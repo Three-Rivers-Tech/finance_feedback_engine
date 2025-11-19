@@ -94,11 +94,25 @@ class FinanceFeedbackEngine:
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()
         
+        # Get portfolio breakdown if platform supports it
+        portfolio = None
+        if hasattr(self.trading_platform, 'get_portfolio_breakdown'):
+            try:
+                portfolio = self.trading_platform.get_portfolio_breakdown()
+                logger.info(
+                    "Portfolio loaded: $%.2f across %d assets",
+                    portfolio.get('total_value_usd', 0),
+                    portfolio.get('num_assets', 0)
+                )
+            except Exception as e:
+                logger.warning("Could not fetch portfolio breakdown: %s", e)
+        
         # Generate decision using AI engine
         decision = self.decision_engine.generate_decision(
             asset_pair=asset_pair,
             market_data=market_data,
-            balance=balance
+            balance=balance,
+            portfolio=portfolio
         )
         
         # Persist decision

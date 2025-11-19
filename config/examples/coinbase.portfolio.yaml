@@ -1,0 +1,74 @@
+# Finance Feedback Engine 2.0 - Coinbase Portfolio Tracking Configuration
+
+# Alpha Vantage API Configuration
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform - Coinbase Advanced with Portfolio Tracking
+trading_platform: "coinbase_advanced"
+
+# Coinbase Advanced API Credentials
+# Get your API keys from: https://www.coinbase.com/settings/api
+# Guide: https://docs.cloud.coinbase.com/advanced-trade-api/docs/rest-api-auth
+platform_credentials:
+  api_key: "YOUR_COINBASE_API_KEY"
+  api_secret: "YOUR_COINBASE_API_SECRET"
+  
+  # Optional: Use sandbox for testing (default: false for production)
+  use_sandbox: false
+  
+  # Note: passphrase is for legacy API only (not needed for Advanced Trade)
+  # passphrase: "YOUR_PASSPHRASE"
+
+# Decision Engine Configuration
+decision_engine:
+  # AI provider for signals
+  ai_provider: "ensemble"  # Use ensemble for best signals
+  
+  # Model configuration
+  model_name: "default"
+  
+  # Confidence threshold for actions
+  decision_threshold: 0.7
+
+# Ensemble Configuration (if using ensemble provider)
+ensemble:
+  enabled_providers: [local, codex, qwen]  # Choose providers you have set up
+  provider_weights:
+    local: 0.30
+    codex: 0.40
+    qwen: 0.30
+  voting_strategy: "weighted"  # or "majority" or "stacking"
+  agreement_threshold: 0.6
+  adaptive_learning: true
+  learning_rate: 0.1
+
+# Persistence Configuration
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
+  cleanup_days: 30
+
+# Portfolio Tracking Notes:
+# =========================
+# This configuration enables SIGNAL-ONLY mode with real portfolio tracking:
+# 
+# Features:
+# - Real-time portfolio balances from Coinbase
+# - Holdings breakdown with USD values and allocations
+# - Portfolio context included in AI decision prompts
+# - AI learns from your actual holdings to make better recommendations
+#
+# Trade execution is DISABLED - you get signals only.
+# The AI can see your real portfolio to provide context-aware recommendations.
+#
+# Usage:
+# - python main.py portfolio          # View your current holdings
+# - python main.py analyze BTCUSD     # Get signal with portfolio context
+# - python main.py balance            # Quick balance check
+# - python main.py history            # See past signals
+#
+# The AI will consider:
+# - Your existing positions
+# - Current allocation percentages  
+# - Portfolio diversification
+# - Risk exposure across assets

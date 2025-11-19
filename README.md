@@ -9,13 +9,15 @@
 - **🤖 AI-Powered Decisions**: Support for local AI models and CLI-based AI tools
 - **💱 Multi-Asset Support**: Trade cryptocurrencies (BTC, ETH) and forex pairs (EUR/USD, etc.)
 - **🏦 Multi-Platform Integration**: 
-  - Coinbase Advanced
+  - Coinbase Advanced with **Real Portfolio Tracking** 🆕
   - Oanda (Forex)
   - Easily extensible for new platforms
+- **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
 - **💾 Persistent Decision Storage**: Track all trading decisions with timestamps
 - **⚙️ Modular Design**: Each component can be customized or replaced
-- **📈 Balance Management**: Real-time account balance tracking
+- **📈 Balance Management**: Real-time account balance and allocation tracking
 - **🎯 CLI Interface**: Rich command-line interface for easy interaction
+- **🔒 Signal-Only Mode**: Learn from real portfolio without execution risk 🆕
 
 ## 📋 Requirements
 
