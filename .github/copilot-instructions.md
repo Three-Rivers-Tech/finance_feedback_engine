@@ -1,12 +1,14 @@
-# Copilot Instructions: Finance Feedback Engine 2.0
+## Copilot Instructions: Finance Feedback Engine 2.0
 
-Authoritative, project-specific guidance for AI coding agents. Keep edits concise, respect existing patterns, and prefer extending over rewriting.
+> **Authoritative, project-specific guidance for AI coding agents.**
+>
+> **Keep edits concise, respect existing patterns, and prefer extending over rewriting.**
 
 ## Big Picture
-Modular trading decision system coordinating: market data (AlphaVantage), AI decision logic, trading platform abstraction, and JSON persistence. `FinanceFeedbackEngine` in `core.py` is the facade composing provider → platform → decision engine → store. CLI (`cli/main.py`) wraps this facade for user workflows.
+Modular trading decision engine with four main layers:
 
 **Key architectural layers:**
-1. **Data Layer**: `AlphaVantageProvider` fetches market data, news sentiment, macroeconomic indicators
+1. **Data Layer**: `AlphaVantageProvider` fetches OHLC market data, news sentiment, and macro indicators. Data is enriched with technicals (RSI, candlestick analysis) and mock fallback is used only on real API failure.
 2. **Decision Layer**: Multi-provider AI system (local LLM, Copilot CLI, Codex CLI) with ensemble voting
 3. **Platform Layer**: Trading platform abstraction (Coinbase, Oanda, extensible via factory)
 4. **Persistence Layer**: JSON file-based decision store with UUID+timestamp naming
@@ -18,6 +20,7 @@ Modular trading decision system coordinating: market data (AlphaVantage), AI dec
   - `.get_macro_indicators()`: Real GDP, inflation, Fed Funds rate, unemployment
   - `.get_comprehensive_market_data(asset_pair, include_sentiment=True, include_macro=False)`: unified fetch
   - API key required (raises `ValueError` if missing); mock data fallback only after real request fails
+  - **Data enrichment**: Adds candlestick analysis (body %, wicks, trend), technical indicators (RSI), price ranges
 - `PlatformFactory.create_platform(name, credentials)` — maps string → class; registration via `PlatformFactory.register_platform('my_platform', MyPlatform)`.
 - `BaseTradingPlatform` — required methods: `get_balance()`, `execute_trade(decision)`, `get_account_info()`.
 - `DecisionEngine.generate_decision(asset_pair, market_data, balance)` — builds context, prompt, routes to provider (`local | cli | codex | qwen | ensemble`). Returns decision dict with position sizing fields.
@@ -154,6 +157,8 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - **Confidence**: integer 0–100; ensure AI outputs converted appropriately.
 - **Network isolation**: avoid network calls outside data providers; keep side effects localized.
 - **Ensemble metadata**: stored in decision when `ai_provider: "ensemble"`; includes provider_decisions, agreement_score, confidence_variance for transparency/debugging.
+- **Mock data fallback**: When AlphaVantage API fails, creates realistic mock data with `mock: true` flag for testing.
+- **Candlestick enrichment**: Automatically calculates body %, wick sizes, trend direction, close position in range for technical analysis.
 
 ## Safe Modification Rules for Agents
 - Before adding fields: search for their usage in CLI formatting (`cli/main.py`) and update tables/printers accordingly.
@@ -161,6 +166,7 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - When expanding `_query_ai`, keep fallback rule-based logic intact for robustness.
 - Use feature flags via config keys rather than hardcoding behavior changes.
 - Maintain backward compatibility with existing config examples (`config/*.yaml`).
+- When adding technical indicators: follow RSI pattern (fetch from API, interpret signals, add to market_data dict).
 
 ## Testing & Validation Tips
 - Quick sanity: run `python main.py status` after changes.
@@ -169,6 +175,7 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - **Ensemble testing**: run `python main.py analyze BTCUSD --provider ensemble` and inspect `ensemble_metadata` in output JSON; verify all enabled providers contributed and weights sum to 1.0.
 - **Position sizing validation**: check `recommended_position_size` matches formula: `(balance × risk%) / (entry_price × stop_loss%)`; verify LONG positions use entry price as baseline, SHORT positions account for margin requirements.
 - **Sentiment/macro data**: toggle `include_sentiment`/`include_macro` in `analyze_asset()` calls; verify API calls appear in logs and data populated in decision's `market_data.sentiment`/`market_data.macro_indicators`.
+- **Mock data testing**: temporarily invalidate API key; verify graceful fallback with `mock: true` in market_data.
 - No automated tests currently exist; validate changes manually via CLI workflows and inspect JSON output in `data/decisions/`.
 - API key testing: temporarily remove/invalidate API key to verify graceful fallback to mock data (check logs for "API request failed" → "Using mock data").
 
@@ -178,6 +185,8 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - Decision mutation: always call `DecisionStore.update_decision()` after modifying fields.
 - AlphaVantage API field names vary by endpoint (e.g., `1a. open (USD)` vs `1. open`); use `.get()` chains with fallbacks when parsing responses.
 - Decision files named by timestamp date + ID; `DecisionStore.get_decision_by_id()` uses glob `*_{decision_id}.json` to locate files regardless of date prefix.
+- Ensemble weights must sum to 1.0; provider decisions must include action/confidence/reasoning fields for aggregation.
+- Position sizing assumes LONG positions; SHORT positions may need margin adjustments (not currently implemented).
 
 
 ## When In Doubt

@@ -2,7 +2,7 @@
 
 # Alpha Vantage API Configuration
 # Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
-alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+alpha_vantage_api_key: "EXAMPLE_API_KEY_ABC123XYZ456"
 
 # Trading Platform Configuration
 # Options: 'coinbase', 'coinbase_advanced', 'oanda'
