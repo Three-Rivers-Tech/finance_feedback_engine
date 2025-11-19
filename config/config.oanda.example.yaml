@@ -1,0 +1,23 @@
+# Example Configuration for Oanda Forex Trading
+
+# Alpha Vantage API Configuration
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform: Oanda for Forex
+trading_platform: "oanda"
+
+platform_credentials:
+  api_key: "YOUR_OANDA_API_KEY"
+  account_id: "YOUR_OANDA_ACCOUNT_ID"
+  environment: "practice"  # Use 'practice' for testing, 'live' for real trading
+
+# Decision Engine with CLI AI
+decision_engine:
+  ai_provider: "cli"
+  model_name: "trading_advisor"
+  decision_threshold: 0.75
+
+# Persistence
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
