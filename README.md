@@ -62,8 +62,30 @@ Edit `config/config.local.yaml` and add your:
 ### Analyze an Asset
 
 ```bash
+# Using default AI provider (from config)
 python main.py analyze BTCUSD
+
+# Using specific AI provider
+python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
+python main.py analyze BTCUSD --provider cli      # GitHub Copilot CLI
+python main.py analyze BTCUSD --provider local    # Local rule-based
 ```
+
+### AI Provider Options
+
+The engine supports three AI providers:
+
+1. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
+   - Install: `npm install -g @openai/codex-cli` or from https://github.com/openai/codex
+   - Runs locally without token costs
+
+2. **GitHub Copilot CLI** (`--provider cli`): Uses GitHub Copilot CLI
+   - Install: Follow [Copilot CLI setup](https://githubnext.com/projects/copilot-cli)
+   - Requires GitHub Copilot subscription
+
+3. **Local** (`--provider local`): Simple rule-based decisions
+   - No setup required
+   - Good for testing and fallback
 
 ### Check Account Balance
 
@@ -113,7 +135,7 @@ platform_credentials:
 
 # Decision Engine
 decision_engine:
-  ai_provider: "local"  # or "cli"
+  ai_provider: "local"  # Options: "local", "cli" (GitHub Copilot), "codex" (Codex CLI)
   model_name: "default"
   decision_threshold: 0.7
 

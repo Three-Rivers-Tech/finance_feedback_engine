@@ -1,0 +1,65 @@
+# Finance Feedback Engine 2.0 - Ensemble Configuration Example
+# This config enables multi-provider ensemble mode with weighted voting
+
+# Alpha Vantage API (required for market data)
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform Configuration
+trading_platform: "coinbase"  # Options: coinbase, coinbase_advanced, oanda
+
+# Platform-specific credentials
+platform_credentials:
+  api_key: "YOUR_PLATFORM_API_KEY"
+  api_secret: "YOUR_PLATFORM_API_SECRET"
+
+# Decision Engine Configuration
+decision_engine:
+  # Set to 'ensemble' to enable multi-provider mode
+  ai_provider: "ensemble"  # Options: local, cli, codex, ensemble
+  
+  model_name: "ensemble-v1"
+  decision_threshold: 0.7
+
+# Ensemble Configuration (active when ai_provider = "ensemble")
+ensemble:
+  # Providers to use in ensemble
+  enabled_providers:
+    - local    # Llama-3.2-3B-Instruct via Ollama (auto-downloaded)
+    - cli      # GitHub Copilot CLI
+    - codex    # Codex CLI
+  
+  # Provider weights (must sum to 1.0)
+  # These are initial weights - they adapt based on performance
+  provider_weights:
+    local: 0.33  # 33% weight (local LLM - Llama 3.2 3B)
+    cli: 0.33    # 33% weight (GitHub Copilot)
+    codex: 0.34  # 34% weight (Codex CLI)
+  
+  # Voting strategy
+  # Options:
+  #   - "weighted": Confidence-weighted voting (recommended)
+  #   - "majority": Simple majority vote
+  #   - "stacking": Meta-learning ensemble with feature generation
+  voting_strategy: "weighted"
+  
+  # Agreement threshold (0.0 - 1.0)
+  # Minimum consensus required for high-confidence decisions
+  agreement_threshold: 0.6
+  
+  # Adaptive learning
+  # If true, weights update based on provider accuracy over time
+  adaptive_learning: true
+  
+  # Learning rate for weight updates (0.0 - 1.0)
+  # Higher = faster adaptation, Lower = more stable
+  learning_rate: 0.1
+
+# Persistence Configuration
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
+
+# Optional: Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/finance_engine.log"

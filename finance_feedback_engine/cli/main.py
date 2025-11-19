@@ -53,11 +53,26 @@ def cli(ctx, config, verbose):
 
 @cli.command()
 @click.argument('asset_pair')
+@click.option('--provider', '-p', 
+              type=click.Choice(['local', 'cli', 'codex', 'ensemble'], case_sensitive=False),
+              help='AI provider to use (local/cli=copilot/codex/ensemble)')
 @click.pass_context
-def analyze(ctx, asset_pair):
+def analyze(ctx, asset_pair, provider):
     """Analyze an asset pair and generate trading decision."""
     try:
         config = load_config(ctx.obj['config_path'])
+        
+        # Override provider if specified
+        if provider:
+            if 'decision_engine' not in config:
+                config['decision_engine'] = {}
+            config['decision_engine']['ai_provider'] = provider.lower()
+            
+            if provider.lower() == 'ensemble':
+                console.print("[yellow]Using ensemble mode (multiple providers)[/yellow]")
+            else:
+                console.print(f"[yellow]Using AI provider: {provider}[/yellow]")
+        
         engine = FinanceFeedbackEngine(config)
         
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
@@ -72,15 +87,77 @@ def analyze(ctx, asset_pair):
         console.print(f"Confidence: {decision['confidence']}%")
         console.print(f"Reasoning: {decision['reasoning']}")
         
+        # Display position type and sizing
+        if decision.get('position_type'):
+            console.print(f"\n[bold]Position Details:[/bold]")
+            console.print(f"  Type: {decision['position_type']}")
+            console.print(f"  Entry Price: ${decision.get('entry_price', 0):.2f}")
+            console.print(f"  Recommended Size: {decision.get('recommended_position_size', 0):.6f} units")
+            console.print(f"  Risk: {decision.get('risk_percentage', 1)}% of account")
+            console.print(f"  Stop Loss: {decision.get('stop_loss_percentage', 2)}% from entry")
+        
         if decision['suggested_amount'] > 0:
             console.print(f"Suggested Amount: {decision['suggested_amount']}")
         
         console.print(f"\nMarket Data:")
+        console.print(f"  Open: ${decision['market_data'].get('open', 0):.2f}")
         console.print(f"  Close: ${decision['market_data']['close']:.2f}")
         console.print(f"  High: ${decision['market_data']['high']:.2f}")
         console.print(f"  Low: ${decision['market_data']['low']:.2f}")
         console.print(f"  Price Change: {decision['price_change']:.2f}%")
         console.print(f"  Volatility: {decision['volatility']:.2f}%")
+        
+        # Display additional technical data if available
+        md = decision['market_data']
+        if 'trend' in md:
+            console.print(f"\nTechnical Analysis:")
+            console.print(f"  Trend: {md.get('trend', 'N/A')}")
+            console.print(f"  Price Range: ${md.get('price_range', 0):.2f} ({md.get('price_range_pct', 0):.2f}%)")
+            console.print(f"  Body %: {md.get('body_pct', 0):.2f}%")
+            
+        if 'rsi' in md:
+            console.print(f"  RSI: {md.get('rsi', 0):.2f} ({md.get('rsi_signal', 'neutral')})")
+            
+        if md.get('type') == 'crypto' and 'volume' in md:
+            console.print(f"\nCrypto Metrics:")
+            console.print(f"  Volume: {md.get('volume', 0):,.0f}")
+            if 'market_cap' in md and md.get('market_cap', 0) > 0:
+                console.print(f"  Market Cap: ${md.get('market_cap', 0):,.0f}")
+        
+        # Display sentiment analysis if available
+        if 'sentiment' in md and md['sentiment'].get('available'):
+            sent = md['sentiment']
+            console.print(f"\nNews Sentiment:")
+            console.print(f"  Overall: {sent.get('overall_sentiment', 'neutral').upper()}")
+            console.print(f"  Score: {sent.get('sentiment_score', 0):.3f}")
+            console.print(f"  Articles: {sent.get('news_count', 0)}")
+            if sent.get('top_topics'):
+                console.print(f"  Topics: {', '.join(sent.get('top_topics', [])[:3])}")
+        
+        # Display macro indicators if available
+        if 'macro' in md and md['macro'].get('available'):
+            console.print(f"\nMacroeconomic Indicators:")
+            for indicator, data in md['macro'].get('indicators', {}).items():
+                name = indicator.replace('_', ' ').title()
+                console.print(f"  {name}: {data.get('value')} ({data.get('date')})")
+        
+        # Display ensemble metadata if available
+        if decision.get('ensemble_metadata'):
+            meta = decision['ensemble_metadata']
+            console.print("\n[bold cyan]Ensemble Analysis:[/bold cyan]")
+            console.print(f"  Providers Used: {', '.join(meta['providers_used'])}")
+            console.print(f"  Voting Strategy: {meta['voting_strategy']}")
+            console.print(f"  Agreement Score: {meta['agreement_score']:.1%}")
+            console.print(f"  Confidence Variance: {meta['confidence_variance']:.1f}")
+            
+            # Show individual provider decisions
+            console.print("\n[bold]Provider Decisions:[/bold]")
+            for provider, pdecision in meta['provider_decisions'].items():
+                weight = meta['provider_weights'].get(provider, 0)
+                console.print(
+                    f"  [{provider.upper()}] {pdecision['action']} "
+                    f"({pdecision['confidence']}%) - Weight: {weight:.2f}"
+                )
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
