@@ -38,3 +38,28 @@ decision_engine:
   decision_threshold: 0.7
   
   # Custom prompt template (optional)
+
+# Backtesting Configuration (optional)
+# Provides defaults for running historical strategy simulations via CLI `backtest` command.
+# Set `enabled: true` to allow backtesting operations; if absent, defaults are applied safely.
+backtesting:
+  enabled: false            # Backtesting disabled by default to avoid accidental heavy simulations
+  initial_balance: 10000    # Starting paper balance for simulations
+  fee_percentage: 0.1       # Per trade fee (percent of notional)
+  use_real_data: false      # Set true to fetch real Alpha Vantage historical candles (rate limits apply)
+  strategy:
+    name: "sma_crossover"   # Default strategy identifier
+    short_window: 5         # Short SMA periods
+    long_window: 20         # Long SMA periods
+  rl:                       # Pseudo-RL ensemble weight adaptation (experimental)
+    enabled: false
+    strategy_name: "ensemble_weight_rl"
+    providers: ["local", "cli", "codex", "qwen"]
+    initial_weights:
+      local: 0.25
+      cli: 0.25
+      codex: 0.25
+      qwen: 0.25
+    learning_rate: 0.1      # Reward update speed (0 < lr ≤ 1)
+    weight_decay: 0.0       # Optional multiplicative decay per step
+

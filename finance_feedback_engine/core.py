@@ -8,6 +8,7 @@ from .data_providers.alpha_vantage_provider import AlphaVantageProvider
 from .trading_platforms.platform_factory import PlatformFactory
 from .decision_engine.engine import DecisionEngine
 from .persistence.decision_store import DecisionStore
+from .backtesting.backtester import Backtester
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +57,19 @@ class FinanceFeedbackEngine:
         # Initialize persistence
         persistence_config = config.get('persistence', {})
         self.decision_store = DecisionStore(persistence_config)
-        
+
+        # Backtester (lazy init holder)
+        self._backtester: Optional[Backtester] = None
+
         logger.info("Finance Feedback Engine initialized successfully")
 
-    def analyze_asset(self, asset_pair: str, include_sentiment: bool = True, include_macro: bool = False) -> Dict[str, Any]:
-        """
-        Analyze an asset and generate trading decision.
+    def analyze_asset(
+        self,
+        asset_pair: str,
+        include_sentiment: bool = True,
+        include_macro: bool = False,
+    ) -> Dict[str, Any]:
+        """Analyze an asset and generate trading decision.
 
         Args:
             asset_pair: Asset pair to analyze (e.g., 'BTCUSD', 'EURUSD')
@@ -71,7 +79,7 @@ class FinanceFeedbackEngine:
         Returns:
             Dictionary containing analysis results and decision
         """
-        logger.info(f"Analyzing asset: {asset_pair}")
+        logger.info("Analyzing asset: %s", asset_pair)
         
         # Fetch comprehensive market data
         market_data = self.data_provider.get_comprehensive_market_data(
@@ -105,7 +113,7 @@ class FinanceFeedbackEngine:
         return self.trading_platform.get_balance()
 
     def get_decision_history(
-        self, 
+        self,
         asset_pair: Optional[str] = None,
         limit: int = 10
     ) -> List[Dict[str, Any]]:
@@ -147,3 +155,42 @@ class FinanceFeedbackEngine:
         self.decision_store.update_decision(decision)
         
         return result
+
+    def backtest(
+        self,
+        asset_pair: str,
+        start: str,
+        end: str,
+        strategy: str = 'sma_crossover',
+        short_window: Optional[int] = None,
+        long_window: Optional[int] = None,
+        initial_balance: Optional[float] = None,
+        fee_percentage: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Run a historical strategy simulation.
+
+        Args:
+            asset_pair: Symbol pair (e.g. 'BTCUSD').
+            start: Start date (YYYY-MM-DD).
+            end: End date (YYYY-MM-DD).
+            strategy: Strategy identifier (currently only 'sma_crossover').
+            short_window: Override for short SMA window.
+            long_window: Override for long SMA window.
+            initial_balance: Override starting balance.
+            fee_percentage: Override per trade fee percent.
+        Returns:
+            Dict with strategy metadata, performance metrics and trade log.
+        """
+        if self._backtester is None:
+            bt_conf = self.config.get('backtesting', {})
+            self._backtester = Backtester(self.data_provider, bt_conf)
+        return self._backtester.run(
+            asset_pair=asset_pair,
+            start=start,
+            end=end,
+            strategy_name=strategy,
+            short_window=short_window,
+            long_window=long_window,
+            initial_balance=initial_balance,
+            fee_percentage=fee_percentage,
+        )
