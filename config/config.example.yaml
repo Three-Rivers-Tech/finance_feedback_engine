@@ -1,0 +1,40 @@
+# Finance Feedback Engine 2.0 Example Configuration
+
+# Alpha Vantage API Configuration
+# Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform Configuration
+# Options: 'coinbase', 'coinbase_advanced', 'oanda'
+trading_platform: "coinbase"
+
+# Platform-specific credentials
+platform_credentials:
+  # For Coinbase Advanced
+  api_key: "YOUR_COINBASE_API_KEY"
+  api_secret: "YOUR_COINBASE_API_SECRET"
+  passphrase: "YOUR_COINBASE_PASSPHRASE"  # optional
+  
+  # For Oanda
+  # api_key: "YOUR_OANDA_API_KEY"
+  # account_id: "YOUR_OANDA_ACCOUNT_ID"
+  # environment: "practice"  # or 'live'
+
+# Decision Engine Configuration
+decision_engine:
+  # AI Provider: 'local', 'cli', 'codex', or 'ensemble'
+  # 'local' uses Llama-3.2-3B via Ollama (auto-installs)
+  # 'cli' uses GitHub Copilot CLI
+  # 'codex' uses Codex CLI
+  # 'ensemble' uses all providers with weighted voting
+  ai_provider: "local"  # local | cli | codex | qwen | ensemble
+  # NOTE: If ai_provider is 'local', model_name should be an Ollama model (e.g., llama3.2:3b-instruct-fp16).
+  #       If ai_provider is 'cli' or 'codex', model_name should match the CLI/Copilot model name (see docs/AI_PROVIDERS.md).
+  #       Only the relevant fields are used for each provider; others are ignored.
+  # Model name for local provider (Ollama)
+  model_name: "llama3.2:3b-instruct-fp16"  # Default: auto-downloads on first use
+  
+  # Decision confidence threshold (0.0 - 1.0)
+  decision_threshold: 0.7
+  
+  # Custom prompt template (optional)
