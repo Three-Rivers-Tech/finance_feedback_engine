@@ -42,15 +42,16 @@ class EnsembleDecisionManager:
         
         # Provider weights (default: equal weighting)
         self.provider_weights = ensemble_config.get('provider_weights', {
-            'local': 0.2,
-            'cli': 0.4,
-            'codex': 0.4
+            'local': 0.25,
+            'cli': 0.25,
+            'codex': 0.25,
+            'qwen': 0.25
         })
         
         # Providers to use
         self.enabled_providers = ensemble_config.get(
             'enabled_providers',
-            ['local', 'cli', 'codex']
+            ['local', 'cli', 'codex', 'qwen']
         )
         
         # Voting strategy

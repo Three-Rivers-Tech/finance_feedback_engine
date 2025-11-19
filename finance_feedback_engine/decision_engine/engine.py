@@ -439,6 +439,8 @@ Provide:
             return self._cli_ai_inference(prompt)
         elif self.ai_provider == 'codex':
             return self._codex_ai_inference(prompt)
+        elif self.ai_provider == 'qwen':
+            return self._qwen_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
 
@@ -515,6 +517,32 @@ Provide:
                 'amount': 0
             }
 
+    def _qwen_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        CLI-based AI inference using Qwen CLI.
+
+        Args:
+            prompt: AI prompt
+
+        Returns:
+            AI response from Qwen CLI
+        """
+        logger.info("Using Qwen CLI AI inference")
+        
+        try:
+            from .qwen_cli_provider import QwenCLIProvider
+            
+            provider = QwenCLIProvider(self.config)
+            return provider.query(prompt)
+        except (ImportError, ValueError) as e:
+            logger.warning(f"Qwen CLI unavailable, using fallback: {e}")
+            return {
+                'action': 'HOLD',
+                'confidence': 50,
+                'reasoning': 'Qwen CLI unavailable, using fallback decision.',
+                'amount': 0
+            }
+
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
@@ -545,6 +573,8 @@ Provide:
                     decision = self._cli_ai_inference(prompt)
                 elif provider == 'codex':
                     decision = self._codex_ai_inference(prompt)
+                elif provider == 'qwen':
+                    decision = self._qwen_ai_inference(prompt)
                 else:
                     logger.warning(f"Unknown provider: {provider}")
                     continue
