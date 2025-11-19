@@ -59,20 +59,26 @@ class FinanceFeedbackEngine:
         
         logger.info("Finance Feedback Engine initialized successfully")
 
-    def analyze_asset(self, asset_pair: str) -> Dict[str, Any]:
+    def analyze_asset(self, asset_pair: str, include_sentiment: bool = True, include_macro: bool = False) -> Dict[str, Any]:
         """
         Analyze an asset and generate trading decision.
 
         Args:
             asset_pair: Asset pair to analyze (e.g., 'BTCUSD', 'EURUSD')
+            include_sentiment: Include news sentiment analysis (default: True)
+            include_macro: Include macroeconomic indicators (default: False)
 
         Returns:
             Dictionary containing analysis results and decision
         """
         logger.info(f"Analyzing asset: {asset_pair}")
         
-        # Fetch market data
-        market_data = self.data_provider.get_market_data(asset_pair)
+        # Fetch comprehensive market data
+        market_data = self.data_provider.get_comprehensive_market_data(
+            asset_pair,
+            include_sentiment=include_sentiment,
+            include_macro=include_macro
+        )
         
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()

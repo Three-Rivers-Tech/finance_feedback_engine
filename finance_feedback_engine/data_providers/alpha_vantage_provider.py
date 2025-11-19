@@ -43,9 +43,278 @@ class AlphaVantageProvider:
         
         # Determine asset type and fetch appropriate data
         if 'BTC' in asset_pair or 'ETH' in asset_pair:
-            return self._get_crypto_data(asset_pair)
+            market_data = self._get_crypto_data(asset_pair)
         else:
-            return self._get_forex_data(asset_pair)
+            market_data = self._get_forex_data(asset_pair)
+        
+        # Enrich with additional context
+        market_data = self._enrich_market_data(market_data, asset_pair)
+        
+        return market_data
+
+    def _enrich_market_data(self, market_data: Dict[str, Any], asset_pair: str) -> Dict[str, Any]:
+        """
+        Enrich market data with additional metrics and context.
+
+        Args:
+            market_data: Base market data
+            asset_pair: Asset pair
+
+        Returns:
+            Enriched market data
+        """
+        try:
+            # Calculate additional technical indicators
+            open_price = market_data.get('open', 0)
+            high_price = market_data.get('high', 0)
+            low_price = market_data.get('low', 0)
+            close_price = market_data.get('close', 0)
+            
+            # Price range
+            price_range = high_price - low_price
+            price_range_pct = (price_range / close_price * 100) if close_price > 0 else 0
+            
+            # Body vs wick analysis (candlestick)
+            body = abs(close_price - open_price)
+            body_pct = (body / close_price * 100) if close_price > 0 else 0
+            
+            # Upper and lower wicks
+            upper_wick = high_price - max(open_price, close_price)
+            lower_wick = min(open_price, close_price) - low_price
+            
+            # Trend direction
+            is_bullish = close_price > open_price
+            trend = "bullish" if is_bullish else "bearish" if close_price < open_price else "neutral"
+            
+            # Position in range (where did it close)
+            if price_range > 0:
+                close_position_in_range = (close_price - low_price) / price_range
+            else:
+                close_position_in_range = 0.5
+            
+            # Add enrichments
+            market_data['price_range'] = price_range
+            market_data['price_range_pct'] = price_range_pct
+            market_data['body_size'] = body
+            market_data['body_pct'] = body_pct
+            market_data['upper_wick'] = upper_wick
+            market_data['lower_wick'] = lower_wick
+            market_data['trend'] = trend
+            market_data['is_bullish'] = is_bullish
+            market_data['close_position_in_range'] = close_position_in_range
+            
+            # Fetch technical indicators if available
+            technical_data = self._get_technical_indicators(asset_pair)
+            if technical_data:
+                market_data.update(technical_data)
+            
+        except Exception as e:
+            logger.warning(f"Error enriching market data: {e}")
+        
+        return market_data
+
+    def _get_technical_indicators(self, asset_pair: str) -> Dict[str, Any]:
+        """
+        Fetch technical indicators from Alpha Vantage.
+
+        Args:
+            asset_pair: Asset pair
+
+        Returns:
+            Dictionary with technical indicators
+        """
+        indicators = {}
+        
+        try:
+            # Determine symbol format
+            if 'BTC' in asset_pair or 'ETH' in asset_pair:
+                # For crypto, use the base currency
+                symbol = asset_pair[:3] if len(asset_pair) > 3 else asset_pair
+            else:
+                # For forex, we'll skip detailed indicators for now
+                return indicators
+            
+            # Fetch RSI (Relative Strength Index)
+            rsi_params = {
+                'function': 'RSI',
+                'symbol': symbol,
+                'interval': 'daily',
+                'time_period': 14,
+                'series_type': 'close',
+                'apikey': self.api_key
+            }
+            
+            rsi_response = requests.get(self.BASE_URL, params=rsi_params, timeout=10)
+            if rsi_response.status_code == 200:
+                rsi_data = rsi_response.json()
+                if 'Technical Analysis: RSI' in rsi_data:
+                    rsi_series = rsi_data['Technical Analysis: RSI']
+                    latest_rsi = list(rsi_series.values())[0]
+                    indicators['rsi'] = float(latest_rsi.get('RSI', 0))
+                    
+                    # Interpret RSI
+                    if indicators['rsi'] > 70:
+                        indicators['rsi_signal'] = 'overbought'
+                    elif indicators['rsi'] < 30:
+                        indicators['rsi_signal'] = 'oversold'
+                    else:
+                        indicators['rsi_signal'] = 'neutral'
+            
+        except Exception as e:
+            logger.debug(f"Could not fetch technical indicators: {e}")
+        
+        return indicators
+
+    def get_news_sentiment(self, asset_pair: str, limit: int = 5) -> Dict[str, Any]:
+        """
+        Fetch news sentiment data from Alpha Vantage.
+
+        Args:
+            asset_pair: Asset pair to get news for
+            limit: Maximum number of news items
+
+        Returns:
+            Dictionary with sentiment analysis
+        """
+        sentiment_data = {
+            'available': False,
+            'overall_sentiment': 'neutral',
+            'sentiment_score': 0.0,
+            'news_count': 0,
+            'top_topics': []
+        }
+        
+        try:
+            # Extract ticker/symbol
+            if 'BTC' in asset_pair:
+                tickers = 'CRYPTO:BTC'
+            elif 'ETH' in asset_pair:
+                tickers = 'CRYPTO:ETH'
+            else:
+                # For forex, use currency codes
+                tickers = asset_pair[:3]
+            
+            params = {
+                'function': 'NEWS_SENTIMENT',
+                'tickers': tickers,
+                'apikey': self.api_key,
+                'limit': limit
+            }
+            
+            response = requests.get(self.BASE_URL, params=params, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'feed' in data and len(data['feed']) > 0:
+                    sentiment_data['available'] = True
+                    sentiment_data['news_count'] = len(data['feed'])
+                    
+                    # Calculate average sentiment
+                    sentiment_scores = []
+                    topics = []
+                    
+                    for article in data['feed'][:limit]:
+                        # Overall article sentiment
+                        overall_score = float(article.get('overall_sentiment_score', 0))
+                        sentiment_scores.append(overall_score)
+                        
+                        # Extract topics
+                        if 'topics' in article:
+                            for topic in article['topics']:
+                                topics.append(topic.get('topic', ''))
+                    
+                    # Average sentiment
+                    if sentiment_scores:
+                        avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+                        sentiment_data['sentiment_score'] = avg_sentiment
+                        
+                        # Classify sentiment
+                        if avg_sentiment > 0.15:
+                            sentiment_data['overall_sentiment'] = 'bullish'
+                        elif avg_sentiment < -0.15:
+                            sentiment_data['overall_sentiment'] = 'bearish'
+                        else:
+                            sentiment_data['overall_sentiment'] = 'neutral'
+                    
+                    # Top topics
+                    if topics:
+                        from collections import Counter
+                        topic_counts = Counter(topics)
+                        sentiment_data['top_topics'] = [t[0] for t in topic_counts.most_common(3)]
+                
+        except Exception as e:
+            logger.debug(f"Could not fetch news sentiment: {e}")
+        
+        return sentiment_data
+
+    def get_macro_indicators(self, indicators: list = None) -> Dict[str, Any]:
+        """
+        Fetch macroeconomic indicators from Alpha Vantage.
+
+        Args:
+            indicators: List of indicators to fetch (default: key indicators)
+
+        Returns:
+            Dictionary with macro indicators
+        """
+        if indicators is None:
+            indicators = ['REAL_GDP', 'INFLATION', 'FEDERAL_FUNDS_RATE', 'UNEMPLOYMENT']
+        
+        macro_data = {
+            'available': False,
+            'indicators': {}
+        }
+        
+        try:
+            for indicator in indicators[:3]:  # Limit to avoid rate limits
+                params = {
+                    'function': indicator,
+                    'apikey': self.api_key
+                }
+                
+                response = requests.get(self.BASE_URL, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    if 'data' in data and len(data['data']) > 0:
+                        latest = data['data'][0]
+                        macro_data['indicators'][indicator] = {
+                            'value': latest.get('value', 'N/A'),
+                            'date': latest.get('date', 'N/A')
+                        }
+                        macro_data['available'] = True
+                
+        except Exception as e:
+            logger.debug(f"Could not fetch macro indicators: {e}")
+        
+        return macro_data
+
+    def get_comprehensive_market_data(self, asset_pair: str, include_sentiment: bool = True, include_macro: bool = False) -> Dict[str, Any]:
+        """
+        Fetch comprehensive market data including price, sentiment, and macro.
+
+        Args:
+            asset_pair: Asset pair to analyze
+            include_sentiment: Whether to include news sentiment
+            include_macro: Whether to include macro indicators
+
+        Returns:
+            Comprehensive market data dictionary
+        """
+        # Get base market data
+        market_data = self.get_market_data(asset_pair)
+        
+        # Add sentiment if requested
+        if include_sentiment:
+            sentiment = self.get_news_sentiment(asset_pair)
+            market_data['sentiment'] = sentiment
+        
+        # Add macro indicators if requested
+        if include_macro:
+            macro = self.get_macro_indicators()
+            market_data['macro'] = macro
+        
+        return market_data
 
     def _get_crypto_data(self, asset_pair: str) -> Dict[str, Any]:
         """
@@ -82,16 +351,42 @@ class AlphaVantageProvider:
                 latest_date = list(time_series.keys())[0]
                 latest_data = time_series[latest_date]
 
+                # Try different field name formats (API response varies)
+                open_price = float(
+                    latest_data.get('1a. open (USD)') or
+                    latest_data.get('1. open') or
+                    0
+                )
+                high_price = float(
+                    latest_data.get('2a. high (USD)') or
+                    latest_data.get('2. high') or
+                    0
+                )
+                low_price = float(
+                    latest_data.get('3a. low (USD)') or
+                    latest_data.get('3. low') or
+                    0
+                )
+                close_price = float(
+                    latest_data.get('4a. close (USD)') or
+                    latest_data.get('4. close') or
+                    0
+                )
+                volume = float(latest_data.get('5. volume', 0))
+                market_cap = float(
+                    latest_data.get('6. market cap (USD)', 0)
+                )
+
                 return {
                     'asset_pair': asset_pair,
                     'timestamp': datetime.utcnow().isoformat(),
                     'date': latest_date,
-                    'open': float(latest_data.get('1a. open (USD)', 0)),
-                    'high': float(latest_data.get('2a. high (USD)', 0)),
-                    'low': float(latest_data.get('3a. low (USD)', 0)),
-                    'close': float(latest_data.get('4a. close (USD)', 0)),
-                    'volume': float(latest_data.get('5. volume', 0)),
-                    'market_cap': float(latest_data.get('6. market cap (USD)', 0)),
+                    'open': open_price,
+                    'high': high_price,
+                    'low': low_price,
+                    'close': close_price,
+                    'volume': volume,
+                    'market_cap': market_cap,
                     'type': 'crypto'
                 }
             else:

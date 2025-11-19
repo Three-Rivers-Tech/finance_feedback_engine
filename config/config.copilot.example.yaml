@@ -1,0 +1,26 @@
+# Finance Feedback Engine 2.0 - Copilot CLI Configuration
+
+# Alpha Vantage API Configuration
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform Configuration
+trading_platform: "coinbase"
+
+# Platform-specific credentials
+platform_credentials:
+  api_key: "YOUR_COINBASE_API_KEY"
+  api_secret: "YOUR_COINBASE_API_SECRET"
+  passphrase: "YOUR_COINBASE_PASSPHRASE"
+
+# Decision Engine with GitHub Copilot CLI
+decision_engine:
+  # Use GitHub Copilot CLI for AI-powered decisions
+  ai_provider: "cli"
+  model_name: "copilot-cli"
+  decision_threshold: 0.7
+
+# Persistence Configuration
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
+  cleanup_days: 30
