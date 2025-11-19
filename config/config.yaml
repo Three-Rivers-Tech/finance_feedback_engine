@@ -1,0 +1,46 @@
+# Finance Feedback Engine 2.0 Configuration
+
+# Alpha Vantage API Configuration
+# Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform Configuration
+# Options: 'coinbase', 'coinbase_advanced', 'oanda'
+trading_platform: "coinbase"
+
+# Platform-specific credentials
+platform_credentials:
+  # For Coinbase Advanced
+  api_key: "YOUR_COINBASE_API_KEY"
+  api_secret: "YOUR_COINBASE_API_SECRET"
+  passphrase: "YOUR_COINBASE_PASSPHRASE"  # optional
+  
+  # For Oanda
+  # api_key: "YOUR_OANDA_API_KEY"
+  # account_id: "YOUR_OANDA_ACCOUNT_ID"
+  # environment: "practice"  # or 'live'
+
+# Decision Engine Configuration
+decision_engine:
+  # AI Provider: 'local', 'cli', or specific provider
+  ai_provider: "local"
+  
+  # Model name/path (for local models)
+  model_name: "default"
+  
+  # Decision confidence threshold (0.0 - 1.0)
+  decision_threshold: 0.7
+  
+  # Custom prompt template (optional)
+  # prompt_template: "path/to/custom_prompt.txt"
+
+# Persistence Configuration
+persistence:
+  # Path to store trading decisions
+  storage_path: "data/decisions"
+  
+  # Maximum decisions to keep in memory
+  max_decisions: 1000
+  
+  # Auto-cleanup old decisions (days)
+  cleanup_days: 30

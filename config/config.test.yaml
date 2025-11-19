@@ -1,0 +1,18 @@
+# Test Configuration for Finance Feedback Engine
+
+alpha_vantage_api_key: "demo"
+
+trading_platform: "coinbase"
+
+platform_credentials:
+  api_key: "test_key"
+  api_secret: "test_secret"
+
+decision_engine:
+  ai_provider: "local"
+  model_name: "default"
+  decision_threshold: 0.7
+
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
