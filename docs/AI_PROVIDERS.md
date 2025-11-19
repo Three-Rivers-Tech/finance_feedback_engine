@@ -8,37 +8,43 @@ The Finance Feedback Engine supports multiple AI providers for generating tradin
 
 **Provider ID**: `qwen`
 
-**Description**: Uses the free Qwen CLI tool for AI-powered trading analysis without any subscription costs.
+**Description**: Uses the free Qwen CLI tool for AI-powered trading analysis. Supports both free OAuth authentication with rate limits and optional OpenAI-compatible API providers for unlimited usage.
 
 **Advantages**:
-- ✅ **Completely Free** - No API charges or subscription fees
+- ✅ **Completely Free** - OAuth provides free tier with rate limits (60 requests/minute, 2,000 requests/day)
 - ✅ **Fast response times** - Direct CLI execution
 - ✅ **High-quality analysis** - Advanced AI model
 - ✅ **Easy integration** - Simple command-line interface
+- ✅ **Flexible deployment** - Choose between free OAuth or paid API providers
 
 **Installation**:
 ```bash
 # Requires Node.js v20 or above
-# Install via npm (requires OAuth authentication)
-npm install -g qwen-cli
+# Install via npm
+npm install -g @qwen-code/qwen-code
 
-# Authenticate with OAuth
+# Authenticate with OAuth (free tier)
 qwen auth
 ```
 
 **Requirements**:
 - Node.js v20 or higher
-- OAuth authentication (one-time setup)
+- **Free Path**: OAuth authentication via qwen.ai account (one-time setup, 60 req/min, 2,000 req/day)
+- **Paid Alternative**: Configure OpenAI-compatible API providers with API keys (unlimited usage, costs depend on provider)
 
 **Usage**:
 ```bash
-# Via CLI flag
+# Via CLI flag (uses configured authentication)
 python main.py analyze BTCUSD --provider qwen
 
 # Or in config.yaml
 decision_engine:
   ai_provider: "qwen"
 ```
+
+**Pricing & Authentication**:
+- **Free Tier**: OAuth via qwen.ai account provides 60 requests per minute and 2,000 requests per day at no cost
+- **Paid Options**: Users may configure OpenAI-compatible API providers with API keys, incurring usage costs based on the chosen provider's pricing
 
 **Example Output**:
 ```
@@ -224,10 +230,12 @@ decision_engine:
 | **Quality** | High | High (3B params) | High (GPT-4 class) | High |
 | **Speed** | ~5-15s | ~5-20s | ~10-15s | ~5-10s |
 | **Reasoning** | Natural language | Natural language | Natural language | Natural language |
-| **Privacy** | Cloud | 100% local | Local | Cloud |
+| **Privacy** | Cloud / Self-hosted | 100% local | Local | Cloud |
 | **Internet** | Required | Not required | Initial setup | Required |
 | **Hardware** | Standard | Standard CPU | Standard | Standard |
 | **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None |
+
+*Note: Qwen CLI privacy depends on the chosen authentication method. Cloud-based authentication uses remote servers, while self-hosted options allow local deployment.*
 
 ---
 
@@ -327,7 +335,7 @@ qwen auth
 **Error**: `Codex CLI not found`
 ```bash
 # Install Codex CLI
-npm install -g @openai/codex-cli
+npm install -g @openai/codex
 
 # Verify installation
 codex --version
@@ -378,6 +386,7 @@ Potential future integrations:
 - Azure OpenAI
 - Google Gemini API
 - Local model fine-tuning support
+- Enhanced privacy mode with configurable local-only processing options
 
 ---
 
