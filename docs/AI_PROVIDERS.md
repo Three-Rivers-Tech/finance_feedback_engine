@@ -4,7 +4,57 @@ The Finance Feedback Engine supports multiple AI providers for generating tradin
 
 ## Available Providers
 
-### 1. Codex CLI (Recommended for Local Development)
+### 1. Qwen CLI (Free - Recommended for Cost-Free Analysis)
+
+**Provider ID**: `qwen`
+
+**Description**: Uses the free Qwen CLI tool for AI-powered trading analysis without any subscription costs.
+
+**Advantages**:
+- ✅ **Completely Free** - No API charges or subscription fees
+- ✅ **Fast response times** - Direct CLI execution
+- ✅ **High-quality analysis** - Advanced AI model
+- ✅ **Easy integration** - Simple command-line interface
+
+**Installation**:
+```bash
+# Requires Node.js v20 or above
+# Install via npm (requires OAuth authentication)
+npm install -g qwen-cli
+
+# Authenticate with OAuth
+qwen auth
+```
+
+**Requirements**:
+- Node.js v20 or higher
+- OAuth authentication (one-time setup)
+
+**Usage**:
+```bash
+# Via CLI flag
+python main.py analyze BTCUSD --provider qwen
+
+# Or in config.yaml
+decision_engine:
+  ai_provider: "qwen"
+```
+
+**Example Output**:
+```
+Using AI provider: qwen
+Analyzing BTCUSD...
+Trading Decision Generated
+Decision ID: abc123...
+Asset: BTCUSD
+Action: BUY
+Confidence: 75%
+Reasoning: Strong bullish momentum with positive sentiment
+```
+
+---
+
+### 2. Codex CLI (Recommended for Local Development)
 
 **Provider ID**: `codex`
 
@@ -19,7 +69,7 @@ The Finance Feedback Engine supports multiple AI providers for generating tradin
 **Installation**:
 ```bash
 # Install Codex CLI
-npm install -g @openai/codex-cli
+npm install -g @openai/codex
 
 # Or from source
 git clone https://github.com/openai/codex
@@ -147,7 +197,8 @@ decision_engine:
 **Fallback Behavior**:
 - Primary model: `llama3.2:3b-instruct-fp16` (3B, high quality)
 - Fallback model: `llama3.2:1b-instruct-fp16` (1B, compact)
-- If both fail or Ollama not installed: rule-based fallback
+- If both fail: Hard failure (RuntimeError)
+- Windows: Manual Ollama installation required
 
 **Performance**:
 - **Inference speed**: 5-30 tokens/second (CPU dependent)
@@ -166,21 +217,31 @@ decision_engine:
 
 ## Provider Comparison
 
-| Feature | Local LLM (Ollama) | Codex CLI | Copilot CLI |
-|---------|-------------------|-----------|-------------|
-| **Cost** | Free (one-time download) | Free (local) | Subscription |
-| **Setup** | Auto-download | npm install | GitHub auth |
-| **Quality** | High (3B params) | High (GPT-4 class) | High |
-| **Speed** | ~5-20s | ~10-15s | ~5-10s |
-| **Reasoning** | Natural language | Natural language | Natural language |
-| **Privacy** | 100% local | Local | Cloud |
-| **Internet** | Not required | Initial setup | Required |
-| **Hardware** | Standard CPU | Standard | Standard |
-| **API Charges** | ❌ None | ❌ None | ❌ None |
+| Feature | Qwen CLI | Local LLM (Ollama) | Codex CLI | Copilot CLI |
+|---------|----------|-------------------|-----------|-------------|
+| **Cost** | Free | Free (one-time download) | Free (local) | Subscription |
+| **Setup** | OAuth + Node.js v20+ | Auto-download | npm install | GitHub auth |
+| **Quality** | High | High (3B params) | High (GPT-4 class) | High |
+| **Speed** | ~5-15s | ~5-20s | ~10-15s | ~5-10s |
+| **Reasoning** | Natural language | Natural language | Natural language | Natural language |
+| **Privacy** | Cloud | 100% local | Local | Cloud |
+| **Internet** | Required | Not required | Initial setup | Required |
+| **Hardware** | Standard | Standard CPU | Standard | Standard |
+| **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None |
 
 ---
 
 ## Configuration Examples
+
+### Using Qwen CLI (Free)
+
+```yaml
+# config/config.yaml
+decision_engine:
+  ai_provider: "qwen"
+  model_name: "default"
+  decision_threshold: 0.7
+```
 
 ### Using Codex CLI (Default)
 
@@ -219,6 +280,9 @@ decision_engine:
 You can override the config file provider at runtime using the `--provider` flag:
 
 ```bash
+# Override to use Qwen (free)
+python main.py analyze BTCUSD --provider qwen
+
 # Override to use Codex
 python main.py analyze BTCUSD --provider codex
 
@@ -238,6 +302,25 @@ This is useful for:
 ---
 
 ## Troubleshooting
+
+### Qwen CLI Issues
+
+**Error**: `Qwen CLI not found`
+```bash
+# Install Qwen CLI (requires Node.js v20+)
+npm install -g qwen-cli
+
+# Verify Node.js version
+node --version  # Should be v20.0.0 or higher
+
+# Authenticate
+qwen auth
+```
+
+**Error**: `OAuth authentication required`
+- Run `qwen auth` to authenticate with OAuth
+- Follow the prompts to complete authentication
+- Verify authentication: `qwen --version`
 
 ### Codex CLI Issues
 
@@ -289,11 +372,12 @@ gh auth login
 ## Future Providers (Roadmap)
 
 Potential future integrations:
-- Ollama (local LLM)
 - LangChain integration
 - Custom OpenAI API (with API key)
 - Anthropic Claude
 - Azure OpenAI
+- Google Gemini API
+- Local model fine-tuning support
 
 ---
 

@@ -68,22 +68,28 @@ python main.py analyze BTCUSD
 # Using specific AI provider
 python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
 python main.py analyze BTCUSD --provider cli      # GitHub Copilot CLI
+python main.py analyze BTCUSD --provider qwen     # Qwen CLI (free, requires Node.js v20+)
 python main.py analyze BTCUSD --provider local    # Local rule-based
 ```
 
 ### AI Provider Options
 
-The engine supports three AI providers:
+The engine supports four AI providers:
 
 1. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
-   - Install: `npm install -g @openai/codex-cli` or from https://github.com/openai/codex
+  - Install: `npm install -g @openai/codex` or from https://github.com/openai/codex
    - Runs locally without token costs
 
 2. **GitHub Copilot CLI** (`--provider cli`): Uses GitHub Copilot CLI
-   - Install: Follow [Copilot CLI setup](https://githubnext.com/projects/copilot-cli)
+  - Install: Follow [Copilot CLI setup](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
    - Requires GitHub Copilot subscription
 
-3. **Local** (`--provider local`): Simple rule-based decisions
+3. **Qwen CLI** (`--provider qwen`): Uses free Qwen CLI tool
+   - Install: Requires Node.js v20+ and OAuth authentication
+   - Command: `qwen`
+   - Free to use
+
+4. **Local** (`--provider local`): Simple rule-based decisions
    - No setup required
    - Good for testing and fallback
 

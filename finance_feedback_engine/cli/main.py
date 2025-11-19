@@ -54,8 +54,8 @@ def cli(ctx, config, verbose):
 @cli.command()
 @click.argument('asset_pair')
 @click.option('--provider', '-p', 
-              type=click.Choice(['local', 'cli', 'codex', 'ensemble'], case_sensitive=False),
-              help='AI provider to use (local/cli=copilot/codex/ensemble)')
+              type=click.Choice(['local', 'cli', 'codex', 'qwen', 'ensemble'], case_sensitive=False),
+              help='AI provider to use (local/cli=copilot/codex/qwen/ensemble)')
 @click.pass_context
 def analyze(ctx, asset_pair, provider):
     """Analyze an asset pair and generate trading decision."""

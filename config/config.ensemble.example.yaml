@@ -27,13 +27,15 @@ ensemble:
     - local    # Llama-3.2-3B-Instruct via Ollama (auto-downloaded)
     - cli      # GitHub Copilot CLI
     - codex    # Codex CLI
+    - qwen     # Qwen CLI (free, requires Node.js v20+ and OAuth)
   
   # Provider weights (must sum to 1.0)
   # These are initial weights - they adapt based on performance
   provider_weights:
-    local: 0.33  # 33% weight (local LLM - Llama 3.2 3B)
-    cli: 0.33    # 33% weight (GitHub Copilot)
-    codex: 0.34  # 34% weight (Codex CLI)
+    local: 0.25  # 25% weight (local LLM - Llama 3.2 3B)
+    cli: 0.25    # 25% weight (GitHub Copilot)
+    codex: 0.25  # 25% weight (Codex CLI)
+    qwen: 0.25   # 25% weight (Qwen CLI - free)
   
   # Voting strategy
   # Options:
