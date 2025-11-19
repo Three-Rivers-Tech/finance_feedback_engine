@@ -75,7 +75,7 @@ Modular trading decision system coordinating: market data (AlphaVantage), AI dec
   "risk_percentage": 1.0,
   "ensemble_metadata": {
     "providers_used": ["local", "cli", "codex", "qwen"],
-    "provider_weights": {"local": 0.2, "cli": 0.4, "codex": 0.4},
+    "provider_weights": {"local": 0.25, "cli": 0.25, "codex": 0.25, "qwen": 0.25},
     "voting_strategy": "weighted|majority|stacking",
     "provider_decisions": {...},
     "agreement_score": 0.0-1.0,
