@@ -293,6 +293,14 @@ class Backtester:
         NOTE: AlphaVantage free tier has limited historical throughput; for now
         we call current market once, then fabricate a random walk within ±2%.
         """
+        import hashlib
+        # Deterministic seed from asset_pair and date range
+        seed_str = f"{asset_pair}:{start_dt.isoformat()}:{end_dt.isoformat()}"
+        seed_bytes = seed_str.encode("utf-8")
+        seed_hash = hashlib.sha256(seed_bytes).hexdigest()
+        seed_int = int(seed_hash[:16], 16)  # Use first 16 hex digits for seed
+        local_rng = random.Random(seed_int)
+
         seed = self.data_provider.get_market_data(asset_pair)
         base_close = float(seed.get("close", 100))
         current = base_close
@@ -300,14 +308,14 @@ class Backtester:
         dt = start_dt
         while dt <= end_dt:
             # Random walk step
-            change_pct = random.uniform(-0.02, 0.02)
+            change_pct = local_rng.uniform(-0.02, 0.02)
             open_price = current
             close_price = max(0.01, open_price * (1 + change_pct))
             high_price = max(open_price, close_price) * (
-                1 + random.uniform(0, 0.01)
+                1 + local_rng.uniform(0, 0.01)
             )
             low_price = min(open_price, close_price) * (
-                1 - random.uniform(0, 0.01)
+                1 - local_rng.uniform(0, 0.01)
             )
             candles.append(
                 Candle(
