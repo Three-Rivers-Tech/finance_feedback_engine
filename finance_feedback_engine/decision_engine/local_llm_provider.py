@@ -38,7 +38,13 @@ class LocalLLMProvider:
             config: Configuration dictionary
         """
         self.config = config
-        self.model_name = config.get('model_name', self.DEFAULT_MODEL)
+        
+        # Normalize model name: "default" -> actual default model
+        requested_model = config.get('model_name', 'default')
+        if requested_model == 'default':
+            self.model_name = self.DEFAULT_MODEL
+        else:
+            self.model_name = requested_model
         
         logger.info(f"Initializing local LLM provider with model: {self.model_name}")
         
@@ -151,117 +157,81 @@ class LocalLLMProvider:
     def _ensure_model_available(self) -> None:
         """
         Ensure model is downloaded and ready.
-        Auto-downloads if missing. Fails hard if download fails.
         
-        Smart upgrade logic:
-        - If primary model available: use it (delete fallback to save space)
-        - If only fallback available: try to upgrade to primary
-        - If neither available: download primary, fallback to 1B if fails
+        Download strategy:
+        1. Check if requested model is available -> use it
+        2. If not, attempt to download requested model
+        3. If download fails and requested was primary, try fallback
+        4. If all fails, raise error with clear instructions
         """
-        primary_available = self._is_model_available(self.DEFAULT_MODEL)
-        fallback_available = self._is_model_available(self.FALLBACK_MODEL)
-        requested_available = self._is_model_available(self.model_name)
-        
-        # Case 1: Requested model already available
-        if requested_available:
-            logger.info(f"Model {self.model_name} already available")
-            
-            # Clean up: if primary model is available, delete fallback
-            if (self.model_name == self.DEFAULT_MODEL and 
-                fallback_available):
-                logger.info(
-                    f"Primary model {self.DEFAULT_MODEL} active. "
-                    f"Deleting fallback {self.FALLBACK_MODEL} to free "
-                    f"disk space (~2.5GB)..."
-                )
-                self._delete_model(self.FALLBACK_MODEL)
-            
+        # Check if model already exists
+        if self._is_model_available(self.model_name):
+            logger.info(f"Model {self.model_name} is already available")
             return
         
-        # Case 2: Primary model available (upgrade from fallback)
-        if self.model_name == self.FALLBACK_MODEL and primary_available:
-            logger.info(
-                f"Upgrading from fallback {self.FALLBACK_MODEL} "
-                f"to primary {self.DEFAULT_MODEL}"
-            )
-            self.model_name = self.DEFAULT_MODEL
-            logger.info(f"Now using primary model: {self.DEFAULT_MODEL}")
-            
-            # Delete fallback after successful upgrade
-            logger.info(
-                f"Deleting fallback model {self.FALLBACK_MODEL} "
-                f"to free disk space..."
-            )
-            self._delete_model(self.FALLBACK_MODEL)
-            return
+        # Model not available - need to download
+        logger.info(
+            f"Model {self.model_name} not found locally. "
+            f"Downloading..."
+        )
+        logger.info(
+            "This is a one-time download. Please wait..."
+        )
         
-        # Case 3: Only fallback available, try to get primary
-        if fallback_available and not primary_available:
-            if self.model_name == self.DEFAULT_MODEL:
-                logger.info(
-                    f"Fallback model {self.FALLBACK_MODEL} detected. "
-                    f"Attempting to download primary {self.DEFAULT_MODEL}..."
-                )
-                if self._download_model(self.DEFAULT_MODEL):
-                    logger.info(
-                        f"Successfully upgraded to primary model: "
-                        f"{self.DEFAULT_MODEL}"
-                    )
-                    # Delete fallback after successful upgrade
-                    logger.info(
-                        f"Deleting fallback model {self.FALLBACK_MODEL} "
-                        f"to free disk space..."
-                    )
-                    self._delete_model(self.FALLBACK_MODEL)
-                    return
-                else:
-                    logger.warning(
-                        f"Primary model download failed. "
-                        f"Continuing with fallback: {self.FALLBACK_MODEL}"
-                    )
-                    self.model_name = self.FALLBACK_MODEL
-                    return
-        
-        # Case 4: Model not found - attempt download
-        logger.warning(f"Model {self.model_name} not found. Downloading...")
-        logger.info("This is a one-time download (~2GB). Please wait...")
-        
-        # Try to download requested/primary model
+        # Attempt to download requested model
         if self._download_model(self.model_name):
-            logger.info(f"Model {self.model_name} downloaded successfully")
-            return
-        
-        # Primary failed - try fallback
-        logger.info(f"Attempting fallback model: {self.FALLBACK_MODEL}")
-        if self._download_model(self.FALLBACK_MODEL):
-            self.model_name = self.FALLBACK_MODEL
-            logger.info(f"Using fallback model: {self.FALLBACK_MODEL}")
-            logger.warning(
-                f"System will attempt to upgrade to {self.DEFAULT_MODEL} "
-                f"on next boot"
+            logger.info(
+                f"Successfully downloaded {self.model_name}"
             )
             return
         
-        # Both failed - hard failure
+        # Download failed - try fallback if we were trying primary
+        if self.model_name == self.DEFAULT_MODEL:
+            logger.warning(
+                f"Failed to download primary model {self.DEFAULT_MODEL}. "
+                f"Trying fallback {self.FALLBACK_MODEL}..."
+            )
+            
+            if self._download_model(self.FALLBACK_MODEL):
+                self.model_name = self.FALLBACK_MODEL
+                logger.info(
+                    f"Using fallback model: {self.FALLBACK_MODEL}"
+                )
+                logger.warning(
+                    f"Primary model {self.DEFAULT_MODEL} download failed. "
+                    f"Performance may be reduced with fallback model."
+                )
+                return
+        
+        # Both failed or custom model failed - hard error
         raise RuntimeError(
-            f"Failed to download both primary and fallback models.\n"
-            f"Ensure you have internet connection and sufficient disk space.\n"
-            f"Manual download: ollama pull {self.DEFAULT_MODEL}"
+            f"Failed to download model: {self.model_name}\n"
+            f"Please check:\n"
+            f"  1. Internet connection is active\n"
+            f"  2. Sufficient disk space (~5GB free)\n"
+            f"  3. Ollama service is running\n"
+            f"Manual download: ollama pull {self.model_name}"
         )
     
     def _download_model(self, model_name: str) -> bool:
         """
-        Download a specific model.
+        Download a specific model from Ollama library.
         
         Args:
-            model_name: Name of model to download
+            model_name: Name of model to download (e.g., 'llama3.2:3b-instruct-fp16')
             
         Returns:
             bool: True if download successful, False otherwise
         """
         try:
-            logger.info(f"Pulling {model_name} from Ollama library...")
+            logger.info(
+                f"Downloading {model_name} from Ollama library..."
+            )
+            logger.info(
+                "This may take several minutes depending on your connection."
+            )
             
+            # Run ollama pull command
             result = subprocess.run(
                 ['ollama', 'pull', model_name],
                 capture_output=True,
@@ -272,27 +242,33 @@ class LocalLLMProvider:
             
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
-                logger.error(f"Model {model_name} download failed: {error_msg}")
-                return False
-            
-            # Verify download
-            if not self._is_model_available(model_name):
                 logger.error(
-                    f"Model {model_name} download appeared successful "
-                    f"but model not available"
+                    f"Download failed for {model_name}: {error_msg}"
                 )
                 return False
             
-            logger.info(f"Model {model_name} downloaded successfully")
+            # Verify the model was actually downloaded
+            if not self._is_model_available(model_name):
+                logger.error(
+                    f"Download reported success but {model_name} "
+                    f"is not available. This may indicate a disk space "
+                    f"or permission issue."
+                )
+                return False
+            
+            logger.info(f"Successfully downloaded {model_name}")
             return True
             
         except subprocess.TimeoutExpired:
             logger.error(
-                f"Model {model_name} download timeout (>10 minutes)"
+                f"Download timeout for {model_name} (>10 minutes). "
+                f"Check your internet connection and try again."
             )
             return False
         except Exception as e:
-            logger.error(f"Failed to download model {model_name}: {e}")
+            logger.error(
+                f"Unexpected error downloading {model_name}: {e}"
+            )
             return False
 
     def _delete_model(self, model_name: str) -> bool:
@@ -381,31 +357,23 @@ class LocalLLMProvider:
             logger.info(f"Querying local LLM: {self.model_name}")
             
             # Create system prompt for trading
-            system_prompt = (
+            full_prompt = (
                 "You are a professional day trading advisor. "
                 "Analyze market data and provide trading recommendations. "
-                "Respond in JSON format with keys: action (BUY/SELL/HOLD), "
-                "confidence (0-100), reasoning (brief explanation), "
-                "amount (suggested position size)."
+                "Respond ONLY with valid JSON containing these exact keys: "
+                "action (BUY/SELL/HOLD), confidence (0-100 integer), "
+                "reasoning (brief explanation string), "
+                "amount (decimal number for position size).\n\n"
+                f"{prompt}"
             )
             
-            # Build Ollama request
-            ollama_input = {
-                "model": self.model_name,
-                "prompt": f"{system_prompt}\n\n{prompt}",
-                "stream": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0.7,
-                    "num_predict": 500,
-                    "top_p": 0.9
-                }
-            }
-            
-            # Call Ollama API
+            # Call Ollama with proper format
             result = subprocess.run(
-                ['ollama', 'run', self.model_name, '--format', 'json'],
-                input=json.dumps(ollama_input),
+                [
+                    'ollama', 'run', self.model_name,
+                    '--format', 'json',
+                    full_prompt
+                ],
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -417,27 +385,41 @@ class LocalLLMProvider:
                 return self._create_fallback_response()
             
             response_text = result.stdout.strip()
+            logger.debug(f"Raw LLM response: {response_text[:200]}")
             
             # Try to parse JSON response
             try:
                 decision = json.loads(response_text)
+                
+                # Validate and normalize
                 if self._is_valid_decision(decision):
-                    decision['confidence'] = int(decision.get('confidence', 60))
-                    decision['amount'] = float(decision.get('amount', 0.1))
+                    decision['confidence'] = int(
+                        decision.get('confidence', 60)
+                    )
+                    decision['amount'] = float(
+                        decision.get('amount', 0.1)
+                    )
                     logger.info(
                         f"Local LLM decision: {decision['action']} "
                         f"({decision['confidence']}%)"
                     )
                     return decision
-            except json.JSONDecodeError:
-                pass
-            
-            # Fallback: parse text response
-            logger.info("Parsing local LLM text response")
-            return self._parse_text_response(response_text)
+                else:
+                    logger.warning(
+                        "LLM response missing required fields, "
+                        "attempting text parsing"
+                    )
+                    return self._parse_text_response(response_text)
+                    
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"Failed to parse LLM JSON response: {e}. "
+                    f"Attempting text parsing"
+                )
+                return self._parse_text_response(response_text)
             
         except subprocess.TimeoutExpired:
-            logger.error("Local LLM inference timeout")
+            logger.error("Local LLM inference timeout (>60s)")
             return self._create_fallback_response()
         except Exception as e:
             logger.error(f"Local LLM error: {e}")

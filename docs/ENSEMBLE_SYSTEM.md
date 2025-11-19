@@ -184,7 +184,7 @@ from finance_feedback_engine.core import FinanceFeedbackEngine
 import yaml
 
 # Load ensemble config
-with open('config/config.ensemble.example.yaml') as f:
+with open('config/examples/ensemble.yaml') as f:
     config = yaml.safe_load(f)
 
 # Create engine

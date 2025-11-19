@@ -1,0 +1,28 @@
+# Finance Feedback Engine 2.0 - Qwen CLI Configuration
+
+# Alpha Vantage API Configuration
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# Trading Platform Configuration
+trading_platform: "coinbase"
+
+# Platform-specific credentials
+platform_credentials:
+  api_key: "YOUR_COINBASE_API_KEY"
+  api_secret: "YOUR_COINBASE_API_SECRET"
+  passphrase: "YOUR_COINBASE_PASSPHRASE"
+
+# Decision Engine with Qwen CLI
+decision_engine:
+  # Use free Qwen CLI for AI-powered decisions
+  # Requires Node.js v20+ and OAuth authentication
+  # Install: npm install -g qwen (or follow instructions at https://github.com/QwenLM/Qwen)
+  ai_provider: "qwen"
+  model_name: "qwen-cli"
+  decision_threshold: 0.7
+
+# Persistence Configuration
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
+  cleanup_days: 30

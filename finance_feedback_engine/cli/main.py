@@ -47,7 +47,7 @@ def load_config(config_path: str) -> dict:
 @click.option(
     '--config', '-c',
     default='config/config.yaml',
-    help='Path to configuration file'
+    help='Path to config file (prefers config/config.local.yaml when present)'
 )
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 @click.pass_context
@@ -55,7 +55,15 @@ def cli(ctx, config, verbose):
     """Finance Feedback Engine 2.0 - AI-powered trading decision tool."""
     setup_logging(verbose)
     ctx.ensure_object(dict)
-    ctx.obj['config_path'] = config
+
+    config_path = Path(config)
+    param_source = ctx.get_parameter_source('config')
+    if param_source == click.core.ParameterSource.DEFAULT:
+        local_path = Path('config/config.local.yaml')
+        if local_path.exists():
+            config_path = local_path
+
+    ctx.obj['config_path'] = str(config_path)
     ctx.obj['verbose'] = verbose
 
 
@@ -238,6 +246,113 @@ def balance(ctx):
             table.add_row(asset, f"{amount:,.2f}")
         
         console.print(table)
+        
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.pass_context
+def portfolio(ctx):
+    """Show detailed portfolio breakdown with allocations."""
+    try:
+        config = load_config(ctx.obj['config_path'])
+        engine = FinanceFeedbackEngine(config)
+        
+        # Check if platform supports portfolio breakdown
+        if not hasattr(engine.trading_platform, 'get_portfolio_breakdown'):
+            console.print(
+                "[yellow]Portfolio breakdown not supported "
+                "by this trading platform[/yellow]"
+            )
+            # Fall back to simple balance
+            balances = engine.get_balance()
+            table = Table(title="Account Balances")
+            table.add_column("Asset", style="cyan")
+            table.add_column("Balance", style="green", justify="right")
+            
+            for asset, amount in balances.items():
+                table.add_row(asset, f"{amount:,.2f}")
+            
+            console.print(table)
+            return
+        
+        # Get futures trading account breakdown
+        portfolio_data = engine.trading_platform.get_portfolio_breakdown()
+        
+        # Display futures account summary
+        total_value = portfolio_data.get('total_value_usd', 0)
+        
+        console.print(
+            "\n[bold cyan]Futures Trading Account[/bold cyan]"
+        )
+        console.print(f"Account Balance: [green]${total_value:,.2f}[/green]\n")
+        
+        # Display futures summary
+        futures_summary = portfolio_data.get('futures_summary', {})
+        if futures_summary:
+            console.print("[bold yellow]Account Metrics[/bold yellow]")
+            console.print(
+                f"  Unrealized PnL: "
+                f"${futures_summary.get('unrealized_pnl', 0):,.2f}"
+            )
+            console.print(
+                f"  Daily Realized PnL: "
+                f"${futures_summary.get('daily_realized_pnl', 0):,.2f}"
+            )
+            console.print(
+                f"  Buying Power: "
+                f"${futures_summary.get('buying_power', 0):,.2f}"
+            )
+            console.print(
+                f"  Initial Margin: "
+                f"${futures_summary.get('initial_margin', 0):,.2f}"
+            )
+            console.print()
+        
+        # Display active futures positions (long/short)
+        futures_positions = portfolio_data.get('futures_positions', [])
+        if futures_positions:
+            table = Table(title="Active Positions (Long/Short)")
+            table.add_column("Product", style="cyan")
+            table.add_column("Side", style="white")
+            table.add_column("Contracts", style="white", justify="right")
+            table.add_column("Entry", style="yellow", justify="right")
+            table.add_column("Current", style="yellow", justify="right")
+            table.add_column("Unrealized PnL", style="green", justify="right")
+            
+            for pos in futures_positions:
+                product = pos.get('product_id', 'N/A')
+                side = pos.get('side', 'N/A')
+                contracts = pos.get('contracts', 0)
+                entry = pos.get('entry_price', 0)
+                current = pos.get('current_price', 0)
+                pnl = pos.get('unrealized_pnl', 0)
+                
+                # Color PnL based on positive/negative
+                pnl_color = "green" if pnl >= 0 else "red"
+                pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
+                
+                # Color side indicator
+                side_color = "green" if side == "LONG" else "red"
+                side_str = f"[{side_color}]{side}[/{side_color}]"
+                
+                table.add_row(
+                    product,
+                    side_str,
+                    f"{contracts:.0f}",
+                    f"${entry:,.2f}",
+                    f"${current:,.2f}",
+                    pnl_str
+                )
+            
+            console.print(table)
+        else:
+            console.print(
+                "[yellow]No active positions "
+                "(pure long/short futures strategy)[/yellow]"
+            )
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
