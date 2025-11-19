@@ -87,8 +87,8 @@ pip install -e .
 python test_api.py
 
 # Test CLI commands
-python main.py -c config/config.test.yaml status
-python main.py -c config/config.test.yaml analyze BTCUSD
+python main.py -c config/examples/test.yaml status
+python main.py -c config/examples/test.yaml analyze BTCUSD
 ```
 
 ## Code Style

@@ -1,5 +1,5 @@
 # Prevent committing secrets
-config/config.yaml
+config/config.local.yaml
 # Local configuration (contains secrets, do not commit)
 config/config.yaml
 # Python

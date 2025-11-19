@@ -20,14 +20,18 @@ Modular trading decision engine with four main layers:
   - `.get_macro_indicators()`: Real GDP, inflation, Fed Funds rate, unemployment
   - `.get_comprehensive_market_data(asset_pair, include_sentiment=True, include_macro=False)`: unified fetch
   - API key required (raises `ValueError` if missing); mock data fallback only after real request fails
+  - **Future enhancement**: Plan to integrate Yahoo Finance or other free API providers for fallback instead of mock data
   - **Data enrichment**: Adds candlestick analysis (body %, wicks, trend), technical indicators (RSI), price ranges
 - `PlatformFactory.create_platform(name, credentials)` — maps string → class; registration via `PlatformFactory.register_platform('my_platform', MyPlatform)`.
 - `BaseTradingPlatform` — required methods: `get_balance()`, `execute_trade(decision)`, `get_account_info()`.
+  - Optional: `get_portfolio_breakdown()` — returns detailed portfolio with holdings, USD values, allocation percentages (implemented by `CoinbaseAdvancedPlatform`)
 - `DecisionEngine.generate_decision(asset_pair, market_data, balance)` — builds context, prompt, routes to provider (`local | cli | codex | qwen | ensemble`). Returns decision dict with position sizing fields.
+  - AI receives portfolio context when available (holdings, allocations) for context-aware recommendations
 - `EnsembleDecisionManager` — aggregates decisions from multiple AI providers using weighted/majority/stacking strategies; adaptive learning adjusts provider weights based on historical accuracy.
 - `LocalLLMProvider` — auto-installs Ollama and downloads Llama-3.2-3B-Instruct (3B params, CPU-optimized, no API costs); fallback to 1B model if needed.
 - `QwenCLIProvider` — free Qwen CLI integration (requires Node.js v20+ and OAuth authentication); invokes `qwen` command for trading decisions.
 - `DecisionStore` — file-based JSON persistence; filename pattern: `YYYY-MM-DD_<uuid>.json` (date extracted from decision timestamp); retrieval filters by asset; updates rewrite same file by ID glob match.
+- `Backtester` — experimental MVP module for strategy validation; currently supports SMA crossover with synthetic candles; invoked via `FinanceFeedbackEngine.backtest()`; metrics: net return %, win rate %, max drawdown %.
 
 ## Decision Object Schema (key fields)
 ```json
@@ -115,13 +119,14 @@ Agents adding config options must: (1) default safely if absent, (2) avoid break
 
 ## Developer Workflows
 - Install: `pip install -r requirements.txt` or `pip install -e .`
-- Config: copy `config/config.yaml` → `config/config.local.yaml` for local credentials (gitignored); CLI defaults to `config/config.yaml` but accepts `-c path/to/config.yaml`.
+- Config: create `config/config.local.yaml` for local credentials (gitignored); CLI auto-selects `config.local.yaml` if present when using default config path, otherwise falls back to `config.yaml`. Example configs in `config/examples/`. To use a specific config: `-c path/to/config.yaml`.
 - Run CLI examples: 
   - `python main.py analyze BTCUSD` (uses config default provider)
   - `python main.py analyze BTCUSD --provider ensemble` (multi-provider mode)
   - `python main.py analyze BTCUSD --provider local` (Llama-3.2-3B via Ollama)
   - `python main.py analyze BTCUSD --provider qwen` (free Qwen CLI)
   - `python main.py balance`, `history --limit 20`, `execute <id>`, `status`
+  - `python main.py portfolio` (detailed breakdown with allocations — requires platform with `get_portfolio_breakdown()` like Coinbase Advanced)
 - Local iteration: modify module; invoke CLI command hitting modified path; verify JSON output written to `data/decisions/`.
 - Logging: uses `logging.basicConfig`; verbose flag `-v` sets DEBUG level across all modules.
 - Output formatting: CLI uses Rich library (`rich.console.Console`, `rich.table.Table`) for colored tables/formatting; when adding decision fields, update display logic in `cli/main.py` (search for `console.print` patterns).
@@ -131,6 +136,12 @@ Agents adding config options must: (1) default safely if absent, (2) avoid break
   - **Codex CLI**: similar to Copilot; uses `copilot -p` invocation pattern
   - **Qwen CLI**: free Qwen CLI (requires Node.js v20+ and OAuth); set `decision_engine.ai_provider: "qwen"`
   - **Ensemble**: aggregates all providers via `EnsembleDecisionManager`; weights adapt over time if `adaptive_learning: true`
+- **Backtesting**: `python main.py backtest BTCUSD -s 2025-01-01 -e 2025-03-01 --strategy sma_crossover --short-window 5 --long-window 20`; experimental MVP with synthetic candles; config in `backtesting:` YAML section; metrics: net return %, win rate %, max drawdown %.
+- **Testing patterns**:
+  - **Quick validation**: `python test_api.py` (Python API test with demo config)
+  - **CLI demo**: `bash demo.sh` (runs full feature demo via test config from `config/examples/`)
+  - **Quickstart**: `python quickstart.py` (interactive example with annotations)
+  - No automated unit tests; validate changes manually via CLI + JSON inspection
 
 ## Extension Patterns
 1. **New Trading Platform**:
@@ -139,6 +150,12 @@ class MyPlatform(BaseTradingPlatform):
     def get_balance(self): ...
     def execute_trade(self, decision): return { 'success': True, 'platform': 'my_platform', 'message': 'simulated' }
     def get_account_info(self): ...
+    def get_portfolio_breakdown(self):  # Optional - for detailed portfolio tracking
+        return {
+            'total_value_usd': float,
+            'num_assets': int,
+            'holdings': [{'asset': str, 'amount': float, 'value_usd': float, 'allocation_pct': float}]
+        }
 PlatformFactory.register_platform('my_platform', MyPlatform)
 ```
 
@@ -157,7 +174,7 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - **Confidence**: integer 0–100; ensure AI outputs converted appropriately.
 - **Network isolation**: avoid network calls outside data providers; keep side effects localized.
 - **Ensemble metadata**: stored in decision when `ai_provider: "ensemble"`; includes provider_decisions, agreement_score, confidence_variance for transparency/debugging.
-- **Mock data fallback**: When AlphaVantage API fails, creates realistic mock data with `mock: true` flag for testing.
+- **Mock data fallback**: When AlphaVantage API fails, creates realistic mock data with `mock: true` flag for testing. Future plan: integrate Yahoo Finance or other free API providers for fallback instead of mock data.
 - **Candlestick enrichment**: Automatically calculates body %, wick sizes, trend direction, close position in range for technical analysis.
 
 ## Safe Modification Rules for Agents
@@ -172,10 +189,12 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - Quick sanity: run `python main.py status` after changes.
 - Decision flow test: `analyze` → check file in `data/decisions/` → optionally `execute <id>`; ensure `executed` fields update.
 - For new platform: implement minimal stubs returning deterministic data; run `balance` & `execute`.
+- **Test scripts**: `python test_api.py` (Python API), `bash demo.sh` (CLI demo), `python quickstart.py` (guided example).
 - **Ensemble testing**: run `python main.py analyze BTCUSD --provider ensemble` and inspect `ensemble_metadata` in output JSON; verify all enabled providers contributed and weights sum to 1.0.
 - **Position sizing validation**: check `recommended_position_size` matches formula: `(balance × risk%) / (entry_price × stop_loss%)`; verify LONG positions use entry price as baseline, SHORT positions account for margin requirements.
 - **Sentiment/macro data**: toggle `include_sentiment`/`include_macro` in `analyze_asset()` calls; verify API calls appear in logs and data populated in decision's `market_data.sentiment`/`market_data.macro_indicators`.
 - **Mock data testing**: temporarily invalidate API key; verify graceful fallback with `mock: true` in market_data.
+- **Backtesting**: `python main.py backtest BTCUSD -s 2025-01-01 -e 2025-03-01`; validate synthetic candle generation and SMA strategy signals.
 - No automated tests currently exist; validate changes manually via CLI workflows and inspect JSON output in `data/decisions/`.
 - API key testing: temporarily remove/invalidate API key to verify graceful fallback to mock data (check logs for "API request failed" → "Using mock data").
 

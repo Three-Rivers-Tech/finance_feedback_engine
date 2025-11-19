@@ -17,11 +17,19 @@ console = Console()
 
 def load_ensemble_config():
     """Load ensemble configuration."""
-    # Use test config with ensemble settings added
-    config_path = Path("config/config.test.yaml")
+    # Prefer local config first, then test config
+    config_paths = [
+        Path("config/config.local.yaml"),
+        Path("config/examples/test.yaml"),
+    ]
     
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    for config_path in config_paths:
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = yaml.safe_load(f)
+                break
+    else:
+        config = {}
     
     # Override to ensemble mode
     config['decision_engine'] = {

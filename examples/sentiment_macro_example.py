@@ -17,15 +17,26 @@ import yaml
 
 
 def load_api_key():
-    """Load API key from config."""
-    config_path = Path(__file__).parent.parent / 'config' / 'config.yaml'
-    try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-            return config.get('alpha_vantage_api_key')
-    except Exception as e:
-        print(f"Warning: Could not load config: {e}")
-        return None
+    """Load API key, preferring local config overrides."""
+    config_dir = Path(__file__).parent.parent / 'config'
+    candidate_paths = [
+        config_dir / 'config.local.yaml',
+        config_dir / 'config.yaml',
+        config_dir / 'examples' / 'default.yaml',
+    ]
+
+    for path in candidate_paths:
+        if path.exists():
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f) or {}
+                    api_key = config.get('alpha_vantage_api_key')
+                    if api_key:
+                        return api_key
+            except Exception as exc:
+                print(f"Warning: Could not load config from {path}: {exc}")
+
+    return None
 
 
 def demonstrate_sentiment_analysis():
@@ -39,7 +50,7 @@ def demonstrate_sentiment_analysis():
         print("\n⚠️  No API key found. Using mock demonstration.\n")
         print("To enable real sentiment data:")
         print("1. Get a free API key from https://www.alphavantage.co/")
-        print("2. Add it to config/config.yaml as 'alpha_vantage_api_key'\n")
+        print("2. Add it to config/config.local.yaml as 'alpha_vantage_api_key'\n")
         return
     
     provider = AlphaVantageProvider(api_key=api_key)

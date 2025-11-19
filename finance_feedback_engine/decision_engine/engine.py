@@ -95,7 +95,8 @@ class DecisionEngine:
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
-        balance: Dict[str, float]
+        balance: Dict[str, float],
+        portfolio: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate a trading decision based on market data and balances.
@@ -104,14 +105,17 @@ class DecisionEngine:
             asset_pair: Asset pair being analyzed
             market_data: Current market data
             balance: Account balances
+            portfolio: Optional portfolio breakdown with holdings/allocations
 
         Returns:
             Trading decision with recommendation
         """
-        logger.info(f"Generating decision for {asset_pair}")
+        logger.info("Generating decision for %s", asset_pair)
         
         # Create decision context
-        context = self._create_decision_context(asset_pair, market_data, balance)
+        context = self._create_decision_context(
+            asset_pair, market_data, balance, portfolio
+        )
         
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
@@ -132,7 +136,8 @@ class DecisionEngine:
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
-        balance: Dict[str, float]
+        balance: Dict[str, float],
+        portfolio: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Create context for decision making.
@@ -141,18 +146,21 @@ class DecisionEngine:
             asset_pair: Asset pair
             market_data: Market data
             balance: Balances
+            portfolio: Optional portfolio breakdown
 
         Returns:
             Decision context
         """
-        return {
+        context = {
             'asset_pair': asset_pair,
             'market_data': market_data,
             'balance': balance,
+            'portfolio': portfolio,
             'timestamp': datetime.utcnow().isoformat(),
             'price_change': self._calculate_price_change(market_data),
             'volatility': self._calculate_volatility(market_data)
         }
+        return context
 
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage."""
@@ -346,6 +354,46 @@ Macro Impact Considerations:
 VOLATILITY ANALYSIS:
 --------------------
 Intraday Volatility: {volatility:.2f}%
+"""
+
+        # Add portfolio information if available
+        portfolio = context.get('portfolio')
+        if portfolio and portfolio.get('holdings'):
+            total_value = portfolio.get('total_value_usd', 0)
+            num_assets = portfolio.get('num_assets', 0)
+            
+            market_info += f"""
+CURRENT PORTFOLIO:
+------------------
+Total Portfolio Value: ${total_value:,.2f}
+Number of Assets: {num_assets}
+
+Holdings:
+"""
+            for holding in portfolio.get('holdings', []):
+                currency = holding.get('currency')
+                amount = holding.get('amount', 0)
+                value_usd = holding.get('value_usd', 0)
+                allocation = holding.get('allocation_pct', 0)
+                market_info += (
+                    f"  {currency}: {amount:.6f} "
+                    f"(${value_usd:,.2f} - {allocation:.1f}%)\n"
+                )
+            
+            # Check if we already hold the asset being analyzed
+            asset_base = asset_pair.replace('USD', '').replace('USDT', '')
+            current_holding = None
+            for holding in portfolio.get('holdings', []):
+                if holding.get('currency') == asset_base:
+                    current_holding = holding
+                    break
+            
+            if current_holding:
+                market_info += f"""
+EXISTING POSITION IN {asset_base}:
+Amount: {current_holding.get('amount', 0):.6f}
+Current Value: ${current_holding.get('value_usd', 0):,.2f}
+Allocation: {current_holding.get('allocation_pct', 0):.1f}%
 """
 
         prompt = f"""You are a financial trading advisor. Analyze the following market data and provide a trading recommendation.
