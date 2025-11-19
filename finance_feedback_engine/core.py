@@ -39,8 +39,11 @@ class FinanceFeedbackEngine:
         self.config = config
         
         # Initialize data provider
+        import os
+        api_key = os.environ.get('ALPHA_VANTAGE_API_KEY') \
+            or config.get('alpha_vantage_api_key')
         self.data_provider = AlphaVantageProvider(
-            api_key=config.get('alpha_vantage_api_key')
+            api_key=api_key
         )
         
         # Initialize trading platform
