@@ -1,3 +1,5 @@
+# Local configuration (contains secrets, do not commit)
+config/config.yaml
 # Python
 __pycache__/
 *.py[cod]
