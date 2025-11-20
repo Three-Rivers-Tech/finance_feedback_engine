@@ -4,6 +4,15 @@
 
 The Finance Feedback Engine 2.0 features a sophisticated ensemble decision system that combines multiple AI providers for more robust and reliable trading recommendations. The system uses state-of-the-art ensemble learning techniques including weighted voting, adaptive weight adjustment, and meta-feature generation.
 
+**Key Features:**
+- **Dynamic Weight Adjustment**: Automatically handles provider failures by renormalizing weights
+- **Multi-Provider Support**: Local LLM, Copilot CLI, Codex CLI, Qwen CLI
+- **Intelligent Voting**: Weighted, majority, and stacking strategies
+- **Adaptive Learning**: Improves provider weights based on historical accuracy
+- **Resilient Operation**: Continues functioning even when some providers fail
+
+> **New in 2.0**: Dynamic weight adjustment ensures robust decision-making even when AI providers fail. See [Dynamic Weight Adjustment](DYNAMIC_WEIGHT_ADJUSTMENT.md) for details.
+
 ## Theoretical Foundation
 
 The ensemble system is based on research in:

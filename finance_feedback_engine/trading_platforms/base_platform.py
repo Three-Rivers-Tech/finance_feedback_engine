@@ -52,3 +52,17 @@ class BaseTradingPlatform(ABC):
             Account details
         """
         pass
+
+    def get_portfolio_breakdown(self) -> Dict[str, Any]:
+        """
+        Optional: Get detailed portfolio breakdown.
+
+        Returns:
+            Dictionary with detailed portfolio metrics.
+        """
+        return {
+            'total_value_usd': 0,
+            'num_assets': 0,
+            'holdings': [],
+            'error': 'Not implemented'
+        }

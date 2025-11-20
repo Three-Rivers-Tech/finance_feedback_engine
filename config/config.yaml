@@ -5,34 +5,86 @@
 alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
 
 # Trading Platform Configuration
-# Options: 'coinbase', 'coinbase_advanced', 'oanda'
-trading_platform: "coinbase"
+# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'mock'
+# - coinbase/coinbase_advanced: Crypto trading with futures portfolio tracking
+# - oanda: Forex trading with position & margin tracking
+# - mock: Testing without real API (simulated data)
+trading_platform: "coinbase_advanced"
 
 # Platform-specific credentials
+# Uncomment and configure based on your chosen platform
 platform_credentials:
-  # For Coinbase Advanced
+  # ============================================
+  # Option 1: Coinbase Advanced (Crypto Futures)
+  # ============================================
+  # Get your API keys from: https://www.coinbase.com/settings/api
   api_key: "YOUR_COINBASE_API_KEY"
   api_secret: "YOUR_COINBASE_API_SECRET"
-  passphrase: "YOUR_COINBASE_PASSPHRASE"  # optional
+  use_sandbox: false  # true for testing, false for production
+  # passphrase: "YOUR_PASSPHRASE"  # optional, for legacy API only
   
-  # For Oanda
-  # api_key: "YOUR_OANDA_API_KEY"
+  # ============================================
+  # Option 2: Oanda (Forex Trading)
+  # ============================================
+  # Get credentials from: https://www.oanda.com/
+  # 1. Create account (practice or live)
+  # 2. Generate Personal Access Token
+  # 3. Find account ID in dashboard (format: 001-XXX-XXXXXXX-XXX)
+  # Uncomment below if using Oanda:
+  #
+  # api_key: "YOUR_OANDA_API_TOKEN"
   # account_id: "YOUR_OANDA_ACCOUNT_ID"
-  # environment: "practice"  # or 'live'
+  # environment: "practice"  # 'practice' for demo, 'live' for real money
+  
+  # ============================================
+  # Option 3: Mock Platform (Testing)
+  # ============================================
+  # No credentials needed - uses simulated data
+  # Set trading_platform: "mock" above
 
 # Decision Engine Configuration
 decision_engine:
-  # AI Provider: 'local', 'cli', or specific provider
+  # AI Provider Options:
+  # - 'local': Free Llama-3.2-3B via Ollama (auto-installed)
+  # - 'cli': GitHub Copilot CLI
+  # - 'codex': Codex CLI
+  # - 'qwen': Free Qwen CLI (requires Node.js v20+)
+  # - 'ensemble': Aggregate multiple providers for best signals
   ai_provider: "local"
   
-  # Model name/path (for local models)
-  model_name: "default"
+  # Model name/path (provider-specific)
+  model_name: "llama3.2:3b-instruct-fp16"
   
   # Decision confidence threshold (0.0 - 1.0)
+  # Only execute trades above this confidence level
   decision_threshold: 0.7
   
   # Custom prompt template (optional)
   # prompt_template: "path/to/custom_prompt.txt"
+
+# Ensemble Configuration (only used if ai_provider: "ensemble")
+ensemble:
+  # Which providers to include in ensemble
+  # Only enable providers you have configured
+  enabled_providers: [local]  # Example: [local, cli, codex, qwen]
+  
+  # Initial weights for each provider (must sum to 1.0)
+  provider_weights:
+    local: 1.0
+    # cli: 0.25
+    # codex: 0.25
+    # qwen: 0.25
+  
+  # Voting strategy: 'weighted', 'majority', or 'stacking'
+  voting_strategy: "weighted"
+  
+  # Minimum agreement threshold (0.0-1.0)
+  # Higher = requires more consensus between providers
+  agreement_threshold: 0.6
+  
+  # Adaptive learning: adjust weights based on accuracy
+  adaptive_learning: true
+  learning_rate: 0.1
 
 # Persistence Configuration
 persistence:
@@ -44,3 +96,49 @@ persistence:
   
   # Auto-cleanup old decisions (days)
   cleanup_days: 30
+
+# ============================================
+# USAGE NOTES
+# ============================================
+#
+# Quick Start:
+# 1. Set your alpha_vantage_api_key above
+# 2. Choose your trading_platform (coinbase_advanced or oanda)
+# 3. Add platform credentials for your chosen platform
+# 4. Choose ai_provider (local is easiest - no setup required)
+#
+# CLI Commands:
+# - python main.py status              # Check account & platform
+# - python main.py balance             # Quick balance check
+# - python main.py portfolio           # Detailed holdings (if supported)
+# - python main.py analyze BTCUSD      # Get AI trading signal
+# - python main.py history --limit 20  # View past decisions
+# - python main.py execute <id>        # Execute a decision
+#
+# Platform-Specific Notes:
+#
+# Coinbase Advanced (Crypto Futures):
+# - Supports: BTC, ETH futures trading
+# - Portfolio tracking: positions, P&L, margin
+# - Asset format: BTCUSD, ETHUSD
+# - Install: pip install coinbase-advanced-py
+#
+# Oanda (Forex):
+# - Supports: All major/cross/exotic forex pairs
+# - Portfolio tracking: positions, P&L, margin, currency exposure
+# - Asset format: EUR_USD, GBP_USD (use underscore)
+# - Install: pip install oandapyV20
+# - Environments: 'practice' (demo) or 'live' (real money)
+#
+# AI Providers:
+# - local: Free, no API costs, runs on CPU (4-8GB RAM)
+# - cli/codex: Requires GitHub Copilot subscription
+# - qwen: Free, requires Node.js v20+ and OAuth
+# - ensemble: Combines multiple providers for better accuracy
+#
+# For more details, see:
+# - README.md
+# - USAGE.md
+# - docs/OANDA_INTEGRATION.md (forex)
+# - docs/PORTFOLIO_TRACKING.md (crypto)
+# - docs/ENSEMBLE_SYSTEM.md (multi-provider AI)

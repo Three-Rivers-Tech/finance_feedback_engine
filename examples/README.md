@@ -23,6 +23,87 @@ python examples/custom_platform.py
 
 ---
 
+### 2. `oanda_forex_example.py` - Oanda Forex Trading with Portfolio Context
+
+Demonstrates Oanda integration for forex trading with comprehensive portfolio tracking.
+
+**Run:**
+```bash
+python examples/oanda_forex_example.py
+```
+
+**What it shows:**
+- Setting up Oanda platform connection
+- Viewing forex portfolio breakdown (positions, P&L, margin)
+- Analyzing forex pairs with AI
+- Context-aware trading decisions with portfolio exposure
+
+**Requirements:**
+- Oanda account (practice or live)
+- `pip install oandapyV20`
+- Valid API credentials in config
+
+**Use case:** Professional forex trading with real-time portfolio tracking and AI-powered analysis.
+
+---
+
+### 3. `ensemble_example.py` - Multi-Provider AI Ensemble
+
+Demonstrates ensemble decision making with multiple AI providers.
+
+**Run:**
+```bash
+python examples/ensemble_example.py
+```
+
+**What it shows:**
+- Combining multiple AI providers (Local LLM, Copilot CLI, Codex CLI, Qwen)
+- Weighted voting strategies
+- Agreement scoring and confidence variance
+- Adaptive learning with provider weight updates
+
+**Use case:** Increase decision confidence by aggregating multiple AI opinions.
+
+---
+
+### 4. `position_sizing_example.py` - Advanced Position Sizing
+
+Demonstrates position sizing calculations for long/short trades.
+
+**Run:**
+```bash
+python examples/position_sizing_example.py
+```
+
+**What it shows:**
+- Risk-based position sizing (1% risk default)
+- Stop loss placement (2% default)
+- Long vs short position calculations
+- Entry price and margin requirements
+
+**Use case:** Proper risk management for trading strategies.
+
+---
+
+### 5. `sentiment_macro_example.py` - Market Sentiment and Macro Analysis
+
+Demonstrates enriched market data with sentiment and macroeconomic indicators.
+
+**Run:**
+```bash
+python examples/sentiment_macro_example.py
+```
+
+**What it shows:**
+- News sentiment analysis (bullish/bearish/neutral)
+- Macroeconomic indicators (GDP, inflation, Fed funds, unemployment)
+- Technical indicators (RSI, candlestick patterns)
+- Comprehensive market context for AI decisions
+
+**Use case:** Fundamentals-driven trading with sentiment and macro context.
+
+---
+
 ## Creating Your Own Examples
 
 When creating examples:
