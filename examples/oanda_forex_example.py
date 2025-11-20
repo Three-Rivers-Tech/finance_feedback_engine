@@ -10,6 +10,7 @@ This example demonstrates:
 
 import sys
 import os
+import yaml
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -37,8 +38,16 @@ def main():
     print(f"📋 Loading config: {config_path}")
     print()
     
+    # Load YAML config
     try:
-        engine = FinanceFeedbackEngine(config_path=config_path)
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except Exception as e:
+        print(f"❌ Failed to load config: {e}")
+        return
+    
+    try:
+        engine = FinanceFeedbackEngine(config)
     except ValueError as e:
         print(f"❌ Configuration error: {e}")
         print()
