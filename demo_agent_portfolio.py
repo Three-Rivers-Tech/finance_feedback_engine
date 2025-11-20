@@ -118,6 +118,10 @@ def example_3_crypto_vs_fiat():
         
         total = portfolio['total_value_usd']
         
+        if total == 0:
+            console.print("[yellow]Portfolio is empty or has zero value[/yellow]")
+            return
+        
         table = Table(title="Asset Class Breakdown")
         table.add_column("Class", style="cyan")
         table.add_column("Value (USD)", justify="right", style="green")

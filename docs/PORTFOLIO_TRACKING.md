@@ -6,7 +6,7 @@ The Finance Feedback Engine supports **real-time futures trading portfolio track
 
 **Status: Signal-Only Mode** - Portfolio tracking is active, but trade execution is disabled. The system provides intelligent signals for perpetual futures and forex long/short positions.
 
-**Strategy Focus**: This is a **perpetual futures and forex long/short trading strategy only** - no spot holdings or position accumulation logic.
+**Strategy Focus**: This is a **perpetual futures long/short trading strategy** (forex support planned) - no spot holdings or position accumulation logic.
 
 ## Features
 
