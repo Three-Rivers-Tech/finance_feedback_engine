@@ -594,12 +594,13 @@ Provide:
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
+        Dynamically adjusts weights when providers fail to respond.
 
         Args:
             prompt: AI prompt
 
         Returns:
-            Aggregated decision from ensemble
+            Aggregated decision from ensemble with failure handling
         """
         logger.info("Using ensemble AI inference")
         
@@ -610,8 +611,9 @@ Provide:
         # Get enabled providers from ensemble config
         enabled = self.ensemble_manager.enabled_providers
         
-        # Query each provider
+        # Query each provider and track failures
         provider_decisions = {}
+        failed_providers = []
         
         for provider in enabled:
             try:
@@ -625,28 +627,96 @@ Provide:
                     decision = self._qwen_ai_inference(prompt)
                 else:
                     logger.warning(f"Unknown provider: {provider}")
+                    failed_providers.append(provider)
                     continue
                 
-                provider_decisions[provider] = decision
-                logger.info(
-                    f"{provider}: {decision['action']} "
-                    f"({decision['confidence']}%)"
-                )
+                # Check if the decision is a valid response (not a fallback)
+                if self._is_valid_provider_response(decision, provider):
+                    provider_decisions[provider] = decision
+                    logger.info(
+                        f"{provider}: {decision['action']} "
+                        f"({decision['confidence']}%)"
+                    )
+                else:
+                    # Provider returned fallback response, treat as failure
+                    logger.warning(
+                        f"Provider {provider} returned fallback/invalid "
+                        f"response, treating as failure"
+                    )
+                    failed_providers.append(provider)
                 
             except Exception as e:
                 logger.warning(f"Provider {provider} failed: {e}")
+                failed_providers.append(provider)
                 continue
         
-        # Aggregate decisions
+        # Handle complete failure case
         if not provider_decisions:
-            logger.error("No provider decisions available")
-            return self._rule_based_decision(prompt)
+            logger.error(
+                f"All {len(enabled)} providers failed, using rule-based "
+                f"fallback"
+            )
+            fallback = self._rule_based_decision(prompt)
+            fallback['ensemble_metadata'] = {
+                'providers_used': [],
+                'providers_failed': failed_providers,
+                'all_providers_failed': True,
+                'fallback_used': True
+            }
+            return fallback
         
+        # Log success/failure summary
+        logger.info(
+            f"Ensemble query complete: {len(provider_decisions)} succeeded, "
+            f"{len(failed_providers)} failed"
+        )
+        
+        # Aggregate decisions with failure information
         aggregated = self.ensemble_manager.aggregate_decisions(
-            provider_decisions
+            provider_decisions,
+            failed_providers=failed_providers
         )
         
         return aggregated
+
+    def _is_valid_provider_response(
+        self,
+        decision: Dict[str, Any],
+        provider: str
+    ) -> bool:
+        """
+        Check if provider response is valid (not a fallback).
+
+        Args:
+            decision: Decision dict from provider
+            provider: Provider name
+
+        Returns:
+            True if valid response, False if fallback/invalid
+        """
+        # Check for fallback indicators in reasoning
+        reasoning = decision.get('reasoning', '').lower()
+        fallback_keywords = [
+            'unavailable',
+            'fallback',
+            'failed to',
+            'error',
+            'could not'
+        ]
+        
+        if any(keyword in reasoning for keyword in fallback_keywords):
+            return False
+        
+        # Check for valid action
+        if decision.get('action') not in ['BUY', 'SELL', 'HOLD']:
+            return False
+        
+        # Check for valid confidence range
+        confidence = decision.get('confidence', 0)
+        if not isinstance(confidence, (int, float)) or confidence < 0:
+            return False
+        
+        return True
 
     def _rule_based_decision(self, prompt: str) -> Dict[str, Any]:
         """

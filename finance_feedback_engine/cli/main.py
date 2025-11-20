@@ -10,6 +10,8 @@ from rich.table import Table
 # from rich import print as rprint  # unused
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.cli.interactive import start_interactive_session
+
 
 console = Console()
 
@@ -34,24 +36,37 @@ def load_config(config_path: str) -> dict:
     
     with open(path, 'r', encoding='utf-8') as f:
         if path.suffix in ['.yaml', '.yml']:
-            return yaml.safe_load(f)
+            config = yaml.safe_load(f)
+            if config is None:
+                raise click.ClickException(
+                    f"Configuration file {config_path} is empty or invalid YAML"
+                )
+            return config
         elif path.suffix == '.json':
-            return json.load(f)
+            config = json.load(f)
+            if config is None:
+                raise click.ClickException(
+                    f"Configuration file {config_path} is empty or invalid JSON"
+                )
+            return config
         else:
             raise click.ClickException(
                 f"Unsupported config format: {path.suffix}"
             )
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.option(
     '--config', '-c',
     default='config/config.yaml',
     help='Path to config file (prefers config/config.local.yaml when present)'
 )
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+@click.option(
+    '--interactive', '-i', is_flag=True, help='Start in interactive mode'
+)
 @click.pass_context
-def cli(ctx, config, verbose):
+def cli(ctx, config, verbose, interactive):
     """Finance Feedback Engine 2.0 - AI-powered trading decision tool."""
     setup_logging(verbose)
     ctx.ensure_object(dict)
@@ -65,6 +80,14 @@ def cli(ctx, config, verbose):
 
     ctx.obj['config_path'] = str(config_path)
     ctx.obj['verbose'] = verbose
+
+    if interactive:
+        start_interactive_session(cli)
+        return
+
+    if ctx.invoked_subcommand is None:
+        console.print(cli.get_help(ctx))
+        return
 
 
 @cli.command()
@@ -98,10 +121,26 @@ def analyze(ctx, asset_pair, provider):
                     f"[yellow]Using AI provider: {provider}[/yellow]"
                 )
         
-        engine = FinanceFeedbackEngine(config)
-        
+        try:
+            engine = FinanceFeedbackEngine(config)
+        except Exception as e:
+            # If platform initialization fails (missing SDKs), allow an
+            # interactive override to use the explicit 'mock' platform.
+            if ctx.obj.get('interactive'):
+                console.print(
+                    f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
+                )
+                use_mock = console.input("Use mock platform for this session? [y/N]: ")
+                if use_mock.strip().lower() == 'y':
+                    config['trading_platform'] = 'mock'
+                    engine = FinanceFeedbackEngine(config)
+                else:
+                    raise
+            else:
+                raise
+
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
-        
+
         decision = engine.analyze_asset(asset_pair)
         
         # Display decision

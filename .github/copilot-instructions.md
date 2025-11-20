@@ -24,7 +24,8 @@ Modular trading decision engine with four main layers:
   - **Data enrichment**: Adds candlestick analysis (body %, wicks, trend), technical indicators (RSI), price ranges
 - `PlatformFactory.create_platform(name, credentials)` — maps string → class; registration via `PlatformFactory.register_platform('my_platform', MyPlatform)`.
 - `BaseTradingPlatform` — required methods: `get_balance()`, `execute_trade(decision)`, `get_account_info()`.
-  - Optional: `get_portfolio_breakdown()` — returns detailed portfolio with holdings, USD values, allocation percentages (implemented by `CoinbaseAdvancedPlatform`)
+  - Optional: `get_portfolio_breakdown()` — returns detailed portfolio with holdings, USD values, allocation percentages
+  - Implemented by: `CoinbaseAdvancedPlatform` (crypto futures), `OandaPlatform` (forex positions)
 - `DecisionEngine.generate_decision(asset_pair, market_data, balance)` — builds context, prompt, routes to provider (`local | cli | codex | qwen | ensemble`). Returns decision dict with position sizing fields.
   - AI receives portfolio context when available (holdings, allocations) for context-aware recommendations
 - `EnsembleDecisionManager` — aggregates decisions from multiple AI providers using weighted/majority/stacking strategies; adaptive learning adjusts provider weights based on historical accuracy.
@@ -126,7 +127,8 @@ Agents adding config options must: (1) default safely if absent, (2) avoid break
   - `python main.py analyze BTCUSD --provider local` (Llama-3.2-3B via Ollama)
   - `python main.py analyze BTCUSD --provider qwen` (free Qwen CLI)
   - `python main.py balance`, `history --limit 20`, `execute <id>`, `status`
-  - `python main.py portfolio` (detailed breakdown with allocations — requires platform with `get_portfolio_breakdown()` like Coinbase Advanced)
+  - `python main.py portfolio` (detailed breakdown with allocations — requires platform with `get_portfolio_breakdown()` like Coinbase Advanced or Oanda)
+  - **Forex trading**: `python main.py analyze EUR_USD` (use underscore format for Oanda pairs)
 - Local iteration: modify module; invoke CLI command hitting modified path; verify JSON output written to `data/decisions/`.
 - Logging: uses `logging.basicConfig`; verbose flag `-v` sets DEBUG level across all modules.
 - Output formatting: CLI uses Rich library (`rich.console.Console`, `rich.table.Table`) for colored tables/formatting; when adding decision fields, update display logic in `cli/main.py` (search for `console.print` patterns).
@@ -176,6 +178,8 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - **Ensemble metadata**: stored in decision when `ai_provider: "ensemble"`; includes provider_decisions, agreement_score, confidence_variance for transparency/debugging.
 - **Mock data fallback**: When AlphaVantage API fails, creates realistic mock data with `mock: true` flag for testing. Future plan: integrate Yahoo Finance or other free API providers for fallback instead of mock data.
 - **Candlestick enrichment**: Automatically calculates body %, wick sizes, trend direction, close position in range for technical analysis.
+- **Forex pairs (Oanda)**: Use underscore format (e.g., `EUR_USD` not `EURUSD`); API returns positions with instrument names in this format. AlphaVantage provider auto-converts if needed.
+- **Oanda portfolio**: `OandaPlatform.get_portfolio_breakdown()` returns: open positions (long/short), unrealized PnL, margin used/available, currency exposure, NAV. Requires `oandapyV20` library installed.
 
 ## Safe Modification Rules for Agents
 - Before adding fields: search for their usage in CLI formatting (`cli/main.py`) and update tables/printers accordingly.

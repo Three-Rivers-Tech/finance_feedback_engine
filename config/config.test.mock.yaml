@@ -1,0 +1,14 @@
+alpha_vantage_api_key: "demo"
+
+trading_platform: "mock"
+
+platform_credentials: {}
+
+decision_engine:
+  ai_provider: "local"
+  model_name: "default"
+  decision_threshold: 0.7
+
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
