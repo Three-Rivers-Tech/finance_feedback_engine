@@ -7,10 +7,14 @@
 - **🔌 Plug-and-Play Architecture**: Easy to set up and configure
 - **📊 Real-Time Market Data**: Integration with Alpha Vantage Premium API
 - **🤖 AI-Powered Decisions**: Support for local AI models and CLI-based AI tools
+- **🎭 Ensemble Mode**: Combine multiple AI providers with intelligent voting 🆕
+  - **Dynamic Weight Adjustment**: Automatically handles provider failures
+  - **Resilient Operation**: Continues working even when some providers are down
+  - **Transparent Metadata**: Full visibility into provider health and decisions
 - **💱 Multi-Asset Support**: Trade cryptocurrencies (BTC, ETH) and forex pairs (EUR/USD, etc.)
 - **🏦 Multi-Platform Integration**: 
   - Coinbase Advanced with **Real Portfolio Tracking** 🆕
-  - Oanda (Forex)
+  - Oanda (Forex) with **Position & Margin Tracking** 🆕
   - Easily extensible for new platforms
 - **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
 - **💾 Persistent Decision Storage**: Track all trading decisions with timestamps
@@ -72,13 +76,48 @@ python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API cha
 python main.py analyze BTCUSD --provider cli      # GitHub Copilot CLI
 python main.py analyze BTCUSD --provider qwen     # Qwen CLI (free, requires Node.js v20+)
 python main.py analyze BTCUSD --provider local    # Local rule-based
+python main.py analyze BTCUSD --provider ensemble # Multi-provider voting 🆕
 ```
+
+### Ensemble Mode (NEW!)
+
+Combine multiple AI providers for more robust decisions:
+
+```bash
+# Analyze with ensemble mode (combines all providers)
+python main.py analyze BTCUSD --provider ensemble
+```
+
+**Features:**
+- **Intelligent Voting**: Combines decisions from multiple AI providers
+- **Dynamic Weight Adjustment**: Automatically handles provider failures by renormalizing weights
+- **Resilient**: Continues working even when some providers are unavailable
+- **Transparent**: Full metadata shows which providers succeeded/failed and how weights were adjusted
+
+**Example metadata when one provider fails:**
+```json
+{
+  "ensemble_metadata": {
+    "providers_used": ["local", "codex", "qwen"],
+    "providers_failed": ["cli"],
+    "weight_adjustment_applied": true,
+    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333}
+  }
+}
+```
+
+See [docs/DYNAMIC_WEIGHT_ADJUSTMENT.md](docs/DYNAMIC_WEIGHT_ADJUSTMENT.md) for details.
 
 ### AI Provider Options
 
-The engine supports four AI providers:
+The engine supports five AI providers:
 
-1. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
+1. **Ensemble** (`--provider ensemble`): Combines multiple providers with weighted voting 🆕
+   - Automatically handles provider failures
+   - Configurable weights and voting strategies
+   - Best for production use with high reliability
+
+2. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
   - Install: `npm install -g @openai/codex` or from https://github.com/openai/codex
    - Runs locally without token costs
 
