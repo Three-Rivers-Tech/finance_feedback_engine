@@ -16,7 +16,7 @@ platform_credentials:
 decision_engine:
   # Use free Qwen CLI for AI-powered decisions
   # Requires Node.js v20+ and OAuth authentication
-  # Install: npm install -g qwen (or follow instructions at https://github.com/QwenLM/Qwen)
+  # Install: npm install -g @qwen-code/qwen-code
   ai_provider: "qwen"
   model_name: "qwen-cli"
   decision_threshold: 0.7

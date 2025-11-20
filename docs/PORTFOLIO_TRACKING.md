@@ -2,29 +2,31 @@
 
 ## Overview
 
-The Finance Feedback Engine now supports **real portfolio tracking** from Coinbase Advanced, enabling the AI to make context-aware trading recommendations based on your actual holdings.
+The Finance Feedback Engine supports **real-time futures trading portfolio tracking** from Coinbase Advanced, enabling the AI to make context-aware trading recommendations based on your active long/short positions.
 
-**Status: Signal-Only Mode** - Portfolio tracking is active, but trade execution is disabled. The system provides intelligent signals while learning from your real portfolio.
+**Status: Signal-Only Mode** - Portfolio tracking is active, but trade execution is disabled. The system provides intelligent signals for perpetual futures and forex long/short positions.
+
+**Strategy Focus**: This is a **perpetual futures and forex long/short trading strategy only** - no spot holdings or position accumulation logic.
 
 ## Features
 
-### 📊 Real Portfolio Data
-- Live account balances from Coinbase Advanced API
-- Holdings breakdown with USD valuations
-- Allocation percentages across all assets
-- Total portfolio value calculation
+### 📊 Real Futures Trading Data
+- Live futures account balance and margin from Coinbase Advanced API
+- Active long/short positions with entry/current prices
+- Unrealized and realized PnL tracking
+- Buying power and margin requirements
 
 ### 🤖 AI Portfolio Awareness
 The AI decision engine now receives:
-- Your current holdings and amounts
-- USD value of each position
-- Allocation percentages
-- Whether you already hold the asset being analyzed
+- Your current long/short positions
+- Position sizes and leverage
+- Unrealized PnL on open positions
+- Available buying power and margin status
 
 This enables recommendations like:
-- "You already hold 15% in BTC - consider rebalancing" 
-- "Portfolio is 80% USD - opportunity to deploy capital"
-- "ETH allocation is only 5% - bullish signals suggest increasing"
+- "You have a LONG position in BTC-PERP at $42,000 - consider closing on resistance"
+- "Current SHORT in ETH shows +$150 unrealized PnL - trail stop loss"
+- "Buying power at $1,200 - opportunity for new position"
 
 ### 🔒 Safety First
 - **No execution enabled** - signals only
@@ -85,52 +87,55 @@ python main.py portfolio
 ```
 
 **Output:**
-```
-Portfolio Summary
-Total Value: $12,345.67
-Number of Assets: 4
 
-Portfolio Holdings
-┌────────┬──────────────┬──────────────┬────────────┐
-│ Asset  │ Amount       │ Value (USD)  │ Allocation │
-├────────┼──────────────┼──────────────┼────────────┤
-│ USD    │ $8,500.00    │ $8,500.00    │ 68.85%     │
-│ BTC    │ 0.125000     │ $2,500.00    │ 20.25%     │
-│ ETH    │ 2.500000     │ $1,250.00    │ 10.12%     │
-│ SOL    │ 5.000000     │ $95.67       │ 0.77%      │
-└────────┴──────────────┴──────────────┴────────────┘
+```text
+Futures Trading Account
+Account Balance: $217.70
+
+Account Metrics
+  Unrealized PnL: $17.70
+  Daily Realized PnL: $10.75
+  Buying Power: $123.13
+  Initial Margin: $233.83
+
+                         Active Positions (Long/Short)
+┏━━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
+┃ Product         ┃ Side ┃ Contracts ┃     Entry ┃   Current ┃ Unrealized PnL ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
+│ ETP-20DEC30-CDE │ LONG │         3 │ $2,920.00 │ $2,978.00 │         $12.60 │
+└─────────────────┴──────┴───────────┴───────────┴───────────┴────────────────┘
 ```
 
-### Get AI Signal with Portfolio Context
+### Get AI Signal with Futures Position Context
 
 ```bash
 python main.py analyze BTCUSD
 ```
 
 The AI will see:
-```
-CURRENT PORTFOLIO:
-------------------
-Total Portfolio Value: $12,345.67
-Number of Assets: 4
 
-Holdings:
-  USD: 8500.000000 ($8,500.00 - 68.8%)
-  BTC: 0.125000 ($2,500.00 - 20.2%)
-  ETH: 2.500000 ($1,250.00 - 10.1%)
-  SOL: 5.000000 ($95.67 - 0.8%)
+```text
+CURRENT FUTURES ACCOUNT:
+------------------------
+Futures Balance: $217.70
+Unrealized PnL: $17.70
+Daily Realized PnL: $10.75
+Buying Power: $123.13
+Initial Margin: $233.83
 
-EXISTING POSITION IN BTC:
-Amount: 0.125000
-Current Value: $2,500.00
-Allocation: 20.2%
+ACTIVE POSITIONS:
+  ETP-20DEC30-CDE LONG: 3 contracts
+    Entry: $2,920.00
+    Current: $2,978.00
+    Unrealized PnL: $12.60
 ```
 
 **The AI uses this to provide context-aware recommendations:**
-- Considers your existing exposure
-- Suggests position sizing relative to portfolio
-- Factors in diversification
-- Advises on rebalancing opportunities
+
+- Considers your existing long/short positions
+- Suggests position sizing based on available buying power
+- Factors in current margin requirements
+- Advises on risk management based on unrealized PnL
 
 ### Check Account Info
 
@@ -139,63 +144,80 @@ python main.py status
 ```
 
 Shows:
+
 - Platform: coinbase_advanced
-- Mode: signal_only
+- Mode: signal_only (futures trading)
 - Execution enabled: false
-- Portfolio value and asset count
+- Futures account balance and active positions
 
 ## API Reference
 
 ### CoinbaseAdvancedPlatform Methods
 
 ```python
-# Get simple balances
+# Get futures account balance
 balances = platform.get_balance()
-# Returns: {'USD': 8500.0, 'BTC': 0.125, 'ETH': 2.5, 'SOL': 5.0}
+# Returns: {'FUTURES_USD': 217.70}
 
-# Get detailed portfolio breakdown
+# Get detailed futures portfolio breakdown
 portfolio = platform.get_portfolio_breakdown()
 # Returns: {
-#     'holdings': [
+#     'futures_positions': [
 #         {
-#             'currency': 'USD',
-#             'amount': 8500.0,
-#             'value_usd': 8500.0,
-#             'allocation_pct': 68.85
-#         },
-#         ...
+#             'product_id': 'ETP-20DEC30-CDE',
+#             'side': 'LONG',
+#             'contracts': 3.0,
+#             'entry_price': 2920.0,
+#             'current_price': 2978.0,
+#             'unrealized_pnl': 12.60,
+#             'daily_pnl': 5.25
+#         }
 #     ],
-#     'total_value_usd': 12345.67,
-#     'num_assets': 4
+#     'futures_summary': {
+#         'total_balance_usd': 217.70,
+#         'unrealized_pnl': 17.70,
+#         'daily_realized_pnl': 10.75,
+#         'buying_power': 123.13,
+#         'initial_margin': 233.83
+#     },
+#     'total_value_usd': 217.70,
+#     'futures_value_usd': 217.70,
+#     'spot_value_usd': 0.0,
+#     'holdings': [],
+#     'num_assets': 0
 # }
 
-# Get account info with portfolio
+# Get account info with futures portfolio
 account_info = platform.get_account_info()
 # Returns: {
 #     'platform': 'coinbase_advanced',
 #     'mode': 'signal_only',
 #     'execution_enabled': False,
-#     'balances': {...},
-#     'portfolio': {...}
+#     'balances': {'FUTURES_USD': 217.70},
+#     'portfolio': {
+#         'futures_positions': [...],
+#         'futures_summary': {...},
+#         'total_value_usd': 217.70
+#     }
 # }
 ```
 
 ## How It Works
 
-### 1. Portfolio Data Flow
+### 1. Futures Portfolio Data Flow
 
-```
-Coinbase Advanced API 
+```text
+Coinbase Advanced API (Futures)
     ↓
 CoinbaseAdvancedPlatform.get_portfolio_breakdown()
     ↓
 FinanceFeedbackEngine.analyze_asset()
     ↓
-DecisionEngine.generate_decision() [includes portfolio context]
+DecisionEngine.generate_decision() [includes futures portfolio context]
     ↓
-AI Provider receives portfolio data in prompt
+AI Provider receives futures positions and margin data in prompt
     ↓
-Context-aware trading signal generated
+Context-aware long/short trading signal generated
 ```
 
 ### 2. Decision Engine Integration
@@ -207,7 +229,7 @@ decision = decision_engine.generate_decision(
     asset_pair="BTCUSD",
     market_data={...},
     balance={...},
-    portfolio={...}  # NEW: Portfolio breakdown
+    portfolio={...}  # NEW: Futures portfolio breakdown
 )
 ```
 
@@ -216,19 +238,19 @@ decision = decision_engine.generate_decision(
 The AI prompt now includes:
 
 ```text
-CURRENT PORTFOLIO:
-------------------
-Total Portfolio Value: $X,XXX.XX
-Number of Assets: N
+CURRENT FUTURES ACCOUNT:
+------------------------
+Futures Balance: $XXX.XX
+Unrealized PnL: $XX.XX
+Daily Realized PnL: $XX.XX
+Buying Power: $XXX.XX
+Initial Margin: $XXX.XX
 
-Holdings:
-  ASSET: amount (value - allocation%)
-  ...
-
-EXISTING POSITION IN [ASSET]:
-Amount: X.XXXXXX
-Current Value: $X,XXX.XX
-Allocation: XX.X%
+ACTIVE POSITIONS:
+  PRODUCT LONG/SHORT: N contracts
+    Entry: $X,XXX.XX
+    Current: $X,XXX.XX
+    Unrealized PnL: $XX.XX
 ```
 
 ## Limitations & Future Enhancements
@@ -236,32 +258,32 @@ Allocation: XX.X%
 ### Current Limitations
 
 - **Signal-only mode**: No automatic trade execution
-- **Coinbase only**: Other platforms not yet supported
-- **No P&L tracking**: Doesn't track entry prices/gains yet
-- **No historical positions**: Only current holdings
+- **Coinbase futures only**: Spot trading and other platforms not supported
+- **Perpetual futures focus**: Strategy is long/short trading only (no position accumulation)
+- **Limited to active positions**: Only shows currently open long/short positions
 
 ### Planned Enhancements
 
-1. **P&L Tracking**
-   - Entry price recording
-   - Realized/unrealized gains
-   - Performance metrics
+1. **Forex Integration**
+   - Oanda API for forex long/short positions
+   - Multi-platform futures/forex aggregation
+   - Unified position tracking
 
-2. **Multi-Platform Support**
-   - Oanda portfolio integration
-   - Binance support
-   - Multi-platform aggregation
+2. **Advanced Risk Management**
+   - Position size recommendations based on margin
+   - Stop-loss suggestions for open positions
+   - Leverage and margin utilization alerts
 
-3. **Advanced Analytics**
-   - Sharpe ratio calculation
-   - Risk-adjusted returns
-   - Correlation analysis
-   - Diversification score
+3. **Performance Analytics**
+   - Win rate and profit factor by position type
+   - Risk-adjusted returns for long/short strategies
+   - Correlation analysis between positions
+   - Maximum drawdown tracking
 
-4. **Position Management**
-   - Historical position tracking
-   - Trade journal integration
-   - Performance attribution
+4. **Position History**
+   - Historical long/short position tracking
+   - Trade journal for closed positions
+   - Performance attribution by instrument
 
 ## Security Best Practices
 
@@ -288,14 +310,17 @@ pip install coinbase-advanced-py
 ```
 
 ### "Portfolio breakdown not supported"
+
 - Ensure using `coinbase_advanced` platform (not legacy `coinbase`)
 - Check API credentials are correct
 - Verify API key has required permissions
 
-### "No holdings found"
-- Check Coinbase account actually has assets
+### "No futures positions found"
+
+- Check Coinbase account has active perpetual futures positions
 - Verify using correct API environment (sandbox vs production)
-- Check API key permissions include portfolio read access
+- Check API key permissions include futures read access
+- Ensure you have opened futures positions (this is not for spot balances)
 
 ### Connection errors
 - Verify internet connection
