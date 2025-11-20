@@ -7,9 +7,6 @@ from .base_platform import BaseTradingPlatform
 
 logger = logging.getLogger(__name__)
 
-# Minimum balance threshold to filter dust (very small amounts)
-DUST_THRESHOLD_USD = 0.01  # $0.01
-
 
 class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     """
