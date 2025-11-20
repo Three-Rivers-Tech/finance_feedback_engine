@@ -7,7 +7,7 @@ Implements state-of-the-art ensemble techniques inspired by:
 - Pareto-optimal multi-objective balancing
 """
 
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import logging
 import numpy as np
 from datetime import datetime
@@ -83,13 +83,16 @@ class EnsembleDecisionManager:
 
     def aggregate_decisions(
         self,
-        provider_decisions: Dict[str, Dict[str, Any]]
+        provider_decisions: Dict[str, Dict[str, Any]],
+        failed_providers: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Aggregate decisions from multiple providers into unified decision.
+        Dynamically adjusts weights when providers fail to respond.
 
         Args:
             provider_decisions: Dict mapping provider name to decision dict
+            failed_providers: Optional list of providers that failed to respond
 
         Returns:
             Unified decision with ensemble metadata
@@ -97,8 +100,11 @@ class EnsembleDecisionManager:
         if not provider_decisions:
             raise ValueError("No provider decisions to aggregate")
         
+        failed_providers = failed_providers or []
+        
         logger.info(
-            f"Aggregating {len(provider_decisions)} provider decisions"
+            f"Aggregating {len(provider_decisions)} provider decisions "
+            f"({len(failed_providers)} failed)"
         )
         
         # Extract base predictions
@@ -119,10 +125,16 @@ class EnsembleDecisionManager:
         if not actions:
             raise ValueError("No valid provider decisions found")
         
-        # Apply voting strategy
+        # Dynamically adjust weights for active providers
+        adjusted_weights = self._adjust_weights_for_active_providers(
+            provider_names, failed_providers
+        )
+        
+        # Apply voting strategy with adjusted weights
         if self.voting_strategy == 'weighted':
             final_decision = self._weighted_voting(
-                provider_names, actions, confidences, reasonings, amounts
+                provider_names, actions, confidences, reasonings, amounts,
+                adjusted_weights
             )
         elif self.voting_strategy == 'majority':
             final_decision = self._majority_voting(
@@ -133,15 +145,20 @@ class EnsembleDecisionManager:
                 provider_names, actions, confidences, reasonings, amounts
             )
         else:
-            raise ValueError(f"Unknown voting strategy: {self.voting_strategy}")
+            raise ValueError(
+                f"Unknown voting strategy: {self.voting_strategy}"
+            )
         
         # Add ensemble metadata
         final_decision['ensemble_metadata'] = {
             'providers_used': provider_names,
-            'provider_weights': {
+            'providers_failed': failed_providers,
+            'original_weights': {
                 p: self.provider_weights.get(p, 0)
-                for p in provider_names
+                for p in self.enabled_providers
             },
+            'adjusted_weights': adjusted_weights,
+            'weight_adjustment_applied': len(failed_providers) > 0,
             'voting_strategy': self.voting_strategy,
             'provider_decisions': provider_decisions,
             'agreement_score': self._calculate_agreement_score(actions),
@@ -152,10 +169,54 @@ class EnsembleDecisionManager:
         logger.info(
             f"Ensemble decision: {final_decision['action']} "
             f"({final_decision['confidence']}%) - "
-            f"Agreement: {final_decision['ensemble_metadata']['agreement_score']:.2f}"
+            f"Agreement: "
+            f"{final_decision['ensemble_metadata']['agreement_score']:.2f}"
         )
         
         return final_decision
+
+    def _adjust_weights_for_active_providers(
+        self,
+        active_providers: List[str],
+        failed_providers: List[str]
+    ) -> Dict[str, float]:
+        """
+        Dynamically adjust weights when some providers fail.
+        Renormalizes weights to sum to 1.0 using only active providers.
+
+        Args:
+            active_providers: List of providers that successfully responded
+            failed_providers: List of providers that failed
+
+        Returns:
+            Dict mapping active providers to adjusted weights (sum = 1.0)
+        """
+        if not active_providers:
+            return {}
+        
+        # Get original weights for active providers
+        active_weights = {
+            provider: self.provider_weights.get(provider, 1.0)
+            for provider in active_providers
+        }
+        
+        # Calculate total weight of active providers
+        total_weight = sum(active_weights.values())
+        
+        # Renormalize to sum to 1.0
+        adjusted_weights = {
+            provider: weight / total_weight
+            for provider, weight in active_weights.items()
+        }
+        
+        if failed_providers:
+            logger.info(
+                f"Dynamically adjusted weights due to {len(failed_providers)} "
+                f"failed provider(s): {failed_providers}"
+            )
+            logger.debug(f"Adjusted weights: {adjusted_weights}")
+        
+        return adjusted_weights
 
     def _weighted_voting(
         self,
@@ -163,10 +224,12 @@ class EnsembleDecisionManager:
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
+        adjusted_weights: Optional[Dict[str, float]] = None
     ) -> Dict[str, Any]:
         """
         Weighted voting based on provider weights and confidences.
+        Uses adjusted weights if provided (e.g., when some providers failed).
 
         Args:
             providers: List of provider names
@@ -174,6 +237,7 @@ class EnsembleDecisionManager:
             confidences: List of confidence scores
             reasonings: List of reasoning strings
             amounts: List of suggested amounts
+            adjusted_weights: Optional pre-computed adjusted weights
 
         Returns:
             Aggregated decision
@@ -181,14 +245,27 @@ class EnsembleDecisionManager:
         # Normalize confidences to [0, 1]
         norm_confidences = np.array(confidences) / 100.0
         
-        # Get provider weights
-        weights = np.array([
-            self.provider_weights.get(p, 1.0) for p in providers
-        ])
+        # Get provider weights (use adjusted if provided, else original)
+        if adjusted_weights is not None:
+            weights = np.array([
+                adjusted_weights.get(p, 0.0) for p in providers
+            ])
+        else:
+            weights = np.array([
+                self.provider_weights.get(p, 1.0) for p in providers
+            ])
         
         # Combine weights with confidences for voting power
         voting_power = weights * norm_confidences
-        voting_power = voting_power / voting_power.sum()
+        
+        # Handle edge case where all voting power is zero
+        if voting_power.sum() == 0:
+            logger.warning(
+                "All voting power is zero, using equal weights"
+            )
+            voting_power = np.ones(len(providers)) / len(providers)
+        else:
+            voting_power = voting_power / voting_power.sum()
         
         # Vote for each action
         action_votes = {'BUY': 0.0, 'SELL': 0.0, 'HOLD': 0.0}
