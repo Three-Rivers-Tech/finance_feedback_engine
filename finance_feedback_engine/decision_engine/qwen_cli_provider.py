@@ -9,6 +9,11 @@ import logging
 import subprocess
 import json
 import re
+from .decision_validation import (
+    is_valid_decision,
+    try_parse_decision_json,
+    build_fallback_decision,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,19 +142,15 @@ class QwenCLIProvider:
             Parsed decision dict or None if parsing fails
         """
         # Try direct JSON parse
-        try:
-            data = json.loads(output)
-            if self._is_valid_decision(data):
-                # Ensure correct types
-                data['confidence'] = int(data.get('confidence', 50))
-                data['amount'] = float(data.get('amount', 0))
-                logger.info(
-                    "Qwen decision parsed: %s (%d%%)",
-                    data['action'], data['confidence']
-                )
-                return data
-        except json.JSONDecodeError:
-            pass
+        data = try_parse_decision_json(output)
+        if data:
+            data['confidence'] = int(data.get('confidence', 50))
+            data['amount'] = float(data.get('amount', 0))
+            logger.info(
+                "Qwen decision parsed: %s (%d%%)",
+                data['action'], data['confidence']
+            )
+            return data
 
         # Try to extract JSON from markdown code blocks
         json_match = re.search(
@@ -158,63 +159,30 @@ class QwenCLIProvider:
             re.DOTALL
         )
         if json_match:
-            try:
-                data = json.loads(json_match.group(1))
-                if self._is_valid_decision(data):
-                    data['confidence'] = int(data.get('confidence', 50))
-                    data['amount'] = float(data.get('amount', 0))
-                    logger.info(
-                        "Qwen decision from code block: %s (%d%%)",
-                        data['action'], data['confidence']
-                    )
-                    return data
-            except json.JSONDecodeError:
-                pass
+            data = try_parse_decision_json(json_match.group(1))
+            if data:
+                data['confidence'] = int(data.get('confidence', 50))
+                data['amount'] = float(data.get('amount', 0))
+                logger.info(
+                    "Qwen decision from code block: %s (%d%%)",
+                    data['action'], data['confidence']
+                )
+                return data
 
         # Try to find JSON object in text
         json_match = re.search(r'\{[^{}]*\}', output, re.DOTALL)
         if json_match:
-            try:
-                data = json.loads(json_match.group(0))
-                if self._is_valid_decision(data):
-                    data['confidence'] = int(data.get('confidence', 50))
-                    data['amount'] = float(data.get('amount', 0))
-                    logger.info(
-                        "Qwen decision extracted: %s (%d%%)",
-                        data['action'], data['confidence']
-                    )
-                    return data
-            except json.JSONDecodeError:
-                pass
+            data = try_parse_decision_json(json_match.group(0))
+            if data:
+                data['confidence'] = int(data.get('confidence', 50))
+                data['amount'] = float(data.get('amount', 0))
+                logger.info(
+                    "Qwen decision extracted: %s (%d%%)",
+                    data['action'], data['confidence']
+                )
+                return data
 
         return {}
-
-    def _is_valid_decision(self, data: Dict[str, Any]) -> bool:
-        """
-        Validate decision structure.
-
-        Args:
-            data: Decision dictionary to validate
-
-        Returns:
-            True if valid, False otherwise
-        """
-        required = ['action', 'confidence', 'reasoning']
-        if not all(k in data for k in required):
-            return False
-        
-        action = data.get('action', '').upper()
-        if action not in ['BUY', 'SELL', 'HOLD']:
-            return False
-        
-        try:
-            conf = int(data.get('confidence', -1))
-            if not 0 <= conf <= 100:
-                return False
-        except (TypeError, ValueError):
-            return False
-        
-        return True
 
     def _extract_decision_from_text(self, text: str) -> Dict[str, Any]:
         """
@@ -269,12 +237,6 @@ class QwenCLIProvider:
             Conservative fallback decision
         """
         logger.warning("Using fallback decision")
-        return {
-            'action': 'HOLD',
-            'confidence': 50,
-            'reasoning': (
-                'Qwen CLI unavailable or failed, '
-                'using conservative fallback.'
-            ),
-            'amount': 0
-        }
+        return build_fallback_decision(
+            'Qwen CLI unavailable or failed, using conservative fallback.'
+        )

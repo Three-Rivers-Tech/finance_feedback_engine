@@ -5,6 +5,11 @@ import logging
 import subprocess
 import json
 import re
+from .decision_validation import (
+    is_valid_decision,
+    try_parse_decision_json,
+    build_fallback_decision,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,20 +74,21 @@ class CodexCLIProvider:
             
             if result.returncode != 0:
                 logger.error(f"Codex CLI error: {result.stderr}")
-                return self._create_fallback_response()
+                return build_fallback_decision(
+                    "Codex CLI unavailable, using fallback decision."
+                )
             
             response_text = result.stdout.strip()
             
-            # Try to parse JSON response first
-            try:
-                decision = json.loads(response_text)
-                if self._is_valid_decision(decision):
-                    decision['confidence'] = int(decision.get('confidence', 50))
-                    decision['amount'] = float(decision.get('amount', 0))
-                    logger.info(f"Codex decision parsed: {decision['action']} ({decision['confidence']}%)")
-                    return decision
-            except json.JSONDecodeError:
-                pass
+            decision = try_parse_decision_json(response_text)
+            if decision:
+                decision['confidence'] = int(decision.get('confidence', 50))
+                decision['amount'] = float(decision.get('amount', 0))
+                logger.info(
+                    f"Codex decision parsed: {decision['action']} "
+                    f"({decision['confidence']}%)"
+                )
+                return decision
             
             # Fallback: parse text response
             logger.info("Parsing Codex text response")
@@ -90,18 +96,19 @@ class CodexCLIProvider:
             
         except subprocess.TimeoutExpired:
             logger.error("Codex CLI timeout")
-            return self._create_fallback_response()
+            return build_fallback_decision(
+                "Codex CLI timeout, using fallback decision."
+            )
         except FileNotFoundError:
             logger.error("Codex CLI not found - install from https://github.com/openai/codex")
-            return self._create_fallback_response()
+            return build_fallback_decision(
+                "Codex CLI not found, using fallback decision."
+            )
         except Exception as e:
             logger.error(f"Codex CLI error: {e}")
-            return self._create_fallback_response()
-
-    def _is_valid_decision(self, decision: Dict[str, Any]) -> bool:
-        """Check if decision dict has required fields."""
-        required = ['action', 'confidence', 'reasoning']
-        return all(k in decision for k in required)
+            return build_fallback_decision(
+                "Codex CLI error, using fallback decision."
+            )
 
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """
@@ -140,13 +147,4 @@ class CodexCLIProvider:
             'confidence': confidence,
             'reasoning': reasoning,
             'amount': amount
-        }
-
-    def _create_fallback_response(self) -> Dict[str, Any]:
-        """Create a default HOLD response."""
-        return {
-            'action': 'HOLD',
-            'confidence': 50,
-            'reasoning': 'Codex CLI unavailable, using fallback decision.',
-            'amount': 0
         }
