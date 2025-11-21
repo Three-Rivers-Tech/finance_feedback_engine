@@ -26,13 +26,16 @@ class OandaPlatform(BaseTradingPlatform):
 
         Args:
             credentials: Dictionary containing:
-                - api_key: Oanda API access token
+                - access_token: Oanda API access token (or api_key)
                 - account_id: Oanda account ID
                 - environment: 'practice' or 'live'
                 - base_url: Optional custom base URL
         """
         super().__init__(credentials)
-        self.api_key = credentials.get('api_key')
+        # Support both 'access_token' and 'api_key' for flexibility
+        self.api_key = (
+            credentials.get('access_token') or credentials.get('api_key')
+        )
         self.account_id = credentials.get('account_id')
         self.environment = credentials.get('environment', 'practice')
         

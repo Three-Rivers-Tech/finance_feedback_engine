@@ -29,12 +29,17 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         super().__init__(credentials)
         self.platforms: Dict[str, BaseTradingPlatform] = {}
 
-        if 'coinbase' in credentials and credentials['coinbase']:
+        # Support both 'coinbase' and 'coinbase_advanced' keys
+        coinbase_creds = (
+            credentials.get('coinbase') or
+            credentials.get('coinbase_advanced')
+        )
+        if coinbase_creds:
             logger.info(
                 "Initializing Coinbase Advanced platform for unified access."
             )
             self.platforms['coinbase'] = CoinbaseAdvancedPlatform(
-                credentials['coinbase']
+                coinbase_creds
             )
         
         if 'oanda' in credentials and credentials['oanda']:

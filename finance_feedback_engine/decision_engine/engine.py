@@ -695,7 +695,10 @@ Provide:
             True if valid response, False if fallback/invalid
         """
         # Check for fallback indicators in reasoning
-        reasoning = decision.get('reasoning', '').lower()
+        reasoning = decision.get('reasoning', '')
+        if not isinstance(reasoning, str) or not reasoning.strip():
+            return False
+        reasoning_lower = reasoning.lower()
         fallback_keywords = [
             'unavailable',
             'fallback',
@@ -704,7 +707,7 @@ Provide:
             'could not'
         ]
         
-        if any(keyword in reasoning for keyword in fallback_keywords):
+        if any(keyword in reasoning_lower for keyword in fallback_keywords):
             return False
         
         # Check for valid action
@@ -713,8 +716,27 @@ Provide:
         
         # Check for valid confidence range
         confidence = decision.get('confidence', 0)
-        if not isinstance(confidence, (int, float)) or confidence < 0:
+        if (
+            not isinstance(confidence, (int, float)) or
+            confidence < 0 or
+            confidence > 100
+        ):
             return False
+        
+        amount = decision.get('amount', 0)
+        # Treat missing/None as zero, but reject negative or non-numeric
+        if amount is None:
+            amount = 0
+        if not isinstance(amount, (int, float)):
+            try:
+                amount = float(amount)
+            except (TypeError, ValueError):
+                return False
+        if amount < 0:
+            return False
+        
+        # Normalize amount back onto the decision for downstream consumers
+        decision['amount'] = float(amount)
         
         return True
 
