@@ -166,6 +166,9 @@ class EnsembleDecisionManager:
             'timestamp': datetime.utcnow().isoformat()
         }
         
+        if 'voting_power' in final_decision:
+            final_decision['ensemble_metadata']['voting_power'] = final_decision['voting_power']
+        
         logger.info(
             f"Ensemble decision: {final_decision['action']} "
             f"({final_decision['confidence']}%) - "
@@ -202,6 +205,16 @@ class EnsembleDecisionManager:
         
         # Calculate total weight of active providers
         total_weight = sum(active_weights.values())
+        
+        if total_weight <= 0:
+            logger.warning(
+                "Total active weight is zero or negative; falling back to "
+                "equal weights for active providers"
+            )
+            return {
+                provider: 1.0 / len(active_providers)
+                for provider in active_providers
+            }
         
         # Renormalize to sum to 1.0
         adjusted_weights = {
@@ -263,9 +276,9 @@ class EnsembleDecisionManager:
             logger.warning(
                 "All voting power is zero, using equal weights"
             )
-            voting_power = np.ones(len(providers)) / len(providers)
-        else:
-            voting_power = voting_power / voting_power.sum()
+            voting_power = np.ones(len(providers))
+        
+        voting_power = voting_power / voting_power.sum()
         
         # Vote for each action
         action_votes = {'BUY': 0.0, 'SELL': 0.0, 'HOLD': 0.0}
@@ -308,7 +321,11 @@ class EnsembleDecisionManager:
             'confidence': int(ensemble_confidence),
             'reasoning': final_reasoning,
             'amount': final_amount,
-            'action_votes': action_votes
+            'action_votes': action_votes,
+            'voting_power': {
+                provider: float(power)
+                for provider, power in zip(providers, voting_power)
+            }
         }
 
     def _majority_voting(
