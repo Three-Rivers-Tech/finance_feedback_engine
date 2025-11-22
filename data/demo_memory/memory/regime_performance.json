@@ -1,0 +1,32 @@
+{
+  "bullish": {
+    "total_trades": 3,
+    "winning_trades": 3,
+    "total_pnl": 900.0
+  },
+  "trend_bullish": {
+    "total_trades": 3,
+    "winning_trades": 3,
+    "total_pnl": 900.0
+  },
+  "neutral": {
+    "total_trades": 1,
+    "winning_trades": 0,
+    "total_pnl": -40.0
+  },
+  "trend_neutral": {
+    "total_trades": 1,
+    "winning_trades": 0,
+    "total_pnl": -40.0
+  },
+  "bearish": {
+    "total_trades": 1,
+    "winning_trades": 1,
+    "total_pnl": 240.0
+  },
+  "trend_bearish": {
+    "total_trades": 1,
+    "winning_trades": 1,
+    "total_pnl": 240.0
+  }
+}

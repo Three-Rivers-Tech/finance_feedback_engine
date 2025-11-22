@@ -1,0 +1,54 @@
+{
+  "local": {
+    "total_trades": 3,
+    "winning_trades": 2,
+    "total_pnl": 696.0,
+    "confidence_calibration": [
+      {
+        "confidence": 75,
+        "was_profitable": true,
+        "pnl": 200.0
+      },
+      {
+        "confidence": 70,
+        "was_profitable": true,
+        "pnl": 400.0
+      }
+    ]
+  },
+  "cli": {
+    "total_trades": 3,
+    "winning_trades": 1,
+    "total_pnl": 332.0,
+    "confidence_calibration": [
+      {
+        "confidence": 60,
+        "was_profitable": false,
+        "pnl": -40.0
+      },
+      {
+        "confidence": 80,
+        "was_profitable": true,
+        "pnl": 300.0
+      }
+    ]
+  },
+  "ensemble": {
+    "total_trades": 1,
+    "winning_trades": 1,
+    "total_pnl": 240.0,
+    "confidence_calibration": [
+      {
+        "confidence": 85,
+        "was_profitable": true,
+        "pnl": 240.0
+      }
+    ]
+  },
+  "codex": {
+    "total_trades": 1,
+    "winning_trades": 0,
+    "total_pnl": 72.0,
+    "confidence_calibration": []
+  }
+}

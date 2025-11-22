@@ -1,9 +1,12 @@
 """Alpha Vantage data provider module."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 import logging
 import requests
 from datetime import datetime
+
+from ..utils.retry import exponential_backoff_retry
+from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -17,17 +20,39 @@ class AlphaVantageProvider:
 
     BASE_URL = "https://www.alphavantage.co/query"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
         """
         Initialize Alpha Vantage provider.
 
         Args:
             api_key: Alpha Vantage API key (premium recommended)
+            config: Optional configuration dictionary with timeout settings
         """
         if not api_key:
             raise ValueError("Alpha Vantage API key is required")
         self.api_key = api_key
-        logger.info("Alpha Vantage provider initialized")
+        self.config = config or {}
+        
+        # Timeout configuration (industry best practice)
+        api_timeouts = self.config.get('api_timeouts', {})
+        self.timeout_market_data = api_timeouts.get('market_data', 10)
+        self.timeout_sentiment = api_timeouts.get('sentiment', 15)
+        self.timeout_macro = api_timeouts.get('macro', 10)
+        
+        # Circuit breaker for API calls (prevent cascading failures)
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60.0,
+            expected_exception=requests.exceptions.RequestException,
+            name="AlphaVantage-API"
+        )
+        
+        logger.info(
+            "Alpha Vantage provider initialized with timeouts: "
+            f"market={self.timeout_market_data}s, "
+            f"sentiment={self.timeout_sentiment}s, "
+            f"macro={self.timeout_macro}s"
+        )
 
     def get_market_data(self, asset_pair: str) -> Dict[str, Any]:
         """
@@ -38,19 +63,40 @@ class AlphaVantageProvider:
 
         Returns:
             Dictionary containing market data
+            
+        Raises:
+            CircuitBreakerOpenError: If circuit breaker is open
+            ValueError: If data validation fails
         """
         logger.info("Fetching market data for %s", asset_pair)
         
-        # Determine asset type and fetch appropriate data
-        if 'BTC' in asset_pair or 'ETH' in asset_pair:
-            market_data = self._get_crypto_data(asset_pair)
-        else:
-            market_data = self._get_forex_data(asset_pair)
-        
-        # Enrich with additional context
-        market_data = self._enrich_market_data(market_data, asset_pair)
-        
-        return market_data
+        try:
+            # Determine asset type and fetch appropriate data
+            if 'BTC' in asset_pair or 'ETH' in asset_pair:
+                market_data = self._get_crypto_data(asset_pair)
+            else:
+                market_data = self._get_forex_data(asset_pair)
+            
+            # Validate data quality
+            is_valid, issues = self.validate_market_data(market_data, asset_pair)
+            if not is_valid:
+                logger.warning(
+                    f"Market data validation issues for {asset_pair}: {issues}"
+                )
+                # Continue with warning, but flag in data
+                market_data['validation_warnings'] = issues
+            
+            # Enrich with additional context
+            market_data = self._enrich_market_data(market_data, asset_pair)
+            
+            return market_data
+            
+        except CircuitBreakerOpenError:
+            logger.error(f"Circuit breaker open for {asset_pair}, using fallback")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to fetch market data for {asset_pair}: {e}")
+            raise
 
     # ------------------------------------------------------------------
     # Historical Batch Data
@@ -487,7 +533,7 @@ class AlphaVantageProvider:
 
     def _get_crypto_data(self, asset_pair: str) -> Dict[str, Any]:
         """
-        Fetch cryptocurrency data.
+        Fetch cryptocurrency data with retry and circuit breaker.
 
         Args:
             asset_pair: Crypto pair (e.g., 'BTCUSD')
@@ -511,9 +557,17 @@ class AlphaVantageProvider:
         }
 
         try:
-            response = requests.get(self.BASE_URL, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            # Use circuit breaker for API call
+            def api_call():
+                response = requests.get(
+                    self.BASE_URL,
+                    params=params,
+                    timeout=self.timeout_market_data
+                )
+                response.raise_for_status()
+                return response.json()
+            
+            data = self.circuit_breaker.call(api_call)
 
             if 'Time Series (Digital Currency Daily)' in data:
                 time_series = data['Time Series (Digital Currency Daily)']
@@ -568,7 +622,7 @@ class AlphaVantageProvider:
 
     def _get_forex_data(self, asset_pair: str) -> Dict[str, Any]:
         """
-        Fetch forex data.
+        Fetch forex data with retry and circuit breaker.
 
         Args:
             asset_pair: Forex pair (e.g., 'EURUSD')
@@ -587,9 +641,17 @@ class AlphaVantageProvider:
         }
 
         try:
-            response = requests.get(self.BASE_URL, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
+            # Use circuit breaker for API call
+            def api_call():
+                response = requests.get(
+                    self.BASE_URL,
+                    params=params,
+                    timeout=self.timeout_market_data
+                )
+                response.raise_for_status()
+                return response.json()
+            
+            data = self.circuit_breaker.call(api_call)
 
             if 'Time Series FX (Daily)' in data:
                 time_series = data['Time Series FX (Daily)']
@@ -643,3 +705,86 @@ class AlphaVantageProvider:
             'type': asset_type,
             'mock': True
         }
+
+    def validate_market_data(
+        self, data: Dict[str, Any], asset_pair: str
+    ) -> Tuple[bool, List[str]]:
+        """
+        Validate market data quality and completeness.
+        
+        Industry best practice: Always validate input data before processing
+        to catch stale data, missing fields, or invalid values.
+
+        Args:
+            data: Market data dictionary to validate
+            asset_pair: Asset pair for logging context
+
+        Returns:
+            Tuple of (is_valid, list_of_issues)
+        """
+        issues = []
+        
+        # Check for required OHLC fields
+        required_fields = ['open', 'high', 'low', 'close']
+        missing_fields = [
+            f for f in required_fields
+            if f not in data or data[f] == 0
+        ]
+        if missing_fields:
+            issues.append(f"Missing OHLC fields: {missing_fields}")
+        
+        # Check for stale data (if timestamp available)
+        if 'timestamp' in data and not data.get('mock', False):
+            try:
+                data_time = datetime.fromisoformat(
+                    data['timestamp'].replace('Z', '+00:00')
+                )
+                age = datetime.utcnow() - data_time.replace(tzinfo=None)
+                if age.total_seconds() > 3600:  # 1 hour threshold
+                    issues.append(
+                        f"Market data is stale "
+                        f"({age.total_seconds():.0f}s old)"
+                    )
+            except (ValueError, TypeError) as e:
+                issues.append(f"Invalid timestamp format: {e}")
+        
+        # Sanity checks on OHLC values
+        if all(f in data for f in required_fields):
+            high = data['high']
+            low = data['low']
+            close = data['close']
+            open_price = data['open']
+            
+            if high < low:
+                issues.append(
+                    f"Invalid OHLC: high ({high}) < low ({low})"
+                )
+            
+            if not (low <= close <= high):
+                issues.append(
+                    f"Invalid OHLC: close ({close}) "
+                    f"not in range [{low}, {high}]"
+                )
+            
+            if not (low <= open_price <= high):
+                issues.append(
+                    f"Invalid OHLC: open ({open_price}) "
+                    f"not in range [{low}, {high}]"
+                )
+            
+            # Check for zero or negative prices
+            if any(data[f] <= 0 for f in required_fields):
+                issues.append("OHLC contains zero or negative values")
+        
+        # Return validation result
+        is_valid = len(issues) == 0
+        if not is_valid:
+            logger.warning(
+                f"Market data validation failed for {asset_pair}: {issues}"
+            )
+        
+        return is_valid, issues
+    
+    def get_circuit_breaker_stats(self) -> Dict[str, Any]:
+        """Get circuit breaker statistics for monitoring."""
+        return self.circuit_breaker.get_stats()
