@@ -299,7 +299,10 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'total_value_usd': total_value,
                 'futures_value_usd': futures_value,
                 'spot_value_usd': spot_value,
-                'num_assets': len(holdings)
+                'num_assets': len(holdings),
+                # Expose unrealized P&L at the portfolio level for downstream consumers.
+                'unrealized_pnl': futures_summary.get('unrealized_pnl', 0.0),
+                'platform': 'coinbase'
             }
             
         except Exception as e:

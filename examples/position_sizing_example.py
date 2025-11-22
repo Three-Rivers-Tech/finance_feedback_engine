@@ -105,7 +105,8 @@ def demonstrate_long_position():
             entry_price=entry_price,
             current_price=current_price,
             position_size=position_size,
-            position_type='LONG'
+            position_type='LONG',
+            unrealized=True  # Still an open position in this scenario
         )
         
         print(f"\n{scenario_name}: ${current_price:,.2f}")
@@ -146,7 +147,8 @@ def demonstrate_short_position():
             entry_price=entry_price,
             current_price=current_price,
             position_size=position_size,
-            position_type='SHORT'
+            position_type='SHORT',
+            unrealized=True  # Open short; P&L is unrealized
         )
         
         print(f"\n{scenario_name}: ${current_price:,.2f}")
@@ -175,8 +177,12 @@ def demonstrate_comparison():
     for current_price in price_scenarios:
         price_change = ((current_price - entry_price) / entry_price) * 100
         
-        long_pnl = engine.calculate_pnl(entry_price, current_price, position_size, 'LONG')
-        short_pnl = engine.calculate_pnl(entry_price, current_price, position_size, 'SHORT')
+        long_pnl = engine.calculate_pnl(
+            entry_price, current_price, position_size, 'LONG', unrealized=True
+        )
+        short_pnl = engine.calculate_pnl(
+            entry_price, current_price, position_size, 'SHORT', unrealized=True
+        )
         
         print(f"\nCurrent Price: ${current_price:,.2f} ({price_change:+.1f}%)")
         print(f"  LONG Position:  ${long_pnl['pnl_dollars']:+8,.2f} ({long_pnl['pnl_percentage']:+6.2f}%)")

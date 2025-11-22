@@ -146,7 +146,8 @@ pnl = engine.calculate_pnl(
     entry_price=50000,
     current_price=55000,
     position_size=0.1,
-    position_type='LONG'
+    position_type='LONG',
+    unrealized=True
 )
 ```
 
