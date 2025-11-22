@@ -1,0 +1,22 @@
+{
+  "decision_id": "trade-002",
+  "asset_pair": "BTCUSD",
+  "action": "BUY",
+  "entry_timestamp": "2025-11-13T19:23:54.197484",
+  "exit_timestamp": "2025-11-14T19:23:54.197484",
+  "entry_price": 51000,
+  "exit_price": 50500,
+  "position_size": 0.08,
+  "realized_pnl": -40.0,
+  "pnl_percentage": -0.9803921568627451,
+  "holding_period_hours": 24.0,
+  "ai_provider": "cli",
+  "ensemble_providers": null,
+  "decision_confidence": 60,
+  "market_sentiment": "Neutral",
+  "volatility": 3.0,
+  "price_trend": "neutral",
+  "was_profitable": false,
+  "hit_stop_loss": false,
+  "hit_take_profit": false
+}

@@ -1,0 +1,81 @@
+{
+  "timestamp": "2025-11-22T19:23:54.198628",
+  "total_trades": 5,
+  "winning_trades": 4,
+  "losing_trades": 1,
+  "win_rate": 80.0,
+  "total_pnl": 1100.0,
+  "avg_win": 285.0,
+  "avg_loss": 40.0,
+  "profit_factor": 28.5,
+  "max_drawdown": 20.0,
+  "sharpe_ratio": 22.529346221506064,
+  "sortino_ratio": null,
+  "provider_stats": {
+    "local": {
+      "win_rate": 66.66666666666666,
+      "total_trades": 3,
+      "total_pnl": 696.0,
+      "avg_pnl_per_trade": 232.0,
+      "high_confidence_winrate": 100.0,
+      "medium_confidence_winrate": 0,
+      "low_confidence_winrate": 0
+    },
+    "cli": {
+      "win_rate": 33.33333333333333,
+      "total_trades": 3,
+      "total_pnl": 332.0,
+      "avg_pnl_per_trade": 110.66666666666667,
+      "high_confidence_winrate": 100.0,
+      "medium_confidence_winrate": 0.0,
+      "low_confidence_winrate": 0
+    },
+    "ensemble": {
+      "win_rate": 100.0,
+      "total_trades": 1,
+      "total_pnl": 240.0,
+      "avg_pnl_per_trade": 240.0,
+      "high_confidence_winrate": 100.0,
+      "medium_confidence_winrate": 0,
+      "low_confidence_winrate": 0
+    },
+    "codex": {
+      "win_rate": 0.0,
+      "total_trades": 1,
+      "total_pnl": 72.0,
+      "avg_pnl_per_trade": 72.0
+    }
+  },
+  "regime_performance": {
+    "bullish": {
+      "win_rate": 100.0,
+      "total_pnl": 900.0,
+      "total_trades": 3
+    },
+    "trend_bullish": {
+      "win_rate": 100.0,
+      "total_pnl": 900.0,
+      "total_trades": 3
+    },
+    "neutral": {
+      "win_rate": 0.0,
+      "total_pnl": -40.0,
+      "total_trades": 1
+    },
+    "trend_neutral": {
+      "win_rate": 0.0,
+      "total_pnl": -40.0,
+      "total_trades": 1
+    },
+    "bearish": {
+      "win_rate": 100.0,
+      "total_pnl": 240.0,
+      "total_trades": 1
+    },
+    "trend_bearish": {
+      "win_rate": 100.0,
+      "total_pnl": 240.0,
+      "total_trades": 1
+    }
+  }
+}

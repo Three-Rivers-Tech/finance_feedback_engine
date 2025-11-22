@@ -17,6 +17,9 @@
   - Oanda (Forex) with **Position & Margin Tracking** 🆕
   - Easily extensible for new platforms
 - **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
+- **📊 Position Sizing**: Automatic position sizing with 1% risk / 2% stop loss defaults 🆕
+  - **Smart Signal-Only Mode**: Provides trading signals without position sizing when portfolio data unavailable 🆕
+  - **Risk Management**: Calculates appropriate position sizes based on account balance
 - **💾 Persistent Decision Storage**: Track all trading decisions with timestamps
 - **⚙️ Modular Design**: Each component can be customized or replaced
 - **📈 Balance Management**: Real-time account balance and allocation tracking
@@ -139,6 +142,21 @@ The engine supports five AI providers:
 ```bash
 python main.py balance
 ```
+
+### View Portfolio Dashboard 🆕
+
+```bash
+# Show unified dashboard aggregating all platforms
+python main.py dashboard
+```
+
+The dashboard displays:
+- Total portfolio value across all platforms
+- Asset count and holdings breakdown
+- Per-platform allocation percentages
+- Real-time data from Coinbase, Oanda, etc.
+
+See [docs/PORTFOLIO_DASHBOARD.md](docs/PORTFOLIO_DASHBOARD.md) for details.
 
 ### View Decision History
 

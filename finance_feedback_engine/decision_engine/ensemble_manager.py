@@ -88,7 +88,14 @@ class EnsembleDecisionManager:
     ) -> Dict[str, Any]:
         """
         Aggregate decisions from multiple providers into unified decision.
-        Dynamically adjusts weights when providers fail to respond.
+        Implements multi-tier fallback strategy with dynamic weight
+        recalculation when providers fail.
+
+        Fallback Tiers:
+        1. Weighted voting (preferred if weights configured)
+        2. Majority voting (if weighted fails)
+        3. Simple averaging (if majority fails)
+        4. Single provider (if only one available)
 
         Args:
             provider_decisions: Dict mapping provider name to decision dict
@@ -101,10 +108,17 @@ class EnsembleDecisionManager:
             raise ValueError("No provider decisions to aggregate")
         
         failed_providers = failed_providers or []
+        total_providers = len(self.enabled_providers)
+        active_providers = len(provider_decisions)
+        failure_rate = (
+            len(failed_providers) / total_providers
+            if total_providers > 0 else 0
+        )
         
         logger.info(
-            f"Aggregating {len(provider_decisions)} provider decisions "
-            f"({len(failed_providers)} failed)"
+            f"Aggregating {active_providers} provider decisions "
+            f"({len(failed_providers)} failed, "
+            f"{failure_rate:.1%} failure rate)"
         )
         
         # Extract base predictions
@@ -130,29 +144,24 @@ class EnsembleDecisionManager:
             provider_names, failed_providers
         )
         
-        # Apply voting strategy with adjusted weights
-        if self.voting_strategy == 'weighted':
-            final_decision = self._weighted_voting(
-                provider_names, actions, confidences, reasonings, amounts,
-                adjusted_weights
-            )
-        elif self.voting_strategy == 'majority':
-            final_decision = self._majority_voting(
-                provider_names, actions, confidences, reasonings, amounts
-            )
-        elif self.voting_strategy == 'stacking':
-            final_decision = self._stacking_ensemble(
-                provider_names, actions, confidences, reasonings, amounts
-            )
-        else:
-            raise ValueError(
-                f"Unknown voting strategy: {self.voting_strategy}"
-            )
+        # Apply progressive fallback strategy
+        final_decision, fallback_tier = self._apply_voting_with_fallback(
+            provider_names, actions, confidences, reasonings, amounts,
+            adjusted_weights
+        )
         
-        # Add ensemble metadata
+        # Adjust confidence based on provider availability
+        final_decision = self._adjust_confidence_for_failures(
+            final_decision, active_providers, total_providers
+        )
+        
+        # Add comprehensive ensemble metadata
         final_decision['ensemble_metadata'] = {
             'providers_used': provider_names,
             'providers_failed': failed_providers,
+            'num_active': active_providers,
+            'num_total': total_providers,
+            'failure_rate': failure_rate,
             'original_weights': {
                 p: self.provider_weights.get(p, 0)
                 for p in self.enabled_providers
@@ -160,14 +169,18 @@ class EnsembleDecisionManager:
             'adjusted_weights': adjusted_weights,
             'weight_adjustment_applied': len(failed_providers) > 0,
             'voting_strategy': self.voting_strategy,
+            'fallback_tier': fallback_tier,
             'provider_decisions': provider_decisions,
             'agreement_score': self._calculate_agreement_score(actions),
             'confidence_variance': float(np.var(confidences)),
+            'confidence_adjusted': active_providers < total_providers,
             'timestamp': datetime.utcnow().isoformat()
         }
         
         if 'voting_power' in final_decision:
-            final_decision['ensemble_metadata']['voting_power'] = final_decision['voting_power']
+            final_decision['ensemble_metadata']['voting_power'] = (
+                final_decision['voting_power']
+            )
         
         logger.info(
             f"Ensemble decision: {final_decision['action']} "
@@ -230,6 +243,264 @@ class EnsembleDecisionManager:
             logger.debug(f"Adjusted weights: {adjusted_weights}")
         
         return adjusted_weights
+
+    def _apply_voting_with_fallback(
+        self,
+        providers: List[str],
+        actions: List[str],
+        confidences: List[int],
+        reasonings: List[str],
+        amounts: List[float],
+        adjusted_weights: Dict[str, float]
+    ) -> Tuple[Dict[str, Any], str]:
+        """
+        Apply voting strategy with progressive fallback tiers.
+        
+        Fallback progression:
+        1. Primary strategy (weighted/majority/stacking)
+        2. Majority voting (if primary fails)
+        3. Simple averaging (if majority fails)
+        4. Single provider (if only one available)
+        
+        Args:
+            providers: List of active provider names
+            actions: Provider actions
+            confidences: Provider confidences
+            reasonings: Provider reasonings
+            amounts: Provider amounts
+            adjusted_weights: Dynamically adjusted weights
+        
+        Returns:
+            Tuple of (decision dict, fallback_tier)
+        """
+        fallback_tier = 'primary'
+        
+        try:
+            # Tier 1: Primary voting strategy
+            if self.voting_strategy == 'weighted':
+                decision = self._weighted_voting(
+                    providers, actions, confidences, reasonings, amounts,
+                    adjusted_weights
+                )
+            elif self.voting_strategy == 'majority':
+                decision = self._majority_voting(
+                    providers, actions, confidences, reasonings, amounts
+                )
+            elif self.voting_strategy == 'stacking':
+                decision = self._stacking_ensemble(
+                    providers, actions, confidences, reasonings, amounts
+                )
+            else:
+                raise ValueError(
+                    f"Unknown voting strategy: {self.voting_strategy}"
+                )
+            
+            # Validate primary result
+            if self._validate_decision(decision):
+                logger.debug(
+                    f"Primary strategy '{self.voting_strategy}' succeeded"
+                )
+                return decision, fallback_tier
+            else:
+                logger.warning(
+                    f"Primary strategy '{self.voting_strategy}' produced "
+                    f"invalid decision, falling back"
+                )
+                raise ValueError("Invalid primary decision")
+        
+        except Exception as e:
+            logger.warning(
+                f"Primary strategy failed: {e}, attempting fallback"
+            )
+        
+        # Tier 2: Majority voting fallback
+        if len(providers) >= 2:
+            try:
+                fallback_tier = 'majority_fallback'
+                logger.info("Using majority voting fallback")
+                decision = self._majority_voting(
+                    providers, actions, confidences, reasonings, amounts
+                )
+                if self._validate_decision(decision):
+                    return decision, fallback_tier
+            except Exception as e:
+                logger.warning(f"Majority fallback failed: {e}")
+        
+        # Tier 3: Simple averaging fallback
+        if len(providers) >= 2:
+            try:
+                fallback_tier = 'average_fallback'
+                logger.info("Using simple averaging fallback")
+                decision = self._simple_average(
+                    providers, actions, confidences, reasonings, amounts
+                )
+                if self._validate_decision(decision):
+                    return decision, fallback_tier
+            except Exception as e:
+                logger.warning(f"Average fallback failed: {e}")
+        
+        # Tier 4: Single provider fallback
+        if len(providers) >= 1:
+            fallback_tier = 'single_provider'
+            logger.warning(
+                f"All ensemble methods failed, using single provider: "
+                f"{providers[0]}"
+            )
+            # Select highest confidence provider
+            best_idx = np.argmax(confidences)
+            decision = {
+                'action': actions[best_idx],
+                'confidence': confidences[best_idx],
+                'reasoning': (
+                    f"SINGLE PROVIDER FALLBACK [{providers[best_idx]}]: "
+                    f"{reasonings[best_idx]}"
+                ),
+                'amount': amounts[best_idx],
+                'fallback_used': True,
+                'fallback_provider': providers[best_idx]
+            }
+            return decision, fallback_tier
+        
+        # Should never reach here due to validation at function start
+        raise ValueError("No providers available for decision")
+
+    def _simple_average(
+        self,
+        providers: List[str],
+        actions: List[str],
+        confidences: List[int],
+        reasonings: List[str],
+        amounts: List[float]
+    ) -> Dict[str, Any]:
+        """
+        Simple averaging fallback strategy.
+        Uses most common action with averaged confidence.
+        
+        Args:
+            providers: Provider names
+            actions: Provider actions
+            confidences: Provider confidences
+            reasonings: Provider reasonings
+            amounts: Provider amounts
+        
+        Returns:
+            Aggregated decision
+        """
+        from collections import Counter
+        
+        # Most common action
+        action_counts = Counter(actions)
+        final_action = action_counts.most_common(1)[0][0]
+        
+        # Simple average of all confidences (not just supporters)
+        final_confidence = int(np.mean(confidences))
+        
+        # Average amount from all providers
+        final_amount = float(np.mean(amounts))
+        
+        # Aggregate reasoning
+        final_reasoning = (
+            f"SIMPLE AVERAGE FALLBACK ({len(providers)} providers):\n" +
+            "\n".join([
+                f"[{p}] {a} ({c}%): {r[:100]}"
+                for p, a, c, r
+                in zip(providers, actions, confidences, reasonings)
+            ])
+        )
+        
+        return {
+            'action': final_action,
+            'confidence': final_confidence,
+            'reasoning': final_reasoning,
+            'amount': final_amount,
+            'simple_average_used': True
+        }
+
+    def _validate_decision(self, decision: Dict[str, Any]) -> bool:
+        """
+        Validate that a decision dict is well-formed.
+        
+        Args:
+            decision: Decision dictionary to validate
+        
+        Returns:
+            True if valid, False otherwise
+        """
+        required_keys = ['action', 'confidence', 'reasoning', 'amount']
+        
+        # Check required keys exist
+        if not all(key in decision for key in required_keys):
+            return False
+        
+        # Validate action
+        if decision['action'] not in ['BUY', 'SELL', 'HOLD']:
+            return False
+        
+        # Validate confidence
+        conf = decision['confidence']
+        if not isinstance(conf, (int, float)) or conf < 0 or conf > 100:
+            return False
+        
+        # Validate reasoning
+        reasoning = decision['reasoning']
+        if (not isinstance(reasoning, str) or
+                not reasoning.strip()):
+            return False
+        
+        # Validate amount
+        amt = decision['amount']
+        if not isinstance(amt, (int, float)) or amt < 0:
+            return False
+        
+        return True
+
+    def _adjust_confidence_for_failures(
+        self,
+        decision: Dict[str, Any],
+        active_providers: int,
+        total_providers: int
+    ) -> Dict[str, Any]:
+        """
+        Adjust confidence based on provider availability.
+        Reduces confidence when fewer providers are available.
+        
+        Args:
+            decision: Decision dict to adjust
+            active_providers: Number of active providers
+            total_providers: Total number of configured providers
+        
+        Returns:
+            Decision with adjusted confidence
+        """
+        if active_providers >= total_providers:
+            # No adjustment needed
+            decision['confidence_adjustment_factor'] = 1.0
+            return decision
+        
+        # Calculate degradation factor based on provider availability
+        # Formula: factor = 0.7 + 0.3 * (active / total)
+        # Examples:
+        # - 4/4 providers: 1.0 (no degradation)
+        # - 3/4 providers: 0.925 (7.5% reduction)
+        # - 2/4 providers: 0.85 (15% reduction)
+        # - 1/4 providers: 0.775 (22.5% reduction)
+        availability_ratio = active_providers / total_providers
+        adjustment_factor = 0.7 + 0.3 * availability_ratio
+        
+        original_confidence = decision['confidence']
+        adjusted_confidence = int(original_confidence * adjustment_factor)
+        
+        decision['confidence'] = adjusted_confidence
+        decision['confidence_adjustment_factor'] = adjustment_factor
+        decision['original_confidence'] = original_confidence
+        
+        logger.info(
+            f"Confidence adjusted: {original_confidence} → "
+            f"{adjusted_confidence} (factor: {adjustment_factor:.3f}) "
+            f"due to {active_providers}/{total_providers} providers active"
+        )
+        
+        return decision
 
     def _weighted_voting(
         self,

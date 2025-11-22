@@ -1,0 +1,26 @@
+{
+  "decision_id": "trade-003",
+  "asset_pair": "BTCUSD",
+  "action": "SELL",
+  "entry_timestamp": "2025-11-14T19:23:54.197493",
+  "exit_timestamp": "2025-11-15T19:23:54.197493",
+  "entry_price": 52000,
+  "exit_price": 50000,
+  "position_size": 0.12,
+  "realized_pnl": 240.0,
+  "pnl_percentage": 3.8461538461538463,
+  "holding_period_hours": 24.0,
+  "ai_provider": "ensemble",
+  "ensemble_providers": [
+    "local",
+    "cli",
+    "codex"
+  ],
+  "decision_confidence": 85,
+  "market_sentiment": "Bearish",
+  "volatility": 8.0,
+  "price_trend": "bearish",
+  "was_profitable": true,
+  "hit_stop_loss": false,
+  "hit_take_profit": true
+}

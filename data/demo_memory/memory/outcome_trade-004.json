@@ -1,0 +1,22 @@
+{
+  "decision_id": "trade-004",
+  "asset_pair": "ETHUSD",
+  "action": "BUY",
+  "entry_timestamp": "2025-11-15T19:23:54.197501",
+  "exit_timestamp": "2025-11-16T19:23:54.197501",
+  "entry_price": 3000,
+  "exit_price": 3200,
+  "position_size": 2.0,
+  "realized_pnl": 400.0,
+  "pnl_percentage": 6.666666666666667,
+  "holding_period_hours": 24.0,
+  "ai_provider": "local",
+  "ensemble_providers": null,
+  "decision_confidence": 70,
+  "market_sentiment": "Bullish",
+  "volatility": 6.0,
+  "price_trend": "bullish",
+  "was_profitable": true,
+  "hit_stop_loss": false,
+  "hit_take_profit": true
+}

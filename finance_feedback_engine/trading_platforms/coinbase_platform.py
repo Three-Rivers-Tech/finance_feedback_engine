@@ -82,15 +82,17 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
     def get_balance(self) -> Dict[str, float]:
         """
-        Get futures account balance.
+        Get account balances including futures and spot USD/USDC.
         
-        Returns futures trading account balance only.
-        Strategy focus: perpetual futures long/short, no spot holdings.
+        Returns futures trading account balance and spot USD/USDC balances.
 
         Returns:
-            Dictionary with 'FUTURES_USD': total futures account balance
+            Dictionary with:
+            - 'FUTURES_USD': total futures account balance
+            - 'SPOT_USD': spot USD balance (if any)
+            - 'SPOT_USDC': spot USDC balance (if any)
         """
-        logger.info("Fetching futures account balance")
+        logger.info("Fetching account balances (futures + spot USD/USDC)")
         
         try:
             client = self._get_client()
@@ -115,6 +117,32 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
             
+            # Get spot balances for USD and USDC
+            try:
+                accounts_response = client.get_accounts()
+                accounts_list = getattr(accounts_response, 'accounts', [])
+                
+                for account in accounts_list:
+                    # Use attribute access for Coinbase Account objects
+                    currency = getattr(account, 'currency', '')
+                    if currency in ['USD', 'USDC']:
+                        available_balance = getattr(
+                            account, 'available_balance', None
+                        )
+                        if available_balance:
+                            balance_value = float(
+                                getattr(available_balance, 'value', 0)
+                            )
+                            
+                            if balance_value > 0:
+                                balances[f'SPOT_{currency}'] = balance_value
+                                logger.info(
+                                    "Spot %s balance: $%.2f",
+                                    currency, balance_value
+                                )
+            except Exception as e:
+                logger.warning("Could not fetch spot balances: %s", e)
+            
             return balances
             
         except ImportError:
@@ -132,18 +160,21 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
-        Get futures trading account breakdown.
+        Get complete account breakdown including futures and spot USD/USDC.
         
-        Focus: Perpetual futures long/short positions only.
-        No spot holdings - this is a pure futures trading strategy.
+        Returns futures positions plus spot USD/USDC balances.
 
         Returns:
-            Dictionary with futures trading metrics:
+            Dictionary with:
             - futures_positions: List of active long/short positions
-            - futures_summary: Account summary (balance, PnL, margin, buying power)
-            - total_value_usd: Total futures account value
+            - futures_summary: Account summary (balance, PnL, margin, power)
+            - holdings: Spot USD/USDC holdings
+            - total_value_usd: Combined futures + spot value
+            - futures_value_usd: Futures account value
+            - spot_value_usd: Spot USD/USDC value
+            - num_assets: Number of holdings (spot only)
         """
-        logger.info("Fetching futures trading account breakdown")
+        logger.info("Fetching complete account breakdown")
         
         try:
             client = self._get_client()
@@ -171,10 +202,16 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     
                     futures_summary = {
                         'total_balance_usd': futures_value,
-                        'unrealized_pnl': float(unrealized_pnl.get('value', 0)),
-                        'daily_realized_pnl': float(daily_pnl.get('value', 0)),
+                        'unrealized_pnl': float(
+                            unrealized_pnl.get('value', 0)
+                        ),
+                        'daily_realized_pnl': float(
+                            daily_pnl.get('value', 0)
+                        ),
                         'buying_power': float(buying_power.get('value', 0)),
-                        'initial_margin': float(initial_margin.get('value', 0))
+                        'initial_margin': float(
+                            initial_margin.get('value', 0)
+                        )
                     }
                     
                     logger.info("Futures account balance: $%.2f", futures_value)
@@ -206,14 +243,63 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 logger.error("Error fetching futures data: %s", e)
                 raise
             
+            # Get spot USD/USDC balances
+            holdings = []
+            spot_value = 0.0
+            
+            try:
+                accounts_response = client.get_accounts()
+                accounts_list = getattr(accounts_response, 'accounts', [])
+                
+                for account in accounts_list:
+                    # Use attribute access for Coinbase Account objects
+                    currency = getattr(account, 'currency', '')
+                    if currency in ['USD', 'USDC']:
+                        available_balance = getattr(
+                            account, 'available_balance', None
+                        )
+                        if available_balance:
+                            balance_value = float(
+                                getattr(available_balance, 'value', 0)
+                            )
+                            
+                            if balance_value > 0:
+                                holdings.append({
+                                    'asset': currency,
+                                    'amount': balance_value,
+                                    'value_usd': balance_value,
+                                    'allocation_pct': 0.0  # Calculate below
+                                })
+                                spot_value += balance_value
+                                logger.info(
+                                    "Spot %s: $%.2f", currency, balance_value
+                                )
+            except Exception as e:
+                logger.warning("Could not fetch spot balances: %s", e)
+            
+            # Calculate total value and allocations
+            total_value = futures_value + spot_value
+            
+            if total_value > 0:
+                for holding in holdings:
+                    holding['allocation_pct'] = (
+                        (holding['value_usd'] / total_value) * 100
+                    )
+            
+            logger.info(
+                "Total portfolio value: $%.2f "
+                "(futures: $%.2f, spot: $%.2f)",
+                total_value, futures_value, spot_value
+            )
+            
             return {
                 'futures_positions': futures_positions,
                 'futures_summary': futures_summary,
-                'total_value_usd': futures_value,
+                'holdings': holdings,
+                'total_value_usd': total_value,
                 'futures_value_usd': futures_value,
-                'spot_value_usd': 0.0,  # Not used - futures only
-                'holdings': [],  # Not used - futures only
-                'num_assets': 0  # Not used - futures only
+                'spot_value_usd': spot_value,
+                'num_assets': len(holdings)
             }
             
         except Exception as e:
