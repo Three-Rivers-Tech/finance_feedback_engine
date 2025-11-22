@@ -28,7 +28,7 @@ Modular trading decision engine with four main layers:
   - Implemented by: `CoinbaseAdvancedPlatform` (crypto futures), `OandaPlatform` (forex positions)
 - `DecisionEngine.generate_decision(asset_pair, market_data, balance)` — builds context, prompt, routes to provider (`local | cli | codex | qwen | ensemble`). Returns decision dict with position sizing fields.
   - AI receives portfolio context when available (holdings, allocations) for context-aware recommendations
-- `EnsembleDecisionManager` — aggregates decisions from multiple AI providers using weighted/majority/stacking strategies; adaptive learning adjusts provider weights based on historical accuracy.
+- `EnsembleDecisionManager` — aggregates decisions from multiple AI providers using weighted/majority/stacking strategies; **4-tier progressive fallback system** (primary → majority → average → single); **dynamic weight recalculation** renormalizes weights when providers fail; adaptive learning adjusts provider weights based on historical accuracy; **confidence degradation** reduces confidence proportionally to provider failures (formula: `0.7 + 0.3 * (active/total)`).
 - `LocalLLMProvider` — auto-installs Ollama and downloads Llama-3.2-3B-Instruct (3B params, CPU-optimized, no API costs); fallback to 1B model if needed.
 - `QwenCLIProvider` — free Qwen CLI integration (requires Node.js v20+ and OAuth authentication); invokes `qwen` command for trading decisions.
 - `DecisionStore` — file-based JSON persistence; filename pattern: `YYYY-MM-DD_<uuid>.json` (date extracted from decision timestamp); retrieval filters by asset; updates rewrite same file by ID glob match.
@@ -77,17 +77,28 @@ Modular trading decision engine with four main layers:
   "ai_provider": "local|cli|codex|qwen|ensemble",
   "model_name": "string",
   "position_type": "LONG|SHORT|null",
-  "recommended_position_size": float,
+  "recommended_position_size": float|null,
   "entry_price": float,
-  "stop_loss_percentage": 2.0,
-  "risk_percentage": 1.0,
+  "stop_loss_percentage": float|null,
+  "risk_percentage": float|null,
+  "signal_only": bool,
   "ensemble_metadata": {
     "providers_used": ["local", "cli", "codex", "qwen"],
-    "provider_weights": {"local": 0.25, "cli": 0.25, "codex": 0.25, "qwen": 0.25},
+    "providers_failed": ["cli"],
+    "num_active": 3,
+    "num_total": 4,
+    "failure_rate": 0.25,
+    "original_weights": {"local": 0.25, "cli": 0.25, "codex": 0.25, "qwen": 0.25},
+    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333},
+    "weight_adjustment_applied": true,
     "voting_strategy": "weighted|majority|stacking",
+    "fallback_tier": "primary|majority_fallback|average_fallback|single_provider",
     "provider_decisions": {...},
     "agreement_score": 0.0-1.0,
-    "confidence_variance": float
+    "confidence_variance": float,
+    "confidence_adjusted": true,
+    "original_confidence": 85,
+    "confidence_adjustment_factor": 0.925
   }
 }
 ```
@@ -171,11 +182,13 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - **Market data dict keys**: open/high/low/close/volume (required); market_cap (crypto only); sentiment/macro_indicators/technical (optional enrichments) — consumers rely on presence (default 0 if missing).
 - **Price change & volatility**: computed in `DecisionEngine`; altering formulas must keep return type (float %).
 - **Position sizing**: uses 1% risk / 2% stop loss defaults; formula: `(balance × risk%) / (entry_price × stop_loss%)`. Fields: `position_type` (LONG/SHORT/null), `recommended_position_size`, `entry_price`, `stop_loss_percentage`, `risk_percentage`.
+- **Signal-only mode**: When portfolio/balance data unavailable (empty, zero, or invalid), engine sets `signal_only: true` and position sizing fields (`recommended_position_size`, `stop_loss_percentage`, `risk_percentage`) to `null`. Decision still provides action/confidence/reasoning but no position recommendations. CLI displays warning: "⚠ Signal-Only Mode: Portfolio data unavailable, no position sizing provided".
 - **JSON persistence**: append-only (updates overwrite same file by ID); avoid format churn. Date-prefixed filenames enable chronological browsing.
 - **Platform names**: normalized to lowercase in factory lookup.
 - **Confidence**: integer 0–100; ensure AI outputs converted appropriately.
 - **Network isolation**: avoid network calls outside data providers; keep side effects localized.
 - **Ensemble metadata**: stored in decision when `ai_provider: "ensemble"`; includes provider_decisions, agreement_score, confidence_variance for transparency/debugging.
+- **Ensemble fallback system**: 4-tier progressive fallback (primary → majority → average → single provider) ensures decisions generated even when providers fail. Weights auto-renormalize for active providers only (e.g., 3/4 active: 0.25 → 0.333 each). Confidence degraded by formula: `0.7 + 0.3 * (active/total)`. Metadata tracks: `providers_failed`, `failure_rate`, `adjusted_weights`, `fallback_tier`, `confidence_adjustment_factor`.
 - **Mock data fallback**: When AlphaVantage API fails, creates realistic mock data with `mock: true` flag for testing. Future plan: integrate Yahoo Finance or other free API providers for fallback instead of mock data.
 - **Candlestick enrichment**: Automatically calculates body %, wick sizes, trend direction, close position in range for technical analysis.
 - **Forex pairs (Oanda)**: Use underscore format (e.g., `EUR_USD` not `EURUSD`); API returns positions with instrument names in this format. AlphaVantage provider auto-converts if needed.
@@ -195,6 +208,7 @@ PlatformFactory.register_platform('my_platform', MyPlatform)
 - For new platform: implement minimal stubs returning deterministic data; run `balance` & `execute`.
 - **Test scripts**: `python test_api.py` (Python API), `bash demo.sh` (CLI demo), `python quickstart.py` (guided example).
 - **Ensemble testing**: run `python main.py analyze BTCUSD --provider ensemble` and inspect `ensemble_metadata` in output JSON; verify all enabled providers contributed and weights sum to 1.0.
+- **Ensemble fallback testing**: run `python test_ensemble_fallback.py` to validate 4-tier fallback system, dynamic weight recalculation, and confidence degradation. Check `fallback_tier`, `adjusted_weights`, `failure_rate` in metadata.
 - **Position sizing validation**: check `recommended_position_size` matches formula: `(balance × risk%) / (entry_price × stop_loss%)`; verify LONG positions use entry price as baseline, SHORT positions account for margin requirements.
 - **Sentiment/macro data**: toggle `include_sentiment`/`include_macro` in `analyze_asset()` calls; verify API calls appear in logs and data populated in decision's `market_data.sentiment`/`market_data.macro_indicators`.
 - **Mock data testing**: temporarily invalidate API key; verify graceful fallback with `mock: true` in market_data.

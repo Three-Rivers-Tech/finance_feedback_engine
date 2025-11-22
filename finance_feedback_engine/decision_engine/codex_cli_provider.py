@@ -60,16 +60,17 @@ class CodexCLIProvider:
             Dictionary with action, confidence, reasoning, amount
         """
         try:
-            # Call codex exec (non-interactive mode)
-            cmd = ['codex', 'exec', prompt]
+            # Call codex exec (non-interactive mode) with prompt via stdin
+            cmd = ['codex', 'exec']
             
             logger.info("Querying Codex CLI for trading decision")
             
             result = subprocess.run(
                 cmd,
+                input=prompt,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=60
             )
             
             if result.returncode != 0:

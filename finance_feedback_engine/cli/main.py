@@ -11,6 +11,10 @@ from rich.table import Table
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.cli.interactive import start_interactive_session
+from finance_feedback_engine.dashboard import (
+    PortfolioDashboardAggregator,
+    display_portfolio_dashboard
+)
 
 
 console = Console()
@@ -151,8 +155,19 @@ def analyze(ctx, asset_pair, provider):
         console.print(f"Confidence: {decision['confidence']}%")
         console.print(f"Reasoning: {decision['reasoning']}")
         
-        # Display position type and sizing
-        if decision.get('position_type'):
+        # Check if signal-only mode (no position sizing)
+        if decision.get('signal_only'):
+            console.print(
+                "\n[yellow]⚠ Signal-Only Mode: "
+                "Portfolio data unavailable, no position sizing provided"
+                "[/yellow]"
+            )
+        
+        # Display position type and sizing (only if available)
+        if (
+            decision.get('position_type') and
+            not decision.get('signal_only')
+        ):
             console.print("\n[bold]Position Details:[/bold]")
             console.print(f"  Type: {decision['position_type']}")
             console.print(
@@ -331,18 +346,31 @@ def portfolio(ctx):
         # Get futures trading account breakdown
         portfolio_data = engine.trading_platform.get_portfolio_breakdown()
         
-        # Display futures account summary
+        # Display account summary
         total_value = portfolio_data.get('total_value_usd', 0)
+        futures_value = portfolio_data.get('futures_value_usd', 0)
+        spot_value = portfolio_data.get('spot_value_usd', 0)
         
         console.print(
-            "\n[bold cyan]Futures Trading Account[/bold cyan]"
+            "\n[bold cyan]Portfolio Summary[/bold cyan]"
         )
-        console.print(f"Account Balance: [green]${total_value:,.2f}[/green]\n")
+        console.print(
+            f"Total Value: [green]${total_value:,.2f}[/green]"
+        )
+        if futures_value > 0:
+            console.print(
+                f"  Futures: ${futures_value:,.2f}"
+            )
+        if spot_value > 0:
+            console.print(
+                f"  Spot (USD/USDC): ${spot_value:,.2f}"
+            )
+        console.print()
         
         # Display futures summary
         futures_summary = portfolio_data.get('futures_summary', {})
         if futures_summary:
-            console.print("[bold yellow]Account Metrics[/bold yellow]")
+            console.print("[bold yellow]Futures Account Metrics[/bold yellow]")
             console.print(
                 f"  Unrealized PnL: "
                 f"${futures_summary.get('unrealized_pnl', 0):,.2f}"
@@ -359,6 +387,31 @@ def portfolio(ctx):
                 f"  Initial Margin: "
                 f"${futures_summary.get('initial_margin', 0):,.2f}"
             )
+            console.print()
+        
+        # Display spot holdings (USD/USDC)
+        holdings = portfolio_data.get('holdings', [])
+        if holdings:
+            table = Table(title="Spot Holdings (USD/USDC)")
+            table.add_column("Asset", style="cyan")
+            table.add_column("Amount", style="white", justify="right")
+            table.add_column("Value (USD)", style="green", justify="right")
+            table.add_column("Allocation", style="yellow", justify="right")
+            
+            for holding in holdings:
+                asset = holding.get('asset', 'N/A')
+                amount = holding.get('amount', 0)
+                value = holding.get('value_usd', 0)
+                allocation = holding.get('allocation_pct', 0)
+                
+                table.add_row(
+                    asset,
+                    f"{amount:,.2f}",
+                    f"${value:,.2f}",
+                    f"{allocation:.2f}%"
+                )
+            
+            console.print(table)
             console.print()
         
         # Display active futures positions (long/short)
@@ -403,6 +456,30 @@ def portfolio(ctx):
                 "[yellow]No active positions "
                 "(pure long/short futures strategy)[/yellow]"
             )
+        
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.pass_context
+def dashboard(ctx):
+    """Show unified dashboard aggregating all platform portfolios."""
+    try:
+        config = load_config(ctx.obj['config_path'])
+        engine = FinanceFeedbackEngine(config)
+        
+        # For now, we only have one platform instance
+        # Future: support multiple platforms from config
+        platforms = [engine.trading_platform]
+        
+        # Aggregate portfolio data
+        aggregator = PortfolioDashboardAggregator(platforms)
+        aggregated_data = aggregator.aggregate()
+        
+        # Display unified dashboard
+        display_portfolio_dashboard(aggregated_data)
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
@@ -513,6 +590,59 @@ def status(ctx):
             "\n[bold red]✗ Engine initialization failed[/bold red]"
         )
         console.print(f"Error: {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
+@click.option(
+    '--confirm',
+    is_flag=True,
+    help='Skip confirmation prompt'
+)
+@click.pass_context
+def wipe_decisions(ctx, confirm):
+    """Delete all stored trading decisions."""
+    try:
+        config = load_config(ctx.obj['config_path'])
+        engine = FinanceFeedbackEngine(config)
+        
+        # Get current count
+        count = engine.decision_store.get_decision_count()
+        
+        if count == 0:
+            console.print("[yellow]No decisions to wipe.[/yellow]")
+            return
+        
+        console.print(
+            f"[bold yellow]Warning: This will delete all {count} "
+            f"stored decisions![/bold yellow]"
+        )
+        
+        # Confirm unless --confirm flag or interactive mode
+        if not confirm:
+            if ctx.obj.get('interactive'):
+                response = console.input(
+                    "Are you sure you want to continue? [y/N]: "
+                )
+            else:
+                response = click.confirm(
+                    "Are you sure you want to continue?",
+                    default=False
+                )
+                response = 'y' if response else 'n'
+            
+            if response.lower() != 'y':
+                console.print("[yellow]Cancelled.[/yellow]")
+                return
+        
+        # Wipe all decisions
+        deleted = engine.decision_store.wipe_all_decisions()
+        console.print(
+            f"[bold green]✓ Wiped {deleted} decisions[/bold green]"
+        )
+        
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
 
 
