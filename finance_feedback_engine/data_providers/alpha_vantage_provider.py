@@ -92,7 +92,7 @@ class AlphaVantageProvider:
             return market_data
             
         except CircuitBreakerOpenError:
-            logger.error(f"Circuit breaker open for {asset_pair}, using fallback")
+            logger.error(f"Circuit breaker open for {asset_pair}")
             raise
         except Exception as e:
             logger.error(f"Failed to fetch market data for {asset_pair}: {e}")
@@ -740,7 +740,7 @@ class AlphaVantageProvider:
                     data['timestamp'].replace('Z', '+00:00')
                 )
                 age = datetime.utcnow() - data_time.replace(tzinfo=None)
-                if age.total_seconds() > 3600:  # 1 hour threshold
+                if age.total_seconds() > 86400:  # 24 hour threshold for daily data
                     issues.append(
                         f"Market data is stale "
                         f"({age.total_seconds():.0f}s old)"

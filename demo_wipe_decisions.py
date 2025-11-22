@@ -77,7 +77,7 @@ def main():
     console.print(f"Remaining decisions: [yellow]{new_count}[/yellow]")
     
     console.print()
-    console.print("[bold]CLI Usage:[/bold]")
+    console.print("[bold]Production CLI Usage (main.py):[/bold]")
     console.print("  python main.py wipe-decisions")
     console.print("  python main.py wipe-decisions --confirm  # Skip prompt")
     console.print()

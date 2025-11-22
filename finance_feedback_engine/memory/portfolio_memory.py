@@ -416,7 +416,11 @@ class PortfolioMemoryEngine:
         
         # Calculate Sharpe ratio (simplified)
         pnls = [o.pnl_percentage or 0 for o in outcomes]
-        sharpe_ratio = self._calculate_sharpe_ratio(pnls)
+        sharpe_ratio = self._calculate_sharpe_ratio(pnls)  # NOTE: The annualization factor np.sqrt(252) assumes daily returns (252 trading days/year).
+        # However, 'returns' here are per-trade PnL percentages with variable holding periods (hours to weeks).
+        # This means the Sharpe ratio is a simplified approximation and may not be accurate for variable holding periods.
+        # TODO: For more accurate risk-adjusted metrics, consider converting trade returns to a standardized time period
+        #       or use time-weighted returns based on holding_period_hours.
         sortino_ratio = self._calculate_sortino_ratio(pnls)
         
         # Provider stats

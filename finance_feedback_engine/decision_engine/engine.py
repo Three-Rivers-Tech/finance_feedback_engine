@@ -226,7 +226,8 @@ class DecisionEngine:
         entry_price: float,
         current_price: float,
         position_size: float,
-        position_type: str = 'LONG'
+        position_type: str = 'LONG',
+        unrealized: bool = False,
     ) -> Dict[str, float]:
         """
         Calculate profit and loss for a position.
@@ -236,6 +237,7 @@ class DecisionEngine:
             current_price: Current market price
             position_size: Size of the position
             position_type: 'LONG' or 'SHORT'
+            unrealized: Whether the P&L is unrealized (open position)
 
         Returns:
             Dictionary with P&L metrics
@@ -244,7 +246,7 @@ class DecisionEngine:
             return {
                 'pnl_dollars': 0.0,
                 'pnl_percentage': 0.0,
-                'unrealized': True
+                'unrealized': unrealized
             }
         
         if position_type.upper() == 'LONG':
@@ -259,7 +261,7 @@ class DecisionEngine:
         return {
             'pnl_dollars': pnl_dollars,
             'pnl_percentage': pnl_percentage,
-            'unrealized': True  # Changes to False when position is closed
+            'unrealized': unrealized
         }
 
     def _create_ai_prompt(self, context: Dict[str, Any]) -> str:
@@ -366,15 +368,20 @@ Intraday Volatility: {volatility:.2f}%
         if portfolio and portfolio.get('holdings'):
             total_value = portfolio.get('total_value_usd', 0)
             num_assets = portfolio.get('num_assets', 0)
-            
-            market_info += f"""
+            unrealized_pnl = portfolio.get('unrealized_pnl')
+
+            market_info += """
 CURRENT PORTFOLIO:
 ------------------
-Total Portfolio Value: ${total_value:,.2f}
-Number of Assets: {num_assets}
-
-Holdings:
 """
+            market_info += (
+                f"Total Portfolio Value: ${total_value:,.2f}\n"
+                f"Number of Assets: {num_assets}\n"
+            )
+            if unrealized_pnl is not None:
+                market_info += f"Unrealized P&L: ${unrealized_pnl:,.2f}\n"
+
+            market_info += "\nHoldings:\n"
             for holding in portfolio.get('holdings', []):
                 currency = holding.get('currency')
                 amount = holding.get('amount', 0)
@@ -966,6 +973,10 @@ Provide:
             'balance_snapshot': context['balance'],
             'price_change': context['price_change'],
             'volatility': context['volatility'],
+            # Surface portfolio unrealized P&L if available from platform data
+            'portfolio_unrealized_pnl': (
+                context.get('portfolio', {}) or {}
+            ).get('unrealized_pnl'),
             'executed': False,
             'ai_provider': self.ai_provider,
             'model_name': self.model_name
