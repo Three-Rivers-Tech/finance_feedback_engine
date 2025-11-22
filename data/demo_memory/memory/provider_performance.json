@@ -47,7 +47,7 @@
   },
   "codex": {
     "total_trades": 1,
-    "winning_trades": 0,
+    "winning_trades": 1,
     "total_pnl": 72.0,
     "confidence_calibration": []
   }

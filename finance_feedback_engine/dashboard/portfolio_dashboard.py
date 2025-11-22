@@ -23,7 +23,8 @@ class PortfolioDashboardAggregator:
             'total_value_usd': 0.0,
             'num_assets': 0,
             'holdings': [],
-            'platforms': []
+            'platforms': [],
+            'unrealized_pnl': 0.0
         }
         for platform in self.platforms:
             try:
@@ -33,6 +34,9 @@ class PortfolioDashboardAggregator:
                 # Aggregate totals
                 total_val = breakdown.get('total_value_usd', 0.0)
                 aggregated['total_value_usd'] += total_val
+                aggregated['unrealized_pnl'] += breakdown.get(
+                    'unrealized_pnl', 0.0
+                )
                 aggregated['num_assets'] += breakdown.get('num_assets', 0)
                 aggregated['holdings'].extend(breakdown.get('holdings', []))
                 aggregated['platforms'].append({
@@ -56,11 +60,15 @@ def display_portfolio_dashboard(aggregated_data):
     total_value = aggregated_data.get('total_value_usd', 0.0)
     num_assets = aggregated_data.get('num_assets', 0)
     platforms = aggregated_data.get('platforms', [])
+    unrealized_total = aggregated_data.get('unrealized_pnl', 0.0)
     
     # Header panel
     header = Panel(
         f"[bold cyan]Total Portfolio Value:[/bold cyan] "
         f"[green]${total_value:,.2f}[/green]\n"
+        f"[bold cyan]Unrealized P&L:[/bold cyan] "
+        f"{'[green]' if unrealized_total >= 0 else '[red]'}"
+        f"${unrealized_total:,.2f}[/]\n"
         f"[bold cyan]Assets Across Platforms:[/bold cyan] {num_assets}",
         title="[bold]Multi-Platform Portfolio Dashboard[/bold]",
         border_style="blue"
@@ -75,10 +83,12 @@ def display_portfolio_dashboard(aggregated_data):
         
         platform_total = breakdown.get('total_value_usd', 0.0)
         platform_assets = breakdown.get('num_assets', 0)
+        platform_unrealized = breakdown.get('unrealized_pnl', 0.0)
         
         console.print(
             f"[bold yellow]{platform_name}[/bold yellow] - "
-            f"${platform_total:,.2f} ({platform_assets} assets)"
+            f"${platform_total:,.2f} ({platform_assets} assets) "
+            f"Unrealized: ${platform_unrealized:,.2f}"
         )
         
         # Holdings table

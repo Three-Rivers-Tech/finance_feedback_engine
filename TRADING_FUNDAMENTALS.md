@@ -232,7 +232,8 @@ long_pnl = engine.calculate_pnl(
     entry_price=50000.00,
     current_price=55000.00,
     position_size=0.1,
-    position_type='LONG'
+    position_type='LONG',
+    unrealized=True
 )
 # Result: {'pnl_dollars': 500.0, 'pnl_percentage': 10.0, 'unrealized': True}
 
@@ -241,7 +242,8 @@ short_pnl = engine.calculate_pnl(
     entry_price=50000.00,
     current_price=45000.00,
     position_size=0.1,
-    position_type='SHORT'
+    position_type='SHORT',
+    unrealized=True
 )
 # Result: {'pnl_dollars': 500.0, 'pnl_percentage': 10.0, 'unrealized': True}
 ```

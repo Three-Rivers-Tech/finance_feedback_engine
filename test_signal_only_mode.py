@@ -69,10 +69,23 @@ ai_response_buy = {
     'amount': 0.05
 }
 
-decision1 = engine._create_decision(
+
+# Use the public API: generate_decision
+
+# For balance, always return a dict (empty if not a dict)
+def safe_balance(val):
+    return val if isinstance(val, dict) else {}
+
+# For portfolio and memory_context, allow dict or None
+def safe_dict(val):
+    return val if isinstance(val, dict) or val is None else None
+
+decision1 = engine.generate_decision(
     asset_pair='BTCUSD',
-    context=context_with_balance,
-    ai_response=ai_response_buy
+    market_data=market_data,
+    balance=safe_balance(context_with_balance['balance']),
+    portfolio=safe_dict(context_with_balance['portfolio']),
+    memory_context=safe_dict(context_with_balance['memory_context'])
 )
 
 print(f"Action:                     {decision1['action']}")
@@ -99,10 +112,13 @@ context_empty_balance = {
     'volatility': 1.77
 }
 
-decision2 = engine._create_decision(
+
+decision2 = engine.generate_decision(
     asset_pair='BTCUSD',
-    context=context_empty_balance,
-    ai_response=ai_response_buy
+    market_data=market_data,
+    balance=safe_balance(context_empty_balance['balance']),
+    portfolio=safe_dict(context_empty_balance['portfolio']),
+    memory_context=safe_dict(context_empty_balance['memory_context'])
 )
 
 print(f"Action:                     {decision2['action']}")
@@ -129,10 +145,13 @@ context_zero_balance = {
     'volatility': 1.77
 }
 
-decision3 = engine._create_decision(
+
+decision3 = engine.generate_decision(
     asset_pair='BTCUSD',
-    context=context_zero_balance,
-    ai_response=ai_response_buy
+    market_data=market_data,
+    balance=safe_balance(context_zero_balance['balance']),
+    portfolio=safe_dict(context_zero_balance['portfolio']),
+    memory_context=safe_dict(context_zero_balance['memory_context'])
 )
 
 print(f"Action:                     {decision3['action']}")
@@ -159,10 +178,13 @@ context_none_balance = {
     'volatility': 1.77
 }
 
-decision4 = engine._create_decision(
+
+decision4 = engine.generate_decision(
     asset_pair='BTCUSD',
-    context=context_none_balance,
-    ai_response=ai_response_buy
+    market_data=market_data,
+    balance=safe_balance(context_none_balance['balance']),
+    portfolio=safe_dict(context_none_balance['portfolio']),
+    memory_context=safe_dict(context_none_balance['memory_context'])
 )
 
 print(f"Action:                     {decision4['action']}")
@@ -180,19 +202,31 @@ print("=" * 70)
 print()
 print("✓ Test 1 (Valid balance):   Position sizing ENABLED")
 print(f"  - signal_only = {decision1['signal_only']}")
-print(f"  - recommended_position_size = {decision1['recommended_position_size']:.6f}")
+print(
+    f"  - recommended_position_size = "
+    f"{decision1['recommended_position_size']:.6f}"
+)
 print()
 print("✓ Test 2 (Empty balance):   Position sizing DISABLED")
 print(f"  - signal_only = {decision2['signal_only']}")
-print(f"  - recommended_position_size = {decision2['recommended_position_size']}")
+print(
+    f"  - recommended_position_size = "
+    f"{decision2['recommended_position_size']}"
+)
 print()
 print("✓ Test 3 (Zero balance):    Position sizing DISABLED")
 print(f"  - signal_only = {decision3['signal_only']}")
-print(f"  - recommended_position_size = {decision3['recommended_position_size']}")
+print(
+    f"  - recommended_position_size = "
+    f"{decision3['recommended_position_size']}"
+)
 print()
 print("✓ Test 4 (None balance):    Position sizing DISABLED")
 print(f"  - signal_only = {decision4['signal_only']}")
-print(f"  - recommended_position_size = {decision4['recommended_position_size']}")
+print(
+    f"  - recommended_position_size = "
+    f"{decision4['recommended_position_size']}"
+)
 print()
 print("All tests passed! Signal-only mode works correctly.")
 print("When portfolio data is unavailable, the engine provides signals only.")

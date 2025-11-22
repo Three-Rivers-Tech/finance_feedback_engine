@@ -124,6 +124,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         Merges portfolio data from Coinbase (futures) and Oanda (forex).
         """
         total_value_usd = 0
+        total_unrealized = 0.0
         all_holdings = []
         num_assets = 0
         
@@ -135,6 +136,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 platform_breakdowns[name] = breakdown
                 
                 total_value_usd += breakdown.get('total_value_usd', 0)
+                # Capture unrealized P&L if the platform exposes it
+                total_unrealized += breakdown.get('unrealized_pnl', 0.0)
                 
                 # Add platform prefix to holdings
                 holdings = breakdown.get('holdings', [])
@@ -163,5 +166,6 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             'total_value_usd': total_value_usd,
             'num_assets': num_assets,
             'holdings': all_holdings,
-            'platform_breakdowns': platform_breakdowns
+            'platform_breakdowns': platform_breakdowns,
+            'unrealized_pnl': total_unrealized
         }
