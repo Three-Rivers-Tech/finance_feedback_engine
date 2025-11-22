@@ -9,6 +9,7 @@ from .trading_platforms.platform_factory import PlatformFactory
 from .decision_engine.engine import DecisionEngine
 from .persistence.decision_store import DecisionStore
 from .backtesting.backtester import Backtester
+from .memory.portfolio_memory import PortfolioMemoryEngine
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,8 @@ class FinanceFeedbackEngine:
         api_key = os.environ.get('ALPHA_VANTAGE_API_KEY') \
             or config.get('alpha_vantage_api_key')
         self.data_provider = AlphaVantageProvider(
-            api_key=api_key
+            api_key=api_key,
+            config=config
         )
         
         # Initialize trading platform
@@ -61,6 +63,13 @@ class FinanceFeedbackEngine:
         persistence_config = config.get('persistence', {})
         self.decision_store = DecisionStore(persistence_config)
 
+        # Initialize portfolio memory engine
+        memory_enabled = config.get('portfolio_memory', {}).get('enabled', False)
+        self.memory_engine: Optional[PortfolioMemoryEngine] = None
+        if memory_enabled:
+            self.memory_engine = PortfolioMemoryEngine(config)
+            logger.info("Portfolio Memory Engine enabled")
+
         # Backtester (lazy init holder)
         self._backtester: Optional[Backtester] = None
 
@@ -71,6 +80,7 @@ class FinanceFeedbackEngine:
         asset_pair: str,
         include_sentiment: bool = True,
         include_macro: bool = False,
+        use_memory_context: bool = True,
     ) -> Dict[str, Any]:
         """Analyze an asset and generate trading decision.
 
@@ -78,6 +88,7 @@ class FinanceFeedbackEngine:
             asset_pair: Asset pair to analyze (e.g., 'BTCUSD', 'EURUSD')
             include_sentiment: Include news sentiment analysis (default: True)
             include_macro: Include macroeconomic indicators (default: False)
+            use_memory_context: Include portfolio memory context (default: True)
 
         Returns:
             Dictionary containing analysis results and decision
@@ -107,12 +118,24 @@ class FinanceFeedbackEngine:
             except Exception as e:
                 logger.warning("Could not fetch portfolio breakdown: %s", e)
         
+        # Get memory context if enabled
+        memory_context = None
+        if use_memory_context and self.memory_engine:
+            memory_context = self.memory_engine.generate_context(
+                asset_pair=asset_pair
+            )
+            logger.info(
+                "Memory context loaded: %d historical trades",
+                memory_context.get('total_historical_trades', 0)
+            )
+        
         # Generate decision using AI engine
         decision = self.decision_engine.generate_decision(
             asset_pair=asset_pair,
             market_data=market_data,
             balance=balance,
-            portfolio=portfolio
+            portfolio=portfolio,
+            memory_context=memory_context
         )
         
         # Persist decision
@@ -211,3 +234,128 @@ class FinanceFeedbackEngine:
             initial_balance=initial_balance,
             fee_percentage=fee_percentage,
         )
+    
+    # ===================================================================
+    # Portfolio Memory Methods
+    # ===================================================================
+    
+    def record_trade_outcome(
+        self,
+        decision_id: str,
+        exit_price: float,
+        exit_timestamp: Optional[str] = None,
+        hit_stop_loss: bool = False,
+        hit_take_profit: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Record the outcome of a completed trade for learning.
+        
+        Args:
+            decision_id: ID of the original decision
+            exit_price: Price at which position was closed
+            exit_timestamp: When position was closed (default: now)
+            hit_stop_loss: Whether stop loss was triggered
+            hit_take_profit: Whether take profit was triggered
+        
+        Returns:
+            TradeOutcome dict if memory engine enabled, None otherwise
+        """
+        if not self.memory_engine:
+            logger.warning(
+                "Portfolio memory engine not enabled. "
+                "Cannot record trade outcome."
+            )
+            return None
+        
+        # Get original decision
+        decision = self.decision_store.get_decision_by_id(decision_id)
+        if not decision:
+            raise ValueError(f"Decision {decision_id} not found")
+        
+        # Record outcome
+        outcome = self.memory_engine.record_trade_outcome(
+            decision=decision,
+            exit_price=exit_price,
+            exit_timestamp=exit_timestamp,
+            hit_stop_loss=hit_stop_loss,
+            hit_take_profit=hit_take_profit
+        )
+        
+        logger.info(
+            f"Trade outcome recorded: {outcome.asset_pair} "
+            f"P&L: ${outcome.realized_pnl:.2f}"
+        )
+        
+        return outcome.to_dict()
+    
+    def get_performance_snapshot(
+        self,
+        window_days: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get portfolio performance snapshot.
+        
+        Args:
+            window_days: Number of days to analyze (None = all time)
+        
+        Returns:
+            PerformanceSnapshot dict if memory engine enabled, None otherwise
+        """
+        if not self.memory_engine:
+            logger.warning("Portfolio memory engine not enabled")
+            return None
+        
+        snapshot = self.memory_engine.analyze_performance(
+            window_days=window_days
+        )
+        
+        return snapshot.to_dict()
+    
+    def get_memory_context(
+        self,
+        asset_pair: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get portfolio memory context for a given asset.
+        
+        Args:
+            asset_pair: Optional asset pair filter
+        
+        Returns:
+            Context dict if memory engine enabled, None otherwise
+        """
+        if not self.memory_engine:
+            return None
+        
+        return self.memory_engine.generate_context(asset_pair=asset_pair)
+    
+    def get_provider_recommendations(self) -> Optional[Dict[str, Any]]:
+        """
+        Get AI provider weight recommendations based on performance.
+        
+        Returns:
+            Recommendations dict if memory engine enabled, None otherwise
+        """
+        if not self.memory_engine:
+            logger.warning("Portfolio memory engine not enabled")
+            return None
+        
+        return self.memory_engine.get_provider_recommendations()
+    
+    def save_memory(self) -> None:
+        """Save portfolio memory to disk."""
+        if self.memory_engine:
+            self.memory_engine.save_memory()
+            logger.info("Portfolio memory saved")
+    
+    def get_memory_summary(self) -> Optional[Dict[str, Any]]:
+        """
+        Get summary of portfolio memory state.
+        
+        Returns:
+            Summary dict if memory engine enabled, None otherwise
+        """
+        if not self.memory_engine:
+            return None
+        
+        return self.memory_engine.get_summary()

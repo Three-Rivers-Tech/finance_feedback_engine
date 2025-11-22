@@ -27,13 +27,52 @@ class PlatformFactory:
             super().__init__(credentials)
 
         def get_balance(self) -> Dict[str, float]:
-            return {"CASH_USD": 1000.0}
+            return {
+                "FUTURES_USD": 20000.0,
+                "SPOT_USD": 3000.0,
+                "SPOT_USDC": 2000.0
+            }
 
         def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
             return {"success": True, "message": "simulated trade (mock)"}
 
         def get_account_info(self) -> Dict[str, Any]:
             return {"platform": "mock", "mock": True}
+
+        def get_portfolio_breakdown(self) -> Dict[str, Any]:
+            """Return mock portfolio data for testing dashboard."""
+            futures_value = 20000.00
+            spot_value = 5000.00  # USD + USDC
+            total_value = futures_value + spot_value
+            
+            return {
+                'total_value_usd': total_value,
+                'futures_value_usd': futures_value,
+                'spot_value_usd': spot_value,
+                'num_assets': 2,
+                'holdings': [
+                    {
+                        'asset': 'USD',
+                        'amount': 3000.00,
+                        'value_usd': 3000.00,
+                        'allocation_pct': (3000.00 / total_value) * 100
+                    },
+                    {
+                        'asset': 'USDC',
+                        'amount': 2000.00,
+                        'value_usd': 2000.00,
+                        'allocation_pct': (2000.00 / total_value) * 100
+                    }
+                ],
+                'futures_summary': {
+                    'total_balance_usd': futures_value,
+                    'unrealized_pnl': 500.00,
+                    'daily_realized_pnl': 150.00,
+                    'buying_power': 40000.00,
+                    'initial_margin': 5000.00
+                },
+                'futures_positions': []
+            }
 
     _platforms = {
         'coinbase': CoinbaseAdvancedPlatform,

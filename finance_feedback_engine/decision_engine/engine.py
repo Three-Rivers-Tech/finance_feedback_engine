@@ -96,7 +96,8 @@ class DecisionEngine:
         asset_pair: str,
         market_data: Dict[str, Any],
         balance: Dict[str, float],
-        portfolio: Optional[Dict[str, Any]] = None
+        portfolio: Optional[Dict[str, Any]] = None,
+        memory_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate a trading decision based on market data and balances.
@@ -106,6 +107,7 @@ class DecisionEngine:
             market_data: Current market data
             balance: Account balances
             portfolio: Optional portfolio breakdown with holdings/allocations
+            memory_context: Optional historical performance context
 
         Returns:
             Trading decision with recommendation
@@ -114,7 +116,7 @@ class DecisionEngine:
         
         # Create decision context
         context = self._create_decision_context(
-            asset_pair, market_data, balance, portfolio
+            asset_pair, market_data, balance, portfolio, memory_context
         )
         
         # Generate AI prompt
@@ -137,7 +139,8 @@ class DecisionEngine:
         asset_pair: str,
         market_data: Dict[str, Any],
         balance: Dict[str, float],
-        portfolio: Optional[Dict[str, Any]] = None
+        portfolio: Optional[Dict[str, Any]] = None,
+        memory_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Create context for decision making.
@@ -147,6 +150,7 @@ class DecisionEngine:
             market_data: Market data
             balance: Balances
             portfolio: Optional portfolio breakdown
+            memory_context: Optional historical performance context
 
         Returns:
             Decision context
@@ -156,6 +160,7 @@ class DecisionEngine:
             'market_data': market_data,
             'balance': balance,
             'portfolio': portfolio,
+            'memory_context': memory_context,
             'timestamp': datetime.utcnow().isoformat(),
             'price_change': self._calculate_price_change(market_data),
             'volatility': self._calculate_volatility(market_data)
@@ -395,6 +400,12 @@ Amount: {current_holding.get('amount', 0):.6f}
 Current Value: ${current_holding.get('value_usd', 0):,.2f}
 Allocation: {current_holding.get('allocation_pct', 0):.1f}%
 """
+        
+        # Add portfolio memory context if available
+        memory_context = context.get('memory_context')
+        if memory_context and memory_context.get('has_history'):
+            memory_text = self._format_memory_context(memory_context)
+            market_info += f"\n{memory_text}\n"
 
         prompt = f"""You are a financial trading advisor. Analyze the following market data and provide a trading recommendation.
 
@@ -463,6 +474,90 @@ Provide:
 4. Suggested position size (considering risk management)
 """
         return prompt
+    
+    def _format_memory_context(self, memory_context: Dict[str, Any]) -> str:
+        """
+        Format memory context for AI prompt.
+        
+        Args:
+            memory_context: Memory context from PortfolioMemoryEngine
+        
+        Returns:
+            Formatted string for prompt
+        """
+        lines = [
+            "",
+            "=" * 60,
+            "PORTFOLIO MEMORY & LEARNING CONTEXT",
+            "=" * 60,
+            f"Historical Trades: {memory_context.get('total_historical_trades', 0)}",
+            f"Recent Trades Analyzed: {memory_context.get('recent_trades_analyzed', 0)}",
+            "",
+            "Recent Performance:"
+        ]
+        
+        recent_perf = memory_context.get('recent_performance', {})
+        lines.append(
+            f"  Win Rate: {recent_perf.get('win_rate', 0):.1f}%"
+        )
+        lines.append(
+            f"  Total P&L: ${recent_perf.get('total_pnl', 0):.2f}"
+        )
+        lines.append(
+            f"  Wins: {recent_perf.get('winning_trades', 0)}, "
+            f"Losses: {recent_perf.get('losing_trades', 0)}"
+        )
+        
+        # Current streak
+        streak = memory_context.get('current_streak', {})
+        if streak.get('type'):
+            lines.append(
+                f"  Current Streak: {streak.get('count', 0)} "
+                f"{streak.get('type', '')} trades"
+            )
+        
+        # Action performance
+        action_perf = memory_context.get('action_performance', {})
+        if action_perf:
+            lines.append("")
+            lines.append("Historical Action Performance:")
+            for action, stats in action_perf.items():
+                lines.append(
+                    f"  {action}: {stats.get('win_rate', 0):.1f}% win rate, "
+                    f"${stats.get('total_pnl', 0):.2f} P&L "
+                    f"({stats.get('count', 0)} trades)"
+                )
+        
+        # Asset-specific history
+        if memory_context.get('asset_specific'):
+            asset_stats = memory_context['asset_specific']
+            lines.append("")
+            lines.append(
+                f"{memory_context.get('asset_pair', 'This Asset')} "
+                f"Historical Performance:"
+            )
+            lines.append(
+                f"  {asset_stats.get('total_trades', 0)} trades, "
+                f"{asset_stats.get('win_rate', 0):.1f}% win rate, "
+                f"${asset_stats.get('total_pnl', 0):.2f} total P&L"
+            )
+        
+        lines.append("=" * 60)
+        lines.append("")
+        lines.append(
+            "IMPORTANT: Consider this historical performance when making "
+            "your recommendation."
+        )
+        lines.append(
+            "If recent performance is poor, consider being more conservative."
+        )
+        lines.append(
+            "If specific actions (BUY/SELL) have performed poorly, factor "
+            "that into your decision."
+        )
+        lines.append("")
+        
+        return "\n".join(lines)
 
     def _query_ai(self, prompt: str) -> Dict[str, Any]:
         """
@@ -808,17 +903,46 @@ Provide:
         """
         decision_id = str(uuid.uuid4())
         
-        # Calculate recommended position size based on risk management
+        # Logic gate: Only calculate position sizing if we have valid balance data
         current_price = context['market_data'].get('close', 0)
-        total_balance = sum(context['balance'].values())
+        balance = context.get('balance', {})
         
-        # Use 1% risk with 2% stop loss as default conservative values
-        recommended_position_size = self.calculate_position_size(
-            account_balance=total_balance,
-            risk_percentage=1.0,
-            entry_price=current_price,
-            stop_loss_percentage=2.0
+        # Check if balance data is available and valid
+        has_valid_balance = (
+            balance and 
+            isinstance(balance, dict) and 
+            len(balance) > 0 and 
+            sum(balance.values()) > 0
         )
+        
+        # Calculate position sizing only if balance is available
+        if has_valid_balance:
+            total_balance = sum(balance.values())
+            
+            # Use 1% risk with 2% stop loss as default conservative values
+            recommended_position_size = self.calculate_position_size(
+                account_balance=total_balance,
+                risk_percentage=1.0,
+                entry_price=current_price,
+                stop_loss_percentage=2.0
+            )
+            stop_loss_percentage = 2.0
+            risk_percentage = 1.0
+            signal_only = False
+            logger.info(
+                "Position sizing calculated: %.4f units (balance: $%.2f)",
+                recommended_position_size,
+                total_balance
+            )
+        else:
+            # Signal-only mode: No position sizing when balance unavailable
+            recommended_position_size = None
+            stop_loss_percentage = None
+            risk_percentage = None
+            signal_only = True
+            logger.warning(
+                "Portfolio data unavailable - providing signal only (no position sizing)"
+            )
         
         # Determine position type based on action
         action = ai_response.get('action', 'HOLD')
@@ -832,11 +956,12 @@ Provide:
             'confidence': ai_response.get('confidence', 50),
             'reasoning': ai_response.get('reasoning', 'No reasoning provided'),
             'suggested_amount': ai_response.get('amount', 0),
-            'recommended_position_size': recommended_position_size,
+            'recommended_position_size': recommended_position_size,  # None if signal_only
             'position_type': position_type,  # LONG, SHORT, or None
             'entry_price': current_price,
-            'stop_loss_percentage': 2.0,  # Default 2% stop loss
-            'risk_percentage': 1.0,  # Default 1% account risk
+            'stop_loss_percentage': stop_loss_percentage,  # None if signal_only
+            'risk_percentage': risk_percentage,  # None if signal_only
+            'signal_only': signal_only,  # True when position sizing unavailable
             'market_data': context['market_data'],
             'balance_snapshot': context['balance'],
             'price_change': context['price_change'],

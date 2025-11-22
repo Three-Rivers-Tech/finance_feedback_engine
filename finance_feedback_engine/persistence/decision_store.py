@@ -201,3 +201,31 @@ class DecisionStore:
         
         logger.info(f"Cleaned up {deleted_count} old decisions")
         return deleted_count
+
+    def wipe_all_decisions(self) -> int:
+        """
+        Delete all stored decisions.
+
+        Returns:
+            Number of decisions deleted
+        """
+        deleted_count = 0
+        
+        for filepath in self.storage_path.glob("*.json"):
+            try:
+                filepath.unlink()
+                deleted_count += 1
+            except Exception as e:
+                logger.error(f"Error deleting {filepath}: {e}")
+        
+        logger.info(f"Wiped {deleted_count} decisions")
+        return deleted_count
+
+    def get_decision_count(self) -> int:
+        """
+        Get total count of stored decisions.
+
+        Returns:
+            Number of decisions in storage
+        """
+        return len(list(self.storage_path.glob("*.json")))

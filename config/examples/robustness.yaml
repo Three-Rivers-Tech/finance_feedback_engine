@@ -1,0 +1,67 @@
+# Example Configuration with Phase 1 Robustness Features
+
+alpha_vantage_api_key: "your-api-key-here"
+
+# Phase 1: Timeout Configuration
+# Industry best practice: configure timeouts per operation type
+api_timeouts:
+  market_data: 10      # seconds - OHLC data fetch
+  sentiment: 15        # seconds - news sentiment analysis
+  macro: 10            # seconds - macroeconomic indicators
+
+trading_platform: coinbase_advanced
+
+platform_credentials:
+  api_key: "your-platform-key"
+  api_secret: "your-platform-secret"
+
+decision_engine:
+  ai_provider: ensemble
+  model_name: "llama-3.2-3b-instruct"
+  decision_threshold: 0.7
+
+ensemble:
+  enabled_providers:
+    - local
+    - cli
+    - codex
+    - qwen
+  provider_weights:
+    local: 0.25
+    cli: 0.25
+    codex: 0.25
+    qwen: 0.25
+  voting_strategy: weighted
+  agreement_threshold: 0.6
+  adaptive_learning: true
+  learning_rate: 0.1
+
+persistence:
+  storage_path: "data/decisions"
+  max_decisions: 1000
+
+portfolio_memory:
+  enabled: true
+  storage_path: "data/demo_memory"
+
+backtesting:
+  enabled: true
+  default_strategy: "sma_crossover"
+  default_initial_capital: 10000.0
+
+# Phase 1 Features (Auto-configured):
+# =====================================
+# Circuit Breaker:
+#   - failure_threshold: 5 (opens after 5 consecutive failures)
+#   - recovery_timeout: 60s (waits 60s before testing recovery)
+#   - Automatically applied to AlphaVantage API calls
+#
+# Retry Logic:
+#   - max_retries: 3 (can be customized per operation)
+#   - base_delay: 1.0s with exponential backoff
+#   - Jitter enabled to prevent thundering herd
+#
+# Validation:
+#   - Market data quality checks (stale data, OHLC sanity)
+#   - Decision validation (required fields, value ranges)
+#   - Position sizing validation (risk limits, stop loss)
