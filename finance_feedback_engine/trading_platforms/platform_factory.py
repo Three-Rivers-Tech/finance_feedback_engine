@@ -50,6 +50,7 @@ class PlatformFactory:
                 'futures_value_usd': futures_value,
                 'spot_value_usd': spot_value,
                 'num_assets': 2,
+                'unrealized_pnl': 500.00,
                 'holdings': [
                     {
                         'asset': 'USD',

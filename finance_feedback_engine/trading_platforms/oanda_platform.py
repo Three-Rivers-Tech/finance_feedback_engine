@@ -266,6 +266,8 @@ class OandaPlatform(BaseTradingPlatform):
                 'base_currency': base_currency,
                 'balance': balance,
                 'unrealized_pl': unrealized_pl,
+                # Alias to keep naming consistent with other platforms/unified view.
+                'unrealized_pnl': unrealized_pl,
                 'margin_used': margin_used,
                 'margin_available': margin_available,
                 'nav': nav,
