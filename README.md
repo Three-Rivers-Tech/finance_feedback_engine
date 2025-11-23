@@ -70,17 +70,24 @@ Edit `config/config.local.yaml` and add your:
 
 ### Analyze an Asset
 
+**Flexible Input Formats** - Enter asset pairs in any format you prefer! 🆕
+
 ```bash
 # Using default AI provider (from config)
-python main.py analyze BTCUSD
+python main.py analyze BTCUSD        # Standard format
+python main.py analyze btc-usd       # Lowercase with dash
+python main.py analyze BTC_USD       # Underscore separator
+python main.py analyze "BTC/USD"     # Slash separator (quotes needed)
 
 # Using specific AI provider
 python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
-python main.py analyze BTCUSD --provider cli      # GitHub Copilot CLI
-python main.py analyze BTCUSD --provider qwen     # Qwen CLI (free, requires Node.js v20+)
-python main.py analyze BTCUSD --provider local    # Local rule-based
-python main.py analyze BTCUSD --provider ensemble # Multi-provider voting 🆕
+python main.py analyze btc-usd --provider cli     # GitHub Copilot CLI (any format works!)
+python main.py analyze eur_usd --provider qwen    # Qwen CLI (free, requires Node.js v20+)
+python main.py analyze ETHUSD --provider local    # Local rule-based
+python main.py analyze gbp-jpy --provider ensemble # Multi-provider voting 🆕
 ```
+
+All asset pair formats are automatically standardized to uppercase without separators for API compatibility. See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for details.
 
 ### Ensemble Mode (NEW!)
 
