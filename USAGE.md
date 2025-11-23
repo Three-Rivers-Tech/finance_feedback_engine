@@ -76,18 +76,31 @@ alpha_vantage_api_key: ${ALPHA_VANTAGE_API_KEY}
 
 ### 1. Analyze an Asset
 
-Analyze a cryptocurrency or forex pair and generate a trading decision:
+Analyze a cryptocurrency or forex pair and generate a trading decision.
+
+**Flexible Input Formats** - The engine automatically standardizes asset pairs to uppercase without separators:
 
 ```bash
-# Analyze Bitcoin
-python main.py analyze BTCUSD
+# Analyze Bitcoin (all formats work!)
+python main.py analyze BTCUSD       # Standard format
+python main.py analyze btc-usd      # Lowercase with dash
+python main.py analyze BTC_USD      # Underscore separator
+python main.py analyze "BTC/USD"    # Slash separator (quotes needed)
 
-# Analyze Ethereum
+# Analyze Ethereum (any format)
 python main.py analyze ETHUSD
+python main.py analyze eth-usd
+python main.py analyze ETH_USD
 
-# Analyze EUR/USD forex pair
+# Analyze EUR/USD forex pair (various formats)
 python main.py analyze EURUSD
+python main.py analyze eur_usd      # Common forex format
+python main.py analyze EUR-USD
+python main.py analyze "EUR/USD"
 ```
+
+> **Note**: All formats are automatically converted to uppercase without separators (e.g., `btc-usd` → `BTCUSD`).  
+> See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for complete details.
 
 **Output:**
 ```

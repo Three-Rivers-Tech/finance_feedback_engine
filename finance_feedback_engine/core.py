@@ -93,6 +93,11 @@ class FinanceFeedbackEngine:
         Returns:
             Dictionary containing analysis results and decision
         """
+        from .utils.validation import standardize_asset_pair
+        
+        # Standardize asset pair input (uppercase, remove separators)
+        asset_pair = standardize_asset_pair(asset_pair)
+        
         logger.info("Analyzing asset: %s", asset_pair)
         
         # Fetch comprehensive market data

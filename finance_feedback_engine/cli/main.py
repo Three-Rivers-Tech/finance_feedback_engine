@@ -107,7 +107,12 @@ def cli(ctx, config, verbose, interactive):
 @click.pass_context
 def analyze(ctx, asset_pair, provider):
     """Analyze an asset pair and generate trading decision."""
+    from ..utils.validation import standardize_asset_pair
+    
     try:
+        # Standardize asset pair input (uppercase, remove separators)
+        asset_pair = standardize_asset_pair(asset_pair)
+        
         config = load_config(ctx.obj['config_path'])
         
         # Override provider if specified
