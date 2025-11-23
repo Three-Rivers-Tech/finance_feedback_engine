@@ -7,6 +7,7 @@ from .circuit_breaker import (
     CircuitState,
     circuit_breaker
 )
+from .validation import standardize_asset_pair
 
 __all__ = [
     'exponential_backoff_retry',
@@ -15,4 +16,5 @@ __all__ = [
     'CircuitBreakerOpenError',
     'CircuitState',
     'circuit_breaker',
+    'standardize_asset_pair',
 ]
