@@ -1,5 +1,6 @@
 """Live trade monitoring system - orchestrates trade detection and tracking."""
 
+import time
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -183,10 +184,10 @@ class TradeMonitor:
                 
                 # Generate unique trade ID from product_id
                 # (In production, use order ID or fill ID from exchange)
-                trade_id = f"{product_id}_{position.get('side', 'UNKNOWN')}"
+                trade_id = f"{product_id}_{position.get('side', 'UNKNOWN')}_{int(time.time())}"
                 
                 # Check if we're already tracking this trade
-                if trade_id in self.tracked_trade_ids:
+                if trade_id in self.tracked_trade_ids or trade_id in self.active_trackers:
                     continue
                 
                 # New trade detected!
@@ -242,9 +243,9 @@ class TradeMonitor:
                     poll_interval=self.poll_interval
                 )
                 
-                # Submit to thread pool
+                # Submit to executor for thread lifecycle management
+                # (Executor manages thread creation, execution, and cleanup)
                 self.executor.submit(tracker.run)
-                tracker.start()  # Start the thread
                 
                 self.active_trackers[trade_id] = tracker
                 

@@ -183,7 +183,7 @@ class TradeTrackerThread(threading.Thread):
         # Determine exit reason
         if forced_stop:
             exit_reason = 'manual_stop'
-        elif realized_pnl < 0 and abs(realized_pnl) >= abs(self.peak_pnl * 0.5):
+        elif realized_pnl < 0 and self.peak_pnl > 0 and abs(realized_pnl) >= self.peak_pnl * 0.5:
             exit_reason = 'stop_loss_likely'
         elif realized_pnl > 0 and realized_pnl >= self.peak_pnl * 0.9:
             exit_reason = 'take_profit_likely'
