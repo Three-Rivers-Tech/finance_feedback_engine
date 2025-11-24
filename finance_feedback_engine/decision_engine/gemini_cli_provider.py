@@ -147,85 +147,74 @@ class GeminiCLIProvider:
         # Try JSON parse first
         # (output-format json returns structured data)
         # Gemini CLI with --output-format json returns structured output
+        def safe_confidence(val):
+            try:
+                return int(val) if val is not None else 50
+            except (ValueError, TypeError):
+                return 50
+
+        def safe_amount(val):
+            try:
+                return float(val) if val is not None else 0
+            except (ValueError, TypeError):
+                return 0
+
         try:
             wrapper_data = json.loads(output)
-            # If it's the structured response from Gemini CLI
             if isinstance(wrapper_data, dict):
-                # Gemini CLI uses 'response' field (not 'text')
-                response_text = (wrapper_data.get('response') or 
-                                wrapper_data.get('text'))
+                response_text = (wrapper_data.get('response') or wrapper_data.get('text'))
                 if response_text:
-                    # Try direct JSON parse from response
                     data = try_parse_decision_json(response_text)
                     if data:
-                        data['confidence'] = int(data.get('confidence', 50))
-                        data['amount'] = float(data.get('amount', 0))
+                        data['confidence'] = safe_confidence(data.get('confidence', 50))
+                        data['amount'] = safe_amount(data.get('amount', 0))
                         logger.info(
-                            "Gemini decision from wrapped response: "
-                            "%s (%d%%)",
-                            data['action'],
-                            data['confidence']
+                            "Gemini decision from wrapped response: %s (%d%%)",
+                            data['action'], data['confidence']
                         )
                         return data
-                    
-                    # Try extracting JSON from markdown within response
-                    json_match = re.search(
-                        r'```(?:json)?\s*(\{.*?\})\s*```',
-                        response_text,
-                        re.DOTALL
-                    )
+                    json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
                     if json_match:
                         data = try_parse_decision_json(json_match.group(1))
                         if data:
-                            data['confidence'] = int(
-                                data.get('confidence', 50)
-                            )
-                            data['amount'] = float(data.get('amount', 0))
+                            data['confidence'] = safe_confidence(data.get('confidence', 50))
+                            data['amount'] = safe_amount(data.get('amount', 0))
                             logger.info(
-                                "Gemini decision from response markdown: "
-                                "%s (%d%%)",
-                                data['action'],
-                                data['confidence']
+                                "Gemini decision from response markdown: %s (%d%%)",
+                                data['action'], data['confidence']
                             )
                             return data
         except json.JSONDecodeError:
             pass
 
-        # Try direct JSON parse
         data = try_parse_decision_json(output)
         if data:
-            data['confidence'] = int(data.get('confidence', 50))
-            data['amount'] = float(data.get('amount', 0))
+            data['confidence'] = safe_confidence(data.get('confidence', 50))
+            data['amount'] = safe_amount(data.get('amount', 0))
             logger.info(
                 "Gemini decision parsed: %s (%d%%)",
                 data['action'], data['confidence']
             )
             return data
 
-        # Try to extract JSON from markdown code blocks
-        json_match = re.search(
-            r'```(?:json)?\s*(\{.*?\})\s*```',
-            output,
-            re.DOTALL
-        )
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', output, re.DOTALL)
         if json_match:
             data = try_parse_decision_json(json_match.group(1))
             if data:
-                data['confidence'] = int(data.get('confidence', 50))
-                data['amount'] = float(data.get('amount', 0))
+                data['confidence'] = safe_confidence(data.get('confidence', 50))
+                data['amount'] = safe_amount(data.get('amount', 0))
                 logger.info(
                     "Gemini decision from code block: %s (%d%%)",
                     data['action'], data['confidence']
                 )
                 return data
 
-        # Try to find JSON object in text
         json_match = re.search(r'\{[^{}]*\}', output, re.DOTALL)
         if json_match:
             data = try_parse_decision_json(json_match.group(0))
             if data:
-                data['confidence'] = int(data.get('confidence', 50))
-                data['amount'] = float(data.get('amount', 0))
+                data['confidence'] = safe_confidence(data.get('confidence', 50))
+                data['amount'] = safe_amount(data.get('amount', 0))
                 logger.info(
                     "Gemini decision extracted: %s (%d%%)",
                     data['action'], data['confidence']
