@@ -463,51 +463,55 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
             )
             market_info += f"\n{monitoring_text}\n"
 
-        prompt = f"""You are a financial trading advisor. Analyze the following market data and provide a trading recommendation.
+        prompt = f"""You are an educational trading analysis system demonstrating technical and fundamental market analysis for learning purposes.
+
+TASK: Analyze the following market data and demonstrate what a technical analysis would suggest. This is for educational/research purposes only, not actual financial advice.
 
 {market_info}
 
 Account Balance: {balance}
 
-TRADING CONTEXT - Long/Short Positions:
-===================================
-A LONG position means buying an asset with the expectation that its price will RISE.
-- Enter: BUY action when bullish (expecting price increase)
+EDUCATIONAL CONTEXT - Trading Position Types:
+=============================================
+This analysis will demonstrate understanding of LONG and SHORT position mechanics for educational purposes.
+
+A LONG position represents buying an asset with expectation of price appreciation:
+- Entry: BUY action when technical indicators suggest bullish momentum
 - Exit: SELL action to close position
-- Profit: When price rises above entry price
-- Loss: When price falls below entry price
+- Profit scenario: When price rises above entry price
+- Loss scenario: When price falls below entry price
 - Formula: P&L = (Exit Price - Entry Price) × Position Size
 
-A SHORT position means selling an asset with the expectation that its price will FALL.
-- Enter: SELL action when bearish (expecting price decrease)
+A SHORT position represents selling an asset with expectation of price depreciation:
+- Entry: SELL action when technical indicators suggest bearish momentum
 - Exit: BUY action to close/cover position
-- Profit: When price falls below entry price
-- Loss: When price rises above entry price
+- Profit scenario: When price falls below entry price
+- Loss scenario: When price rises above entry price
 - Formula: P&L = (Entry Price - Exit Price) × Position Size
 
-POSITION SIZING PRINCIPLES:
-===========================
-Position size should be calculated based on:
+POSITION SIZING CALCULATION (Educational):
+==========================================
+Position sizing demonstrates risk management principles:
 1. Risk tolerance (typically 1-2% of account balance per trade)
-2. Stop-loss distance (price distance to exit if wrong)
-3. Volatility (higher volatility = smaller position)
-4. Account balance (never risk entire capital)
+2. Stop-loss distance (price distance to exit if analysis proves incorrect)
+3. Volatility consideration (higher volatility = smaller position)
+4. Account preservation (never risk entire capital)
 Formula: Position Size = (Account Balance × Risk %) / (Entry Price × Stop Loss %)
 
-PROFIT & LOSS CALCULATION:
-==========================
+PROFIT & LOSS CALCULATION (Educational):
+========================================
 For LONG: P&L = (Current Price - Entry Price) / Entry Price × 100%
 For SHORT: P&L = (Entry Price - Current Price) / Entry Price × 100%
 Unrealized P&L: Open positions (not yet closed)
 Realized P&L: Closed positions (actual profit/loss)
 
-ANALYSIS GUIDELINES:
-====================
-Consider the following in your analysis:
+TECHNICAL ANALYSIS FRAMEWORK:
+=============================
+Demonstrate analysis considering:
 - Candlestick patterns (long wicks suggest rejection, large body suggests conviction)
-- Close position in range (near high = bullish, near low = bearish)
+- Close position in range (near high = bullish signal, near low = bearish signal)
 - RSI levels (>70 overbought, <30 oversold, if provided)
-- Volatility (high volatility = higher risk)
+- Volatility metrics (high volatility = higher risk assessment)
 - Volume trends (for crypto, if provided)
 - Overall trend direction
 - News sentiment (bullish/bearish/neutral, if provided)
@@ -515,19 +519,22 @@ Consider the following in your analysis:
 - Macroeconomic context (inflation, rates, GDP, if provided)
 - Macro headwinds/tailwinds for the asset class
 
-Sentiment & Macro Integration:
+Signal Integration Framework:
 - Bullish sentiment + positive technicals = strong buy signal
 - Bearish sentiment + negative technicals = strong sell signal
-- Conflicting signals (e.g., bullish technicals, bearish sentiment) = caution/hold
+- Conflicting signals (e.g., bullish technicals, bearish sentiment) = caution/hold signal
 - High inflation/rates may favor crypto over fiat currencies
-- Economic weakness may increase risk-off behavior
+- Economic weakness may indicate risk-off behavior
 
-Based on this information, should we BUY (go long), SELL (go short or close), or HOLD {asset_pair}?
-Provide:
-1. Action (BUY/SELL/HOLD)
-2. Confidence (0-100%)
-3. Reasoning (brief explanation including long/short context)
-4. Suggested position size (considering risk management)
+ANALYSIS OUTPUT REQUIRED:
+=========================
+Demonstrate a technical analysis for {asset_pair} showing:
+1. Signal Type: BUY (long signal), SELL (short signal), or HOLD (neutral)
+2. Signal Strength: 0-100% (how strong the technical indicators align)
+3. Technical Reasoning: Brief explanation of what the indicators show (reference long/short mechanics)
+4. Example Position Size: Demonstrate position sizing calculation for risk management education
+
+Format response as a structured technical analysis demonstration.
 """
         return prompt
     
@@ -1064,18 +1071,73 @@ Provide:
         # Logic gate: Only calculate position sizing if we have valid balance data
         current_price = context['market_data'].get('close', 0)
         balance = context.get('balance', {})
+        action = ai_response.get('action', 'HOLD')
         
-        # Check if balance data is available and valid
+        # Determine asset type (crypto vs forex) for correct balance pool selection
+        asset_type = context['market_data'].get('type', 'unknown')
+        is_crypto = 'BTC' in asset_pair or 'ETH' in asset_pair or asset_type == 'crypto'
+        is_forex = '_' in asset_pair or asset_type == 'forex'
+        
+        # Extract the appropriate balance based on asset type
+        # Crypto: Use Coinbase balances (coinbase_*)
+        # Forex: Use Oanda balances (oanda_*)
+        relevant_balance = {}
+        if balance and isinstance(balance, dict):
+            if is_crypto:
+                # Filter for Coinbase balances
+                relevant_balance = {
+                    k: v for k, v in balance.items() 
+                    if k.startswith('coinbase_')
+                }
+            elif is_forex:
+                # Filter for Oanda balances
+                relevant_balance = {
+                    k: v for k, v in balance.items() 
+                    if k.startswith('oanda_')
+                }
+            else:
+                # Unknown type, use all balances as fallback
+                relevant_balance = balance
+        
+        # Check if relevant balance data is available and valid
         has_valid_balance = (
-            balance and 
-            isinstance(balance, dict) and 
-            len(balance) > 0 and 
-            sum(balance.values()) > 0
+            relevant_balance and 
+            len(relevant_balance) > 0 and 
+            sum(relevant_balance.values()) > 0
         )
         
-        # Calculate position sizing only if balance is available
-        if has_valid_balance:
-            total_balance = sum(balance.values())
+        # Check for existing position in this asset
+        portfolio = context.get('portfolio')
+        asset_base = asset_pair.replace('USD', '').replace('USDT', '').replace('_', '')
+        has_existing_position = False
+        
+        if portfolio and portfolio.get('holdings'):
+            for holding in portfolio.get('holdings', []):
+                if holding.get('currency') == asset_base and holding.get('amount', 0) > 0:
+                    has_existing_position = True
+                    break
+        
+        # Check monitoring context for active positions (futures/margin)
+        monitoring_context = context.get('monitoring_context')
+        if monitoring_context and not has_existing_position:
+            active_positions = monitoring_context.get('active_positions', {})
+            futures_positions = active_positions.get('futures', [])
+            for position in futures_positions:
+                if asset_pair in position.get('product_id', ''):
+                    has_existing_position = True
+                    break
+        
+        # Calculate position sizing based on action and existing position
+        # HOLD: Only show position sizing if there's an existing position
+        # BUY/SELL: Always calculate position sizing if balance is available
+        should_calculate_position = (
+            has_valid_balance and 
+            (action in ['BUY', 'SELL'] or (action == 'HOLD' and has_existing_position))
+        )
+        
+        if should_calculate_position:
+            total_balance = sum(relevant_balance.values())
+            balance_source = 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
             
             # Use 1% risk with 2% stop loss as default conservative values
             recommended_position_size = self.calculate_position_size(
@@ -1087,23 +1149,42 @@ Provide:
             stop_loss_percentage = 2.0
             risk_percentage = 1.0
             signal_only = False
-            logger.info(
-                "Position sizing calculated: %.4f units (balance: $%.2f)",
-                recommended_position_size,
-                total_balance
-            )
+            
+            if action == 'HOLD' and has_existing_position:
+                logger.info(
+                    "HOLD with existing position: showing position sizing (%.4f units) from %s",
+                    recommended_position_size,
+                    balance_source
+                )
+            else:
+                logger.info(
+                    "Position sizing calculated: %.4f units (balance: $%.2f from %s)",
+                    recommended_position_size,
+                    total_balance,
+                    balance_source
+                )
         else:
-            # Signal-only mode: No position sizing when balance unavailable
+            # Signal-only mode: No position sizing when balance unavailable or HOLD without position
             recommended_position_size = None
             stop_loss_percentage = None
             risk_percentage = None
-            signal_only = True
-            logger.warning(
-                "Portfolio data unavailable - providing signal only (no position sizing)"
-            )
+            if action == 'HOLD' and not has_existing_position:
+                logger.info(
+                    "HOLD without existing position - no position sizing shown"
+                )
+            elif not has_valid_balance:
+                balance_type = 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'platform'
+                logger.warning(
+                    "No valid %s balance available for %s - providing signal only (no position sizing)",
+                    balance_type,
+                    asset_pair
+                )
+            else:
+                logger.warning(
+                    "Portfolio data unavailable - providing signal only (no position sizing)"
+                )
         
         # Determine position type based on action
-        action = ai_response.get('action', 'HOLD')
         position_type = 'LONG' if action == 'BUY' else 'SHORT' if action == 'SELL' else None
         
         decision = {
