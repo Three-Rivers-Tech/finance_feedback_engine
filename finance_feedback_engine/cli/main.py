@@ -24,6 +24,7 @@ console = Console()
 
 def _parse_requirements_file(req_file: Path) -> list:
     """Parse requirements.txt and return list of package names (base names only)."""
+    import re
     packages = []
     if not req_file.exists():
         return packages
@@ -34,10 +35,34 @@ def _parse_requirements_file(req_file: Path) -> list:
             # Skip comments and empty lines
             if not line or line.startswith('#'):
                 continue
-            # Extract package name (before >= or ==)
-            pkg = line.split('>=')[0].split('==')[0].split('[')[0].strip()
-            if pkg:
-                packages.append(pkg)
+            
+            # Remove inline comments
+            line = line.split('#')[0].strip()
+            if not line:
+                continue
+            
+            # Try using packaging library first (most robust)
+            try:
+                from packaging.requirements import Requirement
+                req = Requirement(line)
+                packages.append(req.name)
+                continue
+            except ImportError:
+                pass  # Fall back to regex approach
+            except Exception:
+                pass  # Invalid requirement, try regex fallback
+            
+            # Fallback: Use regex to extract package name
+            # Handles operators: ~=, !=, <=, <, >, ==, >=
+            # Also strips extras [extra1,extra2] and environment markers
+            match = re.match(
+                r'^([a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?)',
+                line
+            )
+            if match:
+                pkg = match.group(1)
+                if pkg:
+                    packages.append(pkg)
     return packages
 
 
@@ -224,12 +249,28 @@ def install_deps(ctx, auto_install):
     try:
         subprocess.run(
             [sys.executable, '-m', 'pip', 'install'] + missing,
-            check=True
+            check=True,
+            timeout=600
         )
-        console.print("\n[bold green]✓ Dependencies installed successfully![/bold green]")
+        console.print(
+            "\n[bold green]✓ Dependencies installed successfully!"
+            "[/bold green]"
+        )
+    except subprocess.TimeoutExpired:
+        console.print(
+            "\n[bold red]✗ Installation timed out after 10 minutes"
+            "[/bold red]"
+        )
+        console.print(
+            "[yellow]Please retry the installation or check your network "
+            "connection and permissions.[/yellow]"
+        )
     except subprocess.CalledProcessError as e:
         console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
-        console.print("[yellow]You may need to run with elevated permissions or check your pip configuration.[/yellow]")
+        console.print(
+            "[yellow]You may need to run with elevated permissions or "
+            "check your pip configuration.[/yellow]"
+        )
     except Exception as e:
         console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
 
