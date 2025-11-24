@@ -719,8 +719,8 @@ Format response as a structured technical analysis demonstration.
             return self._codex_ai_inference(prompt)
         elif self.ai_provider == 'qwen':
             return self._qwen_ai_inference(prompt)
-        elif self.ai_provider == 'gemini':
-            return self._gemini_ai_inference(prompt)
+        # elif self.ai_provider == 'gemini':
+        #     return self._gemini_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
 
@@ -823,31 +823,31 @@ Format response as a structured technical analysis demonstration.
                 'amount': 0
             }
 
-    def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        CLI-based AI inference using Gemini CLI.
-
-        Args:
-            prompt: AI prompt
-
-        Returns:
-            AI response from Gemini CLI
-        """
-        logger.info("Using Gemini CLI AI inference")
-        
-        try:
-            from .gemini_cli_provider import GeminiCLIProvider
-            
-            provider = GeminiCLIProvider(self.config)
-            return provider.query(prompt)
-        except (ImportError, ValueError) as e:
-            logger.warning(f"Gemini CLI unavailable, using fallback: {e}")
-            return {
-                'action': 'HOLD',
-                'confidence': 50,
-                'reasoning': 'Gemini CLI unavailable, using fallback.',
-                'amount': 0
-            }
+    # def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
+    #     """
+    #     CLI-based AI inference using Gemini CLI.
+    #
+    #     Args:
+    #         prompt: AI prompt
+    #
+    #     Returns:
+    #         AI response from Gemini CLI
+    #     """
+    #     logger.info("Using Gemini CLI AI inference")
+    #     
+    #     try:
+    #         from .gemini_cli_provider import GeminiCLIProvider
+    #         
+    #         provider = GeminiCLIProvider(self.config)
+    #         return provider.query(prompt)
+    #     except (ImportError, ValueError) as e:
+    #         logger.warning(f"Gemini CLI unavailable, using fallback: {e}")
+    #         return {
+    #             'action': 'HOLD',
+    #             'confidence': 50,
+    #             'reasoning': 'Gemini CLI unavailable, using fallback.',
+    #             'amount': 0
+    #         }
 
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -883,8 +883,8 @@ Format response as a structured technical analysis demonstration.
                     decision = self._codex_ai_inference(prompt)
                 elif provider == 'qwen':
                     decision = self._qwen_ai_inference(prompt)
-                elif provider == 'gemini':
-                    decision = self._gemini_ai_inference(prompt)
+                # elif provider == 'gemini':
+                #     decision = self._gemini_ai_inference(prompt)
                 else:
                     logger.warning(f"Unknown provider: {provider}")
                     failed_providers.append(provider)
