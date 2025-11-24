@@ -396,8 +396,20 @@ class LocalLLMProvider:
             
             decision = try_parse_decision_json(response_text)
             if decision:
-                decision['confidence'] = int(decision.get('confidence', 60))
-                decision['amount'] = float(decision.get('amount', 0.1))
+                # Safely convert confidence to int (default 60 if missing/invalid)
+                try:
+                    confidence_val = decision.get('confidence', 60)
+                    decision['confidence'] = int(confidence_val) if confidence_val is not None else 60
+                except (ValueError, TypeError):
+                    decision['confidence'] = 60
+                
+                # Safely convert amount to float (default 0.1 if missing/invalid)
+                try:
+                    amount_val = decision.get('amount', 0.1)
+                    decision['amount'] = float(amount_val) if amount_val is not None else 0.1
+                except (ValueError, TypeError):
+                    decision['amount'] = 0.1
+                
                 logger.info(
                     f"Local LLM decision: {decision['action']} "
                     f"({decision['confidence']}%)"

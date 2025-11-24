@@ -1168,6 +1168,8 @@ Format response as a structured technical analysis demonstration.
             recommended_position_size = None
             stop_loss_percentage = None
             risk_percentage = None
+            signal_only = True
+            
             if action == 'HOLD' and not has_existing_position:
                 logger.info(
                     "HOLD without existing position - no position sizing shown"
@@ -1187,6 +1189,12 @@ Format response as a structured technical analysis demonstration.
         # Determine position type based on action
         position_type = 'LONG' if action == 'BUY' else 'SHORT' if action == 'SELL' else None
         
+        # Override suggested_amount to 0 for HOLD with no position (logic over LLM hallucinations)
+        suggested_amount = ai_response.get('amount', 0)
+        if action == 'HOLD' and not has_existing_position:
+            suggested_amount = 0
+            logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
+        
         decision = {
             'id': decision_id,
             'asset_pair': asset_pair,
@@ -1194,7 +1202,7 @@ Format response as a structured technical analysis demonstration.
             'action': action,
             'confidence': ai_response.get('confidence', 50),
             'reasoning': ai_response.get('reasoning', 'No reasoning provided'),
-            'suggested_amount': ai_response.get('amount', 0),
+            'suggested_amount': suggested_amount,  # Overridden to 0 for HOLD without position
             'recommended_position_size': recommended_position_size,  # None if signal_only
             'position_type': position_type,  # LONG, SHORT, or None
             'entry_price': current_price,
