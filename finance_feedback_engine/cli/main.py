@@ -184,6 +184,49 @@ def cli(ctx, config, verbose, interactive):
         return
 
 
+
+@cli.command()
+@click.option(
+    '--config', '-c',
+    default='config/agent.yaml',
+    help='Path to agent configuration file.'
+)
+@click.pass_context
+def agent(ctx, config):
+    """Run the engine in autonomous agentic mode."""
+    from finance_feedback_engine.agent.config import TradingAgentConfig
+    from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator
+    from finance_feedback_engine.trading_platforms.unified_platform import UnifiedPlatform
+
+    try:
+        # Load agent-specific config
+        agent_config_data = load_config(config)
+        agent_config = TradingAgentConfig(**agent_config_data)
+
+        # Load main engine config
+        main_config = load_config(ctx.obj['config_path'])
+
+        # Initialize components
+        engine = FinanceFeedbackEngine(main_config)
+        
+        # The orchestrator uses the existing engine and its platform
+        orchestrator = TradingAgentOrchestrator(
+            config=agent_config,
+            engine=engine.decision_engine,
+            platform=engine.trading_platform
+        )
+
+        # Start the agent
+        orchestrator.run()
+
+    except Exception as e:
+        console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
 @cli.command()
 @click.option(
     '--auto-install', '-y',

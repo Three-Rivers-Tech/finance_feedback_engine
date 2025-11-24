@@ -1,0 +1,26 @@
+# Configuration for the Agentic Trading Mode
+# See finance_feedback_engine/agent/config.py for all options
+
+# --- Execution Controls ---
+# If true, the agent will execute trades without asking for confirmation.
+autonomous_execution: false
+# Defines when to ask for approval. Options: always, never, on_new_asset
+approval_policy: always
+# Max trades to execute in a 24-hour period.
+max_daily_trades: 5
+
+# --- Strategic Goals ---
+# The overall mission for the agent. Options: growth, capital_preservation, balanced
+strategic_goal: balanced
+# The risk tolerance for the agent. Options: low, medium, high
+risk_appetite: medium
+# The maximum acceptable drawdown for the portfolio.
+max_drawdown_percent: 15.0
+
+# --- Data & Analysis Controls ---
+# List of asset pairs for the agent to monitor and trade.
+asset_pairs:
+  - BTCUSD
+  - ETHUSD
+# How often the agent should run its analysis loop, in seconds.
+analysis_frequency_seconds: 300
