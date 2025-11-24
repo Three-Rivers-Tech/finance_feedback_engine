@@ -17,6 +17,11 @@
   - Oanda (Forex) with **Position & Margin Tracking** 🆕
   - Easily extensible for new platforms
 - **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
+- **🔍 Live Trade Monitoring**: Automatic detection and tracking of open positions 🆕
+  - **Real-time P&L Tracking**: Monitor unrealized profits/losses as they happen
+  - **Thread-Safe**: Max 2 concurrent trades with dedicated monitoring threads
+  - **ML Feedback Loop**: Completed trades feed back into AI for continuous learning
+  - **Comprehensive Metrics**: Exit reasons, holding time, peak P&L, max drawdown
 - **📊 Position Sizing**: Automatic position sizing with 1% risk / 2% stop loss defaults 🆕
   - **Smart Signal-Only Mode**: Provides trading signals without position sizing when portfolio data unavailable 🆕
   - **Risk Management**: Calculates appropriate position sizes based on account balance
@@ -83,6 +88,7 @@ python main.py analyze "BTC/USD"     # Slash separator (quotes needed)
 python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
 python main.py analyze btc-usd --provider cli     # GitHub Copilot CLI (any format works!)
 python main.py analyze eur_usd --provider qwen    # Qwen CLI (free, requires Node.js v20+)
+python main.py analyze BTCUSD --provider gemini   # Gemini CLI (free, requires Node.js v20+)
 python main.py analyze ETHUSD --provider local    # Local rule-based
 python main.py analyze gbp-jpy --provider ensemble # Multi-provider voting 🆕
 ```
@@ -140,7 +146,12 @@ The engine supports five AI providers:
    - Command: `qwen`
    - Free to use
 
-4. **Local** (`--provider local`): Simple rule-based decisions
+4. **Gemini CLI** (`--provider gemini`): Uses free Google Gemini CLI
+   - Install: `npm install -g @google/gemini-cli` (requires Node.js v20+)
+   - Authentication: OAuth (60 req/min, 1000 req/day) or API key (100 req/day)
+   - Free tier with Gemini 2.5 Pro access
+
+5. **Local** (`--provider local`): Simple rule-based decisions
    - No setup required
    - Good for testing and fallback
 
@@ -188,6 +199,34 @@ python main.py execute <decision_id>
 ```bash
 python main.py status
 ```
+
+### Live Trade Monitoring 🆕
+
+Start automatic monitoring of open positions:
+
+```bash
+python main.py monitor start
+```
+
+Monitor detects and tracks trades automatically:
+- Polls for new positions every 30s
+- Updates prices and P&L in real-time
+- Records metrics when trades close
+- Feeds outcomes back to AI for learning
+
+Check monitoring status:
+
+```bash
+python main.py monitor status
+```
+
+View performance metrics:
+
+```bash
+python main.py monitor metrics
+```
+
+See [docs/LIVE_TRADE_MONITORING.md](docs/LIVE_TRADE_MONITORING.md) for full details.
 
 ## 📖 Configuration
 

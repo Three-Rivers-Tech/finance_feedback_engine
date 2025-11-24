@@ -111,7 +111,7 @@ platform_credentials:
 python main.py status
 
 # View forex portfolio breakdown
-python main.py portfolio
+python main.py dashboard
 
 # Analyze forex pair
 python main.py analyze EUR_USD

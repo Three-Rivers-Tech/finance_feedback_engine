@@ -82,6 +82,9 @@ class DecisionEngine:
         self.model_name = config.get('model_name', 'default')
         self.decision_threshold = config.get('decision_threshold', 0.7)
         
+        # Monitoring context provider (optional, set via set_monitoring_context)
+        self.monitoring_provider = None
+        
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None
         if self.ai_provider == 'ensemble':
@@ -90,6 +93,16 @@ class DecisionEngine:
             logger.info("Ensemble mode enabled")
         
         logger.info(f"Decision engine initialized with provider: {self.ai_provider}")
+    
+    def set_monitoring_context(self, monitoring_provider):
+        """
+        Set the monitoring context provider for live trade awareness.
+        
+        Args:
+            monitoring_provider: MonitoringContextProvider instance
+        """
+        self.monitoring_provider = monitoring_provider
+        logger.info("Monitoring context provider attached to decision engine")
 
     def generate_decision(
         self,
@@ -114,9 +127,31 @@ class DecisionEngine:
         """
         logger.info("Generating decision for %s", asset_pair)
         
+        # Get live monitoring context if available
+        monitoring_context = None
+        if self.monitoring_provider:
+            try:
+                monitoring_context = (
+                    self.monitoring_provider.get_monitoring_context(
+                        asset_pair=asset_pair
+                    )
+                )
+                logger.info(
+                    "Monitoring context loaded: %d active positions, %d slots",
+                    len(monitoring_context.get('active_positions', {}).get('futures', [])),
+                    monitoring_context.get('slots_available', 0)
+                )
+            except Exception as e:
+                logger.warning("Could not load monitoring context: %s", e)
+        
         # Create decision context
         context = self._create_decision_context(
-            asset_pair, market_data, balance, portfolio, memory_context
+            asset_pair,
+            market_data,
+            balance,
+            portfolio,
+            memory_context,
+            monitoring_context
         )
         
         # Generate AI prompt
@@ -140,7 +175,8 @@ class DecisionEngine:
         market_data: Dict[str, Any],
         balance: Dict[str, float],
         portfolio: Optional[Dict[str, Any]] = None,
-        memory_context: Optional[Dict[str, Any]] = None
+        memory_context: Optional[Dict[str, Any]] = None,
+        monitoring_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Create context for decision making.
@@ -151,6 +187,7 @@ class DecisionEngine:
             balance: Balances
             portfolio: Optional portfolio breakdown
             memory_context: Optional historical performance context
+            monitoring_context: Optional live monitoring context
 
         Returns:
             Decision context
@@ -158,6 +195,10 @@ class DecisionEngine:
         context = {
             'asset_pair': asset_pair,
             'market_data': market_data,
+            'balance': balance,
+            'portfolio': portfolio,
+            'memory_context': memory_context,
+            'monitoring_context': monitoring_context,
             'balance': balance,
             'portfolio': portfolio,
             'memory_context': memory_context,
@@ -413,6 +454,14 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
         if memory_context and memory_context.get('has_history'):
             memory_text = self._format_memory_context(memory_context)
             market_info += f"\n{memory_text}\n"
+        
+        # Add live monitoring context if available
+        monitoring_context = context.get('monitoring_context')
+        if monitoring_context and monitoring_context.get('has_monitoring_data'):
+            monitoring_text = self.monitoring_provider.format_for_ai_prompt(
+                monitoring_context
+            )
+            market_info += f"\n{monitoring_text}\n"
 
         prompt = f"""You are a financial trading advisor. Analyze the following market data and provide a trading recommendation.
 
@@ -591,6 +640,8 @@ Provide:
             return self._codex_ai_inference(prompt)
         elif self.ai_provider == 'qwen':
             return self._qwen_ai_inference(prompt)
+        elif self.ai_provider == 'gemini':
+            return self._gemini_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
 
@@ -693,6 +744,32 @@ Provide:
                 'amount': 0
             }
 
+    def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        CLI-based AI inference using Gemini CLI.
+
+        Args:
+            prompt: AI prompt
+
+        Returns:
+            AI response from Gemini CLI
+        """
+        logger.info("Using Gemini CLI AI inference")
+        
+        try:
+            from .gemini_cli_provider import GeminiCLIProvider
+            
+            provider = GeminiCLIProvider(self.config)
+            return provider.query(prompt)
+        except (ImportError, ValueError) as e:
+            logger.warning(f"Gemini CLI unavailable, using fallback: {e}")
+            return {
+                'action': 'HOLD',
+                'confidence': 50,
+                'reasoning': 'Gemini CLI unavailable, using fallback.',
+                'amount': 0
+            }
+
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
@@ -727,6 +804,8 @@ Provide:
                     decision = self._codex_ai_inference(prompt)
                 elif provider == 'qwen':
                     decision = self._qwen_ai_inference(prompt)
+                elif provider == 'gemini':
+                    decision = self._gemini_ai_inference(prompt)
                 else:
                     logger.warning(f"Unknown provider: {provider}")
                     failed_providers.append(provider)

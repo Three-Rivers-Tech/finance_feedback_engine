@@ -203,7 +203,7 @@ def main():
     print("  • Review the decision in data/decisions/")
     print("  • Execute trade: python main.py execute <decision_id>")
     print("  • View history: python main.py history --asset EUR_USD")
-    print("  • Monitor portfolio: python main.py portfolio")
+    print("  • Monitor portfolio: python main.py dashboard")
     print()
     print("⚠️  Remember: Always start with practice environment before live trading!")
     print("=" * 60)
