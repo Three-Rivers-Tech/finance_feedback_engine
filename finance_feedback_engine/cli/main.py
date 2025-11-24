@@ -6,6 +6,7 @@ import json
 import yaml
 import subprocess
 import sys
+import re
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -24,7 +25,6 @@ console = Console()
 
 def _parse_requirements_file(req_file: Path) -> list:
     """Parse requirements.txt and return list of package names (base names only)."""
-    import re
     packages = []
     if not req_file.exists():
         return packages

@@ -273,7 +273,9 @@ class MonitoringContextProvider:
                         metrics = json.load(f)
                     
                     # Check if within lookback period
-                    entry_time_str = metrics.get('entry_time', '').replace('Z', '+00:00')
+                    entry_time_str = metrics.get('entry_time', '')
+                    if entry_time_str.endswith('Z'):
+                        entry_time_str = entry_time_str[:-1] + '+00:00'
                     entry_time = datetime.fromisoformat(entry_time_str)
                     
                     if entry_time >= cutoff_time:
