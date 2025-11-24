@@ -19,7 +19,7 @@ console = Console()
 def example_1_view_portfolio():
     """Example 1: Agent views your portfolio breakdown"""
     console.print("\n[bold cyan]Example 1: View Portfolio Breakdown[/bold cyan]\n")
-    console.print("Command: [yellow]python main.py portfolio[/yellow]\n")
+    console.print("Command: [yellow]python main.py dashboard[/yellow]\n")
     
     # Load config
     with open('config/config.local.yaml') as f:

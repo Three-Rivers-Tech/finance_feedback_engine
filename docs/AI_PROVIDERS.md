@@ -60,7 +60,84 @@ Reasoning: Strong bullish momentum with positive sentiment
 
 ---
 
-### 2. Codex CLI (Recommended for Local Development)
+### 2. Gemini CLI (Free - Recommended for Advanced Analysis)
+
+**Provider ID**: `gemini`
+
+**Description**: Uses Google's official Gemini CLI tool for AI-powered trading analysis. Provides access to Gemini 2.5 Pro with 1M token context window through free OAuth authentication or API key.
+
+**Advantages**:
+- ✅ **Free tier** - OAuth: 60 req/min, 1,000 req/day | API key: 100 req/day
+- ✅ **Powerful AI** - Gemini 2.5 Pro with 1M token context
+- ✅ **Built-in tools** - Google Search grounding, web fetch
+- ✅ **Multiple auth options** - OAuth or API key
+- ✅ **Active development** - Official Google tool
+
+**Installation**:
+```bash
+# Requires Node.js v20 or above
+# Install via npm
+npm install -g @google/gemini-cli
+
+# Or via Homebrew (macOS/Linux)
+brew install gemini-cli
+
+# Or run directly with npx (no install)
+npx https://github.com/google-gemini/gemini-cli
+```
+
+**Authentication Options**:
+```bash
+# Option 1: OAuth login (recommended - higher limits)
+# Start CLI and follow browser authentication
+gemini
+# Select "Login with Google" when prompted
+
+# Option 2: API key (simpler setup)
+export GEMINI_API_KEY="your-api-key"
+# Get key from: https://aistudio.google.com/apikey
+```
+
+**Requirements**:
+- Node.js v20 or higher
+- **Free Path 1**: OAuth via Google account (60 req/min, 1,000 req/day)
+- **Free Path 2**: API key from Google AI Studio (100 req/day)
+
+**Usage**:
+```bash
+# Via CLI flag
+python main.py analyze BTCUSD --provider gemini
+
+# Or in config.yaml
+decision_engine:
+  ai_provider: "gemini"
+```
+
+**Pricing**:
+- **OAuth Free Tier**: 60 requests per minute, 1,000 requests per day
+- **API Key Free Tier**: 100 requests per day with Gemini 2.5 Pro
+- **Paid Tier**: Usage-based billing for higher limits (optional)
+
+**Example Output**:
+```
+Using AI provider: gemini
+Analyzing BTCUSD...
+Trading Decision Generated
+Decision ID: xyz789...
+Asset: BTCUSD
+Action: BUY
+Confidence: 82%
+Reasoning: Strong upward momentum with positive market sentiment
+```
+
+**Resources**:
+- [Official Gemini CLI Docs](https://github.com/google-gemini/gemini-cli)
+- [Get API Key](https://aistudio.google.com/apikey)
+- [Authentication Guide](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/authentication.md)
+
+---
+
+### 3. Codex CLI (Recommended for Local Development)
 
 **Provider ID**: `codex`
 

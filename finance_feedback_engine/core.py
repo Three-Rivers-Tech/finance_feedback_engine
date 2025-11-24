@@ -50,7 +50,43 @@ class FinanceFeedbackEngine:
         
         # Initialize trading platform
         platform_name = config.get('trading_platform', 'coinbase')
-        platform_credentials = config.get('platform_credentials', {})
+        
+        # Handle unified/multi-platform mode
+        if platform_name.lower() == 'unified':
+            # Convert platforms list to unified credentials format
+            platforms_list = config.get('platforms', [])
+            if not platforms_list:
+                raise ValueError(
+                    "Unified platform mode requires 'platforms' list in config. "
+                    "Example:\n"
+                    "platforms:\n"
+                    "  - name: coinbase_advanced\n"
+                    "    credentials: {...}\n"
+                    "  - name: oanda\n"
+                    "    credentials: {...}"
+                )
+            
+            # Transform platforms list into nested dict format
+            unified_credentials = {}
+            for platform_config in platforms_list:
+                platform_key = platform_config.get('name', '').lower()
+                platform_creds = platform_config.get('credentials', {})
+                
+                # Normalize key names (coinbase_advanced -> coinbase)
+                if platform_key in ['coinbase', 'coinbase_advanced']:
+                    unified_credentials['coinbase'] = platform_creds
+                elif platform_key == 'oanda':
+                    unified_credentials['oanda'] = platform_creds
+                else:
+                    logger.warning(
+                        f"Unknown platform in unified config: {platform_key}"
+                    )
+            
+            platform_credentials = unified_credentials
+        else:
+            # Single platform mode (legacy)
+            platform_credentials = config.get('platform_credentials', {})
+        
         self.trading_platform = PlatformFactory.create_platform(
             platform_name, platform_credentials
         )
@@ -69,11 +105,85 @@ class FinanceFeedbackEngine:
         if memory_enabled:
             self.memory_engine = PortfolioMemoryEngine(config)
             logger.info("Portfolio Memory Engine enabled")
+        
+        # Initialize monitoring context provider (lazy init)
+        self.monitoring_provider = None
+        self.trade_monitor = None
+        self._monitoring_enabled = config.get('monitoring', {}).get(
+            'enable_context_integration', True
+        )
+        
+        # Auto-enable monitoring integration if enabled in config
+        if self._monitoring_enabled:
+            self._auto_enable_monitoring()
 
         # Backtester (lazy init holder)
         self._backtester: Optional[Backtester] = None
 
         logger.info("Finance Feedback Engine initialized successfully")
+    
+    def _auto_enable_monitoring(self):
+        """Auto-enable monitoring integration with default settings."""
+        try:
+            from .monitoring import (
+                MonitoringContextProvider,
+                TradeMetricsCollector
+            )
+            
+            # Create metrics collector
+            metrics_collector = TradeMetricsCollector()
+            
+            # Create monitoring provider (no trade monitor needed for context)
+            self.monitoring_provider = MonitoringContextProvider(
+                platform=self.trading_platform,
+                trade_monitor=None,  # Optional, can add later
+                metrics_collector=metrics_collector
+            )
+            
+            # Attach to decision engine
+            self.decision_engine.set_monitoring_context(
+                self.monitoring_provider
+            )
+            
+            logger.info(
+                "Monitoring context auto-enabled - "
+                "AI has position awareness by default"
+            )
+        except Exception as e:
+            logger.warning(
+                "Could not auto-enable monitoring context: %s", e
+            )
+    
+    def enable_monitoring_integration(
+        self,
+        trade_monitor=None,
+        metrics_collector=None
+    ):
+        """
+        Enable live monitoring context integration for AI decisions.
+        
+        Args:
+            trade_monitor: Optional TradeMonitor instance
+            metrics_collector: Optional TradeMetricsCollector instance
+        """
+        from .monitoring import MonitoringContextProvider
+        
+        self.trade_monitor = trade_monitor
+        self.monitoring_provider = MonitoringContextProvider(
+            platform=self.trading_platform,
+            trade_monitor=trade_monitor,
+            metrics_collector=metrics_collector
+        )
+        
+        # Attach to decision engine
+        self.decision_engine.set_monitoring_context(
+            self.monitoring_provider
+        )
+        
+        logger.info(
+            "Monitoring context integration enabled - "
+            "AI will have full awareness of active positions/trades"
+        )
 
     def analyze_asset(
         self,

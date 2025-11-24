@@ -5,11 +5,17 @@
 alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
 
 # Trading Platform Configuration
-# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'mock'
+# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'mock', 'unified'
 # - coinbase/coinbase_advanced: Crypto trading with futures portfolio tracking
 # - oanda: Forex trading with position & margin tracking
 # - mock: Testing without real API (simulated data)
+# - unified: Multi-platform mode (configure 'platforms' list below)
+#
+# Single Platform Mode: Set one platform name (legacy)
 trading_platform: "coinbase_advanced"
+#
+# Multi-Platform Mode: Use 'unified' and configure platforms list below
+# trading_platform: "unified"
 
 # Platform-specific credentials
 # Uncomment and configure based on your chosen platform
@@ -42,6 +48,32 @@ platform_credentials:
   # No credentials needed - uses simulated data
   # Set trading_platform: "mock" above
 
+# ============================================
+# Multi-Platform Configuration (Advanced)
+# ============================================
+# To use multiple platforms simultaneously:
+# 1. Set trading_platform: "unified" above
+# 2. Uncomment and configure platforms list below
+# 3. Dashboard aggregates portfolio across all platforms
+#
+# platforms:
+#   - name: "coinbase_advanced"
+#     credentials:
+#       api_key: "YOUR_COINBASE_API_KEY"
+#       api_secret: "YOUR_COINBASE_API_SECRET"
+#       use_sandbox: false
+#   
+#   - name: "oanda"
+#     credentials:
+#       api_key: "YOUR_OANDA_API_TOKEN"
+#       account_id: "YOUR_OANDA_ACCOUNT_ID"
+#       environment: "practice"
+#
+# NOTE: When using unified platform mode:
+# - Execute trades on specific platform: specify platform_name in decision
+# - View aggregated portfolio: python main.py portfolio (uses dashboard aggregator)
+# - Balances shown separately per platform in 'balance' command
+
 # Decision Engine Configuration
 decision_engine:
   # AI Provider Options:
@@ -49,6 +81,7 @@ decision_engine:
   # - 'cli': GitHub Copilot CLI
   # - 'codex': Codex CLI
   # - 'qwen': Free Qwen CLI (requires Node.js v20+)
+  # - 'gemini': Free Google Gemini CLI (requires Node.js v20+)
   # - 'ensemble': Aggregate multiple providers for best signals
   ai_provider: "local"
   
@@ -66,14 +99,15 @@ decision_engine:
 ensemble:
   # Which providers to include in ensemble
   # Only enable providers you have configured
-  enabled_providers: [local]  # Example: [local, cli, codex, qwen]
+  enabled_providers: [local]  # Example: [local, cli, codex, qwen, gemini]
   
   # Initial weights for each provider (must sum to 1.0)
   provider_weights:
     local: 1.0
-    # cli: 0.25
-    # codex: 0.25
-    # qwen: 0.25
+    # cli: 0.20
+    # codex: 0.20
+    # qwen: 0.20
+    # gemini: 0.20
   
   # Voting strategy: 'weighted', 'majority', or 'stacking'
   voting_strategy: "weighted"
@@ -83,8 +117,24 @@ ensemble:
   agreement_threshold: 0.6
   
   # Adaptive learning: adjust weights based on accuracy
-  adaptive_learning: true
+  # TESTED: Dynamic weight adjustment, ensemble fallback system
+  adaptive_learning: true  # ON BY DEFAULT - thoroughly tested
   learning_rate: 0.1
+
+# ============================================
+# Live Trading Monitoring
+# ============================================
+# Provides real-time position awareness to AI decision engine
+# TESTED: Monitoring integration tests, context provider validation
+monitoring:
+  # Enable monitoring context integration (AI position awareness)
+  enable_context_integration: true  # ON BY DEFAULT - thoroughly tested
+  
+  # Include sentiment data in market analysis
+  include_sentiment: true  # Alpha Vantage NEWS_SENTIMENT API
+  
+  # Include macro indicators in market analysis
+  include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
 
 # Persistence Configuration
 persistence:
@@ -96,6 +146,66 @@ persistence:
   
   # Auto-cleanup old decisions (days)
   cleanup_days: 30
+
+# ============================================
+# Portfolio Memory Engine
+# ============================================
+# Tracks trade outcomes and provides learning-based recommendations
+# Inspired by reinforcement learning (experience replay, Thompson sampling)
+# TESTED: Phase 1 integration tests, portfolio memory implementation
+portfolio_memory:
+  # Enable portfolio memory tracking
+  enabled: true  # ON BY DEFAULT - thoroughly tested
+  
+  # Maximum experiences to retain in memory buffer
+  max_memory_size: 1000
+  
+  # Learning rate for provider weight updates (0.0-1.0)
+  # Higher = faster adaptation, Lower = more stable
+  learning_rate: 0.1
+  
+  # Number of recent trades to include in AI context
+  context_window: 20
+
+# ============================================
+# Backtesting (Experimental)
+# ============================================
+# Run historical strategy simulations
+backtesting:
+  # Enable backtesting (manual toggle)
+  enabled: false
+  
+  # Use real historical data from AlphaVantage (requires API key)
+  # If false, uses synthetic candles
+  use_real_data: false
+  
+  # Starting paper balance for simulations
+  initial_balance: 10000.0
+  
+  # Per-trade fee as percentage of notional (0.1 = 0.1%)
+  fee_percentage: 0.1
+  
+  # Default strategy configuration
+  strategy:
+    name: "sma_crossover"  # Options: sma_crossover, ensemble_weight_rl
+    short_window: 5        # Fast moving average period
+    long_window: 20        # Slow moving average period
+  
+  # Reinforcement learning config (for RL strategies)
+  rl:
+    learning_rate: 0.01
+    discount_factor: 0.95
+    exploration_rate: 0.1
+
+# ============================================
+# Logging Configuration (Optional)
+# ============================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  # Optional: Log file path (if omitted, logs to console only)
+  # file: "logs/finance_engine.log"
 
 # ============================================
 # USAGE NOTES
@@ -134,6 +244,7 @@ persistence:
 # - local: Free, no API costs, runs on CPU (4-8GB RAM)
 # - cli/codex: Requires GitHub Copilot subscription
 # - qwen: Free, requires Node.js v20+ and OAuth
+# - gemini: Free, requires Node.js v20+ and OAuth or API key
 # - ensemble: Combines multiple providers for better accuracy
 #
 # For more details, see:
