@@ -33,6 +33,11 @@ def test_monitoring_context_provider():
     # Get context
     context = provider.get_monitoring_context(asset_pair='BTCUSD')
     
+    # Validate context structure
+    assert isinstance(context, dict), "Context should be a dictionary"
+    assert 'has_monitoring_data' in context, "Missing has_monitoring_data field"
+    assert 'active_positions' in context, "Missing active_positions field"
+    
     print("\n✓ Context generated successfully")
     print(f"  Has monitoring data: {context.get('has_monitoring_data')}")
     print(f"  Active positions: {len(context.get('active_positions', {}).get('futures', []))}")
@@ -40,6 +45,9 @@ def test_monitoring_context_provider():
     
     # Test formatting for AI prompt
     formatted = provider.format_for_ai_prompt(context)
+    assert isinstance(formatted, str), "Formatted output should be a string"
+    assert len(formatted) > 0, "Formatted output should not be empty"
+    
     print("\n✓ AI prompt formatting works")
     print(f"  Formatted text length: {len(formatted)} chars")
     print(f"\n{formatted}")
@@ -80,6 +88,11 @@ def test_decision_engine_integration():
         market_data=market_data,
         balance=balance
     )
+    
+    # Validate decision structure
+    assert isinstance(decision, dict), "Decision should be a dictionary"
+    assert 'action' in decision, "Decision missing action field"
+    assert 'confidence' in decision, "Decision missing confidence field"
     
     print(f"\n✓ Decision generated successfully")
     print(f"  Action: {decision['action']}")

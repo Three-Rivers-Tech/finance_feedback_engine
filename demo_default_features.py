@@ -7,6 +7,7 @@ No manual configuration required - just initialize the engine and go!
 """
 
 import yaml
+import sys
 from finance_feedback_engine import FinanceFeedbackEngine
 
 
@@ -16,10 +17,25 @@ def main():
     print("=" * 70)
     print()
     
-    # Load config
+    # Load config with robust error handling
     print("📋 Loading configuration from config/config.local.yaml...")
-    with open('config/config.local.yaml', 'r') as f:
-        config = yaml.safe_load(f)
+    try:
+        with open('config/config.local.yaml', 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print("❌ Configuration file 'config/config.local.yaml' not found. "
+              "Create it (copy from 'config/config.yaml') and retry.")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"❌ Configuration file is malformed YAML: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Unexpected error reading configuration: {e}")
+        sys.exit(1)
+
+    if not config:
+        print("❌ Loaded configuration is empty. Populate config/config.local.yaml before running this demo.")
+        sys.exit(1)
     
     # Show enabled features in config
     print("\n✅ Features Enabled in Configuration:")
@@ -34,7 +50,11 @@ def main():
     print("   (All tested features will auto-enable during initialization)")
     print()
     
-    engine = FinanceFeedbackEngine(config)
+    try:
+        engine = FinanceFeedbackEngine(config)
+    except Exception as e:
+        print(f"❌ Error initializing engine: {e}")
+        return
     
     # Verify features are active
     print("\n✅ Features Active in Engine:")
@@ -46,11 +66,11 @@ def main():
     # Show memory stats
     if engine.memory_engine:
         print("\n📊 Portfolio Memory Stats:")
-        print(f"  • Total Experiences: {len(engine.memory_engine.experience_buffer)}")
-        print(f"  • Trade Outcomes: {len(engine.memory_engine.trade_outcomes)}")
-        print(f"  • Memory Capacity: {engine.memory_engine.max_memory_size}")
-        print(f"  • Learning Rate: {engine.memory_engine.learning_rate}")
-        print(f"  • Context Window: {engine.memory_engine.context_window}")
+        print(f"  • Total Experiences: {len(getattr(engine.memory_engine, 'experience_buffer', []))}")
+        print(f"  • Trade Outcomes: {len(getattr(engine.memory_engine, 'trade_outcomes', []))}")
+        print(f"  • Memory Capacity: {getattr(engine.memory_engine, 'max_memory_size', 'N/A')}")
+        print(f"  • Learning Rate: {getattr(engine.memory_engine, 'learning_rate', 'N/A')}")
+        print(f"  • Context Window: {getattr(engine.memory_engine, 'context_window', 'N/A')}")
     
     # Show monitoring info
     if engine.monitoring_provider:
@@ -59,7 +79,6 @@ def main():
         print(f"  • Position Awareness: Active")
         print(f"  • Real-time P&L Tracking: Active")
         print(f"  • Risk Metrics: Active")
-    
     # Demonstrate sentiment + technical data fetching
     print("\n🔍 Testing Market Data Fetch (with sentiment + technicals)...")
     print("   Fetching: BTCUSD")
