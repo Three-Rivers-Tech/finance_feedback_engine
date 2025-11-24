@@ -224,7 +224,7 @@ From `.github/copilot-instructions.md`, the agent understands:
    - Only available for platforms implementing `get_portfolio_breakdown()`
 
 3. ✅ **CLI Commands**
-   - `python main.py portfolio` - detailed breakdown
+   - `python main.py dashboard` - unified comprehensive dashboard
    - `python main.py balance` - simple balances
    - Both work with Coinbase Advanced platform
 
