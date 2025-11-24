@@ -2,7 +2,9 @@
 
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -258,9 +260,6 @@ class MonitoringContextProvider:
         
         try:
             # Get all metrics files
-            from pathlib import Path
-            import json
-            
             metrics_dir = Path("data/trade_metrics")
             if not metrics_dir.exists():
                 return {}
@@ -274,9 +273,8 @@ class MonitoringContextProvider:
                         metrics = json.load(f)
                     
                     # Check if within lookback period
-                    entry_time = datetime.fromisoformat(
-                        metrics.get('entry_time', '').replace('Z', '')
-                    )
+                    entry_time_str = metrics.get('entry_time', '').replace('Z', '+00:00')
+                    entry_time = datetime.fromisoformat(entry_time_str)
                     
                     if entry_time >= cutoff_time:
                         # Filter by asset if specified
