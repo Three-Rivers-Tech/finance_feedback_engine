@@ -3,6 +3,7 @@
 import time
 import logging
 import threading
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Optional, Set
 from queue import Queue, Empty
@@ -181,10 +182,14 @@ class TradeMonitor:
             
             for position in positions:
                 product_id = position.get('product_id', '')
+                side = position.get('side', 'UNKNOWN')
+                entry_price = position.get('entry_price', 0.0)
                 
-                # Generate unique trade ID from product_id
-                # (In production, use order ID or fill ID from exchange)
-                trade_id = f"{product_id}_{position.get('side', 'UNKNOWN')}_{int(time.time())}"
+                # Generate stable trade ID from immutable attributes
+                # Use deterministic hash of product_id, side, and entry_price
+                # This ensures the same position gets the same ID across detection cycles
+                stable_key = f"{product_id}:{side}:{entry_price:.8f}"
+                trade_id = hashlib.sha256(stable_key.encode()).hexdigest()[:16]
                 
                 # Check if we're already tracking this trade
                 if trade_id in self.tracked_trade_ids or trade_id in self.active_trackers:
