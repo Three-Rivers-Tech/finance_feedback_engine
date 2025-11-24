@@ -93,7 +93,7 @@ python main.py analyze "BTC/USD"     # Slash separator (quotes needed)
 python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
 python main.py analyze btc-usd --provider cli     # GitHub Copilot CLI (any format works!)
 python main.py analyze eur_usd --provider qwen    # Qwen CLI (free, requires Node.js v20+)
-python main.py analyze BTCUSD --provider gemini   # Gemini CLI (free, requires Node.js v20+)
+# python main.py analyze BTCUSD --provider gemini   # Gemini CLI (free, requires Node.js v20+)
 python main.py analyze ETHUSD --provider local    # Local rule-based
 python main.py analyze gbp-jpy --provider ensemble # Multi-provider voting 🆕
 ```
