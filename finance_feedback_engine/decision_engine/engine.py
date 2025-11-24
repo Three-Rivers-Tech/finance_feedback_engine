@@ -549,9 +549,45 @@ Provide:
             f"Historical Trades: {memory_context.get('total_historical_trades', 0)}",
             f"Recent Trades Analyzed: {memory_context.get('recent_trades_analyzed', 0)}",
             "",
-            "Recent Performance:"
         ]
         
+        # Long-term performance (e.g., 90 days)
+        long_term = memory_context.get('long_term_performance', {})
+        if long_term and long_term.get('has_data'):
+            period_days = long_term.get('period_days', 90)
+            lines.extend([
+                f"LONG-TERM PERFORMANCE ({period_days} days):",
+                "-" * 60,
+                f"  Total Realized P&L: "
+                f"${long_term.get('realized_pnl', 0):.2f}",
+                f"  Total Trades: {long_term.get('total_trades', 0)}",
+                f"  Win Rate: {long_term.get('win_rate', 0):.1f}%",
+                f"  Profit Factor: {long_term.get('profit_factor', 0):.2f}",
+                f"  ROI: {long_term.get('roi_percentage', 0):.1f}%",
+                "",
+                f"  Average Win: ${long_term.get('avg_win', 0):.2f}",
+                f"  Average Loss: ${long_term.get('avg_loss', 0):.2f}",
+                f"  Best Trade: ${long_term.get('best_trade', 0):.2f}",
+                f"  Worst Trade: ${long_term.get('worst_trade', 0):.2f}",
+                "",
+                f"  Recent Momentum: "
+                f"{long_term.get('recent_momentum', 'N/A')}",
+            ])
+            
+            sharpe = long_term.get('sharpe_ratio')
+            if sharpe is not None:
+                lines.append(f"  Sharpe Ratio: {sharpe:.2f}")
+            
+            avg_holding = long_term.get('average_holding_hours')
+            if avg_holding is not None:
+                lines.append(
+                    f"  Average Holding Period: {avg_holding:.1f} hours"
+                )
+            
+            lines.append("")
+        
+        # Recent performance
+        lines.append("Recent Performance:")
         recent_perf = memory_context.get('recent_performance', {})
         lines.append(
             f"  Win Rate: {recent_perf.get('win_rate', 0):.1f}%"
@@ -600,6 +636,42 @@ Provide:
         
         lines.append("=" * 60)
         lines.append("")
+        
+        # Performance-based guidance for AI
+        if long_term and long_term.get('has_data'):
+            lines.append(
+                "PERFORMANCE GUIDANCE FOR DECISION:"
+            )
+            
+            # Check if long-term performance is poor
+            lt_pnl = long_term.get('realized_pnl', 0)
+            lt_win_rate = long_term.get('win_rate', 50)
+            momentum = long_term.get('recent_momentum', 'stable')
+            
+            if lt_pnl < 0 and lt_win_rate < 45:
+                lines.append(
+                    "⚠ CAUTION: Long-term performance is negative. "
+                    "Consider being more conservative."
+                )
+            elif lt_pnl > 0 and lt_win_rate > 60:
+                lines.append(
+                    "✓ Long-term performance is strong. "
+                    "Current strategy is working well."
+                )
+            
+            if momentum == 'declining':
+                lines.append(
+                    "⚠ Performance momentum is DECLINING. "
+                    "Recent trades performing worse than earlier ones."
+                )
+            elif momentum == 'improving':
+                lines.append(
+                    "✓ Performance momentum is IMPROVING. "
+                    "Recent trades performing better."
+                )
+            
+            lines.append("")
+        
         lines.append(
             "IMPORTANT: Consider this historical performance when making "
             "your recommendation."

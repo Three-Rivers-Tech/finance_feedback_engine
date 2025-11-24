@@ -17,6 +17,11 @@
   - Oanda (Forex) with **Position & Margin Tracking** 🆕
   - Easily extensible for new platforms
 - **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
+- **📊 Long-Term Performance Tracking**: AI analyzes 90-day portfolio performance for better decisions 🆕
+  - **Realized P&L**: Total profit/loss over extended period
+  - **Win Rate & Profit Factor**: Historical success metrics
+  - **Performance Momentum**: Detects improving/declining trends
+  - **Risk-Adjusted Returns**: Sharpe ratio for professional-grade analysis
 - **🔍 Live Trade Monitoring**: Automatic detection and tracking of open positions 🆕
   - **Real-time P&L Tracking**: Monitor unrealized profits/losses as they happen
   - **Thread-Safe**: Max 2 concurrent trades with dedicated monitoring threads
@@ -424,6 +429,7 @@ All trading decisions are stored as JSON files in the configured storage path (d
 ## 🚦 Roadmap
 
 - [ ] Add more trading platforms (Binance, Kraken, etc.)
+- [x] **Long-term portfolio performance tracking** (see `docs/LONG_TERM_PERFORMANCE.md`) ✅
 - [ ] Implement backtesting functionality
 - [ ] Add portfolio management features
 - [ ] Create web dashboard
@@ -431,6 +437,17 @@ All trading decisions are stored as JSON files in the configured storage path (d
 - [ ] Implement advanced AI models integration
 - [ ] Add risk management strategies
 - [ ] Create mobile app
+
+## 📚 Documentation
+
+- **[Long-Term Performance Tracking](docs/LONG_TERM_PERFORMANCE.md)** - 90-day portfolio metrics for AI decision-making 🆕
+- **[AI Providers](docs/AI_PROVIDERS.md)** - Guide to available AI providers
+- **[Live Trade Monitoring](docs/LIVE_TRADE_MONITORING.md)** - Real-time position tracking
+- **[Portfolio Memory Engine](PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
+- **[Signal-Only Mode](SIGNAL_ONLY_MODE.md)** - Trading signals without execution
+- **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
+- **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
+- **[Ensemble System](docs/ENSEMBLE_SYSTEM.md)** - Multi-provider AI aggregation
 
 ## 🤝 Contributing
 
