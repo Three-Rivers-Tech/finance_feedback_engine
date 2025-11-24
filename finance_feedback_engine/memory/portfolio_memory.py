@@ -581,10 +581,186 @@ class PortfolioMemoryEngine:
     # Context Generation for AI
     # ===================================================================
     
+    def get_performance_over_period(
+        self,
+        days: int = 90,
+        asset_pair: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Calculate portfolio performance metrics over a specified time period.
+        
+        This provides longer-term performance context (default 90 days) to help
+        AI models understand overall portfolio health and recent trends.
+        
+        Args:
+            days: Number of days to look back (default 90)
+            asset_pair: Optionally filter to specific asset
+        
+        Returns:
+            Dict with performance metrics including:
+            - realized_pnl: Total realized profit/loss over period
+            - total_trades: Number of trades completed
+            - win_rate: Percentage of profitable trades
+            - avg_win: Average profit on winning trades
+            - avg_loss: Average loss on losing trades
+            - profit_factor: Ratio of gross profit to gross loss
+            - sharpe_ratio: Risk-adjusted return metric (if available)
+            - roi_percentage: Return on investment %
+            - best_trade: Largest winning trade
+            - worst_trade: Largest losing trade
+            - average_holding_hours: Avg time positions held
+            - recent_momentum: Performance trend (improving/declining/stable)
+        """
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        # Filter outcomes by time period
+        period_outcomes = [
+            o for o in self.trade_outcomes
+            if o.exit_timestamp and
+            datetime.fromisoformat(
+                o.exit_timestamp.replace('Z', '+00:00')
+            ) >= cutoff_date
+        ]
+        
+        # Filter by asset if specified
+        if asset_pair:
+            period_outcomes = [
+                o for o in period_outcomes
+                if o.asset_pair == asset_pair
+            ]
+        
+        if not period_outcomes:
+            return {
+                'has_data': False,
+                'period_days': days,
+                'message': f'No completed trades in the last {days} days'
+            }
+        
+        # Calculate core metrics
+        total_pnl = sum(o.realized_pnl or 0 for o in period_outcomes)
+        winning_trades = [
+            o for o in period_outcomes if (o.realized_pnl or 0) > 0
+        ]
+        losing_trades = [
+            o for o in period_outcomes if (o.realized_pnl or 0) <= 0
+        ]
+        
+        win_count = len(winning_trades)
+        loss_count = len(losing_trades)
+        total_trades = len(period_outcomes)
+        win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
+        
+        # Average win/loss
+        avg_win = (sum(o.realized_pnl or 0 for o in winning_trades) / win_count
+                   if win_count > 0 else 0)
+        avg_loss = (
+            sum(o.realized_pnl or 0 for o in losing_trades) / loss_count
+            if loss_count > 0 else 0
+        )
+        
+        # Profit factor (gross profit / gross loss)
+        gross_profit = sum(o.realized_pnl or 0 for o in winning_trades)
+        gross_loss = abs(sum(o.realized_pnl or 0 for o in losing_trades))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else 0
+        
+        # Best/worst trades
+        pnls = [o.realized_pnl or 0 for o in period_outcomes]
+        best_trade = max(pnls) if pnls else 0
+        worst_trade = min(pnls) if pnls else 0
+        
+        # Average holding period
+        holding_periods = [
+            o.holding_period_hours for o in period_outcomes
+            if o.holding_period_hours is not None
+        ]
+        avg_holding_hours = (
+            sum(holding_periods) / len(holding_periods)
+            if holding_periods else None
+        )
+        
+        # Calculate ROI percentage (assuming we can estimate average capital)
+        # This is approximate - real ROI needs starting capital
+        avg_position_value = sum(
+            abs(o.entry_price * o.position_size) for o in period_outcomes
+        ) / total_trades if total_trades > 0 else 1
+        roi_percentage = (
+            (total_pnl / avg_position_value * 100)
+            if avg_position_value > 0 else 0
+        )
+        
+        # Recent momentum: compare first half vs second half of period
+        mid_point = len(period_outcomes) // 2
+        if mid_point > 0:
+            first_half_pnl = sum(
+                o.realized_pnl or 0
+                for o in period_outcomes[:mid_point]
+            )
+            second_half_pnl = sum(
+                o.realized_pnl or 0
+                for o in period_outcomes[mid_point:]
+            )
+            
+            if second_half_pnl > first_half_pnl * 1.1:
+                momentum = 'improving'
+            elif second_half_pnl < first_half_pnl * 0.9:
+                momentum = 'declining'
+            else:
+                momentum = 'stable'
+        else:
+            momentum = 'insufficient_data'
+        
+        # Sharpe ratio (if we have enough data)
+        sharpe_ratio = None
+        if len(period_outcomes) >= 10:
+            returns = [
+                (o.realized_pnl or 0) / (o.entry_price * o.position_size)
+                if o.entry_price * o.position_size > 0 else 0
+                for o in period_outcomes
+            ]
+            sharpe_ratio = self._calculate_sharpe_ratio(returns)
+        
+        return {
+            'has_data': True,
+            'period_days': days,
+            'period_start': cutoff_date.isoformat(),
+            'period_end': datetime.utcnow().isoformat(),
+            
+            # Core performance
+            'realized_pnl': total_pnl,
+            'total_trades': total_trades,
+            'win_rate': win_rate,
+            'winning_trades': win_count,
+            'losing_trades': loss_count,
+            
+            # Win/loss analysis
+            'avg_win': avg_win,
+            'avg_loss': avg_loss,
+            'profit_factor': profit_factor,
+            'gross_profit': gross_profit,
+            'gross_loss': gross_loss,
+            
+            # Extremes
+            'best_trade': best_trade,
+            'worst_trade': worst_trade,
+            
+            # Risk metrics
+            'sharpe_ratio': sharpe_ratio,
+            'roi_percentage': roi_percentage,
+            
+            # Trading behavior
+            'average_holding_hours': avg_holding_hours,
+            'recent_momentum': momentum,
+            
+            # Asset filter
+            'asset_pair': asset_pair if asset_pair else 'all'
+        }
+    
     def generate_context(
         self,
         asset_pair: Optional[str] = None,
-        max_recent: Optional[int] = None
+        max_recent: Optional[int] = None,
+        include_long_term: bool = True,
+        long_term_days: int = 90
     ) -> Dict[str, Any]:
         """
         Generate performance context to inform new trading decisions.
@@ -592,6 +768,8 @@ class PortfolioMemoryEngine:
         Args:
             asset_pair: Optionally filter to specific asset
             max_recent: Max number of recent trades to include
+            include_long_term: Include long-term performance metrics
+            long_term_days: Days to look back for long-term metrics
         
         Returns:
             Dict with performance context for AI prompting
@@ -603,7 +781,16 @@ class PortfolioMemoryEngine:
         if asset_pair:
             outcomes = [o for o in outcomes if o.asset_pair == asset_pair]
         
-        if not outcomes:
+        # Get long-term performance if requested
+        long_term_performance = None
+        if include_long_term:
+            long_term_performance = self.get_performance_over_period(
+                days=long_term_days,
+                asset_pair=asset_pair
+            )
+        
+        if not outcomes and not (long_term_performance and
+                                 long_term_performance.get('has_data')):
             return {
                 'has_history': False,
                 'message': 'No historical trades available'
@@ -612,7 +799,7 @@ class PortfolioMemoryEngine:
         # Aggregate recent performance
         recent_pnl = sum(o.realized_pnl or 0 for o in outcomes)
         recent_wins = sum(1 for o in outcomes if o.was_profitable)
-        recent_win_rate = recent_wins / len(outcomes) * 100
+        recent_win_rate = recent_wins / len(outcomes) * 100 if outcomes else 0
         
         # Recent performance by action
         action_stats = defaultdict(lambda: {'count': 0, 'wins': 0, 'pnl': 0.0})
@@ -678,7 +865,8 @@ class PortfolioMemoryEngine:
             'current_streak': {
                 'type': streak_type,
                 'count': streak_count
-            }
+            },
+            'long_term_performance': long_term_performance
         }
         
         # Add asset-specific context
