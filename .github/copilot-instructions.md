@@ -138,7 +138,7 @@ Agents adding config options must: (1) default safely if absent, (2) avoid break
   - `python main.py analyze BTCUSD --provider local` (Llama-3.2-3B via Ollama)
   - `python main.py analyze BTCUSD --provider qwen` (free Qwen CLI)
   - `python main.py balance`, `history --limit 20`, `execute <id>`, `status`
-  - `python main.py portfolio` (detailed breakdown with allocations — requires platform with `get_portfolio_breakdown()` like Coinbase Advanced or Oanda)
+  - `python main.py dashboard` (unified dashboard with comprehensive portfolio breakdown — aggregates all platform data)
   - **Forex trading**: `python main.py analyze EUR_USD` (use underscore format for Oanda pairs)
 - Local iteration: modify module; invoke CLI command hitting modified path; verify JSON output written to `data/decisions/`.
 - Logging: uses `logging.basicConfig`; verbose flag `-v` sets DEBUG level across all modules.

@@ -32,7 +32,7 @@ platform_credentials:
 Then verify:
 ```bash
 python main.py status
-python main.py portfolio  # View forex positions & margin
+python main.py dashboard  # View forex positions & margin
 python main.py analyze EUR_USD
 ```
 
@@ -59,7 +59,7 @@ platform_credentials:
 Then verify:
 ```bash
 python main.py status
-python main.py portfolio  # View crypto futures positions
+python main.py dashboard  # View crypto futures positions
 python main.py analyze BTCUSD
 ```
 
@@ -105,7 +105,7 @@ This means your `config.local.yaml` is automatically used when present!
 python main.py status
 
 # View portfolio (both platforms)
-python main.py portfolio
+python main.py dashboard
 
 # Crypto analysis (Coinbase)
 python main.py analyze BTCUSD

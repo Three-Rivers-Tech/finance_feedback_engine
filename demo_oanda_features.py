@@ -209,7 +209,7 @@ def demo_oanda_features():
     
     print("4. Run Analysis:")
     print("   python main.py analyze EUR_USD")
-    print("   python main.py portfolio")
+    print("   python main.py dashboard")
     print("   python main.py balance\n")
     
     print("5. Available Forex Pairs:")

@@ -128,15 +128,6 @@ Output:
 └─────────────┴───────────┘
 ```
 
-### Portfolio Command
-```bash
-python main.py portfolio
-```
-Shows:
-- Combined total value
-- Futures breakdown (positions, PnL, margin)
-- Spot holdings table (USD/USDC)
-
 ### Dashboard Command
 ```bash
 python main.py dashboard

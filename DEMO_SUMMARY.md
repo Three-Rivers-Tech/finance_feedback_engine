@@ -152,7 +152,7 @@ python main.py analyze BTCUSD
 python main.py balance
 
 # View portfolio
-python main.py portfolio
+python main.py dashboard
 
 # Decision history
 python main.py history --limit 10

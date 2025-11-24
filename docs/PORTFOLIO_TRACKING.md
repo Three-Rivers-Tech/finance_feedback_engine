@@ -83,7 +83,7 @@ python main.py -c config/config.local.yaml balance
 ### View Portfolio
 
 ```bash
-python main.py portfolio
+python main.py dashboard
 ```
 
 **Output:**
@@ -344,4 +344,4 @@ For issues or questions:
 
 ---
 
-**Ready to start?** Run `python main.py portfolio` to see your live holdings! 🚀
+**Ready to start?** Run `python main.py dashboard` to see your live holdings! 🚀

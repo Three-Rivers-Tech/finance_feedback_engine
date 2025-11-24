@@ -93,7 +93,7 @@ Unrealized P&L: +234.56 USD
 ### View Portfolio Breakdown
 
 ```bash
-python main.py portfolio
+python main.py dashboard
 ```
 
 **Output:**
@@ -354,7 +354,7 @@ Review decision history regularly to evaluate strategy.
 python main.py status
 
 # 2. View current portfolio
-python main.py portfolio
+python main.py dashboard
 
 # 3. Analyze opportunity
 python main.py analyze EUR_USD
@@ -363,7 +363,7 @@ python main.py analyze EUR_USD
 python main.py execute <decision_id>
 
 # 5. Monitor results
-python main.py portfolio
+python main.py dashboard
 python main.py history --limit 5
 ```
 

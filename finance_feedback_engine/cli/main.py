@@ -4,6 +4,8 @@ import click
 import logging
 import json
 import yaml
+import subprocess
+import sys
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -18,6 +20,69 @@ from finance_feedback_engine.dashboard import (
 
 
 console = Console()
+
+
+def _parse_requirements_file(req_file: Path) -> list:
+    """Parse requirements.txt and return list of package names (base names only)."""
+    packages = []
+    if not req_file.exists():
+        return packages
+    
+    with open(req_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            # Skip comments and empty lines
+            if not line or line.startswith('#'):
+                continue
+            # Extract package name (before >= or ==)
+            pkg = line.split('>=')[0].split('==')[0].split('[')[0].strip()
+            if pkg:
+                packages.append(pkg)
+    return packages
+
+
+def _get_installed_packages() -> dict:
+    """Get currently installed packages as dict {name: version}."""
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'list', '--format=json'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        installed = json.loads(result.stdout)
+        return {pkg['name'].lower(): pkg['version'] for pkg in installed}
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not retrieve installed packages: {e}[/yellow]")
+        return {}
+
+
+def _check_dependencies() -> tuple:
+    """Check which dependencies are missing. Returns (missing, installed) tuples."""
+    req_file = Path('requirements.txt')
+    if not req_file.exists():
+        return ([], [])
+    
+    required = _parse_requirements_file(req_file)
+    installed_dict = _get_installed_packages()
+    
+    missing = []
+    installed = []
+    
+    for pkg in required:
+        pkg_lower = pkg.lower()
+        # Normalize both hyphen and underscore for comparison
+        pkg_normalized = pkg_lower.replace('-', '_')
+        
+        # Check both forms (hyphen and underscore)
+        if (pkg_lower in installed_dict or 
+            pkg_normalized in installed_dict or
+            pkg_lower.replace('_', '-') in installed_dict):
+            installed.append(pkg)
+        else:
+            missing.append(pkg)
+    
+    return (missing, installed)
 
 
 def setup_logging(verbose: bool = False):
@@ -95,14 +160,89 @@ def cli(ctx, config, verbose, interactive):
 
 
 @cli.command()
+@click.option(
+    '--auto-install', '-y',
+    is_flag=True,
+    help='Automatically install missing dependencies without prompting'
+)
+@click.pass_context
+def install_deps(ctx, auto_install):
+    """Check and install missing project dependencies."""
+    console.print("[bold cyan]Checking project dependencies...[/bold cyan]\n")
+    
+    missing, installed = _check_dependencies()
+    
+    if not missing and not installed:
+        console.print("[yellow]requirements.txt not found.[/yellow]")
+        return
+    
+    # Display summary table
+    from rich.table import Table
+    table = Table(title="Dependency Status")
+    table.add_column("Status", style="bold")
+    table.add_column("Count", justify="right")
+    table.add_column("Packages", style="dim")
+    
+    if installed:
+        installed_preview = ', '.join(installed[:5])
+        if len(installed) > 5:
+            installed_preview += f" ... (+{len(installed) - 5} more)"
+        table.add_row("[green]✓ Installed[/green]", str(len(installed)), installed_preview)
+    
+    if missing:
+        missing_preview = ', '.join(missing[:5])
+        if len(missing) > 5:
+            missing_preview += f" ... (+{len(missing) - 5} more)"
+        table.add_row("[red]✗ Missing[/red]", str(len(missing)), missing_preview)
+    
+    console.print(table)
+    console.print()
+    
+    if not missing:
+        console.print("[bold green]✓ All dependencies are installed![/bold green]")
+        return
+    
+    # Show missing packages
+    console.print("[yellow]Missing dependencies:[/yellow]")
+    for pkg in missing:
+        console.print(f"  • {pkg}")
+    console.print()
+    
+    # Prompt for installation (unless auto-install)
+    if not auto_install:
+        if ctx.obj.get('interactive'):
+            response = console.input("[bold]Install missing dependencies? [y/N]: [/bold]")
+        else:
+            response = input("Install missing dependencies? [y/N]: ")
+        
+        if response.strip().lower() != 'y':
+            console.print("[yellow]Installation cancelled.[/yellow]")
+            return
+    
+    # Install missing packages
+    console.print("\n[bold cyan]Installing missing dependencies...[/bold cyan]")
+    try:
+        subprocess.run(
+            [sys.executable, '-m', 'pip', 'install'] + missing,
+            check=True
+        )
+        console.print("\n[bold green]✓ Dependencies installed successfully![/bold green]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
+        console.print("[yellow]You may need to run with elevated permissions or check your pip configuration.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+
+
+@cli.command()
 @click.argument('asset_pair')
 @click.option(
     '--provider', '-p',
     type=click.Choice(
-        ['local', 'cli', 'codex', 'qwen', 'ensemble'],
+        ['local', 'cli', 'codex', 'qwen', 'gemini', 'ensemble'],
         case_sensitive=False
     ),
-    help='AI provider (local/cli/codex/qwen/ensemble)'
+    help='AI provider (local/cli/codex/qwen/gemini/ensemble)'
 )
 @click.pass_context
 def analyze(ctx, asset_pair, provider):
@@ -316,151 +456,6 @@ def balance(ctx):
             table.add_row(asset, f"{amount:,.2f}")
         
         console.print(table)
-        
-    except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {str(e)}")
-        raise click.Abort()
-
-
-@cli.command()
-@click.pass_context
-def portfolio(ctx):
-    """Show detailed portfolio breakdown with allocations."""
-    try:
-        config = load_config(ctx.obj['config_path'])
-        engine = FinanceFeedbackEngine(config)
-        
-        # Check if platform supports portfolio breakdown
-        if not hasattr(engine.trading_platform, 'get_portfolio_breakdown'):
-            console.print(
-                "[yellow]Portfolio breakdown not supported "
-                "by this trading platform[/yellow]"
-            )
-            # Fall back to simple balance
-            balances = engine.get_balance()
-            table = Table(title="Account Balances")
-            table.add_column("Asset", style="cyan")
-            table.add_column("Balance", style="green", justify="right")
-            
-            for asset, amount in balances.items():
-                table.add_row(asset, f"{amount:,.2f}")
-            
-            console.print(table)
-            return
-        
-        # Get futures trading account breakdown
-        portfolio_data = engine.trading_platform.get_portfolio_breakdown()
-        
-        # Display account summary
-        total_value = portfolio_data.get('total_value_usd', 0)
-        futures_value = portfolio_data.get('futures_value_usd', 0)
-        spot_value = portfolio_data.get('spot_value_usd', 0)
-        
-        console.print(
-            "\n[bold cyan]Portfolio Summary[/bold cyan]"
-        )
-        console.print(
-            f"Total Value: [green]${total_value:,.2f}[/green]"
-        )
-        if futures_value > 0:
-            console.print(
-                f"  Futures: ${futures_value:,.2f}"
-            )
-        if spot_value > 0:
-            console.print(
-                f"  Spot (USD/USDC): ${spot_value:,.2f}"
-            )
-        console.print()
-        
-        # Display futures summary
-        futures_summary = portfolio_data.get('futures_summary', {})
-        if futures_summary:
-            console.print("[bold yellow]Futures Account Metrics[/bold yellow]")
-            console.print(
-                f"  Unrealized PnL: "
-                f"${futures_summary.get('unrealized_pnl', 0):,.2f}"
-            )
-            console.print(
-                f"  Daily Realized PnL: "
-                f"${futures_summary.get('daily_realized_pnl', 0):,.2f}"
-            )
-            console.print(
-                f"  Buying Power: "
-                f"${futures_summary.get('buying_power', 0):,.2f}"
-            )
-            console.print(
-                f"  Initial Margin: "
-                f"${futures_summary.get('initial_margin', 0):,.2f}"
-            )
-            console.print()
-        
-        # Display spot holdings (USD/USDC)
-        holdings = portfolio_data.get('holdings', [])
-        if holdings:
-            table = Table(title="Spot Holdings (USD/USDC)")
-            table.add_column("Asset", style="cyan")
-            table.add_column("Amount", style="white", justify="right")
-            table.add_column("Value (USD)", style="green", justify="right")
-            table.add_column("Allocation", style="yellow", justify="right")
-            
-            for holding in holdings:
-                asset = holding.get('asset', 'N/A')
-                amount = holding.get('amount', 0)
-                value = holding.get('value_usd', 0)
-                allocation = holding.get('allocation_pct', 0)
-                
-                table.add_row(
-                    asset,
-                    f"{amount:,.2f}",
-                    f"${value:,.2f}",
-                    f"{allocation:.2f}%"
-                )
-            
-            console.print(table)
-            console.print()
-        
-        # Display active futures positions (long/short)
-        futures_positions = portfolio_data.get('futures_positions', [])
-        if futures_positions:
-            table = Table(title="Active Positions (Long/Short)")
-            table.add_column("Product", style="cyan")
-            table.add_column("Side", style="white")
-            table.add_column("Contracts", style="white", justify="right")
-            table.add_column("Entry", style="yellow", justify="right")
-            table.add_column("Current", style="yellow", justify="right")
-            table.add_column("Unrealized PnL", style="green", justify="right")
-            
-            for pos in futures_positions:
-                product = pos.get('product_id', 'N/A')
-                side = pos.get('side', 'N/A')
-                contracts = pos.get('contracts', 0)
-                entry = pos.get('entry_price', 0)
-                current = pos.get('current_price', 0)
-                pnl = pos.get('unrealized_pnl', 0)
-                
-                # Color PnL based on positive/negative
-                pnl_color = "green" if pnl >= 0 else "red"
-                pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
-                
-                # Color side indicator
-                side_color = "green" if side == "LONG" else "red"
-                side_str = f"[{side_color}]{side}[/{side_color}]"
-                
-                table.add_row(
-                    product,
-                    side_str,
-                    f"{contracts:.0f}",
-                    f"${entry:,.2f}",
-                    f"${current:,.2f}",
-                    pnl_str
-                )
-            
-            console.print(table)
-        else:
-            console.print(
-                "[yellow]No active positions "
-                "(pure long/short futures strategy)[/yellow]"
-            )
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
@@ -1034,6 +1029,258 @@ def check_versions(ctx):
         console.print("[yellow]Ollama not available[/yellow]")
     
     console.print("\n[bold green]✓ Version check complete[/bold green]\n")
+
+
+@cli.group()
+@click.pass_context
+def monitor(ctx):
+    """Live trade monitoring commands."""
+    pass
+
+
+@monitor.command()
+@click.pass_context
+def start(ctx):
+    """Start live trade monitoring."""
+    try:
+        config_path = ctx.obj['config_path']
+        config = load_config(config_path)
+        
+        # Initialize engine
+        engine = FinanceFeedbackEngine(config=config)
+        
+        # Check platform supports monitoring
+        if not hasattr(engine.trading_platform, 'get_portfolio_breakdown'):
+            console.print(
+                "[red]Error:[/red] Current platform doesn't support "
+                "portfolio monitoring"
+            )
+            return
+        
+        from finance_feedback_engine.monitoring import TradeMonitor
+        
+        console.print("\n[bold cyan]🔍 Starting Live Trade Monitor[/bold cyan]\n")
+        
+        # Create and start monitor
+        trade_monitor = TradeMonitor(
+            platform=engine.trading_platform,
+            detection_interval=30,  # Check for new trades every 30s
+            poll_interval=30  # Update positions every 30s
+        )
+        
+        trade_monitor.start()
+        
+        console.print("[green]✓ Monitor started successfully[/green]")
+        console.print(
+            f"  Max concurrent trades: {trade_monitor.MAX_CONCURRENT_TRADES}"
+        )
+        console.print(
+            f"  Detection interval: {trade_monitor.detection_interval}s"
+        )
+        console.print(
+            f"  Poll interval: {trade_monitor.poll_interval}s"
+        )
+        console.print("\n[yellow]Monitor is running in background...[/yellow]")
+        console.print(
+            "[dim]Use 'python main.py monitor status' to check status[/dim]"
+        )
+        console.print(
+            "[dim]Use 'python main.py monitor stop' to stop monitoring[/dim]"
+        )
+        
+        # Keep process alive
+        import time
+        try:
+            while trade_monitor.is_running:
+                time.sleep(5)
+        except KeyboardInterrupt:
+            console.print("\n\n[yellow]Stopping monitor...[/yellow]")
+            trade_monitor.stop()
+            console.print("[green]✓ Monitor stopped[/green]")
+        
+    except Exception as e:
+        console.print(f"[red]Error starting monitor:[/red] {e}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+
+
+@monitor.command(name='status')
+@click.pass_context
+def monitor_status(ctx):
+    """Show live trade monitoring status."""
+    try:
+        config_path = ctx.obj['config_path']
+        config = load_config(config_path)
+        
+        engine = FinanceFeedbackEngine(config=config)
+        
+        from finance_feedback_engine.monitoring import TradeMonitor
+        
+        # Note: In production, you'd store monitor instance globally
+        # For now, show what trades are currently open on platform
+        
+        console.print("\n[bold cyan]📊 Trade Monitor Status[/bold cyan]\n")
+        
+        try:
+            portfolio = engine.trading_platform.get_portfolio_breakdown()
+            positions = portfolio.get('futures_positions', [])
+            
+            if not positions:
+                console.print("[yellow]No open positions detected[/yellow]")
+                return
+            
+            table = Table(title="Open Positions (Monitored)")
+            table.add_column("Product ID", style="cyan")
+            table.add_column("Side", style="white")
+            table.add_column("Contracts", style="green", justify="right")
+            table.add_column("Entry", style="yellow", justify="right")
+            table.add_column("Current", style="yellow", justify="right")
+            table.add_column("PnL", style="white", justify="right")
+            
+            for pos in positions:
+                product_id = pos.get('product_id', 'N/A')
+                side = pos.get('side', 'N/A')
+                contracts = pos.get('contracts', 0)
+                entry = pos.get('entry_price', 0)
+                current = pos.get('current_price', 0)
+                pnl = pos.get('unrealized_pnl', 0)
+                
+                pnl_color = "green" if pnl >= 0 else "red"
+                pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
+                
+                table.add_row(
+                    product_id,
+                    side,
+                    f"{contracts:.0f}",
+                    f"${entry:,.2f}",
+                    f"${current:,.2f}",
+                    pnl_str
+                )
+            
+            console.print(table)
+            console.print(
+                f"\n[dim]Total open positions: {len(positions)}[/dim]"
+            )
+            
+        except Exception as e:
+            console.print(f"[red]Error fetching positions:[/red] {e}")
+        
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+
+
+@monitor.command()
+@click.pass_context
+def metrics(ctx):
+    """Show trade performance metrics."""
+    try:
+        from finance_feedback_engine.monitoring import TradeMetricsCollector
+        
+        console.print("\n[bold cyan]📈 Trade Performance Metrics[/bold cyan]\n")
+        
+        # Load metrics from disk
+        collector = TradeMetricsCollector()
+        
+        # Load all metric files
+        import json
+        from pathlib import Path
+        
+        metrics_dir = Path("data/trade_metrics")
+        if not metrics_dir.exists():
+            console.print(
+                "[yellow]No trade metrics found yet[/yellow]"
+            )
+            console.print(
+                "[dim]Metrics will appear here once trades complete[/dim]"
+            )
+            return
+        
+        metric_files = list(metrics_dir.glob("trade_*.json"))
+        
+        if not metric_files:
+            console.print("[yellow]No completed trades yet[/yellow]")
+            return
+        
+        # Load all metrics
+        all_metrics = []
+        for file in metric_files:
+            try:
+                with open(file, 'r') as f:
+                    metric = json.load(f)
+                    all_metrics.append(metric)
+            except Exception as e:
+                console.print(f"[dim]Warning: Could not load {file.name}: {e}[/dim]")
+        
+        if not all_metrics:
+            console.print("[yellow]No valid metrics found[/yellow]")
+            return
+        
+        # Calculate aggregate stats
+        winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
+        losing = [m for m in all_metrics if m.get('realized_pnl', 0) <= 0]
+        
+        total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
+        avg_pnl = total_pnl / len(all_metrics)
+        win_rate = (len(winning) / len(all_metrics) * 100) if all_metrics else 0
+        
+        # Display summary
+        console.print(f"Total Trades:     {len(all_metrics)}")
+        console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
+        console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
+        console.print(f"Win Rate:         {win_rate:.1f}%")
+        
+        pnl_color = "green" if total_pnl >= 0 else "red"
+        console.print(f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]")
+        
+        avg_color = "green" if avg_pnl >= 0 else "red"
+        console.print(f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]")
+        
+        # Show recent trades
+        console.print("\n[bold]Recent Trades:[/bold]\n")
+        
+        table = Table()
+        table.add_column("Product", style="cyan")
+        table.add_column("Side", style="white")
+        table.add_column("Duration", style="yellow")
+        table.add_column("PnL", style="white", justify="right")
+        table.add_column("Exit Reason", style="dim")
+        
+        # Sort by exit time and show last 10
+        sorted_metrics = sorted(
+            all_metrics,
+            key=lambda m: m.get('exit_time', ''),
+            reverse=True
+        )[:10]
+        
+        for m in sorted_metrics:
+            product = m.get('product_id', 'N/A')
+            side = m.get('side', 'N/A')
+            duration = m.get('holding_duration_hours', 0)
+            pnl = m.get('realized_pnl', 0)
+            reason = m.get('exit_reason', 'unknown')
+            
+            pnl_color = "green" if pnl >= 0 else "red"
+            pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
+            
+            table.add_row(
+                product,
+                side,
+                f"{duration:.2f}h",
+                pnl_str,
+                reason
+            )
+        
+        console.print(table)
+        
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
 
 
 if __name__ == '__main__':

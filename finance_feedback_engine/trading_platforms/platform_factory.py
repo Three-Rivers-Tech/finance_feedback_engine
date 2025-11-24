@@ -92,7 +92,8 @@ class PlatformFactory:
 
         Args:
             platform_name: Name of the platform (e.g., 'coinbase', 'oanda')
-            credentials: Platform-specific credentials
+            credentials: Platform-specific credentials OR full config dict
+                        for unified platform
 
         Returns:
             Trading platform instance
