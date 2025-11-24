@@ -21,17 +21,36 @@ class TradingAgentOrchestrator:
         self.platform = platform
         self.trades_today = 0
         # Snapshot initial portfolio value for P/L kill-switch calculations
-        try:
-            breakdown = self.platform.get_portfolio_breakdown()
-            self.initial_portfolio_value = breakdown.get('total_value_usd', 0.0)
-        except Exception:
-            self.initial_portfolio_value = 0.0
+        # Wait for a valid non-zero portfolio value (up to timeout)
+        self.initial_portfolio_value = 0.0
+        # Retry a fixed number of times (6 retries, 10s apart)
+        retries = 6
+        interval = 10.0  # seconds
+        self.init_failed = False
+        for attempt in range(1, retries + 1):
+            try:
+                breakdown = self.platform.get_portfolio_breakdown()
+                val = breakdown.get('total_value_usd', 0.0)
+                if val and val > 0:
+                    self.initial_portfolio_value = val
+                    break
+            except Exception:
+                pass
+            if attempt < retries:
+                time.sleep(interval)
+        else:
+            # All retries failed
+            self.init_failed = True
         print("Trading Agent Orchestrator initialized.")
 
     def run(self):
         """Starts the main agentic loop."""
         print(f"Agent starting with strategy: '{self.config.strategic_goal}' and risk appetite: '{self.config.risk_appetite}'.")
         print(f"Autonomous execution is {'ENABLED' if self.config.autonomous_execution else 'DISABLED'}.")
+
+        if getattr(self, 'init_failed', False):
+            print("Could not obtain initial portfolio snapshot after retries. Exiting gracefully.")
+            return
 
         while True:
             # Compute current portfolio P/L% and apply kill-switch
@@ -44,7 +63,7 @@ class TradingAgentOrchestrator:
                 current_value = None
                 unrealized = 0.0
 
-            if self.initial_portfolio_value and current_value is not None:
+            if self.initial_portfolio_value > 0 and current_value is not None:
                 pnl_pct = ((current_value - self.initial_portfolio_value) / self.initial_portfolio_value) * 100.0
                 # Stop if gain threshold reached
                 if pnl_pct >= self.config.kill_switch_gain_pct:
