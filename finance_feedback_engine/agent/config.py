@@ -10,6 +10,11 @@ class TradingAgentConfig(BaseModel):
     autonomous_execution: bool = False
     approval_policy: Literal["always", "never", "on_new_asset"] = "on_new_asset"
     max_daily_trades: int = 5
+    # Kill-switch thresholds (percentage of portfolio P/L)
+    # Stop trading if portfolio gains >= kill_switch_gain_pct
+    # or losses <= -kill_switch_loss_pct
+    kill_switch_gain_pct: float = 5.0
+    kill_switch_loss_pct: float = 2.0
 
     # --- Strategic Goals ---
     strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"
@@ -17,5 +22,5 @@ class TradingAgentConfig(BaseModel):
     max_drawdown_percent: float = 15.0
 
     # --- Data & Analysis Controls ---
-    asset_pairs: List[str] = ["BTCUSD"]
+    asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
     analysis_frequency_seconds: int = 300
