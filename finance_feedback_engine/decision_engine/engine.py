@@ -168,6 +168,25 @@ class DecisionEngine:
         )
         
         return decision
+    
+    
+    def _specific_local_inference(self, prompt: str, model_name: str) -> Dict[str, Any]:
+        """Query a specific local model by name."""
+        logger.info(f"Using specific local model: {model_name}")
+        try:
+            from .local_llm_provider import LocalLLMProvider
+            
+            # Create temporary config overriding the model_name
+            temp_config = self.config.copy()
+            temp_config['model_name'] = model_name
+            
+            provider = LocalLLMProvider(temp_config)
+            response = provider.query(prompt)
+            return response
+        except Exception as e:
+            logger.warning(f"Local model {model_name} failed: {e}")
+            return self._rule_based_decision(prompt)
+
 
     def _create_decision_context(
         self,
@@ -872,11 +891,24 @@ Format response as a structured technical analysis demonstration.
         # Query each provider and track failures
         provider_decisions = {}
         failed_providers = []
+        local_provider_map = (
+            self.config.get('local_providers')
+            if isinstance(self.config.get('local_providers'), dict)
+            else {}
+        )
         
         for provider in enabled:
             try:
                 if provider == 'local':
-                    decision = self._local_ai_inference(prompt)
+                    # Maintain legacy behaviour when only 'local' is configured
+                    if 'local' in local_provider_map:
+                        model_name = local_provider_map['local']
+                        decision = self._specific_local_inference(prompt, model_name)
+                    else:
+                        decision = self._local_ai_inference(prompt)
+                elif provider in local_provider_map:
+                    model_name = local_provider_map[provider]
+                    decision = self._specific_local_inference(prompt, model_name)
                 elif provider == 'cli':
                     decision = self._cli_ai_inference(prompt)
                 elif provider == 'codex':
