@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 import logging
 import uuid
 from datetime import datetime
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -868,6 +869,39 @@ Format response as a structured technical analysis demonstration.
     #             'amount': 0
     #         }
 
+    def _get_all_local_models(self) -> list[str]:
+        """Get a list of all available local Ollama models."""
+        try:
+            result = subprocess.run(
+                ['ollama', 'list'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False
+            )
+            
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) <= 1:
+                    return []
+                
+                # First line is header, skip it
+                model_lines = lines[1:]
+                
+                # Extract model name from each line (first column)
+                model_names = [line.split()[0] for line in model_lines if line]
+                logger.info(f"Discovered local models: {model_names}")
+                return model_names
+            else:
+                logger.warning("Could not list local models, 'ollama list' failed.")
+                return []
+        except FileNotFoundError:
+            logger.warning("Ollama command not found, cannot discover local models.")
+            return []
+        except Exception as e:
+            logger.error(f"Error discovering local models: {e}")
+            return []
+
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
@@ -886,7 +920,16 @@ Format response as a structured technical analysis demonstration.
             return self._rule_based_decision(prompt)
         
         # Get enabled providers from ensemble config
-        enabled = self.ensemble_manager.enabled_providers
+        enabled_providers = self.ensemble_manager.enabled_providers.copy()
+        
+        all_discovered_local_models = self._get_all_local_models()
+
+        # Discover and add all available local models if 'all_local' is specified
+        if 'all_local' in enabled_providers:
+            enabled_providers.remove('all_local')
+            for model_name in all_discovered_local_models:
+                if model_name not in enabled_providers:
+                    enabled_providers.append(model_name)
         
         # Query each provider and track failures
         provider_decisions = {}
@@ -896,9 +939,10 @@ Format response as a structured technical analysis demonstration.
             if isinstance(self.config.get('local_providers'), dict)
             else {}
         )
-        
-        for provider in enabled:
+
+        for provider in enabled_providers:
             try:
+                decision = None
                 if provider == 'local':
                     # Maintain legacy behaviour when only 'local' is configured
                     if 'local' in local_provider_map:
@@ -909,6 +953,8 @@ Format response as a structured technical analysis demonstration.
                 elif provider in local_provider_map:
                     model_name = local_provider_map[provider]
                     decision = self._specific_local_inference(prompt, model_name)
+                elif provider in all_discovered_local_models:
+                    decision = self._specific_local_inference(prompt, provider)
                 elif provider == 'cli':
                     decision = self._cli_ai_inference(prompt)
                 elif provider == 'codex':
@@ -919,6 +965,11 @@ Format response as a structured technical analysis demonstration.
                 #     decision = self._gemini_ai_inference(prompt)
                 else:
                     logger.warning(f"Unknown provider: {provider}")
+                    failed_providers.append(provider)
+                    continue
+
+                if decision is None:
+                    logger.warning(f"Provider {provider} did not return a decision.")
                     failed_providers.append(provider)
                     continue
                 
@@ -945,7 +996,7 @@ Format response as a structured technical analysis demonstration.
         # Handle complete failure case
         if not provider_decisions:
             logger.error(
-                f"All {len(enabled)} providers failed, using rule-based "
+                f"All {len(enabled_providers)} providers failed, using rule-based "
                 f"fallback"
             )
             fallback = self._rule_based_decision(prompt)
