@@ -199,7 +199,6 @@ def cli(ctx, config, verbose, interactive):
         cli_tools = [
             ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
             ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
-            ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
             ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
             ("Node.js", ["node", "--version"], "nvm install --lts"),
         ]
@@ -305,15 +304,66 @@ def install_deps(ctx, auto_install):
     console.print(table)
     console.print()
     
-    if not missing:
+    # Check additional dependencies: ollama, node.js, coinbase-advanced-py
+    console.print("[bold cyan]Checking additional dependencies...[/bold cyan]\n")
+    
+    additional_missing = []
+    additional_installed = []
+    
+    # Check coinbase-advanced-py (Python package)
+    try:
+        import coinbase_advanced_py
+        additional_installed.append("coinbase-advanced-py")
+    except ImportError:
+        additional_missing.append("coinbase-advanced-py")
+        missing.append("coinbase-advanced-py")  # Add to pip install list
+    
+    # Check CLI tools
+    cli_checks = [
+        ("ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
+        ("node", ["node", "--version"], "nvm install --lts"),
+    ]
+    
+    for tool, cmd, install_cmd in cli_checks:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                additional_installed.append(tool)
+            else:
+                additional_missing.append(tool)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            additional_missing.append(tool)
+    
+    # Display additional status
+    if additional_installed or additional_missing:
+        add_table = Table(title="Additional Dependencies")
+        add_table.add_column("Component", style="cyan")
+        add_table.add_column("Status", style="white")
+        
+        for comp in additional_installed:
+            add_table.add_row(comp, "[green]✓ Installed[/green]")
+        for comp in additional_missing:
+            add_table.add_row(comp, "[red]✗ Missing[/red]")
+        
+        console.print(add_table)
+        console.print()
+    
+    if not missing and not additional_missing:
         console.print("[bold green]✓ All dependencies are installed![/bold green]")
         return
     
     # Show missing packages
-    console.print("[yellow]Missing dependencies:[/yellow]")
-    for pkg in missing:
-        console.print(f"  • {pkg}")
-    console.print()
+    if missing:
+        console.print("[yellow]Missing Python dependencies:[/yellow]")
+        for pkg in missing:
+            console.print(f"  • {pkg}")
+        console.print()
+    
+    if additional_missing:
+        console.print("[yellow]Missing additional dependencies:[/yellow]")
+        for comp in additional_missing:
+            console.print(f"  • {comp}")
+        console.print()
     
     # Prompt for installation (unless auto-install)
     if not auto_install:
@@ -326,35 +376,65 @@ def install_deps(ctx, auto_install):
             console.print("[yellow]Installation cancelled.[/yellow]")
             return
     
-    # Install missing packages
-    console.print("\n[bold cyan]Installing missing dependencies...[/bold cyan]")
-    try:
-        subprocess.run(
-            [sys.executable, '-m', 'pip', 'install'] + missing,
-            check=True,
-            timeout=600
-        )
-        console.print(
-            "\n[bold green]✓ Dependencies installed successfully!"
-            "[/bold green]"
-        )
-    except subprocess.TimeoutExpired:
-        console.print(
-            "\n[bold red]✗ Installation timed out after 10 minutes"
-            "[/bold red]"
-        )
-        console.print(
-            "[yellow]Please retry the installation or check your network "
-            "connection and permissions.[/yellow]"
-        )
-    except subprocess.CalledProcessError as e:
-        console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
-        console.print(
-            "[yellow]You may need to run with elevated permissions or "
-            "check your pip configuration.[/yellow]"
-        )
-    except Exception as e:
-        console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+    # Install missing Python packages
+    if missing:
+        console.print("\n[bold cyan]Installing missing Python dependencies...[/bold cyan]")
+        try:
+            subprocess.run(
+                [sys.executable, '-m', 'pip', 'install'] + missing,
+                check=True,
+                timeout=600
+            )
+            console.print(
+                "\n[bold green]✓ Python dependencies installed successfully!"
+                "[/bold green]"
+            )
+        except subprocess.TimeoutExpired:
+            console.print(
+                "\n[bold red]✗ Installation timed out after 10 minutes"
+                "[/bold red]"
+            )
+            console.print(
+                "[yellow]Please retry the installation or check your network "
+                "connection and permissions.[/yellow]"
+            )
+        except subprocess.CalledProcessError as e:
+            console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
+            console.print(
+                "[yellow]You may need to run with elevated permissions or "
+                "check your pip configuration.[/yellow]"
+            )
+        except Exception as e:
+            console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+    
+    # Install missing CLI tools
+    if additional_missing:
+        console.print("\n[bold cyan]Installing missing CLI tools...[/bold cyan]")
+        for comp in additional_missing:
+            if comp == "ollama":
+                console.print(f"Installing {comp}...")
+                try:
+                    subprocess.run(
+                        ["bash", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+                        check=True,
+                        timeout=300
+                    )
+                    console.print(f"[green]✓ {comp} installed successfully[/green]")
+                except Exception as e:
+                    console.print(f"[red]✗ {comp} installation failed: {e}[/red]")
+            elif comp == "node":
+                console.print(f"Installing {comp} via nvm...")
+                try:
+                    # Assume nvm is installed; if not, this will fail
+                    subprocess.run(
+                        ["bash", "-c", "nvm install --lts && nvm use --lts"],
+                        check=True,
+                        timeout=300
+                    )
+                    console.print(f"[green]✓ {comp} installed successfully[/green]")
+                except Exception as e:
+                    console.print(f"[red]✗ {comp} installation failed: {e}[/red]")
+                    console.print("[yellow]Note: nvm must be installed first. Install nvm from https://github.com/nvm-sh/nvm[/yellow]")
 
 
 @cli.command()
@@ -1171,43 +1251,12 @@ def update_ai(ctx, update):
 
     console.print("\n[bold cyan]Checking AI Provider Versions[/bold cyan]\n")
 
-    # --- Python libraries ---
-    libraries = [
-        ("ollama", "Ollama Python Client"),
-        ("coinbase-advanced-py", "Coinbase Advanced"),
-        ("oandapyV20", "Oanda API"),
-        ("click", "Click CLI"),
-        ("rich", "Rich Terminal"),
-        ("pyyaml", "PyYAML"),
-    ]
-
-    versions_table = Table(title="System Components")
-    versions_table.add_column("Component", style="cyan")
-    versions_table.add_column("Version", style="green")
-    versions_table.add_column("Status", style="white")
-
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    versions_table.add_row("Python", python_version, "✓")
-
-    missing_libs = []
-    for lib_name, display_name in libraries:
-        try:
-            lib_version = version(lib_name)
-            versions_table.add_row(display_name, lib_version, "✓")
-        except PackageNotFoundError:
-            versions_table.add_row(display_name, "Not installed", "✗")
-            missing_libs.append(lib_name)
-
-    console.print(versions_table)
-
     # --- CLI tools ---
     console.print("\n[bold cyan]AI Provider CLI Tools[/bold cyan]\n")
     cli_tools = [
-        ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
         ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
         ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
         ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
-        ("Node.js", ["node", "--version"], "nvm install --lts"),
     ]
     cli_table = Table(title="CLI Tools")
     cli_table.add_column("Tool", style="cyan")
@@ -1239,20 +1288,13 @@ def update_ai(ctx, update):
     if update:
         console.print("\n[bold cyan]Updating/Installing only missing or outdated components...[/bold cyan]\n")
         tasks = []
-        # Only add missing Python libraries
-        for lib_name in missing_libs:
-            tasks.append((f"pip install --upgrade {lib_name}", [sys.executable, "-m", "pip", "install", "--upgrade", lib_name], f"Python: {lib_name}"))
         # Only add missing CLI tools
         for tool, _, upgrade_cmd in missing_tools:
-            if "curl" in upgrade_cmd:
-                tasks.append((upgrade_cmd, ["bash", "-c", upgrade_cmd], tool))
-            elif "npm" in upgrade_cmd:
-                tasks.append((upgrade_cmd, upgrade_cmd.split(), tool))
-            elif "nvm" in upgrade_cmd:
+            if "npm" in upgrade_cmd:
                 tasks.append((upgrade_cmd, upgrade_cmd.split(), tool))
 
         if not tasks:
-            console.print("[green]✓ All components are already installed![/green]")
+            console.print("[green]✓ All AI CLI tools are already installed![/green]")
         else:
             with Progress(
                 SpinnerColumn(),
