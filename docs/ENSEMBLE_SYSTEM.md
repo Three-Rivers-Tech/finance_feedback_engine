@@ -6,7 +6,7 @@ The Finance Feedback Engine 2.0 features a sophisticated ensemble decision syste
 
 **Key Features:**
 - **Dynamic Weight Adjustment**: Automatically handles provider failures by renormalizing weights
-- **Multi-Provider Support**: Local LLM, Copilot CLI, Codex CLI, Qwen CLI
+- **Multi-Provider Support**: All Local LLMs (dynamic), Local LLM, Copilot CLI, Codex CLI, Qwen CLI
 - **Intelligent Voting**: Weighted, majority, and stacking strategies
 - **Adaptive Learning**: Improves provider weights based on historical accuracy
 - **Resilient Operation**: Continues functioning even when some providers fail
@@ -131,12 +131,14 @@ decision_engine:
 
 ensemble:
   enabled_providers:
-    - local
+    - 'all_local'
     - cli
     - codex
   
   provider_weights:
-    local: 0.2
+    # Note: 'all_local' itself has no weight, but the discovered models will
+    # have a default weight unless specified here.
+    'llama3.2:3b-instruct-fp16': 0.2
     cli: 0.4
     codex: 0.4
   
@@ -149,7 +151,7 @@ ensemble:
 ### Provider Weights
 
 Initial weights represent confidence in each provider:
-- **local (0.2)**: Conservative rule-based, 20% influence
+- **all_local**: Dynamically discovers and includes all local Ollama models.
 - **cli (0.4)**: GitHub Copilot, 40% influence  
 - **codex (0.4)**: Codex CLI, 40% influence
 
