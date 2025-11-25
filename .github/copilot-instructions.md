@@ -19,6 +19,7 @@ Modular trading decision engine with four main layers:
 - `DecisionStore`: JSON persistence; filename: `YYYY-MM-DD_<uuid>.json`. Retrieval by asset, update by ID.
 - `Backtester`: MVP for strategy validation (SMA crossover, synthetic candles). Run via `FinanceFeedbackEngine.backtest()`.
 
+
 ### Developer Workflows
 - Install: `pip install -r requirements.txt` or `pip install -e .`
 - Config: create `config/config.local.yaml` (gitignored) for local credentials. CLI auto-selects this if present. Example configs in `config/examples/`.
@@ -26,12 +27,15 @@ Modular trading decision engine with four main layers:
 - Logging: `-v` flag sets DEBUG level across all modules.
 - Output: CLI uses Rich library for colored tables. When adding decision fields, update display logic in `cli/main.py` (search for `console.print`).
 - No automated unit tests; validate changes manually via CLI and inspect JSON in `data/decisions/`.
+- **See `examples/` directory for hands-on scripts demonstrating extension patterns (custom platforms, AI providers, Oanda integration, etc.).**
+- **Refer to `README.md` for a comprehensive feature overview.**
 
 ### Extension & Integration Patterns
 - **New Trading Platform**: Subclass `BaseTradingPlatform`, implement required methods, register with `PlatformFactory`.
 - **New AI Provider**: Implement `.query(prompt)` → dict. Wire into `DecisionEngine._query_ai` or ensemble. See `LocalLLMProvider`, `CopilotCLIProvider`, `CodexCLIProvider`, `QwenCLIProvider` for reference.
 - **New Data Provider**: Follow `AlphaVantageProvider` pattern. Implement `.get_market_data(asset_pair)` → dict. Adapt `FinanceFeedbackEngine.analyze_asset()`.
 - **Ensemble Integration**: Add provider to `ensemble.enabled_providers` in config. Ensure provider returns standard decision dict. `EnsembleDecisionManager.aggregate_decisions()` handles voting/weighting.
+- **See `examples/` for practical code samples of these patterns.**
 
 ### Conventions & Practices
 - Market data dict: open/high/low/close/volume required; market_cap (crypto only); sentiment/macro/technical optional.
@@ -60,4 +64,4 @@ Modular trading decision engine with four main layers:
 - Backtesting: `python main.py backtest BTCUSD -s 2025-01-01 -e 2025-03-01`.
 
 ---
-Feedback welcome: clarify unclear sections or request deeper guidance (e.g., backtesting, risk rules).
+Feedback welcome: If any integration, workflow, or pattern is unclear or missing, request clarification or deeper guidance (e.g., backtesting, risk rules, extension points).
