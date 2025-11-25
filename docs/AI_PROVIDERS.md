@@ -183,7 +183,7 @@ Reasoning: **BTCUSD Recommendation**
 
 ---
 
-### 2. GitHub Copilot CLI
+### 4. GitHub Copilot CLI
 
 **Provider ID**: `cli`
 
@@ -220,7 +220,7 @@ decision_engine:
 
 ---
 
-### 3. Local LLM (Ollama - Recommended for Privacy)
+### 5. Local LLM (Ollama - Recommended for Privacy)
 
 **Provider ID**: `local`
 
@@ -298,19 +298,61 @@ decision_engine:
 
 ---
 
+### 6. All Local LLMs (Ensemble)
+
+**Provider ID**: `all_local` (used within an `ensemble`)
+
+**Description**: Automatically discovers and uses all available Ollama models on your machine as part of an `ensemble` decision. This allows you to leverage the collective intelligence of all your local models without manually listing them.
+
+**Advantages**:
+- ✅ **Dynamic & Automatic** - No need to update config when you add/remove models.
+- ✅ **Collective Intelligence** - Combines the outputs of multiple models for a more robust decision.
+- ✅ **Cost-Free** - Leverages your existing local models.
+- ✅ **Private** - All processing happens on your machine.
+
+**Usage**:
+To use this feature, you must set `ai_provider` to `ensemble` in your `config.local.yaml` and include `all_local` in the `providers` list.
+
+```yaml
+# config/config.local.yaml
+decision_engine:
+  ai_provider: "ensemble"
+  ensemble:
+    providers:
+      - "all_local"
+      - "gemini"  # You can include other providers as well
+    weights:
+      # Optionally assign weights to specific models
+      "llama3.2:3b-instruct-fp16": 0.6
+      "gemini": 0.4
+    aggregation_strategy: "weighted"
+```
+
+When this configuration is active, the system will:
+1.  Scan for all locally installed Ollama models.
+2.  Add each discovered model to the ensemble.
+3.  Query each model for a trading decision.
+4.  Aggregate the results along with any other configured providers (`gemini` in the example).
+
+**Requirements**:
+- Ollama installed and running.
+- At least one Ollama model downloaded (e.g., `ollama pull llama3.2:3b-instruct-fp16`).
+
+---
+
 ## Provider Comparison
 
-| Feature | Qwen CLI | Local LLM (Ollama) | Codex CLI | Copilot CLI |
+| Feature | Qwen CLI | Local LLM (Ollama) | All Local (Ensemble) | Codex CLI | Copilot CLI |
 |---------|----------|-------------------|-----------|-------------|
-| **Cost** | Free | Free (one-time download) | Free (local) | Subscription |
-| **Setup** | OAuth + Node.js v20+ | Auto-download | npm install | GitHub auth |
-| **Quality** | High | High (3B params) | High (GPT-4 class) | High |
-| **Speed** | ~5-15s | ~5-20s | ~10-15s | ~5-10s |
-| **Reasoning** | Natural language | Natural language | Natural language | Natural language |
-| **Privacy** | Cloud / Self-hosted | 100% local | Local | Cloud |
-| **Internet** | Required | Not required | Initial setup | Required |
-| **Hardware** | Standard | Standard CPU | Standard | Standard |
-| **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None |
+| **Cost** | Free | Free (one-time download) | Free (uses local models) | Free (local) | Subscription |
+| **Setup** | OAuth + Node.js v20+ | Auto-download | Add to `ensemble` config | npm install | GitHub auth |
+| **Quality** | High | High (3B params) | Very High (multi-model) | High (GPT-4 class) | High |
+| **Speed** | ~5-15s | ~5-20s | ~10-30s (per model) | ~10-15s | ~5-10s |
+| **Reasoning** | Natural language | Natural language | Aggregated | Natural language | Natural language |
+| **Privacy** | Cloud / Self-hosted | 100% local | 100% local | Local | Cloud |
+| **Internet** | Required | Not required | Not required | Initial setup | Required |
+| **Hardware** | Standard | Standard CPU | Standard CPU | Standard | Standard |
+| **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
 
 *Note: Qwen CLI privacy depends on the chosen authentication method. Cloud-based authentication uses remote servers, while self-hosted options allow local deployment.*
 
@@ -467,4 +509,4 @@ Potential future integrations:
 
 ---
 
-**Last Updated**: November 18, 2025
+**Last Updated**: November 25, 2025
