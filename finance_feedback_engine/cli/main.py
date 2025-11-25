@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+from packaging.requirements import Requirement
 # from rich import print as rprint  # unused
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
@@ -43,7 +44,6 @@ def _parse_requirements_file(req_file: Path) -> list:
             
             # Try using packaging library first (most robust)
             try:
-                from packaging.requirements import Requirement
                 req = Requirement(line)
                 packages.append(req.name)
                 continue
@@ -175,7 +175,46 @@ def cli(ctx, config, verbose, interactive):
     ctx.obj['config_path'] = str(config_path)
     ctx.obj['verbose'] = verbose
 
+    # On interactive boot, check versions and prompt for update if needed
     if interactive:
+        import subprocess
+        import sys
+        from importlib.metadata import version, PackageNotFoundError
+        from rich.prompt import Confirm
+        console.print("\n[bold cyan]Checking AI Provider Versions (interactive mode)...[/bold cyan]\n")
+        libraries = [
+            ("ollama", "Ollama Python Client"),
+            ("coinbase-advanced-py", "Coinbase Advanced"),
+            ("oandapyV20", "Oanda API"),
+            ("click", "Click CLI"),
+            ("rich", "Rich Terminal"),
+            ("pyyaml", "PyYAML"),
+        ]
+        missing_libs = []
+        for lib_name, _ in libraries:
+            try:
+                _ = version(lib_name)
+            except PackageNotFoundError:
+                missing_libs.append(lib_name)
+        cli_tools = [
+            ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
+            ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
+            ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
+            ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
+            ("Node.js", ["node", "--version"], "nvm install --lts"),
+        ]
+        missing_tools = []
+        for tool, cmd, upgrade_cmd in cli_tools:
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if result.returncode != 0:
+                    missing_tools.append((tool, upgrade_cmd))
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                missing_tools.append((tool, upgrade_cmd))
+        if missing_libs or missing_tools:
+            console.print("[yellow]Some AI provider dependencies are missing or outdated.[/yellow]")
+            if Confirm.ask("Would you like to update/install them now?"):
+                ctx.invoke(update_ai, update=True)
         start_interactive_session(cli)
         return
 
@@ -868,253 +907,6 @@ def backtest(
         raise click.Abort()
 
 
-@cli.command()
-@click.pass_context
-def check_versions(ctx):
-    """Check versions of all AI provider CLI tools and libraries."""
-    import subprocess
-    import sys
-    from importlib.metadata import version, PackageNotFoundError
-    
-    console.print("\n[bold cyan]Checking AI Provider Versions[/bold cyan]\n")
-    
-    versions_table = Table(title="System Components")
-    versions_table.add_column("Component", style="cyan")
-    versions_table.add_column("Version", style="green")
-    versions_table.add_column("Status", style="white")
-    
-    # Check Python version
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    versions_table.add_row("Python", python_version, "✓")
-    
-    # Check Python libraries
-    libraries = [
-        ("ollama", "Ollama Python Client"),
-        ("coinbase-advanced-py", "Coinbase Advanced"),
-        ("oandapyV20", "Oanda API"),
-        ("click", "Click CLI"),
-        ("rich", "Rich Terminal"),
-        ("pyyaml", "PyYAML"),
-    ]
-    
-    for lib_name, display_name in libraries:
-        try:
-            lib_version = version(lib_name)
-            versions_table.add_row(display_name, lib_version, "✓")
-        except PackageNotFoundError:
-            versions_table.add_row(display_name, "Not installed", "✗")
-    
-    console.print(versions_table)
-    
-    # Check CLI tools
-    console.print("\n[bold cyan]AI Provider CLI Tools[/bold cyan]\n")
-    
-    cli_table = Table(title="CLI Tools")
-    cli_table.add_column("Tool", style="cyan")
-    cli_table.add_column("Version", style="green")
-    cli_table.add_column("Status", style="white")
-    cli_table.add_column("Upgrade Command", style="yellow")
-    
-    # Check Ollama
-    try:
-        result = subprocess.run(
-            ["ollama", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            ollama_version = result.stdout.strip().split()[-1]
-            cli_table.add_row(
-                "Ollama",
-                ollama_version,
-                "✓",
-                "curl -fsSL https://ollama.com/install.sh | sh"
-            )
-        else:
-            cli_table.add_row("Ollama", "Error", "⚠", "Visit ollama.com")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        cli_table.add_row(
-            "Ollama",
-            "Not installed",
-            "✗",
-            "curl -fsSL https://ollama.com/install.sh | sh"
-        )
-    
-    # Check GitHub Copilot CLI
-    try:
-        result = subprocess.run(
-            ["copilot", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            copilot_version = result.stdout.strip().split('\n')[0]
-            cli_table.add_row(
-                "Copilot CLI",
-                copilot_version,
-                "✓",
-                "npm update -g @githubnext/github-copilot-cli"
-            )
-        else:
-            cli_table.add_row(
-                "Copilot CLI",
-                "Error",
-                "⚠",
-                "npm i -g @githubnext/github-copilot-cli"
-            )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        cli_table.add_row(
-            "Copilot CLI",
-            "Not installed",
-            "✗",
-            "npm i -g @githubnext/github-copilot-cli"
-        )
-    
-    # Check Codex CLI
-    # Note: Codex uses the same Copilot CLI binary with different prompts
-    try:
-        result = subprocess.run(
-            ["copilot", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            copilot_version_check = result.stdout.strip().split('\n')[0]
-            cli_table.add_row(
-                "Codex CLI",
-                f"{copilot_version_check} (via Copilot)",
-                "✓",
-                "npm update -g @githubnext/github-copilot-cli"
-            )
-        else:
-            cli_table.add_row(
-                "Codex CLI",
-                "Error",
-                "⚠",
-                "npm i -g @githubnext/github-copilot-cli"
-            )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        cli_table.add_row(
-            "Codex CLI",
-            "Not installed",
-            "✗",
-            "npm i -g @githubnext/github-copilot-cli"
-        )
-    
-    # Check Qwen CLI
-    try:
-        result = subprocess.run(
-            ["qwen", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            qwen_version = result.stdout.strip()
-            cli_table.add_row(
-                "Qwen CLI",
-                qwen_version,
-                "✓",
-                "npm update -g @qwen/cli"
-            )
-        else:
-            cli_table.add_row(
-                "Qwen CLI",
-                "Error",
-                "⚠",
-                "npm i -g @qwen/cli"
-            )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        cli_table.add_row(
-            "Qwen CLI",
-            "Not installed",
-            "✗",
-            "npm i -g @qwen/cli"
-        )
-    
-    # Check Node.js (required for CLI tools)
-    try:
-        result = subprocess.run(
-            ["node", "--version"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            node_version = result.stdout.strip()
-            cli_table.add_row(
-                "Node.js",
-                node_version,
-                "✓",
-                "nvm install --lts"
-            )
-        else:
-            cli_table.add_row(
-                "Node.js",
-                "Error",
-                "⚠",
-                "Visit nodejs.org"
-            )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        cli_table.add_row(
-            "Node.js",
-            "Not installed",
-            "✗",
-            "Visit nodejs.org or use nvm"
-        )
-    
-    console.print(cli_table)
-    
-    # Check Ollama models
-    console.print("\n[bold cyan]Ollama Models[/bold cyan]\n")
-    
-    try:
-        result = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode == 0:
-            models_table = Table(title="Installed Ollama Models")
-            models_table.add_column("Model", style="cyan")
-            models_table.add_column("ID", style="white")
-            models_table.add_column("Size", style="green")
-            models_table.add_column("Modified", style="yellow")
-            
-            lines = result.stdout.strip().split('\n')[1:]  # Skip header
-            if lines:
-                for line in lines:
-                    parts = line.split()
-                    if len(parts) >= 4:
-                        model_name = parts[0]
-                        model_id = parts[1]
-                        model_size = parts[2]
-                        model_modified = ' '.join(parts[3:])
-                        models_table.add_row(
-                            model_name,
-                            model_id,
-                            model_size,
-                            model_modified
-                        )
-                console.print(models_table)
-            else:
-                console.print("[yellow]No Ollama models installed[/yellow]")
-                console.print(
-                    "\nInstall the default model:\n"
-                    "  ollama pull llama3.2:3b-instruct-fp16"
-                )
-        else:
-            console.print("[yellow]Could not list Ollama models[/yellow]")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        console.print("[yellow]Ollama not available[/yellow]")
-    
-    console.print("\n[bold green]✓ Version check complete[/bold green]\n")
-
-
 @cli.group()
 @click.pass_context
 def monitor(ctx):
@@ -1365,6 +1157,167 @@ def metrics(ctx):
         if ctx.obj.get('verbose'):
             import traceback
             console.print(traceback.format_exc())
+
+
+@cli.command()
+@click.option('--update', is_flag=True, help='Update/install only missing or outdated AI provider CLI tools and libraries')
+@click.pass_context
+def update_ai(ctx, update):
+    """Check and optionally update/install only missing or outdated AI provider CLI tools and libraries."""
+    import subprocess
+    import sys
+    from importlib.metadata import version, PackageNotFoundError
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+
+    console.print("\n[bold cyan]Checking AI Provider Versions[/bold cyan]\n")
+
+    # --- Python libraries ---
+    libraries = [
+        ("ollama", "Ollama Python Client"),
+        ("coinbase-advanced-py", "Coinbase Advanced"),
+        ("oandapyV20", "Oanda API"),
+        ("click", "Click CLI"),
+        ("rich", "Rich Terminal"),
+        ("pyyaml", "PyYAML"),
+    ]
+
+    versions_table = Table(title="System Components")
+    versions_table.add_column("Component", style="cyan")
+    versions_table.add_column("Version", style="green")
+    versions_table.add_column("Status", style="white")
+
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    versions_table.add_row("Python", python_version, "✓")
+
+    missing_libs = []
+    for lib_name, display_name in libraries:
+        try:
+            lib_version = version(lib_name)
+            versions_table.add_row(display_name, lib_version, "✓")
+        except PackageNotFoundError:
+            versions_table.add_row(display_name, "Not installed", "✗")
+            missing_libs.append(lib_name)
+
+    console.print(versions_table)
+
+    # --- CLI tools ---
+    console.print("\n[bold cyan]AI Provider CLI Tools[/bold cyan]\n")
+    cli_tools = [
+        ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
+        ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
+        ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
+        ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
+        ("Node.js", ["node", "--version"], "nvm install --lts"),
+    ]
+    cli_table = Table(title="CLI Tools")
+    cli_table.add_column("Tool", style="cyan")
+    cli_table.add_column("Version", style="green")
+    cli_table.add_column("Status", style="white")
+    cli_table.add_column("Upgrade Command", style="yellow")
+
+    missing_tools = []
+    for tool, cmd, upgrade_cmd in cli_tools:
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Special handling for Copilot/Codex
+                if tool == "Codex CLI":
+                    version_str = f"{result.stdout.strip().split('\n')[0]} (via Copilot)"
+                else:
+                    version_str = result.stdout.strip().split('\n')[0]
+                cli_table.add_row(tool, version_str, "✓", upgrade_cmd.replace('i -g', 'update -g'))
+            else:
+                cli_table.add_row(tool, "Error", "⚠", upgrade_cmd)
+                missing_tools.append((tool, upgrade_cmd))
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            cli_table.add_row(tool, "Not installed", "✗", upgrade_cmd)
+            missing_tools.append((tool, upgrade_cmd))
+
+    console.print(cli_table)
+
+    # --- Update/install logic with progress bar (only missing/outdated) ---
+    if update:
+        console.print("\n[bold cyan]Updating/Installing only missing or outdated components...[/bold cyan]\n")
+        tasks = []
+        # Only add missing Python libraries
+        for lib_name in missing_libs:
+            tasks.append((f"pip install --upgrade {lib_name}", [sys.executable, "-m", "pip", "install", "--upgrade", lib_name], f"Python: {lib_name}"))
+        # Only add missing CLI tools
+        for tool, _, upgrade_cmd in missing_tools:
+            if "curl" in upgrade_cmd:
+                tasks.append((upgrade_cmd, ["bash", "-c", upgrade_cmd], tool))
+            elif "npm" in upgrade_cmd:
+                tasks.append((upgrade_cmd, upgrade_cmd.split(), tool))
+            elif "nvm" in upgrade_cmd:
+                tasks.append((upgrade_cmd, upgrade_cmd.split(), tool))
+
+        if not tasks:
+            console.print("[green]✓ All components are already installed![/green]")
+        else:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}"),
+                BarColumn(),
+                TimeElapsedColumn(),
+                transient=True,
+            ) as progress:
+                task_id = progress.add_task("[cyan]Updating/Installing...", total=len(tasks))
+                for cmd_str, cmd_list, label in tasks:
+                    progress.update(task_id, description=f"[white]Installing [bold]{label}[/bold]...")
+                    try:
+                        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=300)
+                        if result.returncode == 0:
+                            progress.console.print(f"[green]✓ {label} installed/updated successfully[/green]")
+                        else:
+                            progress.console.print(f"[red]✗ {label} failed: {result.stderr.strip() or result.stdout.strip()}[/red]")
+                    except Exception as e:
+                        progress.console.print(f"[red]✗ {label} error: {e}[/red]")
+                    progress.advance(task_id)
+            console.print("\n[bold green]✓ Update/install process complete[/bold green]\n")
+
+    # --- Ollama models ---
+    console.print("\n[bold cyan]Ollama Models[/bold cyan]\n")
+    try:
+        result = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            models_table = Table(title="Installed Ollama Models")
+            models_table.add_column("Model", style="cyan")
+            models_table.add_column("ID", style="white")
+            models_table.add_column("Size", style="green")
+            models_table.add_column("Modified", style="yellow")
+            lines = result.stdout.strip().split('\n')[1:]  # Skip header
+            if lines:
+                for line in lines:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        model_name = parts[0]
+                        model_id = parts[1]
+                        model_size = parts[2]
+                        model_modified = ' '.join(parts[3:])
+                        models_table.add_row(
+                            model_name,
+                            model_id,
+                            model_size,
+                            model_modified
+                        )
+                console.print(models_table)
+            else:
+                console.print("[yellow]No Ollama models installed[/yellow]")
+                console.print(
+                    "\nInstall the default model:\n"
+                    "  ollama pull llama3.2:3b-instruct-fp16"
+                )
+        else:
+            console.print("[yellow]Could not list Ollama models[/yellow]")
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        console.print("[yellow]Ollama not available[/yellow]")
+
+    console.print("\n[bold green]✓ Version check complete[/bold green]\n")
 
 
 if __name__ == '__main__':
