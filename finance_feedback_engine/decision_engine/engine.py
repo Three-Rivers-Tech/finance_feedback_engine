@@ -1,10 +1,11 @@
 """Decision engine for generating AI-powered trading decisions."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import logging
 import uuid
 from datetime import datetime
 import subprocess
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
@@ -902,6 +903,67 @@ Format response as a structured technical analysis demonstration.
             logger.error(f"Error discovering local models: {e}")
             return []
 
+    def _query_single_provider(self, provider: str, prompt: str) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """
+        Query a single AI provider and handle its response.
+
+        Args:
+            provider: The name of the provider to query.
+            prompt: The prompt to send to the provider.
+
+        Returns:
+            A tuple of (provider_name, decision_dict) or (provider_name, None) on failure.
+        """
+        try:
+            decision = None
+            local_provider_map = (
+                self.config.get('local_providers')
+                if isinstance(self.config.get('local_providers'), dict)
+                else {}
+            )
+            all_discovered_local_models = self._get_all_local_models()
+
+            if provider == 'local':
+                if 'local' in local_provider_map:
+                    model_name = local_provider_map['local']
+                    decision = self._specific_local_inference(prompt, model_name)
+                else:
+                    decision = self._local_ai_inference(prompt)
+            elif provider in local_provider_map:
+                model_name = local_provider_map[provider]
+                decision = self._specific_local_inference(prompt, model_name)
+            elif provider in all_discovered_local_models:
+                decision = self._specific_local_inference(prompt, provider)
+            elif provider == 'cli':
+                decision = self._cli_ai_inference(prompt)
+            elif provider == 'codex':
+                decision = self._codex_ai_inference(prompt)
+            elif provider == 'qwen':
+                decision = self._qwen_ai_inference(prompt)
+            else:
+                logger.warning(f"Unknown provider: {provider}")
+                return provider, None
+
+            if decision is None:
+                logger.warning(f"Provider {provider} did not return a decision.")
+                return provider, None
+
+            if self._is_valid_provider_response(decision, provider):
+                logger.info(
+                    f"{provider}: {decision['action']} "
+                    f"({decision['confidence']}%)"
+                )
+                return provider, decision
+            else:
+                logger.warning(
+                    f"Provider {provider} returned fallback/invalid "
+                    f"response, treating as failure"
+                )
+                return provider, None
+        except Exception as e:
+            logger.warning(f"Provider {provider} failed: {e}")
+            return provider, None
+
     def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
@@ -930,74 +992,72 @@ Format response as a structured technical analysis demonstration.
             for model_name in all_discovered_local_models:
                 if model_name not in enabled_providers:
                     enabled_providers.append(model_name)
+
+        # If 'local' is configured, expand it into specific local model names
+        # so the ensemble queries both the primary and the required secondary
+        # local models (if available or configured).
+        if 'local' in enabled_providers:
+            try:
+                # Import here to avoid top-level import cycles
+                from .local_llm_provider import LocalLLMProvider
+
+                primary_model = LocalLLMProvider.DEFAULT_MODEL
+                secondary_model = getattr(
+                    LocalLLMProvider, 'SECONDARY_MODEL', None
+                )
+            except Exception:
+                # Fallback to known defaults if import fails
+                primary_model = 'llama3.2:3b-instruct-fp16'
+                secondary_model = 'deepseek-r1:8b'
+
+            # Remove the abstract 'local' provider and replace with actual
+            # model names
+            enabled_providers = [p for p in enabled_providers if p != 'local']
+
+            # If user provided a mapping for local_providers, prefer that
+            local_provider_map = (
+                self.config.get('local_providers')
+                if isinstance(self.config.get('local_providers'), dict)
+                else {}
+            )
+            mapped_local = local_provider_map.get('local')
+            if mapped_local:
+                if mapped_local not in enabled_providers:
+                    enabled_providers.append(mapped_local)
+            else:
+                # Append primary and secondary model names
+                if primary_model and primary_model not in enabled_providers:
+                    enabled_providers.append(primary_model)
+                if (
+                    secondary_model
+                    and secondary_model not in enabled_providers
+                ):
+                    enabled_providers.append(secondary_model)
         
-        # Query each provider and track failures
         provider_decisions = {}
         failed_providers = []
-        local_provider_map = (
-            self.config.get('local_providers')
-            if isinstance(self.config.get('local_providers'), dict)
-            else {}
-        )
 
-        for provider in enabled_providers:
-            try:
-                decision = None
-                if provider == 'local':
-                    # Maintain legacy behaviour when only 'local' is configured
-                    if 'local' in local_provider_map:
-                        model_name = local_provider_map['local']
-                        decision = self._specific_local_inference(prompt, model_name)
-                    else:
-                        decision = self._local_ai_inference(prompt)
-                elif provider in local_provider_map:
-                    model_name = local_provider_map[provider]
-                    decision = self._specific_local_inference(prompt, model_name)
-                elif provider in all_discovered_local_models:
-                    decision = self._specific_local_inference(prompt, provider)
-                elif provider == 'cli':
-                    decision = self._cli_ai_inference(prompt)
-                elif provider == 'codex':
-                    decision = self._codex_ai_inference(prompt)
-                elif provider == 'qwen':
-                    decision = self._qwen_ai_inference(prompt)
-                # elif provider == 'gemini':
-                #     decision = self._gemini_ai_inference(prompt)
-                else:
-                    logger.warning(f"Unknown provider: {provider}")
-                    failed_providers.append(provider)
-                    continue
-
-                if decision is None:
-                    logger.warning(f"Provider {provider} did not return a decision.")
-                    failed_providers.append(provider)
-                    continue
-                
-                # Check if the decision is a valid response (not a fallback)
-                if self._is_valid_provider_response(decision, provider):
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(enabled_providers)
+        ) as executor:
+            future_to_provider = {
+                executor.submit(
+                    self._query_single_provider, provider, prompt
+                ): provider
+                for provider in enabled_providers
+            }
+            for future in concurrent.futures.as_completed(future_to_provider):
+                provider, decision = future.result()
+                if decision:
                     provider_decisions[provider] = decision
-                    logger.info(
-                        f"{provider}: {decision['action']} "
-                        f"({decision['confidence']}%)"
-                    )
                 else:
-                    # Provider returned fallback response, treat as failure
-                    logger.warning(
-                        f"Provider {provider} returned fallback/invalid "
-                        f"response, treating as failure"
-                    )
                     failed_providers.append(provider)
-                
-            except Exception as e:
-                logger.warning(f"Provider {provider} failed: {e}")
-                failed_providers.append(provider)
-                continue
-        
+
         # Handle complete failure case
         if not provider_decisions:
             logger.error(
-                f"All {len(enabled_providers)} providers failed, using rule-based "
-                f"fallback"
+                "All %d providers failed, using rule-based fallback",
+                len(enabled_providers),
             )
             fallback = self._rule_based_decision(prompt)
             fallback['ensemble_metadata'] = {
@@ -1112,15 +1172,15 @@ Format response as a structured technical analysis demonstration.
                     return {
                         'action': 'SELL',
                         'confidence': 65,
-                        'reasoning': 'Price increased significantly, taking profit.',
-                        'amount': 0.1
+                        'reasoning': 'Price increased; taking profit.',
+                        'amount': 0.1,
                     }
                 elif price_change < -2:
                     return {
                         'action': 'BUY',
                         'confidence': 70,
-                        'reasoning': 'Price dropped, good buying opportunity.',
-                        'amount': 0.1
+                        'reasoning': 'Price dropped; buying opportunity.',
+                        'amount': 0.1,
                     }
             except Exception as e:
                 logger.error(f"Error parsing price change: {e}")
@@ -1151,14 +1211,18 @@ Format response as a structured technical analysis demonstration.
         """
         decision_id = str(uuid.uuid4())
         
-        # Logic gate: Only calculate position sizing if we have valid balance data
+        # Logic gate: only calculate position sizing when balance data exists
         current_price = context['market_data'].get('close', 0)
         balance = context.get('balance', {})
         action = ai_response.get('action', 'HOLD')
         
-        # Determine asset type (crypto vs forex) for correct balance pool selection
+        # Determine asset type (crypto vs forex) for balance selection
         asset_type = context['market_data'].get('type', 'unknown')
-        is_crypto = 'BTC' in asset_pair or 'ETH' in asset_pair or asset_type == 'crypto'
+        is_crypto = (
+            'BTC' in asset_pair
+            or 'ETH' in asset_pair
+            or asset_type == 'crypto'
+        )
         is_forex = '_' in asset_pair or asset_type == 'forex'
         
         # Extract the appropriate balance based on asset type
@@ -1169,13 +1233,13 @@ Format response as a structured technical analysis demonstration.
             if is_crypto:
                 # Filter for Coinbase balances
                 relevant_balance = {
-                    k: v for k, v in balance.items() 
+                    k: v for k, v in balance.items()
                     if k.startswith('coinbase_')
                 }
             elif is_forex:
                 # Filter for Oanda balances
                 relevant_balance = {
-                    k: v for k, v in balance.items() 
+                    k: v for k, v in balance.items()
                     if k.startswith('oanda_')
                 }
             else:
@@ -1184,19 +1248,26 @@ Format response as a structured technical analysis demonstration.
         
         # Check if relevant balance data is available and valid
         has_valid_balance = (
-            relevant_balance and 
-            len(relevant_balance) > 0 and 
-            sum(relevant_balance.values()) > 0
+            relevant_balance
+            and len(relevant_balance) > 0
+            and sum(relevant_balance.values()) > 0
         )
         
         # Check for existing position in this asset
         portfolio = context.get('portfolio')
-        asset_base = asset_pair.replace('USD', '').replace('USDT', '').replace('_', '')
+        asset_base = (
+            asset_pair.replace('USD', '')
+            .replace('USDT', '')
+            .replace('_', '')
+        )
         has_existing_position = False
         
         if portfolio and portfolio.get('holdings'):
             for holding in portfolio.get('holdings', []):
-                if holding.get('currency') == asset_base and holding.get('amount', 0) > 0:
+                if (
+                    holding.get('currency') == asset_base
+                    and holding.get('amount', 0) > 0
+                ):
                     has_existing_position = True
                     break
         
@@ -1214,13 +1285,18 @@ Format response as a structured technical analysis demonstration.
         # HOLD: Only show position sizing if there's an existing position
         # BUY/SELL: Always calculate position sizing if balance is available
         should_calculate_position = (
-            has_valid_balance and 
-            (action in ['BUY', 'SELL'] or (action == 'HOLD' and has_existing_position))
+            has_valid_balance
+            and (
+                action in ['BUY', 'SELL']
+                or (action == 'HOLD' and has_existing_position)
+            )
         )
         
         if should_calculate_position:
             total_balance = sum(relevant_balance.values())
-            balance_source = 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
+            balance_source = (
+                'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
+            )
             
             # Use 1% risk with 2% stop loss as default conservative values
             recommended_position_size = self.calculate_position_size(
@@ -1235,19 +1311,20 @@ Format response as a structured technical analysis demonstration.
             
             if action == 'HOLD' and has_existing_position:
                 logger.info(
-                    "HOLD with existing position: showing position sizing (%.4f units) from %s",
+                    "HOLD with existing position: sizing (%.4f units) from %s",
                     recommended_position_size,
-                    balance_source
+                    balance_source,
                 )
             else:
                 logger.info(
-                    "Position sizing calculated: %.4f units (balance: $%.2f from %s)",
+                    "Position sizing: %.4f units (balance: $%.2f from %s)",
                     recommended_position_size,
                     total_balance,
-                    balance_source
+                    balance_source,
                 )
         else:
-            # Signal-only mode: No position sizing when balance unavailable or HOLD without position
+            # Signal-only mode: No position sizing when balance is unavailable
+            # or when HOLD without an existing position
             recommended_position_size = None
             stop_loss_percentage = None
             risk_percentage = None
@@ -1258,25 +1335,39 @@ Format response as a structured technical analysis demonstration.
                     "HOLD without existing position - no position sizing shown"
                 )
             elif not has_valid_balance:
-                balance_type = 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'platform'
+                balance_type = (
+                    'Coinbase'
+                    if is_crypto
+                    else 'Oanda'
+                    if is_forex
+                    else 'platform'
+                )
                 logger.warning(
-                    "No valid %s balance available for %s - providing signal only (no position sizing)",
+                    "No valid %s balance for %s - providing signal only",
                     balance_type,
-                    asset_pair
+                    asset_pair,
                 )
             else:
                 logger.warning(
-                    "Portfolio data unavailable - providing signal only (no position sizing)"
+                    "Portfolio data unavailable - providing signal only"
                 )
         
         # Determine position type based on action
-        position_type = 'LONG' if action == 'BUY' else 'SHORT' if action == 'SELL' else None
-        
-        # Override suggested_amount to 0 for HOLD with no position (logic over LLM hallucinations)
+        position_type = (
+            'LONG'
+            if action == 'BUY'
+            else 'SHORT'
+            if action == 'SELL'
+            else None
+        )
+
+        # Override suggested_amount to 0 for HOLD with no position
         suggested_amount = ai_response.get('amount', 0)
         if action == 'HOLD' and not has_existing_position:
             suggested_amount = 0
-            logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
+            logger.debug(
+                "Overriding suggested_amount to 0 (HOLD with no position)"
+            )
         
         decision = {
             'id': decision_id,
@@ -1285,13 +1376,13 @@ Format response as a structured technical analysis demonstration.
             'action': action,
             'confidence': ai_response.get('confidence', 50),
             'reasoning': ai_response.get('reasoning', 'No reasoning provided'),
-            'suggested_amount': suggested_amount,  # Overridden to 0 for HOLD without position
-            'recommended_position_size': recommended_position_size,  # None if signal_only
-            'position_type': position_type,  # LONG, SHORT, or None
+            'suggested_amount': suggested_amount,
+            'recommended_position_size': recommended_position_size,
+            'position_type': position_type,
             'entry_price': current_price,
-            'stop_loss_percentage': stop_loss_percentage,  # None if signal_only
-            'risk_percentage': risk_percentage,  # None if signal_only
-            'signal_only': signal_only,  # True when position sizing unavailable
+            'stop_loss_percentage': stop_loss_percentage,
+            'risk_percentage': risk_percentage,
+            'signal_only': signal_only,
             'market_data': context['market_data'],
             'balance_snapshot': context['balance'],
             'price_change': context['price_change'],
@@ -1317,6 +1408,11 @@ Format response as a structured technical analysis demonstration.
         if 'meta_features' in ai_response:
             decision['meta_features'] = ai_response['meta_features']
         
-        logger.info(f"Decision created: {decision['action']} {asset_pair} (confidence: {decision['confidence']}%)")
+        logger.info(
+            "Decision created: %s %s (confidence: %s%%)",
+            decision['action'],
+            asset_pair,
+            decision['confidence'],
+        )
         
         return decision

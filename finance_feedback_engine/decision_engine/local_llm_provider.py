@@ -34,6 +34,8 @@ class LocalLLMProvider:
     # Model selection based on research
     DEFAULT_MODEL = "llama3.2:3b-instruct-fp16"
     FALLBACK_MODEL = "llama3.2:1b-instruct-fp16"  # Ultra-compact fallback
+    # Enforce at least one secondary model for robustness
+    SECONDARY_MODEL = "deepseek-r1:8b"
     
     def __init__(self, config: Dict[str, Any]):
         """
@@ -51,7 +53,9 @@ class LocalLLMProvider:
         else:
             self.model_name = requested_model
         
-        logger.info(f"Initializing local LLM provider with model: {self.model_name}")
+        logger.info(
+            f"Initializing local LLM provider with model: {self.model_name}"
+        )
         
         # Verify Ollama installation (auto-install if needed)
         if not self._check_ollama_installed():
@@ -59,6 +63,28 @@ class LocalLLMProvider:
         
         # Ensure model is available (auto-download if needed)
         self._ensure_model_available()
+
+        # Ensure secondary model exists for robustness (required)
+        try:
+            if not self._is_model_available(self.SECONDARY_MODEL):
+                logger.info(
+                    "Secondary model %s not found. Downloading for "
+                    "ensemble robustness...",
+                    self.SECONDARY_MODEL,
+                )
+                if not self._download_model(self.SECONDARY_MODEL):
+                    # Non-recoverable: require at least two local models
+                    raise RuntimeError(
+                        "Failed to ensure required secondary model: %s. "
+                        "Please run: ollama pull %s"
+                        % (self.SECONDARY_MODEL, self.SECONDARY_MODEL)
+                    )
+                logger.info(
+                    "Successfully downloaded secondary model: %s",
+                    self.SECONDARY_MODEL,
+                )
+        except Exception as e:
+            raise RuntimeError(f"Failed to ensure secondary model: {e}")
         
         logger.info("Local LLM provider initialized successfully")
 
@@ -80,14 +106,18 @@ class LocalLLMProvider:
             
             if result.returncode == 0:
                 version = result.stdout.strip()
-                logger.info(f"Ollama installed: {version}")
+                logger.info("Ollama installed: %s", version)
                 return True
             else:
-                logger.warning("Ollama command failed, attempting installation...")
+                logger.warning(
+                    "Ollama command failed, attempting installation..."
+                )
                 return self._install_ollama()
                 
         except FileNotFoundError:
-            logger.warning("Ollama not found in PATH, attempting installation...")
+            logger.warning(
+                "Ollama not found in PATH, attempting installation..."
+            )
             return self._install_ollama()
         except subprocess.TimeoutExpired:
             logger.error("Ollama version check timeout")
@@ -111,7 +141,9 @@ class LocalLLMProvider:
         try:
             if system == "Linux" or system == "Darwin":  # Linux or macOS
                 logger.info(f"Installing Ollama on {system}...")
-                logger.info("Running: curl -fsSL https://ollama.ai/install.sh | sh")
+                logger.info(
+                    "Running: curl -fsSL https://ollama.ai/install.sh | sh"
+                )
                 
                 # Download and execute install script
                 install_cmd = "curl -fsSL https://ollama.ai/install.sh | sh"
@@ -124,17 +156,22 @@ class LocalLLMProvider:
                 )
                 
                 if result.returncode != 0:
-                    logger.error(f"Installation failed: {result.stderr}")
-                    raise RuntimeError(f"Ollama installation failed: {result.stderr}")
+                    logger.error("Installation failed: %s", result.stderr)
+                    raise RuntimeError(
+                        "Ollama installation failed: %s" % result.stderr
+                    )
                 
                 logger.info(f"Ollama installed successfully on {system}")
                 logger.info(f"Installation output: {result.stdout}")
                 
             elif system == "Windows":
-                logger.error("Automatic installation not supported on Windows")
+                logger.error(
+                    "Automatic installation not supported on Windows"
+                )
                 raise RuntimeError(
                     "Automatic Ollama installation not supported on Windows.\n"
-                    "Please download and install manually from: https://ollama.ai/download\n"
+                    "Please download and install manually from: "
+                    "https://ollama.ai/download\n"
                     "After installation, restart your terminal and try again."
                 )
             else:
@@ -149,7 +186,9 @@ class LocalLLMProvider:
             )
             
             if verify_result.returncode == 0:
-                logger.info(f"Installation verified: {verify_result.stdout.strip()}")
+                logger.info(
+                    "Installation verified: %s" % verify_result.stdout.strip()
+                )
                 return True
             else:
                 raise RuntimeError("Ollama installed but verification failed")
@@ -223,7 +262,8 @@ class LocalLLMProvider:
         Download a specific model from Ollama library.
         
         Args:
-            model_name: Name of model to download (e.g., 'llama3.2:3b-instruct-fp16')
+            model_name: Name of model to download (e.g.,
+                'llama3.2:3b-instruct-fp16')
             
         Returns:
             bool: True if download successful, False otherwise

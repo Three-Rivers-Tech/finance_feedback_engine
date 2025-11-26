@@ -3,54 +3,54 @@
   "total_historical_trades": 50,
   "recent_trades_analyzed": 10,
   "recent_performance": {
-    "total_pnl": -3.173575418932664,
-    "win_rate": 40.0,
-    "winning_trades": 4,
-    "losing_trades": 6
+    "total_pnl": -64.83256804346644,
+    "win_rate": 60.0,
+    "winning_trades": 6,
+    "losing_trades": 4
   },
   "action_performance": {
     "BUY": {
-      "win_rate": 40.0,
-      "total_pnl": -55.53298723827523,
+      "win_rate": 100.0,
+      "total_pnl": 193.20566716443815,
       "count": 5
     },
     "SELL": {
-      "win_rate": 40.0,
-      "total_pnl": 52.359411819342554,
+      "win_rate": 20.0,
+      "total_pnl": -258.0382352079046,
       "count": 5
     }
   },
   "provider_performance": {
     "local": {
-      "win_rate": 40.0,
+      "win_rate": 60.0,
       "count": 10
     }
   },
   "current_streak": {
-    "type": "losing",
-    "count": 1
+    "type": "winning",
+    "count": 2
   },
   "long_term_performance": {
     "has_data": true,
     "period_days": 90,
-    "period_start": "2025-08-26T01:47:34.595908",
-    "period_end": "2025-11-24T01:47:34.596002",
-    "realized_pnl": 379.32188306428793,
+    "period_start": "2025-08-28T14:41:09.197619",
+    "period_end": "2025-11-26T14:41:09.197719",
+    "realized_pnl": 918.3245930677922,
     "total_trades": 45,
-    "win_rate": 51.11111111111111,
-    "winning_trades": 23,
-    "losing_trades": 22,
-    "avg_win": 59.440943445484166,
-    "avg_loss": -44.90090073553855,
-    "profit_factor": 1.3839990622282257,
-    "gross_profit": 1367.1416992461359,
-    "gross_loss": 987.8198161818481,
-    "best_trade": 99.33086183318494,
-    "worst_trade": -77.27744339937898,
-    "sharpe_ratio": 2.3545412208748964,
-    "roi_percentage": 7.586437661285758,
+    "win_rate": 68.88888888888889,
+    "winning_trades": 31,
+    "losing_trades": 14,
+    "avg_win": 51.570125570555554,
+    "avg_loss": -48.59637854424499,
+    "profit_factor": 2.349783991225507,
+    "gross_profit": 1598.6738926872222,
+    "gross_loss": 680.3492996194299,
+    "best_trade": 95.2586816306367,
+    "worst_trade": -79.88184838589072,
+    "sharpe_ratio": 6.12203510644397,
+    "roi_percentage": 18.366491861355843,
     "average_holding_hours": 24.0,
-    "recent_momentum": "improving",
+    "recent_momentum": "declining",
     "asset_pair": "all"
   }
 }

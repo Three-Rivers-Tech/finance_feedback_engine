@@ -157,6 +157,15 @@ class PortfolioMemoryEngine:
                 'total_pnl': 0.0
             }
         )
+
+        # Ensemble strategy performance tracking
+        self.strategy_performance: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'total_pnl': 0.0,
+            }
+        )
         
         # Load existing memory
         self._load_memory()
@@ -293,7 +302,7 @@ class PortfolioMemoryEngine:
         outcome: TradeOutcome,
         decision: Dict[str, Any]
     ) -> None:
-        """Update performance stats for providers involved in decision."""
+        """Update performance stats for providers and strategies."""
         # Update primary provider
         if outcome.ai_provider:
             provider = outcome.ai_provider
@@ -310,26 +319,35 @@ class PortfolioMemoryEngine:
                 'pnl': outcome.realized_pnl
             })
         
-        # Update ensemble providers
-        if outcome.ensemble_providers:
+        # Update ensemble providers and strategy
+        if outcome.ai_provider == 'ensemble':
             ensemble_meta = decision.get('ensemble_metadata', {})
             provider_decisions = ensemble_meta.get('provider_decisions', {})
             
-            for provider in outcome.ensemble_providers:
-                stats = self.provider_performance[provider]
-                stats['total_trades'] += 1
-                
-                # Check if this provider agreed with final action
-                provider_decision = provider_decisions.get(provider, {})
-                provider_action = provider_decision.get('action')
-                
-                if provider_action == outcome.action and outcome.was_profitable:
-                    stats['winning_trades'] += 1
-                
-                # Attribute proportional P&L based on voting power
-                voting_power = ensemble_meta.get('voting_power', {})
-                provider_weight = voting_power.get(provider, 0)
-                stats['total_pnl'] += (outcome.realized_pnl or 0) * provider_weight
+            # Update individual providers within the ensemble
+            if outcome.ensemble_providers:
+                for provider in outcome.ensemble_providers:
+                    stats = self.provider_performance[provider]
+                    stats['total_trades'] += 1
+                    
+                    provider_decision = provider_decisions.get(provider, {})
+                    provider_action = provider_decision.get('action')
+                    
+                    if provider_action == outcome.action and outcome.was_profitable:
+                        stats['winning_trades'] += 1
+                    
+                    voting_power = ensemble_meta.get('voting_power', {})
+                    provider_weight = voting_power.get(provider, 1.0 / len(outcome.ensemble_providers) if outcome.ensemble_providers else 0)
+                    stats['total_pnl'] += (outcome.realized_pnl or 0) * provider_weight
+            
+            # Update strategy performance
+            strategy = ensemble_meta.get('voting_strategy')
+            if strategy:
+                strat_stats = self.strategy_performance[strategy]
+                strat_stats['total_trades'] += 1
+                if outcome.was_profitable:
+                    strat_stats['winning_trades'] += 1
+                strat_stats['total_pnl'] += outcome.realized_pnl or 0
     
     def _update_regime_performance(self, outcome: TradeOutcome) -> None:
         """Track performance in different market regimes."""
@@ -414,14 +432,17 @@ class PortfolioMemoryEngine:
         
         max_drawdown = self._calculate_max_drawdown(equity_curve)
         
-        # Calculate Sharpe ratio (simplified)
-        pnls = [o.pnl_percentage or 0 for o in outcomes]
-        sharpe_ratio = self._calculate_sharpe_ratio(pnls)  # NOTE: The annualization factor np.sqrt(252) assumes daily returns (252 trading days/year).
-        # However, 'returns' here are per-trade PnL percentages with variable holding periods (hours to weeks).
-        # This means the Sharpe ratio is a simplified approximation and may not be accurate for variable holding periods.
-        # TODO: For more accurate risk-adjusted metrics, consider converting trade returns to a standardized time period
-        #       or use time-weighted returns based on holding_period_hours.
-        sortino_ratio = self._calculate_sortino_ratio(pnls)
+        # Calculate risk-adjusted metrics using daily returns
+        daily_returns = []
+        for o in outcomes:
+            if o.pnl_percentage is not None and o.holding_period_hours and o.holding_period_hours > 0:
+                # Normalize per-trade return to an equivalent daily return
+                daily_return = o.pnl_percentage * (24 / o.holding_period_hours)
+                daily_returns.append(daily_return)
+
+        # Sharpe and Sortino ratios are now calculated with daily returns, making the annualization more accurate.
+        sharpe_ratio = self._calculate_sharpe_ratio(daily_returns)
+        sortino_ratio = self._calculate_sortino_ratio(daily_returns)
         
         # Provider stats
         provider_stats = self._calculate_provider_stats()
@@ -1017,6 +1038,23 @@ class PortfolioMemoryEngine:
                 p: perf['total_trades'] for p, perf in stats.items()
             }
         }
+
+    def get_strategy_performance_summary(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Calculates and returns the performance summary for each voting strategy.
+        """
+        summary = {}
+        for strategy, stats in self.strategy_performance.items():
+            total_trades = stats['total_trades']
+            if total_trades > 0:
+                win_rate = (stats['winning_trades'] / total_trades) * 100
+                summary[strategy] = {
+                    'total_trades': total_trades,
+                    'winning_trades': stats['winning_trades'],
+                    'total_pnl': stats['total_pnl'],
+                    'win_rate': win_rate
+                }
+        return summary
     
     # ===================================================================
     # Persistence

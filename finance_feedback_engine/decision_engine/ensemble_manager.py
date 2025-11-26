@@ -13,6 +13,8 @@ import numpy as np
 from datetime import datetime
 import json
 from pathlib import Path
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +79,62 @@ class EnsembleDecisionManager:
         # Performance tracking
         self.performance_history = self._load_performance_history()
         
+        # Initialize meta-learner for stacking ensemble
+        self.meta_learner = None
+        self.meta_feature_scaler = None
+        if self.voting_strategy == 'stacking':
+            self._initialize_meta_learner()
+
         logger.info(
             f"Ensemble manager initialized with providers: "
             f"{self.enabled_providers}, strategy: {self.voting_strategy}"
         )
+
+    def _initialize_meta_learner(self):
+        """
+        Initializes the meta-learner model for the stacking ensemble.
+        
+        It tries to load a trained model from 'meta_learner_model.json'.
+        If the file doesn't exist, it falls back to hardcoded mock parameters.
+        """
+        logger.info("Initializing meta-learner for stacking ensemble.")
+        self.meta_learner = LogisticRegression()
+        self.meta_feature_scaler = StandardScaler()
+        
+        model_path = Path(__file__).parent / 'meta_learner_model.json'
+        
+        if model_path.exists():
+            try:
+                with open(model_path, 'r') as f:
+                    model_data = json.load(f)
+                
+                self.meta_learner.classes_ = np.array(model_data['classes'])
+                self.meta_learner.coef_ = np.array(model_data['coef'])
+                self.meta_learner.intercept_ = np.array(model_data['intercept'])
+                
+                self.meta_feature_scaler.mean_ = np.array(model_data['scaler_mean'])
+                self.meta_feature_scaler.scale_ = np.array(model_data['scaler_scale'])
+                
+                logger.info(f"Meta-learner loaded from {model_path}")
+                return
+            except (json.JSONDecodeError, KeyError, IOError) as e:
+                logger.warning(
+                    f"Failed to load trained meta-learner model from {model_path}: {e}. "
+                    "Falling back to mock parameters."
+                )
+
+        # Fallback to mock-trained parameters if file doesn't exist or is invalid
+        logger.info("Using mock-trained parameters for meta-learner.")
+        self.meta_learner.classes_ = np.array(['BUY', 'HOLD', 'SELL'])
+        self.meta_learner.coef_ = np.array([
+            [2.0, -1.0, -1.0, 0.8, -0.5],
+            [-1.0, -1.0, 2.0, -0.2, 0.8],
+            [-1.0, 2.0, -1.0, 0.8, -0.5],
+        ])
+        self.meta_learner.intercept_ = np.array([0.0, 0.0, 0.0])
+        self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
+        self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
+        logger.info("Meta-learner initialized with mock-trained parameters for updated features.")
 
     def aggregate_decisions(
         self,
@@ -649,45 +703,42 @@ class EnsembleDecisionManager:
         amounts: List[float]
     ) -> Dict[str, Any]:
         """
-        Stacking ensemble with meta-features.
+        Stacking ensemble with a trained meta-learner model.
         
-        Generates meta-features from base predictions and applies
-        learned combination rules.
+        Generates meta-features from base predictions, scales them, and
+        feeds them to a logistic regression model to get the final decision.
         """
+        if not self.meta_learner or not self.meta_feature_scaler:
+            logger.warning(
+                "Meta-learner not initialized for stacking strategy. "
+                "Falling back to weighted voting."
+            )
+            return self._weighted_voting(providers, actions, confidences, reasonings, amounts)
+
         # Generate meta-features
         meta_features = self._generate_meta_features(
             actions, confidences, amounts
         )
         
-        # Apply meta-learner rules (simple heuristic-based for now)
-        # In production, this would use a trained meta-model
+        # Create feature vector in the correct order
+        feature_vector = np.array([
+            meta_features['buy_ratio'],
+            meta_features['sell_ratio'],
+            meta_features['hold_ratio'],
+            meta_features['avg_confidence'],
+            meta_features['confidence_std']
+        ]).reshape(1, -1)
         
-        # Feature: Agreement level
-        agreement = meta_features['agreement_ratio']
+        # Scale the features
+        scaled_features = self.meta_feature_scaler.transform(feature_vector)
         
-        # Feature: Confidence spread
-        conf_std = meta_features['confidence_std']
+        # Predict action and probabilities
+        final_action = self.meta_learner.predict(scaled_features)[0]
+        probabilities = self.meta_learner.predict_proba(scaled_features)[0]
         
-        # Feature: Dominant action strength
-        dominant_action = meta_features['dominant_action']
-        dominant_ratio = meta_features['dominant_ratio']
-        
-        # Meta-learner decision rules
-        if agreement > 0.66:  # Strong agreement
-            final_action = dominant_action
-            # High agreement -> boost confidence
-            base_conf = meta_features['avg_confidence']
-            final_confidence = int(min(100, base_conf * 1.2))
-        elif conf_std < 15:  # Low variance in confidence
-            final_action = dominant_action
-            final_confidence = int(meta_features['avg_confidence'])
-        else:  # Disagreement or high variance
-            # Conservative: go with weighted vote but reduce confidence
-            weighted_result = self._weighted_voting(
-                providers, actions, confidences, reasonings, amounts
-            )
-            final_action = weighted_result['action']
-            final_confidence = int(weighted_result['confidence'] * 0.85)
+        # Get confidence for the winning action
+        class_index = list(self.meta_learner.classes_).index(final_action)
+        final_confidence = int(probabilities[class_index] * 100)
         
         final_reasoning = self._aggregate_reasoning(
             providers, actions, reasonings, final_action
@@ -700,7 +751,8 @@ class EnsembleDecisionManager:
             'confidence': final_confidence,
             'reasoning': final_reasoning,
             'amount': final_amount,
-            'meta_features': meta_features
+            'meta_features': meta_features,
+            'stacking_probabilities': dict(zip(self.meta_learner.classes_, probabilities))
         }
 
     def _generate_meta_features(
@@ -712,21 +764,21 @@ class EnsembleDecisionManager:
         """Generate meta-features from base model predictions."""
         from collections import Counter
         
+        num_providers = len(actions)
         action_counts = Counter(actions)
-        most_common = action_counts.most_common(1)[0]
         
         return {
-            'dominant_action': most_common[0],
-            'dominant_ratio': most_common[1] / len(actions),
-            'agreement_ratio': most_common[1] / len(actions),
+            'buy_ratio': action_counts.get('BUY', 0) / num_providers,
+            'sell_ratio': action_counts.get('SELL', 0) / num_providers,
+            'hold_ratio': action_counts.get('HOLD', 0) / num_providers,
             'avg_confidence': float(np.mean(confidences)),
             'confidence_std': float(np.std(confidences)),
-            'min_confidence': min(confidences),
-            'max_confidence': max(confidences),
+            'min_confidence': min(confidences) if confidences else 0,
+            'max_confidence': max(confidences) if confidences else 0,
             'avg_amount': float(np.mean(amounts)),
             'amount_std': float(np.std(amounts)),
-            'num_providers': len(actions),
-            'action_diversity': len(action_counts)  # How many unique actions
+            'num_providers': num_providers,
+            'action_diversity': len(action_counts)
         }
 
     def _aggregate_reasoning(

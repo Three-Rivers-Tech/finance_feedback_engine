@@ -7,6 +7,8 @@ import yaml
 import subprocess
 import sys
 import re
+import os
+import copy
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -19,6 +21,7 @@ from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
     display_portfolio_dashboard
 )
+from finance_feedback_engine.cli.new_command import manage_group # Import the new command group
 
 
 console = Console()
@@ -119,8 +122,101 @@ def setup_logging(verbose: bool = False):
     )
 
 
+def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
+    """Deep merges d2 into d1, overwriting values in d1 with those from d2."""
+    for k, v in d2.items():
+        if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+            d1[k] = _deep_merge_dicts(d1[k], v)
+        else:
+            d1[k] = v
+    return d1
+
+
+def _deep_fill_missing(target: dict, source: dict) -> dict:
+    """Fill missing keys in target from source without overwriting existing values.
+
+    Recurses into nested dicts so that local overrides remain intact and base
+    defaults are used only where keys are absent.
+    """
+    for k, v in source.items():
+        if k not in target:
+            target[k] = v
+        else:
+            if isinstance(target[k], dict) and isinstance(v, dict):
+                _deep_fill_missing(target[k], v)
+            # if target has a value (not dict) we keep it — do not overwrite
+    return target
+
+
+def load_tiered_config() -> dict:
+    """
+    Loads configuration from multiple sources with a tiered precedence:
+    1. config/config.local.yaml (local overrides - highest file priority)
+    2. config/config.yaml (base defaults used only where local is missing)
+    3. Environment variables (highest overall precedence)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    base_config_path = Path('config/config.yaml')
+    local_config_path = Path('config/config.local.yaml')
+
+    # Prefer local config as the primary file so local values take precedence.
+    # Start with local (if present) then fill missing values from base config.
+    config = {}
+    # 1. Load local config first (preferred)
+    if local_config_path.exists():
+        with open(local_config_path, 'r', encoding='utf-8') as f:
+            local_config = yaml.safe_load(f)
+            if local_config:
+                config.update(local_config)
+
+    # 2. Load base config and fill missing keys from it
+    if base_config_path.exists():
+        with open(base_config_path, 'r', encoding='utf-8') as f:
+            base_config = yaml.safe_load(f)
+            if base_config:
+                _deep_fill_missing(config, base_config)
+    else:
+        logger.warning(f"Base config file not found: {base_config_path}")
+    
+    # 3. Apply environment variables
+    env_var_mappings = {
+        'ALPHA_VANTAGE_API_KEY': ('alpha_vantage_api_key',),
+        'COINBASE_API_KEY': ('trading_platform', 'coinbase', 'api_key'),
+        'COINBASE_API_SECRET': ('trading_platform', 'coinbase', 'api_secret'),
+        'COINBASE_PASSPHRASE': ('trading_platform', 'coinbase', 'passphrase'),
+        'OANDA_API_KEY': ('trading_platform', 'oanda', 'api_key'),
+        'OANDA_ACCOUNT_ID': ('trading_platform', 'oanda', 'account_id'),
+        'OANDA_LIVE': ('trading_platform', 'oanda', 'live'), # Boolean conversion needed
+        'GEMINI_API_KEY': ('decision_engine', 'gemini', 'api_key'),
+        'GEMINI_MODEL_NAME': ('decision_engine', 'gemini', 'model_name'),
+        # Add more as needed
+    }
+
+    for env_var, config_path_keys in env_var_mappings.items():
+        value = os.getenv(env_var)
+        if value is not None:
+            # Handle boolean conversion for specific keys
+            if env_var == 'OANDA_LIVE':
+                value = value.lower() == 'true'
+
+            current_level = config
+            for i, key in enumerate(config_path_keys):
+                if i == len(config_path_keys) - 1: # Last key
+                    current_level[key] = value
+                else:
+                    current_level = current_level.setdefault(key, {})
+    
+    return config
+
+
 def load_config(config_path: str) -> dict:
-    """Load configuration from file."""
+    """
+    Load a specific configuration from file.
+    This function is for loading explicitly specified config files, not for the
+    tiered loading process.
+    """
     path = Path(config_path)
     
     if not path.exists():
@@ -149,11 +245,28 @@ def load_config(config_path: str) -> dict:
             )
 
 
+def _get_nested(config: dict, keys: tuple, default=None):
+    """Safely fetch a nested value from a dict."""
+    cur = config
+    for key in keys:
+        if not isinstance(cur, dict) or key not in cur:
+            return default
+        cur = cur[key]
+    return cur
+
+
+def _set_nested(config: dict, keys: tuple, value):
+    """Set a nested value inside a dict, creating intermediate levels."""
+    cur = config
+    for key in keys[:-1]:
+        cur = cur.setdefault(key, {})
+    cur[keys[-1]] = value
+
 @click.group(invoke_without_command=True)
 @click.option(
     '--config', '-c',
-    default='config/config.yaml',
-    help='Path to config file (prefers config/config.local.yaml when present)'
+    default=None, # Change default to None
+    help='Path to a specific config file (overrides tiered loading)'
 )
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 @click.option(
@@ -165,14 +278,15 @@ def cli(ctx, config, verbose, interactive):
     setup_logging(verbose)
     ctx.ensure_object(dict)
 
-    config_path = Path(config)
-    param_source = ctx.get_parameter_source('config')
-    if param_source == click.core.ParameterSource.DEFAULT:
-        local_path = Path('config/config.local.yaml')
-        if local_path.exists():
-            config_path = local_path
-
-    ctx.obj['config_path'] = str(config_path)
+    if config: # If a specific config file is provided by the user
+        final_config = load_config(config) # Use the old load_config
+        ctx.obj['config_path'] = config # Store the path for other commands
+    else: # Use tiered loading
+        final_config = load_tiered_config()
+        # Indicate that tiered loading was used, might not have a single path
+        ctx.obj['config_path'] = 'tiered' # Set a placeholder
+    
+    ctx.obj['config'] = final_config # Store the final config
     ctx.obj['verbose'] = verbose
 
     # On interactive boot, check versions and prompt for update if needed
@@ -182,6 +296,7 @@ def cli(ctx, config, verbose, interactive):
         from importlib.metadata import version, PackageNotFoundError
         from rich.prompt import Confirm
         console.print("\n[bold cyan]Checking AI Provider Versions (interactive mode)...[/bold cyan]\n")
+        # Map known packages to provider features for clearer reporting
         libraries = [
             ("ollama", "Ollama Python Client"),
             ("coinbase-advanced-py", "Coinbase Advanced"),
@@ -210,6 +325,35 @@ def cli(ctx, config, verbose, interactive):
                     missing_tools.append((tool, upgrade_cmd))
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 missing_tools.append((tool, upgrade_cmd))
+        # Emit a concise status log mapping missing components to AI providers
+        import logging as _logging
+        _logger = _logging.getLogger(__name__)
+
+        provider_impact = {}
+        # Map package/tool -> provider keys
+        mapping = {
+            'ollama': 'local',
+            'copilot': 'cli',
+            'qwen': 'qwen',
+            'coinbase-advanced-py': 'coinbase',
+            'oandapyV20': 'oanda',
+            'node': 'cli',
+        }
+
+        for lib in missing_libs:
+            prov = mapping.get(lib, 'unknown')
+            provider_impact.setdefault(prov, []).append(lib)
+
+        for tool, _ in missing_tools:
+            key = tool.lower().split()[0] if isinstance(tool, str) else str(tool)
+            prov = mapping.get(key, 'unknown')
+            provider_impact.setdefault(prov, []).append(tool)
+
+        if provider_impact:
+            _logger.info("Interactive startup: provider dependency status:")
+            for prov, items in provider_impact.items():
+                _logger.info("  %s: missing/outdated -> %s", prov, ', '.join(map(str, items)))
+
         if missing_libs or missing_tools:
             console.print("[yellow]Some AI provider dependencies are missing or outdated.[/yellow]")
             if Confirm.ask("Would you like to update/install them now?"):
@@ -220,6 +364,152 @@ def cli(ctx, config, verbose, interactive):
     if ctx.invoked_subcommand is None:
         console.print(cli.get_help(ctx))
         return
+
+
+
+@cli.command(name='config-editor')
+@click.option(
+    '--output', '-o',
+    default='config/config.local.yaml',
+    show_default=True,
+    help='Where to write your customized config overlay.'
+)
+@click.pass_context
+def config_editor(ctx, output):
+    """Interactive helper to capture API keys and core settings.
+
+    Writes a focused overlay file (defaults to config/config.local.yaml) so your
+    secrets are kept separate from the base config/config.yaml defaults.
+    """
+    base_path = Path('config/config.yaml')
+    target_path = Path(output)
+
+    base_config = {}
+    if base_path.exists():
+        try:
+            base_config = load_config(str(base_path))
+        except Exception as e:
+            console.print(f"[yellow]Warning: could not read base config: {e}[/yellow]")
+
+    existing_config = {}
+    if target_path.exists():
+        try:
+            existing_config = load_config(str(target_path))
+        except Exception as e:
+            console.print(f"[yellow]Warning: could not read existing {target_path}: {e}[/yellow]")
+
+    # Start from existing overlay so we don't drop user-specific keys
+    updated_config = copy.deepcopy(existing_config)
+
+    def current(keys, fallback=None):
+        return _get_nested(existing_config, keys, _get_nested(base_config, keys, fallback))
+
+    def prompt_text(label, keys, secret=False, allow_empty=True):
+        default_val = current(keys, '')
+        show_default = bool(default_val)
+        val = click.prompt(
+            label,
+            default=default_val,
+            show_default=show_default,
+            hide_input=secret,
+        )
+        if isinstance(val, str) and not val and default_val and not allow_empty:
+            val = default_val
+        _set_nested(updated_config, keys, val)
+
+    def prompt_choice(label, keys, choices):
+        default_val = current(keys, choices[0])
+        val = click.prompt(
+            label,
+            type=click.Choice(choices, case_sensitive=False),
+            default=default_val,
+            show_default=True,
+        )
+        _set_nested(updated_config, keys, val)
+        return val
+
+    def prompt_bool(label, keys):
+        cur_val = current(keys, False)
+        if isinstance(cur_val, str):
+            default_val = cur_val.lower() == 'true'
+        else:
+            default_val = bool(cur_val)
+        val = click.confirm(label, default=default_val, show_default=True)
+        _set_nested(updated_config, keys, val)
+
+    console.print("\n[bold cyan]Config Editor[/bold cyan]")
+    console.print("You'll be prompted for common settings. Press Enter to keep the shown default.")
+
+    # API keys and platform selection
+    prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
+
+    platform = prompt_choice(
+        "Trading platform",
+        ("trading_platform",),
+        ["coinbase_advanced", "coinbase", "oanda", "mock", "unified"],
+    )
+
+    if platform in {"coinbase", "coinbase_advanced"}:
+        console.print("\n[bold]Coinbase Advanced credentials[/bold]")
+        prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
+        prompt_text("API secret", ("platform_credentials", "api_secret"), secret=True)
+        prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
+        prompt_text(
+            "Passphrase (optional; leave blank to skip)",
+            ("platform_credentials", "passphrase"),
+            secret=True,
+            allow_empty=True,
+        )
+    elif platform == "oanda":
+        console.print("\n[bold]Oanda credentials[/bold]")
+        prompt_text("API token", ("platform_credentials", "api_key"), secret=True)
+        prompt_text("Account ID", ("platform_credentials", "account_id"))
+        prompt_choice(
+            "Environment",
+            ("platform_credentials", "environment"),
+            ["practice", "live"],
+        )
+    elif platform == "mock":
+        console.print("\n[yellow]Mock platform selected — no credentials required.[/yellow]")
+    elif platform == "unified":
+        console.print(
+            "\n[yellow]Unified mode detected. Configure per-platform entries in the YAML manually if needed.[/yellow]"
+        )
+
+    # Decision engine settings
+    console.print("\n[bold]Decision engine[/bold]")
+    ai_choice = prompt_choice(
+        "AI provider",
+        ("decision_engine", "ai_provider"),
+        ["local", "cli", "codex", "qwen", "gemini", "ensemble"],
+    )
+    prompt_text("Model name", ("decision_engine", "model_name"))
+
+    if ai_choice == "gemini":
+        console.print("Gemini settings (stored under decision_engine.gemini)")
+        prompt_text("Gemini API key", ("decision_engine", "gemini", "api_key"), secret=True)
+        prompt_text(
+            "Gemini model name",
+            ("decision_engine", "gemini", "model_name"),
+        )
+
+    # Monitoring + persistence toggles
+    console.print("\n[bold]Monitoring & persistence[/bold]")
+    prompt_bool("Enable monitoring context integration?", ("monitoring", "enable_context_integration"))
+    prompt_bool("Include sentiment in monitoring?", ("monitoring", "include_sentiment"))
+    prompt_bool("Include macro indicators?", ("monitoring", "include_macro"))
+    prompt_text("Decision storage path", ("persistence", "storage_path"))
+    prompt_bool("Enable portfolio memory?", ("portfolio_memory", "enabled"))
+    prompt_bool("Enable backtesting flag by default?", ("backtesting", "enabled"))
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(target_path, 'w', encoding='utf-8') as f:
+        yaml.safe_dump(updated_config, f, sort_keys=False)
+
+    console.print(
+        f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]\n"
+        "This file overrides defaults from config/config.yaml when running the CLI."
+    )
 
 
 
@@ -242,7 +532,7 @@ def agent(ctx, config):
         agent_config = TradingAgentConfig(**agent_config_data)
 
         # Load main engine config
-        main_config = load_config(ctx.obj['config_path'])
+        main_config = ctx.obj['config']
 
         # Initialize components
         engine = FinanceFeedbackEngine(main_config)
@@ -456,7 +746,7 @@ def analyze(ctx, asset_pair, provider):
         # Standardize asset pair input (uppercase, remove separators)
         asset_pair = standardize_asset_pair(asset_pair)
         
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         
         # Override provider if specified
         if provider:
@@ -475,9 +765,33 @@ def analyze(ctx, asset_pair, provider):
         
         try:
             engine = FinanceFeedbackEngine(config)
+        except ValueError as e:
+            # Provide a clear, actionable message when Alpha Vantage API key is missing
+            msg = str(e)
+            if 'Alpha Vantage API key' in msg or 'api key is required' in msg.lower() or 'alpha_vantage' in msg.lower():
+                console.print(
+                    "[bold red]Alpha Vantage API key is required to fetch market data.[/bold red]"
+                )
+                console.print("Set the key via one of the following:")
+                console.print("  - Run `python main.py config-editor` and enter the Alpha Vantage key when prompted")
+                console.print("  - Export the environment variable `ALPHA_VANTAGE_API_KEY` before running the CLI")
+                console.print("  - Add `alpha_vantage_api_key: YOUR_KEY` to `config/config.local.yaml`")
+                return
+            # Fall back to existing platform-init interactive prompt for other ValueErrors
+            if ctx.obj.get('interactive'):
+                console.print(
+                    f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
+                )
+                use_mock = console.input("Use mock platform for this session? [y/N]: ")
+                if use_mock.strip().lower() == 'y':
+                    config['trading_platform'] = 'mock'
+                    engine = FinanceFeedbackEngine(config)
+                else:
+                    raise
+            else:
+                raise
         except Exception as e:
-            # If platform initialization fails (missing SDKs), allow an
-            # interactive override to use the explicit 'mock' platform.
+            # Preserve existing behavior for non-ValueError exceptions
             if ctx.obj.get('interactive'):
                 console.print(
                     f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
@@ -645,7 +959,7 @@ def analyze(ctx, asset_pair, provider):
 def balance(ctx):
     """Show current account balances."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
         
         balances = engine.get_balance()
@@ -670,7 +984,7 @@ def balance(ctx):
 def dashboard(ctx):
     """Show unified dashboard aggregating all platform portfolios."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
         
         # For now, we only have one platform instance
@@ -696,7 +1010,7 @@ def dashboard(ctx):
 def history(ctx, asset, limit):
     """Show decision history."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
         
         decisions = engine.get_decision_history(asset_pair=asset, limit=limit)
@@ -738,7 +1052,7 @@ def history(ctx, asset, limit):
 def execute(ctx, decision_id):
     """Execute a trading decision."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
         
         console.print(
@@ -769,7 +1083,7 @@ def execute(ctx, decision_id):
 def status(ctx):
     """Show engine status and configuration."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         
         console.print("[bold]Finance Feedback Engine Status[/bold]\n")
         console.print(
@@ -806,7 +1120,7 @@ def status(ctx):
 def wipe_decisions(ctx, confirm):
     """Delete all stored trading decisions."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
         
         # Get current count
@@ -893,7 +1207,7 @@ def backtest(
 ):
     """Run a simple historical strategy simulation (experimental)."""
     try:
-        config = load_config(ctx.obj['config_path'])
+        config = ctx.obj['config']
         bt_conf = config.setdefault('backtesting', {})
         if real_data:
             bt_conf['use_real_data'] = True
@@ -993,14 +1307,15 @@ def monitor(ctx):
     """Live trade monitoring commands."""
     pass
 
+cli.add_command(manage_group) # Register the new manage_group
+
 
 @monitor.command()
 @click.pass_context
 def start(ctx):
     """Start live trade monitoring."""
     try:
-        config_path = ctx.obj['config_path']
-        config = load_config(config_path)
+        config = ctx.obj['config']
         
         # Initialize engine
         engine = FinanceFeedbackEngine(config=config)
@@ -1066,8 +1381,7 @@ def start(ctx):
 def monitor_status(ctx):
     """Show live trade monitoring status."""
     try:
-        config_path = ctx.obj['config_path']
-        config = load_config(config_path)
+        config = ctx.obj['config']
         
         engine = FinanceFeedbackEngine(config=config)
         
@@ -1254,6 +1568,7 @@ def update_ai(ctx, update):
     # --- CLI tools ---
     console.print("\n[bold cyan]AI Provider CLI Tools[/bold cyan]\n")
     cli_tools = [
+        ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
         ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
         ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
         ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
@@ -1270,10 +1585,12 @@ def update_ai(ctx, update):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 # Special handling for Copilot/Codex
+                # Extract first non-empty line from stdout as version string
+                version_line = result.stdout.strip().split('\n')[0]
                 if tool == "Codex CLI":
-                    version_str = f"{result.stdout.strip().split('\n')[0]} (via Copilot)"
+                    version_str = f"{version_line} (via Copilot)"
                 else:
-                    version_str = result.stdout.strip().split('\n')[0]
+                    version_str = version_line
                 cli_table.add_row(tool, version_str, "✓", upgrade_cmd.replace('i -g', 'update -g'))
             else:
                 cli_table.add_row(tool, "Error", "⚠", upgrade_cmd)
@@ -1288,10 +1605,18 @@ def update_ai(ctx, update):
     if update:
         console.print("\n[bold cyan]Updating/Installing only missing or outdated components...[/bold cyan]\n")
         tasks = []
-        # Only add missing CLI tools
+        # Add installer tasks for missing CLI tools (support shell installers and npm)
         for tool, _, upgrade_cmd in missing_tools:
-            if "npm" in upgrade_cmd:
-                tasks.append((upgrade_cmd, upgrade_cmd.split(), tool))
+            # Ollama uses a shell installer
+            if 'ollama' in upgrade_cmd or 'ollama.com' in upgrade_cmd:
+                tasks.append((tool, ["bash", "-c", upgrade_cmd], upgrade_cmd))
+            elif upgrade_cmd.strip().startswith('npm'):
+                # Split npm command into args
+                parts = upgrade_cmd.split()
+                tasks.append((tool, parts, upgrade_cmd))
+            else:
+                # Fallback: run as shell command
+                tasks.append((tool, ["bash", "-c", upgrade_cmd], upgrade_cmd))
 
         if not tasks:
             console.print("[green]✓ All AI CLI tools are already installed![/green]")
@@ -1304,14 +1629,15 @@ def update_ai(ctx, update):
                 transient=True,
             ) as progress:
                 task_id = progress.add_task("[cyan]Updating/Installing...", total=len(tasks))
-                for cmd_str, cmd_list, label in tasks:
+                for label, cmd_list, cmd_str in tasks:
                     progress.update(task_id, description=f"[white]Installing [bold]{label}[/bold]...")
                     try:
-                        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=300)
+                        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=600)
                         if result.returncode == 0:
                             progress.console.print(f"[green]✓ {label} installed/updated successfully[/green]")
                         else:
-                            progress.console.print(f"[red]✗ {label} failed: {result.stderr.strip() or result.stdout.strip()}[/red]")
+                            stderr = (result.stderr or result.stdout or '').strip()
+                            progress.console.print(f"[red]✗ {label} failed: {stderr}[/red]")
                     except Exception as e:
                         progress.console.print(f"[red]✗ {label} error: {e}[/red]")
                     progress.advance(task_id)
@@ -1360,6 +1686,75 @@ def update_ai(ctx, update):
         console.print("[yellow]Ollama not available[/yellow]")
 
     console.print("\n[bold green]✓ Version check complete[/bold green]\n")
+
+
+@cli.command(name='retrain-meta-learner')
+@click.option(
+    '--force',
+    is_flag=True,
+    help='Force retraining even if performance criteria are not met.'
+)
+@click.pass_context
+def retrain_meta_learner(ctx, force):
+    """Check stacking ensemble performance and retrain if needed."""
+    try:
+        from train_meta_learner import run_training
+        
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+        
+        console.print("\n[bold cyan]Checking meta-learner performance...[/bold cyan]")
+        
+        # Ensure memory is loaded
+        if not engine.memory.trade_outcomes:
+            console.print("[yellow]No trade history found in memory. Cannot check performance.[/yellow]")
+            return
+
+        perf = engine.memory.get_strategy_performance_summary()
+        
+        stacking_perf = perf.get('stacking')
+        
+        if not stacking_perf:
+            console.print("[yellow]No performance data found for the 'stacking' strategy.[/yellow]")
+            console.print("Generate some decisions using the stacking strategy to gather data.")
+            return
+            
+        win_rate = stacking_perf.get('win_rate', 0)
+        total_trades = stacking_perf.get('total_trades', 0)
+        
+        console.print(f"Stacking strategy performance: {win_rate:.2f}% win rate over {total_trades} trades.")
+        
+        # Define retraining criteria
+        win_rate_threshold = 55.0
+        min_trades_threshold = 20
+        
+        should_retrain = False
+        if force:
+            console.print("[yellow]--force flag detected. Forcing retraining...[/yellow]")
+            should_retrain = True
+        elif total_trades < min_trades_threshold:
+            console.print(f"Skipping retraining: Not enough trades ({total_trades} < {min_trades_threshold}).")
+        elif win_rate >= win_rate_threshold:
+            console.print(f"Skipping retraining: Win rate is acceptable ({win_rate:.2f}% >= {win_rate_threshold:.2f}%).")
+        else:
+            console.print(f"[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]")
+            should_retrain = True
+            
+        if should_retrain:
+            run_training()
+            console.print("[bold green]✓ Meta-learner retraining process complete.[/bold green]")
+        else:
+            console.print("[bold green]✓ No retraining needed at this time.[/bold green]")
+
+    except ImportError:
+        console.print("[bold red]Error:[/bold red] Could not import 'train_meta_learner'. Make sure it is in the project root.")
+        raise click.Abort()
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
 
 
 if __name__ == '__main__':

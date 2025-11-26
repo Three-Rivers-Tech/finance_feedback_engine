@@ -325,36 +325,86 @@ class AlphaVantageProvider:
                 # For crypto, use the base currency
                 symbol = asset_pair[:3] if len(asset_pair) > 3 else asset_pair
             else:
-                # For forex, we'll skip detailed indicators for now
+                # For forex, we'll skip detailed indicators for now as AlphaVantage
+                # does not directly support technical indicator functions for FX pairs.
                 return indicators
             
-            # Fetch RSI (Relative Strength Index)
-            rsi_params = {
-                'function': 'RSI',
-                'symbol': symbol,
-                'interval': 'daily',
-                'time_period': 14,
-                'series_type': 'close',
-                'apikey': self.api_key
-            }
-            
-            rsi_response = requests.get(
-                self.BASE_URL, params=rsi_params, timeout=10
-            )
-            if rsi_response.status_code == 200:
-                rsi_data = rsi_response.json()
-                if 'Technical Analysis: RSI' in rsi_data:
-                    rsi_series = rsi_data['Technical Analysis: RSI']
-                    latest_rsi = list(rsi_series.values())[0]
-                    indicators['rsi'] = float(latest_rsi.get('RSI', 0))
-                    
-                    # Interpret RSI
-                    if indicators['rsi'] > 70:
-                        indicators['rsi_signal'] = 'overbought'
-                    elif indicators['rsi'] < 30:
-                        indicators['rsi_signal'] = 'oversold'
-                    else:
-                        indicators['rsi_signal'] = 'neutral'
+            # --- Fetch RSI (Relative Strength Index) ---
+            try:
+                rsi_params = {
+                    'function': 'RSI',
+                    'symbol': symbol,
+                    'interval': 'daily',
+                    'time_period': 14,
+                    'series_type': 'close',
+                    'apikey': self.api_key
+                }
+                rsi_response = requests.get(
+                    self.BASE_URL, params=rsi_params, timeout=10
+                )
+                if rsi_response.status_code == 200:
+                    rsi_data = rsi_response.json()
+                    if 'Technical Analysis: RSI' in rsi_data:
+                        rsi_series = rsi_data['Technical Analysis: RSI']
+                        latest_rsi = list(rsi_series.values())[0]
+                        indicators['rsi'] = float(latest_rsi.get('RSI', 0))
+                        
+                        # Interpret RSI
+                        if indicators['rsi'] > 70:
+                            indicators['rsi_signal'] = 'overbought'
+                        elif indicators['rsi'] < 30:
+                            indicators['rsi_signal'] = 'oversold'
+                        else:
+                            indicators['rsi_signal'] = 'neutral'
+            except Exception as e:
+                logger.debug(f"Could not fetch RSI for {asset_pair}: {e}")
+
+            # --- Fetch MACD (Moving Average Convergence Divergence) ---
+            try:
+                macd_params = {
+                    'function': 'MACD',
+                    'symbol': symbol,
+                    'interval': 'daily',
+                    'series_type': 'close',
+                    'apikey': self.api_key
+                }
+                macd_response = requests.get(
+                    self.BASE_URL, params=macd_params, timeout=10
+                )
+                if macd_response.status_code == 200:
+                    macd_data = macd_response.json()
+                    if 'Technical Analysis: MACD' in macd_data:
+                        macd_series = macd_data['Technical Analysis: MACD']
+                        latest_macd = list(macd_series.values())[0]
+                        indicators['macd'] = float(latest_macd.get('MACD', 0))
+                        indicators['macd_signal'] = float(latest_macd.get('MACD_Signal', 0))
+                        indicators['macd_hist'] = float(latest_macd.get('MACD_Hist', 0))
+            except Exception as e:
+                logger.debug(f"Could not fetch MACD for {asset_pair}: {e}")
+
+            # --- Fetch BBANDS (Bollinger Bands) ---
+            try:
+                bbands_params = {
+                    'function': 'BBANDS',
+                    'symbol': symbol,
+                    'interval': 'daily',
+                    'time_period': 20,
+                    'series_type': 'close',
+                    'apikey': self.api_key
+                }
+                bbands_response = requests.get(
+                    self.BASE_URL, params=bbands_params, timeout=10
+                )
+                if bbands_response.status_code == 200:
+                    bbands_data = bbands_response.json()
+                    if 'Technical Analysis: BBANDS' in bbands_data:
+                        bbands_series = bbands_data['Technical Analysis: BBANDS']
+                        latest_bbands = list(bbands_series.values())[0]
+                        indicators['bbands_upper'] = float(latest_bbands.get('Real Upper Band', 0))
+                        indicators['bbands_middle'] = float(latest_bbands.get('Real Middle Band', 0))
+                        indicators['bbands_lower'] = float(latest_bbands.get('Real Lower Band', 0))
+            except Exception as e:
+                logger.debug(f"Could not fetch BBANDS for {asset_pair}: {e}")
             
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch technical indicators: %s", e)

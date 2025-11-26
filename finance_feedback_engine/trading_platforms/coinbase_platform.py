@@ -94,6 +94,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         """
         logger.info("Fetching account balances (futures + spot USD/USDC)")
         
+        # Assumption: The 'available_balance' from client.get_accounts() for spot USD/USDC
+        # does not include staked amounts. Staked assets are typically not considered
+        # 'available' for trading and thus are implicitly excluded from this calculation
+        # for funds usable in futures trading. If staked assets were included in 'available_balance',
+        # additional API calls or specific fields would be needed to differentiate them.
+        
         try:
             client = self._get_client()
             balances = {}
@@ -126,6 +132,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     # Use attribute access for Coinbase Account objects
                     currency = getattr(account, 'currency', '')
                     if currency in ['USD', 'USDC']:
+                        logger.debug("Inspecting spot account for %s: %s", currency, account)
                         available_balance = getattr(
                             account, 'available_balance', None
                         )
