@@ -56,7 +56,9 @@ class RealtimeDataProvider:
         while self._is_running:
             try:
                 data, _ = await self.ts.get_intraday(
-                    symbol=self.symbol, interval='1min', outputsize='full'
+                    data, _ = await self.ts.get_intraday(
+                        symbol=self.symbol, interval='1min', outputsize='compact'
+                    )
                 )
                 
                 # The Alpha Vantage API returns data in a descending order by time.
