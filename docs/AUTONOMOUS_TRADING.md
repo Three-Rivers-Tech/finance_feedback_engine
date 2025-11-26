@@ -80,7 +80,7 @@ The new file will be created with a placeholder class structure. This will serve
 
 import asyncio
 import logging
-from finance_feedback_engine.agent.config import AgentConfig
+from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemory
@@ -95,7 +95,7 @@ class TradingLoopAgent:
 
     def __init__(
         self,
-        config: AgentConfig,
+        config: TradingAgentConfig,
         decision_engine: DecisionEngine,
         trade_monitor: TradeMonitor,
         portfolio_memory: PortfolioMemory,
@@ -212,35 +212,58 @@ from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 
 # ... existing CLI commands
 
-@cli.command()
-@click.option(
-    "--config",
-    "config_path",
-    type=click.Path(exists=True),
-    default="config/config.local.yaml",
-    help="Path to the configuration file.",
-)
-def run_agent(config_path):
+@cli.command(name="run-agent")
+@click.pass_context
+def run_agent(ctx):
     """
     Starts the autonomous trading agent.
     """
-    # Load configuration
-    # Initialize services (DecisionEngine, TradeMonitor, etc.)
-
-    if config.agent.autonomous.enabled:
-        # Initialize TradingLoopAgent
-        # Start the agent in an asyncio event loop
+    import asyncio
+    
+    console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
+    
+    try:
+        config = ctx.obj['config']
         
-        loop = asyncio.get_event_loop()
-        try:
-            loop.run_until_complete(agent.run())
-        except KeyboardInterrupt:
-            agent.stop()
-            loop.run_until_complete(loop.shutdown_asyncgens())
-        finally:
-            loop.close()
-    else:
-        print("Autonomous agent is not enabled in the configuration.")
+        # We need the full engine to get the initialized components
+        engine = FinanceFeedbackEngine(config)
+        
+        agent_config_data = config.get('agent', {})
+        agent_config = TradingAgentConfig(**agent_config_data)
+        
+        if not agent_config.autonomous.enabled:
+            console.print("[yellow]Autonomous agent is not enabled in the configuration.[/yellow]")
+            console.print("[dim]Enable it by setting `agent.autonomous.enabled: true` in your config file.[/dim]")
+            return
+        
+        console.print("[green]✓ Agent configuration loaded.[/green]")
+        
+        trade_monitor = TradeMonitor(platform=engine.trading_platform)
+        engine.enable_monitoring_integration(trade_monitor=trade_monitor)
+        
+        # Create and start the agent
+        agent = TradingLoopAgent(
+            config=agent_config,
+            decision_engine=engine.decision_engine,
+            trade_monitor=engine.trade_monitor,
+            portfolio_memory=engine.memory_engine,
+            trading_platform=engine.trading_platform,
+        )
+        
+        console.print("[green]✓ Autonomous agent initialized.[/green]")
+        
+        if config.agent.autonomous.enabled:
+            # Start the agent in an asyncio event loop
+            loop = asyncio.get_event_loop()
+            try:
+                loop.run_until_complete(agent.run())
+            except KeyboardInterrupt:
+                agent.stop()
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+        else:
+            print("Autonomous agent is not enabled in the configuration.")
 
 ```
 
@@ -252,4 +275,4 @@ The user will be able to start the agent by running the following command:
 python main.py run-agent
 ```
 
-If `agent.autonomous.enabled` is `true` in the configuration, this will start the `TradingLoopAgent`. Otherwise, it will print a message and exit.
+The agent will use the configuration loaded by the main CLI (via `--config` option if specified, or tiered loading otherwise) and access it through the Click context (`ctx.obj['config']`). If `agent.autonomous.enabled` is `true` in the configuration, this will start the `TradingLoopAgent`. Otherwise, it will print a message and exit.
