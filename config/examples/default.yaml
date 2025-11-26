@@ -28,9 +28,13 @@ decision_engine:
   # 'codex' uses Codex CLI
   # 'ensemble' uses all providers with weighted voting
   ai_provider: "local"  # local | cli | codex | qwen | ensemble
-  # NOTE: If ai_provider is 'local', model_name should be an Ollama model (e.g., llama3.2:3b-instruct-fp16).
-  #       If ai_provider is 'cli' or 'codex', model_name should match the CLI/Copilot model name (see docs/AI_PROVIDERS.md).
-  #       Only the relevant fields are used for each provider; others are ignored.
+  # NOTE: If ai_provider is 'local', model_name should be an Ollama model
+  #       (e.g., llama3.2:3b-instruct-fp16). The system now requires a
+  #       secondary local model for robustness: `deepseek-r1:8b` will be
+  #       auto-downloaded if missing. Ensure you have ~10GB free for both.
+  #       If ai_provider is 'cli' or 'codex', model_name should match the
+  #       CLI/Copilot model name (see docs/AI_PROVIDERS.md). Only the
+  #       relevant fields are used for each provider; others are ignored.
   # Model name for local provider (Ollama)
   model_name: "llama3.2:3b-instruct-fp16"  # Default: auto-downloads on first use
   

@@ -50,6 +50,15 @@ def start_interactive_session(main_cli):
     ctx.obj['verbose'] = False
     # Mark this context as interactive so commands can prompt when needed
     ctx.obj['interactive'] = True
+    # Attempt to load tiered config so interactive commands have `ctx.obj['config']` available
+    try:
+        # Import at runtime to avoid circular import at module load
+        from finance_feedback_engine.cli.main import load_tiered_config
+        ctx.obj['config'] = load_tiered_config()
+    except Exception:
+        # Fall back to empty config but provide a helpful hint later when commands fail
+        ctx.obj['config'] = {}
+        console.print("[yellow]Note: Could not load configuration. Use 'config-editor' to create API keys and settings.[/yellow]")
 
     # Initial menu display
     _show_menu(main_cli)

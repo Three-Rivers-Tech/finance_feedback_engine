@@ -28,12 +28,12 @@ qwen auth
 ```
 
 **Requirements**:
-- Node.js v20 or higher
-- **Free Path**: OAuth authentication via qwen.ai account (one-time setup, 60 req/min, 2,000 req/day)
-- **Paid Alternative**: Configure OpenAI-compatible API providers with API keys (unlimited usage, costs depend on provider)
-
-**Usage**:
-```bash
+Requirements:
+- Ollama installed and running.
+- At least two Ollama models downloaded for robustness. The system
+  auto-downloads the primary model (`llama3.2:3b-instruct-fp16`) and
+  enforces a required secondary model `deepseek-r1:8b`. You can
+  pre-download manually with `ollama pull <model>` if preferred.
 # Via CLI flag (uses configured authentication)
 python main.py analyze BTCUSD --provider qwen
 
