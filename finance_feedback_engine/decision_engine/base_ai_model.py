@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import logging
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,6 @@ class DummyAIModel(BaseAIModel):
             return {"action": "HOLD", "confidence": 0.5, "reasoning": "No features provided."}
         
         actions = ["BUY", "SELL", "HOLD"]
-        import random
         action = random.choice(actions)
         confidence = round(random.uniform(0.5, 0.95), 2)
         reasoning = f"Dummy model recommends {action} with {confidence*100}% confidence based on arbitrary logic."

@@ -115,11 +115,11 @@ class TimeSeriesDataStore:
                 # reading existing data, merging, and then writing back.
                 # Parquet append is not straightforward without libraries like pyarrow's dataset API.
                 # Best practice is to read, merge, then write to avoid data loss.
-                logger.warning(f"Appending to existing Parquet file {file_path} is complex. "
-                               f"Current stub will overwrite if append=True, which might lose data. "
-                               f"Implement proper merge logic for production.")
                 existing_df = self.load_data(asset_pair, df.index.min(), df.index.max())
-                df = pd.concat([existing_df, df[~df.index.isin(existing_df.index)]]).sort_index()
+                # Upsert: update existing timestamps, append new ones
+                combined = pd.concat([existing_df, df])
+                df = combined[~combined.index.duplicated(keep='last')].sort_index()
+                logger.info(f"Merging with existing data: {len(existing_df)} existing + {len(df) - len(existing_df)} new/updated records")
 
             df.to_parquet(file_path, index=True)
             logger.info(f"Saved {len(df)} records for {asset_pair} to {file_path} (Parquet).")
