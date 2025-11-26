@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Dict, Any, Optional, Union
 import logging
+import numpy as np
 
 # TODO: Import FinancialDataValidator from utils
 # from finance_feedback_engine.utils.financial_data_validator import FinancialDataValidator

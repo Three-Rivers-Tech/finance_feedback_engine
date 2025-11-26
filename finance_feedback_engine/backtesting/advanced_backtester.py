@@ -1,6 +1,6 @@
 import pandas as pd
-from datetime import datetime
-from typing import Dict, Any, List, Callable, Optional
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Callable, Optional, Union, Tuple
 import logging
 import numpy as np
 
@@ -170,6 +170,7 @@ class AdvancedBacktester:
         # 2. Initialize portfolio
         current_balance = self.initial_balance
         portfolio_units = 0.0 # For the base asset (e.g., BTC units)
+        total_fees = 0.0
         trades_history: List[Dict[str, Any]] = []
         
         # TODO: Implement full portfolio tracking for multiple assets, not just base asset units.
@@ -196,6 +197,7 @@ class AdvancedBacktester:
                     )
                     current_balance = new_balance
                     portfolio_units += units
+                    total_fees += fee
                     trades_history.append(trade_details)
                 else:
                     logger.info(f"Skipping BUY due to insufficient balance at {timestamp}")
@@ -210,6 +212,7 @@ class AdvancedBacktester:
                     )
                     current_balance = new_balance
                     portfolio_units += units # units will be negative for sell
+                    total_fees += fee
                     trades_history.append(trade_details)
                 else:
                     logger.info(f"Skipping SELL due to no units to sell at {timestamp}")
@@ -221,8 +224,10 @@ class AdvancedBacktester:
         final_value = current_balance
         if portfolio_units > 0:
             # Liquidate remaining position at the last close price
-            final_value += portfolio_units * data['close'].iloc[-1]
-            # TODO: Account for fees on this final liquidation.
+            trade_value = portfolio_units * data['close'].iloc[-1]
+            fee = (trade_value * self.fee_percentage) + self.commission_per_trade
+            final_value += trade_value - fee
+            total_fees += fee
 
         net_return_pct = ((final_value - self.initial_balance) / self.initial_balance) * 100 if self.initial_balance != 0 else 0
 
@@ -234,6 +239,7 @@ class AdvancedBacktester:
             "final_value": final_value,
             "net_return_pct": net_return_pct,
             "total_trades": len(trades_history),
+            "total_fees": total_fees,
             "win_rate": 0.0, # TODO: Calculate actual win rate from trades_history
             "max_drawdown_pct": 0.0 # TODO: Calculate max drawdown
             # TODO: Add Sharpe Ratio, Sortino Ratio, Calmar Ratio, etc.
