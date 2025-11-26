@@ -1,0 +1,65 @@
+alpha_vantage_api_key: EXAMPLE_API_KEY_ABC123XYZ456
+trading_platform: unified
+platform_credentials:
+  api_key: organizations/97bc271d-9497-424e-9a75-a7a850037063/apiKeys/aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
+  api_secret: -----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIKBrHhl5N3bmyd5J9r9TFrd8ySgDezXgKj8GDYYzkvRjoAoGCCqGSM49\nAwEHoUQDQgAEwkepbmvzTwxBBFBbp5uqZL5VcQ2QsrDk/vL68WKshVbZL9v01H8V\nHivifD80tC+SSkajuOQ6zA0LS4AKBKsy+w==\n-----END EC PRIVATE KEY-----\n
+  use_sandbox: false
+decision_engine:
+  ai_provider: ensemble
+  model_name: llama3.2:3b-instruct-fp16
+  decision_threshold: 0.7
+  gemini:
+    api_key: REPLACE_WITH_GEMINI_KEY
+    model_name: gemini-pro
+ensemble:
+  enabled_providers:
+  - local
+  - copilot
+  - qwen
+  provider_weights:
+    local: 0.5
+    copilot: 0.3
+    qwen: 0.2
+  voting_strategy: weighted
+  agreement_threshold: 0.6
+  adaptive_learning: true
+  learning_rate: 0.1
+monitoring:
+  enable_context_integration: true
+  include_sentiment: true
+  include_macro: true
+persistence:
+  storage_path: data/decisions
+  max_decisions: 1000
+  cleanup_days: 30
+portfolio_memory:
+  enabled: true
+  max_memory_size: 1000
+  learning_rate: 0.1
+  context_window: 20
+backtesting:
+  enabled: false
+  use_real_data: false
+  initial_balance: 10000.0
+  fee_percentage: 0.1
+  strategy:
+    name: sma_crossover
+    short_window: 5
+    long_window: 20
+  rl:
+    learning_rate: 0.01
+    discount_factor: 0.95
+    exploration_rate: 0.1
+autonomous_execution: false
+approval_policy: always
+max_daily_trades: 5
+strategic_goal: balanced
+risk_appetite: medium
+logging:
+  level: INFO
+features:
+  enable_live_monitoring: true
+  enable_portfolio_memory: true
+  signal_only_mode: false
+mock:
+  use_mock_data_on_failure: true

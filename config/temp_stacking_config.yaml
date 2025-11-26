@@ -1,0 +1,19 @@
+# Temporary config for testing the stacking ensemble
+alpha_vantage_api_key: "DUMMY_KEY"
+
+persistence:
+  storage_path: "data/decisions"
+
+decision_engine:
+  ai_provider: "ensemble"
+  model_name: "ensemble-v1-stacking"
+  ensemble:
+    enabled_providers:
+      - "local"
+      - "cli"
+      - "codex"
+    voting_strategy: "stacking"
+    provider_weights:
+      local: 0.4
+      cli: 0.3
+      codex: 0.3
