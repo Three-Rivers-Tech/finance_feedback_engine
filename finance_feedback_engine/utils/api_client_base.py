@@ -6,10 +6,14 @@ import json
 from typing import Dict, Any, Optional
 from requests.exceptions import RequestException, HTTPError, Timeout
 
-# TODO: Consider using a dedicated retry library like 'tenacity' for more advanced retry logic.
-# from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+
 
 logger = logging.getLogger(__name__)
+
+def log_before_retry(retry_state):
+    """Log before retrying."""
+    logger.info(f"Retrying {retry_state.fn.__name__} in {retry_state.next_action.sleep:.2f} seconds...")
 
 class APIClientBase(ABC):
     """
@@ -19,6 +23,7 @@ class APIClientBase(ABC):
     This class serves as a foundation for building robust and resilient API
     integrations, particularly important for interacting with external financial
     data providers or trading platforms.
+    
 
     Implementation Notes:
     - **Abstracted HTTP Operations:** Defines abstract methods for HTTP verbs
@@ -89,12 +94,18 @@ class APIClientBase(ABC):
         if headers:
             request_headers.update(headers)
 
-        for attempt in range(retries):
+        @retry(
+            stop=stop_after_attempt(retries),
+            wait=wait_exponential(multiplier=backoff_factor),
+            retry=retry_if_exception_type((RequestException, HTTPError, Timeout)),
+            before_sleep=log_before_retry
+        )
+        def _send():
             try:
                 # TODO: Integrate with a rate limiter before sending request
                 # self.rate_limiter.wait()
 
-                logger.debug(f"Attempt {attempt + 1}/{retries}: {method} {url} with params={params}, data={data}, json={json_data}")
+                logger.debug(f"Sending {method} request to {url} with params={params}, data={data}, json={json_data}")
                 
                 response = requests.request(
                     method,
@@ -108,28 +119,22 @@ class APIClientBase(ABC):
                 response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx) 
                 return response.json()
             
-            except Timeout as e:
-                logger.warning(f"Request to {url} timed out on attempt {attempt + 1}: {e}")
             except HTTPError as e:
                 # Distinguish between client errors (4xx) and server errors (5xx)
                 if 400 <= e.response.status_code < 500:
                     logger.error(f"Client error ({e.response.status_code}) for {url}: {e.response.text}")
                     raise
                 else: # 5xx server errors, retry
-                    logger.warning(f"Server error ({e.response.status_code}) for {url} on attempt {attempt + 1}: {e.response.text}")
-            except RequestException as e:
-                logger.warning(f"Network or request error for {url} on attempt {attempt + 1}: {e}")
-            except json.JSONDecodeError:
-                logger.error(f"Failed to decode JSON response from {url}. Response: {response.text}")
+                    logger.warning(f"Server error ({e.response.status_code}) for {url}: {e.response.text}")
+                    raise
+            except (RequestException, Timeout) as e:
+                logger.warning(f"Network or request error for {url}: {e}")
                 raise
-
-            if attempt < retries - 1:
-                sleep_time = backoff_factor * (2 ** attempt)
-                logger.info(f"Retrying {url} in {sleep_time:.2f} seconds...")
-                time.sleep(sleep_time)
-            
-        logger.error(f"Failed to {method} {url} after {retries} attempts.")
-        raise RequestException(f"Max retries exceeded for {url}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode JSON response from {url}. Response: {e.doc}")
+                raise
+        
+        return _send()
 
     # Concrete API clients will implement methods like get_market_data, place_order, etc.
     # using this _send_request method.
