@@ -8,8 +8,7 @@ from typing import Dict, Any, Callable, Optional
 from alpha_vantage.async_support.timeseries import TimeSeries
 
 from finance_feedback_engine.utils.financial_data_validator import FinancialDataValidator
-# TODO: Import a TimeSeriesDataStore for persistence
-# from finance_feedback_engine.persistence.timeseries_data_store import TimeSeriesDataStore
+from finance_feedback_engine.persistence.timeseries_data_store import TimeSeriesDataStore
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +49,7 @@ class RealtimeDataProvider:
         self._task: Optional[asyncio.Task] = None
         self.ts = TimeSeries(key=self.api_key, output_format='pandas')
         self.validator = FinancialDataValidator()
+        self.data_store = TimeSeriesDataStore()
 
     async def _listen_for_data(self):
         """Polls Alpha Vantage for new data."""
@@ -73,6 +73,7 @@ class RealtimeDataProvider:
                     logger.warning(f"Invalid data received: {errors} - Data: {latest_data}")
                 else:
                     self.data_handler(latest_data)
+                    self.data_store.save_data(self.symbol, latest_data)
 
             except Exception as e:
                 logger.exception(f"Unexpected error while polling for data: {e}")
