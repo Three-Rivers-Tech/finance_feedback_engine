@@ -9,6 +9,9 @@ class RateLimiter:
     Tokens are refilled at a specified rate (tokens_per_second). Each request
     consumes one token. If no tokens are available, the caller waits until
     a token becomes available.
+
+    Note: Synchronous and asynchronous methods should not be mixed on the same instance
+    to avoid potential deadlocks or inconsistent behavior.
     """
     def __init__(self, tokens_per_second: float, max_tokens: int):
         if tokens_per_second <= 0 or max_tokens <= 0:
@@ -18,8 +21,7 @@ class RateLimiter:
         self.max_tokens = max_tokens
         self.tokens = max_tokens
         self.last_refill_time = time.monotonic()
-        self._lock = threading.Lock() # For synchronous access
-        self._async_lock = asyncio.Lock() # For asynchronous access
+        self._lock = threading.Lock()  # Shared lock for both sync and async
 
     def _refill_tokens(self):
         """Refills tokens based on the elapsed time."""
@@ -48,11 +50,13 @@ class RateLimiter:
         Asynchronously waits until a token is available, then consumes one.
         Suitable for asynchronous operations.
         """
-        async with self._async_lock:
-            self._refill_tokens() # Refill is synchronous as it modifies shared state
+        with self._lock:
+            self._refill_tokens()
             while self.tokens < 1:
                 sleep_time = (1 - self.tokens) / self.tokens_per_second
+                self._lock.release()
                 await asyncio.sleep(sleep_time)
+                self._lock.acquire()
                 self._refill_tokens()
             self.tokens -= 1
 

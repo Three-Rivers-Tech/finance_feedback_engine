@@ -6,6 +6,8 @@ import json
 from typing import Dict, Any, Optional
 from requests.exceptions import RequestException, HTTPError, Timeout
 
+import aiohttp # Import for asynchronous operations
+
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 
@@ -43,8 +45,6 @@ class APIClientBase(ABC):
       handle their specific authentication flows (e.g., OAuth, HMAC, JWT).
     - **Advanced Rate Limiting:** Implement token bucket or leaky bucket algorithms
       for more sophisticated rate limiting, potentially across multiple clients.
-    - **Asynchronous Support:** Provide an asynchronous version of this base class
-      (e.g., `AsyncAPIClientBase`) using `aiohttp` for non-blocking operations.
     - **Circuit Breaker Pattern:** Integrate a circuit breaker (e.g., `pybreaker` library) 
       to prevent cascading failures when an external API is experiencing issues.
     - **Structured Logging:** Ensure detailed logging of requests, responses, and errors
@@ -69,6 +69,25 @@ class APIClientBase(ABC):
         """
         Abstract method to generate authentication headers for API requests.
         Concrete classes must implement this based on their API's auth scheme.
+        """
+        pass
+
+    @abstractmethod
+    async def _send_request_async(
+        self,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        data: Optional[Dict] = None,
+        json_data: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+        retries: int = DEFAULT_RETRIES,
+        backoff_factor: float = DEFAULT_BACKOFF_FACTOR,
+        timeout: int = DEFAULT_TIMEOUT
+    ) -> Dict[str, Any]:
+        """
+        Abstract method for sending an asynchronous HTTP request to the API with
+        retry logic and error handling. Concrete classes must implement this.
         """
         pass
 
@@ -143,29 +162,7 @@ class APIClientBase(ABC):
     #     endpoint = f"/market/{symbol}/ticker"
     #     return self._send_request("GET", endpoint)
 
-# Example Usage (for demonstration within this stub)
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
 
-    class DummyAPIClient(APIClientBase):
-        """A dummy API client for testing the base class functionality."""
-        def _get_auth_headers(self) -> Dict[str, str]:
-            if self.api_key:
-                return {"X-API-KEY": self.api_key}
-            return {}
-
-        def get_dummy_data(self, item_id: str) -> Dict[str, Any]:
-            logger.info(f"Fetching dummy data for {item_id}")
-            # Simulate a real API call using a mock URL
-            # For this example, we'll hit a real endpoint that might return 404
-            # or use httpbin.org for testing
-            mock_endpoint = f"/anything/{item_id}"
-            return self._send_request("GET", mock_endpoint)
-
-        def post_dummy_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
-            logger.info(f"Posting dummy data: {data}")
-            mock_endpoint = "/post"
-            return self._send_request("POST", mock_endpoint, json_data=data)
 
 
     # Test successful request
