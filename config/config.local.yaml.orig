@@ -1,9 +1,9 @@
-alpha_vantage_api_key: X74XIZNU1F9YW72O
+alpha_vantage_api_key: ${ALPHA_VANTAGE_API_KEY}
 trading_platform: unified
 platform_credentials:
-  api_key: organizations/97bc271d-9497-424e-9a75-a7a850037063/apiKeys/1de4cd48-11aa-4043-809b-99eaae3ca001
-  api_secret: -----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIKBrHhl5N3bmyd5J9r9TFrd8ySgDezXgKj8GDYYzkvRjoAoGCCqGSM49\nAwEHoUQDQgAEwkepbmvzTwxBBFBbp5uqZL5VcQ2QsrDk/vL68WKshVbZL9v01H8V\nHivifD80tC+SSkajuOQ6zA0LS4AKBKsy+w==\n-----END EC PRIVATE KEY-----\n
-  use_sandbox: false
+  api_key: ${PLATFORM_API_KEY}
+  api_secret: ${PLATFORM_API_SECRET}
+  use_sandbox: true
 decision_engine:
   ai_provider: ensemble
   model_name: llama3.2:3b-instruct-fp16

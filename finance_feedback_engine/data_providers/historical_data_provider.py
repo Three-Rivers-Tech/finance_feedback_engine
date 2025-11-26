@@ -1,6 +1,7 @@
 import pandas as pd
 from datetime import datetime
-from typing import Dict, Any, Optional
+from datetime import timezone
+from typing import Dict, Any, Optional, Union
 import logging
 
 # TODO: Import FinancialDataValidator from utils

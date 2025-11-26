@@ -6,8 +6,12 @@ import uuid
 from datetime import datetime
 import subprocess
 import concurrent.futures
+import time
 
 logger = logging.getLogger(__name__)
+
+MAX_WORKERS = 4
+ENSEMBLE_TIMEOUT = 30
 
 
 class DecisionEngine:
@@ -1037,21 +1041,37 @@ Format response as a structured technical analysis demonstration.
         provider_decisions = {}
         failed_providers = []
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(enabled_providers)
-        ) as executor:
+        max_workers = min(len(enabled_providers), MAX_WORKERS)
+        timeout = self.config.get('ensemble_timeout', ENSEMBLE_TIMEOUT)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_provider = {
-                executor.submit(
-                    self._query_single_provider, provider, prompt
-                ): provider
+                executor.submit(self._query_single_provider, provider, prompt): provider
                 for provider in enabled_providers
             }
-            for future in concurrent.futures.as_completed(future_to_provider):
-                provider, decision = future.result()
-                if decision:
-                    provider_decisions[provider] = decision
-                else:
-                    failed_providers.append(provider)
+            start_time = time.time()
+            while future_to_provider and (time.time() - start_time) < timeout:
+                done, not_done = concurrent.futures.wait(
+                    future_to_provider.keys(), timeout=1.0, return_when=concurrent.futures.FIRST_COMPLETED
+                )
+                for future in done:
+                    provider = future_to_provider[future]
+                    try:
+                        provider, decision = future.result()
+                        if decision:
+                            provider_decisions[provider] = decision
+                        else:
+                            failed_providers.append(provider)
+                    except Exception as e:
+                        logger.error(f"Provider {provider} failed: {e}")
+                        failed_providers.append(provider)
+                    del future_to_provider[future]
+            # Cancel remaining futures
+            for future in list(future_to_provider.keys()):
+                future.cancel()
+                provider = future_to_provider[future]
+                failed_providers.append(provider)
+                logger.warning(f"Provider {provider} timed out")
 
         # Handle complete failure case
         if not provider_decisions:

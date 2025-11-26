@@ -340,7 +340,9 @@ class AlphaVantageProvider:
                     'apikey': self.api_key
                 }
                 rsi_response = requests.get(
-                    self.BASE_URL, params=rsi_params, timeout=10
+                    self.BASE_URL,
+                    params=rsi_params,
+                    timeout=self.timeout_market_data
                 )
                 if rsi_response.status_code == 200:
                     rsi_data = rsi_response.json()
@@ -369,7 +371,9 @@ class AlphaVantageProvider:
                     'apikey': self.api_key
                 }
                 macd_response = requests.get(
-                    self.BASE_URL, params=macd_params, timeout=10
+                    self.BASE_URL,
+                    params=macd_params,
+                    timeout=self.timeout_market_data
                 )
                 if macd_response.status_code == 200:
                     macd_data = macd_response.json()
@@ -393,7 +397,9 @@ class AlphaVantageProvider:
                     'apikey': self.api_key
                 }
                 bbands_response = requests.get(
-                    self.BASE_URL, params=bbands_params, timeout=10
+                    self.BASE_URL,
+                    params=bbands_params,
+                    timeout=self.timeout_market_data
                 )
                 if bbands_response.status_code == 200:
                     bbands_data = bbands_response.json()

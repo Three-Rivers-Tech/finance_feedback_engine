@@ -101,7 +101,18 @@ def run_training():
         return
         
     # Split data for evaluation
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+    except ValueError as e:
+        logging.warning(
+            "Stratified split failed due to insufficient samples per class: "
+            f"{e}. Falling back to non-stratified split."
+        )
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
     
     # Scale the features
     scaler = StandardScaler()
