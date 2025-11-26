@@ -62,7 +62,7 @@ class MonitoringContextProvider:
         context = {
             'timestamp': datetime.utcnow().isoformat(),
             'has_monitoring_data': False,
-            'active_positions': [],
+            'active_positions': {'futures': []},
             'active_trades_count': 0,
             'recent_performance': {},
             'risk_metrics': {},

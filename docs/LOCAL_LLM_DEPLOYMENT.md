@@ -59,6 +59,8 @@ The system will:
 1. **Detect if Ollama is missing**
 2. **Automatically download and install Ollama** (~50MB installer)
 3. **Auto-download the model** (~2GB, one-time)
+4. **Auto-download a required secondary model** (`deepseek-r1:8b`) for
+  robustness. Expect ~8-10GB additional disk usage for both models.
 4. **Run your analysis**
 
 **First-time setup output:**
@@ -128,9 +130,10 @@ INFO - Local LLM provider initialized successfully
 # Check available models
 ollama list
 
-# Should show:
+# Should show both primary and secondary models, e.g.:
 # NAME                               ID              SIZE
 # llama3.2:3b-instruct-fp16         abc123          2.0 GB
+# deepseek-r1:8b                     def456          6.0 GB
 ```
 
 ## Usage
