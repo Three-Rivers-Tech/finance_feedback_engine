@@ -713,7 +713,7 @@ class EnsembleDecisionManager:
                 "Meta-learner not initialized for stacking strategy. "
                 "Falling back to weighted voting."
             )
-            return self._weighted_voting(providers, actions, confidences, reasonings, amounts)
+            return self._weighted_voting(providers, actions, confidences, reasonings, amounts, None)
 
         # Generate meta-features
         meta_features = self._generate_meta_features(
@@ -765,6 +765,14 @@ class EnsembleDecisionManager:
         from collections import Counter
         
         num_providers = len(actions)
+        if num_providers == 0:
+            return {
+                'buy_ratio': 0.0, 'sell_ratio': 0.0, 'hold_ratio': 0.0,
+                'avg_confidence': 0.0, 'confidence_std': 0.0,
+                'min_confidence': 0, 'max_confidence': 0,
+                'avg_amount': 0.0, 'amount_std': 0.0,
+                'num_providers': 0, 'action_diversity': 0
+            }
         action_counts = Counter(actions)
         
         return {

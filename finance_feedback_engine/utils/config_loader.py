@@ -58,8 +58,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
         elif isinstance(data, list):
             return [resolve_env_vars(elem) for elem in data]
         elif isinstance(data, str):
-            match = env_var_pattern.match(data)
-            if match:
+            def replace_env_var(match):
                 env_var_name = match.group(1)
                 env_var_value = os.getenv(env_var_name)
                 if env_var_value is None:
@@ -68,7 +67,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
                         f"'{config_path}' is not set. Please set it."
                     )
                 return env_var_value
-            return data
+            return env_var_pattern.sub(replace_env_var, data)
         return data
 
     return resolve_env_vars(config)

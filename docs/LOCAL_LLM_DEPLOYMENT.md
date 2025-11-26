@@ -132,8 +132,8 @@ ollama list
 
 # Should show both primary and secondary models, e.g.:
 # NAME                               ID              SIZE
-# llama3.2:3b-instruct-fp16         abc123          2.0 GB
-# deepseek-r1:8b                     def456          6.0 GB
+# llama3.2:3b-instruct-fp16         abc123          ~6.4 GB
+# deepseek-r1:8b                     def456          ~5.2 GB
 ```
 
 ## Usage
