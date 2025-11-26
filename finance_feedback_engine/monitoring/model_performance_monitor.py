@@ -1,6 +1,6 @@
 import pandas as pd
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Tuple, Optional
 import logging
 import json
 import os
@@ -206,7 +206,11 @@ class ModelPerformanceMonitor:
         current_win_rate = current_performance.get("win_rate", 0)
         baseline_win_rate = baseline_performance.get("win_rate", 0)
 
-        if (baseline_win_rate - current_win_rate) / baseline_win_rate > (1 - self.drift_detection_threshold):
+        if baseline_win_rate == 0:
+            drift_results["has_drift"] = False
+            drift_results["drift_score"] = None
+            drift_results["metrics_affected"].append({"metric": "win_rate", "change": "Cannot compute change: baseline win rate is zero"})
+        elif (baseline_win_rate - current_win_rate) / baseline_win_rate > (1 - self.drift_detection_threshold):
             drift_results["has_drift"] = True
             drift_results["drift_score"] = (baseline_win_rate - current_win_rate) / baseline_win_rate
             drift_results["metrics_affected"].append({"metric": "win_rate", "change": f"Dropped from {baseline_win_rate:.2f}% to {current_win_rate:.2f}%"})
