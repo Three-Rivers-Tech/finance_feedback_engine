@@ -67,3 +67,29 @@ backtesting:
     learning_rate: 0.1      # Reward update speed (0 < lr ≤ 1)
     weight_decay: 0.0       # Optional multiplicative decay per step
 
+# Agent Configuration
+agent:
+  # --- Execution Controls ---
+  autonomous_execution: false
+  approval_policy: "on_new_asset"
+  max_daily_trades: 5
+  # Kill-switch thresholds (percentage of portfolio P/L)
+  kill_switch_gain_pct: 5.0
+  kill_switch_loss_pct: 2.0
+
+  # --- Autonomous Agent Settings ---
+  autonomous:
+    enabled: false
+    profit_target: 0.05
+    stop_loss: 0.02
+
+  # --- Strategic Goals ---
+  strategic_goal: "balanced"
+  risk_appetite: "medium"
+  max_drawdown_percent: 15.0
+
+  # --- Data & Analysis Controls ---
+  asset_pairs: ["BTCUSD", "ETHUSD"]
+  analysis_frequency_seconds: 300
+
+

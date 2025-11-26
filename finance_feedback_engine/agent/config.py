@@ -1,5 +1,11 @@
 from typing import List, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+class AutonomousAgentConfig(BaseModel):
+    """Configuration for the autonomous trading agent."""
+    enabled: bool = False
+    profit_target: float = 0.05  # 5%
+    stop_loss: float = 0.02  # 2%
 
 class TradingAgentConfig(BaseModel):
     """
@@ -15,6 +21,7 @@ class TradingAgentConfig(BaseModel):
     # or losses <= -kill_switch_loss_pct
     kill_switch_gain_pct: float = 5.0
     kill_switch_loss_pct: float = 2.0
+    autonomous: AutonomousAgentConfig = Field(default_factory=AutonomousAgentConfig)
 
     # --- Strategic Goals ---
     strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"

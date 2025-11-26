@@ -1757,5 +1757,68 @@ def retrain_meta_learner(ctx, force):
         raise click.Abort()
 
 
+@cli.command(name="run-agent")
+@click.pass_context
+def run_agent(ctx):
+    """Starts the autonomous trading agent."""
+    import asyncio
+    from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+    from finance_feedback_engine.agent.config import TradingAgentConfig
+    from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+
+    console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
+
+    try:
+        config = ctx.obj['config']
+        
+        # We need the full engine to get the initialized components
+        engine = FinanceFeedbackEngine(config)
+
+        agent_config_data = config.get('agent', {})
+        agent_config = TradingAgentConfig(**agent_config_data)
+
+        if not agent_config.autonomous.enabled:
+            console.print("[yellow]Autonomous agent is not enabled in the configuration.[/yellow]")
+            console.print("[dim]Enable it by setting `agent.autonomous.enabled: true` in your config file.[/dim]")
+            return
+
+        console.print("[green]✓ Agent configuration loaded.[/green]")
+        
+        trade_monitor = TradeMonitor(platform=engine.trading_platform)
+        engine.enable_monitoring_integration(trade_monitor=trade_monitor)
+
+
+        # Create and start the agent
+        agent = TradingLoopAgent(
+            config=agent_config,
+            decision_engine=engine.decision_engine,
+            trade_monitor=engine.trade_monitor,
+            portfolio_memory=engine.memory_engine,
+            trading_platform=engine.trading_platform,
+        )
+
+        console.print("[green]✓ Autonomous agent initialized.[/green]")
+        console.print("[yellow]Press Ctrl+C to stop the agent.[/yellow]")
+
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_until_complete(agent.run())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]")
+            agent.stop()
+            # Allow time for cleanup
+            loop.run_until_complete(asyncio.sleep(1))
+        finally:
+            loop.close()
+            console.print("[bold green]✓ Agent stopped.[/bold green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
 if __name__ == '__main__':
     cli()
