@@ -83,8 +83,10 @@ class LocalLLMProvider:
                     "Successfully downloaded secondary model: %s",
                     self.SECONDARY_MODEL,
                 )
+        except RuntimeError:
+            raise  # Re-raise without wrapping
         except Exception as e:
-            raise RuntimeError(f"Failed to ensure secondary model: {e}")
+            raise RuntimeError(f"Failed to ensure secondary model: {e}") from e
         
         logger.info("Local LLM provider initialized successfully")
 

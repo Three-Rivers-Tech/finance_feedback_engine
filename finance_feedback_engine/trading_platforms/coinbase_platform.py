@@ -132,10 +132,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     # Use attribute access for Coinbase Account objects
                     currency = getattr(account, 'currency', '')
                     if currency in ['USD', 'USDC']:
-                        logger.debug("Inspecting spot account for %s: %s", currency, account)
-                        available_balance = getattr(
-                            account, 'available_balance', None
-                        )
+                        account_id = getattr(account, 'id', '')
+                        truncated_id = account_id[-4:] if account_id else 'N/A'
+                        available_balance = getattr(account, 'available_balance', None)
+                        available_balance_value = getattr(available_balance, 'value', 'N/A') if available_balance else 'N/A'
+                        logger.debug("Inspecting spot account for %s: id=...%s, available_balance=%s", currency, truncated_id, available_balance_value)
                         if available_balance:
                             balance_value = float(
                                 getattr(available_balance, 'value', 0)
