@@ -75,19 +75,43 @@ class DecisionEngine:
         Initialize the decision engine.
 
         Args:
-            config: Configuration dictionary containing:
-                - ai_provider: 'local', 'cli', 'codex', or 'ensemble'
-                - model_name: Name/path of the model to use
-                - prompt_template: Custom prompt template (optional)
-                - decision_threshold: Confidence threshold for decisions
+            config: Full configuration dictionary containing:
+                - decision_engine.ai_provider: 'local', 'cli', 'codex', or 'ensemble'
+                - decision_engine.model_name: Name/path of the model to use
+                - decision_engine.prompt_template: Custom prompt template (optional)
+                - decision_engine.decision_threshold: Confidence threshold for decisions
+                - decision_engine.local_models: List of preferred local models
+                - decision_engine.local_priority: Local model priority setting
                 - ensemble: Ensemble configuration (if provider='ensemble')
         """
         self.config = config
-        self.ai_provider = config.get('ai_provider', 'local')
-        self.model_name = config.get('model_name', 'default')
-        self.decision_threshold = config.get('decision_threshold', 0.7)
-        self.portfolio_stop_loss_percentage = config.get('portfolio_stop_loss_percentage', 2.0)
-        self.portfolio_take_profit_percentage = config.get('portfolio_take_profit_percentage', 5.0)
+        
+        # Extract decision engine configuration
+        decision_config = config.get('decision_engine', {})
+        self.ai_provider = decision_config.get('ai_provider', 'local')
+        self.model_name = decision_config.get('model_name', 'default')
+        self.decision_threshold = decision_config.get('decision_threshold', 0.7)
+        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 2.0)
+        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 5.0)
+        
+        # Local models and priority configuration
+        self.local_models = decision_config.get('local_models', [])
+        self.local_priority = decision_config.get('local_priority', False)
+        
+        # Validate local_models
+        if not isinstance(self.local_models, list):
+            raise ValueError(f"local_models must be a list, got {type(self.local_models)}")
+        
+        # Validate local_priority
+        valid_priority_values = (True, False, "soft")
+        if isinstance(self.local_priority, str):
+            if self.local_priority not in valid_priority_values:
+                raise ValueError(f"local_priority string must be 'soft', got '{self.local_priority}'")
+        elif not isinstance(self.local_priority, (bool, int, float)):
+            raise ValueError(f"local_priority must be bool, int, float, or 'soft', got {type(self.local_priority)}")
+        
+        logger.info(f"Local models configured: {self.local_models}")
+        logger.info(f"Local priority: {self.local_priority}")
         
         # Monitoring context provider (optional, set via set_monitoring_context)
         self.monitoring_provider = None
@@ -183,9 +207,12 @@ class DecisionEngine:
         try:
             from .local_llm_provider import LocalLLMProvider
             
-            # Create temporary config overriding the model_name
+            # Create temporary config overriding the model_name and including local settings
             temp_config = self.config.copy()
             temp_config['model_name'] = model_name
+            temp_config.setdefault('decision_engine', {})
+            temp_config['decision_engine']['local_models'] = self.local_models
+            temp_config['decision_engine']['local_priority'] = self.local_priority
             
             provider = LocalLLMProvider(temp_config)
             response = provider.query(prompt)
@@ -936,7 +963,12 @@ Format response as a structured technical analysis demonstration.
             )
             all_discovered_local_models = self._get_all_local_models()
 
-            if provider == 'local':
+            # Consult configured local_models first
+            if provider in self.local_models:
+                decision = self._specific_local_inference(prompt, provider)
+            elif provider == 'local' and self.local_models:
+                decision = self._specific_local_inference(prompt, self.local_models[0])
+            elif provider == 'local':
                 if 'local' in local_provider_map:
                     model_name = local_provider_map['local']
                     decision = self._specific_local_inference(prompt, model_name)
@@ -1051,25 +1083,31 @@ Format response as a structured technical analysis demonstration.
         failed_providers = []
 
         # Partition providers into local (GPU-bound) and remote groups
-        local_provider_map = (
-            self.config.get('local_providers')
-            if isinstance(self.config.get('local_providers'), dict)
-            else {}
-        )
-        all_discovered_local_models = self._get_all_local_models()
-        local_providers = [
-            p for p in enabled_providers
-            if p == 'local' or p in local_provider_map or p in all_discovered_local_models
-        ]
-        remote_providers = [p for p in enabled_providers if p not in local_providers]
+        local_candidates = []
+        if self.local_models:
+            for model in self.local_models:
+                if model in enabled_providers:
+                    local_candidates.append(model)
+        else:
+            local_provider_map = (
+                self.config.get('local_providers')
+                if isinstance(self.config.get('local_providers'), dict)
+                else {}
+            )
+            all_discovered_local_models = self._get_all_local_models()
+            local_candidates = [
+                p for p in enabled_providers
+                if p == 'local' or p in local_provider_map or p in all_discovered_local_models
+            ]
+        remote_candidates = [p for p in enabled_providers if p not in local_candidates]
 
         # Execute remote providers concurrently with per-task timeouts
-        if remote_providers:
-            logger.info(f"Querying {len(remote_providers)} remote providers concurrently")
+        if remote_candidates:
+            logger.info(f"Querying {len(remote_candidates)} remote providers concurrently")
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
                 future_to_provider = {
                     executor.submit(self._query_single_provider, provider, prompt): provider
-                    for provider in remote_providers
+                    for provider in remote_candidates
                 }
                 for future in as_completed(future_to_provider):
                     provider = future_to_provider[future]
@@ -1087,9 +1125,9 @@ Format response as a structured technical analysis demonstration.
                         failed_providers.append(provider)
 
         # Execute local providers sequentially to avoid GPU memory conflicts
-        if local_providers:
-            logger.info(f"Querying {len(local_providers)} local providers sequentially")
-            for provider in local_providers:
+        if local_candidates:
+            logger.info(f"Querying {len(local_candidates)} local providers sequentially")
+            for provider in local_candidates:
                 logger.info(f"Querying provider: {provider}")
                 provider_name, decision = self._query_single_provider(provider, prompt)
                 if decision:
@@ -1097,10 +1135,38 @@ Format response as a structured technical analysis demonstration.
                 else:
                     failed_providers.append(provider_name)
 
+        # Filter to valid provider decisions only
+        valid_provider_decisions = {}
+        for p, d in provider_decisions.items():
+            if self._is_valid_provider_response(d, p):
+                valid_provider_decisions[p] = d
+            else:
+                failed_providers.append(p)  # treat invalid as failed
+
+        # Compute adjusted_weights if local_priority
+        adjusted_weights = None
+        if self.local_priority:
+            boost_factor = 1.0
+            if isinstance(self.local_priority, (int, float)):
+                boost_factor = self.local_priority
+            elif self.local_priority == "soft":
+                boost_factor = 1.5
+            adjusted_weights = {}
+            for p in valid_provider_decisions:
+                base_weight = self.ensemble_manager.provider_weights.get(p, 1.0)
+                if p in local_candidates:
+                    adjusted_weights[p] = base_weight * boost_factor
+                else:
+                    adjusted_weights[p] = base_weight
+            # Normalize
+            total = sum(adjusted_weights.values())
+            if total > 0:
+                adjusted_weights = {p: w / total for p, w in adjusted_weights.items()}
+
         # Handle complete failure case
-        if not provider_decisions:
+        if not valid_provider_decisions:
             logger.error(
-                "All %d providers failed, using rule-based fallback",
+                "All %d providers failed or invalid, using rule-based fallback",
                 len(enabled_providers),
             )
             fallback = self._rule_based_decision(prompt)
@@ -1114,15 +1180,20 @@ Format response as a structured technical analysis demonstration.
         
         # Log success/failure summary
         logger.info(
-            f"Ensemble query complete: {len(provider_decisions)} succeeded, "
-            f"{len(failed_providers)} failed"
+            f"Ensemble query complete: {len(valid_provider_decisions)} valid, "
+            f"{len(failed_providers)} failed/invalid"
         )
         
         # Aggregate decisions with failure information
         aggregated = self.ensemble_manager.aggregate_decisions(
-            provider_decisions,
-            failed_providers=failed_providers
+            valid_provider_decisions,
+            failed_providers=failed_providers,
+            adjusted_weights=adjusted_weights
         )
+        
+        # Add local metadata
+        aggregated['ensemble_metadata']['local_models_used'] = [p for p in valid_provider_decisions if p in local_candidates]
+        aggregated['ensemble_metadata']['local_priority_applied'] = self.local_priority is not None
         
         return aggregated
 
