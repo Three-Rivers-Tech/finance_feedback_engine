@@ -2,14 +2,14 @@
   "decision_id": "test-learn",
   "asset_pair": "ETHUSD",
   "action": "BUY",
-  "entry_timestamp": "2025-11-27T16:42:07.929901",
-  "exit_timestamp": "2025-11-27T16:42:07.930202",
+  "entry_timestamp": "2025-11-27T16:47:33.661809",
+  "exit_timestamp": "2025-11-27T16:47:33.662079",
   "entry_price": 100.0,
   "exit_price": 110.0,
   "position_size": 1.0,
   "realized_pnl": 10.0,
   "pnl_percentage": 10.0,
-  "holding_period_hours": 8.361111111111111e-08,
+  "holding_period_hours": 7.5e-08,
   "ai_provider": "ensemble",
   "ensemble_providers": [
     "local"
