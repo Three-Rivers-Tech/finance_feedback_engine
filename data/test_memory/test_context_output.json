@@ -3,52 +3,52 @@
   "total_historical_trades": 50,
   "recent_trades_analyzed": 10,
   "recent_performance": {
-    "total_pnl": 208.94308954808878,
-    "win_rate": 70.0,
-    "winning_trades": 7,
-    "losing_trades": 3
+    "total_pnl": 176.00971943996842,
+    "win_rate": 60.0,
+    "winning_trades": 6,
+    "losing_trades": 4
   },
   "action_performance": {
     "BUY": {
       "win_rate": 80.0,
-      "total_pnl": 127.79044585713078,
+      "total_pnl": 308.32457039687586,
       "count": 5
     },
     "SELL": {
-      "win_rate": 60.0,
-      "total_pnl": 81.152643690958,
+      "win_rate": 40.0,
+      "total_pnl": -132.31485095690743,
       "count": 5
     }
   },
   "provider_performance": {
     "local": {
-      "win_rate": 70.0,
+      "win_rate": 60.0,
       "count": 10
     }
   },
   "current_streak": {
-    "type": "winning",
+    "type": "losing",
     "count": 1
   },
   "long_term_performance": {
     "has_data": true,
     "period_days": 90,
-    "period_start": "2025-08-29T16:36:09.976383",
-    "period_end": "2025-11-27T16:36:09.976578",
-    "realized_pnl": 670.1708703447989,
+    "period_start": "2025-08-29T16:42:08.017409",
+    "period_end": "2025-11-27T16:42:08.017518",
+    "realized_pnl": 746.2536912217189,
     "total_trades": 45,
     "win_rate": 62.22222222222222,
     "winning_trades": 28,
     "losing_trades": 17,
-    "avg_win": 52.9035209984039,
-    "avg_loss": -47.713395153559425,
-    "profit_factor": 1.8262211434705324,
-    "gross_profit": 1481.2985879553091,
-    "gross_loss": 811.1277176105102,
-    "best_trade": 96.9277501365458,
-    "worst_trade": -78.2864027667563,
-    "sharpe_ratio": 4.254600913951957,
-    "roi_percentage": 13.40341740689598,
+    "avg_win": 58.17011991809085,
+    "avg_loss": -51.912333322636755,
+    "profit_factor": 1.8456039854998587,
+    "gross_profit": 1628.7633577065437,
+    "gross_loss": 882.5096664848248,
+    "best_trade": 95.84316377769338,
+    "worst_trade": -75.81095870197635,
+    "sharpe_ratio": 4.467750598964207,
+    "roi_percentage": 14.92507382443438,
     "average_holding_hours": 24.0,
     "recent_momentum": "improving",
     "asset_pair": "all"

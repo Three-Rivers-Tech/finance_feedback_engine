@@ -137,3 +137,6 @@ def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
     outcome = engine.record_trade_outcome('test-learn', exit_price=110.0)
     assert stub.called is True
     assert stub.last_args[1] == 'BUY'
+    # performance metric should be numeric
+    perf = stub.last_args[2]
+    assert isinstance(perf, (int, float))

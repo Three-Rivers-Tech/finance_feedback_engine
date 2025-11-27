@@ -512,8 +512,45 @@ class FinanceFeedbackEngine:
                     opposite = {'BUY': 'SELL', 'SELL': 'BUY', 'LONG': 'SHORT', 'SHORT': 'LONG'}
                     actual_outcome = opposite.get(original_action, 'HOLD')
 
-                # Use P&L percentage as performance metric when available
-                perf_metric = outcome.pnl_percentage if getattr(outcome, 'pnl_percentage', None) is not None else (outcome.realized_pnl or 0.0)
+                # Use P&L percentage as base metric when available (prefer percent)
+                base_pct = None
+                try:
+                    base_pct = getattr(outcome, 'pnl_percentage', None)
+                except Exception:
+                    base_pct = None
+
+                if base_pct is None:
+                    # Compute percentage from realized pnl if possible
+                    try:
+                        denom = (outcome.entry_price or 0) * (outcome.position_size or decision.get('recommended_position_size', 0) or 1)
+                        base_pct = ((outcome.realized_pnl or 0.0) / denom * 100.0) if denom else (outcome.realized_pnl or 0.0)
+                    except Exception:
+                        base_pct = (outcome.realized_pnl or 0.0)
+
+                # Time adjustment: reward quicker profitable trades (cap amplification)
+                holding = getattr(outcome, 'holding_period_hours', None) or 24.0
+                speed_factor = 24.0 / max(holding, 1.0/24.0)
+                speed_factor = max(0.25, min(speed_factor, 4.0))
+
+                # Volatility normalization: if volatility is provided, moderate the score
+                vol = getattr(outcome, 'volatility', None) or decision.get('volatility') or 0.0
+                vol_factor = 1.0 / (1.0 + abs(vol)) if vol is not None else 1.0
+
+                # Risk penalty: penalize very large position relative to account size
+                try:
+                    entry_val = (outcome.entry_price or decision.get('entry_price', 0)) * (outcome.position_size or decision.get('recommended_position_size', 0) or 1)
+                    balances = decision.get('balance_snapshot') or {}
+                    if isinstance(balances, dict):
+                        account_value = sum(v for v in balances.values() if isinstance(v, (int, float)))
+                    else:
+                        account_value = float(balances) if balances else 0.0
+                    risk_frac = (entry_val / account_value) if account_value > 0 else 0.0
+                    risk_penalty = max(0.1, 1.0 - risk_frac)
+                except Exception:
+                    risk_penalty = 1.0
+
+                # Final normalized performance metric
+                perf_metric = float(base_pct * speed_factor * vol_factor * risk_penalty)
 
                 try:
                     ensemble_mgr.update_provider_weights(
