@@ -2,7 +2,7 @@ import time
 import click
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
-from finance_feedback_engine.trading_platforms.unified_platform import UnifiedPlatform
+from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
 # Additional imports will be needed for data providers, persistence, etc.
 
 class TradingAgentOrchestrator:
@@ -15,7 +15,7 @@ class TradingAgentOrchestrator:
     3. Decide: Delegate decision-making to the existing DecisionEngine.
     4. Act: Execute trades based on the agent's configuration (e.g., requiring approval).
     """
-    def __init__(self, config: TradingAgentConfig, engine: DecisionEngine, platform: UnifiedPlatform):
+    def __init__(self, config: TradingAgentConfig, engine: DecisionEngine, platform: UnifiedTradingPlatform):
         self.config = config
         self.engine = engine
         self.platform = platform
@@ -42,6 +42,17 @@ class TradingAgentOrchestrator:
             # All retries failed
             self.init_failed = True
         print("Trading Agent Orchestrator initialized.")
+        self._paused_by_monitor = False # Flag to indicate if paused by monitoring
+        self.kill_switch_gain_pct = self.config.kill_switch_gain_pct
+        self.kill_switch_loss_pct = self.config.kill_switch_loss_pct
+
+    def pause_trading(self, reason: str = "Unknown reason"):
+        """
+        Pauses the trading agent's operation, usually triggered by the monitor
+        due to portfolio-level stop-loss or take-profit.
+        """
+        self._paused_by_monitor = True
+        print(f"Agent PAUSED by monitor: {reason}. No new trades will be executed.")
 
     def run(self):
         """Starts the main agentic loop."""
@@ -53,26 +64,10 @@ class TradingAgentOrchestrator:
             return
 
         while True:
-            # Compute current portfolio P/L% and apply kill-switch
-            try:
-                breakdown = self.platform.get_portfolio_breakdown()
-                current_value = breakdown.get('total_value_usd', 0.0)
-                unrealized = breakdown.get('unrealized_pnl', 0.0)
-            except Exception as e:
-                print(f"Warning: could not fetch portfolio breakdown: {e}")
-                current_value = None
-                unrealized = 0.0
-
-            if self.initial_portfolio_value > 0 and current_value is not None:
-                pnl_pct = ((current_value - self.initial_portfolio_value) / self.initial_portfolio_value) * 100.0
-                # Stop if gain threshold reached
-                if pnl_pct >= self.config.kill_switch_gain_pct:
-                    print(f"Kill-switch triggered: portfolio gain {pnl_pct:.2f}% >= {self.config.kill_switch_gain_pct}% (stopping agent).")
-                    break
-                # Stop if loss threshold exceeded (negative P/L)
-                if pnl_pct <= -abs(self.config.kill_switch_loss_pct):
-                    print(f"Kill-switch triggered: portfolio loss {pnl_pct:.2f}% <= -{self.config.kill_switch_loss_pct}% (stopping agent).")
-                    break
+            if self._paused_by_monitor:
+                print("Agent is paused by monitor. Waiting for resume signal or manual intervention.")
+                time.sleep(self.config.analysis_frequency_seconds) # Wait before checking again
+                continue
 
             for asset_pair in self.config.asset_pairs:
                 try:
@@ -87,7 +82,7 @@ class TradingAgentOrchestrator:
                     context = f"Strategic Goal: {self.config.strategic_goal}. Risk Appetite: {self.config.risk_appetite}. Market Data: {market_data}"
 
                     # 3. DECIDE: Use the existing "oneshot" decision engine
-                    decision = self.engine.analyze(asset_pair, provider_name='default') # Assuming 'default' provider
+                    decision = self.engine.generate_decision(asset_pair)
 
                     if not decision or decision.decision == "HOLD":
                         print(f"Decision: HOLD. No action taken.")

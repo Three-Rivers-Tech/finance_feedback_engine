@@ -41,7 +41,12 @@ class TradeMonitor:
         metrics_collector: Optional[TradeMetricsCollector] = None,
         portfolio_memory=None,  # PortfolioMemoryEngine instance
         detection_interval: int = 30,  # seconds between scans
-        poll_interval: int = 30  # seconds between position updates
+        poll_interval: int = 30,  # seconds between position updates
+        portfolio_initial_balance: float = 0.0,
+        portfolio_stop_loss_percentage: float = 0.0,
+        portfolio_take_profit_percentage: float = 0.0,
+        monitoring_context_provider=None, # Optionally pass a pre-initialized provider
+        orchestrator=None # Orchestrator instance for control signals
     ):
         """
         Initialize trade monitor.
@@ -58,6 +63,22 @@ class TradeMonitor:
         self.portfolio_memory = portfolio_memory
         self.detection_interval = detection_interval
         self.poll_interval = poll_interval
+        self.portfolio_initial_balance = portfolio_initial_balance
+        self.portfolio_stop_loss_percentage = portfolio_stop_loss_percentage
+        self.portfolio_take_profit_percentage = portfolio_take_profit_percentage
+        self.orchestrator = orchestrator
+
+        # Initialize MonitoringContextProvider
+        if monitoring_context_provider:
+            self.monitoring_context_provider = monitoring_context_provider
+        else:
+            from .context_provider import MonitoringContextProvider
+            self.monitoring_context_provider = MonitoringContextProvider(
+                platform=self.platform,
+                trade_monitor=self,
+                metrics_collector=self.metrics_collector,
+                portfolio_initial_balance=self.portfolio_initial_balance
+            )
         
         # Thread management
         self.executor = ThreadPoolExecutor(
@@ -74,6 +95,7 @@ class TradeMonitor:
         self._stop_event = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
         self._running = False
+        self._monitoring_state = 'active'
         
         logger.info(
             f"TradeMonitor initialized | "
@@ -99,6 +121,9 @@ class TradeMonitor:
         )
         self._monitor_thread.start()
         
+        # Initialize monitoring state (active/paused/stopped)
+        self._monitoring_state = 'active'
+        
         logger.info("TradeMonitor started successfully")
     
     def stop(self, timeout: float = 10.0) -> bool:
@@ -117,6 +142,9 @@ class TradeMonitor:
         
         logger.info("Stopping TradeMonitor...")
         self._stop_event.set()
+        
+        # Set state to stopped
+        self._monitoring_state = 'stopped'
         
         # Stop all active trackers
         for trade_id, tracker in list(self.active_trackers.items()):
@@ -144,23 +172,31 @@ class TradeMonitor:
         
         try:
             while not self._stop_event.is_set():
-                try:
-                    # 1. Detect new trades from platform
-                    self._detect_new_trades()
-                    
-                    # 2. Clean up completed trackers
-                    self._cleanup_completed_trackers()
-                    
-                    # 3. Process pending trades if slots available
-                    self._process_pending_trades()
-                    
-                    # 4. Log status
-                    self._log_status()
-                    
-                except Exception as e:
-                    logger.error(
-                        f"Error in monitoring loop: {e}",
-                        exc_info=True
+                if self._monitoring_state == 'active':
+                    try:
+                        # 1. Detect new trades from platform
+                        self._detect_new_trades()
+                        
+                        # 2. Clean up completed trackers
+                        self._cleanup_completed_trackers()
+                        
+                        # 3. Process pending trades if slots available
+                        self._process_pending_trades()
+                        
+                        # 4. Check portfolio P&L thresholds
+                        self._check_portfolio_pnl_limits()
+                        
+                        # 5. Log status
+                        self._log_status()
+                        
+                    except Exception as e:
+                        logger.error(
+                            f"Error in monitoring loop: {e}",
+                            exc_info=True
+                        )
+                else:
+                    logger.debug(
+                        f"Monitoring paused. Current state: {self._monitoring_state}"
                     )
                 
                 # Wait for next detection interval (interruptible)
@@ -173,6 +209,79 @@ class TradeMonitor:
             )
         finally:
             logger.info("Main monitoring loop exiting")
+            
+    def _check_portfolio_pnl_limits(self):
+        """Check if portfolio P&L has hit stop-loss or take-profit limits."""
+        if not self.monitoring_context_provider:
+            return
+        
+        try:
+            current_pnl_pct = (
+                self.monitoring_context_provider.get_portfolio_pnl_percentage()
+            )
+            
+            if (
+                self.portfolio_stop_loss_percentage != 0
+                and current_pnl_pct <= -self.portfolio_stop_loss_percentage
+            ):
+                logger.critical(
+                    f"🛑 PORTFOLIO STOP-LOSS HIT! "
+                    f"Current P&L: {current_pnl_pct:.2f}% "
+                    f"Threshold: -{self.portfolio_stop_loss_percentage:.2f}%"
+                )
+                self._handle_portfolio_limit_hit(
+                    'stop_loss',
+                    current_pnl_pct
+                )
+            elif (
+                self.portfolio_take_profit_percentage != 0
+                and current_pnl_pct >= self.portfolio_take_profit_percentage
+            ):
+                logger.info(
+                    f"🎉 PORTFOLIO TAKE-PROFIT HIT! "
+                    f"Current P&L: {current_pnl_pct:.2f}% "
+                    f"Threshold: {self.portfolio_take_profit_percentage:.2f}%"
+                )
+                self._handle_portfolio_limit_hit(
+                    'take_profit',
+                    current_pnl_pct
+                )
+            else:
+                logger.debug(
+                    f"Portfolio P&L: {current_pnl_pct:.2f}% "
+                    f"(SL: -{self.portfolio_stop_loss_percentage:.2f}%, "
+                    f"TP: {self.portfolio_take_profit_percentage:.2f}%)"
+                )
+        except Exception as e:
+            logger.error(f"Error checking portfolio P&L limits: {e}", exc_info=True)
+            
+    def _handle_portfolio_limit_hit(self, limit_type: str, current_pnl_pct: float):
+        """
+        Handle action when portfolio stop-loss or take-profit limit is hit.
+        
+        Args:
+            limit_type: 'stop_loss' or 'take_profit'
+            current_pnl_pct: The current portfolio P&L percentage
+        """
+        logger.warning(
+            f"Portfolio {limit_type.upper()} hit. "
+            f"Current P&L: {current_pnl_pct:.2f}%. Pausing trading."
+        )
+        self._monitoring_state = 'paused'
+        
+        if self.orchestrator:
+            logger.info(f"Signaling Orchestrator to pause trading due to portfolio {limit_type} hit.")
+            # Assume Orchestrator has a pause_trading method
+            self.orchestrator.pause_trading(
+                reason=f"Portfolio {limit_type} hit: P&L {current_pnl_pct:.2f}%"
+            )
+        else:
+            logger.warning("No Orchestrator instance available to signal for pausing trading.")
+        
+        # TODO: Implement more robust actions:
+        # - Close all open positions across platforms (this would be triggered by Orchestrator)
+        # - Send notification
+
     
     def _detect_new_trades(self):
         """Query platform for open positions and detect new trades."""
