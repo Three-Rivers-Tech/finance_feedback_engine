@@ -75,19 +75,30 @@ class DecisionEngine:
         Initialize the decision engine.
 
         Args:
-            config: Full configuration dictionary containing:
-                - decision_engine.ai_provider: 'local', 'cli', 'codex', or 'ensemble'
-                - decision_engine.model_name: Name/path of the model to use
-                - decision_engine.prompt_template: Custom prompt template (optional)
-                - decision_engine.decision_threshold: Confidence threshold for decisions
-                - decision_engine.local_models: List of preferred local models
-                - decision_engine.local_priority: Local model priority setting
-                - ensemble: Ensemble configuration (if provider='ensemble')
+            config: Configuration dictionary. Can be either:
+                - Full configuration dictionary containing 'decision_engine' key with settings
+                - Direct decision_engine sub-dict (for backward compatibility)
+                
+        The following settings are supported:
+            - ai_provider: 'local', 'cli', 'codex', 'ensemble', etc.
+            - model_name: Name/path of the model to use
+            - prompt_template: Custom prompt template (optional)
+            - decision_threshold: Confidence threshold for decisions
+            - local_models: List of preferred local models
+            - local_priority: Local model priority setting
+            - ensemble: Ensemble configuration (if provider='ensemble')
         """
-        self.config = config
+        # Handle both full config and sub-dict formats
+        if 'decision_engine' in config:
+            # Full config passed
+            self.config = config
+            decision_config = config['decision_engine']
+        else:
+            # Sub-dict passed (backward compatibility)
+            self.config = {'decision_engine': config}
+            decision_config = config
         
         # Extract decision engine configuration
-        decision_config = config.get('decision_engine', {})
         self.ai_provider = decision_config.get('ai_provider', 'local')
         self.model_name = decision_config.get('model_name', 'default')
         self.decision_threshold = decision_config.get('decision_threshold', 0.7)
@@ -1147,7 +1158,9 @@ Format response as a structured technical analysis demonstration.
         adjusted_weights = None
         if self.local_priority:
             boost_factor = 1.0
-            if isinstance(self.local_priority, (int, float)):
+            if self.local_priority is True:
+                boost_factor = 2.0
+            elif isinstance(self.local_priority, (int, float)):
                 boost_factor = self.local_priority
             elif self.local_priority == "soft":
                 boost_factor = 1.5

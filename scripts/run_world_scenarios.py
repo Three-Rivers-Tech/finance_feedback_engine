@@ -73,7 +73,11 @@ def main():
         if 'learn' in fp.name or 'test-learn' in fp.name:
             try:
                 # Use a simulated exit price: 10% above entry to show profitable path
-                entry_price = decision.get('entry_price') or decision.get('market_data', {}).get('close') or 1.0
+                entry_price = decision.get('entry_price')
+                if entry_price is None:
+                    entry_price = decision.get('market_data', {}).get('close')
+                if entry_price is None:
+                    entry_price = 1.0
                 exit_price = entry_price * 1.10
                 print(f"Recording trade outcome for {decision_id} (exit_price={exit_price})")
                 outcome = engine.record_trade_outcome(decision_id, exit_price)
