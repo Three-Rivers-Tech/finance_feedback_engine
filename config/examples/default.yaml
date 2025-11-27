@@ -74,8 +74,13 @@ agent:
   approval_policy: "on_new_asset"
   max_daily_trades: 5
   # Kill-switch thresholds (percentage of portfolio P/L)
-  kill_switch_gain_pct: 5.0
-  kill_switch_loss_pct: 2.0
+  # Stop trading if portfolio gains >= kill_switch_gain_pct (portfolio_take_profit_percentage)
+  # or losses <= -kill_switch_loss_pct (portfolio_stop_loss_percentage)
+  kill_switch_gain_pct: 5.0  # Corresponds to portfolio_take_profit_percentage
+  kill_switch_loss_pct: 2.0  # Corresponds to portfolio_stop_loss_percentage
+  
+  # Initial balance for portfolio P/L calculations (e.g., if starting with a specific capital)
+  initial_balance: 10000.0
 
   # --- Autonomous Agent Settings ---
   autonomous:
