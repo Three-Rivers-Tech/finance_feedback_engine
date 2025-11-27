@@ -7,7 +7,7 @@
   "amount": 0.1,
   "timestamp": "2025-01-01T00:00:00Z",
   "executed": true,
-  "execution_time": "2025-11-27T16:42:07.926104",
+  "execution_time": "2025-11-27T16:47:33.658273",
   "execution_result": {
     "success": true,
     "message": "simulated trade (mock)"
