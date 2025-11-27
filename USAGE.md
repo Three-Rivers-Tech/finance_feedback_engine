@@ -220,6 +220,38 @@ python main.py -c config/config.oanda.example.yaml status
 python main.py --config config/my_custom_config.yaml analyze EURUSD
 ```
 
+## Safety & Execution Modes
+
+The engine provides safeguards to prevent unsafe automated executions. Operators should understand two key features:
+
+- **`signal_only` mode**: When enabled on a decision (`signal_only: true`) the engine will not execute orders and will treat the output as a signal only. This is useful for dry-run, simulation, or when the platform credentials are unavailable.
+
+- **Circuit Breaker (execution safety)**: The engine wraps platform `execute_trade` calls with a process-local circuit breaker that tracks recent failures and will temporarily open if repeated errors occur. This prevents cascading failures during noisy platform outages or repeated execution errors.
+
+Example conservative config snippets (in `config/config.local.yaml`):
+
+```yaml
+# Prevent live execution by default in development
+signal_only_default: true
+
+# Safety thresholds used during pre-execution monitoring checks
+safety:
+    max_leverage: 5.0           # block execution above this leverage estimate
+    max_position_pct: 25.0      # block execution if largest position > this percent
+
+# Circuit breaker tuning (process-local)
+circuit_breaker:
+    failure_threshold: 3        # number of consecutive failures to open the breaker
+    recovery_timeout_seconds: 300
+    half_open_retry: 1
+```
+
+Operational notes:
+
+- If the monitoring provider is temporarily unavailable (network timeout or connection error), the engine will log a warning and proceed cautiously using conservative defaults, rather than failing hard. Unexpected monitoring errors or critical configuration problems will raise and block execution so operators can address them.
+- To run the engine in purely signal-only mode use `signal_only_default: true` in your local config or pass `--signal-only` if the CLI supports it.
+- Circuit breaker state is process-local; restarting the engine resets the breaker. For long-lived deployments consider external health checks and operator alerts.
+
 ## Python API
 
 ### Basic Usage
