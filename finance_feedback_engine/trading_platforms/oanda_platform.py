@@ -169,6 +169,9 @@ class OandaPlatform(BaseTradingPlatform):
         try:
             from oandapyV20.endpoints.accounts import AccountDetails
             from oandapyV20.endpoints.positions import OpenPositions
+            # Instruments endpoint provides marginRate per instrument
+            # Instruments import removed; some oandapyV20 versions differ
+            # in constructor signatures and may raise instantiation errors.
             
             client = self._get_client()
             
@@ -181,6 +184,14 @@ class OandaPlatform(BaseTradingPlatform):
             positions_request = OpenPositions(accountID=self.account_id)
             positions_response = client.request(positions_request)
             positions_data = positions_response.get('positions', [])
+            
+            # NOTE: Some oandapyV20 Instruments endpoints can be awkward to
+            # instantiate across versions. To avoid compatibility issues,
+            # compute per-position margin exposure from the account-level
+            # `marginUsed` value when available. We'll fall back to a
+            # default leverage if necessary.
+            # We will compute margin exposure using account-level marginUsed
+            # or by falling back to a default leverage estimate.
             
             # Parse account info
             base_currency = account.get('currency', 'USD')
@@ -235,21 +246,158 @@ class OandaPlatform(BaseTradingPlatform):
                             holdings_map[base] = 0
                         holdings_map[base] += net_units
             
-            # Convert holdings map to list
+            # Convert holdings map to list and compute USD values using live
+            # pricing where possible. We'll request pricing for all instruments
+            # we have positions in plus any necessary conversion pairs to
+            # convert the quote currency into the account base currency.
             holdings = []
-            total_exposure_usd = 0
-            
-            for currency, amount in holdings_map.items():
-                # Estimate USD value (simplified - would need exchange rates)
-                # For now, use absolute value as proxy
-                usd_value = abs(amount)
-                total_exposure_usd += usd_value
-                
+            total_exposure_usd = 0.0
+
+            # Build set of instruments to request pricing for
+            instrument_set = set()
+            for p in positions:
+                instr = p.get('instrument')
+                if instr:
+                    instrument_set.add(instr)
+
+            # Determine conversion pairs for any quote currency that isn't
+            # the account base currency (e.g., convert JPY -> USD)
+            conversion_candidates = set()
+            for instr in list(instrument_set):
+                if '_' in instr:
+                    base, quote = instr.split('_')
+                    if quote != base_currency:
+                        # Try both directions; we'll use whichever pricing
+                        # instrument is available and invert if needed.
+                        conversion_candidates.add(f"{quote}_{base_currency}")
+                        conversion_candidates.add(f"{base_currency}_{quote}")
+
+            # Merge instrument lists and remove any empties
+            all_request_instruments = list(
+                instrument_set.union(conversion_candidates)
+            )
+            all_request_instruments = [
+                i for i in all_request_instruments if i
+            ]
+
+            price_map = {}
+            try:
+                # Request Pricing for all instruments
+                if all_request_instruments:
+                    from oandapyV20.endpoints.pricing import Pricing
+
+                    params = {
+                        "instruments": ",".join(all_request_instruments)
+                    }
+                    pricing_request = Pricing(
+                        accountID=self.account_id, params=params
+                    )
+                    pricing_response = client.request(pricing_request)
+
+                    # Build price map using mid-price of bid/ask
+                    for p in pricing_response.get('prices', []):
+                        instr = p.get('instrument')
+                        bids = p.get('bids', [])
+                        asks = p.get('asks', [])
+                        mid = None
+                        try:
+                            if bids and asks:
+                                bid = float(bids[0].get('price'))
+                                ask = float(asks[0].get('price'))
+                                mid = (bid + ask) / 2.0
+                            else:
+                                # Fallback to closeout prices if present
+                                cb = p.get('closeoutBid')
+                                ca = p.get('closeoutAsk')
+                                mid = float(cb or ca or 1.0)
+                        except Exception:
+                            cb = p.get('closeoutBid')
+                            ca = p.get('closeoutAsk')
+                            mid = float(cb or ca or 1.0)
+
+                        if instr and mid is not None:
+                            price_map[instr] = mid
+            except Exception as e:
+                logger.warning(
+                    "Could not fetch live pricing for instruments: %s",
+                    e
+                )
+
+            # Compute per-position notional (in quote currency) and convert
+            # to account base currency (usually USD) using price_map.
+            default_leverage = 50.0
+            position_usd_values = []  # tuples of (instr, units, usd_value)
+
+            for p in positions:
+                instr = p.get('instrument')
+                units = float(p.get('units', 0))
+                price = price_map.get(instr, 1.0)
+
+                # notional is in quote currency (price is quote per base)
+                notional_in_quote = abs(units) * price
+
+                # If the quote currency matches account base, we're done
+                usd_value = None
+                if '_' in instr:
+                    base, quote = instr.split('_')
+                    if quote == base_currency:
+                        usd_value = notional_in_quote
+                    else:
+                        # Try direct conversion: quote -> account base
+                        direct = f"{quote}_{base_currency}"
+                        inverse = f"{base_currency}_{quote}"
+
+                        if direct in price_map:
+                            conv_rate = price_map[direct]
+                            usd_value = notional_in_quote * conv_rate
+                        elif inverse in price_map and price_map.get(inverse):
+                            conv_rate_inv = price_map[inverse]
+                            try:
+                                usd_value = (
+                                    notional_in_quote * (1.0 / conv_rate_inv)
+                                )
+                            except Exception:
+                                usd_value = None
+
+                # Fallback: if we couldn't convert via pricing, fall back to
+                # allocating margin proportionally or using leverage division
+                if usd_value is None:
+                    # If account reports margin_used, allocate proportionally
+                    # otherwise derive margin exposure using a default leverage
+                    usd_value = (notional_in_quote / default_leverage)
+
+                position_usd_values.append((instr, units, usd_value))
+
+            # Allocate margin_used proportionally across positions if available
+            if margin_used and any(v for (_, _, v) in position_usd_values):
+                total_notional = sum(
+                    abs(v) for (_, _, v) in position_usd_values
+                )
+                if total_notional > 0:
+                    # Scale to margin_used
+                    scaled = []
+                    for instr, units, usd_val in position_usd_values:
+                        prop = (
+                            (abs(usd_val) / total_notional)
+                            if total_notional
+                            else 0
+                        )
+                        scaled_val = prop * margin_used
+                        scaled.append((instr, units, scaled_val))
+                    position_usd_values = scaled
+
+            # Build holdings list and compute total exposure
+            for instr, units, usd_value in position_usd_values:
+                try:
+                    v = float(usd_value)
+                except Exception:
+                    v = 0.0
+                total_exposure_usd += v
                 holdings.append({
-                    'asset': currency,
-                    'amount': amount,
-                    'value_usd': usd_value,
-                    'allocation_pct': 0  # Will calculate after total known
+                    'asset': instr,
+                    'amount': units,
+                    'value_usd': v,
+                    'allocation_pct': 0
                 })
             
             # Calculate allocation percentages
@@ -266,7 +414,7 @@ class OandaPlatform(BaseTradingPlatform):
                 'base_currency': base_currency,
                 'balance': balance,
                 'unrealized_pl': unrealized_pl,
-                # Alias to keep naming consistent with other platforms/unified view.
+                # Alias to keep naming consistent with other platforms.
                 'unrealized_pnl': unrealized_pl,
                 'margin_used': margin_used,
                 'margin_available': margin_available,
