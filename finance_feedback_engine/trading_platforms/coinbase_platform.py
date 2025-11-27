@@ -285,14 +285,43 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             except Exception as e:
                 logger.warning("Could not fetch spot balances: %s", e)
             
-            # Calculate total value and allocations
-            total_value = futures_value + spot_value
+            # Add futures positions to holdings with leverage adjustment.
+            # Also sum margin exposures into futures_value if available.
+            futures_margin_total = 0.0
+            for pos in futures_positions:
+                leverage = 10.0
+                try:
+                    leverage = float(pos.get('leverage'))
+                except Exception:
+                    # Keep default if leverage not present or invalid
+                    pass
+
+                contracts = float(pos.get('contracts', 0.0))
+                current_price = float(pos.get('current_price', 0.0))
+                notional = contracts * current_price
+                margin = notional / leverage if leverage > 0 else notional
+                futures_margin_total += margin
+
+                holdings.append({
+                    'asset': pos.get('product_id'),
+                    'amount': contracts,
+                    'value_usd': margin,
+                    'allocation_pct': 0.0
+                })
+
+            # Calculate total value and allocations. Use margin-based
+            # futures value.
+            total_value = futures_margin_total + spot_value
             
             if total_value > 0:
                 for holding in holdings:
-                    holding['allocation_pct'] = (
-                        (holding['value_usd'] / total_value) * 100
-                    )
+                    try:
+                        holding_value = float(holding.get('value_usd', 0))
+                        holding['allocation_pct'] = (
+                            (holding_value / total_value) * 100
+                        )
+                    except Exception:
+                        holding['allocation_pct'] = 0.0
             
             logger.info(
                 "Total portfolio value: $%.2f "
@@ -308,7 +337,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'futures_value_usd': futures_value,
                 'spot_value_usd': spot_value,
                 'num_assets': len(holdings),
-                # Expose unrealized P&L at the portfolio level for downstream consumers.
+                # Expose unrealized P&L at the portfolio level for downstream
+                # consumers.
                 'unrealized_pnl': futures_summary.get('unrealized_pnl', 0.0),
                 'platform': 'coinbase'
             }
