@@ -339,15 +339,71 @@ class FinanceFeedbackEngine:
         if not decision:
             raise ValueError(f"Decision {decision_id} not found")
         
-        result = self.trading_platform.execute_trade(decision)
-        
-        # Update decision with execution result
+        # Pre-execution safety checks
+        self._preexecution_checks(decision, monitoring_context=None)
+
+        # Use persistent circuit breaker on platform when available
+        try:
+            breaker = None
+            if getattr(self.trading_platform, 'get_execute_breaker', None):
+                breaker = self.trading_platform.get_execute_breaker()
+
+            # If no breaker on platform, create a local one
+            if breaker is None:
+                from .utils.circuit_breaker import CircuitBreaker
+                cb_name = f"execute_trade:{self.trading_platform.__class__.__name__}"
+                breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60, name=cb_name)
+
+            # Execute trade under circuit breaker protection
+            result = breaker.call(self.trading_platform.execute_trade, decision)
+        except Exception as e:
+            # Log and update decision with failure
+            logger.error(f"Trade execution failed: {e}")
+            decision['executed'] = False
+            decision['execution_time'] = datetime.utcnow().isoformat()
+            decision['execution_result'] = {'success': False, 'error': str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+
+        # Update decision with successful execution result
         decision['executed'] = True
         decision['execution_time'] = datetime.utcnow().isoformat()
         decision['execution_result'] = result
         self.decision_store.update_decision(decision)
-        
+
         return result
+
+    def _preexecution_checks(self, decision: Dict[str, Any], monitoring_context: Optional[object] = None) -> None:
+        """
+        Run pre-execution safety checks before sending orders to the platform.
+        """
+        # Block execution if signal_only mode
+        if decision.get('signal_only', False):
+            raise ValueError("Decision is in signal-only mode; execution blocked")
+
+        # If monitoring provider available, get context and run simple risk checks
+        try:
+            provider = self.monitoring_provider or monitoring_context
+            if provider:
+                ctx = provider.get_monitoring_context(asset_pair=decision.get('asset_pair'))
+                risk = ctx.get('risk_metrics', {})
+                leverage = risk.get('leverage_estimate', 0)
+                largest_pct = ctx.get('position_concentration', {}).get('largest_position_pct', 0)
+
+                # Simple safety thresholds — configurable later via config
+                max_leverage = self.config.get('safety', {}).get('max_leverage', 5.0)
+                max_concentration = self.config.get('safety', {}).get('max_position_pct', 25.0)
+
+                if leverage and leverage > max_leverage:
+                    raise ValueError(f"Execution blocked: leverage {leverage:.2f} exceeds max {max_leverage}")
+
+                if largest_pct and largest_pct > max_concentration:
+                    raise ValueError(
+                        f"Execution blocked: largest position {largest_pct:.1f}% exceeds max {max_concentration}%"
+                    )
+        except Exception as e:
+            # If monitoring fetch fails, be conservative and allow execution to proceed
+            logger.warning(f"Pre-execution monitoring checks failed; proceeding cautiously: {e}")
 
     def backtest(
         self,
@@ -438,7 +494,39 @@ class FinanceFeedbackEngine:
             f"Trade outcome recorded: {outcome.asset_pair} "
             f"P&L: ${outcome.realized_pnl:.2f}"
         )
-        
+        # ----- Learning loop: update ensemble weights if available -----
+        try:
+            ensemble_mgr = getattr(self.decision_engine, 'ensemble_manager', None)
+            if ensemble_mgr and isinstance(ensemble_mgr, object):
+                # Extract provider decisions from original decision if available
+                ensemble_meta = decision.get('ensemble_metadata', {})
+                provider_decisions = ensemble_meta.get('provider_decisions', {})
+
+                # Determine actual outcome as market-directed action
+                # If trade was profitable, actual_outcome == original action
+                # Otherwise actual_outcome == opposite action
+                original_action = decision.get('action')
+                if outcome.was_profitable:
+                    actual_outcome = original_action
+                else:
+                    opposite = {'BUY': 'SELL', 'SELL': 'BUY', 'LONG': 'SHORT', 'SHORT': 'LONG'}
+                    actual_outcome = opposite.get(original_action, 'HOLD')
+
+                # Use P&L percentage as performance metric when available
+                perf_metric = outcome.pnl_percentage if getattr(outcome, 'pnl_percentage', None) is not None else (outcome.realized_pnl or 0.0)
+
+                try:
+                    ensemble_mgr.update_provider_weights(
+                        provider_decisions,
+                        actual_outcome,
+                        perf_metric
+                    )
+                    logger.info("Ensemble weights updated from trade outcome")
+                except Exception as e:
+                    logger.warning(f"Failed to update ensemble weights: {e}")
+        except Exception as e:
+            logger.debug(f"No ensemble manager available or learning update skipped: {e}")
+
         return outcome.to_dict()
     
     def get_performance_snapshot(

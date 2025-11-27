@@ -116,7 +116,26 @@ class PlatformFactory:
         # Instantiate the platform class directly. If an external SDK is
         # missing and this raises, propagate the error so callers are
         # explicitly aware and can choose the explicit 'mock' platform.
-        return platform_class(credentials)
+        instance = platform_class(credentials)
+
+        # Attach a persistent circuit breaker on the instance if possible
+        try:
+            from ..utils.circuit_breaker import CircuitBreaker
+
+            # Only attach if not already present
+            if not getattr(instance, 'get_execute_breaker', None) or instance.get_execute_breaker() is None:
+                breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60, name=f"execute_trade:{platform_name}")
+                # Use set_execute_breaker accessor if available
+                if getattr(instance, 'set_execute_breaker', None):
+                    instance.set_execute_breaker(breaker)
+                else:
+                    # Fallback to setting attribute directly
+                    setattr(instance, '_execute_breaker', breaker)
+        except Exception:
+            # If circuit breaker module not available, continue without it
+            logger.debug("CircuitBreaker not attached (unavailable)")
+
+        return instance
 
     @classmethod
     def register_platform(
