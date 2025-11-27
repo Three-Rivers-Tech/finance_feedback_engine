@@ -898,6 +898,12 @@ def analyze(ctx, asset_pair, provider):
                     f"  [{provider.upper()}] {pdecision['action']} "
                     f"({pdecision['confidence']}%) - {weight_str}"
                 )
+            
+            # Display local priority metadata if available
+            if meta.get('local_models_used'):
+                console.print(f"  Local Models Used: {', '.join(meta['local_models_used'])}")
+            if meta.get('local_priority_applied'):
+                console.print("  Local Priority Applied: Yes")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")

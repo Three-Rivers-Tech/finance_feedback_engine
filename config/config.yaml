@@ -88,6 +88,13 @@ decision_engine:
   # Model name/path (provider-specific)
   model_name: "llama3.2:3b-instruct-fp16"
   
+  # Local models list for ensemble (optional, defaults to auto-discovery)
+  # local_models: ["llama3.2:3b-instruct-fp16", "mistral:7b-instruct"]
+  
+  # Local priority mode: boost local providers in ensemble
+  # Options: false (disabled), true (2x boost), "soft" (1.5x boost), or number (custom multiplier)
+  # local_priority: "soft"
+  
   # Decision confidence threshold (0.0 - 1.0)
   # Only execute trades above this confidence level
   decision_threshold: 0.7

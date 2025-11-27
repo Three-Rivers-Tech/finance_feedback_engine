@@ -46,6 +46,14 @@ class LocalLLMProvider:
         """
         self.config = config
         
+        # Read local models and priority from config
+        decision_engine_config = config.get('decision_engine', {})
+        self.local_models = decision_engine_config.get('local_models', [])
+        if not isinstance(self.local_models, list):
+            logger.warning("local_models must be a list, using empty list.")
+            self.local_models = []
+        self.local_priority = decision_engine_config.get('local_priority', False)
+        
         # Normalize model name: "default" -> actual default model
         requested_model = config.get('model_name', 'default')
         if requested_model == 'default':
@@ -54,7 +62,8 @@ class LocalLLMProvider:
             self.model_name = requested_model
         
         logger.info(
-            f"Initializing local LLM provider with model: {self.model_name}"
+            f"Initializing local LLM provider with model: {self.model_name}, "
+            f"local_models: {self.local_models}, local_priority: {self.local_priority}"
         )
         
         # Verify Ollama installation (auto-install if needed)
@@ -66,23 +75,30 @@ class LocalLLMProvider:
 
         # Ensure secondary model exists for robustness (required)
         try:
-            if not self._is_model_available(self.SECONDARY_MODEL):
-                logger.info(
-                    "Secondary model %s not found. Downloading for "
-                    "ensemble robustness...",
-                    self.SECONDARY_MODEL,
-                )
-                if not self._download_model(self.SECONDARY_MODEL):
-                    # Non-recoverable: require at least two local models
-                    raise RuntimeError(
-                        "Failed to ensure required secondary model: %s. "
-                        "Please run: ollama pull %s"
-                        % (self.SECONDARY_MODEL, self.SECONDARY_MODEL)
+            # Use configured local_models if available, else defaults
+            if self.local_models:
+                secondary_candidates = self.local_models[1:] if len(self.local_models) > 1 else [self.SECONDARY_MODEL]
+            else:
+                secondary_candidates = [self.SECONDARY_MODEL]
+            
+            for secondary_model in secondary_candidates:
+                if not self._is_model_available(secondary_model):
+                    logger.info(
+                        "Secondary model %s not found. Downloading for "
+                        "ensemble robustness...",
+                        secondary_model,
                     )
-                logger.info(
-                    "Successfully downloaded secondary model: %s",
-                    self.SECONDARY_MODEL,
-                )
+                    if not self._download_model(secondary_model):
+                        # Non-recoverable: require at least two local models
+                        raise RuntimeError(
+                            "Failed to ensure required secondary model: %s. "
+                            "Please run: ollama pull %s"
+                            % (secondary_model, secondary_model)
+                        )
+                    logger.info(
+                        "Successfully downloaded secondary model: %s",
+                        secondary_model,
+                    )
         except RuntimeError:
             raise  # Re-raise without wrapping
         except Exception as e:
