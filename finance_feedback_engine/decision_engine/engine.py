@@ -5,7 +5,7 @@ import logging
 import uuid
 from datetime import datetime
 import subprocess
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -1040,29 +1040,52 @@ Format response as a structured technical analysis demonstration.
         provider_decisions = {}
         failed_providers = []
 
-        # Sequential execution to avoid GPU memory conflicts with local models
-        logger.info(f"Querying {len(enabled_providers)} providers sequentially")
-        
-        for provider in enabled_providers:
-            logger.info(f"Querying provider: {provider}")
-            provider_name, decision = self._query_single_provider(provider, prompt)
-            if decision:
-                provider_decisions[provider_name] = decision
-            else:
-                failed_providers.append(provider_name)
-        
-        # Post-check: Wait for all local models to finish (if any were used)
-        local_models_used = [
+        # Partition providers into local (GPU-bound) and remote groups
+        local_provider_map = (
+            self.config.get('local_providers')
+            if isinstance(self.config.get('local_providers'), dict)
+            else {}
+        )
+        all_discovered_local_models = self._get_all_local_models()
+        local_providers = [
             p for p in enabled_providers
-            if p in self._get_all_local_models()
+            if p == 'local' or p in local_provider_map or p in all_discovered_local_models
         ]
-        if local_models_used:
-            logger.info(
-                f"Waiting for {len(local_models_used)} local models to finish"
-            )
-            # Give a moment for any background processes to complete
-            time.sleep(2)
-            logger.info("All local models finished")
+        remote_providers = [p for p in enabled_providers if p not in local_providers]
+
+        # Execute remote providers concurrently with per-task timeouts
+        if remote_providers:
+            logger.info(f"Querying {len(remote_providers)} remote providers concurrently")
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_provider = {
+                    executor.submit(self._query_single_provider, provider, prompt): provider
+                    for provider in remote_providers
+                }
+                for future in as_completed(future_to_provider):
+                    provider = future_to_provider[future]
+                    try:
+                        provider_name, decision = future.result(timeout=10)  # per-task timeout
+                        if decision:
+                            provider_decisions[provider_name] = decision
+                        else:
+                            failed_providers.append(provider_name)
+                    except TimeoutError:
+                        logger.warning(f"Provider {provider} timed out")
+                        failed_providers.append(provider)
+                    except Exception as e:
+                        logger.warning(f"Provider {provider} failed: {e}")
+                        failed_providers.append(provider)
+
+        # Execute local providers sequentially to avoid GPU memory conflicts
+        if local_providers:
+            logger.info(f"Querying {len(local_providers)} local providers sequentially")
+            for provider in local_providers:
+                logger.info(f"Querying provider: {provider}")
+                provider_name, decision = self._query_single_provider(provider, prompt)
+                if decision:
+                    provider_decisions[provider_name] = decision
+                else:
+                    failed_providers.append(provider_name)
 
         # Handle complete failure case
         if not provider_decisions:
