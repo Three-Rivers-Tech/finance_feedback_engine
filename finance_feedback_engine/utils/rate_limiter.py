@@ -10,19 +10,21 @@ class RateLimiter:
     consumes one token. If no tokens are available, the caller waits until
     a token becomes available.
 
-    Supports both synchronous and asynchronous usage with separate locks
-    to avoid blocking the event loop.
+    Supports both synchronous and asynchronous usage. The shared state is
+    protected by a single threading.Lock to prevent race conditions between
+    sync and async methods.
     """
     def __init__(self, tokens_per_second: float, max_tokens: int):
         if tokens_per_second <= 0 or max_tokens <= 0:
-            raise ValueError("tokens_per_second and max_tokens must be positive.")
+            raise ValueError(
+                "Both tokens_per_second and max_tokens must be positive."
+            )
 
         self.tokens_per_second = tokens_per_second
         self.max_tokens = max_tokens
         self.tokens = max_tokens
         self.last_refill_time = time.monotonic()
-        self._lock = threading.Lock()  # For synchronous access
-        self._async_lock = asyncio.Lock()  # For asynchronous access
+        self._lock = threading.Lock()  # Single lock for shared state
 
     def _refill_tokens(self):
         """Refills tokens based on the elapsed time."""
@@ -33,31 +35,33 @@ class RateLimiter:
             self.tokens = min(self.max_tokens, self.tokens + new_tokens)
             self.last_refill_time = now
 
+    def _wait_for_token_sync(self):
+        """
+        Internal synchronous method to wait for and consume a token.
+        Must be called with the lock held.
+        """
+        self._refill_tokens()
+        while self.tokens < 1:
+            sleep_time = (1 - self.tokens) / self.tokens_per_second
+            time.sleep(sleep_time)
+            self._refill_tokens()
+        self.tokens -= 1
+
     def wait_for_token(self):
         """
         Blocks until a token is available, then consumes one.
         Suitable for synchronous operations.
         """
         with self._lock:
-            self._refill_tokens()
-            while self.tokens < 1:
-                sleep_time = (1 - self.tokens) / self.tokens_per_second
-                time.sleep(sleep_time)
-                self._refill_tokens()
-            self.tokens -= 1
+            self._wait_for_token_sync()
 
     async def wait_for_token_async(self):
         """
         Asynchronously waits until a token is available, then consumes one.
         Suitable for asynchronous operations.
         """
-        async with self._async_lock:
-            self._refill_tokens()
-            while self.tokens < 1:
-                sleep_time = (1 - self.tokens) / self.tokens_per_second
-                await asyncio.sleep(sleep_time)
-                self._refill_tokens()
-            self.tokens -= 1
+        await asyncio.to_thread(self._wait_for_token_sync)
+
 
 if __name__ == "__main__":
     # Example Synchronous Usage
@@ -69,9 +73,9 @@ if __name__ == "__main__":
         end_time = time.monotonic()
         print(f"Sync Request {i+1}: waited for {end_time - start_time:.2f}s")
         if i == 0:
-            assert (end_time - start_time) < 0.1 # First request should be fast
+            assert (end_time - start_time) < 0.1  # First fast
         else:
-            assert (end_time - start_time) > 0.9 # Subsequent requests should wait approx 1 sec
+            assert (end_time - start_time) > 0.9  # Subsequent should wait ~1s
 
     # Example Asynchronous Usage
     print("\n--- Asynchronous Rate Limiter Test (2 tokens/sec, max 2) ---")
@@ -84,7 +88,7 @@ if __name__ == "__main__":
                 start_time = time.monotonic()
                 await limiter_async.wait_for_token_async()
                 end_time = time.monotonic()
-                print(f"Async Request {req_num+1}: waited for {end_time - start_time:.2f}s")
+                print(f"Async {req_num+1}: {end_time - start_time:.2f}s")
 
             tasks.append(asyncio.create_task(request_func(i)))
         await asyncio.gather(*tasks)
