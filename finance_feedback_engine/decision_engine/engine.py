@@ -86,6 +86,8 @@ class DecisionEngine:
         self.ai_provider = config.get('ai_provider', 'local')
         self.model_name = config.get('model_name', 'default')
         self.decision_threshold = config.get('decision_threshold', 0.7)
+        self.portfolio_stop_loss_percentage = config.get('portfolio_stop_loss_percentage', 2.0)
+        self.portfolio_take_profit_percentage = config.get('portfolio_take_profit_percentage', 5.0)
         
         # Monitoring context provider (optional, set via set_monitoring_context)
         self.monitoring_provider = None
@@ -515,12 +517,20 @@ A SHORT position represents selling an asset with expectation of price depreciat
 
 POSITION SIZING CALCULATION (Educational):
 ==========================================
-Position sizing demonstrates risk management principles:
+Position sizing demonstrates risk management principles for INDIVIDUAL TRADES:
 1. Risk tolerance (typically 1-2% of account balance per trade)
-2. Stop-loss distance (price distance to exit if analysis proves incorrect)
+2. Stop-loss distance: Price level where you exit if wrong for an individual trade.
 3. Volatility consideration (higher volatility = smaller position)
-4. Account preservation (never risk entire capital)
+4. Account preservation (never risk entire capital on one trade)
 Formula: Position Size = (Account Balance × Risk %) / (Entry Price × Stop Loss %)
+
+OVERALL PORTFOLIO RISK MANAGEMENT:
+==================================
+The system aims to manage the ENTIRE PORTFOLIO'S risk and reward, not just individual trades.
+- Portfolio Stop-Loss: {self.portfolio_stop_loss_percentage}% maximum acceptable loss for the entire portfolio.
+- Portfolio Take-Profit: {self.portfolio_take_profit_percentage}% target profit for the entire portfolio.
+These overall limits should influence the conservativeness of individual trade recommendations.
+
 
 PROFIT & LOSS CALCULATION (Educational):
 ========================================
@@ -1332,15 +1342,16 @@ Format response as a structured technical analysis demonstration.
                 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
             )
             
-            # Use 1% risk with 2% stop loss as default conservative values
+            # Use 1% risk with 2% stop loss as default conservative values for individual position sizing
+            risk_percentage = self.config.get('risk_percentage', 1.0)
+            stop_loss_percentage_for_sizing = 2.0
+
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
-                risk_percentage=1.0,
+                risk_percentage=risk_percentage,
                 entry_price=current_price,
-                stop_loss_percentage=2.0
+                stop_loss_percentage=stop_loss_percentage_for_sizing
             )
-            stop_loss_percentage = 2.0
-            risk_percentage = 1.0
             signal_only = False
             
             if action == 'HOLD' and has_existing_position:
@@ -1414,9 +1425,12 @@ Format response as a structured technical analysis demonstration.
             'recommended_position_size': recommended_position_size,
             'position_type': position_type,
             'entry_price': current_price,
-            'stop_loss_percentage': stop_loss_percentage,
+            'stop_loss_percentage': None, # Individual trade SL is not explicitly set by the DecisionEngine
+            'take_profit_percentage': None, # Individual trade TP is not explicitly set by the DecisionEngine
             'risk_percentage': risk_percentage,
             'signal_only': signal_only,
+            'portfolio_stop_loss_percentage': self.portfolio_stop_loss_percentage,
+            'portfolio_take_profit_percentage': self.portfolio_take_profit_percentage,
             'market_data': context['market_data'],
             'balance_snapshot': context['balance'],
             'price_change': context['price_change'],

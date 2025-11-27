@@ -24,7 +24,13 @@ class MonitoringContextProvider:
     of actual trading state when making new decisions.
     """
     
-    def __init__(self, platform, trade_monitor=None, metrics_collector=None):
+    def __init__(
+        self,
+        platform,
+        trade_monitor=None,
+        metrics_collector=None,
+        portfolio_initial_balance: float = 0.0
+    ):
         """
         Initialize monitoring context provider.
         
@@ -36,6 +42,7 @@ class MonitoringContextProvider:
         self.platform = platform
         self.trade_monitor = trade_monitor
         self.metrics_collector = metrics_collector
+        self.portfolio_initial_balance = portfolio_initial_balance
         
         logger.info("MonitoringContextProvider initialized")
     
@@ -316,6 +323,29 @@ class MonitoringContextProvider:
             logger.error(f"Error getting recent performance: {e}")
             return {}
     
+    def get_portfolio_pnl_percentage(self) -> float:
+        """
+        Calculate the overall portfolio P&L as a percentage of the initial balance.
+        This assumes that the `account_value` from `risk_metrics` (derived from
+        `platform.get_portfolio_breakdown().get('total_value_usd')`) already reflects
+        the current total equity, including both unrealized P&L of open positions
+        and realized P&L from closed positions (if any are settled).
+        
+        Returns:
+            Current overall portfolio P&L as a percentage.
+        """
+        if self.portfolio_initial_balance <= 0:
+            return 0.0
+        
+        # Get current total value of the portfolio from the platform
+        current_context = self.get_monitoring_context()
+        current_portfolio_value = current_context.get('risk_metrics', {}).get('account_value', 0.0)
+        
+        # Calculate P&L as a percentage of initial balance
+        pnl_percentage = ((current_portfolio_value - self.portfolio_initial_balance) / self.portfolio_initial_balance) * 100
+        
+        return pnl_percentage
+
     def format_for_ai_prompt(self, context: Dict[str, Any]) -> str:
         """
         Format monitoring context for inclusion in AI prompts.
