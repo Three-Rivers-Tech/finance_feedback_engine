@@ -229,17 +229,53 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 positions_list = getattr(
                     positions_response, 'positions', []
                 )
-                
+
+                # Default leverage assumption for Coinbase perpetuals when
+                # API does not provide an explicit leverage field. This is
+                # a conservative hard-coded default used only for portfolio
+                # margin/allocation calculations (signal-only mode).
+                default_leverage = 10.0
+
                 for pos in positions_list:
-                    # pos supports dict-style access
+                    # pos may be a dict-like or an object with attributes.
+                    # Use safe accessors to avoid TypeError/AttributeError or
+                    # blocking calls caused by unexpected objects.
+                    def safe_get(o, key, default=None):
+                        try:
+                            if isinstance(o, dict):
+                                return o.get(key, default)
+                            return getattr(o, key, default)
+                        except Exception:
+                            return default
+
+                    # Try a set of possible leverage field names that the API
+                    # might return. If found and parseable, store as a float;
+                    # otherwise fall back to `default_leverage`.
+                    raw_leverage = None
+                    for key in ('leverage', 'leverage_ratio', 'margin_leverage', 'leverage_level', 'leverage_amount'):
+                        candidate = safe_get(pos, key, None)
+                        if candidate is not None:
+                            raw_leverage = candidate
+                            break
+
+                    parsed_leverage = None
+                    if raw_leverage is not None:
+                        try:
+                            parsed_leverage = float(raw_leverage)
+                        except Exception:
+                            parsed_leverage = None
+
+                    leverage_value = parsed_leverage if parsed_leverage and parsed_leverage > 0 else default_leverage
+
                     futures_positions.append({
-                        'product_id': pos['product_id'],
-                        'side': pos['side'],  # LONG or SHORT
-                        'contracts': float(pos['number_of_contracts']),
-                        'entry_price': float(pos['avg_entry_price']),
-                        'current_price': float(pos['current_price']),
-                        'unrealized_pnl': float(pos['unrealized_pnl']),
-                        'daily_pnl': float(pos['daily_realized_pnl'])
+                        'product_id': safe_get(pos, 'product_id', None),
+                        'side': safe_get(pos, 'side', None),  # LONG or SHORT
+                        'contracts': float(safe_get(pos, 'number_of_contracts', 0)),
+                        'entry_price': float(safe_get(pos, 'avg_entry_price', 0)),
+                        'current_price': float(safe_get(pos, 'current_price', 0)),
+                        'unrealized_pnl': float(safe_get(pos, 'unrealized_pnl', 0)),
+                        'daily_pnl': float(safe_get(pos, 'daily_realized_pnl', 0)),
+                        'leverage': leverage_value
                     })
                     
                 logger.info(
@@ -288,13 +324,19 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             # Add futures positions to holdings with leverage adjustment.
             # Also sum margin exposures into futures_value if available.
             futures_margin_total = 0.0
+            # Reuse the same default used above; if the block that created
+            # `futures_positions` didn't run (e.g., positions API failed),
+            # fallback here as well.
+            default_leverage = locals().get('default_leverage', 10.0)
+
             for pos in futures_positions:
-                leverage = 10.0
+                # Ensure we have a safe numeric leverage value. `pos['leverage']`
+                # is set above (when reading the API) to either a parsed float
+                # or the `default_leverage` so this conversion should succeed.
                 try:
-                    leverage = float(pos.get('leverage'))
+                    leverage = float(pos.get('leverage', default_leverage))
                 except Exception:
-                    # Keep default if leverage not present or invalid
-                    pass
+                    leverage = default_leverage
 
                 contracts = float(pos.get('contracts', 0.0))
                 current_price = float(pos.get('current_price', 0.0))
