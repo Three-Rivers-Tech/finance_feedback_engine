@@ -56,6 +56,8 @@ class APIClientBase(ABC):
     DEFAULT_RETRIES = 3
     DEFAULT_BACKOFF_FACTOR = 0.5
     DEFAULT_TIMEOUT = 10 # seconds
+    DEFAULT_TOKENS_PER_SECOND = 5 # Default for rate limiting
+    DEFAULT_MAX_TOKENS = 5 # Default max tokens for burst
 
     def __init__(self, base_url: str, api_key: Optional[str] = None, api_secret: Optional[str] = None):
         self.base_url = base_url
