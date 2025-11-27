@@ -298,7 +298,6 @@ def cli(ctx, config, verbose, interactive):
         console.print("\n[bold cyan]Checking AI Provider Versions (interactive mode)...[/bold cyan]\n")
         # Map known packages to provider features for clearer reporting
         libraries = [
-            ("ollama", "Ollama Python Client"),
             ("coinbase-advanced-py", "Coinbase Advanced"),
             ("oandapyV20", "Oanda API"),
             ("click", "Click CLI"),
@@ -506,56 +505,7 @@ def config_editor(ctx, output):
     with open(target_path, 'w', encoding='utf-8') as f:
         yaml.safe_dump(updated_config, f, sort_keys=False)
 
-    console.print(
-        f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]\n"
-        "This file overrides defaults from config/config.yaml when running the CLI."
-    )
 
-
-
-@cli.command()
-@click.option(
-    '--config', '-c',
-    default='config/agent.yaml',
-    help='Path to agent configuration file.'
-)
-@click.pass_context
-def agent(ctx, config):
-    """Run the engine in autonomous agentic mode."""
-    from finance_feedback_engine.agent.config import TradingAgentConfig
-    from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator
-    from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
-
-    try:
-        # Load agent-specific config
-        agent_config_data = load_config(config)
-        agent_config = TradingAgentConfig(**agent_config_data)
-
-        # Load main engine config
-        main_config = ctx.obj['config']
-
-        # Initialize components
-        engine = FinanceFeedbackEngine(main_config)
-        
-        # The orchestrator uses the existing engine and its platform
-        orchestrator = TradingAgentOrchestrator(
-            config=agent_config,
-            engine=engine.decision_engine,
-            platform=engine.trading_platform
-        )
-
-        # Start the agent
-        orchestrator.run()
-
-    except Exception as e:
-        console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
-        if ctx.obj.get('verbose'):
-            import traceback
-            console.print(traceback.format_exc())
-        raise click.Abort()
-
-
-@cli.command()
 @click.option(
     '--auto-install', '-y',
     is_flag=True,
@@ -1047,13 +997,89 @@ def history(ctx, asset, limit):
 
 
 @cli.command()
-@click.argument('decision_id')
+@click.argument('decision_id', required=False)
 @click.pass_context
 def execute(ctx, decision_id):
     """Execute a trading decision."""
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
+        
+        # If no decision_id provided, show recent decisions and let user select
+        if not decision_id:
+            console.print("[bold blue]Recent Trading Decisions:[/bold blue]\n")
+            
+            # Get recent decisions (limit to 10)
+            decisions = engine.get_decision_history(limit=10)
+            
+            # Filter out HOLD decisions since they don't execute trades
+            decisions = [d for d in decisions if d.get('action') != 'HOLD']
+            
+            if not decisions:
+                console.print(
+                    "[yellow]No executable decisions found. Generate some "
+                    "BUY/SELL decisions first with 'analyze' command.[/yellow]"
+                )
+                return
+            
+            # Display decisions in a table with numbers
+            num_decisions = len(decisions)
+            title = f"Select a Decision to Execute ({num_decisions} available)"
+            table = Table(title=title)
+            table.add_column("#", style="cyan", justify="right")
+            table.add_column("Timestamp", style="cyan")
+            table.add_column("Asset", style="blue")
+            table.add_column("Action", style="magenta")
+            table.add_column("Confidence", style="green", justify="right")
+            table.add_column("Executed", style="yellow")
+            
+            for i, decision in enumerate(decisions, 1):
+                # Just time part of timestamp
+                timestamp = decision['timestamp'].split('T')[1][:8]
+                executed = "✓" if decision.get('executed') else "✗"
+                
+                table.add_row(
+                    str(i),
+                    timestamp,
+                    decision['asset_pair'],
+                    decision['action'],
+                    f"{decision['confidence']}%",
+                    executed
+                )
+            
+            console.print(table)
+            console.print()
+            
+            # Prompt user to select
+            while True:
+                try:
+                    choice = console.input(
+                        "Enter decision number to execute (or 'q' to quit): "
+                    ).strip()
+                    
+                    if choice.lower() in ['q', 'quit', 'exit']:
+                        console.print("[dim]Cancelled.[/dim]")
+                        return
+                    
+                    choice_num = int(choice)
+                    if 1 <= choice_num <= len(decisions):
+                        selected_decision = decisions[choice_num - 1]
+                        decision_id = selected_decision['id']
+                        console.print(
+                            f"[green]Selected decision: {decision_id}[/green]"
+                        )
+                        break
+                    else:
+                        console.print(
+                            f"[red]Invalid choice. Please enter a number "
+                            f"between 1 and {len(decisions)}.[/red]"
+                        )
+                        
+                except ValueError:
+                    console.print(
+                        "[red]Invalid input. Please enter a number or "
+                        "'q' to quit.[/red]"
+                    )
         
         console.print(
             f"[bold blue]Executing decision {decision_id}...[/bold blue]"
@@ -1791,7 +1817,7 @@ def run_agent(ctx):
         # Create and start the agent
         agent = TradingLoopAgent(
             config=agent_config,
-            decision_engine=engine.decision_engine,
+            engine=engine,
             trade_monitor=engine.trade_monitor,
             portfolio_memory=engine.memory_engine,
             trading_platform=engine.trading_platform,
