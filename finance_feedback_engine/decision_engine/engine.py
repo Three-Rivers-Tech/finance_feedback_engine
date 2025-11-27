@@ -28,7 +28,7 @@ class DecisionEngine:
     - Expectation: Asset price will RISE
     - Profit: When current price > entry price
     - Loss: When current price < entry price
-    - P&L Formula: (Exit Price - Entry Price) × Position Size
+    - P&L Formula: (Exit Price - Entry Price) x Position Size
     - Example: Buy BTC at $50,000, sell at $55,000 = $5,000 profit per BTC
     
     Short Positions (Bearish):
@@ -37,7 +37,7 @@ class DecisionEngine:
     - Expectation: Asset price will FALL
     - Profit: When current price < entry price
     - Loss: When current price > entry price
-    - P&L Formula: (Entry Price - Exit Price) × Position Size
+    - P&L Formula: (Entry Price - Exit Price) x Position Size
     - Example: Short BTC at $50,000, cover at $45,000 = $5,000 profit per BTC
     
     Position Sizing Principles:
@@ -49,18 +49,18 @@ class DecisionEngine:
     3. Volatility: Higher volatility requires smaller positions
     4. Account Balance: Never risk entire capital on one trade
     
-    Formula: Position Size = (Account Balance × Risk%) / (Entry Price × Stop Loss%)
+    Formula: Position Size = (Account Balance x Risk%) / (Entry Price x Stop Loss%)
     
     Example: $10,000 account, 1% risk, $50,000 BTC, 2% stop loss
-    → Position Size = ($10,000 × 0.01) / ($50,000 × 0.02) = 0.1 BTC
+    → Position Size = ($10,000 x 0.01) / ($50,000 x 0.02) = 0.1 BTC
     
     Profit & Loss Calculation:
     --------------------------
     Unrealized P&L: Open positions (mark-to-market)
     Realized P&L: Closed positions (actual profit/loss locked in)
     
-    Long P&L % = ((Current Price - Entry Price) / Entry Price) × 100
-    Short P&L % = ((Entry Price - Current Price) / Entry Price) × 100
+    Long P&L % = ((Current Price - Entry Price) / Entry Price) x 100
+    Short P&L % = ((Entry Price - Current Price) / Entry Price) x 100
     
     Risk Management:
     ----------------
