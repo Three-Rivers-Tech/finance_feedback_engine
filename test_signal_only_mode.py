@@ -54,7 +54,7 @@ print("-" * 70)
 context_with_balance = {
     'asset_pair': 'BTCUSD',
     'market_data': market_data,
-    'balance': {'USD': 10000.0, 'BTC': 0.1},  # Valid balance
+    'balance': {'coinbase_USD': 10000.0, 'coinbase_BTC': 0.1},  # Valid balance
     'portfolio': None,
     'memory_context': None,
     'timestamp': '2025-11-22T12:00:00',

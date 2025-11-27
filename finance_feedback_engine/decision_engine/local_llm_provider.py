@@ -366,6 +366,37 @@ class LocalLLMProvider:
             logger.warning(f"Failed to delete model {model_name}: {e}")
             return False
 
+    def _unload_model(self) -> None:
+        """
+        Unload the current model from GPU memory to free resources.
+        
+        This is called after each query to allow sequential loading
+        of different models without memory conflicts.
+        """
+        try:
+            logger.debug(f"Unloading model {self.model_name} from memory")
+            
+            result = subprocess.run(
+                ['ollama', 'stop', self.model_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False
+            )
+            
+            if result.returncode == 0:
+                logger.debug(f"Successfully unloaded model {self.model_name}")
+            else:
+                logger.debug(
+                    f"Model {self.model_name} may not have been loaded: "
+                    f"{result.stderr.strip()}"
+                )
+                
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout unloading model {self.model_name}")
+        except Exception as e:
+            logger.warning(f"Error unloading model {self.model_name}: {e}")
+
     def _is_model_available(self, model_name: str) -> bool:
         """Check if model is available locally."""
         try:
@@ -456,6 +487,10 @@ class LocalLLMProvider:
                     f"Local LLM decision: {decision['action']} "
                     f"({decision['confidence']}%)"
                 )
+                
+                # Unload model from memory to free GPU resources for next model
+                self._unload_model()
+                
                 return decision
 
             logger.warning(
