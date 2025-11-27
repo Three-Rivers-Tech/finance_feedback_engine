@@ -127,6 +127,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         total_unrealized = 0.0
         all_holdings = []
         num_assets = 0
+        cash_balances = {}
         
         platform_breakdowns = {}
 
@@ -138,6 +139,17 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 total_value_usd += breakdown.get('total_value_usd', 0)
                 # Capture unrealized P&L if the platform exposes it
                 total_unrealized += breakdown.get('unrealized_pnl', 0.0)
+
+                # Capture cash/balance if provided by the platform
+                bal = (
+                    breakdown.get('balance') or
+                    breakdown.get('total_balance_usd')
+                )
+                if bal is not None:
+                    try:
+                        cash_balances[name] = float(bal)
+                    except Exception:
+                        cash_balances[name] = 0.0
                 
                 # Add platform prefix to holdings
                 holdings = breakdown.get('holdings', [])
@@ -162,8 +174,15 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     allocation if total_value_usd else 0
                 )
 
+        # Sum cash balances across platforms
+        cash_balance_usd = (
+            sum(cash_balances.values()) if cash_balances else 0.0
+        )
+
         return {
             'total_value_usd': total_value_usd,
+            'cash_balance_usd': cash_balance_usd,
+            'per_platform_cash': cash_balances,
             'num_assets': num_assets,
             'holdings': all_holdings,
             'platform_breakdowns': platform_breakdowns,
