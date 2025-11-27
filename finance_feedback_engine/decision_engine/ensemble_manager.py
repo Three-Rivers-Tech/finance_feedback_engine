@@ -139,7 +139,8 @@ class EnsembleDecisionManager:
     def aggregate_decisions(
         self,
         provider_decisions: Dict[str, Dict[str, Any]],
-        failed_providers: Optional[List[str]] = None
+        failed_providers: Optional[List[str]] = None,
+        adjusted_weights: Optional[Dict[str, float]] = None
     ) -> Dict[str, Any]:
         """
         Aggregate decisions from multiple providers into unified decision.
@@ -195,9 +196,10 @@ class EnsembleDecisionManager:
             raise ValueError("No valid provider decisions found")
         
         # Dynamically adjust weights for active providers
-        adjusted_weights = self._adjust_weights_for_active_providers(
-            provider_names, failed_providers
-        )
+        if adjusted_weights is None:
+            adjusted_weights = self._adjust_weights_for_active_providers(
+                provider_names, failed_providers
+            )
         
         # Apply progressive fallback strategy
         final_decision, fallback_tier = self._apply_voting_with_fallback(
@@ -229,6 +231,8 @@ class EnsembleDecisionManager:
             'agreement_score': self._calculate_agreement_score(actions),
             'confidence_variance': float(np.var(confidences)),
             'confidence_adjusted': active_providers < total_providers,
+            'local_priority_applied': adjusted_weights is not None,
+            'local_models_used': [],  # to be filled by engine
             'timestamp': datetime.utcnow().isoformat()
         }
         
