@@ -98,13 +98,32 @@ class TradingLoopAgent:
             memory_context=memory_context
         )
         
-        if not decision or decision.get('decision') == "HOLD":
+        if not decision or decision.get('decision', 'HOLD') == "HOLD":
             logger.info(f"Decision: HOLD for {asset_pair}. No action taken.")
             return
-        
-        confidence = decision.get('confidence', 0) * 100
-        logger.info(f"Decision: {decision['decision']} {asset_pair} with {confidence:.2f}% confidence.")
-        logger.info(f"Reasoning: {decision.get('reasoning', 'N/A')}")
+
+        # Normalize confidence: support fractions (<=1) and percentages (>1)
+        raw_conf = decision.get('confidence', 0)
+        try:
+            conf_val = float(raw_conf)
+        except Exception:
+            conf_val = 0.0
+
+        if conf_val <= 1:
+            confidence = conf_val * 100.0
+        else:
+            confidence = conf_val
+
+        decision_label = decision.get('decision', 'UNKNOWN')
+        reasoning = decision.get('reasoning', 'N/A')
+
+        logger.info(
+            (
+                f"Decision: {decision_label} {asset_pair} with "
+                f"{confidence:.2f}% confidence."
+            )
+        )
+        logger.info(f"Reasoning: {reasoning}")
         
         # Check if should execute
         if await self._should_execute(decision):
@@ -124,7 +143,10 @@ class TradingLoopAgent:
         elif self.config.approval_policy == "always":
             # In async context, we can't use click.confirm easily
             # For now, assume no for safety
-            logger.warning("Approval required but cannot prompt in async context. Skipping trade.")
+            logger.warning(
+                "Approval required but cannot prompt in async context. "
+                "Skipping trade."
+            )
             return False
         else:
             # on_new_asset or other logic
@@ -135,8 +157,11 @@ class TradingLoopAgent:
         """Execute the trade."""
         try:
             # Use the trading platform to execute
-            result = self.trading_platform.execute_trade(decision)
-            logger.info(f"Executed trade: {decision['decision']} {decision['asset_pair']}")
+            exec_result = self.trading_platform.execute_trade(decision)
+            dec_label = decision.get('decision', 'UNKNOWN')
+            asset_label = decision.get('asset_pair', '')
+            logger.info(f"Executed trade: {dec_label} {asset_label}")
+            logger.debug("Execution result: %s", exec_result)
             # Update portfolio memory if needed
             # self.portfolio_memory.record_trade(...)
         except Exception as e:

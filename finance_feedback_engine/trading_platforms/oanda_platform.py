@@ -306,14 +306,63 @@ class OandaPlatform(BaseTradingPlatform):
                                 ask = float(asks[0].get('price'))
                                 mid = (bid + ask) / 2.0
                             else:
-                                # Fallback to closeout prices if present
+                                # Fallback to closeout prices if present. Do
+                                # not assume an arbitrary price of 1.0 — set
+                                # to None so missing pricing is observable
+                                # downstream.
                                 cb = p.get('closeoutBid')
                                 ca = p.get('closeoutAsk')
-                                mid = float(cb or ca or 1.0)
-                        except Exception:
-                            cb = p.get('closeoutBid')
-                            ca = p.get('closeoutAsk')
-                            mid = float(cb or ca or 1.0)
+                                if cb is not None or ca is not None:
+                                    try:
+                                        mid = float(cb or ca)
+                                    except Exception:
+                                        logger.warning(
+                                            "Invalid closeout prices for %s: "
+                                            "cb=%s ca=%s",
+                                            instr,
+                                            cb,
+                                            ca,
+                                        )
+                                        mid = None
+                                else:
+                                    logger.warning(
+                                        (
+                                            "Missing bids/asks and closeout prices "
+                                            "for instrument %s. Payload: %s"
+                                        ),
+                                        instr,
+                                        {
+                                            k: v
+                                            for k, v in p.items()
+                                            if k in (
+                                                'bids',
+                                                'asks',
+                                                'closeoutBid',
+                                                'closeoutAsk',
+                                            )
+                                        },
+                                    )
+                                    mid = None
+                        except Exception as exc:
+                            # Log exception and the payload to make gaps
+                            # observable
+                            logger.warning(
+                                "Exception while parsing pricing for %s: %s. "
+                                "Payload: %s",
+                                instr,
+                                exc,
+                                {
+                                    k: v
+                                    for k, v in p.items()
+                                    if k in (
+                                        'bids',
+                                        'asks',
+                                        'closeoutBid',
+                                        'closeoutAsk',
+                                    )
+                                },
+                            )
+                            mid = None
 
                         if instr and mid is not None:
                             price_map[instr] = mid
@@ -331,10 +380,19 @@ class OandaPlatform(BaseTradingPlatform):
             for p in positions:
                 instr = p.get('instrument')
                 units = float(p.get('units', 0))
-                price = price_map.get(instr, 1.0)
+                price = price_map.get(instr)
 
                 # notional is in quote currency (price is quote per base)
-                notional_in_quote = abs(units) * price
+                if price is None:
+                    logger.warning(
+                        "Missing price for instrument %s; cannot compute "
+                        "notional. Payload price_map entry: %s",
+                        instr,
+                        price_map.get(instr),
+                    )
+                    notional_in_quote = 0.0
+                else:
+                    notional_in_quote = abs(units) * price
 
                 # If the quote currency matches account base, we're done
                 usd_value = None
