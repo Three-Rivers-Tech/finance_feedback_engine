@@ -524,7 +524,7 @@ def agent(ctx, config):
     """Run the engine in autonomous agentic mode."""
     from finance_feedback_engine.agent.config import TradingAgentConfig
     from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator
-    from finance_feedback_engine.trading_platforms.unified_platform import UnifiedPlatform
+    from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
 
     try:
         # Load agent-specific config
