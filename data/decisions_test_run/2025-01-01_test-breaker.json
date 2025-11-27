@@ -1,0 +1,15 @@
+{
+  "id": "test-breaker",
+  "asset_pair": "ETHUSD",
+  "signal_only": false,
+  "action": "BUY",
+  "confidence": 80,
+  "amount": 0.1,
+  "timestamp": "2025-01-01T00:00:00Z",
+  "executed": true,
+  "execution_time": "2025-11-27T17:04:11.576335",
+  "execution_result": {
+    "success": true,
+    "message": "simulated trade (mock)"
+  }
+}

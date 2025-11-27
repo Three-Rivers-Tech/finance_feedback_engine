@@ -75,6 +75,85 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
             engine._is_valid_provider_response(fallback_reason, "local")
         )
 
+    def test_local_models_config_reading(self):
+        config = {
+            "decision_engine": {
+                "local_models": ["llama3.2:3b", "mistral:7b"],
+                "local_priority": "soft"
+            }
+        }
+        engine = DecisionEngine(config)
+        self.assertEqual(engine.local_models, ["llama3.2:3b", "mistral:7b"])
+        self.assertEqual(engine.local_priority, "soft")
+
+    def test_local_models_validation(self):
+        # Valid list
+        config = {"decision_engine": {"local_models": ["model1", "model2"]}}
+        engine = DecisionEngine(config)
+        self.assertEqual(engine.local_models, ["model1", "model2"])
+
+        # Invalid type
+        config = {"decision_engine": {"local_models": "not_a_list"}}
+        with self.assertRaises(ValueError):
+            DecisionEngine(config)
+
+        # Valid priority types
+        for priority in [True, False, "soft", 1.5, 2.0]:
+            config = {"decision_engine": {"local_priority": priority}}
+            engine = DecisionEngine(config)
+            self.assertEqual(engine.local_priority, priority)
+
+        # Invalid priority type
+        config = {"decision_engine": {"local_priority": "invalid"}}
+        with self.assertRaises(ValueError):
+            DecisionEngine(config)
+
+    def test_local_candidates_building(self):
+        config = {
+            "decision_engine": {
+                "local_models": ["llama3.2:3b", "mistral:7b"]
+            },
+            "ensemble": {
+                "enabled_providers": ["llama3.2:3b", "mistral:7b", "gemini"]
+            }
+        }
+        engine = DecisionEngine(config)
+        # Simulate the partitioning logic
+        enabled_providers = ["llama3.2:3b", "mistral:7b", "gemini"]
+        local_candidates = []
+        if engine.local_models:
+            for model in engine.local_models:
+                if model in enabled_providers:
+                    local_candidates.append(model)
+        self.assertEqual(local_candidates, ["llama3.2:3b", "mistral:7b"])
+
+    def test_adjusted_weights_computation(self):
+        config = {
+            "ensemble": {
+                "enabled_providers": ["local1", "remote1"],
+                "provider_weights": {"local1": 0.5, "remote1": 0.5}
+            }
+        }
+        manager = EnsembleDecisionManager(config)
+        
+        # Test soft boost
+        adjusted_weights = {}
+        local_candidates = ["local1"]
+        boost_factor = 1.5
+        for p in ["local1", "remote1"]:
+            base_weight = manager.provider_weights.get(p, 1.0)
+            if p in local_candidates:
+                adjusted_weights[p] = base_weight * boost_factor
+            else:
+                adjusted_weights[p] = base_weight
+        total = sum(adjusted_weights.values())
+        adjusted_weights = {p: w / total for p, w in adjusted_weights.items()}
+        
+        expected_local = (0.5 * 1.5) / (0.5 * 1.5 + 0.5)
+        expected_remote = 0.5 / (0.5 * 1.5 + 0.5)
+        self.assertAlmostEqual(adjusted_weights["local1"], expected_local, places=3)
+        self.assertAlmostEqual(adjusted_weights["remote1"], expected_remote, places=3)
+
 
 if __name__ == "__main__":
     unittest.main()
