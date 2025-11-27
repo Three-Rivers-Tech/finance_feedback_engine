@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
+from typing import Optional
 
 
 class BaseTradingPlatform(ABC):
@@ -19,6 +20,16 @@ class BaseTradingPlatform(ABC):
             credentials: Platform-specific credentials
         """
         self.credentials = credentials
+        # Persistent in-process circuit breaker for execute_trade
+        self._execute_breaker = None
+
+    def get_execute_breaker(self):
+        """Return the attached CircuitBreaker instance or None."""
+        return self._execute_breaker
+
+    def set_execute_breaker(self, breaker: Optional[object]) -> None:
+        """Attach a CircuitBreaker instance to this platform."""
+        self._execute_breaker = breaker
 
     @abstractmethod
     def get_balance(self) -> Dict[str, float]:

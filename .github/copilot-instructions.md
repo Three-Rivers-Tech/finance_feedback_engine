@@ -1,3 +1,47 @@
+```instructions
+## Copilot Instructions: Finance Feedback Engine 2.0
+
+Authoritative, project-specific guidance for AI coding agents. Keep edits concise and preserve existing patterns.
+
+Big picture (quick):
+- Four logical layers: Data providers (`AlphaVantageProvider`), Decision Engine (`DecisionEngine` + `EnsembleDecisionManager`), Trading Platforms (`PlatformFactory` + `BaseTradingPlatform`), and Persistence (`DecisionStore` JSON files).
+
+Core, actionable pointers:
+- Engine entry: `finance_feedback_engine/core.py` → `FinanceFeedbackEngine` (wires providers, platforms, decision engine, persistence, monitoring).
+- Decision logic: `finance_feedback_engine/decision_engine/engine.py` (prompt construction, `_create_decision_context`, position sizing helpers `calculate_position_size`).
+- Ensemble: `finance_feedback_engine/decision_engine/ensemble_manager.py` (weights, 4-tier fallback). Tests exercise fallback logic in `tests/test_ensemble_fallback.py`.
+- Data provider: `finance_feedback_engine/data_providers/alpha_vantage_provider.py` (use `.get_comprehensive_market_data(...)` for analyze flows). Mock fallback used only on API failure.
+- Platforms: register or inspect platforms in `finance_feedback_engine/trading_platforms/platform_factory.py`. `MockPlatform` useful for local work and CI-less testing.
+- Persistence: `finance_feedback_engine/persistence/decision_store.py` (filenames `YYYY-MM-DD_<uuid>.json`, append-only updates by ID).
+
+Developer workflows & commands:
+- Install: `pip install -r requirements.txt` or `pip install -e .`
+- Run common CLI flows: `python main.py analyze BTCUSD`, `python main.py balance`, `python main.py dashboard`, `python main.py backtest BTCUSD -s 2025-01-01 -e 2025-03-01`.
+- Tests & demos: `python test_api.py`, `bash demo.sh`, plus `pytest` on the `tests/` directory when environment dependencies are available.
+- Config: use `config/config.local.yaml` (gitignored) for credentials. `ALPHA_VANTAGE_API_KEY` env var overrides config.
+
+Project-specific conventions (non-generic):
+- Market data dict: must have `open, high, low, close, volume`; `type` is used to include `market_cap` for crypto.
+- Position sizing fields should follow engine helpers; use `DecisionEngine.calculate_position_size()` for consistency.
+- Signal-only mode: when platform balance/portfolio unavailable set `signal_only: true` and sizing fields to `null`.
+- Platform names are normalized to lowercase; `unified` mode accepts a `platforms:` list in config (see `core.py` for structure).
+
+Integration notes & PR guidance:
+- Monitoring: `FinanceFeedbackEngine` auto-attaches `MonitoringContextProvider` if `monitoring.enable_context_integration` is true. See `finance_feedback_engine/monitoring/` for collector/provider APIs.
+- Backwards-compatibility: changing the decision JSON schema or CLI output must update `cli/main.py`, `persistence/decision_store.py`, and include an example `data/decisions/` file in the PR.
+
+When extending:
+- New Trading Platform: subclass `BaseTradingPlatform`, implement required methods, then call `PlatformFactory.register_platform('name', Class)`.
+- New AI Provider: implement a provider with `.query(prompt) -> dict` and wire into `DecisionEngine._query_ai` or add to `ensemble.enabled_providers`.
+- New Data Provider: provide `.get_market_data(asset_pair)` and a `.get_comprehensive_market_data` style helper and adapt `FinanceFeedbackEngine.analyze_asset()` if needed.
+
+References to inspect when editing:
+- `finance_feedback_engine/core.py`, `decision_engine/engine.py`, `decision_engine/ensemble_manager.py`, `data_providers/alpha_vantage_provider.py`, `trading_platforms/platform_factory.py`, `persistence/decision_store.py`, and `cli/main.py`.
+
+---
+Feedback welcome — tell me which area (monitoring, backtesting, or adding platforms) you want expanded with concrete examples.
+
+```
 ## Copilot Instructions: Finance Feedback Engine 2.0
 
 > **Authoritative, project-specific guidance for AI coding agents.**
