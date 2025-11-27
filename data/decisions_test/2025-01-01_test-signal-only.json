@@ -4,6 +4,6 @@
   "signal_only": true,
   "action": "BUY",
   "confidence": 80,
-  "amount": 0.1,
+  "amount": null,
   "timestamp": "2025-01-01T00:00:00Z"
 }

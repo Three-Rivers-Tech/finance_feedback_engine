@@ -1,6 +1,7 @@
 """Core Finance Feedback Engine module."""
 
 from typing import Dict, Any, Optional, List
+import socket
 from datetime import datetime
 import logging
 
@@ -401,9 +402,13 @@ class FinanceFeedbackEngine:
                     raise ValueError(
                         f"Execution blocked: largest position {largest_pct:.1f}% exceeds max {max_concentration}%"
                     )
+        except (TimeoutError, ConnectionError, socket.timeout) as e:
+            # If monitoring fetch fails due to known transient issues, allow execution but log warning
+            logger.warning(f"Pre-execution monitoring checks failed due to network/timeout; proceeding cautiously: {e}")
         except Exception as e:
-            # If monitoring fetch fails, be conservative and allow execution to proceed
-            logger.warning(f"Pre-execution monitoring checks failed; proceeding cautiously: {e}")
+            # For any other error, re-raise to block execution and surface the problem
+            logger.error(f"Critical error during pre-execution monitoring checks: {e}")
+            raise
 
     def backtest(
         self,
