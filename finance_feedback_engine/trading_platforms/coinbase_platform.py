@@ -427,15 +427,20 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         # Check for existing order with the same client_order_id to avoid duplicates
         try:
             existing_orders = client.list_orders(client_order_id=client_order_id)
-            if existing_orders:
+            # Validate that existing_orders is a list-like object with at least one item
+            if existing_orders and hasattr(existing_orders, '__iter__') and len(existing_orders) > 0:
                 existing_order = existing_orders[0]
+                order_id = getattr(existing_order, 'id', None)
+                order_status = getattr(existing_order, 'status', 'UNKNOWN')
+                if not order_id:
+                    raise ValueError("Existing order missing 'id' attribute")
                 logger.info("Found existing order with client_order_id %s, reusing", client_order_id)
                 return {
                     'success': True,
                     'platform': 'coinbase_advanced',
                     'decision_id': decision.get('id'),
-                    'order_id': existing_order.id,
-                    'order_status': existing_order.status,
+                    'order_id': order_id,
+                    'order_status': order_status,
                     'latency_seconds': 0,
                     'response': existing_order,
                     'timestamp': decision.get('timestamp')
@@ -470,8 +475,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     if current_price <= 0:
                         raise ValueError(f"Invalid price for {asset_pair}: {current_price}")
                     base_size_value = float(size_in_usd) / current_price
-                    # Round to whole number as suggested
-                    base_size = str(int(round(base_size_value)))
+                    # Format with appropriate precision (8 decimals is standard for crypto)
+                    base_size = f"{base_size_value:.8f}"
                     logger.info("Calculated base_size for SELL: %s (price: %.2f, usd_size: %s)", base_size, current_price, size_in_usd)
                 except Exception as e:
                     logger.error("Failed to calculate base_size for SELL: %s", e)

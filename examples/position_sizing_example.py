@@ -43,7 +43,7 @@ def demonstrate_position_sizing():
         account_balance=account_balance,
         risk_percentage=1.0,  # Risk 1% of account
         entry_price=btc_price,
-        stop_loss_percentage=2.0  # 2% stop loss
+        stop_loss_percentage=0.02  # 2% stop loss
     )
     
     risk_dollars = account_balance * 0.01
@@ -61,7 +61,7 @@ def demonstrate_position_sizing():
         account_balance=account_balance,
         risk_percentage=2.0,  # Risk 2% of account
         entry_price=btc_price,
-        stop_loss_percentage=5.0  # 5% stop loss
+        stop_loss_percentage=0.05  # 5% stop loss
     )
     
     risk_dollars_aggressive = account_balance * 0.02

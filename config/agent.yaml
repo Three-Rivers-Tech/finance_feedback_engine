@@ -15,7 +15,7 @@ strategic_goal: balanced
 # The risk tolerance for the agent. Options: low, medium, high
 risk_appetite: medium
 # The maximum acceptable drawdown for the portfolio.
-max_drawdown_percent: 15.0
+max_drawdown_percent: 0.15
 
 # --- Data & Analysis Controls ---
 # List of asset pairs for the agent to monitor and trade.

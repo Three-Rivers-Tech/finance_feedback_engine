@@ -151,7 +151,7 @@ def test_decision_validation():
                 "reasoning": "Strong bullish trend with RSI oversold",
                 "asset_pair": "BTCUSD",
                 "recommended_position_size": 0.5,
-                "stop_loss_percentage": 2.0,
+                "stop_loss_percentage": 0.02,
                 "risk_percentage": 1.0
             },
             "should_pass": True
