@@ -64,6 +64,23 @@ class TradingAgentOrchestrator:
             return
 
         while True:
+            # Check kill-switch conditions
+            try:
+                current_breakdown = self.platform.get_portfolio_breakdown()
+                current_value = current_breakdown.get('total_value_usd', 0.0)
+                if self.initial_portfolio_value > 0:
+                    pnl_pct = (current_value - self.initial_portfolio_value) / self.initial_portfolio_value
+                    if pnl_pct >= self.kill_switch_gain_pct:
+                        print(f"Kill-switch triggered: portfolio gain of {pnl_pct:.2%} exceeds threshold {self.kill_switch_gain_pct:.2%}")
+                        self.pause_trading("Portfolio gain kill-switch")
+                        continue
+                    elif pnl_pct <= -self.kill_switch_loss_pct:
+                        print(f"Kill-switch triggered: portfolio loss of {pnl_pct:.2%} exceeds threshold -{self.kill_switch_loss_pct:.2%}")
+                        self.pause_trading("Portfolio loss kill-switch")
+                        continue
+            except Exception as e:
+                print(f"Error checking kill-switch: {e}")
+
             if self._paused_by_monitor:
                 print("Agent is paused by monitor. Waiting for resume signal or manual intervention.")
                 time.sleep(self.config.analysis_frequency_seconds) # Wait before checking again

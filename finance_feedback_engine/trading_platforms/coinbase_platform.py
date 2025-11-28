@@ -5,6 +5,7 @@ import logging
 import uuid
 import time
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from requests.exceptions import RequestException
 
 from .base_platform import BaseTradingPlatform
 
@@ -395,7 +396,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(2),
-        retry=retry_if_exception_type(Exception) # More specific exceptions can be used
+        retry=retry_if_exception_type((RequestException, ConnectionError, TimeoutError))
     )
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -423,6 +424,25 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         size_in_usd = str(decision.get('suggested_amount', 0))
         client_order_id = f"ffe-{decision.get('id', uuid.uuid4().hex)}"
 
+        # Check for existing order with the same client_order_id to avoid duplicates
+        try:
+            existing_orders = client.list_orders(client_order_id=client_order_id)
+            if existing_orders:
+                existing_order = existing_orders[0]
+                logger.info("Found existing order with client_order_id %s, reusing", client_order_id)
+                return {
+                    'success': True,
+                    'platform': 'coinbase_advanced',
+                    'decision_id': decision.get('id'),
+                    'order_id': existing_order.id,
+                    'order_status': existing_order.status,
+                    'latency_seconds': 0,
+                    'response': existing_order,
+                    'timestamp': decision.get('timestamp')
+                }
+        except Exception as e:
+            logger.debug("No existing order found or error checking: %s", e)
+
         if action not in ['BUY', 'SELL'] or float(size_in_usd) <= 0:
             logger.warning("Invalid trade decision: %s", decision)
             return {
@@ -443,10 +463,24 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     quote_size=size_in_usd
                 )
             else: # SELL
+                # Fetch current price to calculate base size
+                try:
+                    product_response = client.get_product(product_id=asset_pair)
+                    current_price = float(getattr(product_response, 'price', 0))
+                    if current_price <= 0:
+                        raise ValueError(f"Invalid price for {asset_pair}: {current_price}")
+                    base_size_value = float(size_in_usd) / current_price
+                    # Round to whole number as suggested
+                    base_size = str(int(round(base_size_value)))
+                    logger.info("Calculated base_size for SELL: %s (price: %.2f, usd_size: %s)", base_size, current_price, size_in_usd)
+                except Exception as e:
+                    logger.error("Failed to calculate base_size for SELL: %s", e)
+                    raise
+                
                 order_result = client.market_order_sell(
                     client_order_id=client_order_id,
                     product_id=asset_pair,
-                    base_size="0" # Placeholder, need to figure out how to sell by quote size
+                    base_size=base_size
                 )
 
             latency = time.time() - start_time
@@ -489,6 +523,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     'timestamp': decision.get('timestamp')
                 }
 
+        except (RequestException, ConnectionError, TimeoutError) as e:
+            raise  # Allow retry decorator to handle retryable exceptions
         except Exception as e:
             latency = time.time() - start_time if 'start_time' in locals() else -1
             logger.exception("Exception during trade execution")

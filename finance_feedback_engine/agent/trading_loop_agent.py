@@ -152,20 +152,43 @@ class TradingLoopAgent:
         closed_trades = getattr(self.trade_monitor, 'get_closed_trades', lambda: [])()
         for trade in closed_trades:
             try:
-                logger.info(f"Processing closed trade: {trade.product_id} with P&L: ${trade.realized_pnl:.2f}")
-                decision_id = trade.decision_id 
-                if decision_id:
-                    self.engine.record_trade_outcome(
-                        decision_id=decision_id,
-                        exit_price=trade.exit_price,
-                        exit_timestamp=trade.exit_time,
-                        hit_stop_loss=trade.exit_reason == 'stop_loss',
-                        hit_take_profit=trade.exit_reason == 'take_profit'
-                    )
-                else:
-                    logger.warning(f"Cannot record outcome for trade {trade.product_id} without a decision ID.")
+                # Safely get attributes that might be missing
+                product_id = getattr(trade, 'product_id', 'unknown')
+                realized_pnl = getattr(trade, 'realized_pnl', 0.0)
+                decision_id = getattr(trade, 'decision_id', None)
+                exit_price = getattr(trade, 'exit_price', None)
+                exit_time = getattr(trade, 'exit_time', None)
+                exit_reason = getattr(trade, 'exit_reason', None)
+                
+                logger.info(f"Processing closed trade: {product_id} with P&L: ${realized_pnl:.2f}")
+                
+                if not decision_id:
+                    logger.warning(f"Cannot record outcome for trade {product_id} without a decision ID.")
+                    continue
+                
+                # Check for required attributes for record_trade_outcome
+                missing_attrs = []
+                if exit_price is None:
+                    missing_attrs.append('exit_price')
+                if exit_time is None:
+                    missing_attrs.append('exit_time')
+                if exit_reason is None:
+                    missing_attrs.append('exit_reason')
+                
+                if missing_attrs:
+                    logger.warning(f"Cannot record outcome for trade {product_id}: missing required attributes {missing_attrs}")
+                    continue
+                
+                self.engine.record_trade_outcome(
+                    decision_id=decision_id,
+                    exit_price=exit_price,
+                    exit_timestamp=exit_time,
+                    hit_stop_loss=exit_reason == 'stop_loss',
+                    hit_take_profit=exit_reason == 'take_profit'
+                )
             except Exception as e:
-                logger.error(f"Error recording trade outcome for {trade.product_id}: {e}")
+                product_id = getattr(trade, 'product_id', 'unknown')
+                logger.error(f"Error recording trade outcome for {product_id}: {e}")
 
         # Wait before the next monitoring check
         await asyncio.sleep(self.config.monitoring_frequency_seconds)
