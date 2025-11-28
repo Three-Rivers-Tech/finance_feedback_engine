@@ -102,8 +102,8 @@ class DecisionEngine:
         self.ai_provider = decision_config.get('ai_provider', 'local')
         self.model_name = decision_config.get('model_name', 'default')
         self.decision_threshold = decision_config.get('decision_threshold', 0.7)
-        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 2.0)
-        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 5.0)
+        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
+        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 0.05)
         
         # Local models and priority configuration
         self.local_models = decision_config.get('local_models', [])
@@ -565,8 +565,8 @@ Formula: Position Size = (Account Balance × Risk %) / (Entry Price × Stop Loss
 OVERALL PORTFOLIO RISK MANAGEMENT:
 ==================================
 The system aims to manage the ENTIRE PORTFOLIO'S risk and reward, not just individual trades.
-- Portfolio Stop-Loss: {self.portfolio_stop_loss_percentage}% maximum acceptable loss for the entire portfolio.
-- Portfolio Take-Profit: {self.portfolio_take_profit_percentage}% target profit for the entire portfolio.
+- Portfolio Stop-Loss: {self.portfolio_stop_loss_percentage:.2%} maximum acceptable loss for the entire portfolio.
+- Portfolio Take-Profit: {self.portfolio_take_profit_percentage:.2%} target profit for the entire portfolio.
 These overall limits should influence the conservativeness of individual trade recommendations.
 
 
@@ -1520,11 +1520,11 @@ Format response as a structured technical analysis demonstration.
         
         # For non-signal-only BUY/SELL, use calculated position size converted to USD notional
         if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
-            # For crypto futures, position size is USD notional value
-            if asset_pair.endswith('USD') or 'USD' in asset_pair:
+            # For crypto futures, position size is USD notional value when USD or USDT is quote
+            if is_crypto and (asset_pair.endswith('USD') or asset_pair.endswith('USDT')):
                 suggested_amount = recommended_position_size * current_price
                 logger.info(
-                    "Position sizing: $%.2f USD notional (%.6f units @ $%.2f)",
+                    "Position sizing: $%.2f USD notional for crypto futures (%.6f units @ $%.2f)",
                     suggested_amount,
                     recommended_position_size,
                     current_price
