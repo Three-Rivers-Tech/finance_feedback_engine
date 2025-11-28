@@ -205,6 +205,27 @@ backtesting:
     exploration_rate: 0.1
 
 # ============================================
+# Safety & Execution Controls
+# ============================================
+# Prevent unsafe automated executions and provide circuit breaker protection
+safety:
+  # Safety thresholds used during pre-execution monitoring checks
+  max_leverage: 5.0           # block execution above this leverage estimate
+  max_position_pct: 25.0      # block execution if largest position > this percent
+
+# Circuit breaker tuning (process-local)
+circuit_breaker:
+  failure_threshold: 3        # number of consecutive failures to open the breaker
+  recovery_timeout_seconds: 300
+  half_open_retry: 1
+
+# ============================================
+# Signal-Only Mode
+# ============================================
+# Force signal-only mode globally (no position sizing or execution)
+# signal_only_default: false
+
+# ============================================
 # Logging Configuration (Optional)
 # ============================================
 logging:
