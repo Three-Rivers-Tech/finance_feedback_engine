@@ -31,7 +31,7 @@ Developer workflows (concrete commands):
 Project-specific conventions (must-follow):
 - Market data dict must include `open, high, low, close, volume`. Crypto may include `market_cap` under `type`.
 - Position sizing: prefer `DecisionEngine.calculate_position_size()`; default sizing assumes 1% risk / 2% stop-loss.
-- Signal-only mode: set `signal_only: true` in config when balance/portfolio unavailable; sizing fields must be `null`.
+- Signal-only mode: set `signal_only_default: true` in config to force signal-only mode globally; sizing fields must be `null`.
 - Platform names normalized to lowercase; unified mode accepts `platforms:` list in `config/config.local.yaml`.
 - Confidence values are integers 0–100.
 
@@ -69,7 +69,7 @@ Developer workflows (concrete commands)
 Project-specific conventions (do not change lightly)
 - Market data dict must include keys: `open, high, low, close, volume`. Crypto may include `market_cap` under `type`.
 - Position sizing: use `DecisionEngine.calculate_position_size()`; defaults assume 1% risk and ~2% stop-loss unless config overrides.
-- Signal-only mode: set `signal_only: true` in `config/*.yaml` when balance/portfolio is unavailable; sizing fields should be `null` in persisted decisions.
+- Signal-only mode: set `signal_only_default: true` in `config/*.yaml` to force signal-only mode globally; sizing fields should be `null` in persisted decisions.
 - Platform names normalized to lowercase; unified mode reads `platforms:` list in `config/config.local.yaml`.
 - Confidence values are integers 0–100 and stored in `decision['confidence']`.
 

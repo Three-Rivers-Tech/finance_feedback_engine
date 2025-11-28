@@ -1409,11 +1409,23 @@ Format response as a structured technical analysis demonstration.
                     has_existing_position = True
                     break
         
+        # Determine position type based on action
+        position_type = (
+            'LONG'
+            if action == 'BUY'
+            else 'SHORT'
+            if action == 'SELL'
+            else None
+        )
+
         # Calculate position sizing based on action and existing position
         # HOLD: Only show position sizing if there's an existing position
         # BUY/SELL: Always calculate position sizing if balance is available
+        # But skip if signal_only_default is enabled
+        signal_only_default = self.config.get('signal_only_default', False)
         should_calculate_position = (
             has_valid_balance
+            and not signal_only_default
             and (
                 action in ['BUY', 'SELL']
                 or (action == 'HOLD' and has_existing_position)
@@ -1426,18 +1438,28 @@ Format response as a structured technical analysis demonstration.
                 'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
             )
             
-            # Use 1% risk with 2% stop loss as default conservative values for individual position sizing
-            risk_percentage = self.config.get('risk_percentage', 1.0)
-            stop_loss_percentage_for_sizing = 2.0
+            # Get risk parameters from the agent config
+            agent_config = self.config.get('agent', {})
+            risk_percentage = agent_config.get('risk_percentage', 1.0)
+            # TODO: Replace this fixed percentage with a dynamic stop-loss calculation
+            # based on volatility (e.g., ATR) or market structure.
+            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 2.0)
 
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
                 risk_percentage=risk_percentage,
                 entry_price=current_price,
-                stop_loss_percentage=stop_loss_percentage_for_sizing
+                stop_loss_percentage=sizing_stop_loss_percentage
             )
             signal_only = False
             
+            # Calculate the stop loss price
+            stop_loss_price = 0
+            if position_type == 'LONG' and current_price > 0:
+                stop_loss_price = current_price * (1 - sizing_stop_loss_percentage / 100)
+            elif position_type == 'SHORT' and current_price > 0:
+                stop_loss_price = current_price * (1 + sizing_stop_loss_percentage / 100)
+
             if action == 'HOLD' and has_existing_position:
                 logger.info(
                     "HOLD with existing position: sizing (%.4f units) from %s",
@@ -1446,22 +1468,29 @@ Format response as a structured technical analysis demonstration.
                 )
             else:
                 logger.info(
-                    "Position sizing: %.4f units (balance: $%.2f from %s)",
+                    "Position sizing: %.4f units (balance: $%.2f from %s, risk: %s%%, sl: %s%%)",
                     recommended_position_size,
                     total_balance,
                     balance_source,
+                    risk_percentage,
+                    sizing_stop_loss_percentage,
                 )
         else:
             # Signal-only mode: No position sizing when balance is unavailable
             # or when HOLD without an existing position
             recommended_position_size = None
-            stop_loss_percentage = None
+            sizing_stop_loss_percentage = None
             risk_percentage = None
+            stop_loss_price = None
             signal_only = True
             
             if action == 'HOLD' and not has_existing_position:
                 logger.info(
                     "HOLD without existing position - no position sizing shown"
+                )
+            elif signal_only_default:
+                logger.info(
+                    "Signal-only mode enabled by default - no position sizing shown"
                 )
             elif not has_valid_balance:
                 balance_type = (
@@ -1480,15 +1509,6 @@ Format response as a structured technical analysis demonstration.
                 logger.warning(
                     "Portfolio data unavailable - providing signal only"
                 )
-        
-        # Determine position type based on action
-        position_type = (
-            'LONG'
-            if action == 'BUY'
-            else 'SHORT'
-            if action == 'SELL'
-            else None
-        )
 
         # Override suggested_amount to 0 for HOLD with no position
         suggested_amount = ai_response.get('amount', 0)
@@ -1497,6 +1517,21 @@ Format response as a structured technical analysis demonstration.
             logger.debug(
                 "Overriding suggested_amount to 0 (HOLD with no position)"
             )
+        
+        # For non-signal-only BUY/SELL, use calculated position size converted to USD notional
+        if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
+            # For crypto futures, position size is USD notional value
+            if asset_pair.endswith('USD') or 'USD' in asset_pair:
+                suggested_amount = recommended_position_size * current_price
+                logger.info(
+                    "Position sizing: $%.2f USD notional (%.6f units @ $%.2f)",
+                    suggested_amount,
+                    recommended_position_size,
+                    current_price
+                )
+            else:
+                # For forex or other, use unit amount
+                suggested_amount = recommended_position_size
         
         decision = {
             'id': decision_id,
@@ -1509,7 +1544,8 @@ Format response as a structured technical analysis demonstration.
             'recommended_position_size': recommended_position_size,
             'position_type': position_type,
             'entry_price': current_price,
-            'stop_loss_percentage': None, # Individual trade SL is not explicitly set by the DecisionEngine
+            'stop_loss_price': stop_loss_price,
+            'stop_loss_percentage': sizing_stop_loss_percentage,
             'take_profit_percentage': None, # Individual trade TP is not explicitly set by the DecisionEngine
             'risk_percentage': risk_percentage,
             'signal_only': signal_only,

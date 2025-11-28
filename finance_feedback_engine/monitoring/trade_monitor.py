@@ -90,6 +90,8 @@ class TradeMonitor:
         self.active_trackers: Dict[str, TradeTrackerThread] = {}
         self.tracked_trade_ids: Set[str] = set()
         self.pending_queue: Queue = Queue()
+        self.closed_trades_queue: Queue = Queue() # For agent to consume
+        self.expected_trades: Dict[str, str] = {} # Maps asset_pair -> decision_id
         
         # Control
         self._stop_event = threading.Event()
@@ -295,8 +297,6 @@ class TradeMonitor:
                 entry_price = position.get('entry_price', 0.0)
                 
                 # Generate stable trade ID from immutable attributes
-                # Use deterministic hash of product_id, side, and entry_price
-                # This ensures the same position gets the same ID across detection cycles
                 stable_key = f"{product_id}:{side}:{entry_price:.8f}"
                 trade_id = hashlib.sha256(stable_key.encode()).hexdigest()[:16]
                 
@@ -314,10 +314,16 @@ class TradeMonitor:
                 # Add to tracking set
                 self.tracked_trade_ids.add(trade_id)
                 
+                # Associate with a decision if one is expected for this asset
+                decision_id = self.expected_trades.pop(product_id.replace('-', ''), None)
+                if decision_id:
+                    logger.info(f"Associated new trade {trade_id} with decision {decision_id}")
+
                 # Queue for monitoring
                 self.pending_queue.put({
                     'trade_id': trade_id,
-                    'position_data': position
+                    'position_data': position,
+                    'decision_id': decision_id
                 })
                 
         except Exception as e:
@@ -347,18 +353,19 @@ class TradeMonitor:
                 
                 trade_id = trade_info['trade_id']
                 position_data = trade_info['position_data']
-                
+                decision_id = trade_info.get('decision_id')
+
                 # Create and start tracker thread
                 tracker = TradeTrackerThread(
                     trade_id=trade_id,
                     position_data=position_data,
                     platform=self.platform,
                     metrics_callback=self._on_trade_completed,
-                    poll_interval=self.poll_interval
+                    poll_interval=self.poll_interval,
+                    decision_id=decision_id
                 )
                 
                 # Submit to executor for thread lifecycle management
-                # (Executor manages thread creation, execution, and cleanup)
                 self.executor.submit(tracker.run)
                 
                 self.active_trackers[trade_id] = tracker
@@ -379,7 +386,7 @@ class TradeMonitor:
     
     def _on_trade_completed(self, metrics: Dict[str, Any]):
         """
-        Callback when trade tracking completes.
+        Callback when trade tracking completes. This is part of the FEEDBACK loop.
         
         Args:
             metrics: Final trade metrics from tracker
@@ -392,47 +399,41 @@ class TradeMonitor:
             f"Duration: {metrics.get('holding_duration_hours', 0):.2f}h"
         )
         
-        # Record metrics for ML feedback
+        # Record metrics for long-term analysis
         self.metrics_collector.record_trade_metrics(metrics)
+
+        # Put the completed trade metrics into a queue for the agent to process
+        self.closed_trades_queue.put(metrics)
         
-        # Integrate with PortfolioMemoryEngine if available
-        if self.portfolio_memory:
-            try:
-                # Convert monitoring metrics to decision format for memory
-                # Note: In production, you'd link this to the actual decision
-                # that triggered the trade
-                pseudo_decision = {
-                    'id': trade_id,
-                    'asset_pair': metrics.get('product_id', '').replace('-', ''),
-                    'action': 'BUY' if metrics.get('side') == 'LONG' else 'SELL',
-                    'timestamp': metrics.get('entry_time'),
-                    'entry_price': metrics.get('entry_price'),
-                    'position_size': metrics.get('position_size'),
-                    'ai_provider': 'manual',  # Would be actual provider
-                    'confidence': 75  # Would be actual confidence
-                }
-                
-                # Record in portfolio memory
-                self.portfolio_memory.record_trade_outcome(
-                    decision=pseudo_decision,
-                    exit_price=metrics.get('exit_price'),
-                    exit_timestamp=metrics.get('exit_time'),
-                    hit_stop_loss=metrics.get('exit_reason') == 'stop_loss_likely',
-                    hit_take_profit=metrics.get('exit_reason') == 'take_profit_likely'
-                )
-                
-                logger.info(
-                    f"Trade outcome recorded in portfolio memory: {trade_id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Error recording to portfolio memory: {e}",
-                    exc_info=True
-                )
+        # The PortfolioMemoryEngine is updated by the agent loop now, not here.
         
         # Remove from tracked set (allow retracking if reopened)
         self.tracked_trade_ids.discard(trade_id)
     
+    def associate_decision_to_trade(self, decision_id: str, asset_pair: str):
+        """
+        Temporarily store an association between an asset and a decision ID.
+        This helps the monitor link a newly detected trade to the decision that created it.
+        """
+        from ..utils.validation import standardize_asset_pair
+        standardized_pair = standardize_asset_pair(asset_pair, separator='-')
+        self.expected_trades[standardized_pair] = decision_id
+        logger.info(f"Expecting new trade for {standardized_pair} from decision {decision_id}")
+
+    def is_trade_open(self) -> bool:
+        """Check if there are any actively monitored trades."""
+        return bool(self.active_trackers)
+
+    def get_closed_trades(self) -> List[Dict[str, Any]]:
+        """Retrieve all completed trades from the queue."""
+        closed_trades = []
+        while not self.closed_trades_queue.empty():
+            try:
+                closed_trades.append(self.closed_trades_queue.get_nowait())
+            except Empty:
+                break
+        return closed_trades
+
     def _log_status(self):
         """Log current monitoring status."""
         logger.debug(
@@ -509,9 +510,11 @@ class TradeMonitor:
         
         logger.info(f"Manually forcing track: {trade_id}")
         self.tracked_trade_ids.add(trade_id)
+        # Manually associated trades won't have a decision_id from the agent
         self.pending_queue.put({
             'trade_id': trade_id,
-            'position_data': position_data
+            'position_data': position_data,
+            'decision_id': None 
         })
         
         return True
