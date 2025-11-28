@@ -19,8 +19,8 @@ class TradingAgentConfig(BaseModel):
     # Kill-switch thresholds (percentage of portfolio P/L)
     # Stop trading if portfolio gains >= kill_switch_gain_pct
     # or losses <= -kill_switch_loss_pct
-    kill_switch_gain_pct: float = 5.0
-    kill_switch_loss_pct: float = 2.0
+    kill_switch_gain_pct: float = 0.05  # 5%
+    kill_switch_loss_pct: float = 0.02  # 2%
     autonomous: AutonomousAgentConfig = Field(default_factory=AutonomousAgentConfig)
 
     # --- Strategic Goals ---
@@ -29,8 +29,13 @@ class TradingAgentConfig(BaseModel):
     max_drawdown_percent: float = 15.0
 
     # --- Risk Management ---
-    risk_percentage: float = 1.0  # Percentage of account to risk per trade
-    sizing_stop_loss_percentage: float = 2.0  # Stop loss used for position sizing calculation
+    # Note: All percentages use decimal notation (e.g., 0.02 = 2%)
+    # - risk_percentage: Account risk per trade (used in position sizing)
+    # - sizing_stop_loss_percentage: Assumed stop loss for position sizing calculations
+    # - kill_switch_loss_pct: Portfolio-level loss threshold to stop trading
+    # - stop_loss (in AutonomousAgentConfig): Per-trade stop loss for autonomous execution
+    risk_percentage: float = 0.01  # Percentage of account to risk per trade (1%)
+    sizing_stop_loss_percentage: float = 0.02  # Stop loss used for position sizing calculation (2%)
 
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]

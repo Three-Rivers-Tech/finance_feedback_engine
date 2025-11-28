@@ -83,9 +83,11 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         # Determine target platform
         target_platform = None
         # Expanded check for forex pairs, which might be standardized without '_'
+        forex_currencies = {'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'USD'}
+        # Check if asset_pair starts with a forex currency code (e.g., EURUSD, EUR_USD)
         is_forex_pair = (
             '_' in asset_pair or
-            any(p in asset_pair for p in ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'])
+            any(asset_pair.startswith(curr) for curr in forex_currencies)
         )
 
         if 'BTC' in asset_pair or 'ETH' in asset_pair:

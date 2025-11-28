@@ -46,8 +46,8 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
 
     def test_gain_kill_switch_triggers(self):
         config = TradingAgentConfig(asset_pairs=[])
-        config.kill_switch_gain_pct = 5.0
-        config.kill_switch_loss_pct = 2.0
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
 
         orch = object.__new__(TradingAgentOrchestrator)
         orch.config = config
@@ -64,8 +64,8 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
 
     def test_loss_kill_switch_triggers(self):
         config = TradingAgentConfig(asset_pairs=[])
-        config.kill_switch_gain_pct = 5.0
-        config.kill_switch_loss_pct = 2.0
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
 
         orch = object.__new__(TradingAgentOrchestrator)
         orch.config = config

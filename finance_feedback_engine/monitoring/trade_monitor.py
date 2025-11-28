@@ -91,7 +91,8 @@ class TradeMonitor:
         self.tracked_trade_ids: Set[str] = set()
         self.pending_queue: Queue = Queue()
         self.closed_trades_queue: Queue = Queue() # For agent to consume
-        self.expected_trades: Dict[str, str] = {} # Maps asset_pair -> decision_id
+        self.expected_trades: Dict[str, tuple[str, float]] = {} # Maps asset_pair -> (decision_id, timestamp)
+        self._expected_trades_lock = threading.Lock()
         
         # Control
         self._stop_event = threading.Event()
@@ -179,7 +180,10 @@ class TradeMonitor:
                         # 1. Detect new trades from platform
                         self._detect_new_trades()
                         
-                        # 2. Clean up completed trackers
+                        # 2. Clean up stale expectations
+                        self._cleanup_stale_expectations()
+                        
+                        # 3. Clean up completed trackers
                         self._cleanup_completed_trackers()
                         
                         # 3. Process pending trades if slots available
@@ -228,8 +232,8 @@ class TradeMonitor:
             ):
                 logger.critical(
                     f"🛑 PORTFOLIO STOP-LOSS HIT! "
-                    f"Current P&L: {current_pnl_pct:.2f}% "
-                    f"Threshold: -{self.portfolio_stop_loss_percentage:.2f}%"
+                    f"Current P&L: {current_pnl_pct:.2%} "
+                    f"Threshold: -{self.portfolio_stop_loss_percentage:.2%}"
                 )
                 self._handle_portfolio_limit_hit(
                     'stop_loss',
@@ -250,9 +254,9 @@ class TradeMonitor:
                 )
             else:
                 logger.debug(
-                    f"Portfolio P&L: {current_pnl_pct:.2f}% "
-                    f"(SL: -{self.portfolio_stop_loss_percentage:.2f}%, "
-                    f"TP: {self.portfolio_take_profit_percentage:.2f}%)"
+                    f"Portfolio P&L: {current_pnl_pct:.2%} "
+                    f"(SL: -{self.portfolio_stop_loss_percentage:.2%}, "
+                    f"TP: {self.portfolio_take_profit_percentage:.2%})"
                 )
         except Exception as e:
             logger.error(f"Error checking portfolio P&L limits: {e}", exc_info=True)
@@ -267,7 +271,7 @@ class TradeMonitor:
         """
         logger.warning(
             f"Portfolio {limit_type.upper()} hit. "
-            f"Current P&L: {current_pnl_pct:.2f}%. Pausing trading."
+            f"Current P&L: {current_pnl_pct:.2%}%. Pausing trading."
         )
         self._monitoring_state = 'paused'
         
@@ -275,7 +279,7 @@ class TradeMonitor:
             logger.info(f"Signaling Orchestrator to pause trading due to portfolio {limit_type} hit.")
             # Assume Orchestrator has a pause_trading method
             self.orchestrator.pause_trading(
-                reason=f"Portfolio {limit_type} hit: P&L {current_pnl_pct:.2f}%"
+                reason=f"Portfolio {limit_type} hit: P&L {current_pnl_pct:.2%}"
             )
         else:
             logger.warning("No Orchestrator instance available to signal for pausing trading.")
@@ -310,15 +314,19 @@ class TradeMonitor:
                     f"{position.get('side')} {position.get('contracts')} "
                     f"@ ${position.get('entry_price', 0):.2f}"
                 )
-                
-                # Add to tracking set
-                self.tracked_trade_ids.add(trade_id)
-                
                 # Associate with a decision if one is expected for this asset
-                decision_id = self.expected_trades.pop(product_id.replace('-', ''), None)
+                from ..utils.validation import standardize_asset_pair
+                standardized_key = standardize_asset_pair(product_id, separator='-')
+                decision_id = self.expected_trades.pop(standardized_key, None)
                 if decision_id:
                     logger.info(f"Associated new trade {trade_id} with decision {decision_id}")
 
+                # Queue for monitoring
+                self.pending_queue.put({
+                    'trade_id': trade_id,
+                    'position_data': position,
+                    'decision_id': decision_id
+                })
                 # Queue for monitoring
                 self.pending_queue.put({
                     'trade_id': trade_id,
@@ -417,8 +425,23 @@ class TradeMonitor:
         """
         from ..utils.validation import standardize_asset_pair
         standardized_pair = standardize_asset_pair(asset_pair, separator='-')
-        self.expected_trades[standardized_pair] = decision_id
+        with self._expected_trades_lock:
+            self.expected_trades[standardized_pair] = (decision_id, time.time())
         logger.info(f"Expecting new trade for {standardized_pair} from decision {decision_id}")
+
+    def _cleanup_stale_expectations(self, max_age_seconds: int = 300):
+        """
+        Remove expected trade entries older than the specified threshold.
+        """
+        current_time = time.time()
+        with self._expected_trades_lock:
+            stale_keys = [
+                key for key, (decision_id, timestamp) in self.expected_trades.items()
+                if current_time - timestamp > max_age_seconds
+            ]
+            for key in stale_keys:
+                del self.expected_trades[key]
+                logger.info(f"Cleaned up stale expectation for {key}")
 
     def is_trade_open(self) -> bool:
         """Check if there are any actively monitored trades."""
