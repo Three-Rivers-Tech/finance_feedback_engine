@@ -342,7 +342,7 @@ class MonitoringContextProvider:
         current_portfolio_value = current_context.get('risk_metrics', {}).get('account_value', 0.0)
         
         # Calculate P&L as a percentage of initial balance
-        pnl_percentage = ((current_portfolio_value - self.portfolio_initial_balance) / self.portfolio_initial_balance) * 100
+        pnl_percentage = (current_portfolio_value - self.portfolio_initial_balance) / self.portfolio_initial_balance
         
         return pnl_percentage
 

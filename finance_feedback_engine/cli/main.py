@@ -21,7 +21,6 @@ from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
     display_portfolio_dashboard
 )
-from finance_feedback_engine.cli.new_command import manage_group # Import the new command group
 
 
 console = Console()
@@ -1387,8 +1386,6 @@ def monitor(ctx):
     """Live trade monitoring commands."""
     pass
 
-cli.add_command(manage_group) # Register the new manage_group
-
 
 @monitor.command()
 @click.pass_context
@@ -1633,140 +1630,6 @@ def metrics(ctx):
             console.print(traceback.format_exc())
 
 
-@cli.command()
-@click.option('--update', is_flag=True, help='Update/install only missing or outdated AI provider CLI tools and libraries')
-@click.pass_context
-def update_ai(ctx, update):
-    """Check and optionally update/install only missing or outdated AI provider CLI tools and libraries."""
-    import subprocess
-    import sys
-    from importlib.metadata import version, PackageNotFoundError
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
-
-    console.print("\n[bold cyan]Checking AI Provider Versions[/bold cyan]\n")
-
-    # --- CLI tools ---
-    console.print("\n[bold cyan]AI Provider CLI Tools[/bold cyan]\n")
-    cli_tools = [
-        ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
-        ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
-        ("Codex CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
-        ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
-    ]
-    cli_table = Table(title="CLI Tools")
-    cli_table.add_column("Tool", style="cyan")
-    cli_table.add_column("Version", style="green")
-    cli_table.add_column("Status", style="white")
-    cli_table.add_column("Upgrade Command", style="yellow")
-
-    missing_tools = []
-    for tool, cmd, upgrade_cmd in cli_tools:
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                # Special handling for Copilot/Codex
-                # Extract first non-empty line from stdout as version string
-                version_line = result.stdout.strip().split('\n')[0]
-                if tool == "Codex CLI":
-                    version_str = f"{version_line} (via Copilot)"
-                else:
-                    version_str = version_line
-                cli_table.add_row(tool, version_str, "✓", upgrade_cmd.replace('i -g', 'update -g'))
-            else:
-                cli_table.add_row(tool, "Error", "⚠", upgrade_cmd)
-                missing_tools.append((tool, upgrade_cmd))
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            cli_table.add_row(tool, "Not installed", "✗", upgrade_cmd)
-            missing_tools.append((tool, upgrade_cmd))
-
-    console.print(cli_table)
-
-    # --- Update/install logic with progress bar (only missing/outdated) ---
-    if update:
-        console.print("\n[bold cyan]Updating/Installing only missing or outdated components...[/bold cyan]\n")
-        tasks = []
-        # Add installer tasks for missing CLI tools (support shell installers and npm)
-        for tool, _, upgrade_cmd in missing_tools:
-            # Ollama uses a shell installer
-            if 'ollama' in upgrade_cmd or 'ollama.com' in upgrade_cmd:
-                tasks.append((tool, ["bash", "-c", upgrade_cmd], upgrade_cmd))
-            elif upgrade_cmd.strip().startswith('npm'):
-                # Split npm command into args
-                parts = upgrade_cmd.split()
-                tasks.append((tool, parts, upgrade_cmd))
-            else:
-                # Fallback: run as shell command
-                tasks.append((tool, ["bash", "-c", upgrade_cmd], upgrade_cmd))
-
-        if not tasks:
-            console.print("[green]✓ All AI CLI tools are already installed![/green]")
-        else:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("{task.description}"),
-                BarColumn(),
-                TimeElapsedColumn(),
-                transient=True,
-            ) as progress:
-                task_id = progress.add_task("[cyan]Updating/Installing...", total=len(tasks))
-                for label, cmd_list, cmd_str in tasks:
-                    progress.update(task_id, description=f"[white]Installing [bold]{label}[/bold]...")
-                    try:
-                        result = subprocess.run(cmd_list, capture_output=True, text=True, timeout=600)
-                        if result.returncode == 0:
-                            progress.console.print(f"[green]✓ {label} installed/updated successfully[/green]")
-                        else:
-                            stderr = (result.stderr or result.stdout or '').strip()
-                            progress.console.print(f"[red]✗ {label} failed: {stderr}[/red]")
-                    except Exception as e:
-                        progress.console.print(f"[red]✗ {label} error: {e}[/red]")
-                    progress.advance(task_id)
-            console.print("\n[bold green]✓ Update/install process complete[/bold green]\n")
-
-    # --- Ollama models ---
-    console.print("\n[bold cyan]Ollama Models[/bold cyan]\n")
-    try:
-        result = subprocess.run(
-            ["ollama", "list"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        if result.returncode == 0:
-            models_table = Table(title="Installed Ollama Models")
-            models_table.add_column("Model", style="cyan")
-            models_table.add_column("ID", style="white")
-            models_table.add_column("Size", style="green")
-            models_table.add_column("Modified", style="yellow")
-            lines = result.stdout.strip().split('\n')[1:]  # Skip header
-            if lines:
-                for line in lines:
-                    parts = line.split()
-                    if len(parts) >= 4:
-                        model_name = parts[0]
-                        model_id = parts[1]
-                        model_size = parts[2]
-                        model_modified = ' '.join(parts[3:])
-                        models_table.add_row(
-                            model_name,
-                            model_id,
-                            model_size,
-                            model_modified
-                        )
-                console.print(models_table)
-            else:
-                console.print("[yellow]No Ollama models installed[/yellow]")
-                console.print(
-                    "\nInstall the default model:\n"
-                    "  ollama pull llama3.2:3b-instruct-fp16"
-                )
-        else:
-            console.print("[yellow]Could not list Ollama models[/yellow]")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        console.print("[yellow]Ollama not available[/yellow]")
-
-    console.print("\n[bold green]✓ Version check complete[/bold green]\n")
-
 
 @cli.command(name='retrain-meta-learner')
 @click.option(
@@ -1841,16 +1704,16 @@ def retrain_meta_learner(ctx, force):
 @click.option(
     '--take-profit', '-tp',
     type=float,
-    default=5.0,
+    default=0.05,
     show_default=True,
-    help='Portfolio-level take-profit percentage.'
+    help='Portfolio-level take-profit percentage (decimal, e.g., 0.05 for 5%).'
 )
 @click.option(
     '--stop-loss', '-sl',
     type=float,
-    default=2.0,
+    default=0.02,
     show_default=True,
-    help='Portfolio-level stop-loss percentage.'
+    help='Portfolio-level stop-loss percentage (decimal, e.g., 0.02 for 2%).'
 )
 @click.option(
     '--setup',
@@ -1889,8 +1752,8 @@ def run_agent(ctx, take_profit, stop_loss, setup):
             return
 
         console.print("[green]✓ Agent configuration loaded.[/green]")
-        console.print(f"  Portfolio Take Profit: {take_profit}%")
-        console.print(f"  Portfolio Stop Loss: {stop_loss}%")
+        console.print(f"  Portfolio Take Profit: {take_profit:.2%}")
+        console.print(f"  Portfolio Stop Loss: {stop_loss:.2%}")
         
         trade_monitor = TradeMonitor(
             platform=engine.trading_platform,
