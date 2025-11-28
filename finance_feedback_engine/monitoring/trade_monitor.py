@@ -186,13 +186,13 @@ class TradeMonitor:
                         # 3. Clean up completed trackers
                         self._cleanup_completed_trackers()
                         
-                        # 3. Process pending trades if slots available
+                        # 4. Process pending trades if slots available
                         self._process_pending_trades()
                         
-                        # 4. Check portfolio P&L thresholds
+                        # 5. Check portfolio P&L thresholds
                         self._check_portfolio_pnl_limits()
                         
-                        # 5. Log status
+                        # 6. Log status
                         self._log_status()
                         
                     except Exception as e:
@@ -271,7 +271,7 @@ class TradeMonitor:
         """
         logger.warning(
             f"Portfolio {limit_type.upper()} hit. "
-            f"Current P&L: {current_pnl_pct:.2%}%. Pausing trading."
+            f"Current P&L: {current_pnl_pct:.2%}. Pausing trading."
         )
         self._monitoring_state = 'paused'
         
@@ -317,15 +317,11 @@ class TradeMonitor:
                 # Associate with a decision if one is expected for this asset
                 from ..utils.validation import standardize_asset_pair
                 standardized_key = standardize_asset_pair(product_id, separator='-')
-                decision_id = self.expected_trades.pop(standardized_key, None)
+                with self._expected_trades_lock:
+                    decision_id = self.expected_trades.pop(standardized_key, None)
                 if decision_id:
                     logger.info(f"Associated new trade {trade_id} with decision {decision_id}")
 
-                # Queue for monitoring
-                self.pending_queue.put({
-                    'trade_id': trade_id,
-                    'position_data': position,
-                    'decision_id': decision_id
                 })
                 # Queue for monitoring
                 self.pending_queue.put({

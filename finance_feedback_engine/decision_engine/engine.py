@@ -105,6 +105,14 @@ class DecisionEngine:
         self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
         self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 0.05)
         
+        # Compatibility: Convert legacy percentage values (>1) to decimals
+        if self.portfolio_stop_loss_percentage > 1:
+            logger.warning(f"Detected legacy portfolio_stop_loss_percentage {self.portfolio_stop_loss_percentage}%. Converting to decimal: {self.portfolio_stop_loss_percentage/100:.3f}")
+            self.portfolio_stop_loss_percentage /= 100
+        if self.portfolio_take_profit_percentage > 1:
+            logger.warning(f"Detected legacy portfolio_take_profit_percentage {self.portfolio_take_profit_percentage}%. Converting to decimal: {self.portfolio_take_profit_percentage/100:.3f}")
+            self.portfolio_take_profit_percentage /= 100
+        
         # Local models and priority configuration
         self.local_models = decision_config.get('local_models', [])
         self.local_priority = decision_config.get('local_priority', False)
@@ -296,18 +304,18 @@ class DecisionEngine:
     def calculate_position_size(
         self,
         account_balance: float,
-        risk_percentage: float = 1.0,
+        risk_percentage: float = 0.01,
         entry_price: float = 0,
-        stop_loss_percentage: float = 2.0
+        stop_loss_percentage: float = 0.02
     ) -> float:
         """
         Calculate appropriate position size based on risk management.
 
         Args:
             account_balance: Total account balance
-            risk_percentage: Percentage of account to risk (default 1%)
+            risk_percentage: Percentage of account to risk as decimal fraction (default 0.01 = 1%)
             entry_price: Entry price for the position
-            stop_loss_percentage: Stop loss distance as % (default 2%)
+            stop_loss_percentage: Stop loss distance as decimal fraction (default 0.02 = 2%)
 
         Returns:
             Suggested position size in units of asset
@@ -316,10 +324,10 @@ class DecisionEngine:
             return 0.0
         
         # Amount willing to risk in dollar terms
-        risk_amount = account_balance * (risk_percentage / 100)
+        risk_amount = account_balance * risk_percentage
         
         # Price distance of stop loss
-        stop_loss_distance = entry_price * (stop_loss_percentage / 100)
+        stop_loss_distance = entry_price * stop_loss_percentage
         
         # Position size = Risk Amount / Stop Loss Distance
         position_size = risk_amount / stop_loss_distance
@@ -1440,10 +1448,10 @@ Format response as a structured technical analysis demonstration.
             
             # Get risk parameters from the agent config
             agent_config = self.config.get('agent', {})
-            risk_percentage = agent_config.get('risk_percentage', 1.0)
+            risk_percentage = agent_config.get('risk_percentage', 0.01)
             # TODO: Replace this fixed percentage with a dynamic stop-loss calculation
             # based on volatility (e.g., ATR) or market structure.
-            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 2.0)
+            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
 
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
@@ -1456,9 +1464,9 @@ Format response as a structured technical analysis demonstration.
             # Calculate the stop loss price
             stop_loss_price = 0
             if position_type == 'LONG' and current_price > 0:
-                stop_loss_price = current_price * (1 - sizing_stop_loss_percentage / 100)
+                stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
             elif position_type == 'SHORT' and current_price > 0:
-                stop_loss_price = current_price * (1 + sizing_stop_loss_percentage / 100)
+                stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
 
             if action == 'HOLD' and has_existing_position:
                 logger.info(

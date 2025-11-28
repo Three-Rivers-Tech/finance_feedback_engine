@@ -82,9 +82,10 @@ def validate_decision_comprehensive(
     if 'stop_loss_percentage' in decision:
         try:
             stop_loss = float(decision['stop_loss_percentage'])
-            if not 0 < stop_loss <= 100:
+            if not 0 < stop_loss <= 1.0:
                 errors.append(
-                    f"Stop loss {stop_loss}% out of range (0, 100]"
+                    f"Stop loss {stop_loss} out of range (0, 1.0]. "
+                    "Expected decimal fraction (e.g., 0.02 for 2%)"
                 )
         except (TypeError, ValueError) as e:
             errors.append(f"Invalid stop loss percentage: {e}")

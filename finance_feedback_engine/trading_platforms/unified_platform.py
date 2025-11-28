@@ -84,11 +84,17 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         target_platform = None
         # Expanded check for forex pairs, which might be standardized without '_'
         forex_currencies = {'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'USD'}
-        # Check if asset_pair starts with a forex currency code (e.g., EURUSD, EUR_USD)
-        is_forex_pair = (
-            '_' in asset_pair or
-            any(asset_pair.startswith(curr) for curr in forex_currencies)
-        )
+        # Check if asset_pair is a valid forex pair (both parts are forex currencies)
+        is_forex_pair = False
+        if '_' in asset_pair:
+            parts = asset_pair.split('_')
+            if len(parts) == 2 and parts[0] in forex_currencies and parts[1] in forex_currencies:
+                is_forex_pair = True
+        else:
+            # Check for formats like EURUSD (6 chars) or EURJPY (6 chars)
+            if len(asset_pair) == 6:
+                if asset_pair[:3] in forex_currencies and asset_pair[3:] in forex_currencies:
+                    is_forex_pair = True
 
         if 'BTC' in asset_pair or 'ETH' in asset_pair:
             target_platform = self.platforms.get('coinbase')

@@ -81,6 +81,44 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         out = self._run_and_capture(orch)
         self.assertIn('Kill-switch triggered: portfolio loss', out)
 
+    def test_gain_kill_switch_not_triggers(self):
+        config = TradingAgentConfig(asset_pairs=[])
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
+
+        orch = object.__new__(TradingAgentOrchestrator)
+        orch.config = config
+        orch.engine = DummyEngine()
+        platform = mock.Mock()
+        # Gain of 4% (below 5% threshold)
+        platform.get_portfolio_breakdown.return_value = {'total_value_usd': 104.0, 'unrealized_pnl': 4.0}
+        orch.platform = platform
+        orch.trades_today = 0
+        orch.initial_portfolio_value = 100.0
+        orch.init_failed = False
+
+        out = self._run_and_capture(orch)
+        self.assertNotIn('Kill-switch triggered', out)
+
+    def test_loss_kill_switch_not_triggers(self):
+        config = TradingAgentConfig(asset_pairs=[])
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
+
+        orch = object.__new__(TradingAgentOrchestrator)
+        orch.config = config
+        orch.engine = DummyEngine()
+        platform = mock.Mock()
+        # Loss of 1% (above -2% threshold)
+        platform.get_portfolio_breakdown.return_value = {'total_value_usd': 99.0, 'unrealized_pnl': -1.0}
+        orch.platform = platform
+        orch.trades_today = 0
+        orch.initial_portfolio_value = 100.0
+        orch.init_failed = False
+
+        out = self._run_and_capture(orch)
+        self.assertNotIn('Kill-switch triggered', out)
+
     def test_init_failed_exits_gracefully(self):
         config = TradingAgentConfig(asset_pairs=[])
         orch = object.__new__(TradingAgentOrchestrator)
