@@ -483,6 +483,7 @@ def config_editor(ctx, output):
         ["local", "cli", "codex", "qwen", "gemini", "ensemble"],
     )
     prompt_text("Model name", ("decision_engine", "model_name"))
+    prompt_text("Decision confidence threshold (0.0-1.0)", ("decision_engine", "decision_threshold"))
 
     if ai_choice == "gemini":
         console.print("Gemini settings (stored under decision_engine.gemini)")
@@ -492,6 +493,32 @@ def config_editor(ctx, output):
             ("decision_engine", "gemini", "model_name"),
         )
 
+    if ai_choice == "ensemble":
+        console.print("\n[bold]Ensemble configuration[/bold]")
+        # For simplicity, we'll prompt for common providers and basic weights
+        console.print("Select enabled providers (space-separated, e.g., 'local cli gemini'):")
+        enabled_providers_input = click.prompt(
+            "Enabled providers",
+            default="local",
+            show_default=True,
+        )
+        enabled_providers = [p.strip() for p in enabled_providers_input.split() if p.strip()]
+        _set_nested(updated_config, ("ensemble", "enabled_providers"), enabled_providers)
+        
+        # Simple equal weights for now
+        if len(enabled_providers) > 1:
+            weight = round(1.0 / len(enabled_providers), 2)
+            weights = {prov: weight for prov in enabled_providers}
+            _set_nested(updated_config, ("ensemble", "provider_weights"), weights)
+        
+        prompt_choice(
+            "Voting strategy",
+            ("ensemble", "voting_strategy"),
+            ["weighted", "majority", "stacking"],
+        )
+        prompt_text("Agreement threshold (0.0-1.0)", ("ensemble", "agreement_threshold"))
+        prompt_bool("Enable adaptive learning?", ("ensemble", "adaptive_learning"))
+
     # Monitoring + persistence toggles
     console.print("\n[bold]Monitoring & persistence[/bold]")
     prompt_bool("Enable monitoring context integration?", ("monitoring", "enable_context_integration"))
@@ -500,6 +527,27 @@ def config_editor(ctx, output):
     prompt_text("Decision storage path", ("persistence", "storage_path"))
     prompt_bool("Enable portfolio memory?", ("portfolio_memory", "enabled"))
     prompt_bool("Enable backtesting flag by default?", ("backtesting", "enabled"))
+
+    # Signal-only and safety settings
+    console.print("\n[bold]Safety & execution[/bold]")
+    prompt_bool("Force signal-only mode by default?", ("signal_only_default",))
+    
+    console.print("Safety thresholds:")
+    prompt_text("Max leverage", ("safety", "max_leverage"))
+    prompt_text("Max position percentage", ("safety", "max_position_pct"))
+    
+    console.print("Circuit breaker settings:")
+    prompt_text("Failure threshold", ("circuit_breaker", "failure_threshold"))
+    prompt_text("Recovery timeout (seconds)", ("circuit_breaker", "recovery_timeout_seconds"))
+    prompt_text("Half-open retry count", ("circuit_breaker", "half_open_retry"))
+
+    # Logging
+    console.print("\n[bold]Logging[/bold]")
+    prompt_choice(
+        "Log level",
+        ("logging", "level"),
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    )
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     with open(target_path, 'w', encoding='utf-8') as f:
@@ -1790,13 +1838,39 @@ def retrain_meta_learner(ctx, force):
 
 
 @cli.command(name="run-agent")
+@click.option(
+    '--take-profit', '-tp',
+    type=float,
+    default=5.0,
+    show_default=True,
+    help='Portfolio-level take-profit percentage.'
+)
+@click.option(
+    '--stop-loss', '-sl',
+    type=float,
+    default=2.0,
+    show_default=True,
+    help='Portfolio-level stop-loss percentage.'
+)
+@click.option(
+    '--setup',
+    is_flag=True,
+    help='Run interactive config setup before starting the agent.'
+)
 @click.pass_context
-def run_agent(ctx):
+def run_agent(ctx, take_profit, stop_loss, setup):
     """Starts the autonomous trading agent."""
     import asyncio
     from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
     from finance_feedback_engine.agent.config import TradingAgentConfig
     from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+
+    if setup:
+        console.print("\n[bold yellow]Running initial setup...[/bold yellow]")
+        ctx.invoke(config_editor)
+        console.print("\n[bold green]✓ Setup complete. Reloading configuration...[/bold green]\n")
+        # Reload config to apply any changes made in the editor
+        ctx.obj['config'] = load_tiered_config()
 
     console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
 
@@ -1815,8 +1889,14 @@ def run_agent(ctx):
             return
 
         console.print("[green]✓ Agent configuration loaded.[/green]")
+        console.print(f"  Portfolio Take Profit: {take_profit}%")
+        console.print(f"  Portfolio Stop Loss: {stop_loss}%")
         
-        trade_monitor = TradeMonitor(platform=engine.trading_platform)
+        trade_monitor = TradeMonitor(
+            platform=engine.trading_platform,
+            portfolio_take_profit_percentage=take_profit,
+            portfolio_stop_loss_percentage=stop_loss,
+        )
         engine.enable_monitoring_integration(trade_monitor=trade_monitor)
 
 
