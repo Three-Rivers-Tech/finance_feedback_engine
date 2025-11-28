@@ -82,9 +82,15 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         
         # Determine target platform
         target_platform = None
+        # Expanded check for forex pairs, which might be standardized without '_'
+        is_forex_pair = (
+            '_' in asset_pair or
+            any(p in asset_pair for p in ['EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'])
+        )
+
         if 'BTC' in asset_pair or 'ETH' in asset_pair:
             target_platform = self.platforms.get('coinbase')
-        elif '_' in asset_pair:
+        elif is_forex_pair:
             target_platform = self.platforms.get('oanda')
 
         if target_platform:

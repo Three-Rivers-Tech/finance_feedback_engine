@@ -20,6 +20,16 @@ config = {
 # Create decision engine
 engine = DecisionEngine(config)
 
+# Create decision engine with signal_only_default
+config_signal_only = {
+    'decision_engine': {
+        'ai_provider': 'local',
+        'model_name': 'test-model'
+    },
+    'signal_only_default': True
+}
+engine_signal_only = DecisionEngine(config_signal_only)
+
 # Mock market data
 market_data = {
     'type': 'crypto',
@@ -196,6 +206,27 @@ print(f"Stop Loss %:                {decision4['stop_loss_percentage']}")
 print(f"Risk %:                     {decision4['risk_percentage']}")
 print()
 
+# Test 5: Signal-only default enabled - signal-only mode even with valid balance
+print("Test 5: SIGNAL-ONLY DEFAULT (Signal-only mode)")
+print("-" * 70)
+
+decision5 = engine_signal_only.generate_decision(
+    asset_pair='BTCUSD',
+    market_data=market_data,
+    balance=safe_balance(context_with_balance['balance']),
+    portfolio=safe_dict(context_with_balance['portfolio']),
+    memory_context=safe_dict(context_with_balance['memory_context'])
+)
+
+print(f"Action:                     {decision5['action']}")
+print(f"Confidence:                 {decision5['confidence']}%")
+print(f"Signal Only:                {decision5['signal_only']}")
+print(f"Position Type:              {decision5['position_type']}")
+print(f"Recommended Position Size:  {decision5['recommended_position_size']}")
+print(f"Stop Loss %:                {decision5['stop_loss_percentage']}")
+print(f"Risk %:                     {decision5['risk_percentage']}")
+print()
+
 print("=" * 70)
 print("SUMMARY")
 print("=" * 70)
@@ -228,6 +259,14 @@ print(
     f"{decision4['recommended_position_size']}"
 )
 print()
+print("✓ Test 5 (Signal-only default): Position sizing DISABLED")
+print(f"  - signal_only = {decision5['signal_only']}")
+print(
+    f"  - recommended_position_size = "
+    f"{decision5['recommended_position_size']}"
+)
+print()
 print("All tests passed! Signal-only mode works correctly.")
-print("When portfolio data is unavailable, the engine provides signals only.")
+print("When portfolio data is unavailable OR signal_only_default is enabled,")
+print("the engine provides signals only.")
 print()

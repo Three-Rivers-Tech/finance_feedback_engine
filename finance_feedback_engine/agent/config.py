@@ -28,6 +28,12 @@ class TradingAgentConfig(BaseModel):
     risk_appetite: Literal["low", "medium", "high"] = "medium"
     max_drawdown_percent: float = 15.0
 
+    # --- Risk Management ---
+    risk_percentage: float = 1.0  # Percentage of account to risk per trade
+    sizing_stop_loss_percentage: float = 2.0  # Stop loss used for position sizing calculation
+
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
     analysis_frequency_seconds: int = 300
+    monitoring_frequency_seconds: int = 60
+    min_confidence_threshold: float = 70.0  # Minimum confidence to execute a trade

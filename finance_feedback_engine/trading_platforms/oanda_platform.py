@@ -602,9 +602,32 @@ class OandaPlatform(BaseTradingPlatform):
             )
             response = client.request(order_request)
             
+            # Check for API-level errors in the response
+            if 'errorMessage' in response or 'orderRejectTransaction' in response:
+                error_message = response.get('errorMessage', response.get('orderRejectTransaction', {}).get('rejectReason', 'Unknown error'))
+                logger.error(f"Oanda API returned an error: {error_message}")
+                return {
+                    'success': False,
+                    'platform': 'oanda',
+                    'decision_id': decision.get('id'),
+                    'error': error_message,
+                    'timestamp': decision.get('timestamp')
+                }
+
             # Parse response
             order_fill = response.get('orderFillTransaction', {})
             order_create = response.get('orderCreateTransaction', {})
+            
+            # If neither fill nor create transaction is present, assume failure
+            if not order_fill and not order_create:
+                logger.error(f"Oanda trade execution failed: No fill or create transaction in response. Full response: {response}")
+                return {
+                    'success': False,
+                    'platform': 'oanda',
+                    'decision_id': decision.get('id'),
+                    'error': 'No order fill or create transaction found in response.',
+                    'response': response
+                }
             
             return {
                 'success': True,

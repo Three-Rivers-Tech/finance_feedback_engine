@@ -28,7 +28,8 @@ class TradeTrackerThread(threading.Thread):
         position_data: Dict[str, Any],
         platform,
         metrics_callback: Callable[[Dict[str, Any]], None],
-        poll_interval: int = 30  # seconds
+        poll_interval: int = 30,  # seconds
+        decision_id: Optional[str] = None
     ):
         """
         Initialize trade tracker.
@@ -39,6 +40,7 @@ class TradeTrackerThread(threading.Thread):
             platform: Trading platform instance for querying positions
             metrics_callback: Function to call with final trade metrics
             poll_interval: How often to check position status (seconds)
+            decision_id: The ID of the decision that triggered this trade
         """
         super().__init__(daemon=True, name=f"TradeTracker-{trade_id}")
         
@@ -47,6 +49,7 @@ class TradeTrackerThread(threading.Thread):
         self.platform = platform
         self.metrics_callback = metrics_callback
         self.poll_interval = poll_interval
+        self.decision_id = decision_id
         
         # Control flags
         self._stop_event = threading.Event()
@@ -68,6 +71,7 @@ class TradeTrackerThread(threading.Thread):
         
         logger.info(
             f"TradeTracker initialized: {trade_id} | "
+            f"Decision ID: {decision_id} | "
             f"{self.side} {self.product_id} | "
             f"{self.position_size} contracts @ ${self.entry_price:.2f}"
         )
@@ -192,6 +196,7 @@ class TradeTrackerThread(threading.Thread):
         
         metrics = {
             'trade_id': self.trade_id,
+            'decision_id': self.decision_id,
             'product_id': self.product_id,
             'side': self.side,
             'entry_time': self.entry_time.isoformat(),
@@ -265,6 +270,7 @@ class TradeTrackerThread(threading.Thread):
         
         return {
             'trade_id': self.trade_id,
+            'decision_id': self.decision_id,
             'product_id': self.product_id,
             'side': self.side,
             'entry_price': self.entry_price,

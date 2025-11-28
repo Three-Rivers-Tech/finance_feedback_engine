@@ -2,6 +2,9 @@
 
 from typing import Dict, Any
 import logging
+import uuid
+import time
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 from .base_platform import BaseTradingPlatform
 
@@ -351,9 +354,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     'allocation_pct': 0.0
                 })
 
-            # Calculate total value and allocations. Use margin-based
-            # futures value.
-            total_value = futures_margin_total + spot_value
+            # Calculate total value and allocations. Use the full futures
+            # account value, not just the margin for open positions.
+            total_value = futures_value + spot_value
             
             if total_value > 0:
                 for holding in holdings:
@@ -389,31 +392,114 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             logger.error("Error fetching portfolio breakdown: %s", e)
             raise
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        retry=retry_if_exception_type(Exception) # More specific exceptions can be used
+    )
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a trade on Coinbase.
 
         Args:
-            decision: Trading decision
+            decision: Trading decision, expecting:
+                - asset_pair: e.g., 'BTC-USD'
+                - action: 'BUY' or 'SELL'
+                - suggested_amount: The USD notional size for the market order
 
         Returns:
             Execution result
         """
         logger.info(
-            "Trade execution requested: %s", decision.get('action')
+            "Trade execution requested: %s $%s %s",
+            decision.get('action'),
+            decision.get('suggested_amount', 0),
+            decision.get('asset_pair')
         )
-        
-        # Execution not implemented yet - signals only mode
-        return {
-            'success': False,
-            'platform': 'coinbase_advanced',
-            'decision_id': decision.get('id'),
-            'message': (
-                'Signal-only mode: Trade execution not enabled. '
-                'Portfolio tracking active for learning.'
-            ),
-            'timestamp': decision.get('timestamp')
-        }
+
+        client = self._get_client()
+        action = decision.get('action')
+        asset_pair = decision.get('asset_pair')
+        size_in_usd = str(decision.get('suggested_amount', 0))
+        client_order_id = f"ffe-{decision.get('id', uuid.uuid4().hex)}"
+
+        if action not in ['BUY', 'SELL'] or float(size_in_usd) <= 0:
+            logger.warning("Invalid trade decision: %s", decision)
+            return {
+                'success': False,
+                'platform': 'coinbase_advanced',
+                'decision_id': decision.get('id'),
+                'error': 'Invalid action or size',
+                'timestamp': decision.get('timestamp')
+            }
+
+        try:
+            start_time = time.time()
+            
+            if action == 'BUY':
+                order_result = client.market_order_buy(
+                    client_order_id=client_order_id,
+                    product_id=asset_pair,
+                    quote_size=size_in_usd
+                )
+            else: # SELL
+                order_result = client.market_order_sell(
+                    client_order_id=client_order_id,
+                    product_id=asset_pair,
+                    base_size="0" # Placeholder, need to figure out how to sell by quote size
+                )
+
+            latency = time.time() - start_time
+            logger.info("Coinbase API call latency: %.2f seconds", latency)
+            logger.info("Trade execution result: %s", order_result)
+
+            # Log order details
+            order_id = order_result.get('order_id')
+            order_status = order_result.get('status')
+            filled_size = order_result.get('filled_size')
+            total_value = order_result.get('total_value')
+            logger.info(
+                "Order details - ID: %s, Status: %s, Filled Size: %s, Total Value: %s",
+                order_id, order_status, filled_size, total_value
+            )
+
+            success = order_result.get('success', False)
+            if success:
+                return {
+                    'success': True,
+                    'platform': 'coinbase_advanced',
+                    'decision_id': decision.get('id'),
+                    'order_id': order_result.get('order_id'),
+                    'order_status': order_result.get('status'),
+                    'latency_seconds': latency,
+                    'response': order_result,
+                    'timestamp': decision.get('timestamp')
+                }
+            else:
+                error_details = order_result.get('error_details', 'No error details')
+                logger.error("Trade execution failed: %s", error_details)
+                return {
+                    'success': False,
+                    'platform': 'coinbase_advanced',
+                    'decision_id': decision.get('id'),
+                    'error': 'Order creation failed',
+                    'error_details': error_details,
+                    'latency_seconds': latency,
+                    'response': order_result,
+                    'timestamp': decision.get('timestamp')
+                }
+
+        except Exception as e:
+            latency = time.time() - start_time if 'start_time' in locals() else -1
+            logger.exception("Exception during trade execution")
+            return {
+                'success': False,
+                'platform': 'coinbase_advanced',
+                'decision_id': decision.get('id'),
+                'error': str(e),
+                'latency_seconds': latency,
+                'timestamp': decision.get('timestamp')
+            }
 
     def get_account_info(self) -> Dict[str, Any]:
         """
