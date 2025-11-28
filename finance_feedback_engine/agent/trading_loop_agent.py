@@ -154,7 +154,10 @@ class TradingLoopAgent:
             try:
                 # Safely get attributes that might be missing
                 product_id = getattr(trade, 'product_id', 'unknown')
-                realized_pnl = getattr(trade, 'realized_pnl', 0.0)
+                realized_pnl = getattr(trade, 'realized_pnl', None)
+                if realized_pnl is None or not isinstance(realized_pnl, (int, float)):
+                    logger.warning(f"Skipping trade for {product_id}: realized_pnl is missing or not numeric ({realized_pnl})")
+                    continue
                 decision_id = getattr(trade, 'decision_id', None)
                 exit_price = getattr(trade, 'exit_price', None)
                 exit_time = getattr(trade, 'exit_time', None)

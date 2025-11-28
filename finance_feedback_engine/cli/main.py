@@ -840,7 +840,7 @@ def analyze(ctx, asset_pair, provider):
                 f"  Risk: {decision.get('risk_percentage', 1)}% of account"
             )
             console.print(
-                f"  Stop Loss: {decision.get('stop_loss_percentage', 2)}% "
+                f"  Stop Loss: {decision.get('stop_loss_percentage', 0.02)*100:.1f}% "
                 "from entry"
             )
         
@@ -1727,6 +1727,14 @@ def run_agent(ctx, take_profit, stop_loss, setup):
     from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
     from finance_feedback_engine.agent.config import TradingAgentConfig
     from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+    
+    # Compatibility: Detect legacy percentage inputs (> 1) and convert to decimals
+    if take_profit > 1:
+        console.print(f"[yellow]Warning: Detected legacy take-profit value {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]")
+        take_profit /= 100
+    if stop_loss > 1:
+        console.print(f"[yellow]Warning: Detected legacy stop-loss value {stop_loss}%. Converting to decimal: {stop_loss/100:.3f}[/yellow]")
+        stop_loss /= 100
 
     if setup:
         console.print("\n[bold yellow]Running initial setup...[/bold yellow]")
