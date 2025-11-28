@@ -556,7 +556,7 @@ class OandaPlatform(BaseTradingPlatform):
             
             units = decision.get('recommended_position_size', 1000)
             entry_price = decision.get('entry_price', 0)
-            stop_loss_pct = decision.get('stop_loss_percentage', 2.0)
+            stop_loss_pct = decision.get('stop_loss_percentage', 0.02)
             
             # Determine order direction
             if action == 'BUY':
@@ -574,9 +574,9 @@ class OandaPlatform(BaseTradingPlatform):
             stop_loss_price = None
             if entry_price > 0:
                 if action == 'BUY':
-                    stop_loss_price = entry_price * (1 - stop_loss_pct / 100)
+                    stop_loss_price = entry_price * (1 - stop_loss_pct)
                 else:
-                    stop_loss_price = entry_price * (1 + stop_loss_pct / 100)
+                    stop_loss_price = entry_price * (1 + stop_loss_pct)
             
             # Build order data
             order_data = {

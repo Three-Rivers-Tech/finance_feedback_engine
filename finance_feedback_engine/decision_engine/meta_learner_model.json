@@ -19,10 +19,9 @@
     "time_period": "2020-01-01 to 2025-10-31"
   },
   "decision_thresholds": {
-    "buy_threshold": 0.6,
-    "hold_threshold": 0.4
+    "buy_threshold": 0.5
   },
-  "business_logic_notes": "Model predicts BUY or HOLD based on ensemble decision features. Designed for risk management with position sizing integration. See meta_learner_model.md for detailed rationale.",
+  "business_logic_notes": "Model predicts BUY for probabilities >= 0.5, HOLD for < 0.5 based on ensemble decision features. Designed for risk management with position sizing integration. See meta_learner_model.md for detailed rationale.",
   "lineage": {
     "previous_versions": [
       {
