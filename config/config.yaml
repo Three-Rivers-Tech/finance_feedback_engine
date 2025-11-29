@@ -121,6 +121,7 @@ ensemble:
   
   # Debate mode: Enable structured debate between providers
   # When enabled, uses bull/bear/judge workflow instead of ensemble voting
+  # WARNING: All providers in debate_providers must also be listed in enabled_providers above
   debate_mode: false
   
   # Debate providers: Specify which providers play which roles
