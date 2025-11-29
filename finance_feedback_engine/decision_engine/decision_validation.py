@@ -79,13 +79,22 @@ def validate_decision_comprehensive(
             errors.append(f"Invalid position size: {e}")
 
     # Stop loss validation (if present)
+    # Rationale: Stop losses should be conservative to prevent catastrophic losses.
+    # Maximum of 50% (0.5) prevents extreme risk exposure; typical trading uses 1-5%.
+    # Warn if exceeding 20% (0.2) as this may indicate misconfiguration.
     if 'stop_loss_fraction' in decision:
         try:
             stop_loss = float(decision['stop_loss_fraction'])
-            if not 0 < stop_loss <= 1.0:
+            if not 0 < stop_loss <= 0.5:
                 errors.append(
-                    f"Stop loss {stop_loss} out of range (0, 1.0]. "
-                    "Expected decimal fraction (e.g., 0.02 for 2%)"
+                    f"Stop loss {stop_loss} out of range (0, 0.5]. "
+                    "Expected decimal fraction (e.g., 0.02 for 2%). "
+                    "Maximum 50% to prevent catastrophic losses."
+                )
+            elif stop_loss > 0.2:
+                logger.warning(
+                    f"High stop loss fraction {stop_loss} (>20%) detected. "
+                    "Verify this is intentional to avoid excessive risk."
                 )
         except (TypeError, ValueError) as e:
             errors.append(f"Invalid stop loss fraction: {e}")
