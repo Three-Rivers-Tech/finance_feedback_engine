@@ -10,8 +10,12 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+import os
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
+
+EMBEDDING_TIMEOUT_SECS = int(os.getenv('EMBEDDING_TIMEOUT_SECS', 30))
 
 
 class VectorMemory:
@@ -57,20 +61,26 @@ class VectorMemory:
         """
         try:
             import ollama
-
-            # Generate embedding using nomic-embed-text model
-            response = ollama.embeddings(model='nomic-embed-text', prompt=text)
-
-            # Extract embedding vector
-            embedding = np.array(response['embedding'])
-            return embedding
-
         except ImportError:
             logger.error("Ollama package not installed")
             return None
-        except Exception as e:
-            logger.warning(f"Failed to generate embedding: {e}")
-            return None
+
+        def _get_embedding(prompt):
+            return ollama.embeddings(model='nomic-embed-text', prompt=prompt)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_get_embedding, text)
+            try:
+                response = future.result(timeout=EMBEDDING_TIMEOUT_SECS)
+                # Extract embedding vector
+                embedding = np.array(response['embedding'])
+                return embedding
+            except concurrent.futures.TimeoutError:
+                logger.warning(f"Embedding generation timed out after {EMBEDDING_TIMEOUT_SECS} seconds")
+                return None
+            except Exception as e:
+                logger.warning(f"Failed to generate embedding: {e}")
+                return None
 
     def add_record(self, id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
@@ -91,18 +101,21 @@ class VectorMemory:
             return False
 
         # Store the record
-        self.vectors.append(embedding)
-        self.ids.append(id)
-        self.metadata[id] = {
-            'text': text,
-            'metadata': metadata or {},
-            'vector': embedding
-        }
+        if id in self.ids:
+            index = self.ids.index(id)
+            self.vectors[index] = embedding
+            self.metadata[id]['text'] = text
+            self.metadata[id]['metadata'] = metadata or {}
+        else:
+            self.vectors.append(embedding)
+            self.ids.append(id)
+            self.metadata[id] = {
+                'text': text,
+                'metadata': metadata or {}
+            }
 
-        logger.debug(f"Added record {id} to vector store")
+        logger.debug(f"Added/Updated record {id} to vector store")
         return True
-
-    def find_similar(self, text: str, top_k: int = 3) -> List[Tuple[str, float, Dict[str, Any]]]:
         """
         Find similar records using cosine similarity.
 
@@ -117,19 +130,44 @@ class VectorMemory:
             logger.warning("No vectors in store")
             return []
 
+        # Validate top_k
+        top_k = min(max(1, top_k), len(self.vectors))
+
         # Generate embedding for query
         query_embedding = self.get_embedding(text)
         if query_embedding is None:
             logger.error("Failed to generate embedding for query")
             return []
 
+        # Validate dimension consistency
+        try:
+            vector_array = np.array(self.vectors)
+        except Exception as e:
+            logger.error(f"Failed to convert vectors to array (inconsistent dimensions?): {e}")
+            return []
+
         # Calculate cosine similarities
         similarities = cosine_similarity(
             query_embedding.reshape(1, -1),
-            np.array(self.vectors)
+            vector_array
         ).flatten()
 
         # Get top-k indices
+        top_indices = np.argsort(similarities)[::-1][:top_k]
+
+        # Return results
+        results = []
+        for idx in top_indices:
+            record_id = self.ids[idx]
+            similarity = float(similarities[idx])
+            metadata = self.metadata[record_id].copy()
+            # Remove vector from returned metadata for cleanliness
+            metadata.pop('vector', None)
+
+            results.append((record_id, similarity, metadata))
+
+        logger.debug(f"Found {len(results)} similar records for query")
+        return results
         top_indices = np.argsort(similarities)[::-1][:top_k]
 
         # Return results

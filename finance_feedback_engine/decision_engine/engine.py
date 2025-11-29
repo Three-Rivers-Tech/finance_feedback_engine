@@ -221,8 +221,12 @@ class DecisionEngine:
         # Retrieve semantic memory
         if self.vector_memory:
             query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
-            similar = self.vector_memory.find_similar(query, top_k=3)
-            context['semantic_memory'] = similar
+            try:
+                similar = self.vector_memory.find_similar(query, top_k=3)
+                context['semantic_memory'] = similar
+            except Exception as e:
+                logger.error(f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}")
+                context['semantic_memory'] = []
         
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
