@@ -114,13 +114,13 @@ class MarketRegimeDetector:
         true_range = self._calculate_true_range(df)
         atr = true_range.rolling(window=self.adx_period).mean()
         
-        # Calculate +DI and -DI
-        plus_di = 100 * (smooth_plus_dm / atr)
-        minus_di = 100 * (smooth_minus_dm / atr)
+        # Calculate +DI and -DI, guarding against division by zero
+        plus_di = np.where(atr == 0, 0, 100 * (smooth_plus_dm / atr))
+        minus_di = np.where(atr == 0, 0, 100 * (smooth_minus_dm / atr))
         
-        # Replace NaN values with 0
-        plus_di = plus_di.fillna(0)
-        minus_di = minus_di.fillna(0)
+        # Replace infinite values with 0 and fill NaN with 0
+        plus_di = plus_di.replace([np.inf, -np.inf], 0).fillna(0)
+        minus_di = minus_di.replace([np.inf, -np.inf], 0).fillna(0)
         
         return plus_di, minus_di
 
@@ -203,7 +203,7 @@ class MarketRegimeDetector:
         # Initialize trend_direction
         trend_direction = True
         
-        if len(short_ma) >= 2 and len(long_ma) >= 2:
+        if not pd.isna(short_ma.iloc[-1]) and not pd.isna(long_ma.iloc[-1]):
             trend_direction = short_ma.iloc[-1] > long_ma.iloc[-1]
         else:
             # If not enough data for trend, use price comparison

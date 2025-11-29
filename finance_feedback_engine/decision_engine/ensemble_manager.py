@@ -13,6 +13,7 @@ import numpy as np
 from datetime import datetime
 import json
 from pathlib import Path
+from copy import deepcopy
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
@@ -114,6 +115,19 @@ class EnsembleDecisionManager:
             'bear': 'qwen',
             'judge': 'local'
         })
+        
+        # Validate debate providers are enabled when debate mode is active
+        if self.debate_mode:
+            missing_providers = [
+                provider for provider in self.debate_providers.values()
+                if provider not in self.enabled_providers
+            ]
+            if missing_providers:
+                raise ValueError(
+                    f"Debate mode is enabled but the following debate providers are not in enabled_providers: {missing_providers}. "
+                    f"Please add them to enabled_providers or disable debate_mode. "
+                    f"Current enabled_providers: {self.enabled_providers}"
+                )
         
         # Performance tracking
         self.performance_history = self._load_performance_history()
@@ -293,7 +307,8 @@ class EnsembleDecisionManager:
         self,
         bull_case: Dict[str, Any],
         bear_case: Dict[str, Any],
-        judge_decision: Dict[str, Any]
+        judge_decision: Dict[str, Any],
+        failed_debate_providers: List[str] = []
     ) -> Dict[str, Any]:
         """
         Synthesize debate decisions from bull, bear, and judge providers.
@@ -302,12 +317,13 @@ class EnsembleDecisionManager:
             bull_case: Decision from bullish provider
             bear_case: Decision from bearish provider  
             judge_decision: Final decision from judge provider
+            failed_debate_providers: List of provider names that failed
             
         Returns:
             Synthesized decision with debate metadata
         """
-        # Use judge's decision as the final decision
-        final_decision = judge_decision.copy()
+        # Validate all inputs
+        final_decision = deepcopy(judge_decision)
         
         # Add debate-specific metadata
         final_decision['debate_metadata'] = {
@@ -319,22 +335,32 @@ class EnsembleDecisionManager:
         }
         
         # Add ensemble metadata for consistency
+        failed_roles = [role for role, provider in self.debate_providers.items() if provider in failed_debate_providers]
+        providers_used = [p for p in self.debate_providers.values() if p not in failed_debate_providers]
+        num_total = len(self.debate_providers)
+        num_active = len(providers_used)
+        failure_rate = len(failed_debate_providers) / num_total if num_total > 0 else 0.0
+        
+        provider_decisions = {}
+        if 'bull' not in failed_roles:
+            provider_decisions[self.debate_providers['bull']] = bull_case
+        if 'bear' not in failed_roles:
+            provider_decisions[self.debate_providers['bear']] = bear_case
+        if 'judge' not in failed_roles:
+            provider_decisions[self.debate_providers['judge']] = judge_decision
+        
         final_decision['ensemble_metadata'] = {
-            'providers_used': list(self.debate_providers.values()),
-            'providers_failed': [],
-            'num_active': 3,
-            'num_total': 3,
-            'failure_rate': 0.0,
+            'providers_used': providers_used,
+            'providers_failed': failed_debate_providers,
+            'num_active': num_active,
+            'num_total': num_total,
+            'failure_rate': failure_rate,
             'original_weights': {},
             'adjusted_weights': {},
             'weight_adjustment_applied': False,
             'voting_strategy': 'debate',
             'fallback_tier': 'none',
-            'provider_decisions': {
-                self.debate_providers['bull']: bull_case,
-                self.debate_providers['bear']: bear_case,
-                self.debate_providers['judge']: judge_decision
-            },
+            'provider_decisions': provider_decisions,
             'agreement_score': 1.0,  # Judge makes final decision
             'confidence_variance': 0.0,
             'confidence_adjusted': False,

@@ -3,13 +3,13 @@
   "asset_pair": "ETHUSD",
   "action": "BUY",
   "entry_timestamp": "2025-11-27T16:47:33.661809",
-  "exit_timestamp": "2025-11-27T16:47:34.661809",
+  "exit_timestamp": "2025-01-01T00:00:01",
   "entry_price": 100.0,
   "exit_price": 110.0,
   "position_size": 1.0,
   "realized_pnl": 10.0,
   "pnl_percentage": 10.0,
-  "holding_period_hours": 0.0002777777777777778,
+  "holding_period_hours": -7936.792406058056,
   "ai_provider": "ensemble",
   "ensemble_providers": [
     "local"
