@@ -131,7 +131,7 @@ class FinanceFeedbackEngine:
         )
         
         # Initialize decision engine
-        self.decision_engine = DecisionEngine(config)
+        self.decision_engine = DecisionEngine(config, self.data_provider)
         
         # Initialize persistence
         persistence_config = config.get('persistence', {})

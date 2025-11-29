@@ -152,7 +152,6 @@ def update_weights(config_path: str = "config/config.local.yaml"):
 
     # Write back to file
     try:
-        # Write to temporary file first (atomic write pattern)
         config_dir = os.path.dirname(config_path) or '.'
         with tempfile.NamedTemporaryFile(
             mode='w', dir=config_dir, delete=False, suffix='.yaml'
@@ -161,8 +160,8 @@ def update_weights(config_path: str = "config/config.local.yaml"):
             yaml.dump(
                 config_data, f, default_flow_style=False, sort_keys=False
             )
-        # Atomic rename (on POSIX systems)
-        shutil.move(temp_path, config_path)
+        # Atomic replace (works on both POSIX and Windows)
+        os.replace(temp_path, config_path)
         logger.info(f"Successfully updated configuration at {config_path}")
     except Exception as e:
         logger.error(f"Failed to write config: {e}")
