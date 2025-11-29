@@ -28,7 +28,7 @@ class TradingAgentConfig(BaseModel):
     # --- Strategic Goals ---
     strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"
     risk_appetite: Literal["low", "medium", "high"] = "medium"
-    max_drawdown_percent: float = 0.15
+    max_drawdown_percent: float = 0.15  # Max drawdown threshold (auto-normalized: values >1 treated as percentages, <=1 as decimals)
 
     # --- Risk Management ---
     # Note: All percentages use decimal notation (e.g., 0.02 = 2%)
