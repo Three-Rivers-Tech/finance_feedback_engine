@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from enum import Enum, auto
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
@@ -13,9 +14,14 @@ logger = logging.getLogger(__name__)
 class AgentState(Enum):
     """Represents the current state of the trading agent."""
     IDLE = auto()
-    ANALYZING = auto()
-    EXECUTING = auto()
-    MONITORING = auto()
+    PERCEPTION = auto()
+    REASONING = auto()
+    RISK_CHECK = auto()
+    EXECUTION = auto()
+    LEARNING = auto()
+    EXECUTING = auto()  # For backward compatibility with existing functionality
+    ANALYZING = auto()  # For backward compatibility with existing functionality
+    MONITORING = auto()  # For backward compatibility with existing functionality
 
 class TradingLoopAgent:
     """
@@ -35,6 +41,8 @@ class TradingLoopAgent:
         self.trade_monitor = trade_monitor
         self.portfolio_memory = portfolio_memory
         self.trading_platform = trading_platform
+        # Initialize RiskGatekeeper for trade validation
+        self.risk_gatekeeper = RiskGatekeeper()
         self.is_running = False
         self.state = AgentState.IDLE
         self._current_decision = None
@@ -45,27 +53,182 @@ class TradingLoopAgent:
         """
         logger.info("Starting autonomous trading agent...")
         self.is_running = True
-        self.state = AgentState.ANALYZING  # Start by analyzing
+        self.state = AgentState.IDLE  # Start in IDLE state
 
         while self.is_running:
             try:
-                if self.state == AgentState.ANALYZING:
+                if self.state == AgentState.IDLE:
+                    await self.handle_idle_state()
+                elif self.state == AgentState.PERCEPTION:
+                    await self.handle_perception_state()
+                elif self.state == AgentState.REASONING:
+                    await self.handle_reasoning_state()
+                elif self.state == AgentState.RISK_CHECK:
+                    await self.handle_risk_check_state()
+                elif self.state == AgentState.EXECUTION:
+                    await self.handle_execution_state()
+                elif self.state == AgentState.LEARNING:
+                    await self.handle_learning_state()
+                # Backward compatibility states
+                elif self.state == AgentState.ANALYZING:
                     await self.handle_analyzing_state()
                 elif self.state == AgentState.EXECUTING:
                     await self.handle_executing_state()
                 elif self.state == AgentState.MONITORING:
                     await self.handle_monitoring_state()
-                elif self.state == AgentState.IDLE:
-                    await asyncio.sleep(self.config.analysis_frequency_seconds)
-                    self.state = AgentState.ANALYZING
 
             except asyncio.CancelledError:
                 logger.info("Trading loop cancelled.")
                 break
             except Exception as e:
                 logger.error(f"An error occurred in the trading loop: {e}", exc_info=True)
-                self.state = AgentState.IDLE # Go to idle on error and wait before retrying
-                await asyncio.sleep(300) # Backoff on error
+                self.state = AgentState.IDLE  # Go to idle on error and wait before retrying
+                await asyncio.sleep(300)  # Backoff on error
+
+    async def _transition_to(self, new_state: AgentState):
+        """Helper method to handle state transitions with logging."""
+        old_state = self.state
+        self.state = new_state
+        logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+
+    async def handle_idle_state(self):
+        """
+        IDLE: Waiting for the next analysis interval.
+        """
+        logger.info("State: IDLE - Waiting for next analysis interval...")
+        await asyncio.sleep(self.config.analysis_frequency_seconds)
+        await self._transition_to(AgentState.PERCEPTION)
+
+    async def handle_perception_state(self):
+        """
+        PERCEPTION: Fetching market data and portfolio state.
+        """
+        logger.info("State: PERCEPTION - Fetching market data and portfolio state...")
+        # Check for open positions first. If trades are open, we should be monitoring.
+        if self.trade_monitor.is_trade_open():
+            logger.info("Open trades detected. Switching to MONITORING state.")
+            await self._transition_to(AgentState.MONITORING)
+            return
+
+        # Process each asset pair to gather market data
+        for asset_pair in self.config.asset_pairs:
+            try:
+                logger.debug(f"Analyzing {asset_pair}...")
+                # In perception state, we gather data but don't make decisions yet
+                # We'll transition to reasoning to make decisions based on the data
+                break  # Just move to reasoning state after checking if there are open trades
+            except Exception as e:
+                logger.error(f"Error analyzing {asset_pair}: {e}")
+                continue
+
+        # Transition to reasoning after gathering market data
+        await self._transition_to(AgentState.REASONING)
+
+    async def handle_reasoning_state(self):
+        """
+        REASONING: Running the DecisionEngine (Ensemble voting).
+        """
+        logger.info("State: REASONING - Running DecisionEngine...")
+
+        for asset_pair in self.config.asset_pairs:
+            try:
+                logger.debug(f"Generating decision for {asset_pair}...")
+                decision = self.engine.analyze_asset(asset_pair)
+                
+                # If a valid trade decision is found, move to risk check
+                if decision and decision.get('action') in ["BUY", "SELL"]:
+                    if await self._should_execute(decision):
+                        self._current_decision = decision
+                        await self._transition_to(AgentState.RISK_CHECK)
+                        return # Exit reasoning to handle the risk check
+                    else:
+                        logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
+                else:
+                    logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
+
+            except Exception as e:
+                logger.error(f"Error analyzing {asset_pair}: {e}")
+                continue  # Try next asset
+
+        # If no opportunities found, go back to IDLE for next analysis cycle
+        logger.info("Analysis complete. No actionable trades found. Going back to IDLE.")
+        await self._transition_to(AgentState.IDLE)
+
+    async def handle_risk_check_state(self):
+        """
+        RISK_CHECK: Running the RiskGatekeeper.
+        """
+        logger.info("State: RISK_CHECK - Running RiskGatekeeper...")
+
+        if not self._current_decision:
+            logger.warning("RISK_CHECK state reached without a decision. Returning to IDLE.")
+            await self._transition_to(AgentState.IDLE)
+            return
+
+        decision_id = self._current_decision.get('id')
+        asset_pair = self._current_decision.get('asset_pair')
+        
+        # Retrieve monitoring context for risk validation
+        try:
+            # Use the monitoring context provider to get context
+            monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
+        except Exception as e:
+            logger.warning(f"Failed to get monitoring context for risk validation: {e}")
+            monitoring_context = {}
+        
+        # Validate trade with RiskGatekeeper
+        approved, reason = self.risk_gatekeeper.validate_trade(self._current_decision, monitoring_context)
+        if not approved:
+            logger.info(f"Trade rejected by RiskGatekeeper: {reason}. Skipping execution.")
+            # Reset decision and return to perception for next cycle
+            self._current_decision = None
+            await self._transition_to(AgentState.PERCEPTION)
+            return
+
+        logger.info(f"Trade approved by RiskGatekeeper for {asset_pair}. Proceeding to EXECUTION.")
+        await self._transition_to(AgentState.EXECUTION)
+
+    async def handle_execution_state(self):
+        """
+        EXECUTION: Sending orders to BaseTradingPlatform.
+        """
+        logger.info("State: EXECUTION - Sending orders to BaseTradingPlatform...")
+
+        if not self._current_decision:
+            logger.warning("EXECUTION state reached without a decision. Returning to PERCEPTION.")
+            await self._transition_to(AgentState.PERCEPTION)
+            return
+
+        decision_id = self._current_decision.get('id')
+        action = self._current_decision.get('action')
+        asset_pair = self._current_decision.get('asset_pair')
+        
+        try:
+            execution_result = self.engine.execute_decision(decision_id)
+            if execution_result.get('success'):
+                logger.info(f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor.")
+                # Link this decision to the next trade detected for this asset
+                self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+                await self._transition_to(AgentState.LEARNING)
+            else:
+                logger.error(f"Trade execution failed: {execution_result.get('message')}. Returning to PERCEPTION.")
+                await self._transition_to(AgentState.PERCEPTION)
+        except Exception as e:
+            logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
+            await self._transition_to(AgentState.PERCEPTION) # Go back to perception on failure
+        
+        # Clear decision after execution attempt
+        self._current_decision = None
+
+    async def handle_learning_state(self):
+        """
+        LEARNING: Recording the outcome and updating metrics.
+        """
+        logger.info("State: LEARNING - Recording outcome and updating metrics...")
+
+        # For now, just transition back to perception for the next cycle
+        # In a real implementation, we would record the outcome and update metrics
+        await self._transition_to(AgentState.PERCEPTION)
 
     async def handle_analyzing_state(self):
         """
@@ -115,6 +278,21 @@ class TradingLoopAgent:
         action = self._current_decision.get('action')
         asset_pair = self._current_decision.get('asset_pair')
         logger.info(f"State: EXECUTING - Attempting to {action} {asset_pair} (Decision ID: {decision_id})")
+        # Retrieve monitoring context for risk validation
+        try:
+            # Use the monitoring context provider to get context
+            monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
+        except Exception as e:
+            logger.warning(f"Failed to get monitoring context for risk validation: {e}")
+            monitoring_context = {}
+        # Validate trade with RiskGatekeeper
+        approved, reason = self.risk_gatekeeper.validate_trade(self._current_decision, monitoring_context)
+        if not approved:
+            logger.info(f"Trade rejected by RiskGatekeeper: {reason}. Skipping execution.")
+            # Reset state and decision without raising an exception
+            self._current_decision = None
+            self.state = AgentState.ANALYZING
+            return
 
         try:
             execution_result = self.engine.execute_decision(decision_id)
