@@ -1,6 +1,7 @@
 import io
 import sys
 import types
+import threading
 import unittest
 from unittest import mock
 
@@ -39,7 +40,7 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         old_stdout = sys.stdout
         sys.stdout = buf
         try:
-            orchestrator.run()
+            orchestrator.run(test_mode=True)
         finally:
             sys.stdout = old_stdout
         return buf.getvalue()
@@ -57,7 +58,13 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.platform = platform
         orch.trades_today = 0
         orch.initial_portfolio_value = 100.0
+        orch.peak_portfolio_value = 100.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
+        orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
 
         out = self._run_and_capture(orch)
         self.assertIn('Kill-switch triggered: portfolio gain', out)
@@ -76,7 +83,13 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.platform = platform
         orch.trades_today = 0
         orch.initial_portfolio_value = 100.0
+        orch.peak_portfolio_value = 100.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
+        orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
 
         out = self._run_and_capture(orch)
         self.assertIn('Kill-switch triggered: portfolio loss', out)
@@ -95,6 +108,13 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.platform = platform
         orch.trades_today = 0
         orch.initial_portfolio_value = 100.0
+        orch.peak_portfolio_value = 100.0
+        orch.init_failed = False
+        orch._stop_event = threading.Event()
+        orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
         orch.init_failed = False
 
         out = self._run_and_capture(orch)
@@ -114,7 +134,13 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.platform = platform
         orch.trades_today = 0
         orch.initial_portfolio_value = 100.0
+        orch.peak_portfolio_value = 100.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
+        orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
 
         out = self._run_and_capture(orch)
         self.assertNotIn('Kill-switch triggered', out)
@@ -135,7 +161,11 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.initial_portfolio_value = 1000.0
         orch.peak_portfolio_value = 1000.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
         orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
         
         out = self._run_and_capture(orch)
         self.assertIn('Kill-switch triggered: portfolio drawdown of 15.00% exceeds threshold 10.00%', out)
@@ -156,7 +186,11 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.initial_portfolio_value = 1000.0
         orch.peak_portfolio_value = 1000.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
         orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
         
         out = self._run_and_capture(orch)
         self.assertIn('Kill-switch triggered: portfolio drawdown of 15.00% exceeds threshold 10.00%', out)
@@ -177,7 +211,11 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.initial_portfolio_value = 1000.0
         orch.peak_portfolio_value = 1000.0
         orch.init_failed = False
+        orch._stop_event = threading.Event()
         orch._paused_by_monitor = False
+        orch.kill_switch_gain_pct = config.kill_switch_gain_pct
+        orch.kill_switch_loss_pct = config.kill_switch_loss_pct
+        orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
         
         out = self._run_and_capture(orch)
         self.assertNotIn('drawdown', out)

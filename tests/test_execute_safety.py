@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime
+from freezegun import freeze_time
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory
 
@@ -38,6 +39,7 @@ def test_signal_only_blocks_execution(tmp_path, monkeypatch):
         engine.execute_decision('test-signal-only')
 
 
+@freeze_time("2025-01-01T00:00:01Z")
 def test_mock_platform_executes(tmp_path):
     cfg = make_config()
     engine = FinanceFeedbackEngine(cfg)
@@ -60,6 +62,7 @@ def test_mock_platform_executes(tmp_path):
     assert result.get('success') or result.get('message')
 
 
+@freeze_time("2025-01-01T00:00:01Z")
 def test_breaker_opens_after_failures(tmp_path, monkeypatch):
     cfg = make_config()
     engine = FinanceFeedbackEngine(cfg)
@@ -94,6 +97,7 @@ def test_breaker_opens_after_failures(tmp_path, monkeypatch):
         engine.execute_decision('test-breaker')
 
 
+@freeze_time("2025-01-01T00:00:01Z")
 def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
     cfg = make_config()
     # enable portfolio memory so record_trade_outcome is active
@@ -121,7 +125,7 @@ def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
         'action': 'BUY',
         'confidence': 80,
         'amount': 0.1,
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': '2025-01-01T00:00:01Z',  # Use fixed time instead of datetime.utcnow().isoformat()
         'entry_price': 100.0,
         'recommended_position_size': 1.0,
         'ai_provider': 'ensemble',

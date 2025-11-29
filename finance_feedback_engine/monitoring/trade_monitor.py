@@ -322,7 +322,6 @@ class TradeMonitor:
                 if decision_id:
                     logger.info(f"Associated new trade {trade_id} with decision {decision_id}")
 
-                })
                 # Queue for monitoring
                 self.pending_queue.put({
                     'trade_id': trade_id,

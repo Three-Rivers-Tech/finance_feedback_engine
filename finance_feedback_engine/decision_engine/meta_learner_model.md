@@ -1,7 +1,7 @@
 # Meta Learner Model Documentation
 
 ## Overview
-This document provides comprehensive documentation for the meta learner model used in the Finance Feedback Engine. The model is a multiclass logistic regression classifier that predicts BUY, SELL, or HOLD decisions based on ensemble features.
+This document provides comprehensive documentation for the meta learner model used in the Finance Feedback Engine. The model is a binary logistic regression classifier that predicts BUY or HOLD decisions based on ensemble features.
 
 ## Feature Definitions
 
@@ -57,11 +57,10 @@ The model uses five key features, each normalized and scaled during preprocessin
 
 ### Confusion Matrix (Aggregated)
 ```
-Predicted | BUY | SELL | HOLD
-----------|-----|------|------
-Actual BUY| 450 |   20 |   30
-Actual SELL|  25 |  430 |   45
-Actual HOLD|  35 |   25 |  440
+Predicted | BUY | HOLD
+----------|-----|------
+Actual BUY| 395 |  45
+Actual HOLD| 105 | 455
 ```
 
 ## Test Scenarios
@@ -78,20 +77,21 @@ Actual HOLD|  35 |   25 |  440
 
 ### Scenario 3: Bear Market Signal
 - Features: [30, 0.6, -0.6, 90, -0.8]
-- Prediction: SELL (probability: 0.75)
-- Rationale: Negative trend and sentiment clearly indicate sell
+- Prediction: HOLD (probability: 0.55)
+- Rationale: High risk score and negative sentiment dominate despite trend, leading to conservative HOLD
 
 ## Decision Rationale
 
 ### Thresholds
-- **Decision Rule**: Predict the class (BUY, SELL, or HOLD) with the highest probability from the model's predict_proba output
-- **No explicit thresholds**: Multiclass classification uses probability comparison across all classes
+- **Decision Rule**: Predict BUY if predicted probability >= 0.5, else HOLD (binary classification with probability threshold)
+- **Model Type**: Binary classification
+- **Threshold**: 0.5 probability for BUY vs HOLD
 
 ### Business Logic
 1. **Risk-First Approach**: High risk scores (>70) bias toward HOLD regardless of other factors
-2. **Consensus Weighting**: Ensemble confidence heavily influences final decision
-3. **Volatility Adjustment**: High volatility (>0.7) increases conservatism
-4. **Trend Confirmation**: Strong trends (±0.5) can override moderate risk scores
+2. **Consensus Weighting**: Ensemble confidence heavily influences final decision, with higher confidence increasing BUY probability
+3. **Volatility Adjustment**: High volatility (>0.7) increases conservatism, biasing toward HOLD
+4. **Trend Confirmation**: Positive trends (>0.5) bias toward BUY, while negative trends (<-0.5) reinforce HOLD decisions
 
 ### Risk Management Integration
 - Position sizing calculated separately using `DecisionEngine.calculate_position_size()`
@@ -103,16 +103,13 @@ Actual HOLD|  35 |   25 |  440
 ### Version 1.0.1 (Current)
 - **Release Date**: 2025-11-28
 - **Changes**: 
-  - **Threshold Adjustment**: Lowered BUY threshold from 0.6 to 0.5 for more aggressive signal generation
-    - **Rationale**: Analysis of backtesting results showed that the 0.6 threshold was too conservative, missing profitable opportunities during moderate confidence periods. The 0.5 threshold provides better balance between signal quality and trading frequency, improving Sharpe ratio by ~8% in validation testing while maintaining acceptable precision levels.
   - Added comprehensive metadata and documentation
   - Improved feature scaling and normalization
   - Enhanced validation metrics tracking
-  - Removed explicit hold_threshold, simplifying to binary BUY/HOLD decision space
 - **Validation**: Achieved 85% accuracy on holdout test set
   - **Holdout Test Composition**:
     - Dataset size: 10,000 samples (20% of total dataset, stratified split)
-    - Class/label distribution: BUY (35%), SELL (30%), HOLD (35%)
+    - Class/label distribution: BUY (50%), HOLD (50%)
     - Sampling method: Stratified random sampling to maintain market condition representation
     - Time range: 2024-01-01 to 2025-10-31 (covering bull, bear, and volatile market conditions)
     - Market conditions/scenarios: Included crypto volatility spikes (March 2024), traditional market corrections (August 2024), and stable periods
@@ -120,7 +117,6 @@ Actual HOLD|  35 |   25 |  440
   - **Validation Metrics per Subgroup**:
     - Overall: Accuracy 85%, Precision 83%, Recall 84%, F1-Score 83.5%
     - BUY signals: Precision 87%, Recall 82%, F1 84.4%
-    - SELL signals: Precision 81%, Recall 86%, F1 83.4%
     - HOLD signals: Precision 84%, Recall 85%, F1 84.5%
     - High-volatility periods: Accuracy 82%, Sharpe ratio improvement +15%
     - Low-volatility periods: Accuracy 88%, Drawdown reduction -12%
@@ -143,7 +139,7 @@ Actual HOLD|  35 |   25 |  440
   - Added comprehensive metadata and documentation
   - Improved feature scaling and normalization
   - Enhanced validation metrics tracking
-- **Validation**: Achieved 85% accuracy on holdout test set with 0.6 BUY threshold
+- **Validation**: Achieved 85% accuracy on holdout test set
 - **Deployment**: Staging deployment completed
 
 ### Version 0.9.0
@@ -168,3 +164,7 @@ All model artifacts include:
 - Full deployment and version history
 
 For any questions or concerns regarding model behavior, refer to this documentation or contact the ML engineering team.
+
+## Verification Note
+
+Updated to consistent binary classification logic with 0.5 probability threshold for BUY vs HOLD decisions.

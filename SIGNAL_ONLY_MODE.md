@@ -28,7 +28,7 @@ When balance is unavailable, the decision includes:
 
 ❌ **Not Provided (set to null):**
 - `recommended_position_size`
-- `stop_loss_fraction`
+- `stop_loss_percentage`
 - `risk_percentage`
 
 ### 3. **Clear Indication**
