@@ -7,7 +7,7 @@
   "amount": 0.1,
   "timestamp": "2025-01-01T00:00:00Z",
   "executed": false,
-  "execution_time": "2025-11-27T16:47:33.660557",
+  "execution_time": "2025-01-01T00:00:01",
   "execution_result": {
     "success": false,
     "error": "Circuit breaker 'execute_trade:mock' is OPEN. Service unavailable, please try again later."
