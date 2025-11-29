@@ -3,9 +3,12 @@
 from typing import Dict, Any, Optional, Tuple
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+import pandas as pd
+
+from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +73,7 @@ class DecisionEngine:
     - Never risk more than you can afford to lose
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], data_provider=None):
         """
         Initialize the decision engine.
 
@@ -78,6 +81,7 @@ class DecisionEngine:
             config: Configuration dictionary. Can be either:
                 - Full configuration dictionary containing 'decision_engine' key with settings
                 - Direct decision_engine sub-dict (for backward compatibility)
+            data_provider: Data provider instance for fetching historical data
                 
         The following settings are supported:
             - ai_provider: 'local', 'cli', 'codex', 'ensemble', etc.
@@ -88,6 +92,7 @@ class DecisionEngine:
             - local_priority: Local model priority setting
             - ensemble: Ensemble configuration (if provider='ensemble')
         """
+        self.data_provider = data_provider
         # Handle both full config and sub-dict formats
         if 'decision_engine' in config:
             # Full config passed
@@ -278,7 +283,57 @@ class DecisionEngine:
             'price_change': self._calculate_price_change(market_data),
             'volatility': self._calculate_volatility(market_data)
         }
+
+        # Detect market regime using historical data
+        regime = self._detect_market_regime(asset_pair)
+        context['regime'] = regime
+
         return context
+
+    def _detect_market_regime(self, asset_pair: str) -> str:
+        """
+        Detect the current market regime using historical data.
+
+        Args:
+            asset_pair: Asset pair to analyze
+
+        Returns:
+            Market regime string
+        """
+        if not self.data_provider:
+            logger.warning("No data provider available for regime detection")
+            return "UNKNOWN"
+
+        try:
+            # Get last 30 days of historical data
+            end_date = datetime.utcnow().date()
+            start_date = end_date - timedelta(days=30)
+            
+            historical_data = self.data_provider.get_historical_data(
+                asset_pair,
+                start_date.strftime("%Y-%m-%d"),
+                end_date.strftime("%Y-%m-%d")
+            )
+            
+            if not historical_data or len(historical_data) < 14:
+                logger.warning("Insufficient historical data for regime detection")
+                return "UNKNOWN"
+            
+            # Create detector and detect regime
+            detector = MarketRegimeDetector()
+            # Convert list of dicts to DataFrame
+            if isinstance(historical_data, list):
+                df = pd.DataFrame(historical_data)
+            else:
+                df = historical_data
+            regime = detector.detect_regime(df)
+            
+            logger.info("Detected market regime: %s", regime)
+            return regime
+            
+        except Exception as e:
+            logger.error("Error detecting market regime: %s", e)
+            return "UNKNOWN"
 
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage."""
@@ -535,7 +590,13 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
             )
             market_info += f"\n{monitoring_text}\n"
 
-        prompt = f"""You are an educational trading analysis system demonstrating technical and fundamental market analysis for learning purposes.
+        # Prepend market regime if available
+        regime = context.get('regime', 'UNKNOWN')
+        regime_prefix = ""
+        if regime != 'UNKNOWN':
+            regime_prefix = f"CURRENT MARKET REGIME: {regime}. Adjust your strategy to favor trend-following indicators.\n\n"
+
+        prompt = f"""{regime_prefix}You are an educational trading analysis system demonstrating technical and fundamental market analysis for learning purposes.
 
 TASK: Analyze the following market data and demonstrate what a technical analysis would suggest. This is for educational/research purposes only, not actual financial advice.
 
@@ -1045,6 +1106,10 @@ Format response as a structured technical analysis demonstration.
             logger.error("Ensemble manager not initialized")
             return self._rule_based_decision(prompt)
         
+        # Check for debate mode
+        if self.ensemble_manager.debate_mode:
+            return self._debate_ai_inference(prompt)
+        
         # Get enabled providers from ensemble config
         enabled_providers = self.ensemble_manager.enabled_providers.copy()
         
@@ -1217,6 +1282,173 @@ Format response as a structured technical analysis demonstration.
         aggregated['ensemble_metadata']['local_priority_applied'] = self.local_priority is not None
         
         return aggregated
+
+    def _debate_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        Debate mode AI inference using bull, bear, and judge providers.
+        
+        Args:
+            prompt: Base AI prompt with market data
+            
+        Returns:
+            Final decision from judge provider
+        """
+        logger.info("Using debate mode AI inference")
+        
+        debate_providers = self.ensemble_manager.debate_providers
+        
+        # Create bull case prompt
+        bull_prompt = self._create_debate_prompt(prompt, 'bull')
+        bull_provider = debate_providers['bull']
+        logger.info(f"Querying bull case provider: {bull_provider}")
+        bull_name, bull_decision = self._query_single_provider(bull_provider, bull_prompt)
+        if not bull_decision:
+            logger.error(f"Bull provider {bull_provider} failed, falling back to regular ensemble")
+            return self._ensemble_ai_inference(prompt)
+        
+        # Create bear case prompt
+        bear_prompt = self._create_debate_prompt(prompt, 'bear')
+        bear_provider = debate_providers['bear']
+        logger.info(f"Querying bear case provider: {bear_provider}")
+        bear_name, bear_decision = self._query_single_provider(bear_provider, bear_prompt)
+        if not bear_decision:
+            logger.error(f"Bear provider {bear_provider} failed, falling back to regular ensemble")
+            return self._ensemble_ai_inference(prompt)
+        
+        # Create judge prompt with both cases
+        judge_prompt = self._create_judge_prompt(prompt, bull_decision, bear_decision)
+        judge_provider = debate_providers['judge']
+        logger.info(f"Querying judge provider: {judge_provider}")
+        judge_name, judge_decision = self._query_single_provider(judge_provider, judge_prompt)
+        if not judge_decision:
+            logger.error(f"Judge provider {judge_provider} failed, falling back to regular ensemble")
+            return self._ensemble_ai_inference(prompt)
+        
+        # Synthesize debate decision
+        final_decision = self.ensemble_manager.debate_decisions(
+            bull_decision, bear_decision, judge_decision
+        )
+        
+        return final_decision
+
+    def _create_debate_prompt(self, base_prompt: str, role: str) -> str:
+        """
+        Create debate prompt for bull or bear role.
+        
+        Args:
+            base_prompt: Base market analysis prompt
+            role: 'bull' or 'bear'
+            
+        Returns:
+            Modified prompt for the debate role
+        """
+        if role == 'bull':
+            debate_instruction = """
+DEBATE ROLE: BULLISH ADVOCATE
+============================
+You are arguing the BULLISH case for this asset. Focus exclusively on positive factors, technical strengths, and reasons to BUY or HOLD LONG.
+
+Key Guidelines:
+- Emphasize bullish technical indicators (RSI oversold, upward trends, support levels)
+- Highlight positive news sentiment and macroeconomic tailwinds
+- Argue for long positions and upward price movement
+- Downplay or explain away bearish signals as temporary
+- Provide strong reasoning for why the asset will RISE
+
+Present your bullish case with confidence and conviction.
+"""
+        elif role == 'bear':
+            debate_instruction = """
+DEBATE ROLE: BEARISH ADVOCATE  
+============================
+You are arguing the BEARISH case for this asset. Focus exclusively on negative factors, technical weaknesses, and reasons to SELL or HOLD SHORT.
+
+Key Guidelines:
+- Emphasize bearish technical indicators (RSI overbought, downward trends, resistance levels)
+- Highlight negative news sentiment and macroeconomic headwinds
+- Argue for short positions and downward price movement
+- Downplay or explain away bullish signals as temporary
+- Provide strong reasoning for why the asset will FALL
+
+Present your bearish case with confidence and conviction.
+"""
+        else:
+            raise ValueError(f"Unknown debate role: {role}")
+        
+        # Insert debate instruction before the analysis section
+        # Find the position to insert
+        analysis_marker = "ANALYSIS OUTPUT REQUIRED:"
+        if analysis_marker in base_prompt:
+            insert_pos = base_prompt.find(analysis_marker)
+            modified_prompt = (
+                base_prompt[:insert_pos] + 
+                debate_instruction + "\n\n" +
+                base_prompt[insert_pos:]
+            )
+        else:
+            modified_prompt = debate_instruction + "\n\n" + base_prompt
+            
+        return modified_prompt
+
+    def _create_judge_prompt(self, base_prompt: str, bull_case: Dict[str, Any], bear_case: Dict[str, Any]) -> str:
+        """
+        Create judge prompt that includes both bull and bear cases.
+        
+        Args:
+            base_prompt: Base market analysis prompt
+            bull_case: Decision from bullish provider
+            bear_case: Decision from bearish provider
+            
+        Returns:
+            Judge prompt with debate cases
+        """
+        judge_instruction = """
+DEBATE ROLE: IMPARTIAL JUDGE
+===========================
+You are the final arbiter in this debate between bullish and bearish advocates.
+
+Your task is to evaluate both arguments and make the definitive BUY/SELL/HOLD decision.
+
+DEBATE CASES:
+=============
+
+BULLISH CASE:
+-------------
+""" + bull_case.get('reasoning', 'No reasoning provided') + f"""
+Action: {bull_case.get('action', 'HOLD')}
+Confidence: {bull_case.get('confidence', 50)}%
+
+BEARISH CASE:
+-------------
+""" + bear_case.get('reasoning', 'No reasoning provided') + f"""
+Action: {bear_case.get('action', 'HOLD')}
+Confidence: {bear_case.get('confidence', 50)}%
+
+JUDGE GUIDELINES:
+================
+- Consider the strength of technical evidence in both cases
+- Evaluate which argument better explains current market conditions
+- Factor in news sentiment and macroeconomic context
+- Determine which position (long/short) has stronger supporting evidence
+- Make a clear BUY/SELL/HOLD decision with high confidence
+- If arguments are equally compelling, consider HOLD
+- Base decision on market fundamentals, not debate rhetoric
+
+Present your judgment with clear reasoning and final decision.
+"""
+        
+        # Replace the original analysis section with judge instruction
+        analysis_marker = "ANALYSIS OUTPUT REQUIRED:"
+        if analysis_marker in base_prompt:
+            insert_pos = base_prompt.find(analysis_marker)
+            modified_prompt = (
+                base_prompt[:insert_pos] + 
+                judge_instruction
+            )
+        else:
+            modified_prompt = base_prompt + "\n\n" + judge_instruction
+            
+        return modified_prompt
 
     def _is_valid_provider_response(
         self,

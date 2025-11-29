@@ -5,7 +5,7 @@ Authoritative, project-specific guidance for AI coding agents. Keep edits concis
 
 Big picture (quick):
 - Six logical layers: Data providers (`AlphaVantageProvider`), Decision Engine (`DecisionEngine` + `EnsembleDecisionManager`), Trading Platforms (`PlatformFactory` + `BaseTradingPlatform`), Persistence (`DecisionStore` JSON files), Monitoring (`TradeMonitor` + live tracking), and Memory (`PortfolioMemoryEngine` + ML feedback).
-- Primary flow: `FinanceFeedbackEngine.analyze_asset()` → gather market data + portfolio context + memory → build LLM prompt → query AI provider(s) → ensemble aggregation → persist decision → optional execution + live monitoring.
+- Primary flow: `FinanceFeedbackEngine.analyze_asset()` → gather market data + portfolio context + memory + regime detection → build LLM prompt → query AI provider(s) → ensemble aggregation → persist decision → optional execution + live monitoring.
 ## Copilot Instructions: Finance Feedback Engine 2.0
 
 Authoritative, project-specific guidance for AI coding agents. Keep edits concise and preserve patterns.
@@ -21,6 +21,7 @@ Quick map (files to open):
 - `finance_feedback_engine/persistence/decision_store.py` — JSON filenames `YYYY-MM-DD_<uuid>.json`, append-only updates by ID.
 - `finance_feedback_engine/monitoring/trade_monitor.py` — live trade tracking with thread management and metrics collection.
 - `finance_feedback_engine/memory/portfolio_memory.py` — ML feedback loop with historical performance analysis.
+- `finance_feedback_engine/utils/market_regime_detector.py` — regime classification using ADX/ATR on historical OHLC data.
 - `cli/main.py` — CLI commands & output formatting (update if adding decision fields).
 
 Developer workflows (concrete commands):
@@ -42,6 +43,7 @@ Project-specific conventions (must-follow):
 - Decision validation: use `validate_decision_comprehensive()` for all provider outputs before aggregation.
 - Memory context: includes 90-day performance metrics, win rates, and momentum analysis for AI awareness.
 - Monitoring: max 2 concurrent trades with dedicated threads; collects P&L, holding time, and exit reasons.
+- Market regime detection: uses `MarketRegimeDetector` with ADX (>25 = trending) and ATR (relative to price) to classify TRENDING_BULL/BEAR, HIGH_VOLATILITY_CHOP, LOW_VOLATILITY_RANGING; injected at prompt top for strategy guidance.
 
 Integration & extension patterns (examples):
 - New trading platform: subclass `BaseTradingPlatform`, implement `get_balance`, `execute_trade`, `get_account_info`, then call `PlatformFactory.register_platform('name', Class)`.

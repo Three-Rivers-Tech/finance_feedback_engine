@@ -10,6 +10,7 @@ The Finance Feedback Engine 2.0 features a sophisticated ensemble decision syste
 - **Intelligent Voting**: Weighted, majority, and stacking strategies
 - **Adaptive Learning**: Improves provider weights based on historical accuracy
 - **Resilient Operation**: Continues functioning even when some providers fail
+- **Debate Mode**: Structured debate between bullish/bearish advocates with impartial judge 🆕
 
 > **New in 2.0**: Dynamic weight adjustment ensures robust decision-making even when AI providers fail. See [Dynamic Weight Adjustment](DYNAMIC_WEIGHT_ADJUSTMENT.md) for details.
 
@@ -147,6 +148,33 @@ ensemble:
   adaptive_learning: true
   learning_rate: 0.1
 ```
+
+### Debate Mode Setup
+
+**New in 2.0.1**: Structured debate between AI providers for more nuanced decision-making.
+
+```yaml
+ensemble:
+  # Enable debate mode (overrides normal ensemble voting)
+  debate_mode: true
+  
+  # Assign providers to debate roles
+  debate_providers:
+    bull: "gemini"    # Argues the bullish case
+    bear: "qwen"      # Argues the bearish case  
+    judge: "local"    # Makes final impartial judgment
+```
+
+**Debate Workflow:**
+1. **Bull Advocate**: Presents strongest bullish arguments
+2. **Bear Advocate**: Presents strongest bearish arguments  
+3. **Judge**: Evaluates both cases and makes final BUY/SELL/HOLD decision
+
+**Benefits:**
+- More balanced analysis of market conditions
+- Reduces confirmation bias from single-provider thinking
+- Judge sees both sides before deciding
+- Particularly effective for volatile or uncertain markets
 
 ### Provider Weights
 

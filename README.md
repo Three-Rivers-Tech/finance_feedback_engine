@@ -11,6 +11,7 @@
   - **Dynamic Weight Adjustment**: Automatically handles provider failures
   - **Resilient Operation**: Continues working even when some providers are down
   - **Transparent Metadata**: Full visibility into provider health and decisions
+  - **Debate Mode**: Structured debate between bullish/bearish advocates with impartial judge 🆕
 - **💱 Multi-Asset Support**: Trade cryptocurrencies (BTC, ETH) and forex pairs (EUR/USD, etc.)
 - **🏦 Multi-Platform Integration**: 
   - Coinbase Advanced with **Real Portfolio Tracking** 🆕
