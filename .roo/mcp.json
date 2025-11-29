@@ -5,7 +5,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/home/cmp6510/finance_feedback_engine-2.0"
+        "${HOME}/finance_feedback_engine-2.0"
       ]
     }
   }

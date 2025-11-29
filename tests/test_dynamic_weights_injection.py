@@ -7,7 +7,7 @@ from finance_feedback_engine.decision_engine.ensemble_manager import (
 
 # Configure logging for the test
 
-logging.basicConfig(level=logging.INFO)
+
 
 
 def test_dynamic_weights_override():
@@ -77,7 +77,7 @@ def test_dynamic_weights_override():
     # The adjusted_weights in metadata should reflect the dynamic_weights
     adjusted = result["ensemble_metadata"]["adjusted_weights"]
     for provider, weight in dynamic_weights.items():
-        assert pytest.approx(adjusted[provider], rel=1e-3) == weight
+        assert adjusted[provider] == pytest.approx(weight, rel=1e-3)
 
     # Original static weights should remain unchanged in metadata
     original = result["ensemble_metadata"]["original_weights"]

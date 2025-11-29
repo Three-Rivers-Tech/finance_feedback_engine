@@ -8,6 +8,8 @@ import sys
 import yaml
 import logging
 from pathlib import Path
+import tempfile
+import shutil
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
@@ -85,8 +87,9 @@ def update_weights(config_path: str = "config/config.local.yaml"):
     changes_log = []
 
     for provider, adjustment_data in adjustments.items():
-        # Default to 0.2 if not found
-        current_weight = current_weights.get(provider, 0.2)
+        # Default to equal weight for new providers (1/5 providers = 0.2)
+        DEFAULT_WEIGHT = 0.2
+        current_weight = current_weights.get(provider, DEFAULT_WEIGHT)
         factor = adjustment_data['suggested_adjustment_factor']
         win_rate = adjustment_data['current_win_rate']
 
@@ -149,13 +152,23 @@ def update_weights(config_path: str = "config/config.local.yaml"):
 
     # Write back to file
     try:
-        with open(config_path, 'w') as f:
+        # Write to temporary file first (atomic write pattern)
+        config_dir = os.path.dirname(config_path) or '.'
+        with tempfile.NamedTemporaryFile(
+            mode='w', dir=config_dir, delete=False, suffix='.yaml'
+        ) as f:
+            temp_path = f.name
             yaml.dump(
                 config_data, f, default_flow_style=False, sort_keys=False
             )
+        # Atomic rename (on POSIX systems)
+        shutil.move(temp_path, config_path)
         logger.info(f"Successfully updated configuration at {config_path}")
     except Exception as e:
         logger.error(f"Failed to write config: {e}")
+        # Clean up temp file if it exists
+        if 'temp_path' in locals() and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 if __name__ == "__main__":
