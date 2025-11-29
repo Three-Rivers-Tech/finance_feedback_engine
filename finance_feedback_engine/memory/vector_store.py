@@ -15,7 +15,15 @@ import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
-EMBEDDING_TIMEOUT_SECS = int(os.getenv('EMBEDDING_TIMEOUT_SECS', 30))
+timeout_val = os.getenv('EMBEDDING_TIMEOUT_SECS', '30')
+try:
+    EMBEDDING_TIMEOUT_SECS = int(timeout_val)
+    if EMBEDDING_TIMEOUT_SECS <= 0:
+        EMBEDDING_TIMEOUT_SECS = 30
+        logger.warning(f"EMBEDDING_TIMEOUT_SECS must be positive, got {timeout_val}, using default 30")
+except (ValueError, TypeError):
+    EMBEDDING_TIMEOUT_SECS = 30
+    logger.warning(f"Invalid EMBEDDING_TIMEOUT_SECS value '{timeout_val}', using default 30")
 
 
 class VectorMemory:

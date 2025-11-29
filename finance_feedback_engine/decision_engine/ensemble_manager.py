@@ -203,7 +203,8 @@ class EnsembleDecisionManager:
         Returns:
             True if the name contains any local keyword
         """
-        return any(keyword in name for keyword in self.local_keywords)
+        name_lower = name.lower()
+        return any(keyword.lower() in name_lower for keyword in self.local_keywords)
 
     def _calculate_robust_weights(self, active_providers: List[str]) -> Dict[str, float]:
         """
@@ -225,6 +226,10 @@ class EnsembleDecisionManager:
         """
         if not active_providers:
             return {}
+        
+        # If dynamic weights are provided, use them directly (override scaling)
+        if self.dynamic_weights:
+            return {p: self.dynamic_weights.get(p, 0) for p in active_providers}
         
         local_group = [p for p in active_providers if self._is_local_provider(p)]
         cloud_group = [p for p in active_providers if not self._is_local_provider(p)]
@@ -367,7 +372,6 @@ class EnsembleDecisionManager:
             'provider_decisions': provider_decisions,
             'agreement_score': self._calculate_agreement_score(actions),
             'confidence_variance': float(np.var(confidences)),
-            'confidence_adjusted': active_providers < total_providers,
             'local_priority_applied': robust_weights is not None,
             'local_models_used': [],  # to be filled by engine
             'timestamp': datetime.utcnow().isoformat(),
