@@ -223,7 +223,7 @@ position_size = engine.calculate_position_size(
     account_balance=10000.00,    # $10,000 account
     risk_percentage=1.0,          # Risk 1%
     entry_price=50000.00,         # BTC at $50,000
-    stop_loss_percentage=2.0      # 2% stop loss
+    stop_loss_fraction=0.02      # 2% stop loss (as decimal)
 )
 # Result: 0.1 BTC
 
@@ -284,7 +284,7 @@ Generated decisions include these position-related fields:
   "entry_price": 50000.00,
   "recommended_position_size": 0.1,
   "risk_percentage": 1.0,
-  "stop_loss_percentage": 2.0,
+  "stop_loss_fraction": 0.02,
   "confidence": 75,
   "reasoning": "..."
 }

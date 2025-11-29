@@ -26,13 +26,13 @@ has_valid_balance = (
 
 #### Normal Mode (valid balance):
 - Calculates `recommended_position_size`
-- Sets `stop_loss_percentage = 2.0`
+- Sets `stop_loss_fraction = 0.02`
 - Sets `risk_percentage = 1.0`
 - Sets `signal_only = False`
 
 #### Signal-Only Mode (invalid/missing balance):
 - Sets `recommended_position_size = None`
-- Sets `stop_loss_percentage = None`
+- Sets `stop_loss_fraction = None`
 - Sets `risk_percentage = None`
 - Sets `signal_only = True`
 - Logs warning message
@@ -42,7 +42,7 @@ has_valid_balance = (
 **New Fields:**
 - `signal_only` (bool): Indicates if decision is signal-only (no position sizing)
 - `recommended_position_size` (float|null): Position size or null in signal-only mode
-- `stop_loss_percentage` (float|null): Stop loss % or null in signal-only mode
+- `stop_loss_fraction` (float|null): Stop loss fraction or null in signal-only mode
 - `risk_percentage` (float|null): Risk % or null in signal-only mode
 
 ### 3. CLI Display (`finance_feedback_engine/cli/main.py`)

@@ -61,7 +61,7 @@ if [ -f "$LATEST_DECISION" ]; then
     echo "Key fields:"
     echo "  signal_only:                $(cat "$LATEST_DECISION" | grep -o '"signal_only": [^,]*' || echo 'not found')"
     echo "  recommended_position_size:  $(cat "$LATEST_DECISION" | grep -o '"recommended_position_size": [^,]*' || echo 'not found')"
-    echo "  stop_loss_percentage:       $(cat "$LATEST_DECISION" | grep -o '"stop_loss_percentage": [^,]*' || echo 'not found')"
+    echo "  stop_loss_fraction:       $(cat "$LATEST_DECISION" | grep -o '"stop_loss_fraction": [^,]*' || echo 'not found')"
     echo "  risk_percentage:            $(cat "$LATEST_DECISION" | grep -o '"risk_percentage": [^,]*' || echo 'not found')"
 else
     echo "No decision file found in data/demo_signal_only/"
