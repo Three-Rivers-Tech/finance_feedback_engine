@@ -158,9 +158,12 @@ ensemble:
   # Enable debate mode (overrides normal ensemble voting)
   debate_mode: true
   
+  # IMPORTANT: All debate providers must also be listed in enabled_providers
+  enabled_providers: [local, cli, qwen]
+  
   # Assign providers to debate roles
   debate_providers:
-    bull: "gemini"    # Argues the bullish case
+    bull: "cli"    # Argues the bullish case
     bear: "qwen"      # Argues the bearish case  
     judge: "local"    # Makes final impartial judgment
 ```
@@ -175,6 +178,10 @@ ensemble:
 - Reduces confirmation bias from single-provider thinking
 - Judge sees both sides before deciding
 - Particularly effective for volatile or uncertain markets
+
+**Configuration Requirements:**
+- All providers specified in `debate_providers` must be included in `enabled_providers`
+- The system will validate this at startup and raise an error if debate providers are not enabled
 
 ### Provider Weights
 
