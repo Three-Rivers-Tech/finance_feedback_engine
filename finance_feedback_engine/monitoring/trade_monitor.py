@@ -288,7 +288,6 @@ class TradeMonitor:
         # - Close all open positions across platforms (this would be triggered by Orchestrator)
         # - Send notification
 
-    
     def _detect_new_trades(self):
         """Query platform for open positions and detect new trades."""
         try:
