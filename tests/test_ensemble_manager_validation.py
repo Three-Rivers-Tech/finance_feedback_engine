@@ -302,10 +302,9 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
         active = ["local", "cli"]
         weights = manager._calculate_robust_weights(active)
         
-        # local: 0.5 * (0.6 / 0.5) = 0.6
-        # cloud: cli 0.5 * (0.4 / 0.5) = 0.4
-        self.assertAlmostEqual(weights["local"], 0.6, places=3)
-        self.assertAlmostEqual(weights["cli"], 0.4, places=3)
+        # Dynamic weights are used directly as final weights
+        self.assertAlmostEqual(weights["local"], 0.5, places=3)
+        self.assertAlmostEqual(weights["cli"], 0.5, places=3)
         self.assertAlmostEqual(sum(weights.values()), 1.0, places=3)
 
 
