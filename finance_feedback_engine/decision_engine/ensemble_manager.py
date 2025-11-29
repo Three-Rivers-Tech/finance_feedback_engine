@@ -308,7 +308,7 @@ class EnsembleDecisionManager:
         bull_case: Dict[str, Any],
         bear_case: Dict[str, Any],
         judge_decision: Dict[str, Any],
-        failed_debate_providers: List[str] = []
+        failed_debate_providers: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Synthesize debate decisions from bull, bear, and judge providers.
@@ -323,6 +323,7 @@ class EnsembleDecisionManager:
             Synthesized decision with debate metadata
         """
         # Validate all inputs
+        failed_debate_providers = failed_debate_providers or []
         final_decision = deepcopy(judge_decision)
         
         # Add debate-specific metadata
