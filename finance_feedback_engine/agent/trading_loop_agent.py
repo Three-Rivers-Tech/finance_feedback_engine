@@ -110,17 +110,6 @@ class TradingLoopAgent:
             await self._transition_to(AgentState.MONITORING)
             return
 
-        # Process each asset pair to gather market data
-        for asset_pair in self.config.asset_pairs:
-            try:
-                logger.debug(f"Analyzing {asset_pair}...")
-                # In perception state, we gather data but don't make decisions yet
-                # We'll transition to reasoning to make decisions based on the data
-                break  # Just move to reasoning state after checking if there are open trades
-            except Exception as e:
-                logger.error(f"Error analyzing {asset_pair}: {e}")
-                continue
-
         # Transition to reasoning after gathering market data
         await self._transition_to(AgentState.REASONING)
 
