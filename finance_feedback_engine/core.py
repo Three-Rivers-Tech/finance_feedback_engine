@@ -557,7 +557,7 @@ class FinanceFeedbackEngine:
                 perf_metric = float(base_pct * speed_factor * vol_factor * risk_penalty)
 
                 try:
-                    ensemble_mgr.update_provider_weights(
+                    ensemble_mgr.update_base_weights(
                         provider_decisions,
                         actual_outcome,
                         perf_metric

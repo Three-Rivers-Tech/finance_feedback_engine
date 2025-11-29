@@ -74,8 +74,8 @@ class EnsembleDecisionManager:
         self.dynamic_weights = self._validate_dynamic_weights(dynamic_weights)
         ensemble_config = config.get('ensemble', {})
         
-        # Provider weights (default: equal weighting for common providers)
-        self.provider_weights = ensemble_config.get('provider_weights', {
+        # Base weights (default: equal weighting for common providers)
+        self.base_weights = ensemble_config.get('provider_weights', {
             'local': 0.20,
             'cli': 0.20,
             'codex': 0.20,
@@ -129,6 +129,11 @@ class EnsembleDecisionManager:
                     f"Current enabled_providers: {self.enabled_providers}"
                 )
         
+        # Local-First settings
+        self.local_keywords = ['local', 'llama', 'mistral', 'deepseek', 'gemma', 'phi', 'qwen:']
+        self.local_dominance_target = ensemble_config.get('local_dominance_target', 0.6)
+        self.min_local_providers = ensemble_config.get('min_local_providers', 1)
+        
         # Performance tracking
         self.performance_history = self._load_performance_history()
         
@@ -139,8 +144,7 @@ class EnsembleDecisionManager:
             self._initialize_meta_learner()
 
         logger.info(
-            f"Ensemble manager initialized with providers: "
-            f"{self.enabled_providers}, strategy: {self.voting_strategy}"
+            f"Local-First Ensemble initialized. Target Local Dominance: {self.local_dominance_target:.0%}"
         )
 
     def _initialize_meta_learner(self):
@@ -188,6 +192,78 @@ class EnsembleDecisionManager:
         self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
         self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
         logger.info("Meta-learner initialized with mock-trained parameters for updated features.")
+
+    def _is_local_provider(self, name: str) -> bool:
+        """
+        Check if a provider name indicates a local provider.
+        
+        Args:
+            name: Provider name to check
+            
+        Returns:
+            True if the name contains any local keyword
+        """
+        return any(keyword in name for keyword in self.local_keywords)
+
+    def _calculate_robust_weights(self, active_providers: List[str]) -> Dict[str, float]:
+        """
+        Calculate robust weights with local dominance target.
+        
+        Splits active providers into local and cloud groups, then scales
+        weights to achieve target dominance (e.g., 60% local, 40% cloud).
+        
+        Edge cases:
+        - Only cloud providers: cloud gets 100%
+        - Only local providers: local gets 100%
+        - No providers: empty dict
+        
+        Args:
+            active_providers: List of provider names that responded
+            
+        Returns:
+            Dictionary of normalized weights for active providers
+        """
+        if not active_providers:
+            return {}
+        
+        local_group = [p for p in active_providers if self._is_local_provider(p)]
+        cloud_group = [p for p in active_providers if not self._is_local_provider(p)]
+        
+        # Use dynamic weights if available, otherwise base weights
+        weights = self.dynamic_weights or self.base_weights
+        
+        local_sum = sum(weights.get(p, 0) for p in local_group)
+        cloud_sum = sum(weights.get(p, 0) for p in cloud_group)
+        
+        target_local = self.local_dominance_target
+        target_cloud = 1.0 - target_local
+        
+        if local_sum == 0 and cloud_sum == 0:
+            # Fallback to equal weighting
+            num = len(active_providers)
+            return {p: 1.0 / num for p in active_providers}
+        
+        if local_sum == 0:
+            # Only cloud providers, give them 100%
+            num_cloud = len(cloud_group)
+            return {p: 1.0 / num_cloud for p in cloud_group}
+        
+        if cloud_sum == 0:
+            # Only local providers, give them 100%
+            num_local = len(local_group)
+            return {p: 1.0 / num_local for p in local_group}
+        
+        # Scale each group to its target
+        local_scale = target_local / local_sum
+        cloud_scale = target_cloud / cloud_sum
+        
+        result = {}
+        for p in local_group:
+            result[p] = weights.get(p, 0) * local_scale
+        for p in cloud_group:
+            result[p] = weights.get(p, 0) * cloud_scale
+        
+        return result
 
     def aggregate_decisions(
         self,
@@ -248,17 +324,25 @@ class EnsembleDecisionManager:
         if not actions:
             raise ValueError("No valid provider decisions found")
         
-        # Dynamically adjust weights for active providers
-        if adjusted_weights is None:
-            adjusted_weights = self._adjust_weights_for_active_providers(
-                provider_names, failed_providers
-            )
+        # Detect active local providers and check quorum
+        active_local_providers = [p for p in provider_names if self._is_local_provider(p)]
+        local_quorum_met = len(active_local_providers) >= self.min_local_providers
+        
+        # Calculate robust weights directly
+        robust_weights = self._calculate_robust_weights(provider_names)
         
         # Apply progressive fallback strategy
         final_decision, fallback_tier = self._apply_voting_with_fallback(
             provider_names, actions, confidences, reasonings, amounts,
-            adjusted_weights
+            robust_weights
         )
+        
+        # Apply penalty logic if quorum not met
+        quorum_penalty_applied = False
+        if not local_quorum_met:
+            final_decision['confidence'] = int(final_decision['confidence'] * 0.7)
+            final_decision['reasoning'] = f"[WARNING: LOCAL QUORUM FAILED] {final_decision['reasoning']}"
+            quorum_penalty_applied = True
         
         # Adjust confidence based on provider availability
         final_decision = self._adjust_confidence_for_failures(
@@ -273,10 +357,10 @@ class EnsembleDecisionManager:
             'num_total': total_providers,
             'failure_rate': failure_rate,
             'original_weights': {
-                p: self.provider_weights.get(p, 0)
+                p: self.base_weights.get(p, 0)
                 for p in self.enabled_providers
             },
-            'adjusted_weights': adjusted_weights,
+            'adjusted_weights': robust_weights,
             'weight_adjustment_applied': len(failed_providers) > 0,
             'voting_strategy': self.voting_strategy,
             'fallback_tier': fallback_tier,
@@ -284,9 +368,13 @@ class EnsembleDecisionManager:
             'agreement_score': self._calculate_agreement_score(actions),
             'confidence_variance': float(np.var(confidences)),
             'confidence_adjusted': active_providers < total_providers,
-            'local_priority_applied': adjusted_weights is not None,
+            'local_priority_applied': robust_weights is not None,
             'local_models_used': [],  # to be filled by engine
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat(),
+            'active_local_providers': active_local_providers,
+            'local_quorum_met': local_quorum_met,
+            'min_local_providers': self.min_local_providers,
+            'quorum_penalty_applied': quorum_penalty_applied
         }
         
         if 'voting_power' in final_decision:
@@ -386,53 +474,16 @@ class EnsembleDecisionManager:
     ) -> Dict[str, float]:
         """
         Dynamically adjust weights when some providers fail.
-        Renormalizes weights to sum to 1.0 using only active providers.
+        Uses robust weighting with local dominance target.
 
         Args:
             active_providers: List of providers that successfully responded
-            failed_providers: List of providers that failed
+            failed_providers: List of providers that failed (unused in calculation)
 
         Returns:
-            Dict mapping active providers to adjusted weights (sum = 1.0)
+            Dict mapping active providers to adjusted weights
         """
-        if not active_providers:
-            return {}
-        
-        # Get original weights for active providers
-        # Use dynamic_weights if provided, otherwise fall back to static config weights
-        base_weights = self.dynamic_weights if self.dynamic_weights else self.provider_weights
-        active_weights = {
-            provider: base_weights.get(provider, 1.0)
-            for provider in active_providers
-        }
-        
-        # Calculate total weight of active providers
-        total_weight = sum(active_weights.values())
-        
-        if total_weight <= 0:
-            logger.warning(
-                "Total active weight is zero or negative; falling back to "
-                "equal weights for active providers"
-            )
-            return {
-                provider: 1.0 / len(active_providers)
-                for provider in active_providers
-            }
-        
-        # Renormalize to sum to 1.0
-        adjusted_weights = {
-            provider: weight / total_weight
-            for provider, weight in active_weights.items()
-        }
-        
-        if failed_providers:
-            logger.info(
-                f"Dynamically adjusted weights due to {len(failed_providers)} "
-                f"failed provider(s): {failed_providers}"
-            )
-            logger.debug(f"Adjusted weights: {adjusted_weights}")
-        
-        return adjusted_weights
+        return self._calculate_robust_weights(active_providers)
 
     def _apply_voting_with_fallback(
         self,
@@ -726,7 +777,7 @@ class EnsembleDecisionManager:
             ])
         else:
             weights = np.array([
-                self.provider_weights.get(p, 1.0) for p in providers
+                self.base_weights.get(p, 1.0) for p in providers
             ])
         
         # Combine weights with confidences for voting power
@@ -978,7 +1029,7 @@ class EnsembleDecisionManager:
         max_count = max(counts.values())
         return max_count / len(actions)
 
-    def update_provider_weights(
+    def update_base_weights(
         self,
         provider_decisions: Dict[str, Dict[str, Any]],
         actual_outcome: str,
@@ -1042,12 +1093,12 @@ class EnsembleDecisionManager:
         # Normalize to weights
         total_accuracy = sum(accuracies.values())
         if total_accuracy > 0:
-            self.provider_weights = {
+            self.base_weights = {
                 p: acc / total_accuracy
                 for p, acc in accuracies.items()
             }
         
-        logger.info(f"Updated provider weights: {self.provider_weights}")
+        logger.info(f"Updated base weights: {self.base_weights}")
 
     def _load_performance_history(self) -> Dict[str, Any]:
         """Load provider performance history from disk."""
@@ -1080,7 +1131,7 @@ class EnsembleDecisionManager:
     def get_provider_stats(self) -> Dict[str, Any]:
         """Get current provider statistics and weights."""
         stats = {
-            'current_weights': self.provider_weights,
+            'current_weights': self.base_weights,
             'enabled_providers': self.enabled_providers,
             'voting_strategy': self.voting_strategy,
             'provider_performance': {}
