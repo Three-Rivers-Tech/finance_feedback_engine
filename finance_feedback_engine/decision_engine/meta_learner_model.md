@@ -3,6 +3,27 @@
 ## Overview
 This document provides comprehensive documentation for the meta learner model used in the Finance Feedback Engine. The model is a binary logistic regression classifier that predicts BUY or HOLD decisions based on ensemble features.
 
+## Migration from Multiclass to Binary Classification
+
+### Rationale for Removing SELL Predictions
+The model was converted from multiclass (BUY/SELL/HOLD) to binary (BUY/HOLD) classification to simplify decision logic and reduce false positive exit signals. SELL signals were often triggered prematurely in volatile markets, leading to excessive trading and reduced portfolio performance. By removing explicit SELL predictions, the system focuses on entry signals (BUY) and conservative holding (HOLD), allowing risk management systems to handle exits separately.
+
+### Impact on Dependent Systems
+Dependent systems that previously expected SELL signals must be updated to interpret HOLD as a neutral or exit-pending state. Systems relying on SELL for automated exits should integrate with separate risk management modules that monitor stop-loss levels, trailing stops, or time-based exits.
+
+### Adequacy of Collapsing SELL into HOLD
+Collapsing SELL into HOLD adequately represents exit scenarios in most cases, as HOLD signals indicate a lack of strong bullish conviction, allowing external risk management to determine optimal exit timing. However, for systems requiring explicit exit signals, position exit should be managed separately through monitoring tools or additional decision layers.
+
+### Risk Management and Exit Strategies
+Exit strategies are now handled through:
+- Stop-loss levels set automatically based on volatility and risk score
+- Position sizing calculations that incorporate risk parameters
+- Live monitoring with trade tracking and P&L assessment
+- Portfolio memory engine that learns from historical performance to inform future decisions
+
+### Deprecation Notice
+The SELL signal has been deprecated as of version 1.0.0. Any systems depending on SELL predictions should transition to using HOLD as a conservative signal and implement separate exit logic. For migration assistance, refer to the risk management integration section below.
+
 ## Feature Definitions
 
 The model uses five key features, each normalized and scaled during preprocessing:
@@ -97,6 +118,8 @@ Actual HOLD| 105 | 455
 - Position sizing calculated separately using `DecisionEngine.calculate_position_size()`
 - Stop-loss levels automatically set based on volatility and risk score
 - Maximum position size capped at 5% of portfolio for high-risk signals
+- Exit strategies managed through live monitoring, trailing stops, and time-based position closures
+- HOLD signals serve as conservative indicators for potential exits, with final exit decisions delegated to risk management modules
 
 ## Deployment and Version History
 
@@ -136,6 +159,8 @@ Actual HOLD| 105 | 455
 ### Version 1.0.0
 - **Release Date**: 2025-11-20
 - **Changes**: 
+  - Converted model from multiclass (BUY/SELL/HOLD) to binary (BUY/HOLD) classification
+  - Removed SELL predictions to reduce false positives and simplify exit logic
   - Added comprehensive metadata and documentation
   - Improved feature scaling and normalization
   - Enhanced validation metrics tracking
