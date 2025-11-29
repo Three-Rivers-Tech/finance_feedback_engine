@@ -119,6 +119,16 @@ ensemble:
   # Voting strategy: 'weighted', 'majority', or 'stacking'
   voting_strategy: "weighted"
   
+  # Debate mode: Enable structured debate between providers
+  # When enabled, uses bull/bear/judge workflow instead of ensemble voting
+  debate_mode: false
+  
+  # Debate providers: Specify which providers play which roles
+  debate_providers:
+    bull: "gemini"    # Provider for bullish case
+    bear: "qwen"      # Provider for bearish case  
+    judge: "local"    # Provider for final judgment
+  
   # Minimum agreement threshold (0.0-1.0)
   # Higher = requires more consensus between providers
   agreement_threshold: 0.6
