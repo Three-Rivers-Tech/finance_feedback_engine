@@ -32,7 +32,7 @@ class EnsembleDecisionManager:
     - Adaptive weight updates based on performance
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], dynamic_weights: Optional[Dict[str, float]] = None):
         """
         Initialize ensemble manager.
 
@@ -40,6 +40,8 @@ class EnsembleDecisionManager:
             config: Configuration dictionary with ensemble settings
         """
         self.config = config
+        # Store optional dynamic weights that can override config weights at runtime
+        self.dynamic_weights = dynamic_weights or {}
         ensemble_config = config.get('ensemble', {})
         
         # Provider weights (default: equal weighting for common providers)
@@ -270,8 +272,10 @@ class EnsembleDecisionManager:
             return {}
         
         # Get original weights for active providers
+        # Use dynamic_weights if provided, otherwise fall back to static config weights
+        base_weights = self.dynamic_weights if self.dynamic_weights else self.provider_weights
         active_weights = {
-            provider: self.provider_weights.get(provider, 1.0)
+            provider: base_weights.get(provider, 1.0)
             for provider in active_providers
         }
         
