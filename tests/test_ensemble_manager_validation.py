@@ -154,6 +154,46 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
         self.assertAlmostEqual(adjusted_weights["local1"], expected_local, places=3)
         self.assertAlmostEqual(adjusted_weights["remote1"], expected_remote, places=3)
 
+    def test_debate_mode_validates_enabled_providers(self):
+        # Test that debate mode fails when providers are not enabled
+        config_invalid = {
+            "ensemble": {
+                "enabled_providers": ["local"],
+                "debate_mode": True,
+                "debate_providers": {
+                    "bull": "gemini",
+                    "bear": "qwen",
+                    "judge": "local"
+                }
+            }
+        }
+        
+        with self.assertRaises(ValueError) as context:
+            EnsembleDecisionManager(config_invalid)
+        
+        self.assertIn("debate providers are not in enabled_providers", str(context.exception))
+        self.assertIn("gemini", str(context.exception))
+        self.assertIn("qwen", str(context.exception))
+        
+        # Test that debate mode works when all providers are enabled
+        config_valid = {
+            "ensemble": {
+                "enabled_providers": ["local", "gemini", "qwen"],
+                "debate_mode": True,
+                "debate_providers": {
+                    "bull": "gemini",
+                    "bear": "qwen",
+                    "judge": "local"
+                }
+            }
+        }
+        
+        manager = EnsembleDecisionManager(config_valid)
+        self.assertTrue(manager.debate_mode)
+        self.assertEqual(manager.debate_providers["bull"], "gemini")
+        self.assertEqual(manager.debate_providers["bear"], "qwen")
+        self.assertEqual(manager.debate_providers["judge"], "local")
+
 
 if __name__ == "__main__":
     unittest.main()
