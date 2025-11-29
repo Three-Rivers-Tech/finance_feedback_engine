@@ -107,6 +107,14 @@ class EnsembleDecisionManager:
         )
         self.learning_rate = ensemble_config.get('learning_rate', 0.1)
         
+        # Debate mode settings
+        self.debate_mode = ensemble_config.get('debate_mode', False)
+        self.debate_providers = ensemble_config.get('debate_providers', {
+            'bull': 'gemini',
+            'bear': 'qwen',
+            'judge': 'local'
+        })
+        
         # Performance tracking
         self.performance_history = self._load_performance_history()
         
@@ -277,6 +285,69 @@ class EnsembleDecisionManager:
             f"({final_decision['confidence']}%) - "
             f"Agreement: "
             f"{final_decision['ensemble_metadata']['agreement_score']:.2f}"
+        )
+        
+        return final_decision
+
+    def debate_decisions(
+        self,
+        bull_case: Dict[str, Any],
+        bear_case: Dict[str, Any],
+        judge_decision: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Synthesize debate decisions from bull, bear, and judge providers.
+        
+        Args:
+            bull_case: Decision from bullish provider
+            bear_case: Decision from bearish provider  
+            judge_decision: Final decision from judge provider
+            
+        Returns:
+            Synthesized decision with debate metadata
+        """
+        # Use judge's decision as the final decision
+        final_decision = judge_decision.copy()
+        
+        # Add debate-specific metadata
+        final_decision['debate_metadata'] = {
+            'bull_case': bull_case,
+            'bear_case': bear_case,
+            'judge_reasoning': judge_decision.get('reasoning', ''),
+            'debate_providers': self.debate_providers,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        # Add ensemble metadata for consistency
+        final_decision['ensemble_metadata'] = {
+            'providers_used': list(self.debate_providers.values()),
+            'providers_failed': [],
+            'num_active': 3,
+            'num_total': 3,
+            'failure_rate': 0.0,
+            'original_weights': {},
+            'adjusted_weights': {},
+            'weight_adjustment_applied': False,
+            'voting_strategy': 'debate',
+            'fallback_tier': 'none',
+            'provider_decisions': {
+                self.debate_providers['bull']: bull_case,
+                self.debate_providers['bear']: bear_case,
+                self.debate_providers['judge']: judge_decision
+            },
+            'agreement_score': 1.0,  # Judge makes final decision
+            'confidence_variance': 0.0,
+            'confidence_adjusted': False,
+            'local_priority_applied': False,
+            'local_models_used': [],
+            'debate_mode': True,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        logger.info(
+            f"Debate decision: {final_decision['action']} "
+            f"({final_decision['confidence']}%) - "
+            f"Judge: {self.debate_providers['judge']}"
         )
         
         return final_decision
