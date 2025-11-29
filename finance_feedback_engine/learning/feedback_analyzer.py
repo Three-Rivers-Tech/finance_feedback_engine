@@ -72,27 +72,31 @@ class FeedbackAnalyzer:
         
         # Check the main trade_metrics directory
         pattern = os.path.join(self.trade_metrics_dir, "**", "*.json")
-        outcome_files = glob.glob(pattern, recursive=True)
+        outcome_files = set()
+        outcome_files.update(glob.glob(pattern, recursive=True))
         
         # If no files in main directory, check demo_memory directory
-        if not outcome_files:
+        if len(outcome_files) == 0:
             demo_pattern = os.path.join(
                 "data/demo_memory/memory/", "outcome_*.json"
             )
-            outcome_files = glob.glob(demo_pattern, recursive=True)
+            outcome_files.update(glob.glob(demo_pattern, recursive=True))
         
         # Also check test_metrics directory
-        if not outcome_files:
+        if len(outcome_files) == 0:
             test_pattern = os.path.join(
                 "data/test_metrics/", "*.json"
             )
-            outcome_files.extend(glob.glob(test_pattern, recursive=True))
+            outcome_files.update(glob.glob(test_pattern, recursive=True))
         
         # Also check memory subdirectories
         memory_pattern = os.path.join(
             "data/", "**", "memory", "outcome_*.json"
         )
-        outcome_files.extend(glob.glob(memory_pattern, recursive=True))
+        outcome_files.update(glob.glob(memory_pattern, recursive=True))
+        
+        # Convert to list for processing
+        outcome_files = list(outcome_files)
         
         for file_path in outcome_files:
             try:
@@ -109,8 +113,8 @@ class FeedbackAnalyzer:
 
     def calculate_provider_accuracy(self, window_days: int = 30) -> Dict[str, Dict]:
         """
-        Calculate the Win Rate and Profit Factor for each specific AI
-        provider (gemini, llama3.2, qwen) based on trades.
+        Calculate the Win Rate and Profit Factor for each AI
+        provider (gemini, llama3.2, qwen, ensemble) based on trades.
         
         Args:
             window_days: Number of days to look back for analysis
@@ -161,16 +165,7 @@ class FeedbackAnalyzer:
                             timestamp_str.replace('Z', '+00:00')
                         )
                         if decision_time >= cutoff_date:
-                            # Only include the specific providers
-                            if ai_provider in ['gemini', 'llama3.2', 'qwen']:
-                                provider_data[ai_provider].append(outcome)
-                            # Also check if it's an ensemble decision with these providers
-                            elif ai_provider == 'ensemble':
-                                ensemble_metadata = decision.get('ensemble_metadata', {})
-                                providers_used = ensemble_metadata.get('providers_used', [])
-                                for provider in providers_used:
-                                    if provider in ['gemini', 'llama3.2', 'qwen']:
-                                        provider_data[provider].append(outcome)
+                            self._add_outcome_to_providers(decision, outcome, provider_data)
                     except ValueError:
                         # If timestamp parsing fails, try to get from outcome
                         outcome_timestamp = outcome.get('entry_timestamp', '')
@@ -180,16 +175,7 @@ class FeedbackAnalyzer:
                                     outcome_timestamp.replace('Z', '+00:00')
                                 )
                                 if outcome_time >= cutoff_date:
-                                    # Only include the specific providers
-                                    if ai_provider in ['gemini', 'llama3.2', 'qwen']:
-                                        provider_data[ai_provider].append(outcome)
-                                    # Also check if it's an ensemble decision with these providers
-                                    elif ai_provider == 'ensemble':
-                                        ensemble_metadata = decision.get('ensemble_metadata', {})
-                                        providers_used = ensemble_metadata.get('providers_used', [])
-                                        for provider in providers_used:
-                                            if provider in ['gemini', 'llama3.2', 'qwen']:
-                                                provider_data[provider].append(outcome)
+                                    self._add_outcome_to_providers(decision, outcome, provider_data)
                             except ValueError:
                                 continue
                 else:
@@ -201,16 +187,7 @@ class FeedbackAnalyzer:
                                 outcome_timestamp.replace('Z', '+00:00')
                             )
                             if outcome_time >= cutoff_date:
-                                # Only include the specific providers
-                                if ai_provider in ['gemini', 'llama3.2', 'qwen']:
-                                    provider_data[ai_provider].append(outcome)
-                                # Also check if it's an ensemble decision with these providers
-                                elif ai_provider == 'ensemble':
-                                    ensemble_metadata = decision.get('ensemble_metadata', {})
-                                    providers_used = ensemble_metadata.get('providers_used', [])
-                                    for provider in providers_used:
-                                        if provider in ['gemini', 'llama3.2', 'qwen']:
-                                            provider_data[provider].append(outcome)
+                                self._add_outcome_to_providers(decision, outcome, provider_data)
                         except ValueError:
                             continue
         
@@ -269,6 +246,15 @@ class FeedbackAnalyzer:
             if field not in outcome:
                 return False
         return True
+
+    def _add_outcome_to_providers(self, decision: Dict, outcome: Dict, provider_data: Dict) -> None:
+        """Add outcome to the appropriate provider data based on ai_provider."""
+        ai_provider = decision.get('ai_provider', 'unknown')
+        
+        if ai_provider in ['gemini', 'llama3.2', 'qwen']:
+            provider_data[ai_provider].append(outcome)
+        elif ai_provider == 'ensemble':
+            provider_data['ensemble'].append(outcome)
 
     def generate_weight_adjustments(self) -> Dict[str, Dict]:
         """
