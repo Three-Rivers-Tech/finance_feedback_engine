@@ -19,6 +19,9 @@ click>=8.1.0
 rich>=13.0.0
 packaging>=21.0
 
+# Testing
+freezegun>=1.0.0
+
 # Persistence
 python-dateutil>=2.8.0
 

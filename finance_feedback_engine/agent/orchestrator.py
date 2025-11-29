@@ -1,4 +1,5 @@
 import time
+import threading
 import click
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
@@ -42,6 +43,7 @@ class TradingAgentOrchestrator:
             # All retries failed
             self.init_failed = True
         print("Trading Agent Orchestrator initialized.")
+        self._stop_event = threading.Event()
         self._paused_by_monitor = False # Flag to indicate if paused by monitoring
         self.kill_switch_gain_pct = self.config.kill_switch_gain_pct
         self.kill_switch_loss_pct = self.config.kill_switch_loss_pct
@@ -57,7 +59,14 @@ class TradingAgentOrchestrator:
         self._paused_by_monitor = True
         print(f"Agent PAUSED by monitor: {reason}. No new trades will be executed.")
 
-    def run(self):
+    def stop(self):
+        """
+        Stops the trading agent's operation.
+        """
+        self._stop_event.set()
+        print("Agent STOP signal received. Shutting down gracefully.")
+
+    def run(self, test_mode=False):
         """Starts the main agentic loop."""
         print(f"Agent starting with strategy: '{self.config.strategic_goal}' and risk appetite: '{self.config.risk_appetite}'.")
         print(f"Autonomous execution is {'ENABLED' if self.config.autonomous_execution else 'DISABLED'}.")
@@ -66,7 +75,13 @@ class TradingAgentOrchestrator:
             print("Could not obtain initial portfolio snapshot after retries. Exiting gracefully.")
             return
 
-        while True:
+        iteration_count = 0
+        while not self._stop_event.is_set():
+            iteration_count += 1
+            
+            # In test mode, limit to 1 iteration to prevent infinite loops
+            if test_mode and iteration_count > 1:
+                break
             # Check kill-switch conditions
             try:
                 current_breakdown = self.platform.get_portfolio_breakdown()
@@ -83,15 +98,17 @@ class TradingAgentOrchestrator:
                         drawdown_pct = (self.peak_portfolio_value - current_value) / self.peak_portfolio_value
                         if drawdown_pct >= self.max_drawdown_pct:
                             print(f"Kill-switch triggered: portfolio drawdown of {drawdown_pct:.2%} exceeds threshold {self.max_drawdown_pct:.2%}")
-                            self.pause_trading("Portfolio drawdown kill-switch")
-                            continue
+                            print("Agent stopping due to kill-switch activation.")
+                            break
                     
                     if pnl_pct >= self.kill_switch_gain_pct:
                         print(f"Kill-switch triggered: portfolio gain of {pnl_pct:.2%} exceeds threshold {self.kill_switch_gain_pct:.2%}")
-                        self.pause_trading("Portfolio gain kill-switch")
+                        print("Agent stopping due to kill-switch activation.")
+                        break
                     elif pnl_pct <= -self.kill_switch_loss_pct:
                         print(f"Kill-switch triggered: portfolio loss of {pnl_pct:.2%} exceeds threshold -{self.kill_switch_loss_pct:.2%}")
-                        self.pause_trading("Portfolio loss kill-switch")
+                        print("Agent stopping due to kill-switch activation.")
+                        break
             except Exception as e:
                 print(f"Error checking kill-switch: {e}")
             if self._paused_by_monitor:
