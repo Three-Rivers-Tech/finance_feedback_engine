@@ -139,7 +139,7 @@ def demo_oanda_features():
         'position_type': 'LONG',
         'recommended_position_size': 50000,
         'entry_price': 1.08450,
-        'stop_loss_percentage': 0.02,
+        'stop_loss_fraction': 0.02,
         'risk_percentage': 0.01,
         'reasoning': 'Bullish EUR/USD setup with RSI at 52.3 showing upward momentum. '
                     'News sentiment is neutral-positive. Portfolio has limited EUR exposure '
@@ -153,7 +153,7 @@ def demo_oanda_features():
     print(f"Position:      {ai_decision['position_type']}")
     print(f"Size:          {ai_decision['recommended_position_size']:,} units")
     print(f"Entry:         {ai_decision['entry_price']:.5f}")
-    print(f"Stop Loss:     {ai_decision['stop_loss_percentage']*100:.1f}%")
+    print(f"Stop Loss:     {ai_decision['stop_loss_fraction']*100:.1f}%")
     print(f"Risk:          {ai_decision['risk_percentage']*100:.1f}% of account\n")
     print("🤖 AI Reasoning:")
     print(f"   {ai_decision['reasoning']}\n")

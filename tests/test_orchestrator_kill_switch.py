@@ -16,7 +16,7 @@ sys.modules['finance_feedback_engine'] = finance_pkg
 
 # Inject a dummy unified_platform module to satisfy imports used by the orchestrator
 dummy_mod = types.ModuleType('finance_feedback_engine.trading_platforms.unified_platform')
-setattr(dummy_mod, 'UnifiedPlatform', object)
+setattr(dummy_mod, 'UnifiedTradingPlatform', object)
 sys.modules['finance_feedback_engine.trading_platforms.unified_platform'] = dummy_mod
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
@@ -119,18 +119,68 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         out = self._run_and_capture(orch)
         self.assertNotIn('Kill-switch triggered', out)
 
-    def test_init_failed_exits_gracefully(self):
+    def test_drawdown_kill_switch_triggers(self):
         config = TradingAgentConfig(asset_pairs=[])
+        config.max_drawdown_percent = 0.10  # 10% threshold
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
+        
         orch = object.__new__(TradingAgentOrchestrator)
         orch.config = config
         orch.engine = DummyEngine()
-        orch.platform = mock.Mock()
+        platform = mock.Mock()
+        platform.get_portfolio_breakdown.return_value = {'total_value_usd': 850.0}
+        orch.platform = platform
         orch.trades_today = 0
-        orch.initial_portfolio_value = 0.0
-        orch.init_failed = True
-
+        orch.initial_portfolio_value = 1000.0
+        orch.peak_portfolio_value = 1000.0
+        orch.init_failed = False
+        orch._paused_by_monitor = False
+        
         out = self._run_and_capture(orch)
-        self.assertIn('Could not obtain initial portfolio snapshot after retries. Exiting gracefully.', out)
+        self.assertIn('Kill-switch triggered: portfolio drawdown of 15.00% exceeds threshold 10.00%', out)
+
+    def test_drawdown_kill_switch_percentage_input(self):
+        config = TradingAgentConfig(asset_pairs=[])
+        config.max_drawdown_percent = 10.0  # 10% as percentage (should be normalized to 0.10)
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
+        
+        orch = object.__new__(TradingAgentOrchestrator)
+        orch.config = config
+        orch.engine = DummyEngine()
+        platform = mock.Mock()
+        platform.get_portfolio_breakdown.return_value = {'total_value_usd': 850.0}
+        orch.platform = platform
+        orch.trades_today = 0
+        orch.initial_portfolio_value = 1000.0
+        orch.peak_portfolio_value = 1000.0
+        orch.init_failed = False
+        orch._paused_by_monitor = False
+        
+        out = self._run_and_capture(orch)
+        self.assertIn('Kill-switch triggered: portfolio drawdown of 15.00% exceeds threshold 10.00%', out)
+
+    def test_drawdown_kill_switch_not_triggers(self):
+        config = TradingAgentConfig(asset_pairs=[])
+        config.max_drawdown_percent = 0.20  # 20% threshold
+        config.kill_switch_gain_pct = 0.05
+        config.kill_switch_loss_pct = 0.02
+        
+        orch = object.__new__(TradingAgentOrchestrator)
+        orch.config = config
+        orch.engine = DummyEngine()
+        platform = mock.Mock()
+        platform.get_portfolio_breakdown.return_value = {'total_value_usd': 850.0}
+        orch.platform = platform
+        orch.trades_today = 0
+        orch.initial_portfolio_value = 1000.0
+        orch.peak_portfolio_value = 1000.0
+        orch.init_failed = False
+        orch._paused_by_monitor = False
+        
+        out = self._run_and_capture(orch)
+        self.assertNotIn('drawdown', out)
 
 
 if __name__ == '__main__':

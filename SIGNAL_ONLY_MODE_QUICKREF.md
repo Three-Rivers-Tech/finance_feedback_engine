@@ -23,7 +23,7 @@ Signal-only mode activates automatically when:
 
 ### ❌ Not Provided (Signal-Only Mode)
 - `recommended_position_size` → `null`
-- `stop_loss_percentage` → `null`
+- `stop_loss_fraction` → `null`
 - `risk_percentage` → `null`
 
 ## How to Detect
@@ -50,7 +50,7 @@ else:
   "reasoning": "Strong bullish momentum",
   "signal_only": true,
   "recommended_position_size": null,
-  "stop_loss_percentage": null,
+  "stop_loss_fraction": null,
   "risk_percentage": null,
   "entry_price": 96200.0
 }
@@ -65,7 +65,7 @@ else:
   "reasoning": "Strong bullish momentum",
   "signal_only": false,
   "recommended_position_size": 0.052,
-  "stop_loss_percentage": 2.0,
+  "stop_loss_fraction": 0.02,
   "risk_percentage": 1.0,
   "entry_price": 96200.0
 }
@@ -116,7 +116,7 @@ else:
     # Normal mode
     print(f"Action: {decision['action']}")
     print(f"Position Size: {decision['recommended_position_size']:.4f} units")
-    print(f"Stop Loss: {decision['stop_loss_percentage']}%")
+    print(f"Stop Loss: {decision['stop_loss_fraction']*100:.1f}%")
 ```
 
 ## See Also

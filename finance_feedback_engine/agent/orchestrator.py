@@ -45,6 +45,9 @@ class TradingAgentOrchestrator:
         self._paused_by_monitor = False # Flag to indicate if paused by monitoring
         self.kill_switch_gain_pct = self.config.kill_switch_gain_pct
         self.kill_switch_loss_pct = self.config.kill_switch_loss_pct
+        # Normalize max_drawdown_percent to decimal fraction (handle both percentage and decimal input)
+        self.max_drawdown_pct = self.config.max_drawdown_percent if self.config.max_drawdown_percent <= 1.0 else self.config.max_drawdown_percent / 100.0
+        self.peak_portfolio_value = self.initial_portfolio_value
 
     def pause_trading(self, reason: str = "Unknown reason"):
         """
@@ -70,6 +73,19 @@ class TradingAgentOrchestrator:
                 current_value = current_breakdown.get('total_value_usd', 0.0)
                 if self.initial_portfolio_value > 0:
                     pnl_pct = (current_value - self.initial_portfolio_value) / self.initial_portfolio_value
+                    
+                    # Update peak portfolio value for drawdown calculation
+                    if current_value > self.peak_portfolio_value:
+                        self.peak_portfolio_value = current_value
+                    
+                    # Calculate current drawdown from peak
+                    if self.peak_portfolio_value > 0:
+                        drawdown_pct = (self.peak_portfolio_value - current_value) / self.peak_portfolio_value
+                        if drawdown_pct >= self.max_drawdown_pct:
+                            print(f"Kill-switch triggered: portfolio drawdown of {drawdown_pct:.2%} exceeds threshold {self.max_drawdown_pct:.2%}")
+                            self.pause_trading("Portfolio drawdown kill-switch")
+                            continue
+                    
                     if pnl_pct >= self.kill_switch_gain_pct:
                         print(f"Kill-switch triggered: portfolio gain of {pnl_pct:.2%} exceeds threshold {self.kill_switch_gain_pct:.2%}")
                         self.pause_trading("Portfolio gain kill-switch")
