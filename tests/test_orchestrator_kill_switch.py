@@ -115,7 +115,6 @@ class TestOrchestratorKillSwitch(unittest.TestCase):
         orch.kill_switch_gain_pct = config.kill_switch_gain_pct
         orch.kill_switch_loss_pct = config.kill_switch_loss_pct
         orch.max_drawdown_pct = config.max_drawdown_percent if config.max_drawdown_percent <= 1.0 else config.max_drawdown_percent / 100.0
-        orch.init_failed = False
 
         out = self._run_and_capture(orch)
         self.assertNotIn('Kill-switch triggered', out)
