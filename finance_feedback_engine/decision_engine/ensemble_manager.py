@@ -32,6 +32,35 @@ class EnsembleDecisionManager:
     - Adaptive weight updates based on performance
     """
 
+    def _validate_dynamic_weights(self, weights: Optional[Dict[str, float]]) -> Dict[str, float]:
+        """
+        Validate and clean dynamic weights dictionary.
+        
+        Args:
+            weights: Raw weights dictionary to validate
+            
+        Returns:
+            Cleaned dictionary with only valid string keys and non-negative float values
+        """
+        if not weights:
+            return {}
+        
+        validated = {}
+        for key, value in weights.items():
+            if not isinstance(key, str):
+                logger.warning(f"Skipping non-string provider key: {key} (type: {type(key)})")
+                continue
+            try:
+                float_value = float(value)
+                if float_value < 0:
+                    logger.warning(f"Skipping negative weight for provider '{key}': {value}")
+                    continue
+                validated[key] = float_value
+            except (ValueError, TypeError):
+                logger.warning(f"Skipping non-numeric weight for provider '{key}': {value} (type: {type(value)})")
+                continue
+        return validated
+
     def __init__(self, config: Dict[str, Any], dynamic_weights: Optional[Dict[str, float]] = None):
         """
         Initialize ensemble manager.
@@ -41,7 +70,7 @@ class EnsembleDecisionManager:
         """
         self.config = config
         # Store optional dynamic weights that can override config weights at runtime
-        self.dynamic_weights = dynamic_weights or {}
+        self.dynamic_weights = self._validate_dynamic_weights(dynamic_weights)
         ensemble_config = config.get('ensemble', {})
         
         # Provider weights (default: equal weighting for common providers)
