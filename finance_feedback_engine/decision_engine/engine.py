@@ -1453,6 +1453,14 @@ Format response as a structured technical analysis demonstration.
             # based on volatility (e.g., ATR) or market structure.
             sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
 
+            # Compatibility: Convert legacy percentage values (>1) to decimals
+            if risk_percentage > 1:
+                logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
+                risk_percentage /= 100
+            if sizing_stop_loss_percentage > 1:
+                logger.warning(f"Detected legacy sizing_stop_loss_percentage {sizing_stop_loss_percentage}%. Converting to decimal: {sizing_stop_loss_percentage/100:.3f}")
+                sizing_stop_loss_percentage /= 100
+
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
                 risk_percentage=risk_percentage,
@@ -1553,7 +1561,7 @@ Format response as a structured technical analysis demonstration.
             'position_type': position_type,
             'entry_price': current_price,
             'stop_loss_price': stop_loss_price,
-            'stop_loss_percentage': sizing_stop_loss_percentage,
+            'stop_loss_fraction': sizing_stop_loss_percentage,
             'take_profit_percentage': None, # Individual trade TP is not explicitly set by the DecisionEngine
             'risk_percentage': risk_percentage,
             'signal_only': signal_only,

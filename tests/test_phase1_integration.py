@@ -85,7 +85,7 @@ def main():
         'reasoning': 'Strong bullish signals',
         'asset_pair': 'BTCUSD',
         'recommended_position_size': 0.1,
-        'stop_loss_percentage': 0.02,
+        'stop_loss_fraction': 0.02,
         'risk_percentage': 1.0
     }
     
