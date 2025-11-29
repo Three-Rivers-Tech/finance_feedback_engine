@@ -110,7 +110,7 @@ def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
             self.called = False
             self.last_args = None
 
-        def update_provider_weights(self, provider_decisions, actual_outcome, perf_metric):
+        def update_base_weights(self, provider_decisions, actual_outcome, perf_metric):
             self.called = True
             self.last_args = (provider_decisions, actual_outcome, perf_metric)
 

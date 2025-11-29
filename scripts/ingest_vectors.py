@@ -46,7 +46,7 @@ def main():
     persistence_config = config.get('persistence', {})
     storage_path = Path(persistence_config.get('storage_path', 'data/decisions'))
     decisions_dir = storage_path
-    memory_dir = Path('data') / 'memory'
+    memory_dir = Path(persistence_config.get('memory_path', 'data/memory'))
     
     if not decisions_dir.exists():
         logger.error(f"Decisions directory not found: {decisions_dir}")
@@ -89,8 +89,9 @@ def main():
             market_data = decision.get('market_data', {})
             trend = market_data.get('trend', 'unknown')
             rsi = market_data.get('rsi', 50)
-            vol = decision.get('volatility', 0)
-            if not vol:
+            _sentinel = object()
+            vol = decision.get('volatility', _sentinel)
+            if vol is _sentinel:
                 vol = market_data.get('technical', {}).get('volatility', 0)
             action = decision.get('action', 'HOLD')
             
