@@ -1,6 +1,6 @@
 """Decision engine for generating AI-powered trading decisions."""
 
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import pandas as pd
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
+from finance_feedback_engine.memory.vector_store import VectorMemory
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,14 @@ class DecisionEngine:
             self.ensemble_manager = EnsembleDecisionManager(config)
             logger.info("Ensemble mode enabled")
         
+        # Initialize vector memory for semantic search (optional)
+        self.vector_memory = None
+        try:
+            self.vector_memory = VectorMemory(config)
+            logger.info("Vector memory initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize vector memory: {e}. Proceeding without semantic search.")
+        
         logger.info(f"Decision engine initialized with provider: {self.ai_provider}")
     
     def set_monitoring_context(self, monitoring_provider):
@@ -208,6 +217,12 @@ class DecisionEngine:
             memory_context,
             monitoring_context
         )
+        
+        # Retrieve semantic memory
+        if self.vector_memory:
+            query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
+            similar = self.vector_memory.find_similar(query, top_k=3)
+            context['semantic_memory'] = similar
         
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
@@ -590,6 +605,12 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
             )
             market_info += f"\n{monitoring_text}\n"
 
+        # Add historical similarity analysis if available
+        semantic_memory = context.get('semantic_memory')
+        if semantic_memory:
+            similarity_text = self._format_semantic_memory(semantic_memory)
+            market_info += f"\n{similarity_text}\n"
+
         # Prepend market regime if available
         regime = context.get('regime', 'UNKNOWN')
         regime_prefix = ""
@@ -678,6 +699,64 @@ Demonstrate a technical analysis for {asset_pair} showing:
 Format response as a structured technical analysis demonstration.
 """
         return prompt
+    
+    def _format_semantic_memory(self, semantic_memory: List[Tuple[str, float, Dict[str, Any]]]) -> str:
+        """
+        Format semantic memory for AI prompt.
+        
+        Args:
+            semantic_memory: List of tuples (decision_id, similarity_score, metadata)
+            
+        Returns:
+            Formatted string for prompt
+        """
+        if not semantic_memory:
+            return ""
+        
+        lines = [
+            "=" * 60,
+            "HISTORICAL SIMILARITY ANALYSIS",
+            "=" * 60,
+        ]
+        
+        for i, (decision_id, similarity, metadata) in enumerate(semantic_memory, 1):
+            decision = metadata.get('decision', {})
+            outcome = metadata.get('outcome', {})
+            
+            # Extract key info
+            date = decision.get('market_data', {}).get('date', 'N/A')
+            action = decision.get('action', 'HOLD')
+            was_profitable = outcome.get('was_profitable', False)
+            pnl_percentage = outcome.get('pnl_percentage', 0.0)
+            
+            # Format outcome
+            if was_profitable:
+                outcome_str = f"WON (+{pnl_percentage:.1f}%)"
+            else:
+                outcome_str = f"LOST ({pnl_percentage:.1f}%)"
+            
+            # Extract context from market_data in decision
+            market_data = decision.get('market_data', {})
+            trend = market_data.get('trend', 'neutral')
+            rsi = market_data.get('rsi', 'N/A')
+            context_parts = []
+            if trend != 'neutral':
+                context_parts.append(f"{trend.title()} trend")
+            if rsi != 'N/A':
+                context_parts.append(f"RSI {rsi:.0f}")
+            context_str = ", ".join(context_parts) if context_parts else "Neutral conditions"
+            
+            # Format the match line
+            match_line = f"match_{i}: [Sim: {similarity:.2f}] ({date}) -> We {action.upper()} and {outcome_str}. Context: {context_str}."
+            lines.append(match_line)
+        
+        # Add the instruction
+        lines.extend([
+            "",
+            "If the retrieved historical trades resulted in losses (❌), be highly skeptical of a similar setup today."
+        ])
+        
+        return "\n".join(lines)
     
     def _format_memory_context(self, memory_context: Dict[str, Any]) -> str:
         """
