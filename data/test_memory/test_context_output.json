@@ -3,26 +3,26 @@
   "total_historical_trades": 50,
   "recent_trades_analyzed": 10,
   "recent_performance": {
-    "total_pnl": 63.870459784898074,
-    "win_rate": 40.0,
-    "winning_trades": 4,
-    "losing_trades": 6
+    "total_pnl": 359.65150930606796,
+    "win_rate": 80.0,
+    "winning_trades": 8,
+    "losing_trades": 2
   },
   "action_performance": {
     "BUY": {
-      "win_rate": 40.0,
-      "total_pnl": 37.00228978426951,
+      "win_rate": 100.0,
+      "total_pnl": 289.01850455654017,
       "count": 5
     },
     "SELL": {
-      "win_rate": 40.0,
-      "total_pnl": 26.86817000062856,
+      "win_rate": 60.0,
+      "total_pnl": 70.63300474952777,
       "count": 5
     }
   },
   "provider_performance": {
     "local": {
-      "win_rate": 40.0,
+      "win_rate": 80.0,
       "count": 10
     }
   },
@@ -33,24 +33,24 @@
   "long_term_performance": {
     "has_data": true,
     "period_days": 90,
-    "period_start": "2025-08-31T04:11:03.435742",
-    "period_end": "2025-11-29T04:11:03.435795",
-    "realized_pnl": 538.1738007964592,
+    "period_start": "2025-08-31T05:04:55.475182",
+    "period_end": "2025-11-29T05:04:55.475237",
+    "realized_pnl": 1113.3278600238032,
     "total_trades": 45,
-    "win_rate": 53.333333333333336,
-    "winning_trades": 24,
-    "losing_trades": 21,
-    "avg_win": 62.2203116366745,
-    "avg_loss": -45.48160373732043,
-    "profit_factor": 1.5634657035284278,
-    "gross_profit": 1493.287479280188,
-    "gross_loss": 955.113678483729,
-    "best_trade": 95.96503647685775,
-    "worst_trade": -79.00868212463658,
-    "sharpe_ratio": 3.275102795405296,
-    "roi_percentage": 10.763476015929184,
+    "win_rate": 68.88888888888889,
+    "winning_trades": 31,
+    "losing_trades": 14,
+    "avg_win": 55.43313351204994,
+    "avg_loss": -43.2213770606961,
+    "profit_factor": 2.839909414766065,
+    "gross_profit": 1718.4271388735483,
+    "gross_loss": 605.0992788497454,
+    "best_trade": 98.80723138636209,
+    "worst_trade": -75.90236931832858,
+    "sharpe_ratio": 7.7024418203008205,
+    "roi_percentage": 22.266557200476065,
     "average_holding_hours": 24.0,
-    "recent_momentum": "declining",
+    "recent_momentum": "stable",
     "asset_pair": "all"
   }
 }
