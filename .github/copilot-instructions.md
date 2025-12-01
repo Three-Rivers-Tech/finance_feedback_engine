@@ -31,7 +31,6 @@ Data flows:
 
 - Install deps: `pip install -r requirements.txt` or `pip install -e .`
 - Run analyze (single asset): `python main.py analyze BTCUSD --provider ensemble`
-- Run ensemble provider: `python main.py analyze BTCUSD --provider ensemble`
 - Check balances: `python main.py balance` (uses configured platforms; use `MockPlatform` locally)
 - Backtest strategy: `python main.py backtest BTCUSD -s 2024-01-01 -e 2024-12-01`
 - Live monitoring: `python main.py monitor start` (background polling for trades)
@@ -68,7 +67,7 @@ Data flows:
 - Inspect `data/decisions/` and `data/decisions_test/` for canonical decision JSON (fields: `signal_only`, `confidence`, `ensemble_metadata`, sizing fields)
 - Validate decision outputs with `decision_validation.py` before code that persists/executes them
 - Check market regime detection: ADX >25 = trending, ATR relative to price = volatility
-- Monitor quorum failures: Phase 1 requires 3+ free providers to succeed; logs to `data/failures/`
+- Monitor quorum failures: the initial quorum check requires at least 3 free providers to succeed; logs to `data/failures/`
 
 ## Editing Safety Rules for Agents
 

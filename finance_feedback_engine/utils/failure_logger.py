@@ -182,7 +182,6 @@ def send_telegram_notification(message: str, config: Dict[str, Any]) -> bool:
 
 
 # Global instance
-# Global instance
 _logger = None
 _lock = threading.Lock()
 
