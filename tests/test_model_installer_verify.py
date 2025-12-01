@@ -45,5 +45,5 @@ def test_download_model_retry_parallel_result():
     # Simulate one failure in parallel executor
     with patch.object(mi, "_download_model", side_effect=[False]):
         results = mi._download_models_parallel(["gemma2:9b-instruct"], max_workers=1)
-        assert results["gemma2:9b-instruct"] is False
+        results = mi._download_models_parallel(["gemma2:9b-instruct"], max_workers=1)
         assert results["gemma2:9b-instruct"] is False

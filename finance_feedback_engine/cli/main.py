@@ -815,8 +815,49 @@ def analyze(ctx, asset_pair, provider):
                 "[yellow]Phase 1 quorum failure: Insufficient free-tier providers succeeded.[/yellow]"
             )
             console.print(f"[yellow]Reason: {decision.get('reasoning', 'Unknown')}[/yellow]")
+
+            # Persist failure details to disk (append-only per day)
+            try:
+                failures_dir = Path("data/failures")
+                failures_dir.mkdir(parents=True, exist_ok=True)
+
+                payload = {
+                    "timestamp": datetime.now().isoformat(),
+                    "asset_pair": decision.get("asset_pair"),
+                    "reasoning": decision.get("reasoning"),
+                    "context": {
+                        "providers_failed": decision.get("providers_failed"),
+                        "ensemble_metadata": decision.get("ensemble_metadata"),
+                    },
+                    "decision": decision,
+                }
+
+                # Append entry to the day's JSON file; create if it doesn't exist
+                log_path = Path(failure_log)
+                existing = []
+                if log_path.exists():
+                    try:
+                        with open(log_path, "r", encoding="utf-8") as rf:
+                            existing = json.load(rf) or []
+                            if not isinstance(existing, list):
+                                existing = [existing]
+                    except Exception:
+                        # If file is corrupted, start a new list and keep going
+                        existing = []
+
+                existing.append(payload)
+                with open(log_path, "w", encoding="utf-8") as wf:
+                    json.dump(existing, wf, indent=2)
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Failed to write failure log: {e}[/yellow]"
+                )
+
             console.print(f"\n[dim]Failure logged to: {failure_log}[/dim]")
-            console.print("\n[bold yellow]No decision generated. System requires at least 3 successful provider responses.[/bold yellow]")
+            console.print(
+                "\n[bold yellow]No decision generated. Insufficient successful provider responses to meet quorum requirements.[/bold yellow]"
+            )
             return
         
         # Display decision

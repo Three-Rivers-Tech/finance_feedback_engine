@@ -82,7 +82,14 @@ def get_premium_provider_for_asset(asset_type: str) -> str:
     
     Returns:
         Premium provider name ('cli' for crypto, 'gemini' for forex/stock)
+    
+    Raises:
+        ValueError: If asset_type is not one of the supported types
     """
+    valid_types = ('crypto', 'forex', 'stock')
+    if asset_type not in valid_types:
+        raise ValueError(f"Invalid asset_type '{asset_type}'. Must be one of {valid_types}")
+    
     if asset_type == 'crypto':
         return 'cli'
     else:

@@ -588,9 +588,9 @@ class EnsembleDecisionManager:
                         f"({primary_decision.get('confidence')}%)"
                     )
                 
-                    # Check if Codex tiebreaker needed (primary agrees with Phase 1)
-                    if codex_as_tiebreaker and primary_decision.get('action') == phase1_action:
-                        logger.info(f"Phase 2: {primary_provider} agrees with Phase 1 -> calling Codex tiebreaker")
+                    # Check if Codex tiebreaker needed (primary disagrees with Phase 1)
+                    if codex_as_tiebreaker and primary_decision.get('action') != phase1_action:
+                        logger.info(f"Phase 2: {primary_provider} disagrees with Phase 1 -> calling Codex tiebreaker")
                         try:
                             codex_decision = query_function(fallback_provider, prompt)
                             if self._is_valid_provider_response(codex_decision, fallback_provider):
@@ -647,7 +647,11 @@ class EnsembleDecisionManager:
                 phase1_result['ensemble_metadata']['escalation_reason'] = escalation_reason
                 return phase1_result
         
-            # Merge Phase 1 + Phase 2 decisions with equal weighting
+            # Merge Phase 1 + Phase 2 decisions using the configured voting/weighting strategy
+            # If true equal weighting is required, override aggregate_decisions by computing
+            # equal weights for each provider (e.g., adjusted_weights dict mapping each provider
+            # to 1/num_providers) and passing them when calling aggregate_decisions;
+            # ensure failed provider list is still passed through unchanged
             all_decisions = {**phase1_decisions, **phase2_decisions}
             all_failed = phase1_failed
         
@@ -980,6 +984,36 @@ class EnsembleDecisionManager:
         # Validate amount
         amt = decision['amount']
         if not isinstance(amt, (int, float)) or amt < 0:
+            return False
+        
+        return True
+
+    def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
+        """
+        Validate that a provider response dict is well-formed.
+        
+        Args:
+            decision: Decision dictionary from provider to validate
+            provider: Name of the provider for logging
+        
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(decision, dict):
+            logger.warning(f"Provider {provider}: decision is not a dict")
+            return False
+        
+        if 'action' not in decision or 'confidence' not in decision:
+            logger.warning(f"Provider {provider}: missing required keys 'action' or 'confidence'")
+            return False
+        
+        if decision['action'] not in ['BUY', 'SELL', 'HOLD']:
+            logger.warning(f"Provider {provider}: invalid action '{decision['action']}'")
+            return False
+        
+        conf = decision['confidence']
+        if not isinstance(conf, (int, float)) or not (0.0 <= conf <= 1.0):
+            logger.warning(f"Provider {provider}: confidence {conf} not in range 0.0-1.0")
             return False
         
         return True
