@@ -15,6 +15,7 @@ from .decision_validation import (
     try_parse_decision_json,
     build_fallback_decision,
 )
+from ..utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,14 @@ class GeminiCLIProvider:
             config: Configuration dictionary
         """
         self.config = config
+        
+            # Rate limiter for Gemini free tier (OAuth): 60 req/min, 1000 req/day
+            # Using 1 token/second = 60/min, max tokens = 1000 for daily limit
+            self.rate_limiter = RateLimiter(
+                tokens_per_second=1.0,  # 60 requests per minute
+                max_tokens=1000  # 1000 requests per day (OAuth limit)
+            )
+        
         logger.info("Gemini CLI provider initialized")
         
         # Verify gemini is available
@@ -74,6 +83,13 @@ class GeminiCLIProvider:
         Returns:
             Dictionary with action, confidence, reasoning, amount
         """
+            # Wait for rate limit token
+            try:
+                self.rate_limiter.wait_for_token()
+            except Exception as e:
+                logger.warning(f"Rate limit check failed: {e}")
+                # Continue anyway - rate limiter is best-effort
+        
         logger.info("Querying Gemini CLI for trading decision")
 
         formatted_prompt = self._format_prompt_for_gemini(prompt)
