@@ -416,13 +416,16 @@ class ModelInstaller:
         
         return all_success
 
+_installer: Optional[ModelInstaller] = None
+
+
 def get_installer(data_dir: str = "data") -> ModelInstaller:
     """
     Get global ModelInstaller instance.
-    
+
     Args:
         data_dir: Data directory path
-    
+
     Returns:
         ModelInstaller instance
     """
@@ -431,14 +434,9 @@ def get_installer(data_dir: str = "data") -> ModelInstaller:
         _installer = ModelInstaller(data_dir)
     elif _installer.data_dir != Path(data_dir):
         logger.warning(
-            f"Ignoring data_dir={data_dir}, installer already initialized "
-            f"with data_dir={_installer.data_dir}"
+            "Ignoring data_dir=%s, installer already initialized with data_dir=%s",
+            data_dir, _installer.data_dir
         )
-    return _installer
-    """
-    global _installer
-    if _installer is None:
-        _installer = ModelInstaller(data_dir)
     return _installer
 
 
