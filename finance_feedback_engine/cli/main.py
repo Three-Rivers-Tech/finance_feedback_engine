@@ -823,7 +823,16 @@ def analyze(ctx, asset_pair, provider):
 
                 payload = {
                     "timestamp": datetime.now().isoformat(),
-                    "asset_pair": decision.get("asset_pair"),
+                payload = {
+                    "timestamp": datetime.now().isoformat(),
+                    "asset_pair": asset_pair,
+                    "reasoning": decision.get("reasoning"),
+                    "context": {
+                        "providers_failed": decision.get("providers_failed"),
+                        "ensemble_metadata": decision.get("ensemble_metadata"),
+                    },
+                    "decision": decision,
+                }
                     "reasoning": decision.get("reasoning"),
                     "context": {
                         "providers_failed": decision.get("providers_failed"),
