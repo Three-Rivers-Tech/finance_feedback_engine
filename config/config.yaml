@@ -117,12 +117,12 @@ ensemble:
 
   # Initial weights for each provider (must sum to 1.0)
   provider_weights:
-    llama3.2:3b-instruct-fp16: 0.167
-    deepseek-r1:8b: 0.167
-    mistral:7b-instruct: 0.167
-    qwen2.5:7b-instruct: 0.167
-    gemma2:9b-instruct: 0.167
-    qwen: 0.167
+    llama3.2:3b-instruct-fp16: 0.16666667
+    deepseek-r1:8b: 0.16666667
+    mistral:7b-instruct: 0.16666667
+    qwen2.5:7b-instruct: 0.16666667
+    gemma2:9b-instruct: 0.16666667
+    qwen: 0.16666666
     # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
     # they are used conditionally in asset_routing for Phase 2 escalation
   
@@ -159,7 +159,7 @@ ensemble:
 #   - Phase 1 confidence < threshold OR
 #   - Phase 1 agreement < threshold OR
 #   - High-stakes position detected
-# Asset-based routing: Crypto→cli, Forex→gemini, Fallback→gpt-oss:120b-cloud
+# Asset-based routing: Crypto→cli, Forex→gemini, Stock→gemini, Fallback→gpt-oss:120b-cloud
   two_phase:
     # Enable two-phase mode (default: false for backward compatibility)
     enabled: true

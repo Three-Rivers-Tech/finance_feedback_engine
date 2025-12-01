@@ -108,11 +108,14 @@ class CostTracker:
                 for line in f:
                     line = line.strip()
                     if line:
-                        calls.append(json.loads(line))
-        except (json.JSONDecodeError, IOError) as e:
+                        try:
+                            calls.append(json.loads(line))
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Skipping corrupted line in cost log: {e}")
+        except IOError as e:
             logger.warning(f"Could not read cost log: {e}")
-            calls = []
-        
+            return []
+
         return calls
     
     def get_call_count_today(self) -> int:

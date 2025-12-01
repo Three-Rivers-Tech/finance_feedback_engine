@@ -36,7 +36,6 @@ class GeminiCLIProvider:
             config: Configuration dictionary
         """
         self.config = config
-
         # Determine rate limiter based on authentication mode
         auth_mode = self.config.get('auth_mode', 'oauth')
         if auth_mode == 'api_key':
@@ -44,7 +43,7 @@ class GeminiCLIProvider:
             max_tokens = 100
         else:  # oauth or default
             tokens_per_second = 1.0
-            max_tokens = 1000
+            max_tokens = 60  # Allow short bursts but prevent daily quota exhaustion
 
         self.rate_limiter = RateLimiter(
             tokens_per_second=tokens_per_second,
