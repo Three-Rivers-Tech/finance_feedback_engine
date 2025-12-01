@@ -805,6 +805,19 @@ def analyze(ctx, asset_pair, provider):
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
 
         decision = engine.analyze_asset(asset_pair)
+
+        # Check for Phase 1 quorum failure (NO_DECISION action)
+        if decision.get('action') == 'NO_DECISION':
+            from datetime import datetime
+            failure_log = f"data/failures/{datetime.now().strftime('%Y-%m-%d')}.json"
+            console.print("\n[bold red]⚠️ CRITICAL: ANALYSIS FAILED[/bold red]")
+            console.print(
+                "[yellow]Phase 1 quorum failure: Insufficient free-tier providers succeeded.[/yellow]"
+            )
+            console.print(f"[yellow]Reason: {decision.get('reasoning', 'Unknown')}[/yellow]")
+            console.print(f"\n[dim]Failure logged to: {failure_log}[/dim]")
+            console.print("\n[bold yellow]No decision generated. System requires at least 3 successful provider responses.[/bold yellow]")
+            return
         
         # Display decision
         console.print("\n[bold green]Trading Decision Generated[/bold green]")
