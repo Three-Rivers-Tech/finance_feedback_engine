@@ -423,7 +423,7 @@ class EnsembleDecisionManager:
               - Crypto -> Copilot CLI
               - Forex/Stock -> Gemini
               - Fallback -> Codex (if primary fails)
-              - Tiebreaker -> Codex (if primary agrees with Phase 1)
+              - Tiebreaker -> Codex (if primary disagrees with Phase 1)
         
             Args:
                 prompt: Decision prompt for AI providers
@@ -1012,8 +1012,11 @@ class EnsembleDecisionManager:
             return False
         
         conf = decision['confidence']
-        if not isinstance(conf, (int, float)) or not (0.0 <= conf <= 1.0):
-            logger.warning(f"Provider {provider}: confidence {conf} not in range 0.0-1.0")
+        if not isinstance(conf, (int, float)):
+            logger.warning(f"Provider {provider}: confidence is not numeric")
+            return False
+        if not (0 <= conf <= 100):
+            logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
             return False
         
         return True
