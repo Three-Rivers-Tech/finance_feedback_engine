@@ -20,6 +20,11 @@ from sklearn.preprocessing import StandardScaler
 logger = logging.getLogger(__name__)
 
 
+class InsufficientProvidersError(Exception):
+    """Raised when Phase 1 quorum is not met."""
+    pass
+
+
 class EnsembleDecisionManager:
     """
     Manages multiple AI providers and combines their decisions using
@@ -394,6 +399,286 @@ class EnsembleDecisionManager:
         )
         
         return final_decision
+
+        def aggregate_decisions_two_phase(
+            self,
+            prompt: str,
+            asset_pair: str,
+            market_data: Dict[str, Any],
+            query_function: callable
+        ) -> Dict[str, Any]:
+            """
+            Two-phase ensemble aggregation with smart premium API escalation.
+        
+            Phase 1: Query free-tier providers (5 Ollama + Qwen)
+              - Require minimum 3 successful responses (quorum)
+              - Calculate weighted consensus and agreement rate
+        
+            Phase 2: Escalate to premium providers if:
+              - Phase 1 confidence < threshold (default 75%)
+              - Phase 1 agreement < threshold (default 60%)
+              - High-stakes position (size > threshold)
+          
+            Premium provider selection by asset type:
+              - Crypto -> Copilot CLI
+              - Forex/Stock -> Gemini
+              - Fallback -> Codex (if primary fails)
+              - Tiebreaker -> Codex (if primary agrees with Phase 1)
+        
+            Args:
+                prompt: Decision prompt for AI providers
+                asset_pair: Asset pair being analyzed
+                market_data: Market data dict (must include 'type' field)
+                query_function: Function to query individual providers
+        
+            Returns:
+                Decision dict with two-phase metadata
+            
+            Raises:
+                InsufficientProvidersError: If Phase 1 quorum not met
+            """
+            from ..decision_engine.provider_tiers import (
+                get_free_providers,
+                get_premium_provider_for_asset,
+                get_fallback_provider
+            )
+            from ..utils.cost_tracker import log_premium_call, check_budget
+        
+            # Get two-phase configuration
+            two_phase_config = self.config.get('ensemble', {}).get('two_phase', {})
+            enabled = two_phase_config.get('enabled', False)
+        
+            # If two-phase not enabled, use regular aggregation
+            if not enabled:
+                logger.info("Two-phase mode not enabled, using standard aggregation")
+                # Query all enabled providers and aggregate
+                provider_decisions = {}
+                failed_providers = []
+            
+                for provider in self.enabled_providers:
+                    try:
+                        decision = query_function(provider, prompt)
+                        if self._is_valid_provider_response(decision, provider):
+                            provider_decisions[provider] = decision
+                        else:
+                            failed_providers.append(provider)
+                    except Exception as e:
+                        logger.error(f"Provider {provider} failed: {e}")
+                        failed_providers.append(provider)
+            
+                return self.aggregate_decisions(provider_decisions, failed_providers)
+        
+            # ===== PHASE 1: Free Tier Providers =====
+            logger.info(f"=== PHASE 1: Querying free-tier providers for {asset_pair} ===")
+        
+            free_tier = get_free_providers()
+            phase1_quorum = two_phase_config.get('phase1_min_quorum', 3)
+        
+            phase1_decisions = {}
+            phase1_failed = []
+        
+            for provider in free_tier:
+                try:
+                    decision = query_function(provider, prompt)
+                    if self._is_valid_provider_response(decision, provider):
+                        phase1_decisions[provider] = decision
+                        logger.info(f"Phase 1: {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
+                    else:
+                        phase1_failed.append(provider)
+                        logger.warning(f"Phase 1: {provider} returned invalid response")
+                except Exception as e:
+                    logger.error(f"Phase 1: {provider} failed: {e}")
+                    phase1_failed.append(provider)
+        
+            # Check Phase 1 quorum
+            phase1_success_count = len(phase1_decisions)
+        
+            if phase1_success_count < phase1_quorum:
+                logger.error(
+                    f"Phase 1 quorum failure: {phase1_success_count}/{len(free_tier)} "
+                    f"succeeded (need ≥{phase1_quorum})"
+                )
+                raise InsufficientProvidersError(
+                    f"Phase 1 quorum not met: {phase1_success_count}/{len(free_tier)} "
+                    f"providers succeeded (required: {phase1_quorum})"
+                )
+        
+            # Aggregate Phase 1 decisions
+            phase1_result = self.aggregate_decisions(
+                provider_decisions=phase1_decisions,
+                failed_providers=phase1_failed
+            )
+        
+            phase1_action = phase1_result['action']
+            phase1_confidence = phase1_result['confidence']
+            phase1_agreement = phase1_result['ensemble_metadata']['agreement_score']
+        
+            logger.info(
+                f"Phase 1 result: {phase1_action} "
+                f"(confidence={phase1_confidence}%, agreement={phase1_agreement:.2f})"
+            )
+        
+            # ===== PHASE 2 ESCALATION DECISION =====
+            confidence_threshold = two_phase_config.get('phase1_confidence_threshold', 0.75)
+            agreement_threshold = two_phase_config.get('phase1_agreement_threshold', 0.6)
+            require_premium_for_high_stakes = two_phase_config.get('require_premium_for_high_stakes', True)
+            high_stakes_threshold = two_phase_config.get('high_stakes_position_threshold', 1000)
+            max_premium_calls = two_phase_config.get('max_premium_calls_per_day', 50)
+        
+            # Determine if escalation needed
+            low_confidence = (phase1_confidence / 100.0) < confidence_threshold
+            low_agreement = phase1_agreement < agreement_threshold
+            high_stakes = (
+                require_premium_for_high_stakes and 
+                phase1_result.get('amount', 0) > high_stakes_threshold
+            )
+        
+            escalate = low_confidence or low_agreement or high_stakes
+        
+            # Determine escalation reason
+            escalation_reasons = []
+            if low_confidence:
+                escalation_reasons.append(f"low_confidence({phase1_confidence}%<{confidence_threshold*100}%)")
+            if low_agreement:
+                escalation_reasons.append(f"low_agreement({phase1_agreement:.2f}<{agreement_threshold})")
+            if high_stakes:
+                escalation_reasons.append(f"high_stakes(${phase1_result.get('amount', 0)}>${high_stakes_threshold})")
+        
+            escalation_reason = ", ".join(escalation_reasons) if escalation_reasons else None
+        
+            # Check budget before escalating
+            if escalate and not check_budget(max_premium_calls):
+                logger.warning("Phase 2 escalation blocked: daily premium call budget exceeded")
+                escalate = False
+                escalation_reason = "budget_exceeded"
+        
+            if not escalate:
+                logger.info("Phase 2 NOT triggered - using Phase 1 result")
+                phase1_result['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
+                phase1_result['ensemble_metadata']['phase1_action'] = phase1_action
+                phase1_result['ensemble_metadata']['phase1_confidence'] = phase1_confidence
+                phase1_result['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
+                phase1_result['ensemble_metadata']['phase2_triggered'] = False
+                phase1_result['ensemble_metadata']['escalation_reason'] = None
+                return phase1_result
+        
+            # ===== PHASE 2: Premium Provider Escalation =====
+            logger.info(f"=== PHASE 2: Escalating to premium provider (reason: {escalation_reason}) ===")
+        
+            asset_type = market_data.get('type', 'unknown')
+            primary_provider = get_premium_provider_for_asset(asset_type)
+            fallback_provider = get_fallback_provider()
+            codex_as_tiebreaker = two_phase_config.get('codex_as_tiebreaker', True)
+        
+            logger.info(f"Asset type: {asset_type} -> Primary provider: {primary_provider}")
+        
+            phase2_decisions = {}
+            phase2_primary_used = None
+            phase2_fallback_used = False
+            codex_tiebreaker_used = False
+        
+            # Try primary provider
+            try:
+                primary_decision = query_function(primary_provider, prompt)
+                if self._is_valid_provider_response(primary_decision, primary_provider):
+                    phase2_decisions[primary_provider] = primary_decision
+                    phase2_primary_used = primary_provider
+                    logger.info(
+                        f"Phase 2: {primary_provider} -> {primary_decision.get('action')} "
+                        f"({primary_decision.get('confidence')}%)"
+                    )
+                
+                    # Check if Codex tiebreaker needed (primary agrees with Phase 1)
+                    if codex_as_tiebreaker and primary_decision.get('action') == phase1_action:
+                        logger.info(f"Phase 2: {primary_provider} agrees with Phase 1 -> calling Codex tiebreaker")
+                        try:
+                            codex_decision = query_function(fallback_provider, prompt)
+                            if self._is_valid_provider_response(codex_decision, fallback_provider):
+                                phase2_decisions[fallback_provider] = codex_decision
+                                codex_tiebreaker_used = True
+                                logger.info(
+                                    f"Phase 2: {fallback_provider} (tiebreaker) -> {codex_decision.get('action')} "
+                                    f"({codex_decision.get('confidence')}%)"
+                                )
+                        except Exception as e:
+                            logger.warning(f"Phase 2: Codex tiebreaker failed: {e}")
+                else:
+                    logger.warning(f"Phase 2: {primary_provider} returned invalid response")
+                    raise ValueError(f"{primary_provider} invalid response")
+                
+            except Exception as e:
+                logger.error(f"Phase 2: {primary_provider} failed: {e}")
+            
+                # Fallback to Codex
+                logger.info(f"Phase 2: Falling back to {fallback_provider}")
+                try:
+                    fallback_decision = query_function(fallback_provider, prompt)
+                    if self._is_valid_provider_response(fallback_decision, fallback_provider):
+                        phase2_decisions[fallback_provider] = fallback_decision
+                        phase2_fallback_used = True
+                        logger.info(
+                            f"Phase 2: {fallback_provider} (fallback) -> {fallback_decision.get('action')} "
+                            f"({fallback_decision.get('confidence')}%)"
+                        )
+                except Exception as e2:
+                    logger.error(f"Phase 2: {fallback_provider} also failed: {e2}")
+        
+            # Log premium API calls
+            log_premium_call(
+                asset=asset_pair,
+                asset_type=asset_type,
+                phase='phase2',
+                primary_provider=phase2_primary_used,
+                codex_called=codex_tiebreaker_used or phase2_fallback_used,
+                escalation_reason=escalation_reason
+            )
+        
+            # If Phase 2 completely failed, use Phase 1 result
+            if not phase2_decisions:
+                logger.warning("Phase 2 complete failure - using Phase 1 result")
+                phase1_result['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
+                phase1_result['ensemble_metadata']['phase1_action'] = phase1_action
+                phase1_result['ensemble_metadata']['phase1_confidence'] = phase1_confidence
+                phase1_result['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
+                phase1_result['ensemble_metadata']['phase2_triggered'] = True
+                phase1_result['ensemble_metadata']['phase2_primary_provider'] = primary_provider
+                phase1_result['ensemble_metadata']['phase2_fallback_used'] = True
+                phase1_result['ensemble_metadata']['phase2_failed'] = True
+                phase1_result['ensemble_metadata']['escalation_reason'] = escalation_reason
+                return phase1_result
+        
+            # Merge Phase 1 + Phase 2 decisions with equal weighting
+            all_decisions = {**phase1_decisions, **phase2_decisions}
+            all_failed = phase1_failed
+        
+            logger.info(f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions")
+        
+            final_decision = self.aggregate_decisions(
+                provider_decisions=all_decisions,
+                failed_providers=all_failed
+            )
+        
+            # Check if Phase 2 changed the decision
+            decision_changed = final_decision['action'] != phase1_action
+        
+            # Add comprehensive two-phase metadata
+            final_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
+            final_decision['ensemble_metadata']['phase1_action'] = phase1_action
+            final_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
+            final_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
+            final_decision['ensemble_metadata']['phase2_triggered'] = True
+            final_decision['ensemble_metadata']['phase2_primary_provider'] = phase2_primary_used
+            final_decision['ensemble_metadata']['phase2_fallback_used'] = phase2_fallback_used
+            final_decision['ensemble_metadata']['codex_tiebreaker'] = codex_tiebreaker_used
+            final_decision['ensemble_metadata']['escalation_reason'] = escalation_reason
+            final_decision['ensemble_metadata']['decision_changed_by_premium'] = decision_changed
+        
+            logger.info(
+                f"Two-phase decision: {final_decision['action']} "
+                f"(Phase1: {phase1_action}, Changed: {decision_changed})"
+            )
+        
+            return final_decision
 
     def debate_decisions(
         self,

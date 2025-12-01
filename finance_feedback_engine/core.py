@@ -11,6 +11,9 @@ from .decision_engine.engine import DecisionEngine
 from .persistence.decision_store import DecisionStore
 from .backtesting.backtester import Backtester
 from .memory.portfolio_memory import PortfolioMemoryEngine
+from .utils.model_installer import ensure_models_installed
+from .utils.failure_logger import log_quorum_failure
+from .decision_engine.ensemble_manager import InsufficientProvidersError
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,14 @@ class FinanceFeedbackEngine:
                 - persistence: Persistence configuration
         """
         self.config = config
+        
+        # Ensure Ollama models are installed (one-time setup)
+        try:
+            logger.info("Checking Ollama model installation...")
+            ensure_models_installed()
+        except Exception as e:
+            logger.warning(f"Model installation check failed: {e}")
+            # Continue anyway - system may work with fewer models
         
         # Initialize data provider
         import os
@@ -282,14 +293,48 @@ class FinanceFeedbackEngine:
                 memory_context.get('total_historical_trades', 0)
             )
         
-        # Generate decision using AI engine
-        decision = self.decision_engine.generate_decision(
-            asset_pair=asset_pair,
-            market_data=market_data,
-            balance=balance,
-            portfolio=portfolio,
-            memory_context=memory_context
-        )
+            # Generate decision using AI engine (with Phase 1 quorum failure handling)
+            try:
+                decision = self.decision_engine.generate_decision(
+                    asset_pair=asset_pair,
+                    market_data=market_data,
+                    balance=balance,
+                    portfolio=portfolio,
+                    memory_context=memory_context
+                )
+            except InsufficientProvidersError as e:
+                # Phase 1 quorum failure - log and return NO_DECISION
+                logger.error(f"Phase 1 quorum failure for {asset_pair}: {e}")
+            
+                asset_type = market_data.get('type', 'unknown')
+            
+                # Log failure for monitoring
+                log_path = log_quorum_failure(
+                    asset=asset_pair,
+                    asset_type=asset_type,
+                    providers_attempted=[],  # TODO: Extract from exception if available
+                    providers_succeeded=[],
+                    quorum_required=3,
+                    config=self.config
+                )
+            
+                # Return NO_DECISION with detailed reasoning
+                decision = {
+                    'action': 'NO_DECISION',
+                    'confidence': 0,
+                    'reasoning': (
+                        f'Phase 1 quorum failure: {str(e)}. '
+                        f'Manual position review required. '
+                        f'See failure log: {log_path}'
+                    ),
+                    'amount': 0,
+                    'asset_pair': asset_pair,
+                    'timestamp': datetime.now().isoformat(),
+                    'ensemble_metadata': {
+                        'error_type': 'quorum_failure',
+                        'error_message': str(e)
+                    }
+                }
         
         # Persist decision
         self.decision_store.save_decision(decision)

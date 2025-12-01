@@ -14,6 +14,7 @@ from .decision_validation import (
     try_parse_decision_json,
     build_fallback_decision,
 )
+from ..utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,14 @@ class QwenCLIProvider:
             config: Configuration dictionary
         """
         self.config = config
+        
+        # Rate limiter for Qwen free tier: 60 req/min, 2000 req/day
+        # Using 1 token/second = 60/min, max tokens = 2000 for daily limit
+        self.rate_limiter = RateLimiter(
+            tokens_per_second=1.0,  # 60 requests per minute
+            max_tokens=2000  # 2000 requests per day
+        )
+        
         logger.info("Qwen CLI provider initialized")
         
         # Verify qwen is available
@@ -72,6 +81,13 @@ class QwenCLIProvider:
         Returns:
             Dictionary with action, confidence, reasoning, amount
         """
+        # Wait for rate limit token
+        try:
+            self.rate_limiter.wait_for_token()
+        except Exception as e:
+            logger.warning(f"Rate limit check failed: {e}")
+            # Continue anyway - rate limiter is best-effort
+        
         logger.info("Querying Qwen CLI for trading decision")
 
         formatted_prompt = self._format_prompt_for_qwen(prompt)
