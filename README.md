@@ -438,6 +438,9 @@ All trading decisions are stored as JSON files in the configured storage path (d
 - [ ] Implement advanced AI models integration
 - [ ] Add risk management strategies
 - [ ] Create mobile app
+ - [ ] Two-phase ensemble escalation (free→premium) with budget limits 🆕
+ - [ ] Telegram notifications for Phase 1 failures and trade executions 🆕
+ - [ ] Adaptive Phase 1 threshold tuning based on premium provider value-add 🆕
 
 ## 📚 Documentation
 
