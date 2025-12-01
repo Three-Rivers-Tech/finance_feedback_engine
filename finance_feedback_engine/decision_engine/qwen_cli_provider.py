@@ -36,11 +36,12 @@ class QwenCLIProvider:
         """
         self.config = config
         
-        # Rate limiter for Qwen free tier: 60 req/min, 2000 req/day
-        # Using 1 token/second = 60/min, max tokens = 2000 for daily limit
+        # Rate limiter for Qwen CLI: 60 req/min, with burst capacity of 2000 tokens
+        # Using 1 token/second = 60/min, max tokens = 2000 for burst capacity
+        # Note: This does not enforce a daily quota; the bucket refills at 1 token/sec
         self.rate_limiter = RateLimiter(
             tokens_per_second=1.0,  # 60 requests per minute
-            max_tokens=2000  # 2000 requests per day
+            max_tokens=2000  # burst capacity
         )
         
         logger.info("Qwen CLI provider initialized")
