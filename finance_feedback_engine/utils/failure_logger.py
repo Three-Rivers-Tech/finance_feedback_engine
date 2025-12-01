@@ -2,7 +2,8 @@
 
 import json
 import logging
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -30,7 +31,7 @@ class FailureLogger:
         Returns:
             Path to today's failure log file
         """
-        today = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         return self.failures_dir / f"{today}.json"
     
     def log_failure(
@@ -59,7 +60,7 @@ class FailureLogger:
         log_file = self._get_log_file()
         
         failure_entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'asset': asset,
             'asset_type': asset_type,
             'providers_attempted': providers_attempted,
@@ -181,7 +182,7 @@ def send_telegram_notification(message: str, config: Dict[str, Any]) -> bool:
 
 
 # Global instance
-_logger = None
+_lock = threading.Lock()
 
 
 def get_failure_logger(data_dir: str = "data") -> FailureLogger:
@@ -189,14 +190,16 @@ def get_failure_logger(data_dir: str = "data") -> FailureLogger:
     Get global FailureLogger instance.
     
     Args:
-        data_dir: Data directory path
+        data_dir: Data directory path (only used on first initialization; subsequent calls ignore this parameter)
     
     Returns:
         FailureLogger instance
     """
     global _logger
     if _logger is None:
-        _logger = FailureLogger(data_dir)
+        with _lock:
+            if _logger is None:
+                _logger = FailureLogger(data_dir)
     return _logger
 
 

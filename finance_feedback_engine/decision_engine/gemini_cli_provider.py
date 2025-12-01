@@ -36,14 +36,21 @@ class GeminiCLIProvider:
             config: Configuration dictionary
         """
         self.config = config
-        
-            # Rate limiter for Gemini free tier (OAuth): 60 req/min, 1000 req/day
-            # Using 1 token/second = 60/min, max tokens = 1000 for daily limit
-            self.rate_limiter = RateLimiter(
-                tokens_per_second=1.0,  # 60 requests per minute
-                max_tokens=1000  # 1000 requests per day (OAuth limit)
-            )
-        
+
+        # Determine rate limiter based on authentication mode
+        auth_mode = self.config.get('auth_mode', 'oauth')
+        if auth_mode == 'api_key':
+            tokens_per_second = 100 / (24 * 3600)
+            max_tokens = 100
+        else:  # oauth or default
+            tokens_per_second = 1.0
+            max_tokens = 1000
+
+        self.rate_limiter = RateLimiter(
+            tokens_per_second=tokens_per_second,
+            max_tokens=max_tokens
+        )
+
         logger.info("Gemini CLI provider initialized")
         
         # Verify gemini is available
@@ -83,12 +90,12 @@ class GeminiCLIProvider:
         Returns:
             Dictionary with action, confidence, reasoning, amount
         """
-            # Wait for rate limit token
-            try:
-                self.rate_limiter.wait_for_token()
-            except Exception as e:
-                logger.warning(f"Rate limit check failed: {e}")
-                # Continue anyway - rate limiter is best-effort
+        # Wait for rate limit token
+        try:
+            self.rate_limiter.wait_for_token()
+        except Exception as e:
+            logger.warning(f"Rate limit check failed: {e}")
+            # Continue anyway - rate limiter is best-effort
         
         logger.info("Querying Gemini CLI for trading decision")
 

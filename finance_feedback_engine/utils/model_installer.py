@@ -7,7 +7,7 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     from tqdm import tqdm
@@ -37,7 +37,7 @@ class ModelInstaller:
         self.data_dir.mkdir(exist_ok=True)
         self.state_file = self.data_dir / ".models_installed"
     
-    def _load_state(self) -> Dict[str, Dict[str, any]]:
+    def _load_state(self) -> Dict[str, Dict[str, Any]]:
         """
         Load installation state from file.
         
@@ -54,7 +54,7 @@ class ModelInstaller:
             logger.warning(f"Could not load installation state: {e}")
             return {}
     
-    def _save_state(self, state: Dict[str, Dict[str, any]]):
+    def _save_state(self, state: Dict[str, Dict[str, Any]]):
         """
         Save installation state to file.
         
@@ -188,7 +188,12 @@ class ModelInstaller:
                             except (ValueError, IndexError):
                                 pass
                     
-                    process.wait()
+                    try:
+                        process.wait(timeout=600)  # 10 minute timeout
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        logger.error(f"Timeout downloading {model}")
+                        return False
                     pbar.update(100 - last_progress)  # Ensure we reach 100%
                     if process.returncode != 0:
                         return False
@@ -411,11 +416,6 @@ class ModelInstaller:
         
         return all_success
 
-
-# Global instance
-_installer = None
-
-
 def get_installer(data_dir: str = "data") -> ModelInstaller:
     """
     Get global ModelInstaller instance.
@@ -425,6 +425,16 @@ def get_installer(data_dir: str = "data") -> ModelInstaller:
     
     Returns:
         ModelInstaller instance
+    """
+    global _installer
+    if _installer is None:
+        _installer = ModelInstaller(data_dir)
+    elif _installer.data_dir != Path(data_dir):
+        logger.warning(
+            f"Ignoring data_dir={data_dir}, installer already initialized "
+            f"with data_dir={_installer.data_dir}"
+        )
+    return _installer
     """
     global _installer
     if _installer is None:

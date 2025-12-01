@@ -106,7 +106,7 @@ decision_engine:
 ensemble:
   # Which providers to include in ensemble
   # Only enable providers you have configured
-  # Two-phase mode uses: 5 Ollama models + Qwen (free tier), escalates to premium when needed
+  # Two-phase mode uses: enabled_providers (free/local quorum), escalates to premium_providers when needed
   enabled_providers:
     - llama3.2:3b-instruct-fp16
     - deepseek-r1:8b
@@ -114,18 +114,17 @@ ensemble:
     - qwen2.5:7b-instruct
     - gemma2:9b-instruct
     - qwen
-  
+
   # Initial weights for each provider (must sum to 1.0)
   provider_weights:
-    llama3.2:3b-instruct-fp16: 1.0
-    deepseek-r1:8b: 1.0
-    mistral:7b-instruct: 1.0
-    qwen2.5:7b-instruct: 1.0
-    gemma2:9b-instruct: 1.0
-    qwen: 1.0
-    cli: 1.0
-    gemini: 1.0
-    gpt-oss:120b-cloud: 1.0
+    llama3.2:3b-instruct-fp16: 0.167
+    deepseek-r1:8b: 0.167
+    mistral:7b-instruct: 0.167
+    qwen2.5:7b-instruct: 0.167
+    gemma2:9b-instruct: 0.167
+    qwen: 0.167
+    # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
+    # they are used conditionally in asset_routing for Phase 2 escalation
   
   # Voting strategy: 'weighted', 'majority', or 'stacking'
   voting_strategy: "weighted"
@@ -150,17 +149,17 @@ ensemble:
   adaptive_learning: true  # ON BY DEFAULT - thoroughly tested
   learning_rate: 0.1
 
-  # ============================================
-  # Two-Phase Ensemble (Smart Premium API Management)
-  # ============================================
-  # Phase 1: Query free-tier providers (5 Ollama + Qwen)
-  #   - Requires minimum 3 successful responses (quorum)
-  #   - Calculates weighted consensus
-  # Phase 2: Escalate to premium providers if:
-  #   - Phase 1 confidence < threshold OR
-  #   - Phase 1 agreement < threshold OR
-  #   - High-stakes position detected
-  # Asset-based routing: Crypto→Copilot, Forex→Gemini, Fallback→Codex
+# ============================================
+# Two-Phase Ensemble (Smart Premium API Management)
+# ============================================
+# Phase 1: Query enabled_providers (free/local quorum)
+#   - Requires minimum 3 successful responses (quorum)
+#   - Calculates weighted consensus
+# Phase 2: Escalate to premium_providers if:
+#   - Phase 1 confidence < threshold OR
+#   - Phase 1 agreement < threshold OR
+#   - High-stakes position detected
+# Asset-based routing: Crypto→cli, Forex→gemini, Fallback→gpt-oss:120b-cloud
   two_phase:
     # Enable two-phase mode (default: false for backward compatibility)
     enabled: true
@@ -182,7 +181,7 @@ ensemble:
     # High-stakes position threshold (USD)
     high_stakes_position_threshold: 1000
   
-    # Asset-based premium provider routing
+    # Asset-based routing using premium_providers
     asset_routing:
       crypto: "cli"      # Copilot for crypto analysis
       forex: "gemini"    # Gemini for forex analysis

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -41,7 +42,7 @@ class CostTracker:
         primary_provider: Optional[str] = None,
         codex_called: bool = False,
         escalation_reason: Optional[str] = None,
-        cost_estimate: float = 0.0
+        cost_estimate: Optional[float] = None
     ) -> None:
         """
         Log a premium API call.
@@ -65,26 +66,15 @@ class CostTracker:
             'phase2_primary': primary_provider,
             'codex_called': codex_called,
             'escalation_reason': escalation_reason,
-            'cost_estimate': cost_estimate
+            'cost_estimate': cost_estimate or 0.0
         }
         
-        # Load existing calls
-        calls = []
-        if log_file.exists():
-            try:
-                with open(log_file, 'r') as f:
-                    calls = json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Could not read existing cost log: {e}")
-                calls = []
-        
-        # Append new call
-        calls.append(call_entry)
-        
-        # Save updated log
+        # Append to log file in NDJSON format
         try:
-            with open(log_file, 'w') as f:
-                json.dump(calls, f, indent=2)
+            with open(log_file, 'a') as f:
+                f.write(json.dumps(call_entry) + '\n')
+                f.flush()
+                os.fsync(f.fileno())
             
             providers_used = []
             if primary_provider:
@@ -98,7 +88,7 @@ class CostTracker:
             )
             
         except IOError as e:
-            logger.error(f"Could not save cost log: {e}")
+            logger.error(f"Could not append to cost log: {e}")
     
     def get_calls_today(self) -> List[Dict[str, Any]]:
         """
@@ -112,12 +102,18 @@ class CostTracker:
         if not log_file.exists():
             return []
         
+        calls = []
         try:
             with open(log_file, 'r') as f:
-                return json.load(f)
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        calls.append(json.loads(line))
         except (json.JSONDecodeError, IOError) as e:
             logger.warning(f"Could not read cost log: {e}")
-            return []
+            calls = []
+        
+        return calls
     
     def get_call_count_today(self) -> int:
         """
@@ -213,13 +209,13 @@ class CostTracker:
         }
 
 
-# Global instance
-_tracker = None
+# Global instances
+_trackers = {}
 
 
 def get_cost_tracker(data_dir: str = "data") -> CostTracker:
     """
-    Get global CostTracker instance.
+    Get global CostTracker instance for the given data directory.
     
     Args:
         data_dir: Data directory path
@@ -227,10 +223,9 @@ def get_cost_tracker(data_dir: str = "data") -> CostTracker:
     Returns:
         CostTracker instance
     """
-    global _tracker
-    if _tracker is None:
-        _tracker = CostTracker(data_dir)
-    return _tracker
+    if data_dir not in _trackers:
+        _trackers[data_dir] = CostTracker(data_dir)
+    return _trackers[data_dir]
 
 
 def log_premium_call(
@@ -239,7 +234,8 @@ def log_premium_call(
     phase: str = 'phase2',
     primary_provider: Optional[str] = None,
     codex_called: bool = False,
-    escalation_reason: Optional[str] = None
+    escalation_reason: Optional[str] = None,
+    cost_estimate: Optional[float] = None
 ) -> None:
     """
     Convenience function to log a premium API call.
@@ -251,6 +247,7 @@ def log_premium_call(
         primary_provider: Primary provider used
         codex_called: Whether Codex was called
         escalation_reason: Reason for escalation
+        cost_estimate: Estimated cost in dollars (if known)
     """
     tracker = get_cost_tracker()
     tracker.log_premium_call(
@@ -259,7 +256,8 @@ def log_premium_call(
         phase=phase,
         primary_provider=primary_provider,
         codex_called=codex_called,
-        escalation_reason=escalation_reason
+        escalation_reason=escalation_reason,
+        cost_estimate=cost_estimate
     )
 
 
