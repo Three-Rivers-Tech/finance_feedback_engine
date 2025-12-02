@@ -121,13 +121,52 @@ def _check_dependencies() -> tuple:
     return (missing, installed)
 
 
-def setup_logging(verbose: bool = False):
-    """Setup logging configuration."""
-    level = logging.DEBUG if verbose else logging.INFO
+def setup_logging(verbose: bool = False, config: dict = None):
+    """Setup logging configuration.
+    
+    Args:
+        verbose: If True, override config and use DEBUG level
+        config: Configuration dict containing ('logging', 'level') key
+    
+    Priority: --verbose flag > config value > INFO default
+    """
+    # Map string level names to logging constants
+    LEVEL_MAP = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    
+    # Priority 1: --verbose flag overrides everything
+    if verbose:
+        level = logging.DEBUG
+    # Priority 2: Read from config
+    elif config and 'logging' in config and 'level' in config['logging']:
+        config_level = config['logging']['level']
+        # Validate and map the config value
+        if isinstance(config_level, str) and config_level.upper() in LEVEL_MAP:
+            level = LEVEL_MAP[config_level.upper()]
+        else:
+            # Invalid config value, fall back to INFO
+            level = logging.INFO
+            logging.warning(
+                f"Invalid logging level '{config_level}' in config, using INFO"
+            )
+    # Priority 3: Default to INFO
+    else:
+        level = logging.INFO
+    
+    # Apply to root logger via basicConfig
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True  # Override any existing config
     )
+    
+    # Also set the root logger level explicitly
+    logging.getLogger().setLevel(level)
 
 
 def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
@@ -288,7 +327,6 @@ def _set_nested(config: dict, keys: tuple, value):
 @click.pass_context
 def cli(ctx, config, verbose, interactive):
     """Finance Feedback Engine 2.0 - AI-powered trading decision tool."""
-    setup_logging(verbose)
     ctx.ensure_object(dict)
 
     # If a specific config file is provided by the user
@@ -307,6 +345,10 @@ def cli(ctx, config, verbose, interactive):
     # Store the final config
     ctx.obj['config'] = final_config
     ctx.obj['verbose'] = verbose
+    
+    # Setup logging with config and verbose flag
+    # Verbose flag takes priority over config setting
+    setup_logging(verbose=verbose, config=final_config)
 
     # On interactive boot, check versions and prompt for update if needed
     if interactive:
@@ -541,7 +583,7 @@ def config_editor(ctx, output):
         prompt_choice(
             "Log level",
             ("logging", "level"),
-            ["INFO", "DEBUG", "WARNING"],
+            ["INFO", "DEBUG", "WARNING", "ERROR"],
         )
 
         # Write config
