@@ -3,78 +3,237 @@
 
 # Copilot Instructions — Finance Feedback Engine 2.0
 
-Short, actionable guidance for AI coding agents. Keep edits minimal, preserve public APIs, and point to concrete files and commands.
+Concise guidance for AI coding agents. Preserve public APIs, use minimal edits, and reference concrete files/commands.
 
 ## Big Picture Architecture
 
-Modular trading engine: Data providers → Decision Engine (AI + Ensemble) → Trading Platforms → Persistence (JSON) → Monitoring → Portfolio Memory.
+Modular AI-powered trading engine with 6 major subsystems:
 
-**Core entrypoint:** `FinanceFeedbackEngine.analyze_asset()`
-	- Collects market data, memory, market regime (`MarketRegimeDetector`), builds LLM prompt, queries providers, aggregates via `EnsembleDecisionManager`, persists decisions, may execute trades.
+**Data Flow Pipeline:**
+```
+Market Data (Alpha Vantage) 
+  → Market Regime Detector (ADX/ATR analysis)
+  → Decision Engine (AI ensemble with prompt construction)
+  → Ensemble Manager (weighted voting, 4-tier fallback)
+  → Trading Platforms (Coinbase/Oanda/Mock via factory)
+  → Decision Store (append-only JSON persistence)
+  → Portfolio Memory + Monitoring (feedback loop)
+```
 
-**Data flow:**
-	- Market data (Alpha Vantage) → Decision Engine → AI providers (ensemble voting) → JSON decision (append-only, `data/decisions/`)
-	- Monitoring polls platforms, updates P&L, feeds back to AI for learning
-	- Portfolio memory tracks trade outcomes, updates ensemble weights
+**Core Entry Point:** `FinanceFeedbackEngine.analyze_asset(asset_pair, provider)`
+- Gathers market data, portfolio context, regime classification
+- Builds comprehensive LLM prompt with trading fundamentals
+- Queries AI providers (local/cli/codex/qwen/gemini) via `EnsembleDecisionManager`
+- Aggregates decisions using weighted voting with dynamic weight adjustment
+- Persists to `data/decisions/YYYY-MM-DD_<uuid>.json`
+- Optionally executes trades through platform adapters
 
-## Key Files
+**Agentic Mode:** `TradingAgentOrchestrator` runs continuous OODA loop (Observe-Orient-Decide-Act)
+- Kill-switch protection: portfolio-level stop-loss/take-profit/max-drawdown
+- Thread-safe monitoring with max 2 concurrent trades
+- Autonomous or approval-required execution modes
 
-- `finance_feedback_engine/core.py` — Orchestrator, high-level entrypoints
-- `finance_feedback_engine/decision_engine/engine.py` — Prompt construction, context, position sizing
-- `finance_feedback_engine/decision_engine/ensemble_manager.py` — Aggregation, voting, fallback, adaptive learning
-- `finance_feedback_engine/trading_platforms/platform_factory.py` — Platform registration/creation
-- `finance_feedback_engine/persistence/decision_store.py` — JSON naming, append-only
-- `finance_feedback_engine/utils/market_regime_detector.py` — ADX/ATR regime logic
-- `finance_feedback_engine/cli/main.py` — CLI commands, config loading
+## Key Files & Responsibilities
+
+**Core Orchestration:**
+- `finance_feedback_engine/core.py` — Main engine, coordinates all subsystems
+- `finance_feedback_engine/agent/orchestrator.py` — Autonomous trading loop with kill-switch
+- `finance_feedback_engine/cli/main.py` — CLI commands, tiered config loading (`config.yaml` → `config.local.yaml`)
+
+**Decision Making:**
+- `finance_feedback_engine/decision_engine/engine.py` — Prompt builder, position sizing, signal-only mode
+- `finance_feedback_engine/decision_engine/ensemble_manager.py` — Weighted voting, 4-tier fallback, adaptive learning
+- `finance_feedback_engine/decision_engine/decision_validation.py` — Pre-execution schema validation
+- `finance_feedback_engine/utils/market_regime_detector.py` — ADX/ATR regime classification
+
+**Platform Integration:**
+- `finance_feedback_engine/trading_platforms/base_platform.py` — Abstract interface with circuit breaker support
+- `finance_feedback_engine/trading_platforms/platform_factory.py` — Registry pattern, includes `MockPlatform`
+- `finance_feedback_engine/trading_platforms/unified_platform.py` — Multi-platform aggregation
+
+**Persistence & Memory:**
+- `finance_feedback_engine/persistence/decision_store.py` — JSON file naming, retrieval by ID
+- `finance_feedback_engine/memory/portfolio_memory.py` — Trade outcome tracking, weight updates
 
 ## Developer Workflows
 
-- Install: `pip install -r requirements.txt` or `pip install -e .`
-- Analyze: `python main.py analyze BTCUSD --provider ensemble`
-- Check balances: `python main.py balance` (use `MockPlatform` for local/CI)
-- Backtest: `python main.py backtest BTCUSD -s 2024-01-01 -e 2024-12-01`
-- Monitor: `python main.py monitor start` (live polling)
-- Dashboard: `python main.py dashboard`
-- Execute: `python main.py execute <decision_id>`
-- Wipe: `python main.py wipe-decisions --confirm`
-- Config: `python main.py config-editor`
-- Autonomous: `python main.py run-agent --take-profit 0.05 --stop-loss 0.02`
+**Installation & Setup:**
+```bash
+pip install -r requirements.txt          # Install dependencies
+pip install -e .                         # Development mode
+cp config/config.yaml config/config.local.yaml  # Local config (gitignored)
+```
+
+**CLI Commands (via `python main.py`):**
+```bash
+# Analysis & Trading
+analyze BTCUSD --provider ensemble      # Multi-provider analysis
+analyze eur-usd --provider local        # Asset pairs: any format (btc-usd, BTC_USD, "BTC/USD")
+execute <decision_id>                   # Execute persisted decision
+balance                                 # Check platform balances
+
+# Monitoring & Backtesting
+monitor start                           # Live P&L tracking (thread-safe, max 2 trades)
+backtest BTCUSD -s 2024-01-01 -e 2024-12-01
+dashboard                               # Multi-platform portfolio aggregation
+
+# Autonomous Agent
+run-agent --take-profit 0.05 --stop-loss 0.02  # OODA loop with kill-switch
+run-agent --max-drawdown 0.15 --autonomous     # Portfolio-level risk limits
+
+# Utilities
+config-editor                           # Interactive YAML editor
+wipe-decisions --confirm                # Clear decision history
+```
+
+**Testing:**
+```bash
+pytest tests/                           # Run all tests
+pytest tests/test_phase1_robustness.py  # Specific test file
+pytest -v                               # Verbose mode
+```
+- Use `MockPlatform` for local/CI tests (set `trading_platform: mock` in config)
+- Test fixtures in `tests/conftest.py` provide pre-configured engines
+- Config: `config/config.test.mock.yaml` for automated testing
+
+**Debugging:**
+- Add `-v` to CLI for DEBUG logs
+- Check `ensemble_metadata` in decision JSON for provider failures/weights
+- Inspect `data/decisions/YYYY-MM-DD_<uuid>.json` for canonical decision format
+- Validate regime: ADX >25 = trending, ATR/price = volatility measure
+- Failed providers logged to `data/failures/` when quorum breaks
 
 ## Project-Specific Conventions
 
+**Data Formats:**
 - Market data dict: `open`, `high`, `low`, `close`, `volume` (crypto: add `market_cap`)
-- Decisions: `YYYY-MM-DD_<uuid>.json` in `data/decisions/` (append-only)
-- Position sizing: `DecisionEngine.calculate_position_size()` (~1% risk, ~2% stop-loss default)
-- Signal-only mode: auto when balance unavailable or `signal_only_default: true` in config; sets sizing fields to `null`, adds `signal_only: true`
-- Platform names: lowercase; register via `PlatformFactory.register_platform('name', Class)`
+- Asset pairs: uppercase, no separators (e.g., `BTCUSD`) — auto-standardized via `standardize_asset_pair()`
+- Decisions: `YYYY-MM-DD_<uuid>.json` in `data/decisions/` (append-only, never modify)
 - Confidence: integer 0–100 in `decision['confidence']`
-- Asset pairs: uppercase, no separators (e.g., `BTCUSD`), see `standardize_asset_pair()`
-- Ensemble weights: local 60%, cloud 40% (adaptive by trade outcome)
-- Portfolio stop-loss/take-profit: portfolio-level, not per-trade
+
+**Position Sizing Logic (`DecisionEngine.calculate_position_size()`):**
+- Default: ~1% risk per trade, ~2% stop-loss
+- Formula: `Position Size = (Account Balance × Risk%) / (Entry Price × Stop Loss%)`
+- Signal-only mode: auto when balance unavailable or `signal_only_default: true`
+  - Sets sizing fields to `null`, adds `signal_only: true` to decision
+  - Provides action/confidence/reasoning without position sizing
+
+**Ensemble Mechanics:**
+- Provider weights: configurable in `config.yaml` ensemble section (default: equal 20% each)
+- Dynamic weight renormalization: on provider failure, remaining weights sum to 1.0
+- Quorum: minimum 3 providers required for full ensemble confidence
+- 4-tier fallback: weighted → majority → average → single-provider (see `docs/ENSEMBLE_FALLBACK_SYSTEM.md`)
+- All decisions include `ensemble_metadata`: providers used/failed, adjusted weights, fallback tier
+
+**Platform Naming:**
+- Lowercase identifiers: `coinbase_advanced`, `oanda`, `mock`, `unified`
+- Register via `PlatformFactory.register_platform('name', Class)`
+- Unified mode: aggregates multiple platforms (set `trading_platform: unified`, configure `platforms` list)
+
+**Config Loading (tiered):**
+1. `config/config.yaml` (base defaults, committed)
+2. `config/config.local.yaml` (local overrides, gitignored) — deep merge over base
+3. Environment variables: `ALPHA_VANTAGE_API_KEY` overrides config
+
+**Market Regime Detection:**
+- ADX (Average Directional Index): >25 = trending market
+- ATR/price ratio: measures volatility (higher = more volatile)
+- Regimes: `TRENDING_BULL`, `TRENDING_BEAR`, `HIGH_VOLATILITY_CHOP`, `LOW_VOLATILITY_RANGING`
+
+**Trading Fundamentals (embedded in prompts):**
+- Long positions: BUY to enter, SELL to exit (profit when price rises)
+- Short positions: SELL to enter, BUY to cover (profit when price falls)
+- P&L formulas: included in `DecisionEngine` docstring for AI context
 
 ## Ensemble Fallback & Metadata
 
-- 4-tier fallback: weighted → majority → average → single-provider (see `docs/ENSEMBLE_FALLBACK_SYSTEM.md`)
-- Dynamic weight renormalization on provider failure; confidence degraded if fewer providers
-- All decisions include `ensemble_metadata` (providers used/failed, weights, fallback tier, agreement, confidence adjustment)
-- Quorum: at least 3 providers required for full ensemble; logs failures to `data/failures/`
+**4-Tier Progressive Fallback System:**
+1. **Tier 1 (Primary):** Weighted voting using configured `provider_weights`
+2. **Tier 2:** Majority voting fallback (requires 2+ providers)
+3. **Tier 3:** Simple averaging (requires 2+ providers)
+4. **Tier 4:** Single provider (highest confidence)
+
+**Dynamic Weight Adjustment:**
+- On provider failure: remaining weights renormalized to sum to 1.0
+- Example: 4 providers at 0.25 each → 1 fails → 3 remaining at 0.333 each
+- Confidence degraded proportionally based on provider count reduction
+- All failures logged to `data/failures/` with timestamp
+
+**Metadata Fields (in every decision):**
+```json
+{
+  "ensemble_metadata": {
+    "providers_used": ["local", "codex", "qwen"],
+    "providers_failed": ["cli"],
+    "weight_adjustment_applied": true,
+    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333},
+    "fallback_tier": "weighted_voting",
+    "agreement_score": 0.85,
+    "confidence_adjustment": -10
+  }
+}
+```
+
+**Quorum Requirements:**
+- Minimum 3 providers for full ensemble confidence
+- Fewer providers → automatic confidence penalty
+- Quorum failure (all providers down) → logs to `data/failures/`, raises `InsufficientProvidersError`
+
+See `docs/ENSEMBLE_FALLBACK_SYSTEM.md` for complete fallback logic.
 
 ## Integration & Extension Patterns
 
-- Add trading platform: subclass `BaseTradingPlatform`, implement `get_balance`, `execute_trade`, `get_account_info`, register via `PlatformFactory.register_platform()`
-- Add AI provider: implement `.query(prompt) -> dict`, register with `EnsembleDecisionManager` or call from `DecisionEngine._query_ai()`
-- Add data provider: implement `.get_market_data(asset_pair)` and `.get_comprehensive_market_data(...)`, wire into `analyze_asset()`
-- Extend ensemble: add to `enabled_providers`, set `provider_weights`, handle failures via `failed_providers`
-- Add monitoring: implement context provider for active positions/P&L, integrate via `DecisionEngine.set_monitoring_context()`
+**Add Trading Platform:**
+1. Subclass `BaseTradingPlatform` in `finance_feedback_engine/trading_platforms/`
+2. Implement required methods: `get_balance()`, `execute_trade()`, `get_account_info()`
+3. Optional: override `get_portfolio_breakdown()` for dashboard integration
+4. Register in `PlatformFactory`: `PlatformFactory.register_platform('myplatform', MyPlatform)`
+5. Circuit breaker: call `self.set_execute_breaker(breaker)` for resilience
+
+**Add AI Provider:**
+1. Implement `.query(prompt) -> dict` method returning `{action, confidence, reasoning}`
+2. Register in `config.yaml` under `ensemble.enabled_providers`
+3. Set weight in `ensemble.provider_weights`
+4. Handle failures gracefully (ensemble auto-renormalizes on provider down)
+
+**Add Data Provider:**
+1. Implement `.get_market_data(asset_pair) -> dict` (OHLCV format)
+2. Implement `.get_comprehensive_market_data(...)` for enriched context
+3. Wire into `FinanceFeedbackEngine.analyze_asset()` or use via `UnifiedDataProvider`
+
+**Extend Ensemble:**
+- Add to `enabled_providers` list in config
+- Set `provider_weights` (must sum to 1.0)
+- Failed providers auto-handled via `failed_providers` tracking
+
+**Add Monitoring Context:**
+1. Implement context provider with `.get_active_positions()`, `.get_unrealized_pnl()`
+2. Integrate via `DecisionEngine.set_monitoring_context(provider)`
+3. Context included in LLM prompts for portfolio-aware decisions
 
 ## Testing & Debugging
 
+**Testing:**
 - Use `MockPlatform` for CI/local tests
 - Verbose: add `-v` to CLI for DEBUG logs; check `ensemble_metadata` in decisions for provider failures/weights
 - Inspect `data/decisions/` and `data/decisions_test/` for canonical JSON (fields: `signal_only`, `confidence`, `ensemble_metadata`, sizing)
 - Validate outputs with `decision_validation.py` before persisting/executing
 - Check regime: ADX >25 = trending, ATR/price = volatility
 - Quorum: at least 3 providers required; failures logged to `data/failures/`
+
+**Debugging Tips:**
+- Decision JSON location: `data/decisions/YYYY-MM-DD_<uuid>.json`
+- Ensemble metadata shows: providers used/failed, adjusted weights, fallback tier
+- Market regime classification: check `market_regime` field in decision
+- Position sizing: validate against `DecisionEngine.calculate_position_size()` logic
+- Platform errors: circuit breaker logs to console when threshold exceeded
+- Config precedence: `config.local.yaml` > `config.yaml` > env vars
+
+**Common Issues:**
+- "Insufficient providers": Check AI provider availability, ensure 3+ configured
+- Signal-only mode: Balance unavailable or `signal_only_default: true` in config
+- Platform connection: Verify credentials in `config.local.yaml` (gitignored)
+- Asset pair format: Use uppercase without separators (BTCUSD, EURUSD)
 
 ## Editing Safety Rules
 

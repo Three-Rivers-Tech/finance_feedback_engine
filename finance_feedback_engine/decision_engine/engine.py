@@ -181,7 +181,7 @@ class DecisionEngine:
         self.monitoring_provider = monitoring_provider
         logger.info("Monitoring context provider attached to decision engine")
 
-    def generate_decision(
+    async def generate_decision(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
@@ -222,7 +222,7 @@ class DecisionEngine:
                 logger.warning("Could not load monitoring context: %s", e)
         
         # Create decision context
-        context = self._create_decision_context(
+        context = await self._create_decision_context(
             asset_pair,
             market_data,
             balance,
@@ -278,7 +278,7 @@ class DecisionEngine:
             return self._rule_based_decision(prompt)
 
 
-    def _create_decision_context(
+    async def _create_decision_context(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],

@@ -88,7 +88,8 @@ class EnsembleDecisionManager:
             'gemini': 0.20
         })
         # Backward-compatibility alias expected by DecisionEngine
-        self.provider_weights = self.base_weights
+        # Expose as a property to avoid stale references when weights are recalculated
+        # (see provider_weights property below)
         
         # Providers to use
         self.enabled_providers = ensemble_config.get(
@@ -199,6 +200,15 @@ class EnsembleDecisionManager:
         self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
         self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
         logger.info("Meta-learner initialized with mock-trained parameters for updated features.")
+
+    @property
+    def provider_weights(self) -> Dict[str, float]:
+        """
+        Backward-compatible accessor for provider weights.
+        Returns the current base weights dict so external readers
+        always see up-to-date values even after recalculation.
+        """
+        return self.base_weights
 
     def _is_local_provider(self, name: str) -> bool:
         """
@@ -363,8 +373,8 @@ class EnsembleDecisionManager:
         )
 
         # If we entered the single-provider fallback early, mark the tier
-        if fallback_tier_used and fallback_tier != 4:
-            fallback_tier = 4
+        if fallback_tier_used and fallback_tier != 'single_provider':
+            fallback_tier = 'single_provider'
         
         # Apply penalty logic if quorum not met
         quorum_penalty_applied = False

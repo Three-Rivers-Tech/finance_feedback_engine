@@ -154,8 +154,9 @@ class CircuitBreaker:
             result = runner()
             # Re-acquire lock for success handling
             with self._sync_lock:
+                was_half_open = self.state == CircuitState.HALF_OPEN
                 self._on_success()
-                if self.state == CircuitState.HALF_OPEN:
+                if was_half_open:
                     self._half_open_in_progress = False
             return result
         except Exception as exc:
@@ -213,12 +214,13 @@ class CircuitBreaker:
             if is_async:
                 result = await runner()
             else:
-                result = runner()
             # Re-acquire lock for success handling
             async with self._async_lock:
+                was_half_open = self.state == CircuitState.HALF_OPEN
                 self._on_success()
-                if self.state == CircuitState.HALF_OPEN:
+                if was_half_open:
                     self._half_open_in_progress = False
+            return result
             return result
         except Exception as exc:
             # Re-acquire lock for failure handling
