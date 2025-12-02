@@ -27,7 +27,10 @@ console = Console()
 
 
 def _parse_requirements_file(req_file: Path) -> list:
-    """Parse requirements.txt and return list of package names (base names only)."""
+    """Parse requirements.txt and return list of package names.
+    
+    Returns base names only.
+    """
     packages = []
     if not req_file.exists():
         return packages
@@ -80,12 +83,18 @@ def _get_installed_packages() -> dict:
         installed = json.loads(result.stdout)
         return {pkg['name'].lower(): pkg['version'] for pkg in installed}
     except Exception as e:
-        console.print(f"[yellow]Warning: Could not retrieve installed packages: {e}[/yellow]")
+        console.print(
+            f"[yellow]Warning: Could not retrieve installed "
+            f"packages: {e}[/yellow]"
+        )
         return {}
 
 
 def _check_dependencies() -> tuple:
-    """Check which dependencies are missing. Returns (missing, installed) tuples."""
+    """Check which dependencies are missing.
+    
+    Returns (missing, installed) tuples.
+    """
     req_file = Path('requirements.txt')
     if not req_file.exists():
         return ([], [])
@@ -102,9 +111,9 @@ def _check_dependencies() -> tuple:
         pkg_normalized = pkg_lower.replace('-', '_')
         
         # Check both forms (hyphen and underscore)
-        if (pkg_lower in installed_dict or 
-            pkg_normalized in installed_dict or
-            pkg_lower.replace('_', '-') in installed_dict):
+        if (pkg_lower in installed_dict or
+                pkg_normalized in installed_dict or
+                pkg_lower.replace('_', '-') in installed_dict):
             installed.append(pkg)
         else:
             missing.append(pkg)
@@ -132,10 +141,9 @@ def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
 
 
 def _deep_fill_missing(target: dict, source: dict) -> dict:
-    """Fill missing keys in target from source without overwriting existing values.
-
-    Recurses into nested dicts so that local overrides remain intact and base
-    defaults are used only where keys are absent.
+    """Fill missing keys in target from source.
+    
+    Does not overwrite existing values.
     """
     for k, v in source.items():
         if k not in target:
@@ -187,7 +195,8 @@ def load_tiered_config() -> dict:
         'COINBASE_PASSPHRASE': ('trading_platform', 'coinbase', 'passphrase'),
         'OANDA_API_KEY': ('trading_platform', 'oanda', 'api_key'),
         'OANDA_ACCOUNT_ID': ('trading_platform', 'oanda', 'account_id'),
-        'OANDA_LIVE': ('trading_platform', 'oanda', 'live'), # Boolean conversion needed
+        # Boolean conversion needed
+        'OANDA_LIVE': ('trading_platform', 'oanda', 'live'),
         'GEMINI_API_KEY': ('decision_engine', 'gemini', 'api_key'),
         'GEMINI_MODEL_NAME': ('decision_engine', 'gemini', 'model_name'),
         # Add more as needed
@@ -202,7 +211,8 @@ def load_tiered_config() -> dict:
 
             current_level = config
             for i, key in enumerate(config_path_keys):
-                if i == len(config_path_keys) - 1: # Last key
+                # Last key
+                if i == len(config_path_keys) - 1:
                     current_level[key] = value
                 else:
                     current_level = current_level.setdefault(key, {})
@@ -228,14 +238,16 @@ def load_config(config_path: str) -> dict:
             config = yaml.safe_load(f)
             if config is None:
                 raise click.ClickException(
-                    f"Configuration file {config_path} is empty or invalid YAML"
+                    f"Configuration file {config_path} is empty or "
+                    f"invalid YAML"
                 )
             return config
         elif path.suffix == '.json':
             config = json.load(f)
             if config is None:
                 raise click.ClickException(
-                    f"Configuration file {config_path} is empty or invalid JSON"
+                    f"Configuration file {config_path} is empty or "
+                    f"invalid JSON"
                 )
             return config
         else:
@@ -261,10 +273,12 @@ def _set_nested(config: dict, keys: tuple, value):
         cur = cur.setdefault(key, {})
     cur[keys[-1]] = value
 
+
 @click.group(invoke_without_command=True)
 @click.option(
     '--config', '-c',
-    default=None, # Change default to None
+    # Change default to None
+    default=None,
     help='Path to a specific config file (overrides tiered loading)'
 )
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
@@ -277,24 +291,32 @@ def cli(ctx, config, verbose, interactive):
     setup_logging(verbose)
     ctx.ensure_object(dict)
 
-    if config: # If a specific config file is provided by the user
-        final_config = load_config(config) # Use the old load_config
-        ctx.obj['config_path'] = config # Store the path for other commands
-    else: # Use tiered loading
+    # If a specific config file is provided by the user
+    if config:
+        # Use the old load_config
+        final_config = load_config(config)
+        # Store the path for other commands
+        ctx.obj['config_path'] = config
+    # Use tiered loading
+    else:
         final_config = load_tiered_config()
         # Indicate that tiered loading was used, might not have a single path
-        ctx.obj['config_path'] = 'tiered' # Set a placeholder
+        # Set a placeholder
+        ctx.obj['config_path'] = 'tiered'
     
-    ctx.obj['config'] = final_config # Store the final config
+    # Store the final config
+    ctx.obj['config'] = final_config
     ctx.obj['verbose'] = verbose
 
     # On interactive boot, check versions and prompt for update if needed
     if interactive:
         import subprocess
-        import sys
         from importlib.metadata import version, PackageNotFoundError
         from rich.prompt import Confirm
-        console.print("\n[bold cyan]Checking AI Provider Versions (interactive mode)...[/bold cyan]\n")
+        console.print(
+            "\n[bold cyan]Checking AI Provider Versions "
+            "(interactive mode)...[/bold cyan]\n"
+        )
         # Map known packages to provider features for clearer reporting
         libraries = [
             ("coinbase-advanced-py", "Coinbase Advanced"),
@@ -310,15 +332,19 @@ def cli(ctx, config, verbose, interactive):
             except PackageNotFoundError:
                 missing_libs.append(lib_name)
         cli_tools = [
-            ("Ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
-            ("Copilot CLI", ["copilot", "--version"], "npm i -g @githubnext/github-copilot-cli"),
+            ("Ollama", ["ollama", "--version"],
+             "curl -fsSL https://ollama.com/install.sh | sh"),
+            ("Copilot CLI", ["copilot", "--version"],
+             "npm i -g @githubnext/github-copilot-cli"),
             ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
             ("Node.js", ["node", "--version"], "nvm install --lts"),
         ]
         missing_tools = []
         for tool, cmd, upgrade_cmd in cli_tools:
             try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=5
+                )
                 if result.returncode != 0:
                     missing_tools.append((tool, upgrade_cmd))
             except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -343,19 +369,30 @@ def cli(ctx, config, verbose, interactive):
             provider_impact.setdefault(prov, []).append(lib)
 
         for tool, _ in missing_tools:
-            key = tool.lower().split()[0] if isinstance(tool, str) else str(tool)
+            key = (tool.lower().split()[0]
+                   if isinstance(tool, str) else str(tool))
             prov = mapping.get(key, 'unknown')
             provider_impact.setdefault(prov, []).append(tool)
 
         if provider_impact:
             _logger.info("Interactive startup: provider dependency status:")
             for prov, items in provider_impact.items():
-                _logger.info("  %s: missing/outdated -> %s", prov, ', '.join(map(str, items)))
+                _logger.info(
+                    "  %s: missing/outdated -> %s",
+                    prov, ', '.join(map(str, items))
+                )
 
         if missing_libs or missing_tools:
-            console.print("[yellow]Some AI provider dependencies are missing or outdated.[/yellow]")
+            console.print(
+                "[yellow]Some AI provider dependencies are missing or "
+                "outdated.[/yellow]"
+            )
             if Confirm.ask("Would you like to update/install them now?"):
-                ctx.invoke(update_ai, update=True)
+                # TODO: implement update_ai command
+                console.print(
+                    "[yellow]Auto-update not implemented. "
+                    "Please install manually.[/yellow]"
+                )
         start_interactive_session(cli)
         return
 
@@ -376,8 +413,8 @@ def cli(ctx, config, verbose, interactive):
 def config_editor(ctx, output):
     """Interactive helper to capture API keys and core settings.
 
-    Writes a focused overlay file (defaults to config/config.local.yaml) so your
-    secrets are kept separate from the base config/config.yaml defaults.
+    Writes a focused overlay file (defaults to config/config.local.yaml)
+    so your secrets are kept separate from base defaults.
     """
     base_path = Path('config/config.yaml')
     target_path = Path(output)
@@ -387,20 +424,28 @@ def config_editor(ctx, output):
         try:
             base_config = load_config(str(base_path))
         except Exception as e:
-            console.print(f"[yellow]Warning: could not read base config: {e}[/yellow]")
+            console.print(
+                f"[yellow]Warning: could not read base config: "
+                f"{e}[/yellow]"
+            )
 
     existing_config = {}
     if target_path.exists():
         try:
             existing_config = load_config(str(target_path))
         except Exception as e:
-            console.print(f"[yellow]Warning: could not read existing {target_path}: {e}[/yellow]")
+            console.print(
+                f"[yellow]Warning: could not read existing "
+                f"{target_path}: {e}[/yellow]"
+            )
 
     # Start from existing overlay so we don't drop user-specific keys
     updated_config = copy.deepcopy(existing_config)
 
     def current(keys, fallback=None):
-        return _get_nested(existing_config, keys, _get_nested(base_config, keys, fallback))
+        return _get_nested(
+            existing_config, keys, _get_nested(base_config, keys, fallback)
+        )
 
     def prompt_text(label, keys, secret=False, allow_empty=True):
         default_val = current(keys, '')
@@ -411,7 +456,8 @@ def config_editor(ctx, output):
             show_default=show_default,
             hide_input=secret,
         )
-        if isinstance(val, str) and not val and default_val and not allow_empty:
+        if (isinstance(val, str) and not val and
+                default_val and not allow_empty):
             val = default_val
         _set_nested(updated_config, keys, val)
 
@@ -436,7 +482,10 @@ def config_editor(ctx, output):
         _set_nested(updated_config, keys, val)
 
     console.print("\n[bold cyan]Config Editor[/bold cyan]")
-    console.print("Quick setup for API keys and core settings. Press Enter to keep defaults.\n")
+    console.print(
+        "Quick setup for API keys and core settings. "
+        "Press Enter to keep defaults.\n"
+    )
 
     # API keys
     prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
@@ -502,6 +551,7 @@ def config_editor(ctx, output):
     console.print(f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]")
 
 
+@cli.command(name='install-deps')
 @click.option(
     '--auto-install', '-y',
     is_flag=True,
@@ -1657,7 +1707,8 @@ def run_agent(ctx, take_profit, stop_loss, setup):
         console.print(f"[yellow]Warning: Detected legacy take-profit percentage {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]")
         take_profit /= 100
     elif take_profit > 100:
-        console.print(f"[yellow]Warning: Unusually high take-profit value {take_profit}. Proceeding without conversion.[/yellow]")
+        console.print(f"[red]Error: Invalid take-profit value {take_profit}. Please use a decimal (e.g., 0.05 for 5%).[/red]")
+        raise click.Abort()
     if 1 <= stop_loss <= 100:
         console.print(f"[yellow]Warning: Detected legacy stop-loss percentage {stop_loss}%. Converting to decimal: {stop_loss/100:.3f}[/yellow]")
         stop_loss /= 100

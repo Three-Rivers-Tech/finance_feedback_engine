@@ -3,12 +3,9 @@ from click.testing import CliRunner
 import pandas as pd
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
-
-# TODO: Import components to be tested from the main application
-# from finance_feedback_engine.cli.main import cli
-# from finance_feedback_engine.utils.config_loader import load_config
-# from finance_feedback_engine.decision_engine.base_ai_model import DummyAIModel
-# from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+from pathlib import Path
+import yaml
+import shutil
 
 
 # --- Fixtures for CLI Testing ---
@@ -25,20 +22,76 @@ def cli_runner():
     """
     return CliRunner()
 
-# TODO: Add a fixture for a mocked configuration object
-# @pytest.fixture(scope="session")
-# def mock_config():
-#     """
-#     Provides a mock configuration dictionary for testing.
-#     """
-#     return {
-#         "alpha_vantage_api_key": "MOCK_AV_KEY",
-#         "trading_platform": "mock",
-#         "decision_engine": {
-#             "ai_provider": "dummy",
-#             "model_name": "TestModel"
-#         }
-#     }
+
+@pytest.fixture(scope="session")
+def test_config_path():
+    """
+    Provides the path to the unified test configuration file.
+
+    Returns:
+        Path: Path to config/config.test.mock.yaml
+    """
+    return Path("config/config.test.mock.yaml")
+
+
+@pytest.fixture(scope="function")
+def mock_engine(test_config_path):
+    """
+    Provides a FinanceFeedbackEngine instance with test configuration.
+
+    Args:
+        test_config_path: Fixture providing path to test config
+
+    Returns:
+        FinanceFeedbackEngine: Engine initialized with mock config
+    """
+    from finance_feedback_engine import FinanceFeedbackEngine
+    
+    with open(test_config_path, encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    
+    return FinanceFeedbackEngine(config)
+
+
+@pytest.fixture(scope="function")
+def isolated_cli_runner(tmp_path):
+    """
+    Provides a CliRunner with isolated filesystem for file operations.
+
+    Args:
+        tmp_path: Pytest fixture providing temporary directory
+
+    Returns:
+        tuple: (CliRunner, Path to temp directory)
+    """
+    runner = CliRunner()
+    return runner, tmp_path
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_data():
+    """
+    Session-scoped fixture that cleans up test data directories.
+
+    Runs automatically before and after test session to ensure clean state.
+    """
+    # Cleanup before tests
+    test_dirs = [
+        Path("data/decisions_test"),
+        Path("data/test_metrics"),
+        Path("data/test_memory")
+    ]
+    
+    for test_dir in test_dirs:
+        if test_dir.exists():
+            shutil.rmtree(test_dir, ignore_errors=True)
+    
+    yield
+    
+    # Cleanup after tests
+    for test_dir in test_dirs:
+        if test_dir.exists():
+            shutil.rmtree(test_dir, ignore_errors=True)
 
 # --- Fixtures for Data Testing ---
 

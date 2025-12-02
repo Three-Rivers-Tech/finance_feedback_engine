@@ -1,10 +1,11 @@
 """
-Test: Monitoring Context Integration
+Pytest: Monitoring Context Integration
 
 Validates that monitoring data is properly fed into AI decision pipeline.
 """
-
+import pytest
 import yaml
+import asyncio
 from finance_feedback_engine import FinanceFeedbackEngine
 from finance_feedback_engine.monitoring import (
     MonitoringContextProvider,
@@ -12,201 +13,169 @@ from finance_feedback_engine.monitoring import (
 )
 
 
-def test_monitoring_context_provider():
-    """Test that MonitoringContextProvider generates proper context."""
-    print("\n" + "=" * 70)
-    print("TEST 1: MonitoringContextProvider Functionality")
-    print("=" * 70)
-    
+@pytest.fixture
+def mock_engine_with_monitoring():
+    """Fixture for an engine initialized with a mock test config."""
     with open('config/config.test.mock.yaml', encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    
     engine = FinanceFeedbackEngine(config)
+    return engine
+
+
+# --- Test 1: Monitoring Context Creation ---
+def test_monitoring_context_creation(mock_engine_with_monitoring):
+    """Test that MonitoringContextProvider can be instantiated properly."""
+    engine = mock_engine_with_monitoring
     
-    # Create monitoring provider
     provider = MonitoringContextProvider(
         platform=engine.trading_platform,
         trade_monitor=None,
         metrics_collector=None
     )
     
-    # Get context
+    assert provider is not None
+    assert provider.platform is not None
+
+
+# --- Test 2: Monitoring Context Structure ---
+def test_monitoring_context_has_required_fields(
+    mock_engine_with_monitoring
+):
+    """Test that monitoring context contains all required fields."""
+    engine = mock_engine_with_monitoring
+    
+    provider = MonitoringContextProvider(
+        platform=engine.trading_platform,
+        trade_monitor=None,
+        metrics_collector=None
+    )
+    
     context = provider.get_monitoring_context(asset_pair='BTCUSD')
     
-    # Validate context structure
     assert isinstance(context, dict), "Context should be a dictionary"
-    assert 'has_monitoring_data' in context, "Missing has_monitoring_data field"
+    assert 'has_monitoring_data' in context, (
+        "Missing has_monitoring_data field"
+    )
     assert 'active_positions' in context, "Missing active_positions field"
+
+
+# --- Test 3: AI Prompt Formatting ---
+def test_monitoring_context_ai_formatting(mock_engine_with_monitoring):
+    """Test that monitoring context can be formatted for AI prompts."""
+    engine = mock_engine_with_monitoring
     
-    print("\n✓ Context generated successfully")
-    print(f"  Has monitoring data: {context.get('has_monitoring_data')}")
-    print(f"  Active positions: {len(context.get('active_positions', {}).get('futures', []))}")
-    print(f"  Active trades count: {context.get('active_trades_count', 0)}")
+    provider = MonitoringContextProvider(
+        platform=engine.trading_platform,
+        trade_monitor=None,
+        metrics_collector=None
+    )
     
-    # Test formatting for AI prompt
+    context = provider.get_monitoring_context(asset_pair='BTCUSD')
     formatted = provider.format_for_ai_prompt(context)
-    assert isinstance(formatted, str), "Formatted output should be a string"
+    
+    assert isinstance(formatted, str), (
+        "Formatted output should be a string"
+    )
     assert len(formatted) > 0, "Formatted output should not be empty"
-    
-    print("\n✓ AI prompt formatting works")
-    print(f"  Formatted text length: {len(formatted)} chars")
-    print(f"\n{formatted}")
-    
-    return True
 
 
-def test_decision_engine_integration():
-    """Test that DecisionEngine properly uses monitoring context."""
-    print("\n" + "=" * 70)
-    print("TEST 2: DecisionEngine Integration")
-    print("=" * 70)
+# --- Test 4: Provider Attachment to Engine ---
+def test_monitoring_provider_attachment_to_engine(
+    mock_engine_with_monitoring
+):
+    """Test that monitoring provider attaches to decision engine correctly."""
+    engine = mock_engine_with_monitoring
     
-    with open('config/config.test.mock.yaml', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    engine = FinanceFeedbackEngine(config)
-    
-    # Create monitoring provider
     provider = MonitoringContextProvider(
         platform=engine.trading_platform
     )
     
-    # Attach to decision engine
     engine.decision_engine.set_monitoring_context(provider)
     
-    print("\n✓ Monitoring provider attached to decision engine")
-    print(f"  Provider instance: {engine.decision_engine.monitoring_provider}")
+    assert engine.decision_engine.monitoring_provider is not None
+    assert engine.decision_engine.monitoring_provider == provider
+
+
+# --- Test 5: Decision Generation with Monitoring ---
+def test_decision_generation_with_monitoring(mock_engine_with_monitoring):
+    """Test that decisions are generated with monitoring context."""
+    engine = mock_engine_with_monitoring
     
-    # Generate a decision (should include monitoring context)
-    # Use engine's existing data provider (handles mock data gracefully)
-    market_data = engine.data_provider.get_market_data('BTCUSD')
+    provider = MonitoringContextProvider(
+        platform=engine.trading_platform
+    )
+    engine.decision_engine.set_monitoring_context(provider)
+    
+    market_data = asyncio.run(engine.data_provider.get_market_data('BTCUSD'))
     balance = engine.get_balance()
     
-    print("\n✓ Generating decision with monitoring context...")
     decision = engine.decision_engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=market_data,
         balance=balance
     )
     
-    # Validate decision structure
     assert isinstance(decision, dict), "Decision should be a dictionary"
     assert 'action' in decision, "Decision missing action field"
     assert 'confidence' in decision, "Decision missing confidence field"
-    
-    print(f"\n✓ Decision generated successfully")
-    print(f"  Action: {decision['action']}")
-    print(f"  Confidence: {decision['confidence']}%")
-    print(f"  Has monitoring context: {'monitoring_context' in decision}")
-    
-    return True
 
 
-def test_end_to_end_flow():
-    """Test complete end-to-end monitoring-aware decision flow."""
-    print("\n" + "=" * 70)
-    print("TEST 3: End-to-End Monitoring-Aware Decisions")
-    print("=" * 70)
+# --- Test 6: End-to-End Monitoring Setup ---
+def test_end_to_end_monitoring_setup(mock_engine_with_monitoring):
+    """Test that monitoring integration enables properly."""
+    engine = mock_engine_with_monitoring
     
-    with open('config/config.test.mock.yaml', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    # Initialize engine
-    engine = FinanceFeedbackEngine(config)
-    
-    # Initialize monitoring
     metrics_collector = TradeMetricsCollector()
     
-    # Enable integration
     engine.enable_monitoring_integration(
-        trade_monitor=None,  # Can be None for testing
+        trade_monitor=None,
         metrics_collector=metrics_collector
     )
     
-    print("\n✓ Monitoring integration enabled")
-    print(f"  Monitoring provider: {engine.monitoring_provider}")
-    print(f"  Decision engine has provider: {engine.decision_engine.monitoring_provider}")
+    assert engine.monitoring_provider is not None
+    assert engine.decision_engine.monitoring_provider is not None
+
+
+# --- Test 7: End-to-End Decision with Monitoring ---
+def test_end_to_end_decision_with_monitoring(mock_engine_with_monitoring):
+    """Test complete monitoring-aware decision generation flow."""
+    engine = mock_engine_with_monitoring
     
-    # Make decision (should have monitoring awareness)
-    print("\n✓ Generating monitoring-aware decision...")
+    metrics_collector = TradeMetricsCollector()
+    
+    engine.enable_monitoring_integration(
+        trade_monitor=None,
+        metrics_collector=metrics_collector
+    )
+    
     decision = engine.analyze_asset('BTCUSD')
     
-    print(f"\n✓ Decision generated successfully")
-    print(f"  Decision ID: {decision['id']}")
-    print(f"  Asset: {decision['asset_pair']}")
-    print(f"  Action: {decision['action']}")
-    print(f"  Confidence: {decision['confidence']}%")
-    print(f"  Reasoning: {decision['reasoning'][:100]}...")
-    
-    # Verify monitoring context was included in decision context
-    # (This is internal, but we can check the provider exists)
-    assert engine.decision_engine.monitoring_provider is not None
-    print("\n✓ Monitoring context provider is attached and active")
-    
-    return True
+    assert decision is not None
+    assert 'action' in decision
+    assert 'confidence' in decision
 
 
-def main():
-    """Run all tests."""
-    print("\n" + "=" * 70)
-    print("MONITORING CONTEXT INTEGRATION TESTS")
-    print("=" * 70)
-    print("\nThese tests validate that trade monitoring data")
-    print("is properly integrated into the AI decision pipeline.")
+# --- Test 8: Monitoring Provider Persistence ---
+def test_monitoring_provider_persistence(mock_engine_with_monitoring):
+    """Test that monitoring provider persists across operations."""
+    engine = mock_engine_with_monitoring
     
-    tests = [
-        ("MonitoringContextProvider", test_monitoring_context_provider),
-        ("DecisionEngine Integration", test_decision_engine_integration),
-        ("End-to-End Flow", test_end_to_end_flow),
-    ]
+    metrics_collector = TradeMetricsCollector()
     
-    results = []
-    for test_name, test_func in tests:
-        try:
-            success = test_func()
-            results.append((test_name, success, None))
-        except Exception as e:
-            results.append((test_name, False, str(e)))
-            import traceback
-            traceback.print_exc()
+    engine.enable_monitoring_integration(
+        trade_monitor=None,
+        metrics_collector=metrics_collector
+    )
     
-    # Print summary
-    print("\n" + "=" * 70)
-    print("TEST SUMMARY")
-    print("=" * 70)
+    # Verify provider persists
+    provider_before = engine.decision_engine.monitoring_provider
     
-    passed = sum(1 for _, success, _ in results if success)
-    total = len(results)
+    # Generate decision
+    engine.analyze_asset('BTCUSD')
     
-    for test_name, success, error in results:
-        status = "✓ PASS" if success else "✗ FAIL"
-        print(f"{status}: {test_name}")
-        if error:
-            print(f"  Error: {error}")
+    # Verify provider still attached
+    provider_after = engine.decision_engine.monitoring_provider
     
-    print(f"\nTotal: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("\n🎉 All tests passed! Monitoring integration is working correctly.")
-        print("\nKey capabilities validated:")
-        print("  ✓ MonitoringContextProvider generates proper context")
-        print("  ✓ Context includes active positions, risk metrics, performance")
-        print("  ✓ DecisionEngine properly integrates monitoring data")
-        print("  ✓ AI receives full position awareness in prompts")
-        print("  ✓ End-to-end flow works seamlessly")
-    else:
-        print(f"\n⚠️  {total - passed} test(s) failed")
-        return False
-    
-    return True
-
-
-if __name__ == '__main__':
-    try:
-        success = main()
-        exit(0 if success else 1)
-    except Exception as e:
-        print(f"\n❌ Test suite error: {e}")
-        import traceback
-        traceback.print_exc()
-        exit(1)
+    assert provider_before is not None
+    assert provider_after is not None
+    assert provider_before == provider_after

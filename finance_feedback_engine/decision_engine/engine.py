@@ -181,7 +181,7 @@ class DecisionEngine:
         self.monitoring_provider = monitoring_provider
         logger.info("Monitoring context provider attached to decision engine")
 
-    async def generate_decision(
+    def generate_decision(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
@@ -222,7 +222,7 @@ class DecisionEngine:
                 logger.warning("Could not load monitoring context: %s", e)
         
         # Create decision context
-        context = await self._create_decision_context(
+        context = self._create_decision_context(
             asset_pair,
             market_data,
             balance,
@@ -278,7 +278,7 @@ class DecisionEngine:
             return self._rule_based_decision(prompt)
 
 
-    async def _create_decision_context(
+    def _create_decision_context(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
@@ -314,7 +314,7 @@ class DecisionEngine:
         }
 
         # Detect market regime using historical data
-        regime = await self._detect_market_regime(asset_pair)
+        regime = self._detect_market_regime(asset_pair)
         context['regime'] = regime
 
         # --- Inject multi-timeframe pulse context (if internal TradeMonitor running) ---
@@ -387,7 +387,7 @@ class DecisionEngine:
 
         return context
 
-    async def _detect_market_regime(self, asset_pair: str) -> str:
+    def _detect_market_regime(self, asset_pair: str) -> str:
         """
         Detect the current market regime using historical data.
 
@@ -406,12 +406,19 @@ class DecisionEngine:
             end_date = datetime.utcnow().date()
             start_date = end_date - timedelta(days=30)
             
-            # Await async historical data fetch if coroutine
-            historical_data = await self.data_provider.get_historical_data(
+            # Fetch historical data (handle async if needed)
+            import asyncio
+            import inspect
+            historical_data_coro = self.data_provider.get_historical_data(
                 asset_pair,
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")
             )
+            # Check if it's a coroutine and await it
+            if inspect.iscoroutine(historical_data_coro):
+                historical_data = asyncio.run(historical_data_coro)
+            else:
+                historical_data = historical_data_coro
             
             if not historical_data or len(historical_data) < 14:
                 logger.warning("Insufficient historical data for regime detection")
