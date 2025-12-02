@@ -87,6 +87,8 @@ class EnsembleDecisionManager:
             'qwen': 0.20,
             'gemini': 0.20
         })
+        # Backward-compatibility alias expected by DecisionEngine
+        self.provider_weights = self.base_weights
         
         # Providers to use
         self.enabled_providers = ensemble_config.get(
@@ -330,9 +332,22 @@ class EnsembleDecisionManager:
                 reasonings.append(decision.get('reasoning', ''))
                 amounts.append(decision.get('amount', 0))
                 provider_names.append(provider)
-        
+
+        # Graceful single-provider fallback: if none matched enabled list but we
+        # have at least one provider_decision, use the first as a minimal ensemble.
         if not actions:
-            raise ValueError("No valid provider decisions found")
+            if len(provider_decisions) >= 1:
+                fallback_provider, fallback_decision = next(iter(provider_decisions.items()))
+                provider_names = [fallback_provider]
+                actions = [fallback_decision.get('action', 'HOLD')]
+                confidences = [fallback_decision.get('confidence', 50)]
+                reasonings = [fallback_decision.get('reasoning', '')]
+                amounts = [fallback_decision.get('amount', 0)]
+                fallback_tier_used = True
+            else:
+                raise ValueError("No valid provider decisions found")
+        else:
+            fallback_tier_used = False
         
         # Detect active local providers and check quorum
         active_local_providers = [p for p in provider_names if self._is_local_provider(p)]
@@ -346,6 +361,10 @@ class EnsembleDecisionManager:
             provider_names, actions, confidences, reasonings, amounts,
             robust_weights
         )
+
+        # If we entered the single-provider fallback early, mark the tier
+        if fallback_tier_used and fallback_tier != 4:
+            fallback_tier = 4
         
         # Apply penalty logic if quorum not met
         quorum_penalty_applied = False

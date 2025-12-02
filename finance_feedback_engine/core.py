@@ -326,22 +326,22 @@ class FinanceFeedbackEngine:
             Dictionary containing analysis results and decision
         """
         from .utils.validation import standardize_asset_pair
-        
+
         # Standardize asset pair input (uppercase, remove separators)
         asset_pair = standardize_asset_pair(asset_pair)
-        
+
         logger.info("Analyzing asset: %s", asset_pair)
-        
-        # Fetch comprehensive market data
-        market_data = self.data_provider.get_comprehensive_market_data(
+
+        # Fetch comprehensive market data (awaited)
+        market_data = await self.data_provider.get_comprehensive_market_data(
             asset_pair,
             include_sentiment=include_sentiment,
             include_macro=include_macro
         )
-        
+
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()
-        
+
         # Get portfolio breakdown if platform supports it
         portfolio = None
         if hasattr(self.trading_platform, 'get_portfolio_breakdown'):
@@ -354,7 +354,7 @@ class FinanceFeedbackEngine:
                 )
             except Exception as e:
                 logger.warning("Could not fetch portfolio breakdown: %s", e)
-        
+
         # Get memory context if enabled
         memory_context = None
         if use_memory_context and self.memory_engine:
@@ -365,7 +365,7 @@ class FinanceFeedbackEngine:
                 "Memory context loaded: %d historical trades",
                 memory_context.get('total_historical_trades', 0)
             )
-        
+
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         try:
             decision = self.decision_engine.generate_decision(
@@ -378,9 +378,9 @@ class FinanceFeedbackEngine:
         except InsufficientProvidersError as e:
             # Phase 1 quorum failure - log and return NO_DECISION
             logger.error("Phase 1 quorum failure for %s: %s", asset_pair, e)
-        
+
             asset_type = market_data.get('type', 'unknown')
-        
+
             # Log failure for monitoring
             log_path = log_quorum_failure(
                 asset=asset_pair,
@@ -390,7 +390,7 @@ class FinanceFeedbackEngine:
                 quorum_required=3,
                 config=self.config
             )
-        
+
             # Return NO_DECISION with detailed reasoning
             decision = {
                 'action': 'NO_DECISION',
@@ -408,10 +408,20 @@ class FinanceFeedbackEngine:
                     'error_message': str(e)
                 }
             }
-        
+
         # Persist decision
         self.decision_store.save_decision(decision)
-        
+
+        # Cleanup any async resources on providers (e.g., aiohttp sessions)
+        try:
+            if hasattr(self.data_provider, 'close'):
+                maybe_close = self.data_provider.close()
+                if hasattr(maybe_close, '__await__'):
+                    import asyncio as _asyncio
+                    await maybe_close
+        except Exception as e:
+            logger.error(f"Error during provider cleanup: {e}")
+
         return decision
 
     def get_balance(self) -> Dict[str, float]:
