@@ -1,5 +1,5 @@
 from typing import List, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 class AutonomousAgentConfig(BaseModel):
     """Configuration for the autonomous trading agent."""
@@ -49,19 +49,35 @@ class TradingAgentConfig(BaseModel):
     max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
     var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
 
-    @field_validator('correlation_threshold', 'max_var_pct', 'var_confidence', 'max_drawdown_percent', mode='before')
+    @field_validator('correlation_threshold', 'max_var_pct', 'var_confidence', 'max_drawdown_percent', 'min_confidence_threshold', mode='before')
     @classmethod
     def normalize_percentage_fields(cls, v):
-        """Normalize percentage values: if value > 1, treat as percentage and divide by 100."""
+        """Normalize percentage values: if value > 1, treat as percentage and divide by 100.
+        
+        Handles both percentage notation (e.g., 70 -> 0.70) and decimal notation (e.g., 0.70 -> 0.70).
+        Values > 1 are assumed to be percentages and divided by 100.
+        Values <= 1 are assumed to be already in decimal format and returned as-is.
+        """
         if isinstance(v, (int, float)) and v > 1:
             return v / 100
         return v
+
+    @model_validator(mode='after')
+    def normalize_default_percentages(self):
+        """Normalize default percentage values that weren't caught by field validators.
+        
+        Field validators with mode='before' only run on explicitly provided values,
+        not on defaults. This model validator ensures defaults are also normalized.
+        """
+        if self.min_confidence_threshold > 1:
+            self.min_confidence_threshold = self.min_confidence_threshold / 100
+        return self
 
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
     analysis_frequency_seconds: int = 300
     monitoring_frequency_seconds: int = 60
-    min_confidence_threshold: float = 0.70  # Minimum confidence to execute a trade (70%)
+    min_confidence_threshold: float = 70.0  # Minimum confidence to execute a trade (0-100 scale, auto-normalized to 0-1)
     # Asset pairs to monitor for opportunities (superset of asset_pairs for active trading)
     watchlist: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
 

@@ -24,11 +24,22 @@ def mock_platform():
 @pytest.fixture
 def trade_monitor(mock_platform):
     """Create TradeMonitor instance."""
-    return TradeMonitor(
+    monitor = TradeMonitor(
         platform=mock_platform,
         poll_interval=1,  # Fast polling for tests
         detection_interval=1
     )
+    yield monitor
+    
+    # Teardown: ensure monitor is stopped to prevent thread leaks
+    if monitor.is_running:
+        monitor.stop()
+        # Wait for monitor to stop
+        deadline = time.time() + 2.0
+        while monitor.is_running:
+            if time.time() > deadline:
+                break
+            time.sleep(0.05)
 
 
 class TestTradeMonitorLifecycle:
@@ -44,34 +55,64 @@ class TestTradeMonitorLifecycle:
     def test_monitor_start(self, trade_monitor):
         """Test starting the monitor."""
         trade_monitor.start()
-        time.sleep(0.5)  # Give it time to start
-        
+        # Wait until is_running becomes True, with timeout
+        deadline = time.time() + 2.0
+        while not trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not start within timeout")
+            time.sleep(0.05)
+
         assert trade_monitor.is_running is True
-        
+
         trade_monitor.stop()
-        time.sleep(0.5)  # Give it time to stop
+        # Wait until is_running becomes False, with timeout
+        deadline = time.time() + 2.0
+        while trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not stop within timeout")
+            time.sleep(0.05)
     
     def test_monitor_stop(self, trade_monitor):
         """Test stopping the monitor."""
         trade_monitor.start()
-        time.sleep(0.5)
+        # Wait until is_running becomes True, with timeout
+        deadline = time.time() + 2.0
+        while not trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not start within timeout")
+            time.sleep(0.05)
         assert trade_monitor.is_running is True
-        
+
         trade_monitor.stop()
-        time.sleep(0.5)
+        # Wait until is_running becomes False, with timeout
+        deadline = time.time() + 2.0
+        while trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not stop within timeout")
+            time.sleep(0.05)
         assert trade_monitor.is_running is False
     
     def test_monitor_double_start(self, trade_monitor):
         """Test that starting already-running monitor is safe."""
         trade_monitor.start()
-        time.sleep(0.5)
-        
+        # Wait until is_running becomes True, with timeout
+        deadline = time.time() + 2.0
+        while not trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not start within timeout")
+            time.sleep(0.05)
+
         # Second start should be no-op
         trade_monitor.start()
         assert trade_monitor.is_running is True
-        
+
         trade_monitor.stop()
-        time.sleep(0.5)
+        # Wait until is_running becomes False, with timeout
+        deadline = time.time() + 2.0
+        while trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not stop within timeout")
+            time.sleep(0.05)
 
 
 class TestTradeMonitorPnLTracking:
@@ -90,16 +131,26 @@ class TestTradeMonitorPnLTracking:
     def test_get_monitoring_summary_running(self, trade_monitor):
         """Test getting summary when monitor is running."""
         trade_monitor.start()
-        time.sleep(0.5)
-        
+        # Wait until is_running becomes True, with timeout
+        deadline = time.time() + 2.0
+        while not trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not start within timeout")
+            time.sleep(0.05)
+
         summary = trade_monitor.get_monitoring_summary()
-        
+
         assert summary['is_running'] is True
         assert 'active_trackers' in summary
         assert 'pending_trades' in summary
-        
+
         trade_monitor.stop()
-        time.sleep(0.5)
+        # Wait until is_running becomes False, with timeout
+        deadline = time.time() + 2.0
+        while trade_monitor.is_running:
+            if time.time() > deadline:
+                pytest.fail("TradeMonitor did not stop within timeout")
+            time.sleep(0.05)
     
     def test_get_active_trades_empty(self, trade_monitor):
         """Test getting active trades when none exist."""
@@ -112,7 +163,7 @@ class TestTradeMonitorPnLTracking:
 class TestTradeMonitorIntegration:
     """Integration tests for full monitoring workflows."""
     
-    def test_monitor_with_position(self, mock_platform):
+    def test_monitor_with_position(self, trade_monitor, mock_platform):
         """Test monitoring with active position."""
         # Set up platform with a position
         mock_platform.get_positions.return_value = [
@@ -125,17 +176,12 @@ class TestTradeMonitorIntegration:
             }
         ]
         
-        monitor = TradeMonitor(
-            platform=mock_platform,
-            poll_interval=1,
-            detection_interval=1
-        )
-        
-        monitor.start()
+        trade_monitor.start()
         time.sleep(1.5)  # Let it detect the position
         
-        summary = monitor.get_monitoring_summary()
+        summary = trade_monitor.get_monitoring_summary()
         assert summary['is_running'] is True
+        assert summary['active_trackers'] > 0
         
-        monitor.stop()
+        trade_monitor.stop()
         time.sleep(0.5)

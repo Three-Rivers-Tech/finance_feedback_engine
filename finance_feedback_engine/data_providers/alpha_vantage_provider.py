@@ -81,9 +81,15 @@ class AlphaVantageProvider:
 
         Supports nested async with usage: only closes session when all contexts exit.
         """
-        self._context_count += 1
+async def __aenter__(self):
+    """Async context manager entry.
+
+    Supports nested async with usage: only closes session when all contexts exit.
+    """
+    async with self._session_lock:
         await self._ensure_session()
-        return self
+        self._context_count += 1
+    return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit.

@@ -306,9 +306,11 @@ class TradingLoopAgent:
 
     async def _should_execute(self, decision) -> bool:
         """Determine if a trade should be executed based on confidence and policy."""
-        confidence = decision.get('confidence', 0)
-        if confidence < self.config.min_confidence_threshold:
-            logger.info(f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold}%)")
+        confidence = decision.get('confidence', 0)  # 0-100 scale from decision validation
+        # Normalize confidence to 0-1 for comparison with config threshold (which is auto-normalized)
+        confidence_normalized = confidence / 100.0
+        if confidence_normalized < self.config.min_confidence_threshold:
+            logger.info(f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)")
             return False
 
         # Check daily trade limit
