@@ -2,12 +2,10 @@
 
 from typing import Dict, Any, Optional, Tuple, List
 import logging
-import asyncio
 import aiohttp
 from aiohttp_retry import RetryClient, ExponentialRetry
 from datetime import datetime
 
-from ..utils.retry import exponential_backoff_retry
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)
@@ -21,6 +19,12 @@ class AlphaVantageProvider:
     """
 
     BASE_URL = "https://www.alphavantage.co/query"
+
+    def __post_init_session_lock(self):
+        # Helper to ensure the session lock exists (for pickling/compatibility)
+        if not hasattr(self, '_session_lock'):
+            import asyncio
+            self._session_lock = asyncio.Lock()
 
     def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, rate_limiter: Optional[Any] = None):
         """
@@ -41,6 +45,8 @@ class AlphaVantageProvider:
         # Optional shared rate limiter injected by UnifiedDataProvider
         self.rate_limiter = rate_limiter
         self._owned_session = False
+        import asyncio
+        self._session_lock = asyncio.Lock()
 
         
         # Timeout configuration (industry best practice)
@@ -69,7 +75,9 @@ class AlphaVantageProvider:
         if self.session and self._owned_session:
             await self.session.close()
 
-    async def _async_request(self, params: Dict[str, Any], timeout: int) -> Dict[str, Any]:
+    async def _async_request(
+        self, params: Dict[str, Any], timeout: int
+    ) -> Dict[str, Any]:
         """
         Make an asynchronous HTTP request with retries.
 
@@ -81,34 +89,90 @@ class AlphaVantageProvider:
             JSON response
         """
         # Apply rate limiting if limiter is provided
+        rate_limiter_acquired = False
+        rate_limiter_release = None
         if self.rate_limiter is not None:
             try:
-                # Support both sync callable and async methods
-                if hasattr(self.rate_limiter, 'acquire'):
-                    # Semaphore-like interface
+                # Prefer async context manager if available
+                if (
+                    hasattr(self.rate_limiter, "__aenter__")
+                    and hasattr(self.rate_limiter, "__aexit__")
+                ):
+                    # Use as async context manager for the whole request
+                    async with self.rate_limiter:
+                        return await self._do_async_request(
+                            params, timeout
+                        )
+                elif (
+                    hasattr(self.rate_limiter, "acquire")
+                    and hasattr(self.rate_limiter, "release")
+                ):
+                    # Semaphore-like interface: acquire before, release in finally
                     await self.rate_limiter.acquire()
-                elif hasattr(self.rate_limiter, 'wait'):
+                    rate_limiter_acquired = True
+                    rate_limiter_release = self.rate_limiter.release
+                elif hasattr(self.rate_limiter, "wait"):
                     # Wait-based interface
                     await self.rate_limiter.wait()
                 elif callable(self.rate_limiter):
                     # Direct callable - check if it returns awaitable
                     result = self.rate_limiter()
-                    if hasattr(result, '__await__'):
+                    if hasattr(result, "__await__"):
                         await result
             except Exception as e:
                 logger.warning(f"Rate limiter error: {e}")
                 # Propagate limiter exceptions to allow upstream handling
                 raise
-        
+
         # Lazily create a session and retry client within an event loop context
         if self.session is None:
-            self.session = aiohttp.ClientSession()
-            self._owned_session = True
+            await self._ensure_session()
 
         retry = ExponentialRetry(attempts=3)
         client = RetryClient(session=self.session, retry_options=retry)
         try:
-            async with client.get(self.BASE_URL, params=params, timeout=timeout) as resp:
+            async with client.get(
+                self.BASE_URL, params=params, timeout=timeout
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+        finally:
+            await client.close()
+            # Always release the rate limiter if acquired
+            if rate_limiter_acquired and rate_limiter_release:
+                try:
+                    maybe_awaitable = rate_limiter_release()
+                    if hasattr(maybe_awaitable, "__await__"):
+                        await maybe_awaitable
+                except Exception as e:
+                    logger.warning(f"Error releasing rate limiter: {e}")
+
+    async def _do_async_request(
+        self, params: Dict[str, Any], timeout: int
+    ) -> Dict[str, Any]:
+        """
+        Helper for _async_request to perform the actual HTTP request
+        (for use with async context manager rate limiter).
+        """
+        if self.session is None:
+            await self._ensure_session()
+
+    async def _ensure_session(self):
+        """
+        Ensure that self.session is initialized, guarded by a lock to prevent race conditions.
+        """
+        # Defensive: allow for possible missing lock (e.g., after unpickling)
+        self.__post_init_session_lock()
+        async with self._session_lock:
+            if self.session is None:
+                self.session = aiohttp.ClientSession()
+                self._owned_session = True
+        retry = ExponentialRetry(attempts=3)
+        client = RetryClient(session=self.session, retry_options=retry)
+        try:
+            async with client.get(
+                self.BASE_URL, params=params, timeout=timeout
+            ) as resp:
                 resp.raise_for_status()
                 return await resp.json()
         finally:
