@@ -129,6 +129,7 @@ class AlphaVantageProvider:
             await self._ensure_session()
 
         retry = ExponentialRetry(attempts=3)
+        # Initialize RetryClient bound to an existing session
         client = RetryClient(session=self.session, retry_options=retry)
         try:
             async with client.get(
@@ -156,17 +157,6 @@ class AlphaVantageProvider:
         """
         if self.session is None:
             await self._ensure_session()
-
-        retry = ExponentialRetry(attempts=3)
-        client = RetryClient(session=self.session, retry_options=retry)
-        try:
-            async with client.get(
-                self.BASE_URL, params=params, timeout=timeout
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
-        finally:
-            await client.close()
 
         retry = ExponentialRetry(attempts=3)
         client = RetryClient(session=self.session, retry_options=retry)

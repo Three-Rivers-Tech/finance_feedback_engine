@@ -71,6 +71,7 @@ class CircuitBreaker:
         self.success_count = 0
         self.last_failure_time: Optional[float] = None
         self.state = CircuitState.CLOSED
+        self._half_open_in_progress = False  # Track HALF_OPEN probe reservation
         
         # Metrics
         self.total_calls = 0
@@ -80,12 +81,8 @@ class CircuitBreaker:
 
         # Concurrency locks (sync + async)
         self._sync_lock = threading.Lock()
-        try:
-            # Async lock requires loop only when first awaited; creation is cheap.
-            self._async_lock = asyncio.Lock()
-        except Exception:  # pragma: no cover - very unlikely
-            # Fallback in strange contexts; will raise if used.
-            self._async_lock = None
+        # Lazy init: create async lock on first async use to bind to correct event loop
+        self._async_lock = None
         
         logger.info(
             "%s initialized: threshold=%d, timeout=%.1fs",
@@ -119,6 +116,7 @@ class CircuitBreaker:
 
     def _execute_with_circuit(self, runner: Callable[[], Any]) -> Any:
         """Core circuit breaker logic for synchronous execution."""
+        # Acquire lock only for state checks and updates
         with self._sync_lock:
             self.total_calls += 1
             if self.state == CircuitState.OPEN:
@@ -128,6 +126,7 @@ class CircuitBreaker:
                         self.name
                     )
                     self.state = CircuitState.HALF_OPEN
+                    self._half_open_in_progress = True
                 else:
                     logger.warning(
                         "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
@@ -137,23 +136,46 @@ class CircuitBreaker:
                         f"Circuit breaker '{self.name}' is OPEN. "
                         "Service unavailable, please try again later."
                     )
-            # Execute runner while holding lock to guarantee single HALF_OPEN probe
-            try:
-                result = runner()
+            elif self.state == CircuitState.HALF_OPEN:
+                # Reject concurrent calls during HALF_OPEN probe
+                if self._half_open_in_progress:
+                    logger.warning(
+                        "%s is HALF_OPEN with probe in progress, rejecting call",
+                        self.name
+                    )
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker '{self.name}' is testing recovery. "
+                        "Please try again shortly."
+                    )
+                self._half_open_in_progress = True
+        
+        # Execute runner WITHOUT holding lock to avoid serialization
+        try:
+            result = runner()
+            # Re-acquire lock for success handling
+            with self._sync_lock:
                 self._on_success()
-                return result
-            except Exception as exc:
+                if self.state == CircuitState.HALF_OPEN:
+                    self._half_open_in_progress = False
+            return result
+        except Exception as exc:
+            # Re-acquire lock for failure handling
+            with self._sync_lock:
                 if isinstance(exc, self.expected_exception):
                     self._on_failure()
-                raise
+                if self.state == CircuitState.HALF_OPEN:
+                    self._half_open_in_progress = False
+            raise
 
     async def _execute_with_circuit_async(
         self, runner: Callable[[], Any], is_async: bool
     ) -> Any:
         """Core circuit breaker logic for async execution."""
+        # Lazy init: create lock in the correct event loop on first use
         if self._async_lock is None:
-            # Fallback to unsynchronized behavior (should not happen normally)
-            return await runner() if is_async else runner()
+            self._async_lock = asyncio.Lock()
+        
+        # Acquire lock only for state checks and updates
         async with self._async_lock:
             self.total_calls += 1
             if self.state == CircuitState.OPEN:
@@ -163,6 +185,7 @@ class CircuitBreaker:
                         self.name
                     )
                     self.state = CircuitState.HALF_OPEN
+                    self._half_open_in_progress = True
                 else:
                     logger.warning(
                         "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
@@ -172,17 +195,39 @@ class CircuitBreaker:
                         f"Circuit breaker '{self.name}' is OPEN. "
                         "Service unavailable, please try again later."
                     )
-            try:
-                if is_async:
-                    result = await runner()
-                else:
-                    result = runner()
+            elif self.state == CircuitState.HALF_OPEN:
+                # Reject concurrent calls during HALF_OPEN probe
+                if self._half_open_in_progress:
+                    logger.warning(
+                        "%s is HALF_OPEN with probe in progress, rejecting call",
+                        self.name
+                    )
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker '{self.name}' is testing recovery. "
+                        "Please try again shortly."
+                    )
+                self._half_open_in_progress = True
+        
+        # Execute runner WITHOUT holding lock to avoid serialization
+        try:
+            if is_async:
+                result = await runner()
+            else:
+                result = runner()
+            # Re-acquire lock for success handling
+            async with self._async_lock:
                 self._on_success()
-                return result
-            except Exception as exc:
+                if self.state == CircuitState.HALF_OPEN:
+                    self._half_open_in_progress = False
+            return result
+        except Exception as exc:
+            # Re-acquire lock for failure handling
+            async with self._async_lock:
                 if isinstance(exc, self.expected_exception):
                     self._on_failure()
-                raise
+                if self.state == CircuitState.HALF_OPEN:
+                    self._half_open_in_progress = False
+            raise
     
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt recovery."""
