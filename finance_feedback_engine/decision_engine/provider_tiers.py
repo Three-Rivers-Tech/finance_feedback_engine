@@ -8,7 +8,7 @@ FREE_TIER = [
     'deepseek-r1:8b',
     'mistral:7b-instruct',
     'qwen2.5:7b-instruct',
-    'gemma2:9b-instruct',
+    'gemma2:9b',
     'qwen'  # Qwen CLI (free tier with rate limits)
 ]
 
@@ -26,7 +26,7 @@ MODEL_VRAM_REQUIREMENTS: Dict[str, float] = {
     'deepseek-r1:8b': 8.0,
     'mistral:7b-instruct': 7.0,
     'qwen2.5:7b-instruct': 7.0,
-    'gemma2:9b-instruct': 7.5,  # 9B model fits in 8GB due to quantization
+    'gemma2:9b': 7.5,  # 9B model fits in 8GB due to quantization
 }
 
 # Approximate download sizes (in GB)
@@ -35,7 +35,7 @@ MODEL_DOWNLOAD_SIZES: Dict[str, float] = {
     'deepseek-r1:8b': 4.9,
     'mistral:7b-instruct': 4.1,
     'qwen2.5:7b-instruct': 4.4,
-    'gemma2:9b-instruct': 5.4,
+    'gemma2:9b': 5.4,
 }
 
 

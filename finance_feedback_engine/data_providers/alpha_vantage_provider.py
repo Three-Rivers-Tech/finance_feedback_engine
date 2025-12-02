@@ -2,7 +2,9 @@
 
 from typing import Dict, Any, Optional, Tuple, List
 import logging
-import requests
+import asyncio
+import aiohttp
+from aiohttp_retry import RetryClient, ExponentialRetry
 from datetime import datetime
 
 from ..utils.retry import exponential_backoff_retry
@@ -20,18 +22,26 @@ class AlphaVantageProvider:
 
     BASE_URL = "https://www.alphavantage.co/query"
 
-    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, rate_limiter: Optional[Any] = None):
         """
         Initialize Alpha Vantage provider.
 
         Args:
             api_key: Alpha Vantage API key (premium recommended)
             config: Optional configuration dictionary with timeout settings
+            session: Optional aiohttp.ClientSession
         """
         if not api_key:
             raise ValueError("Alpha Vantage API key is required")
         self.api_key = api_key
         self.config = config or {}
+        # Defer aiohttp.ClientSession creation to async request time to avoid
+        # requiring a running event loop during synchronous initialization.
+        self.session = session
+        # Optional shared rate limiter injected by UnifiedDataProvider
+        self.rate_limiter = rate_limiter
+        self._owned_session = False
+
         
         # Timeout configuration (industry best practice)
         api_timeouts = self.config.get('api_timeouts', {})
@@ -43,7 +53,7 @@ class AlphaVantageProvider:
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=5,
             recovery_timeout=60.0,
-            expected_exception=requests.exceptions.RequestException,
+            expected_exception=aiohttp.ClientError,
             name="AlphaVantage-API"
         )
         
@@ -54,7 +64,42 @@ class AlphaVantageProvider:
             f"macro={self.timeout_macro}s"
         )
 
-    def get_market_data(self, asset_pair: str) -> Dict[str, Any]:
+    async def close(self):
+        """Close the aiohttp session if owned by this provider."""
+        if self.session and self._owned_session:
+            await self.session.close()
+
+    async def _async_request(self, params: Dict[str, Any], timeout: int) -> Dict[str, Any]:
+        """
+        Make an asynchronous HTTP request with retries.
+
+        Args:
+            params: Request parameters
+            timeout: Request timeout
+
+        Returns:
+            JSON response
+        """
+        # Lazily create a session and retry client within an event loop context
+        owned_session = False
+        session = self.session
+        if session is None:
+            session = aiohttp.ClientSession()
+            owned_session = True
+
+        retry = ExponentialRetry(attempts=3)
+        client = RetryClient(session=session, retry_options=retry)
+        try:
+            async with client.get(self.BASE_URL, params=params, timeout=timeout) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+        finally:
+            await client.close()
+            if owned_session:
+                await session.close()
+        
+
+    async def get_market_data(self, asset_pair: str) -> Dict[str, Any]:
         """
         Fetch market data for a given asset pair.
 
@@ -73,9 +118,9 @@ class AlphaVantageProvider:
         try:
             # Determine asset type and fetch appropriate data
             if 'BTC' in asset_pair or 'ETH' in asset_pair:
-                market_data = self._get_crypto_data(asset_pair)
+                market_data = await self._get_crypto_data(asset_pair)
             else:
-                market_data = self._get_forex_data(asset_pair)
+                market_data = await self._get_forex_data(asset_pair)
             
             # Validate data quality
             is_valid, issues = self.validate_market_data(market_data, asset_pair)
@@ -87,7 +132,7 @@ class AlphaVantageProvider:
                 market_data['validation_warnings'] = issues
             
             # Enrich with additional context
-            market_data = self._enrich_market_data(market_data, asset_pair)
+            market_data = await self._enrich_market_data(market_data, asset_pair)
             
             return market_data
             
@@ -101,7 +146,7 @@ class AlphaVantageProvider:
     # ------------------------------------------------------------------
     # Historical Batch Data
     # ------------------------------------------------------------------
-    def get_historical_data(
+    async def get_historical_data(
         self,
         asset_pair: str,
         start: str,
@@ -135,11 +180,7 @@ class AlphaVantageProvider:
                     'market': market,
                     'apikey': self.api_key,
                 }
-                response = requests.get(
-                    self.BASE_URL, params=params, timeout=15
-                )
-                response.raise_for_status()
-                data = response.json()
+                data = await self._async_request(params, timeout=15)
                 series_key = 'Time Series (Digital Currency Daily)'
             else:
                 from_currency = asset_pair[:3]
@@ -150,11 +191,7 @@ class AlphaVantageProvider:
                     'to_symbol': to_currency,
                     'apikey': self.api_key,
                 }
-                response = requests.get(
-                    self.BASE_URL, params=params, timeout=15
-                )
-                response.raise_for_status()
-                data = response.json()
+                data = await self._async_request(params, timeout=15)
                 series_key = 'Time Series FX (Daily)'
 
             if series_key not in data:
@@ -236,7 +273,7 @@ class AlphaVantageProvider:
             })
         return out
 
-    def _enrich_market_data(
+    async def _enrich_market_data(
         self, market_data: Dict[str, Any], asset_pair: str
     ) -> Dict[str, Any]:
         """
@@ -298,7 +335,7 @@ class AlphaVantageProvider:
             market_data['close_position_in_range'] = close_position_in_range
             
             # Fetch technical indicators if available
-            technical_data = self._get_technical_indicators(asset_pair)
+            technical_data = await self._get_technical_indicators(asset_pair)
             if technical_data:
                 market_data.update(technical_data)
             
@@ -307,7 +344,7 @@ class AlphaVantageProvider:
         
         return market_data
 
-    def _get_technical_indicators(self, asset_pair: str) -> Dict[str, Any]:
+    async def _get_technical_indicators(self, asset_pair: str) -> Dict[str, Any]:
         """
         Fetch technical indicators from Alpha Vantage.
 
@@ -339,25 +376,21 @@ class AlphaVantageProvider:
                     'series_type': 'close',
                     'apikey': self.api_key
                 }
-                rsi_response = requests.get(
-                    self.BASE_URL,
-                    params=rsi_params,
-                    timeout=self.timeout_market_data
+                rsi_data = await self._async_request(
+                    rsi_params, timeout=self.timeout_market_data
                 )
-                if rsi_response.status_code == 200:
-                    rsi_data = rsi_response.json()
-                    if 'Technical Analysis: RSI' in rsi_data:
-                        rsi_series = rsi_data['Technical Analysis: RSI']
-                        latest_rsi = list(rsi_series.values())[0]
-                        indicators['rsi'] = float(latest_rsi.get('RSI', 0))
-                        
-                        # Interpret RSI
-                        if indicators['rsi'] > 70:
-                            indicators['rsi_signal'] = 'overbought'
-                        elif indicators['rsi'] < 30:
-                            indicators['rsi_signal'] = 'oversold'
-                        else:
-                            indicators['rsi_signal'] = 'neutral'
+                if 'Technical Analysis: RSI' in rsi_data:
+                    rsi_series = rsi_data['Technical Analysis: RSI']
+                    latest_rsi = list(rsi_series.values())[0]
+                    indicators['rsi'] = float(latest_rsi.get('RSI', 0))
+                    
+                    # Interpret RSI
+                    if indicators['rsi'] > 70:
+                        indicators['rsi_signal'] = 'overbought'
+                    elif indicators['rsi'] < 30:
+                        indicators['rsi_signal'] = 'oversold'
+                    else:
+                        indicators['rsi_signal'] = 'neutral'
             except Exception as e:
                 logger.debug(f"Could not fetch RSI for {asset_pair}: {e}")
 
@@ -370,19 +403,15 @@ class AlphaVantageProvider:
                     'series_type': 'close',
                     'apikey': self.api_key
                 }
-                macd_response = requests.get(
-                    self.BASE_URL,
-                    params=macd_params,
-                    timeout=self.timeout_market_data
+                macd_data = await self._async_request(
+                    macd_params, timeout=self.timeout_market_data
                 )
-                if macd_response.status_code == 200:
-                    macd_data = macd_response.json()
-                    if 'Technical Analysis: MACD' in macd_data:
-                        macd_series = macd_data['Technical Analysis: MACD']
-                        latest_macd = list(macd_series.values())[0]
-                        indicators['macd'] = float(latest_macd.get('MACD', 0))
-                        indicators['macd_signal'] = float(latest_macd.get('MACD_Signal', 0))
-                        indicators['macd_hist'] = float(latest_macd.get('MACD_Hist', 0))
+                if 'Technical Analysis: MACD' in macd_data:
+                    macd_series = macd_data['Technical Analysis: MACD']
+                    latest_macd = list(macd_series.values())[0]
+                    indicators['macd'] = float(latest_macd.get('MACD', 0))
+                    indicators['macd_signal'] = float(latest_macd.get('MACD_Signal', 0))
+                    indicators['macd_hist'] = float(latest_macd.get('MACD_Hist', 0))
             except Exception as e:
                 logger.debug(f"Could not fetch MACD for {asset_pair}: {e}")
 
@@ -396,19 +425,15 @@ class AlphaVantageProvider:
                     'series_type': 'close',
                     'apikey': self.api_key
                 }
-                bbands_response = requests.get(
-                    self.BASE_URL,
-                    params=bbands_params,
-                    timeout=self.timeout_market_data
+                bbands_data = await self._async_request(
+                    bbands_params, timeout=self.timeout_market_data
                 )
-                if bbands_response.status_code == 200:
-                    bbands_data = bbands_response.json()
-                    if 'Technical Analysis: BBANDS' in bbands_data:
-                        bbands_series = bbands_data['Technical Analysis: BBANDS']
-                        latest_bbands = list(bbands_series.values())[0]
-                        indicators['bbands_upper'] = float(latest_bbands.get('Real Upper Band', 0))
-                        indicators['bbands_middle'] = float(latest_bbands.get('Real Middle Band', 0))
-                        indicators['bbands_lower'] = float(latest_bbands.get('Real Lower Band', 0))
+                if 'Technical Analysis: BBANDS' in bbands_data:
+                    bbands_series = bbands_data['Technical Analysis: BBANDS']
+                    latest_bbands = list(bbands_series.values())[0]
+                    indicators['bbands_upper'] = float(latest_bbands.get('Real Upper Band', 0))
+                    indicators['bbands_middle'] = float(latest_bbands.get('Real Middle Band', 0))
+                    indicators['bbands_lower'] = float(latest_bbands.get('Real Lower Band', 0))
             except Exception as e:
                 logger.debug(f"Could not fetch BBANDS for {asset_pair}: {e}")
             
@@ -417,7 +442,7 @@ class AlphaVantageProvider:
         
         return indicators
 
-    def get_news_sentiment(
+    async def get_news_sentiment(
         self, asset_pair: str, limit: int = 5
     ) -> Dict[str, Any]:
         """
@@ -455,59 +480,57 @@ class AlphaVantageProvider:
                 'limit': limit
             }
             
-            response = requests.get(self.BASE_URL, params=params, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
+            data = await self._async_request(params, timeout=10)
+            
+            if 'feed' in data and len(data['feed']) > 0:
+                sentiment_data['available'] = True
+                sentiment_data['news_count'] = len(data['feed'])
                 
-                if 'feed' in data and len(data['feed']) > 0:
-                    sentiment_data['available'] = True
-                    sentiment_data['news_count'] = len(data['feed'])
+                # Calculate average sentiment
+                sentiment_scores = []
+                topics = []
+                
+                for article in data['feed'][:limit]:
+                    # Overall article sentiment
+                    overall_score = float(
+                        article.get('overall_sentiment_score', 0)
+                    )
+                    sentiment_scores.append(overall_score)
                     
-                    # Calculate average sentiment
-                    sentiment_scores = []
-                    topics = []
+                    # Extract topics
+                    if 'topics' in article:
+                        for topic in article['topics']:
+                            topics.append(topic.get('topic', ''))
+                
+                # Average sentiment
+                if sentiment_scores:
+                    avg_sentiment = (
+                        sum(sentiment_scores) / len(sentiment_scores)
+                    )
+                    sentiment_data['sentiment_score'] = avg_sentiment
                     
-                    for article in data['feed'][:limit]:
-                        # Overall article sentiment
-                        overall_score = float(
-                            article.get('overall_sentiment_score', 0)
-                        )
-                        sentiment_scores.append(overall_score)
-                        
-                        # Extract topics
-                        if 'topics' in article:
-                            for topic in article['topics']:
-                                topics.append(topic.get('topic', ''))
-                    
-                    # Average sentiment
-                    if sentiment_scores:
-                        avg_sentiment = (
-                            sum(sentiment_scores) / len(sentiment_scores)
-                        )
-                        sentiment_data['sentiment_score'] = avg_sentiment
-                        
-                        # Classify sentiment
-                        if avg_sentiment > 0.15:
-                            sentiment_data['overall_sentiment'] = 'bullish'
-                        elif avg_sentiment < -0.15:
-                            sentiment_data['overall_sentiment'] = 'bearish'
-                        else:
-                            sentiment_data['overall_sentiment'] = 'neutral'
-                    
-                    # Top topics
-                    if topics:
-                        from collections import Counter
-                        topic_counts = Counter(topics)
-                        sentiment_data['top_topics'] = [
-                            t[0] for t in topic_counts.most_common(3)
-                        ]
+                    # Classify sentiment
+                    if avg_sentiment > 0.15:
+                        sentiment_data['overall_sentiment'] = 'bullish'
+                    elif avg_sentiment < -0.15:
+                        sentiment_data['overall_sentiment'] = 'bearish'
+                    else:
+                        sentiment_data['overall_sentiment'] = 'neutral'
+                
+                # Top topics
+                if topics:
+                    from collections import Counter
+                    topic_counts = Counter(topics)
+                    sentiment_data['top_topics'] = [
+                        t[0] for t in topic_counts.most_common(3)
+                    ]
                 
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch news sentiment: %s", e)
         
         return sentiment_data
 
-    def get_macro_indicators(
+    async def get_macro_indicators(
         self, indicators: Optional[list] = None
     ) -> Dict[str, Any]:
         """
@@ -536,26 +559,22 @@ class AlphaVantageProvider:
                     'apikey': self.api_key
                 }
                 
-                response = requests.get(
-                    self.BASE_URL, params=params, timeout=10
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    if 'data' in data and len(data['data']) > 0:
-                        latest = data['data'][0]
-                        macro_data['indicators'][indicator] = {
-                            'value': latest.get('value', 'N/A'),
-                            'date': latest.get('date', 'N/A')
-                        }
-                        macro_data['available'] = True
+                data = await self._async_request(params, timeout=10)
+                
+                if 'data' in data and len(data['data']) > 0:
+                    latest = data['data'][0]
+                    macro_data['indicators'][indicator] = {
+                        'value': latest.get('value', 'N/A'),
+                        'date': latest.get('date', 'N/A')
+                    }
+                    macro_data['available'] = True
                 
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch macro indicators: %s", e)
         
         return macro_data
 
-    def get_comprehensive_market_data(
+    async def get_comprehensive_market_data(
         self,
         asset_pair: str,
         include_sentiment: bool = True,
@@ -573,21 +592,21 @@ class AlphaVantageProvider:
             Comprehensive market data dictionary
         """
         # Get base market data
-        market_data = self.get_market_data(asset_pair)
+        market_data = await self.get_market_data(asset_pair)
         
         # Add sentiment if requested
         if include_sentiment:
-            sentiment = self.get_news_sentiment(asset_pair)
+            sentiment = await self.get_news_sentiment(asset_pair)
             market_data['sentiment'] = sentiment
         
         # Add macro indicators if requested
         if include_macro:
-            macro = self.get_macro_indicators()
+            macro = await self.get_macro_indicators()
             market_data['macro'] = macro
         
         return market_data
 
-    def _get_crypto_data(self, asset_pair: str) -> Dict[str, Any]:
+    async def _get_crypto_data(self, asset_pair: str) -> Dict[str, Any]:
         """
         Fetch cryptocurrency data with retry and circuit breaker.
 
@@ -614,16 +633,10 @@ class AlphaVantageProvider:
 
         try:
             # Use circuit breaker for API call
-            def api_call():
-                response = requests.get(
-                    self.BASE_URL,
-                    params=params,
-                    timeout=self.timeout_market_data
-                )
-                response.raise_for_status()
-                return response.json()
+            async def api_call():
+                return await self._async_request(params, timeout=self.timeout_market_data)
             
-            data = self.circuit_breaker.call(api_call)
+            data = await self.circuit_breaker.call(api_call)
 
             if 'Time Series (Digital Currency Daily)' in data:
                 time_series = data['Time Series (Digital Currency Daily)']
@@ -676,7 +689,7 @@ class AlphaVantageProvider:
             logger.error("Error fetching crypto data: %s", e)
             return self._create_mock_data(asset_pair, 'crypto')
 
-    def _get_forex_data(self, asset_pair: str) -> Dict[str, Any]:
+    async def _get_forex_data(self, asset_pair: str) -> Dict[str, Any]:
         """
         Fetch forex data with retry and circuit breaker.
 
@@ -698,16 +711,10 @@ class AlphaVantageProvider:
 
         try:
             # Use circuit breaker for API call
-            def api_call():
-                response = requests.get(
-                    self.BASE_URL,
-                    params=params,
-                    timeout=self.timeout_market_data
-                )
-                response.raise_for_status()
-                return response.json()
+            async def api_call():
+                return await self._async_request(params, timeout=self.timeout_market_data)
             
-            data = self.circuit_breaker.call(api_call)
+            data = await self.circuit_breaker.call(api_call)
 
             if 'Time Series FX (Daily)' in data:
                 time_series = data['Time Series FX (Daily)']
