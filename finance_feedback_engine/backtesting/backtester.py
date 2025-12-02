@@ -72,7 +72,7 @@ class Backtester:
         self.default_fee_pct = bt_conf.get("fee_percentage", 0.1)  # percent
 
     # Public API -----------------------------------------------------------
-    def run(
+    async def run(
         self,
         asset_pair: str,
         start: str,
@@ -111,11 +111,9 @@ class Backtester:
         candles = []
         if use_real and hasattr(self.data_provider, "get_historical_data"):
             try:
-                # Ensure async provider method is executed synchronously
-                candles = asyncio.run(
-                    self.data_provider.get_historical_data(
-                        asset_pair, start, end
-                    )
+                # Await the async provider method
+                candles = await self.data_provider.get_historical_data(
+                    asset_pair, start, end
                 )
             except Exception:
                 candles = []
@@ -138,7 +136,7 @@ class Backtester:
                     continue
             candles = converted
         if not candles:
-            candles = self._generate_candles(asset_pair, start_dt, end_dt)
+            candles = await self._generate_candles(asset_pair, start_dt, end_dt)
         if len(candles) < lw:
             logger.warning("Insufficient candles for long_window")
             return {
@@ -289,7 +287,7 @@ class Backtester:
         }
 
     # Internal helpers -----------------------------------------------------
-    def _generate_candles(
+    async def _generate_candles(
         self, asset_pair: str, start_dt: datetime, end_dt: datetime
     ) -> List[Candle]:
         """Generate daily candles using provider for seed + synthetic drift.
@@ -305,8 +303,12 @@ class Backtester:
         seed_int = int(seed_hash[:16], 16)  # Use first 16 hex digits for seed
         local_rng = random.Random(seed_int)
 
-        seed = asyncio.run(self.data_provider.get_market_data(asset_pair))
-        base_close = float(seed.get("close", 100))
+        try:
+            # get_market_data is async, await it
+            seed = await self.data_provider.get_market_data(asset_pair)
+            base_close = float(seed.get("close", 100))
+        except Exception:
+            base_close = 100.0  # Fallback to default seed price
         current = base_close
         candles: List[Candle] = []
         dt = start_dt

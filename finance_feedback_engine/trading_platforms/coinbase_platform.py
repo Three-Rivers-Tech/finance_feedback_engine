@@ -98,7 +98,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         """
         try:
             if not asset_pair:
-                return asset_pair
+                logger.warning("Empty asset_pair provided to _format_product_id")
+                raise ValueError("asset_pair cannot be empty")
 
             # Remove whitespace and standardize separators
             s = str(asset_pair).strip().upper()
@@ -112,11 +113,13 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 # Fallback: join first two segments
                 if len(parts) > 2:
                     return f"{parts[0]}-{parts[1]}"
+                return s # If we got here with a hyphen but can't parse, return as is
 
             # No separator case like BTCUSD or ETHUSDC
             # Split by known quote currency suffixes
+            # Order by length (longest first) to prefer longer matches
             known_quotes = (
-                'USD', 'USDT', 'USDC',
+                'USDT', 'USDC', 'USD',
                 'EUR', 'GBP', 'JPY', 'AUD', 'CAD',
                 'BTC', 'ETH',
             )

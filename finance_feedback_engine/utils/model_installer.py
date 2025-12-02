@@ -245,32 +245,62 @@ class ModelInstaller:
                 )
                 return False
 
-            lines = result.stdout.strip().split('\n')
-            # Skip header if present
-            entries = [ln.strip() for ln in lines if ln.strip()][1:] if lines else []
+            lines = [ln.strip() for ln in result.stdout.strip().split('\n') if ln.strip()]
+            # Detect header: look for known keywords or separators
+            header_keywords = {'name', 'model', 'tag', 'digest', 'created', 'size'}
+            header_found = False
+            if lines:
+                first_line = lines[0].lower()
+                if any(h in first_line for h in header_keywords) or ('  ' in first_line):
+                    header_found = True
+            entries = lines[1:] if header_found else lines
+
             installed = set()
             for ln in entries:
                 try:
-                    name = ln.split()[0]
+                    name = ln.split()[0].strip().lower()
                     if name:
                         installed.add(name)
                 except Exception:
                     continue
 
-            if model in installed:
-                logger.info(f"Verified {model} is installed")
+            # Normalize requested model
+            req_norm = model.strip().lower()
+            # Accept exact match, startswith, or base-name match (before colon or dash)
+            matched_name = None
+            for inst_name in installed:
+                if (
+                    inst_name == req_norm
+                    or inst_name.startswith(req_norm)
+                    or inst_name.split(':')[0] == req_norm
+                    or inst_name.split('-')[0] == req_norm
+                ):
+                    matched_name = inst_name
+                    break
+
+            if matched_name:
+                logger.info(f"Verified {model} is installed (matched: {matched_name})")
                 return True
 
-            # Fallback: attempt a lightweight show without --format
+            # Fallback: attempt a lightweight show with JSON format to verify digest
             show = subprocess.run(
-                ['ollama', 'show', model],
+                ['ollama', 'show', model, '--format', 'json'],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
             if show.returncode == 0:
-                logger.info(f"Verified {model} via 'ollama show' output")
-                return True
+                try:
+                    show_data = json.loads(show.stdout)
+                    if 'digest' in show_data and show_data['digest']:
+                        logger.info(f"Verified {model} via 'ollama show' output")
+                        return True
+                    else:
+                        logger.error(f"Verification failed for {model}: missing digest in show output")
+                        return False
+                except json.JSONDecodeError:
+                    logger.error(f"Verification failed for {model}: invalid JSON from 'ollama show'")
+                    return False
 
             logger.error(f"Verification failed for {model}: not listed by 'ollama list' and 'ollama show' failed ({show.returncode})")
             return False
