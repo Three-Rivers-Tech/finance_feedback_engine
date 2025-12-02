@@ -436,28 +436,22 @@ def config_editor(ctx, output):
         _set_nested(updated_config, keys, val)
 
     console.print("\n[bold cyan]Config Editor[/bold cyan]")
-    console.print("You'll be prompted for common settings. Press Enter to keep the shown default.")
+    console.print("Quick setup for API keys and core settings. Press Enter to keep defaults.\n")
 
-    # API keys and platform selection
+    # API keys
     prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
 
     platform = prompt_choice(
         "Trading platform",
         ("trading_platform",),
-        ["coinbase_advanced", "coinbase", "oanda", "mock", "unified"],
+        ["coinbase_advanced", "oanda", "mock", "unified"],
     )
 
     if platform in {"coinbase", "coinbase_advanced"}:
-        console.print("\n[bold]Coinbase Advanced credentials[/bold]")
+        console.print("\n[bold]Coinbase credentials[/bold]")
         prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
         prompt_text("API secret", ("platform_credentials", "api_secret"), secret=True)
         prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
-        prompt_text(
-            "Passphrase (optional; leave blank to skip)",
-            ("platform_credentials", "passphrase"),
-            secret=True,
-            allow_empty=True,
-        )
     elif platform == "oanda":
         console.print("\n[bold]Oanda credentials[/bold]")
         prompt_text("API token", ("platform_credentials", "api_key"), secret=True)
@@ -468,89 +462,44 @@ def config_editor(ctx, output):
             ["practice", "live"],
         )
     elif platform == "mock":
-        console.print("\n[yellow]Mock platform selected — no credentials required.[/yellow]")
+        console.print("\n[yellow]Mock platform — no credentials needed.[/yellow]")
     elif platform == "unified":
         console.print(
-            "\n[yellow]Unified mode detected. Configure per-platform entries in the YAML manually if needed.[/yellow]"
+            "\n[yellow]Unified mode. Configure per-platform entries in config YAML manually.[/yellow]"
         )
 
-    # Decision engine settings
+    # Decision engine
     console.print("\n[bold]Decision engine[/bold]")
     ai_choice = prompt_choice(
         "AI provider",
         ("decision_engine", "ai_provider"),
-        ["local", "cli", "codex", "qwen", "gemini", "ensemble"],
+        ["ensemble", "local", "cli", "gemini"],
     )
-    prompt_text("Model name", ("decision_engine", "model_name"))
-    prompt_text("Decision confidence threshold (0.0-1.0)", ("decision_engine", "decision_threshold"))
-
-    if ai_choice == "gemini":
-        console.print("Gemini settings (stored under decision_engine.gemini)")
-        prompt_text("Gemini API key", ("decision_engine", "gemini", "api_key"), secret=True)
-        prompt_text(
-            "Gemini model name",
-            ("decision_engine", "gemini", "model_name"),
-        )
-
+    
     if ai_choice == "ensemble":
-        console.print("\n[bold]Ensemble configuration[/bold]")
-        # For simplicity, we'll prompt for common providers and basic weights
-        console.print("Select enabled providers (space-separated, e.g., 'local cli gemini'):")
-        enabled_providers_input = click.prompt(
-            "Enabled providers",
-            default="local",
-            show_default=True,
-        )
-        enabled_providers = [p.strip() for p in enabled_providers_input.split() if p.strip()]
-        _set_nested(updated_config, ("ensemble", "enabled_providers"), enabled_providers)
-        
-        # Simple equal weights for now
-        if len(enabled_providers) > 1:
-            weight = round(1.0 / len(enabled_providers), 2)
-            weights = {prov: weight for prov in enabled_providers}
-            _set_nested(updated_config, ("ensemble", "provider_weights"), weights)
-        
-        prompt_choice(
-            "Voting strategy",
-            ("ensemble", "voting_strategy"),
-            ["weighted", "majority", "stacking"],
-        )
-        prompt_text("Agreement threshold (0.0-1.0)", ("ensemble", "agreement_threshold"))
-        prompt_bool("Enable adaptive learning?", ("ensemble", "adaptive_learning"))
+        console.print("Using ensemble mode (default: free local models)")
+        _set_nested(updated_config, ("ensemble", "enabled_providers"), ["local"])
+        _set_nested(updated_config, ("ensemble", "voting_strategy"), "weighted")
+        _set_nested(updated_config, ("ensemble", "adaptive_learning"), True)
 
-    # Monitoring + persistence toggles
-    console.print("\n[bold]Monitoring & persistence[/bold]")
-    prompt_bool("Enable monitoring context integration?", ("monitoring", "enable_context_integration"))
-    prompt_bool("Include sentiment in monitoring?", ("monitoring", "include_sentiment"))
-    prompt_bool("Include macro indicators?", ("monitoring", "include_macro"))
-    prompt_text("Decision storage path", ("persistence", "storage_path"))
-    prompt_bool("Enable portfolio memory?", ("portfolio_memory", "enabled"))
-    prompt_bool("Enable backtesting flag by default?", ("backtesting", "enabled"))
-
-    # Signal-only and safety settings
-    console.print("\n[bold]Safety & execution[/bold]")
-    prompt_bool("Force signal-only mode by default?", ("signal_only_default",))
+    # Autonomous agent
+    console.print("\n[bold]Autonomous agent[/bold]")
+    prompt_bool("Enable autonomous trading?", ("agent", "autonomous", "enabled"))
     
-    console.print("Safety thresholds:")
-    prompt_text("Max leverage", ("safety", "max_leverage"))
-    prompt_text("Max position percentage", ("safety", "max_position_pct"))
-    
-    console.print("Circuit breaker settings:")
-    prompt_text("Failure threshold", ("circuit_breaker", "failure_threshold"))
-    prompt_text("Recovery timeout (seconds)", ("circuit_breaker", "recovery_timeout_seconds"))
-    prompt_text("Half-open retry count", ("circuit_breaker", "half_open_retry"))
-
     # Logging
     console.print("\n[bold]Logging[/bold]")
     prompt_choice(
         "Log level",
         ("logging", "level"),
-        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        ["INFO", "DEBUG", "WARNING"],
     )
 
+    # Write config
     target_path.parent.mkdir(parents=True, exist_ok=True)
     with open(target_path, 'w', encoding='utf-8') as f:
         yaml.safe_dump(updated_config, f, sort_keys=False)
+    
+    console.print(f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]")
 
 
 @click.option(
@@ -1229,11 +1178,24 @@ def status(ctx):
             f"Storage Path: {config.get('persistence', {}).get('storage_path', 'data/decisions')}"
         )
         
-        # Try to initialize engine to verify configuration
-        _engine = FinanceFeedbackEngine(config)  # noqa: F841 (used for init test)
+        # Try to initialize engine and fetch account info for dynamic leverage
+        engine = FinanceFeedbackEngine(config)
         console.print(
             "\n[bold green]✓ Engine initialized successfully[/bold green]"
         )
+        
+        # Fetch and display dynamic leverage from exchange
+        try:
+            account_info = engine.trading_platform.get_account_info()
+            if isinstance(account_info, dict):
+                # Unified platform returns dict of platforms
+                for platform_name, info in account_info.items():
+                    if isinstance(info, dict) and 'max_leverage' in info:
+                        console.print(f"\n{platform_name.upper()} max leverage: {info['max_leverage']:.1f}x (from exchange)")
+            elif 'max_leverage' in account_info:
+                console.print(f"\nMax leverage: {account_info['max_leverage']:.1f}x (from exchange)")
+        except Exception as e:
+            logger.debug(f"Could not fetch leverage info: {e}")
         
     except Exception as e:
         console.print(
@@ -1438,250 +1400,141 @@ def backtest(
 @click.pass_context
 def monitor(ctx):
     """Live trade monitoring commands."""
-    pass
+    cfg = ctx.obj.get('config', {})
+    monitoring_cfg = cfg.get('monitoring', {})
+    manual_cli = monitoring_cfg.get('manual_cli', False)
+    if not manual_cli:
+        console.print("[yellow]Direct monitor control disabled (internal auto-start mode). Set monitoring.manual_cli: true to re-enable.[/yellow]")
 
 
 @monitor.command()
 @click.pass_context
 def start(ctx):
     """Start live trade monitoring."""
-    try:
-        config = ctx.obj['config']
-        
-        # Initialize engine
-        engine = FinanceFeedbackEngine(config=config)
-        
-        # Check platform supports monitoring
-        if not hasattr(engine.trading_platform, 'get_portfolio_breakdown'):
-            console.print(
-                "[red]Error:[/red] Current platform doesn't support "
-                "portfolio monitoring"
-            )
-            return
-        
-        from finance_feedback_engine.monitoring import TradeMonitor
-        
-        console.print("\n[bold cyan]🔍 Starting Live Trade Monitor[/bold cyan]\n")
-        
-        # Create and start monitor
-        trade_monitor = TradeMonitor(
-            platform=engine.trading_platform,
-            detection_interval=30,  # Check for new trades every 30s
-            poll_interval=30  # Update positions every 30s
-        )
-        
-        trade_monitor.start()
-        
-        console.print("[green]✓ Monitor started successfully[/green]")
-        console.print(
-            f"  Max concurrent trades: {trade_monitor.MAX_CONCURRENT_TRADES}"
-        )
-        console.print(
-            f"  Detection interval: {trade_monitor.detection_interval}s"
-        )
-        console.print(
-            f"  Poll interval: {trade_monitor.poll_interval}s"
-        )
-        console.print("\n[yellow]Monitor is running in background...[/yellow]")
-        console.print(
-            "[dim]Use 'python main.py monitor status' to check status[/dim]"
-        )
-        console.print(
-            "[dim]Use 'python main.py monitor stop' to stop monitoring[/dim]"
-        )
-        
-        # Keep process alive
-        import time
-        try:
-            while trade_monitor.is_running:
-                time.sleep(5)
-        except KeyboardInterrupt:
-            console.print("\n\n[yellow]Stopping monitor...[/yellow]")
-            trade_monitor.stop()
-            console.print("[green]✓ Monitor stopped[/green]")
-        
-    except Exception as e:
-        console.print(f"[red]Error starting monitor:[/red] {e}")
-        if ctx.obj.get('verbose'):
-            import traceback
-            console.print(traceback.format_exc())
+    cfg = ctx.obj.get('config', {})
+    monitoring_cfg = cfg.get('monitoring', {})
+    if monitoring_cfg.get('manual_cli', False):
+        console.print("[yellow]Manual start deprecated. Monitor auto-starts via config.monitoring.enabled.[/yellow]")
+    else:
+        console.print("[red]Monitor start blocked: set monitoring.manual_cli: true for legacy behavior (not recommended).[/red]")
 
 
 @monitor.command(name='status')
 @click.pass_context
 def monitor_status(ctx):
     """Show live trade monitoring status."""
-    try:
-        config = ctx.obj['config']
-        
-        engine = FinanceFeedbackEngine(config=config)
-        
-        from finance_feedback_engine.monitoring import TradeMonitor
-        
-        # Note: In production, you'd store monitor instance globally
-        # For now, show what trades are currently open on platform
-        
-        console.print("\n[bold cyan]📊 Trade Monitor Status[/bold cyan]\n")
-        
-        try:
-            portfolio = engine.trading_platform.get_portfolio_breakdown()
-            positions = portfolio.get('futures_positions', [])
-            
-            if not positions:
-                console.print("[yellow]No open positions detected[/yellow]")
-                return
-            
-            table = Table(title="Open Positions (Monitored)")
-            table.add_column("Product ID", style="cyan")
-            table.add_column("Side", style="white")
-            table.add_column("Contracts", style="green", justify="right")
-            table.add_column("Entry", style="yellow", justify="right")
-            table.add_column("Current", style="yellow", justify="right")
-            table.add_column("PnL", style="white", justify="right")
-            
-            for pos in positions:
-                product_id = pos.get('product_id', 'N/A')
-                side = pos.get('side', 'N/A')
-                contracts = pos.get('contracts', 0)
-                entry = pos.get('entry_price', 0)
-                current = pos.get('current_price', 0)
-                pnl = pos.get('unrealized_pnl', 0)
-                
-                pnl_color = "green" if pnl >= 0 else "red"
-                pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
-                
-                table.add_row(
-                    product_id,
-                    side,
-                    f"{contracts:.0f}",
-                    f"${entry:,.2f}",
-                    f"${current:,.2f}",
-                    pnl_str
-                )
-            
-            console.print(table)
-            console.print(
-                f"\n[dim]Total open positions: {len(positions)}[/dim]"
-            )
-            
-        except Exception as e:
-            console.print(f"[red]Error fetching positions:[/red] {e}")
-        
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        if ctx.obj.get('verbose'):
-            import traceback
-            console.print(traceback.format_exc())
+    cfg = ctx.obj.get('config', {})
+    monitoring_cfg = cfg.get('monitoring', {})
+    if monitoring_cfg.get('manual_cli', False):
+        console.print("""[yellow]Status command deprecated; monitor runs internally.
+Use dashboard or decision context for monitoring insights.[/yellow]""")
+    else:
+        console.print("[red]Monitor status disabled. Enable monitoring.manual_cli for legacy output (not recommended).[/red]")
 
 
 @monitor.command()
 @click.pass_context
 def metrics(ctx):
     """Show trade performance metrics."""
-    try:
-        from finance_feedback_engine.monitoring import TradeMetricsCollector
-        
-        console.print("\n[bold cyan]📈 Trade Performance Metrics[/bold cyan]\n")
-        
-        # Load metrics from disk
-        collector = TradeMetricsCollector()
-        
-        # Load all metric files
-        import json
+    cfg = ctx.obj.get('config', {})
+    monitoring_cfg = cfg.get('monitoring', {})
+    if monitoring_cfg.get('manual_cli', False):
+        console.print("[yellow]Metrics command deprecated; aggregated metrics available internally.[/yellow]")
+    else:
+        console.print("[red]Metrics disabled. Set monitoring.manual_cli true for legacy access (not recommended).[/red]")
         from pathlib import Path
-        
-        metrics_dir = Path("data/trade_metrics")
-        if not metrics_dir.exists():
-            console.print(
-                "[yellow]No trade metrics found yet[/yellow]"
-            )
-            console.print(
-                "[dim]Metrics will appear here once trades complete[/dim]"
-            )
-            return
-        
-        metric_files = list(metrics_dir.glob("trade_*.json"))
-        
-        if not metric_files:
-            console.print("[yellow]No completed trades yet[/yellow]")
-            return
-        
-        # Load all metrics
-        all_metrics = []
-        for file in metric_files:
-            try:
-                with open(file, 'r') as f:
-                    metric = json.load(f)
-                    all_metrics.append(metric)
-            except Exception as e:
-                console.print(f"[dim]Warning: Could not load {file.name}: {e}[/dim]")
-        
-        if not all_metrics:
-            console.print("[yellow]No valid metrics found[/yellow]")
-            return
-        
-        # Calculate aggregate stats
-        winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
-        losing = [m for m in all_metrics if m.get('realized_pnl', 0) <= 0]
-        
-        total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
-        avg_pnl = total_pnl / len(all_metrics)
-        win_rate = (len(winning) / len(all_metrics) * 100) if all_metrics else 0
-        
-        # Display summary
-        console.print(f"Total Trades:     {len(all_metrics)}")
-        console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
-        console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
-        console.print(f"Win Rate:         {win_rate:.1f}%")
-        
-        pnl_color = "green" if total_pnl >= 0 else "red"
-        console.print(f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]")
-        
-        avg_color = "green" if avg_pnl >= 0 else "red"
-        console.print(f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]")
-        
-        # Show recent trades
-        console.print("\n[bold]Recent Trades:[/bold]\n")
-        
-        table = Table()
-        table.add_column("Product", style="cyan")
-        table.add_column("Side", style="white")
-        table.add_column("Duration", style="yellow")
-        table.add_column("PnL", style="white", justify="right")
-        table.add_column("Exit Reason", style="dim")
-        
-        # Sort by exit time and show last 10
-        sorted_metrics = sorted(
-            all_metrics,
-            key=lambda m: m.get('exit_time', ''),
-            reverse=True
-        )[:10]
-        
-        for m in sorted_metrics:
-            product = m.get('product_id', 'N/A')
-            side = m.get('side', 'N/A')
-            duration = m.get('holding_duration_hours', 0)
-            pnl = m.get('realized_pnl', 0)
-            reason = m.get('exit_reason', 'unknown')
+        try:
+            metrics_dir = Path("data/trade_metrics")
+            if not metrics_dir.exists():
+                console.print(
+                    "[yellow]No trade metrics found yet[/yellow]"
+                )
+                console.print(
+                    "[dim]Metrics will appear here once trades complete[/dim]"
+                )
+                return
             
-            pnl_color = "green" if pnl >= 0 else "red"
-            pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
+            metric_files = list(metrics_dir.glob("trade_*.json"))
             
-            table.add_row(
-                product,
-                side,
-                f"{duration:.2f}h",
-                pnl_str,
-                reason
-            )
-        
-        console.print(table)
-        
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        if ctx.obj.get('verbose'):
-            import traceback
-            console.print(traceback.format_exc())
+            if not metric_files:
+                console.print("[yellow]No completed trades yet[/yellow]")
+                return
+            
+            # Load all metrics
+            all_metrics = []
+            for file in metric_files:
+                try:
+                    with open(file, 'r') as f:
+                        metric = json.load(f)
+                        all_metrics.append(metric)
+                except Exception as e:
+                    console.print(f"[dim]Warning: Could not load {file.name}: {e}[/dim]")
+            
+            if not all_metrics:
+                console.print("[yellow]No valid metrics found[/yellow]")
+                return
+            
+            # Calculate aggregate stats
+            winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
+            losing = [m for m in all_metrics if m.get('realized_pnl', 0) <= 0]
+            
+            total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
+            avg_pnl = total_pnl / len(all_metrics)
+            win_rate = (len(winning) / len(all_metrics) * 100) if all_metrics else 0
+            
+            # Display summary
+            console.print(f"Total Trades:     {len(all_metrics)}")
+            console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
+            console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
+            console.print(f"Win Rate:         {win_rate:.1f}%")
+            
+            pnl_color = "green" if total_pnl >= 0 else "red"
+            console.print(f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]")
+            
+            avg_color = "green" if avg_pnl >= 0 else "red"
+            console.print(f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]")
+            
+            # Show recent trades
+            console.print("\n[bold]Recent Trades:[/bold]\n")
+            
+            table = Table()
+            table.add_column("Product", style="cyan")
+            table.add_column("Side", style="white")
+            table.add_column("Duration", style="yellow")
+            table.add_column("PnL", style="white", justify="right")
+            table.add_column("Exit Reason", style="dim")
+            
+            # Sort by exit time and show last 10
+            sorted_metrics = sorted(
+                all_metrics,
+                key=lambda m: m.get('exit_time', ''),
+                reverse=True
+            )[:10]
+            
+            for m in sorted_metrics:
+                product = m.get('product_id', 'N/A')
+                side = m.get('side', 'N/A')
+                duration = m.get('holding_duration_hours', 0)
+                pnl = m.get('realized_pnl', 0)
+                reason = m.get('exit_reason', 'unknown')
+                
+                pnl_color = "green" if pnl >= 0 else "red"
+                pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
+                
+                table.add_row(
+                    product,
+                    side,
+                    f"{duration:.2f}h",
+                    pnl_str,
+                    reason
+                )
+            
+            console.print(table)
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+            if ctx.obj.get('verbose'):
+                import traceback
+                console.print(traceback.format_exc())
 
 
 
@@ -1842,9 +1695,91 @@ def run_agent(ctx, take_profit, stop_loss, setup):
         console.print("[green]✓ Autonomous agent initialized.[/green]")
         console.print("[yellow]Press Ctrl+C to stop the agent.[/yellow]")
 
+        # Optional live view of market pulse
+        monitoring_cfg = config.get('monitoring', {})
+        enable_live_view = monitoring_cfg.get('enable_live_view', True)
+
         loop = asyncio.get_event_loop()
+
+        async def live_market_view(engine, agent):
+            from rich.live import Live
+            from rich.table import Table
+            import time
+
+            tm = getattr(engine, 'trade_monitor', None)
+            udp = getattr(tm, 'unified_data_provider', None) if tm else None
+
+            # Determine watchlist: agent-config if available, else common defaults
+            watchlist = []
+            try:
+                wl = getattr(agent, 'watchlist', None)
+                if isinstance(wl, (list, tuple)) and wl:
+                    watchlist = [str(x).upper() for x in wl]
+            except Exception:
+                watchlist = []
+            if not watchlist:
+                watchlist = ['BTCUSD', 'ETHUSD', 'EURUSD']
+
+            def build_table():
+                tbl = Table(title="Live Market Pulse", caption=f"Updated: {time.strftime('%H:%M:%S')}")
+                tbl.add_column("Asset", style="cyan", no_wrap=True)
+                tbl.add_column("Last Price", style="white", justify="right")
+                tbl.add_column("1m Δ%", style="yellow", justify="right")
+                tbl.add_column("Confluence", style="magenta")
+                tbl.add_column("Trend Align", style="green")
+                tbl.add_column("Source Path", style="dim")
+
+                for ap in watchlist:
+                    last_price = "-"
+                    change_1m = "-"
+                    conf = "-"
+                    align = "-"
+                    src_path = "-"
+
+                    try:
+                        if udp:
+                            candles, provider = udp.get_candles(ap, granularity='1m', limit=2)
+                            if candles:
+                                last_close = candles[-1].get('close') or candles[-1].get('price')
+                                prev_close = candles[-2].get('close') if len(candles) > 1 else last_close
+                                last_price = f"{last_close:,.4f}" if isinstance(last_close, (int, float)) else str(last_close)
+                                if isinstance(last_close, (int, float)) and isinstance(prev_close, (int, float)) and prev_close:
+                                    delta = (last_close - prev_close) / prev_close * 100
+                                    change_1m = f"{delta:+.2f}%"
+                                src_path = provider
+                    except Exception:
+                        pass
+
+                    try:
+                        if tm:
+                            mc = tm.get_latest_market_context(ap)
+                            if mc:
+                                conf_val = mc.get('confluence_strength')
+                                conf = f"{conf_val:.2f}" if isinstance(conf_val, (int, float)) else str(conf_val or '-')
+                                ta = mc.get('trend_alignment') or {}
+                                align = ",".join([k for k, v in ta.items() if v]) or '-'
+                                ds = mc.get('data_sources') or {}
+                                src_path = ",".join([str(v) for _, v in sorted(ds.items())]) or src_path
+                    except Exception:
+                        pass
+
+                    tbl.add_row(ap, last_price, change_1m, conf, align, src_path)
+                return tbl
+
+            if enable_live_view:
+                with Live(build_table(), refresh_per_second=0.5) as live:
+                    # Refresh view periodically without forcing extra API calls
+                    while not getattr(agent, 'stop_requested', False):
+                        await asyncio.sleep(2)
+                        live.update(build_table())
+
         try:
-            loop.run_until_complete(agent.run())
+            if enable_live_view:
+                live_task = loop.create_task(live_market_view(engine, agent))
+                run_task = loop.create_task(agent.run())
+                loop.run_until_complete(asyncio.gather(run_task, live_task))
+            else:
+                loop.run_until_complete(agent.run())
         except KeyboardInterrupt:
             console.print("\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]")
             agent.stop()

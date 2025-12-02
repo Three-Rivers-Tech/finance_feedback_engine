@@ -161,10 +161,22 @@ class FinanceFeedbackEngine:
         self._monitoring_enabled = config.get('monitoring', {}).get(
             'enable_context_integration', True
         )
+        self._auto_start_monitor_flag = config.get('monitoring', {}).get(
+            'enabled', False
+        )
+        self._monitor_manual_cli = config.get('monitoring', {}).get(
+            'manual_cli', False
+        )
+        self._monitor_pulse_interval = config.get('monitoring', {}).get(
+            'pulse_interval_seconds', 300
+        )
         
         # Auto-enable monitoring integration if enabled in config
         if self._monitoring_enabled:
             self._auto_enable_monitoring()
+        # Optionally start internal TradeMonitor (no direct CLI control)
+        if self._auto_start_monitor_flag:
+            self._auto_start_trade_monitor()
 
         # Backtester (lazy init holder)
         self._backtester: Optional[Backtester] = None
@@ -202,6 +214,67 @@ class FinanceFeedbackEngine:
             logger.warning(
                 "Could not auto-enable monitoring context: %s", e
             )
+
+    def _auto_start_trade_monitor(self):
+        """Start internal TradeMonitor if enabled in config.
+
+        Creates unified data/timeframe providers if available; falls back gracefully
+        so that monitoring remains passive and non-blocking.
+        """
+        if self.trade_monitor is not None:
+            logger.info("TradeMonitor already started internally; skipping")
+            return
+        try:
+            from .monitoring.trade_monitor import TradeMonitor
+            # Attempt to import unified data provider + timeframe aggregator
+            unified_dp = None
+            timeframe_agg = None
+            try:
+                from .data_providers.unified_data_provider import UnifiedDataProvider
+                from .data_providers.timeframe_aggregator import TimeframeAggregator
+                providers_cfg = (self.config or {}).get('providers', {})
+                av_key = None
+                coinbase_creds = None
+                oanda_creds = None
+                try:
+                    av_key = providers_cfg.get('alpha_vantage', {}).get('api_key')
+                except Exception:
+                    av_key = None
+                try:
+                    coinbase_creds = providers_cfg.get('coinbase', {}).get('credentials')
+                except Exception:
+                    coinbase_creds = None
+                try:
+                    oanda_creds = providers_cfg.get('oanda', {}).get('credentials')
+                except Exception:
+                    oanda_creds = None
+
+                unified_dp = UnifiedDataProvider(
+                    alpha_vantage_api_key=av_key,
+                    coinbase_credentials=coinbase_creds,
+                    oanda_credentials=oanda_creds,
+                    config=self.config
+                )
+                timeframe_agg = TimeframeAggregator(unified_dp)
+            except Exception as e:
+                logger.warning(f"Unified/timeframe providers unavailable for monitor: {e}")
+
+            self.trade_monitor = TradeMonitor(
+                platform=self.trading_platform,
+                detection_interval=30,
+                poll_interval=30,
+                unified_data_provider=unified_dp,
+                timeframe_aggregator=timeframe_agg,
+                pulse_interval=self._monitor_pulse_interval
+            )
+            self.trade_monitor.start()
+            logger.info(
+                "Internal TradeMonitor started (pulse=%ss, manual_cli=%s)",
+                self._monitor_pulse_interval,
+                self._monitor_manual_cli
+            )
+        except Exception as e:
+            logger.warning(f"Failed to auto-start TradeMonitor: {e}")
     
     def enable_monitoring_integration(
         self,

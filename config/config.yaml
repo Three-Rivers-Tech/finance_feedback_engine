@@ -49,6 +49,25 @@ platform_credentials:
   # Set trading_platform: "mock" above
 
 # ============================================
+# Data Providers (UnifiedDataProvider Credentials)
+# ============================================
+# Structured credentials used by internal monitoring and data fetchers.
+# If present, these take precedence for unified data access.
+providers:
+  alpha_vantage:
+    api_key: "${alpha_vantage_api_key}"
+  coinbase:
+    credentials:
+      api_key: "${platform_credentials.api_key}"
+      api_secret: "${platform_credentials.api_secret}"
+      use_sandbox: ${platform_credentials.use_sandbox}
+  oanda:
+    credentials:
+      api_key: "${platform_credentials.api_key}"
+      account_id: "${platform_credentials.account_id}"
+      environment: "${platform_credentials.environment}"
+
+# ============================================
 # Multi-Platform Configuration (Advanced)
 # ============================================
 # To use multiple platforms simultaneously:
@@ -202,6 +221,12 @@ ensemble:
 monitoring:
   # Enable monitoring context integration (AI position awareness)
   enable_context_integration: true  # ON BY DEFAULT - thoroughly tested
+  # Auto-start internal TradeMonitor (no manual CLI exposure)
+  enabled: false  # Set true to start TradeMonitor automatically
+  # Allow legacy manual CLI monitor commands (start/status/metrics)
+  manual_cli: false  # Keep false for safety; true re-enables commands
+  # Pulse interval for multi-timeframe cached analysis
+  pulse_interval_seconds: 300
   
   # Include sentiment data in market analysis
   include_sentiment: true  # Alpha Vantage NEWS_SENTIMENT API

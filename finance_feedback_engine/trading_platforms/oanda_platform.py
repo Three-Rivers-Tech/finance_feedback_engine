@@ -669,7 +669,7 @@ class OandaPlatform(BaseTradingPlatform):
         Get Oanda account information.
 
         Returns:
-            Account details including balance, margin, and status
+            Account details including balance, margin, and leverage
         """
         logger.info("Fetching Oanda account info")
         
@@ -684,6 +684,10 @@ class OandaPlatform(BaseTradingPlatform):
             
             account = response.get('account', {})
             
+            # Calculate effective leverage from margin rate
+            margin_rate = float(account.get('marginRate', 0.02))
+            effective_leverage = 1.0 / margin_rate if margin_rate > 0 else 50.0
+            
             return {
                 'platform': 'oanda',
                 'account_id': self.account_id,
@@ -695,7 +699,8 @@ class OandaPlatform(BaseTradingPlatform):
                 'unrealized_pl': float(account.get('unrealizedPL', 0)),
                 'margin_used': float(account.get('marginUsed', 0)),
                 'margin_available': float(account.get('marginAvailable', 0)),
-                'margin_rate': float(account.get('marginRate', 0)),
+                'margin_rate': margin_rate,
+                'max_leverage': effective_leverage,  # Dynamically calculated from margin_rate
                 'open_trade_count': int(account.get('openTradeCount', 0)),
                 'open_position_count': int(account.get('openPositionCount', 0)),
                 'status': 'active',
