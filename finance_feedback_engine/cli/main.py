@@ -1467,7 +1467,7 @@ def backtest(
             f"[bold blue]Backtesting {asset_pair} {start}→{end} [{strategy}]"  # noqa: E501
         )
 
-        results = engine.backtest(
+        results = asyncio.run(engine.backtest(
             asset_pair=asset_pair,
             start=start,
             end=end,
@@ -1476,7 +1476,7 @@ def backtest(
             long_window=long_window,
             initial_balance=initial_balance,
             fee_percentage=fee,
-        )
+        ))
 
         # Be tolerant of minimal mocked structures
         metrics = results.get('metrics', {})
@@ -1789,8 +1789,10 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous):
                 "Would you like to enable autonomous execution for this run?",
                 default=False
             )
-        except Exception:
+        except (click.Abort, KeyboardInterrupt, EOFError):
             enable_now = False
+            console.print("[yellow]Prompt cancelled. Autonomous execution not enabled for this run.[/yellow]")
+        # Unexpected exceptions propagate
 
         if enable_now:
             agent_config.autonomous.enabled = True
@@ -1834,6 +1836,9 @@ async def _run_live_market_view(engine, agent):
     udp = getattr(tm, 'unified_data_provider', None) if tm else None
     watchlist = agent.config.watchlist if hasattr(agent, 'config') and hasattr(agent.config, 'watchlist') else ['BTCUSD', 'ETHUSD', 'EURUSD']
 
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
     def build_table():
         tbl = Table(title="Live Market Pulse", caption=f"Updated: {time.strftime('%H:%M:%S')}")
         tbl.add_column("Asset", style="cyan", no_wrap=True)
@@ -1856,8 +1861,8 @@ async def _run_live_market_view(engine, agent):
                             delta = (last_close - prev_close) / prev_close * 100
                             change_1m = f"{delta:+.2f}%"
                         src_path = provider
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error fetching market data for asset '{ap}' (provider/tm: {tm}, src_path: {src_path}): {e}\n{traceback.format_exc()}")
 
             try:
                 if tm:
@@ -1869,8 +1874,8 @@ async def _run_live_market_view(engine, agent):
                         align = ",".join([k for k, v in ta.items() if v]) or '-'
                         ds = mc.get('data_sources') or {}
                         src_path = ",".join([str(v) for _, v in sorted(ds.items())]) or src_path
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Error fetching confluence/trend for asset '{ap}' (provider/tm: {tm}, src_path: {src_path}): {e}\n{traceback.format_exc()}")
             tbl.add_row(ap, last_price, change_1m, conf, align, src_path)
         return tbl
 
