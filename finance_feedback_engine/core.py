@@ -498,7 +498,11 @@ class FinanceFeedbackEngine:
         """
         # Block execution if signal_only mode
         if decision.get('signal_only', False):
-            raise ValueError("Decision is in signal-only mode; execution blocked")
+            raise ValueError(
+                "Decision is in signal-only mode; execution blocked. "
+                "To allow execution: provide platform balances (configure credentials) "
+                "or disable signal-only via config key 'signal_only_default: false'."
+            )
 
         # If monitoring provider available, get context and run simple risk checks
         try:

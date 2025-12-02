@@ -84,6 +84,54 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         
         return self._client
 
+    def _format_product_id(self, asset_pair: str) -> str:
+        """
+        Normalize various asset pair formats to Coinbase's product ID style.
+
+        Accepts formats like:
+        - "BTCUSD"
+        - "BTC-USD"
+        - "BTC/USD"
+
+        Returns:
+        - "BTC-USD" (Coinbase Advanced expected format)
+        """
+        try:
+            if not asset_pair:
+                return asset_pair
+
+            # Remove whitespace and standardize separators
+            s = str(asset_pair).strip().upper()
+            s = s.replace('/', '-')
+
+            # If already contains '-', ensure single hyphen separator
+            if '-' in s:
+                parts = [p for p in s.split('-') if p]
+                if len(parts) == 2:
+                    return f"{parts[0]}-{parts[1]}"
+                # Fallback: join first two segments
+                if len(parts) > 2:
+                    return f"{parts[0]}-{parts[1]}"
+
+            # No separator case like BTCUSD or ETHUSDC
+            # Split by known quote currency suffixes
+            known_quotes = (
+                'USD', 'USDT', 'USDC',
+                'EUR', 'GBP', 'JPY', 'AUD', 'CAD',
+                'BTC', 'ETH',
+            )
+            for quote in known_quotes:
+                if s.endswith(quote) and len(s) > len(quote):
+                    base = s[:-len(quote)]
+                    if base:
+                        return f"{base}-{quote}"
+
+            # If unable to parse, return original normalized string
+            return s
+        except Exception:
+            # Be resilient: return the input unchanged on unexpected errors
+            return asset_pair
+
     def get_balance(self) -> Dict[str, float]:
         """
         Get account balances including futures and spot USD/USDC.
@@ -421,6 +469,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         client = self._get_client()
         action = decision.get('action')
         asset_pair = decision.get('asset_pair')
+        product_id = self._format_product_id(asset_pair)
         size_in_usd = str(decision.get('suggested_amount', 0))
         client_order_id = f"ffe-{decision.get('id', uuid.uuid4().hex)}"
 
@@ -464,16 +513,16 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             if action == 'BUY':
                 order_result = client.market_order_buy(
                     client_order_id=client_order_id,
-                    product_id=asset_pair,
+                    product_id=product_id,
                     quote_size=size_in_usd
                 )
             else: # SELL
                 # Fetch current price to calculate base size
                 try:
-                    product_response = client.get_product(product_id=asset_pair)
+                    product_response = client.get_product(product_id=product_id)
                     current_price = float(getattr(product_response, 'price', 0))
                     if current_price <= 0:
-                        raise ValueError(f"Invalid price for {asset_pair}: {current_price}")
+                        raise ValueError(f"Invalid price for {product_id}: {current_price}")
                     base_size_value = float(size_in_usd) / current_price
                     # Format with appropriate precision (8 decimals is standard for crypto)
                     base_size = f"{base_size_value:.8f}"
@@ -484,7 +533,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 
                 order_result = client.market_order_sell(
                     client_order_id=client_order_id,
-                    product_id=asset_pair,
+                    product_id=product_id,
                     base_size=base_size
                 )
 
