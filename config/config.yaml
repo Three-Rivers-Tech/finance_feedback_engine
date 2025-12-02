@@ -131,7 +131,7 @@ ensemble:
     - deepseek-r1:8b
     - mistral:7b-instruct
     - qwen2.5:7b-instruct
-    - gemma2:9b-instruct
+    - gemma2:9b
     - qwen
 
   # Initial weights for each provider (must sum to 1.0)
@@ -340,6 +340,27 @@ logging:
   
   # Optional: Log file path (if omitted, logs to console only)
   # file: "logs/finance_engine.log"
+
+# ============================================
+# Trading Agent (Risk Gatekeeper)
+# ============================================
+agent:
+  # Execution controls
+  autonomous_execution: false
+  approval_policy: on_new_asset
+  max_daily_trades: 5
+  strategic_goal: balanced
+  risk_appetite: medium
+  autonomous:
+    enabled: false
+    profit_target: 0.05   # 5%
+    stop_loss: 0.02       # 2%
+
+  # RiskGatekeeper configuration (decimal fractions)
+  correlation_threshold: 0.7   # 70%
+  max_correlated_assets: 2
+  max_var_pct: 0.05            # 5%
+  var_confidence: 0.95         # 95%
 
 # ============================================
 # USAGE NOTES

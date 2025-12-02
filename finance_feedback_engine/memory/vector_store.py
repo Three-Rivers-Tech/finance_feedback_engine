@@ -44,6 +44,15 @@ class VectorMemory:
         Args:
             storage_path: Path to store vectors (default: data/memory/vectors.pkl)
         """
+        # Allow callers to accidentally pass a dict; extract common keys safely
+        if isinstance(storage_path, dict):
+            storage_path = (
+                storage_path.get('vector_store_path')
+                or storage_path.get('vector_memory_path')
+                or storage_path.get('dir')
+                or 'data/memory/vectors.pkl'
+            )
+
         self.storage_path = Path(storage_path or 'data/memory/vectors.pkl')
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 

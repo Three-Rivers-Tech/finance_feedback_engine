@@ -151,7 +151,15 @@ class DecisionEngine:
         # Initialize vector memory for semantic search (optional)
         self.vector_memory = None
         try:
-            self.vector_memory = VectorMemory(config)
+            # Accept either direct path or nested config keys
+            vm_cfg = config.get('memory', {}) if isinstance(config, dict) else {}
+            storage_path = (
+                vm_cfg.get('vector_store_path')
+                or vm_cfg.get('vector_memory_path')
+                or vm_cfg.get('dir')
+                or 'data/memory/vectors.pkl'
+            )
+            self.vector_memory = VectorMemory(storage_path)
             logger.info("Vector memory initialized successfully")
         except Exception as e:
             logger.warning(f"Failed to initialize vector memory: {e}. Proceeding without semantic search.")

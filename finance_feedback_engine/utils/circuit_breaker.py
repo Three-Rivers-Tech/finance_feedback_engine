@@ -5,6 +5,7 @@ import logging
 from enum import Enum
 from typing import Callable, Any, Optional
 from functools import wraps
+import asyncio
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ class CircuitBreaker:
             f"timeout={recovery_timeout}s"
         )
     
-    def call(self, func: Callable, *args, **kwargs) -> Any:
+    async def call(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute function with circuit breaker protection.
         
@@ -113,7 +114,10 @@ class CircuitBreaker:
         
         # Attempt the call
         try:
-            result = func(*args, **kwargs)
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
             self._on_success()
             return result
             
@@ -218,8 +222,8 @@ def circuit_breaker(
         
     Example:
         @circuit_breaker(failure_threshold=3, recovery_timeout=30)
-        def call_external_api():
-            return requests.get(url)
+        async def call_external_api():
+            return await aiohttp.get(url)
     """
     breaker = CircuitBreaker(
         failure_threshold=failure_threshold,
@@ -230,8 +234,8 @@ def circuit_breaker(
     
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            return breaker.call(func, *args, **kwargs)
+        async def wrapper(*args, **kwargs):
+            return await breaker.call(func, *args, **kwargs)
         
         # Attach breaker instance for external access
         wrapper.circuit_breaker = breaker
