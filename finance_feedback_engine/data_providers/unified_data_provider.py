@@ -2,8 +2,8 @@
 
 from typing import Dict, Any, List, Optional, Tuple
 import logging
-import time
-from datetime import datetime, timedelta
+
+from cachetools import TTLCache
 
 from .alpha_vantage_provider import AlphaVantageProvider
 from .coinbase_data import CoinbaseDataProvider
@@ -63,7 +63,8 @@ class UnifiedDataProvider:
             try:
                 self.alpha_vantage = AlphaVantageProvider(
                     api_key=alpha_vantage_api_key,
-                    config=config
+                    config=config,
+                    rate_limiter=self.rate_limiter
                 )
                 logger.info("Alpha Vantage provider initialized (primary)")
             except Exception as e:
@@ -89,9 +90,8 @@ class UnifiedDataProvider:
             except Exception as e:
                 logger.warning(f"Failed to initialize Oanda data: {e}")
         
-        # In-memory cache: {(asset_pair, granularity): (candles, timestamp)}
-        self._cache: Dict[Tuple[str, str], Tuple[List[Dict], float]] = {}
-        self._cache_ttl = 300  # 5 minutes
+        # In-memory cache: {(asset_pair, granularity): (candles, provider_name)}
+        self._cache = TTLCache(maxsize=1000, ttl=300)  # 5 minutes TTL, thread-safe
         
         logger.info("UnifiedDataProvider initialized with cascading fallback")
 
@@ -102,19 +102,40 @@ class UnifiedDataProvider:
         return any(symbol in pair for symbol in crypto_symbols)
 
     def _is_forex(self, asset_pair: str) -> bool:
-        """Check if asset pair is forex."""
+        """Check if asset pair is a fiat currency pair (forex).
+
+        Detects pairs where both sides are fiat currencies, e.g., 'EURUSD', 'EURGBP',
+        'GBPJPY', etc. Does not require USD specifically.
+        Uses configurable fiat list from `config['forex_currencies']` if provided.
+        """
         pair = asset_pair.upper()
-        forex_currencies = ['EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD']
-        # Check if pair contains forex currencies but not crypto
-        has_forex = any(curr in pair for curr in forex_currencies)
-        has_usd = 'USD' in pair
-        return has_forex and has_usd and not self._is_crypto(pair)
+
+        # Crypto exclusion guard
+        if self._is_crypto(pair):
+            return False
+
+        # Load fiat currency codes (ISO-like 3-letter); allow config override
+        fiat_list = self.config.get(
+            'forex_currencies',
+            ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'CNY', 'HKD', 'SEK', 'NOK']
+        )
+
+        # Attempt to split pair into two 3-letter codes (common format in this project)
+        if len(pair) >= 6:
+            base = pair[0:3]
+            quote = pair[3:6]
+            if base in fiat_list and quote in fiat_list:
+                return True
+
+        # Fallback: if not standard 6-char format, check presence of at least two distinct fiat codes
+        present = [code for code in fiat_list if code in pair]
+        return len(set(present)) >= 2
 
     def _get_cached_candles(
         self,
         asset_pair: str,
         granularity: str
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Optional[Tuple[List[Dict[str, Any]], str]]:
         """
         Get candles from cache if available and fresh.
         
@@ -123,43 +144,35 @@ class UnifiedDataProvider:
             granularity: Timeframe
         
         Returns:
-            Cached candles or None if expired/missing
+            Tuple of (candles, provider_name) or None if expired/missing
         """
         cache_key = (asset_pair.upper(), granularity)
-        
-        if cache_key in self._cache:
-            candles, cached_time = self._cache[cache_key]
-            age = time.time() - cached_time
-            
-            if age < self._cache_ttl:
-                logger.debug(
-                    f"Cache hit for {asset_pair} {granularity} "
-                    f"(age: {age:.1f}s)"
-                )
-                return candles
-            else:
-                # Expired, remove from cache
-                del self._cache[cache_key]
-        
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            candles, provider_name = cached
+            logger.debug(f"Cache hit for {asset_pair} {granularity} (provider: {provider_name})")
+            return candles, provider_name
         return None
 
     def _cache_candles(
         self,
         asset_pair: str,
         granularity: str,
-        candles: List[Dict[str, Any]]
+        candles: List[Dict[str, Any]],
+        provider_name: str
     ) -> None:
         """
-        Store candles in cache.
+        Store candles in cache along with original provider name.
         
         Args:
             asset_pair: Asset pair
             granularity: Timeframe
             candles: Candle data to cache
+            provider_name: Name of provider that produced the candles
         """
         cache_key = (asset_pair.upper(), granularity)
-        self._cache[cache_key] = (candles, time.time())
-        logger.debug(f"Cached {len(candles)} candles for {asset_pair} {granularity}")
+        self._cache[cache_key] = (candles, provider_name)
+        logger.debug(f"Cached {len(candles)} candles for {asset_pair} {granularity} from {provider_name}")
 
     def get_candles(
         self,
@@ -188,7 +201,8 @@ class UnifiedDataProvider:
         # Check cache first
         cached = self._get_cached_candles(asset_pair, granularity)
         if cached is not None:
-            return cached, 'cache'
+            candles, original_provider = cached
+            return candles, original_provider
         
         # Determine provider priority based on asset type
         is_crypto = self._is_crypto(asset_pair)
@@ -242,8 +256,8 @@ class UnifiedDataProvider:
                     continue
                 
                 if candles:
-                    # Success! Cache and return
-                    self._cache_candles(asset_pair, granularity, candles)
+                    # Success! Cache with provider info and return
+                    self._cache_candles(asset_pair, granularity, candles, provider_name)
                     logger.info(
                         f"Retrieved {len(candles)} candles from {provider_name}"
                     )

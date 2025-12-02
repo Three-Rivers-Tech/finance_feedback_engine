@@ -1,6 +1,7 @@
 # finance_feedback_engine/agent/trading_loop_agent.py
 
 import asyncio
+import datetime
 import logging
 from enum import Enum, auto
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
@@ -19,9 +20,6 @@ class AgentState(Enum):
     RISK_CHECK = auto()
     EXECUTION = auto()
     LEARNING = auto()
-    EXECUTING = auto()  # For backward compatibility with existing functionality
-    ANALYZING = auto()  # For backward compatibility with existing functionality
-    MONITORING = auto()  # For backward compatibility with existing functionality
 
 class TradingLoopAgent:
     """
@@ -41,11 +39,27 @@ class TradingLoopAgent:
         self.trade_monitor = trade_monitor
         self.portfolio_memory = portfolio_memory
         self.trading_platform = trading_platform
-        # Initialize RiskGatekeeper for trade validation
-        self.risk_gatekeeper = RiskGatekeeper()
+        # Initialize RiskGatekeeper with configured risk parameters
+        # Normalize percentage-like inputs: allow users to input >1 as whole percentages
+        def _normalize_pct(value: float) -> float:
+            try:
+                return value / 100.0 if value > 1.0 else value
+            except Exception:
+                return value
+
+        self.risk_gatekeeper = RiskGatekeeper(
+            max_drawdown_pct=_normalize_pct(self.config.max_drawdown_percent),
+            correlation_threshold=self.config.correlation_threshold,
+            max_correlated_assets=self.config.max_correlated_assets,
+            max_var_pct=_normalize_pct(self.config.max_var_pct),
+            var_confidence=self.config.var_confidence,
+        )
         self.is_running = False
         self.state = AgentState.IDLE
         self._current_decision = None
+        self.analysis_failures = {}
+        self.daily_trade_count = 0
+        self.last_trade_date = datetime.date.today()
 
     async def run(self):
         """
@@ -69,13 +83,6 @@ class TradingLoopAgent:
                     await self.handle_execution_state()
                 elif self.state == AgentState.LEARNING:
                     await self.handle_learning_state()
-                # Backward compatibility states
-                elif self.state == AgentState.ANALYZING:
-                    await self.handle_analyzing_state()
-                elif self.state == AgentState.EXECUTING:
-                    await self.handle_executing_state()
-                elif self.state == AgentState.MONITORING:
-                    await self.handle_monitoring_state()
 
             except asyncio.CancelledError:
                 logger.info("Trading loop cancelled.")
@@ -93,53 +100,100 @@ class TradingLoopAgent:
 
     async def handle_idle_state(self):
         """
-        IDLE: Waiting for the next analysis interval.
+        IDLE: Waiting for the next analysis interval before transitioning to learning.
         """
         logger.info("State: IDLE - Waiting for next analysis interval...")
         await asyncio.sleep(self.config.analysis_frequency_seconds)
-        await self._transition_to(AgentState.PERCEPTION)
+        # Periodically check for closed trades to learn from
+        await self._transition_to(AgentState.LEARNING)
 
     async def handle_perception_state(self):
         """
-        PERCEPTION: Fetching market data and portfolio state.
+        PERCEPTION: Fetching market data, portfolio state, and performing safety checks.
         """
-        logger.info("State: PERCEPTION - Fetching market data and portfolio state...")
-        # Check for open positions first. If trades are open, we should be monitoring.
-        if self.trade_monitor.is_trade_open():
-            logger.info("Open trades detected. Switching to MONITORING state.")
-            await self._transition_to(AgentState.MONITORING)
-            return
+        logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
+
+        # --- Safety Check: Portfolio Kill Switch ---
+        if self.config.kill_switch_loss_pct is not None and self.config.kill_switch_loss_pct > 0:
+            try:
+                # Assuming get_monitoring_context() without args gives portfolio overview
+                portfolio_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+                # Assuming the context contains 'unrealized_pnl_percent'
+                portfolio_pnl_pct = portfolio_context.get('unrealized_pnl_percent', 0.0)
+
+                if portfolio_pnl_pct < -self.config.kill_switch_loss_pct:
+                    logger.critical(
+                        f"PORTFOLIO KILL SWITCH TRIGGERED! "
+                        f"Current P&L ({portfolio_pnl_pct:.2f}%) has breached the threshold "
+                        f"(-{self.config.kill_switch_loss_pct:.2f}%). Stopping agent."
+                    )
+                    self.stop()
+                    return  # Halt immediately
+            except Exception as e:
+                logger.error(f"Could not check portfolio kill switch due to an error: {e}", exc_info=True)
+
+        # --- Daily Counter Reset ---
+        today = datetime.date.today()
+        if today > self.last_trade_date:
+            logger.info(f"New day detected. Resetting daily trade count from {self.daily_trade_count} to 0.")
+            self.daily_trade_count = 0
+            self.last_trade_date = today
+
+        # The trade_monitor runs in a separate process, so we don't need to switch
+        # to a monitoring state here. The DecisionEngine will get the monitoring
+        # context and be aware of open positions.
 
         # Transition to reasoning after gathering market data
         await self._transition_to(AgentState.REASONING)
 
     async def handle_reasoning_state(self):
         """
-        REASONING: Running the DecisionEngine (Ensemble voting).
+        REASONING: Running the DecisionEngine with retry logic for robustness.
         """
         logger.info("State: REASONING - Running DecisionEngine...")
 
+        MAX_RETRIES = 3
+        RETRY_DELAY_SECONDS = 60
+
         for asset_pair in self.config.asset_pairs:
-            try:
-                logger.debug(f"Generating decision for {asset_pair}...")
-                decision = self.engine.analyze_asset(asset_pair)
-                
-                # If a valid trade decision is found, move to risk check
-                if decision and decision.get('action') in ["BUY", "SELL"]:
-                    if await self._should_execute(decision):
-                        self._current_decision = decision
-                        await self._transition_to(AgentState.RISK_CHECK)
-                        return # Exit reasoning to handle the risk check
+            failure_key = f"analysis:{asset_pair}"
+            
+            if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
+                logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures.")
+                continue
+
+            for attempt in range(MAX_RETRIES):
+                try:
+                    logger.debug(f"Analyzing {asset_pair} (Attempt {attempt + 1}/{MAX_RETRIES})...")
+                    decision = self.engine.analyze_asset(asset_pair)
+
+                    # Reset failure count on success
+                    self.analysis_failures[failure_key] = 0
+                    
+                    if decision and decision.get('action') in ["BUY", "SELL"]:
+                        if await self._should_execute(decision):
+                            self._current_decision = decision
+                            await self._transition_to(AgentState.RISK_CHECK)
+                            return
+                        else:
+                            logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
                     else:
-                        logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
-                else:
-                    logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
+                        logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
+                    
+                    break  # Analysis successful, break retry loop
 
-            except Exception as e:
-                logger.error(f"Error analyzing {asset_pair}: {e}")
-                continue  # Try next asset
+                except Exception as e:
+                    logger.warning(f"Analysis attempt {attempt + 1} for {asset_pair} failed: {e}")
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                    else:
+                        self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
+                        logger.error(
+                            f"Persistent failure analyzing {asset_pair} after {MAX_RETRIES} attempts. "
+                            f"It will be skipped for a while.",
+                            exc_info=True
+                        )
 
-        # If no opportunities found, go back to IDLE for next analysis cycle
         logger.info("Analysis complete. No actionable trades found. Going back to IDLE.")
         await self._transition_to(AgentState.IDLE)
 
@@ -196,6 +250,7 @@ class TradingLoopAgent:
             execution_result = self.engine.execute_decision(decision_id)
             if execution_result.get('success'):
                 logger.info(f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor.")
+                self.daily_trade_count += 1
                 # Link this decision to the next trade detected for this asset
                 self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
                 await self._transition_to(AgentState.LEARNING)
@@ -211,163 +266,38 @@ class TradingLoopAgent:
 
     async def handle_learning_state(self):
         """
-        LEARNING: Recording the outcome and updating metrics.
+        LEARNING: Processing outcomes of closed trades to update the model.
         """
-        logger.info("State: LEARNING - Recording outcome and updating metrics...")
+        logger.info("State: LEARNING - Processing closed trades for feedback...")
 
-        # For now, just transition back to perception for the next cycle
-        # In a real implementation, we would record the outcome and update metrics
+        closed_trades = self.trade_monitor.get_closed_trades()
+        if not closed_trades:
+            logger.info("No closed trades to process.")
+        else:
+            logger.info(f"Processing {len(closed_trades)} closed trades...")
+            for trade_outcome in closed_trades:
+                try:
+                    self.engine.record_trade_outcome(trade_outcome)
+                    logger.info(f"Recorded outcome for trade {trade_outcome.get('id')}")
+                except Exception as e:
+                    logger.error(f"Error recording trade outcome: {e}", exc_info=True)
+        
+        # After processing, transition to perception to gather fresh market data
         await self._transition_to(AgentState.PERCEPTION)
-
-    async def handle_analyzing_state(self):
-        """
-        Perception and Reasoning: Analyze assets to find trading opportunities.
-        """
-        logger.info("State: ANALYZING - Looking for trading opportunities...")
-        # Check for open positions first. If trades are open, we should be monitoring.
-        if self.trade_monitor.is_trade_open():
-            logger.info("Open trades detected. Switching to MONITORING state.")
-            self.state = AgentState.MONITORING
-            return
-
-        for asset_pair in self.config.asset_pairs:
-            try:
-                logger.debug(f"Analyzing {asset_pair}...")
-                decision = self.engine.analyze_asset(asset_pair)
-                
-                # If a valid trade decision is found, move to execute
-                if decision and decision.get('action') in ["BUY", "SELL"]:
-                    if await self._should_execute(decision):
-                        self._current_decision = decision
-                        self.state = AgentState.EXECUTING
-                        return # Exit analysis to handle the execution
-                    else:
-                        logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
-                else:
-                    logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
-
-            except Exception as e:
-                logger.error(f"Error analyzing {asset_pair}: {e}")
-                continue # Try next asset
-
-        # If no opportunities found, go to IDLE before next analysis cycle
-        logger.info("Analysis complete. No actionable trades found. Going to IDLE.")
-        self.state = AgentState.IDLE
-
-    async def handle_executing_state(self):
-        """
-        Action: Execute the trade decision.
-        """
-        if not self._current_decision:
-            logger.warning("EXECUTING state reached without a decision. Returning to ANALYZING.")
-            self.state = AgentState.ANALYZING
-            return
-
-        decision_id = self._current_decision.get('id')
-        action = self._current_decision.get('action')
-        asset_pair = self._current_decision.get('asset_pair')
-        logger.info(f"State: EXECUTING - Attempting to {action} {asset_pair} (Decision ID: {decision_id})")
-        # Retrieve monitoring context for risk validation
-        try:
-            # Use the monitoring context provider to get context
-            monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
-        except Exception as e:
-            logger.warning(f"Failed to get monitoring context for risk validation: {e}")
-            monitoring_context = {}
-        # Validate trade with RiskGatekeeper
-        approved, reason = self.risk_gatekeeper.validate_trade(self._current_decision, monitoring_context)
-        if not approved:
-            logger.info(f"Trade rejected by RiskGatekeeper: {reason}. Skipping execution.")
-            # Reset state and decision without raising an exception
-            self._current_decision = None
-            self.state = AgentState.ANALYZING
-            return
-
-        try:
-            execution_result = self.engine.execute_decision(decision_id)
-            if execution_result.get('success'):
-                logger.info("Trade executed successfully. Associating decision with monitor and switching to MONITORING state.")
-                # Link this decision to the next trade detected for this asset
-                self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
-                self.state = AgentState.MONITORING
-            else:
-                logger.error(f"Trade execution failed: {execution_result.get('message')}. Returning to ANALYZING.")
-                self.state = AgentState.ANALYZING
-        except Exception as e:
-            logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
-            self.state = AgentState.ANALYZING # Go back to analyzing on failure
-        
-        self._current_decision = None # Clear decision after execution attempt
-
-    async def handle_monitoring_state(self):
-        """
-        Feedback and Learning: Monitor open trades and handle outcomes.
-        """
-        logger.info("State: MONITORING - Checking status of open trades...")
-        
-        # The trade_monitor should run its own loop to check for closed trades
-        # Here, we just check if any trades are still open.
-        if not self.trade_monitor.is_trade_open():
-            logger.info("No more open trades. Switching back to ANALYZING state.")
-            self.state = AgentState.ANALYZING
-            return
-
-        # The TradeMonitor should be responsible for detecting when a trade is closed
-        # and then calling the feedback loop (record_trade_outcome).
-        # This requires changes to TradeMonitor to be fully functional.
-        # For now, we assume a method get_closed_trades() exists.
-        closed_trades = getattr(self.trade_monitor, 'get_closed_trades', lambda: [])()
-        for trade in closed_trades:
-            try:
-                # Safely get attributes that might be missing
-                product_id = getattr(trade, 'product_id', 'unknown')
-                realized_pnl = getattr(trade, 'realized_pnl', None)
-                if realized_pnl is None or not isinstance(realized_pnl, (int, float)):
-                    logger.warning(f"Skipping trade for {product_id}: realized_pnl is missing or not numeric ({realized_pnl})")
-                    continue
-                decision_id = getattr(trade, 'decision_id', None)
-                exit_price = getattr(trade, 'exit_price', None)
-                exit_time = getattr(trade, 'exit_time', None)
-                exit_reason = getattr(trade, 'exit_reason', None)
-                
-                logger.info(f"Processing closed trade: {product_id} with P&L: ${realized_pnl:.2f}")
-                
-                if not decision_id:
-                    logger.warning(f"Cannot record outcome for trade {product_id} without a decision ID.")
-                    continue
-                
-                # Check for required attributes for record_trade_outcome
-                missing_attrs = []
-                if exit_price is None:
-                    missing_attrs.append('exit_price')
-                if exit_time is None:
-                    missing_attrs.append('exit_time')
-                if exit_reason is None:
-                    missing_attrs.append('exit_reason')
-                
-                if missing_attrs:
-                    logger.warning(f"Cannot record outcome for trade {product_id}: missing required attributes {missing_attrs}")
-                    continue
-                
-                self.engine.record_trade_outcome(
-                    decision_id=decision_id,
-                    exit_price=exit_price,
-                    exit_timestamp=exit_time,
-                    hit_stop_loss=exit_reason == 'stop_loss',
-                    hit_take_profit=exit_reason == 'take_profit'
-                )
-            except Exception as e:
-                product_id = getattr(trade, 'product_id', 'unknown')
-                logger.error(f"Error recording trade outcome for {product_id}: {e}")
-
-        # Wait before the next monitoring check
-        await asyncio.sleep(self.config.monitoring_frequency_seconds)
 
     async def _should_execute(self, decision) -> bool:
         """Determine if a trade should be executed based on confidence and policy."""
         confidence = decision.get('confidence', 0)
         if confidence < self.config.min_confidence_threshold:
             logger.info(f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold}%)")
+            return False
+
+        # Check daily trade limit
+        if self.config.max_daily_trades > 0 and self.daily_trade_count >= self.config.max_daily_trades:
+            logger.warning(
+                f"Max daily trade limit ({self.config.max_daily_trades}) reached. "
+                f"Skipping trade for {decision.get('asset_pair')}."
+            )
             return False
 
         if self.config.autonomous_execution:
