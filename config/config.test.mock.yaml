@@ -8,7 +8,29 @@ decision_engine:
   ai_provider: "local"
   model_name: "default"
   decision_threshold: 0.7
+  signal_only_default: false
+
+ensemble:
+  enabled_providers:
+    - local
+  provider_weights:
+    local: 1.0
+  min_providers_for_quorum: 1
+  confidence_adjustment_per_missing_provider: 5
+
+agent:
+  autonomous:
+    enabled: false
+  take_profit: 0.05
+  stop_loss: 0.02
+  max_drawdown: 0.15
+  max_concurrent_trades: 2
+  check_interval_seconds: 60
 
 persistence:
-  storage_path: "data/decisions"
+  storage_path: "data/decisions_test"
   max_decisions: 1000
+
+monitoring:
+  enabled: false
+  metrics_path: "data/test_metrics"

@@ -1,57 +1,54 @@
-#!/usr/bin/env python3
-"""Test script for Finance Feedback Engine API."""
+"""Pytest-based tests for the Finance Feedback Engine API."""
 
+import pytest
+from unittest.mock import patch
 from finance_feedback_engine import FinanceFeedbackEngine
 
-# Configuration
-config = {
-    'alpha_vantage_api_key': 'demo',
-    'trading_platform': 'coinbase',
-    'platform_credentials': {
-        'api_key': 'test_key',
-        'api_secret': 'test_secret'
-    },
-    'decision_engine': {
-        'ai_provider': 'local',
-        'model_name': 'default',
-        'decision_threshold': 0.7
-    },
-    'persistence': {
-        'storage_path': 'data/decisions'
+
+@pytest.fixture
+def mock_engine():
+    """Fixture to create a FinanceFeedbackEngine with a mocked platform."""
+    config = {
+        'alpha_vantage_api_key': 'demo',
+        'trading_platform': 'mock',  # Use mock platform to avoid real API calls
+        'decision_engine': {
+            'ai_provider': 'local',
+            'model_name': 'default',
+        },
+        'persistence': {
+            'storage_path': '/tmp/test_decisions'
+        }
     }
-}
+    engine = FinanceFeedbackEngine(config)
+    return engine
 
-print("=" * 60)
-print("Finance Feedback Engine 2.0 - Python API Test")
-print("=" * 60)
 
-# Initialize engine
-print("\n1. Initializing engine...")
-engine = FinanceFeedbackEngine(config)
-print("✓ Engine initialized successfully")
+def test_engine_initialization(mock_engine):
+    """Test that the engine initializes successfully."""
+    assert mock_engine is not None
+    # Platform should be mock by config; no name attribute required
+    assert mock_engine.trading_platform is not None
 
-# Analyze an asset
-print("\n2. Analyzing BTCUSD...")
-decision = engine.analyze_asset('BTCUSD')
-print(f"   Asset: {decision['asset_pair']}")
-print(f"   Action: {decision['action']}")
-print(f"   Confidence: {decision['confidence']}%")
-print(f"   Reasoning: {decision['reasoning']}")
-print(f"   Price: ${decision['market_data']['close']:.2f}")
 
-# Get balance
-print("\n3. Getting account balance...")
-balance = engine.get_balance()
-for asset, amount in balance.items():
-    print(f"   {asset}: {amount:,.2f}")
+def test_analyze_asset(mock_engine):
+    """Test the analyze_asset method (synchronous)."""
+    # Mock the underlying decision generation to avoid AI/network calls
+    with patch.object(mock_engine.decision_engine, 'generate_decision', return_value={'action': 'HOLD', 'confidence': 50}) as mock_gen:
+        decision = mock_engine.analyze_asset('BTCUSD')
+        assert decision is not None
+        assert 'action' in decision
+        mock_gen.assert_called_once()
 
-# View history
-print("\n4. Viewing decision history...")
-history = engine.get_decision_history(limit=3)
-print(f"   Found {len(history)} decisions")
-for i, d in enumerate(history, 1):
-    print(f"   {i}. {d['asset_pair']}: {d['action']} ({d['confidence']}%)")
 
-print("\n" + "=" * 60)
-print("✓ All tests passed successfully!")
-print("=" * 60)
+def test_get_balance(mock_engine):
+    """Test the get_balance method using the mock platform."""
+    balance = mock_engine.get_balance()
+    assert isinstance(balance, dict)
+    # MockPlatform returns FUTURES_USD, SPOT_USD, SPOT_USDC keys
+    assert any(k in balance for k in ('FUTURES_USD', 'SPOT_USD', 'SPOT_USDC'))
+
+
+def test_get_decision_history(mock_engine):
+    """Test the get_decision_history method."""
+    history = mock_engine.get_decision_history(limit=3)
+    assert isinstance(history, list)

@@ -307,7 +307,7 @@ class FinanceFeedbackEngine:
             "AI will have full awareness of active positions/trades"
         )
 
-    async def analyze_asset(
+    def analyze_asset(
         self,
         asset_pair: str,
         include_sentiment: bool = True,
@@ -332,12 +332,13 @@ class FinanceFeedbackEngine:
 
         logger.info("Analyzing asset: %s", asset_pair)
 
-        # Fetch comprehensive market data (awaited)
-        market_data = await self.data_provider.get_comprehensive_market_data(
+        # Fetch comprehensive market data
+        import asyncio
+        market_data = asyncio.run(self.data_provider.get_comprehensive_market_data(
             asset_pair,
             include_sentiment=include_sentiment,
             include_macro=include_macro
-        )
+        ))
 
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()
@@ -368,7 +369,7 @@ class FinanceFeedbackEngine:
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         try:
-            decision = await self.decision_engine.generate_decision(
+            decision = self.decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance=balance,
@@ -473,7 +474,7 @@ class FinanceFeedbackEngine:
                 breaker = CircuitBreaker(failure_threshold=3, recovery_timeout=60, name=cb_name)
 
             # Execute trade under circuit breaker protection
-            result = breaker.call(self.trading_platform.execute_trade, decision)
+            result = breaker.call_sync(self.trading_platform.execute_trade, decision)
         except Exception as e:
             # Log and update decision with failure
             logger.error(f"Trade execution failed: {e}")
