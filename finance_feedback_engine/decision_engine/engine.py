@@ -152,7 +152,7 @@ class DecisionEngine:
         self.vector_memory = None
         try:
             # Accept either direct path or nested config keys
-            vm_cfg = config.get('memory', {}) if isinstance(config, dict) else {}
+            vm_cfg = self.config.get('memory', {}) if isinstance(self.config, dict) else {}
             storage_path = (
                 vm_cfg.get('vector_store_path')
                 or vm_cfg.get('vector_memory_path')

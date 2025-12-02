@@ -164,6 +164,11 @@ class VaRCalculator:
                 'sample_size': min_history_length
             }
 
+        # Check for assets in holdings without price history
+        missing_history = set(holdings.keys()) - set(asset_returns.keys())
+        if missing_history:
+            logger.warning(f"Assets without price history: {missing_history}")
+
         portfolio_returns = []
         for i in range(min_history_length):
             daily_return = 0.0

@@ -128,8 +128,11 @@ class UnifiedDataProvider:
                 return True
 
         # Fallback: if not standard 6-char format, check presence of at least two distinct fiat codes
-        present = [code for code in fiat_list if code in pair]
-        return len(set(present)) >= 2
+        # Only apply to reasonably-sized pairs to avoid false positives
+        if len(pair) <= 8:
+            present = [code for code in fiat_list if code in pair]
+            return len(set(present)) >= 2
+        return False
 
     def _get_cached_candles(
         self,
