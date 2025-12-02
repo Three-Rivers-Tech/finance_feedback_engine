@@ -72,76 +72,95 @@ class CircuitBreaker:
         self.circuit_open_count = 0
         
         logger.info(
-            f"{self.name} initialized: threshold={failure_threshold}, "
-            f"timeout={recovery_timeout}s"
+            "%s initialized: threshold=%d, timeout=%.1fs",
+            self.name, failure_threshold, recovery_timeout
         )
     
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """
-        Execute function with circuit breaker protection.
-        
-        Args:
-            func: Function to call
-            *args: Positional arguments for func
-            **kwargs: Keyword arguments for func
-            
-        Returns:
-            Result from func
-            
-        Raises:
-            CircuitBreakerOpenError: If circuit is open
-            Exception: Original exception from func (if circuit closed)
+        Execute function with circuit breaker protection (async version).
         """
+        if asyncio.iscoroutinefunction(func):
+            async def async_runner():
+                return await func(*args, **kwargs)
+            return await self._execute_with_circuit_async(
+                async_runner, is_async=True
+            )
+        else:
+            def sync_runner():
+                return func(*args, **kwargs)
+            # Directly use the sync logic, no event loop
+            return self._execute_with_circuit(sync_runner)
+
+    def call_sync(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute function with circuit breaker protection in a synchronous
+        context.
+        """
+        def runner():
+            return func(*args, **kwargs)
+        return self._execute_with_circuit(runner)
+
+    def _execute_with_circuit(self, runner: Callable[[], Any]) -> Any:
+        """Core circuit breaker logic for synchronous execution."""
         self.total_calls += 1
-        
-        # Check circuit state
         if self.state == CircuitState.OPEN:
             if self._should_attempt_reset():
                 logger.info(
-                    f"{self.name} entering HALF_OPEN state "
-                    f"(testing recovery)"
+                    "%s entering HALF_OPEN state (testing recovery)",
+                    self.name
                 )
                 self.state = CircuitState.HALF_OPEN
             else:
                 logger.warning(
-                    f"{self.name} is OPEN, rejecting call (fail fast). "
-                    f"Failures: {self.failure_count}/{self.failure_threshold}"
+                    "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
+                    self.name, self.failure_count, self.failure_threshold
                 )
                 raise CircuitBreakerOpenError(
                     f"Circuit breaker '{self.name}' is OPEN. "
-                    f"Service unavailable, please try again later."
+                    "Service unavailable, please try again later."
                 )
-        
-        # Attempt the call
         try:
-            if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
+            result = runner()
             self._on_success()
             return result
-            
-        except self.expected_exception:
-            self._on_failure()
+        except Exception as exc:
+            if isinstance(exc, self.expected_exception):
+                self._on_failure()
             raise
 
-    def call_sync(self, func: Callable, *args, **kwargs) -> Any:
-        """
-        Execute function with circuit breaker protection in a synchronous context.
-
-        For synchronous callers, this wraps the async `call` method using
-        `asyncio.run` to provide blocking behavior while preserving circuit
-        breaker semantics.
-
-        Args:
-            func: Function to call
-            *args: Positional arguments for func
-            **kwargs: Keyword arguments for func
-
-        Returns:
-            Result from func
-        """
-        return asyncio.run(self.call(func, *args, **kwargs))
+    async def _execute_with_circuit_async(
+        self, runner: Callable[[], Any], is_async: bool
+    ) -> Any:
+        """Core circuit breaker logic for async execution."""
+        self.total_calls += 1
+        if self.state == CircuitState.OPEN:
+            if self._should_attempt_reset():
+                logger.info(
+                    "%s entering HALF_OPEN state (testing recovery)",
+                    self.name
+                )
+                self.state = CircuitState.HALF_OPEN
+            else:
+                logger.warning(
+                    "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
+                    self.name, self.failure_count, self.failure_threshold
+                )
+                raise CircuitBreakerOpenError(
+                    f"Circuit breaker '{self.name}' is OPEN. "
+                    "Service unavailable, please try again later."
+                )
+        try:
+            if is_async:
+                result = await runner()
+            else:
+                result = runner()
+            self._on_success()
+            return result
+        except Exception as exc:
+            if isinstance(exc, self.expected_exception):
+                self._on_failure()
+            raise
     
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt recovery."""
@@ -157,9 +176,7 @@ class CircuitBreaker:
         self.success_count += 1
         
         if self.state == CircuitState.HALF_OPEN:
-            logger.info(
-                f"{self.name} recovery successful, closing circuit"
-            )
+            logger.info("%s recovery successful, closing circuit", self.name)
             self._reset()
         
         # Reset failure count on success in CLOSED state
@@ -177,8 +194,11 @@ class CircuitBreaker:
             self._open_circuit()
         
         logger.warning(
-            f"{self.name} failure {self.failure_count}/{self.failure_threshold} "
-            f"(state: {self.state.value})"
+            "%s failure %d/%d (state: %s)",
+            self.name,
+            self.failure_count,
+            self.failure_threshold,
+            self.state.value
         )
     
     def _open_circuit(self):
@@ -187,8 +207,8 @@ class CircuitBreaker:
             self.state = CircuitState.OPEN
             self.circuit_open_count += 1
             logger.error(
-                f"{self.name} OPENING circuit after {self.failure_count} failures. "
-                f"Will retry after {self.recovery_timeout}s"
+                "%s OPENING circuit after %d failures. Will retry after %.1fs",
+                self.name, self.failure_count, self.recovery_timeout
             )
     
     def _reset(self):
@@ -214,13 +234,12 @@ class CircuitBreaker:
     
     def reset_manually(self):
         """Manually reset circuit breaker (for testing/admin)."""
-        logger.info(f"{self.name} manually reset")
+        logger.info("%s manually reset", self.name)
         self._reset()
 
 
 class CircuitBreakerOpenError(Exception):
     """Exception raised when circuit breaker is open."""
-    pass
 
 
 def circuit_breaker(
@@ -249,25 +268,16 @@ def circuit_breaker(
         expected_exception=expected_exception,
         name=name
     )
-    
+
     def decorator(func: Callable) -> Callable:
-        # If the decorated function is async, return an async wrapper
         if asyncio.iscoroutinefunction(func):
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 return await breaker.call(func, *args, **kwargs)
-
-            # Attach breaker instance for external access
-            async_wrapper.circuit_breaker = breaker
             return async_wrapper
-
-        # Otherwise, return a synchronous wrapper for sync functions
+        
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             return breaker.call_sync(func, *args, **kwargs)
-
-        # Attach breaker instance for external access
-        sync_wrapper.circuit_breaker = breaker
         return sync_wrapper
-    
     return decorator

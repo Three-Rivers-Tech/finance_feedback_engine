@@ -169,6 +169,25 @@ class VaRCalculator:
         if missing_history:
             logger.warning(f"Assets without price history: {missing_history}")
 
+        # Calculate subset portfolio value (only assets with price history)
+        subset_portfolio_value = 0.0
+        for asset_id in asset_returns.keys():
+            holding = holdings.get(asset_id, {})
+            quantity = holding.get('quantity', 0)
+            price = holding.get('current_price', 0)
+            subset_portfolio_value += quantity * price
+
+        if subset_portfolio_value == 0:
+            logger.error("Subset portfolio value is zero after excluding missing assets")
+            return {
+                'var': 0.0,
+                'var_usd': 0.0,
+                'portfolio_value': portfolio_value,
+                'confidence_level': confidence_level,
+                'data_quality': 'missing_price_history',
+                'missing_assets': list(missing_history)
+            }
+
         portfolio_returns = []
         for i in range(min_history_length):
             daily_return = 0.0
@@ -177,7 +196,8 @@ class VaRCalculator:
                 quantity = holding.get('quantity', 0)
                 price = holding.get('current_price', 0)
                 asset_value = quantity * price
-                weight = asset_value / portfolio_value if portfolio_value > 0 else 0
+                # Use subset portfolio value so weights sum to 1
+                weight = asset_value / subset_portfolio_value if subset_portfolio_value > 0 else 0
                 # Use the most recent min_history_length days (align from the end)
                 daily_return += returns[-(min_history_length - i)] * weight
             portfolio_returns.append(daily_return)
@@ -188,18 +208,28 @@ class VaRCalculator:
             "If portfolio weights changed, VaR may be inaccurate."
         )
 
-        # Calculate VaR from portfolio returns
+        # Calculate VaR from portfolio returns (based on subset portfolio)
         var = self.calculate_historical_var(portfolio_returns, confidence_level)
-        var_usd = var * portfolio_value
+        var_usd = var * subset_portfolio_value
 
-        return {
+        # Determine data quality
+        data_quality = 'good' if not missing_history else 'incomplete'
+
+        result = {
             'var': round(var, 4),
             'var_usd': round(var_usd, 2),
             'portfolio_value': round(portfolio_value, 2),
+            'subset_portfolio_value': round(subset_portfolio_value, 2),
             'confidence_level': confidence_level,
-            'data_quality': 'good',
+            'data_quality': data_quality,
             'sample_size': len(portfolio_returns)
         }
+
+        # Include missing assets in metadata if any
+        if missing_history:
+            result['missing_assets'] = sorted(list(missing_history))
+
+        return result
 
     def calculate_dual_portfolio_var(
         self,
