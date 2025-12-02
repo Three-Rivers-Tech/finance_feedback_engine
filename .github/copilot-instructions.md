@@ -91,10 +91,14 @@ wipe-decisions --confirm                # Clear decision history
 pytest tests/                           # Run all tests
 pytest tests/test_phase1_robustness.py  # Specific test file
 pytest -v                               # Verbose mode
+pytest -k "ensemble"                    # Run tests matching pattern
 ```
 - Use `MockPlatform` for local/CI tests (set `trading_platform: mock` in config)
 - Test fixtures in `tests/conftest.py` provide pre-configured engines
 - Config: `config/config.test.mock.yaml` for automated testing
+- Test structure mirrors `finance_feedback_engine/` module organization
+- Integration tests validate end-to-end workflows (test_phase1_integration.py)
+- Unit tests focus on individual components (test_ensemble_manager_validation.py)
 
 **Debugging:**
 - Add `-v` to CLI for DEBUG logs
@@ -102,6 +106,8 @@ pytest -v                               # Verbose mode
 - Inspect `data/decisions/YYYY-MM-DD_<uuid>.json` for canonical decision format
 - Validate regime: ADX >25 = trending, ATR/price = volatility measure
 - Failed providers logged to `data/failures/` when quorum breaks
+- Asset pair validation: use `standardize_asset_pair()` from `finance_feedback_engine/utils/validation.py`
+- Decision validation: `decision_validation.py` enforces schema before persistence/execution
 
 ## Project-Specific Conventions
 
@@ -139,11 +145,13 @@ pytest -v                               # Verbose mode
 - ADX (Average Directional Index): >25 = trending market
 - ATR/price ratio: measures volatility (higher = more volatile)
 - Regimes: `TRENDING_BULL`, `TRENDING_BEAR`, `HIGH_VOLATILITY_CHOP`, `LOW_VOLATILITY_RANGING`
+- Implementation: `finance_feedback_engine/utils/market_regime_detector.py`
 
 **Trading Fundamentals (embedded in prompts):**
 - Long positions: BUY to enter, SELL to exit (profit when price rises)
 - Short positions: SELL to enter, BUY to cover (profit when price falls)
 - P&L formulas: included in `DecisionEngine` docstring for AI context
+- Position sizing formula: `(Account Balance × Risk%) / (Entry Price × Stop Loss%)`
 
 ## Ensemble Fallback & Metadata
 
