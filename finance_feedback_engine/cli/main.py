@@ -481,77 +481,78 @@ def config_editor(ctx, output):
         val = click.confirm(label, default=default_val, show_default=True)
         _set_nested(updated_config, keys, val)
 
-    console.print("\n[bold cyan]Config Editor[/bold cyan]")
-    console.print(
-        "Quick setup for API keys and core settings. "
-        "Press Enter to keep defaults.\n"
-    )
-
-    # API keys
-    prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
-
-    platform = prompt_choice(
-        "Trading platform",
-        ("trading_platform",),
-        ["coinbase_advanced", "oanda", "mock", "unified"],
-    )
-
-    if platform in {"coinbase", "coinbase_advanced"}:
-        console.print("\n[bold]Coinbase credentials[/bold]")
-        prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
-        prompt_text("API secret", ("platform_credentials", "api_secret"), secret=True)
-        prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
-    elif platform == "oanda":
-        console.print("\n[bold]Oanda credentials[/bold]")
-        prompt_text("API token", ("platform_credentials", "api_key"), secret=True)
-        prompt_text("Account ID", ("platform_credentials", "account_id"))
-        prompt_choice(
-            "Environment",
-            ("platform_credentials", "environment"),
-            ["practice", "live"],
-        )
-    elif platform == "mock":
-        console.print("\n[yellow]Mock platform — no credentials needed.[/yellow]")
-    elif platform == "unified":
+    try:
+        console.print("\n[bold cyan]Config Editor[/bold cyan]")
         console.print(
-            "\n[yellow]Unified mode. Configure per-platform entries in config YAML manually.[/yellow]"
+            "Quick setup for API keys and core settings. "
+            "Press Enter to keep defaults.\n"
         )
 
-    # Decision engine
-    console.print("\n[bold]Decision engine[/bold]")
-    ai_choice = prompt_choice(
-        "AI provider",
-        ("decision_engine", "ai_provider"),
-        ["ensemble", "local", "cli", "gemini"],
-    )
-    
-    if ai_choice == "ensemble":
-        console.print("Using ensemble mode (default: free local models)")
-        _set_nested(updated_config, ("ensemble", "enabled_providers"), ["local"])
-        _set_nested(updated_config, ("ensemble", "voting_strategy"), "weighted")
-        _set_nested(updated_config, ("ensemble", "adaptive_learning"), True)
+        # API keys
+        prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
 
-    # Autonomous agent
-    console.print("\n[bold]Autonomous agent[/bold]")
-    prompt_bool("Enable autonomous trading?", ("agent", "autonomous", "enabled"))
+        platform = prompt_choice(
+            "Trading platform",
+            ("trading_platform",),
+            ["coinbase_advanced", "oanda", "mock", "unified"],
+        )
 
-    # Logging
-    console.print("\n[bold]Logging[/bold]")
-    prompt_choice(
-        "Log level",
-        ("logging", "level"),
-        ["INFO", "DEBUG", "WARNING"],
-    )
+        if platform in {"coinbase", "coinbase_advanced"}:
+            console.print("\n[bold]Coinbase credentials[/bold]")
+            prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
+            prompt_text("API secret", ("platform_credentials", "api_secret"), secret=True)
+            prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
+        elif platform == "oanda":
+            console.print("\n[bold]Oanda credentials[/bold]")
+            prompt_text("API token", ("platform_credentials", "api_key"), secret=True)
+            prompt_text("Account ID", ("platform_credentials", "account_id"))
+            prompt_choice(
+                "Environment",
+                ("platform_credentials", "environment"),
+                ["practice", "live"],
+            )
+        elif platform == "mock":
+            console.print("\n[yellow]Mock platform — no credentials needed.[/yellow]")
+        elif platform == "unified":
+            console.print(
+                "\n[yellow]Unified mode. Configure per-platform entries in config YAML manually.[/yellow]"
+            )
 
-    # Write config
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(target_path, 'w', encoding='utf-8') as f:
-        yaml.safe_dump(updated_config, f, sort_keys=False)
+        # Decision engine
+        console.print("\n[bold]Decision engine[/bold]")
+        ai_choice = prompt_choice(
+            "AI provider",
+            ("decision_engine", "ai_provider"),
+            ["ensemble", "local", "cli", "gemini"],
+        )
+        
+        if ai_choice == "ensemble":
+            console.print("Using ensemble mode (default: free local models)")
+            _set_nested(updated_config, ("ensemble", "enabled_providers"), ["local"])
+            _set_nested(updated_config, ("ensemble", "voting_strategy"), "weighted")
+            _set_nested(updated_config, ("ensemble", "adaptive_learning"), True)
 
-    console.print(f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]")
-except click.Abort:
-    console.print("[yellow]Cancelled.[/yellow]")
-    return
+        # Autonomous agent
+        console.print("\n[bold]Autonomous agent[/bold]")
+        prompt_bool("Enable autonomous trading?", ("agent", "autonomous", "enabled"))
+
+        # Logging
+        console.print("\n[bold]Logging[/bold]")
+        prompt_choice(
+            "Log level",
+            ("logging", "level"),
+            ["INFO", "DEBUG", "WARNING"],
+        )
+
+        # Write config
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, 'w', encoding='utf-8') as f:
+            yaml.safe_dump(updated_config, f, sort_keys=False)
+
+        console.print(f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]")
+    except click.Abort:
+        console.print("[yellow]Cancelled.[/yellow]")
+        return
 
 
 @cli.command(name='install-deps')
