@@ -368,7 +368,7 @@ class FinanceFeedbackEngine:
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         try:
-            decision = self.decision_engine.generate_decision(
+            decision = await self.decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance=balance,
@@ -411,16 +411,6 @@ class FinanceFeedbackEngine:
 
         # Persist decision
         self.decision_store.save_decision(decision)
-
-        # Cleanup any async resources on providers (e.g., aiohttp sessions)
-        try:
-            if hasattr(self.data_provider, 'close'):
-                maybe_close = self.data_provider.close()
-                if hasattr(maybe_close, '__await__'):
-                    import asyncio as _asyncio
-                    await maybe_close
-        except Exception as e:
-            logger.error(f"Error during provider cleanup: {e}")
 
         return decision
 
@@ -769,3 +759,32 @@ class FinanceFeedbackEngine:
             return None
         
         return self.memory_engine.get_summary()
+    
+    async def close(self) -> None:
+        """
+        Cleanup engine resources (async session cleanup for data providers).
+        
+        Call this method when shutting down the engine to properly close
+        async resources like aiohttp sessions. Can be used in async context
+        managers or shutdown hooks.
+        """
+        import inspect
+        
+        try:
+            if hasattr(self.data_provider, 'close'):
+                close_result = self.data_provider.close()
+                # Check if result is awaitable (coroutine or awaitable object)
+                if inspect.iscoroutine(close_result) or inspect.isawaitable(close_result):
+                    await close_result
+                logger.info("Data provider resources closed successfully")
+        except Exception as e:
+            logger.error(f"Error during engine cleanup: {e}")
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup resources."""
+        await self.close()
+        return False

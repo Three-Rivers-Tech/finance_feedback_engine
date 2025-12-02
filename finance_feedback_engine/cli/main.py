@@ -754,7 +754,23 @@ def analyze(ctx, asset_pair, provider):
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
 
         import asyncio
-        decision = asyncio.run(engine.analyze_asset(asset_pair))
+        
+        # Check for existing event loop to avoid RuntimeError in nested async contexts
+        try:
+            loop = asyncio.get_running_loop()
+            # If we get here, a loop is already running - use run_coroutine_threadsafe
+            future = asyncio.run_coroutine_threadsafe(
+                engine.analyze_asset(asset_pair), 
+                loop
+            )
+            try:
+                decision = future.result()
+            except Exception as e:
+                # Propagate exception to match synchronous CLI flow
+                raise e
+        except RuntimeError:
+            # No running loop - safe to use asyncio.run()
+            decision = asyncio.run(engine.analyze_asset(asset_pair))
 
         # Check for Phase 1 quorum failure (NO_DECISION action)
         if decision.get('action') == 'NO_DECISION':
