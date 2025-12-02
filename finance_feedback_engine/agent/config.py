@@ -62,3 +62,9 @@ class TradingAgentConfig(BaseModel):
     analysis_frequency_seconds: int = 300
     monitoring_frequency_seconds: int = 60
     min_confidence_threshold: float = 70.0  # Minimum confidence to execute a trade
+    watchlist: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
+
+    # --- Timing and Retry Controls ---
+    reasoning_retry_delay_seconds: int = 60
+    reasoning_failure_decay_seconds: int = 3600
+    main_loop_error_backoff_seconds: int = 300

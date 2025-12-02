@@ -75,6 +75,16 @@ class AlphaVantageProvider:
         if self.session and self._owned_session:
             await self.session.close()
 
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self._ensure_session()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.close()
+        return False
+
     async def _async_request(
         self, params: Dict[str, Any], timeout: int
     ) -> Dict[str, Any]:
@@ -130,7 +140,7 @@ class AlphaVantageProvider:
 
         retry = ExponentialRetry(attempts=3)
         # Initialize RetryClient bound to an existing session
-        client = RetryClient(session=self.session, retry_options=retry)
+        client = RetryClient(client_session=self.session, retry_options=retry)
         try:
             async with client.get(
                 self.BASE_URL, params=params, timeout=timeout
@@ -159,7 +169,7 @@ class AlphaVantageProvider:
             await self._ensure_session()
 
         retry = ExponentialRetry(attempts=3)
-        client = RetryClient(session=self.session, retry_options=retry)
+        client = RetryClient(client_session=self.session, retry_options=retry)
         try:
             async with client.get(
                 self.BASE_URL, params=params, timeout=timeout
