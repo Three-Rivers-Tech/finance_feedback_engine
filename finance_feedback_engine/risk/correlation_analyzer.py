@@ -69,14 +69,6 @@ class CorrelationAnalyzer:
                 n
             )
             return None
-        if n < 10:
-            logger.warning(
-                "Insufficient data for correlation (%d points, need 10+)",
-                n
-            )
-            return None
-        
-        # Calculate means
         
         # Calculate means
         mean_a = mean(returns_a)

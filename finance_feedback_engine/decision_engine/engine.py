@@ -94,6 +94,8 @@ class DecisionEngine:
             - ensemble: Ensemble configuration (if provider='ensemble')
         """
         self.data_provider = data_provider
+        # Store original config for backward compatibility lookups
+        self._original_config = config
         # Handle both full config and sub-dict formats
         if 'decision_engine' in config:
             # Full config passed
@@ -152,7 +154,10 @@ class DecisionEngine:
         self.vector_memory = None
         try:
             # Accept either direct path or nested config keys
-            vm_cfg = self.config.get('memory', {}) if isinstance(self.config, dict) else {}
+            # Check top-level 'memory' key first (full config), then fall back to original config (backward compatibility)
+            vm_cfg = self.config.get('memory') or self._original_config.get('memory', {})
+            if not isinstance(vm_cfg, dict):
+                vm_cfg = {}
             storage_path = (
                 vm_cfg.get('vector_store_path')
                 or vm_cfg.get('vector_memory_path')
