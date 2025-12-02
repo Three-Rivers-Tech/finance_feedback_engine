@@ -61,7 +61,8 @@ class TradingAgentConfig(BaseModel):
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
     analysis_frequency_seconds: int = 300
     monitoring_frequency_seconds: int = 60
-    min_confidence_threshold: float = 70.0  # Minimum confidence to execute a trade
+    min_confidence_threshold: float = 0.70  # Minimum confidence to execute a trade (70%)
+    # Asset pairs to monitor for opportunities (superset of asset_pairs for active trading)
     watchlist: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
 
     # --- Timing and Retry Controls ---

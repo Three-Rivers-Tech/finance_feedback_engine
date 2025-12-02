@@ -119,8 +119,8 @@ class MarketRegimeDetector:
         minus_di = np.where(atr == 0, 0, 100 * (smooth_minus_dm / atr))
         
         # Replace infinite values with 0 and fill NaN with 0
-        plus_di = pd.Series(plus_di).replace([np.inf, -np.inf], 0).fillna(0)
-        minus_di = pd.Series(minus_di).replace([np.inf, -np.inf], 0).fillna(0)
+        plus_di = pd.Series(plus_di, index=df.index).replace([np.inf, -np.inf], 0).fillna(0)
+        minus_di = pd.Series(minus_di, index=df.index).replace([np.inf, -np.inf], 0).fillna(0)
         
         return plus_di, minus_di
 
