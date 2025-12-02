@@ -89,17 +89,18 @@ class TestBacktesterCandles:
 class TestBacktesterMaxDrawdown:
     """Test max drawdown calculation."""
     
-    def test_max_drawdown_calculation(self, backtester):
+    @pytest.mark.asyncio
+    async def test_max_drawdown_calculation(self, backtester):
         """Test max drawdown in backtest results."""
-        results = asyncio.run(backtester.run(
+        results = await backtester.run(
             asset_pair='BTCUSD',
             start='2024-01-01',
             end='2024-01-05',
             strategy_name='sma_crossover',
             initial_balance=10000.0
-        ))
+        )
         
-        # Max drawdown should be present in results
-        if 'max_drawdown' in results:
-            assert isinstance(results['max_drawdown'], (int, float))
-            assert results['max_drawdown'] <= 0  # Drawdown is negative
+        # Max drawdown must be present in results
+        assert 'max_drawdown' in results, "max_drawdown should always be calculated"
+        assert isinstance(results['max_drawdown'], (int, float))
+        assert results['max_drawdown'] <= 0, "Drawdown should be negative or zero"

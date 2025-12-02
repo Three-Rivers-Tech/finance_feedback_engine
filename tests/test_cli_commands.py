@@ -443,8 +443,25 @@ def test_install_deps_check_only():
             
             result = runner.invoke(cli, ['install-deps'])
             
-            # Should check dependencies
-            assert result.exit_code == 0 or 'click' in result.output
+            # Assert command succeeded
+            assert result.exit_code == 0
+            assert 'click' in result.output
+            
+            # Verify requirements file was parsed
+            mock_parse.assert_called_once()
+            
+            # Verify subprocess.run was called exactly once for pip list
+            mock_subprocess.assert_called_once()
+            call_args = mock_subprocess.call_args[0][0]  # Get the command list
+            assert 'pip' in call_args or 'pip3' in call_args
+            assert 'list' in call_args
+            assert '--format=json' in call_args or '--format' in call_args
+            
+            # Verify no pip install call was made (check-only mode)
+            all_calls = mock_subprocess.call_args_list
+            for call in all_calls:
+                cmd_args = call[0][0] if call[0] else []
+                assert 'install' not in cmd_args, "pip install should not be called in check-only mode"
 
 
 def test_install_deps_auto_install():
@@ -464,8 +481,15 @@ def test_install_deps_auto_install():
             
             result = runner.invoke(cli, ['install-deps', '--auto-install'])
             
-            # Should attempt installation
             assert result.exit_code == 0
+            
+            # Verify subprocess was called at least twice (check + install)
+            assert mock_subprocess.call_count >= 2
+            
+            # Verify install command was invoked
+            calls = [str(call) for call in mock_subprocess.call_args_list]
+            assert any('install' in str(call) for call in calls), \
+                "Expected pip install to be called with --auto-install flag"
 
 
 @patch('pathlib.Path.exists')
