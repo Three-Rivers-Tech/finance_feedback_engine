@@ -80,23 +80,39 @@ class AlphaVantageProvider:
         Returns:
             JSON response
         """
+        # Apply rate limiting if limiter is provided
+        if self.rate_limiter is not None:
+            try:
+                # Support both sync callable and async methods
+                if hasattr(self.rate_limiter, 'acquire'):
+                    # Semaphore-like interface
+                    await self.rate_limiter.acquire()
+                elif hasattr(self.rate_limiter, 'wait'):
+                    # Wait-based interface
+                    await self.rate_limiter.wait()
+                elif callable(self.rate_limiter):
+                    # Direct callable - check if it returns awaitable
+                    result = self.rate_limiter()
+                    if hasattr(result, '__await__'):
+                        await result
+            except Exception as e:
+                logger.warning(f"Rate limiter error: {e}")
+                # Propagate limiter exceptions to allow upstream handling
+                raise
+        
         # Lazily create a session and retry client within an event loop context
-        owned_session = False
-        session = self.session
-        if session is None:
-            session = aiohttp.ClientSession()
-            owned_session = True
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+            self._owned_session = True
 
         retry = ExponentialRetry(attempts=3)
-        client = RetryClient(session=session, retry_options=retry)
+        client = RetryClient(session=self.session, retry_options=retry)
         try:
             async with client.get(self.BASE_URL, params=params, timeout=timeout) as resp:
                 resp.raise_for_status()
                 return await resp.json()
         finally:
             await client.close()
-            if owned_session:
-                await session.close()
         
 
     async def get_market_data(self, asset_pair: str) -> Dict[str, Any]:

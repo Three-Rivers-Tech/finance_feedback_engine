@@ -140,7 +140,7 @@ ensemble:
     deepseek-r1:8b: 0.16666667
     mistral:7b-instruct: 0.16666667
     qwen2.5:7b-instruct: 0.16666667
-    gemma2:9b-instruct: 0.16666667
+    gemma2:9b: 0.16666667
     qwen: 0.16666666
     # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
     # they are used conditionally in asset_routing for Phase 2 escalation

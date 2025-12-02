@@ -124,6 +124,24 @@ class CircuitBreaker:
         except self.expected_exception:
             self._on_failure()
             raise
+
+    def call_sync(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute function with circuit breaker protection in a synchronous context.
+
+        For synchronous callers, this wraps the async `call` method using
+        `asyncio.run` to provide blocking behavior while preserving circuit
+        breaker semantics.
+
+        Args:
+            func: Function to call
+            *args: Positional arguments for func
+            **kwargs: Keyword arguments for func
+
+        Returns:
+            Result from func
+        """
+        return asyncio.run(self.call(func, *args, **kwargs))
     
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt recovery."""
@@ -233,12 +251,23 @@ def circuit_breaker(
     )
     
     def decorator(func: Callable) -> Callable:
+        # If the decorated function is async, return an async wrapper
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                return await breaker.call(func, *args, **kwargs)
+
+            # Attach breaker instance for external access
+            async_wrapper.circuit_breaker = breaker
+            return async_wrapper
+
+        # Otherwise, return a synchronous wrapper for sync functions
         @wraps(func)
-        async def wrapper(*args, **kwargs):
-            return await breaker.call(func, *args, **kwargs)
-        
+        def sync_wrapper(*args, **kwargs):
+            return breaker.call_sync(func, *args, **kwargs)
+
         # Attach breaker instance for external access
-        wrapper.circuit_breaker = breaker
-        return wrapper
+        sync_wrapper.circuit_breaker = breaker
+        return sync_wrapper
     
     return decorator
