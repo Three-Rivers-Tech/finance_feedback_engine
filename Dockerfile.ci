@@ -1,0 +1,30 @@
+FROM archlinux:latest
+
+# Update system and install base packages
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+        python \
+        python-pip \
+        git \
+        base-devel && \
+    pacman -Scc --noconfirm
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy requirements files
+COPY requirements.txt requirements-dev.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-dev.txt
+
+# Create necessary directories
+RUN mkdir -p /workspace/data/decisions_test /workspace/data/test_metrics
+
+# Set Python path
+ENV PYTHONPATH=/workspace:$PYTHONPATH
+
+# Default command
+CMD ["pytest"]

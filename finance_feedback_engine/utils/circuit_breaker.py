@@ -214,13 +214,13 @@ class CircuitBreaker:
             if is_async:
                 result = await runner()
             else:
+                result = runner()
             # Re-acquire lock for success handling
             async with self._async_lock:
                 was_half_open = self.state == CircuitState.HALF_OPEN
                 self._on_success()
                 if was_half_open:
                     self._half_open_in_progress = False
-            return result
             return result
         except Exception as exc:
             # Re-acquire lock for failure handling
@@ -343,10 +343,12 @@ def circuit_breaker(
             @wraps(func)
             async def async_wrapper(*args, **kwargs):
                 return await breaker.call(func, *args, **kwargs)
+            async_wrapper.circuit_breaker = breaker
             return async_wrapper
         
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
             return breaker.call_sync(func, *args, **kwargs)
+        sync_wrapper.circuit_breaker = breaker
         return sync_wrapper
     return decorator
