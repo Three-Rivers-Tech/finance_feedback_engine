@@ -39,6 +39,16 @@ class TradingAgentConfig(BaseModel):
     risk_percentage: float = 0.01  # Percentage of account to risk per trade (1%)
     sizing_stop_loss_percentage: float = 0.02  # Stop loss used for position sizing calculation (2%)
 
+    # RiskGatekeeper configuration (all decimals; validation enforces bounds)
+    # - correlation_threshold: Asset correlation threshold to consider positions correlated (e.g., 0.7 = 70%)
+    # - max_correlated_assets: Max number of correlated assets allowed within a category/platform before blocking
+    # - max_var_pct: Maximum acceptable portfolio VaR percentage (decimal, e.g., 0.05 = 5%)
+    # - var_confidence: Confidence level used for VaR checks (decimal, e.g., 0.95 = 95%)
+    correlation_threshold: float = Field(0.7, ge=0.0, le=1.0)
+    max_correlated_assets: int = Field(2, gt=0)
+    max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
+    var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
+
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
     analysis_frequency_seconds: int = 300

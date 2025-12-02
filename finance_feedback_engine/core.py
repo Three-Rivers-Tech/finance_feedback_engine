@@ -307,7 +307,7 @@ class FinanceFeedbackEngine:
             "AI will have full awareness of active positions/trades"
         )
 
-    def analyze_asset(
+    async def analyze_asset(
         self,
         asset_pair: str,
         include_sentiment: bool = True,

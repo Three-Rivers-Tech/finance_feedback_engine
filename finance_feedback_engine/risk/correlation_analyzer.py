@@ -1,4 +1,7 @@
-"""Correlation analyzer for portfolio-aware concentration limits and cross-platform risk detection."""
+"""
+Correlation analyzer for portfolio-aware concentration limits and
+cross-platform risk detection.
+"""
 
 from typing import Dict, Any, List, Optional, Tuple
 import logging
@@ -37,7 +40,8 @@ class CorrelationAnalyzer:
         self.correlation_threshold = 0.7  # Per-platform limit
         self.cross_platform_warning_threshold = 0.5
         logger.info(
-            f"CorrelationAnalyzer initialized with {lookback_days}-day lookback"
+            "CorrelationAnalyzer initialized with %d-day lookback",
+            lookback_days
         )
 
     def calculate_pearson_correlation(
@@ -58,21 +62,25 @@ class CorrelationAnalyzer:
         if not returns_a or not returns_b or len(returns_a) != len(returns_b):
             return None
         
-        if len(returns_a) < 10:
+        n = len(returns_a)
+        if n < 10:
             logger.warning(
-                f"Insufficient data for correlation ({len(returns_a)} points, need 10+)"
+                "Insufficient data for correlation (%d points, need 10+)",
+                n
             )
+            return None
+        if n <= 1:
             return None
         
         # Calculate means
         mean_a = mean(returns_a)
         mean_b = mean(returns_b)
         
-        # Calculate covariance and standard deviations
+        # Calculate sample covariance (divide by n-1 to match statistics.stdev)
         covariance = sum(
-            (a - mean_a) * (b - mean_b) 
+            (a - mean_a) * (b - mean_b)
             for a, b in zip(returns_a, returns_b)
-        ) / len(returns_a)
+        ) / (n - 1)
         
         std_a = stdev(returns_a)
         std_b = stdev(returns_b)
@@ -95,7 +103,9 @@ class CorrelationAnalyzer:
         Build correlation matrix from price history.
         
         Args:
-            price_history: Historical prices {asset_id: [{'date': 'YYYY-MM-DD', 'price': X}, ...]}
+            price_history: Historical prices {
+                asset_id: [{'date': 'YYYY-MM-DD', 'price': X}, ...]
+            }
         
         Returns:
             Dictionary mapping (asset_a, asset_b) to correlation coefficient
@@ -114,7 +124,7 @@ class CorrelationAnalyzer:
                 prev_price = history[i-1].get('price', 0)
                 curr_price = history[i].get('price', 0)
                 
-                if prev_price > 0:
+                if prev_price > 0 and curr_price > 0:
                     ret = (curr_price - prev_price) / prev_price
                     returns.append(ret)
             
@@ -139,7 +149,8 @@ class CorrelationAnalyzer:
                 
                 if corr is not None:
                     correlation_matrix[(asset_a, asset_b)] = round(corr, 3)
-                    correlation_matrix[(asset_b, asset_a)] = round(corr, 3)  # Symmetric
+                    # Symmetric
+                    correlation_matrix[(asset_b, asset_a)] = round(corr, 3)
         
         return correlation_matrix
 
@@ -152,7 +163,8 @@ class CorrelationAnalyzer:
         Find pairs of assets with correlation above threshold.
         
         Args:
-            correlation_matrix: Correlation matrix from build_correlation_matrix()
+            correlation_matrix: Correlation matrix from
+                build_correlation_matrix()
             threshold: Minimum correlation (default: 0.7)
         
         Returns:
@@ -195,7 +207,7 @@ class CorrelationAnalyzer:
             - max_correlation: Highest correlation found
             - concentration_warning: Warning message if limits exceeded
         """
-        logger.info(f"Analyzing correlations for {platform_name} platform")
+        logger.info("Analyzing correlations for %s platform", platform_name)
         
         if not holdings or len(holdings) < 2:
             return {
@@ -203,7 +215,8 @@ class CorrelationAnalyzer:
                 'highly_correlated': [],
                 'max_correlation': 0.0,
                 'concentration_warning': None,
-                'platform': platform_name
+                'platform': platform_name,
+                'num_holdings': len(holdings) if holdings else 0
             }
         
         # Build correlation matrix
@@ -233,8 +246,9 @@ class CorrelationAnalyzer:
             
             if len(correlated_assets) > 2:
                 warning = (
-                    f"{len(correlated_assets)} assets with correlation >{self.correlation_threshold} "
-                    f"on {platform_name} (limit: 2)"
+                    f"{len(correlated_assets)} assets with correlation >"
+                    f"{self.correlation_threshold} on {platform_name} "
+                    f"(limit: 2)"
                 )
         
         result = {
@@ -247,8 +261,10 @@ class CorrelationAnalyzer:
         }
         
         logger.info(
-            f"{platform_name}: {len(highly_correlated)} highly correlated pairs, "
-            f"max_correlation={max_correlation:.3f}"
+            "%s: %d highly correlated pairs, max_correlation=%.3f",
+            platform_name,
+            len(highly_correlated),
+            max_correlation
         )
         
         return result
@@ -261,7 +277,8 @@ class CorrelationAnalyzer:
         """
         Analyze correlation between Coinbase and Oanda holdings.
         
-        Warning-only (doesn't block trades) since platforms are financially isolated.
+        Warning-only (doesn't block trades) since platforms are
+        financially isolated.
         Useful for understanding systemic risk during USD volatility events.
         
         Args:
@@ -350,9 +367,7 @@ class CorrelationAnalyzer:
             'warning': warning
         }
         
-        logger.info(
-            f"Cross-platform: max_correlation={max_correlation:.3f}"
-        )
+        logger.info("Cross-platform: max_correlation=%.3f", max_correlation)
         
         return result
 
@@ -412,10 +427,7 @@ class CorrelationAnalyzer:
         if cross_platform['warning']:
             result['overall_warnings'].append(cross_platform['warning'])
         
-        logger.info(
-            f"Dual-platform correlation analysis complete: "
-            f"{len(result['overall_warnings'])} warnings"
-        )
+        logger.info("Dual-platform correlation analysis complete: %d warnings", len(result['overall_warnings']))
         
         return result
 
@@ -436,25 +448,25 @@ class CorrelationAnalyzer:
         
         # Coinbase correlations
         cb = analysis['coinbase']
-        lines.append(f"Coinbase ({cb['num_holdings']} holdings):")
+        lines.append("Coinbase (%d holdings):" % cb['num_holdings'])
         lines.append(f"  Max Correlation: {cb['max_correlation']:.3f}")
         if cb['highly_correlated']:
-            lines.append(f"  Highly Correlated Pairs:")
+            lines.append("  Highly Correlated Pairs:")
             for asset_a, asset_b, corr in cb['highly_correlated'][:3]:
                 lines.append(f"    • {asset_a} ↔ {asset_b}: {corr:.3f}")
         
         # Oanda correlations
         oa = analysis['oanda']
-        lines.append(f"\nOanda ({oa['num_holdings']} holdings):")
+        lines.append("\nOanda (%d holdings):" % oa['num_holdings'])
         lines.append(f"  Max Correlation: {oa['max_correlation']:.3f}")
         if oa['highly_correlated']:
-            lines.append(f"  Highly Correlated Pairs:")
+            lines.append("  Highly Correlated Pairs:")
             for asset_a, asset_b, corr in oa['highly_correlated'][:3]:
                 lines.append(f"    • {asset_a} ↔ {asset_b}: {corr:.3f}")
         
         # Cross-platform
         cp = analysis['cross_platform']
-        lines.append(f"\nCross-Platform:")
+        lines.append("\nCross-Platform:")
         lines.append(f"  Max Correlation: {cp['max_correlation']:.3f}")
         
         # Warnings

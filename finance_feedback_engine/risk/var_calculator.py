@@ -63,9 +63,10 @@ class VaRCalculator:
         # Sort returns (worst to best)
         sorted_returns = sorted(returns)
         
-        # Calculate percentile index
+        # Calculate at the specified percentile
         percentile = 1 - confidence_level
-        index = int(len(sorted_returns) * percentile)
+        index = round(len(sorted_returns) * percentile)
+        index = max(0, min(index, len(sorted_returns) - 1)) # Clamp to valid range
         
         # VaR is the return at the percentile (negative = loss)
         var = abs(sorted_returns[index])
@@ -80,12 +81,14 @@ class VaRCalculator:
     ) -> Dict[str, Any]:
         """
         Calculate VaR for a portfolio of holdings.
-        
+
+        NOTE: This method assumes the current portfolio composition (weights) has remained constant over the historical period. If the portfolio composition changed, the VaR estimate may be inaccurate. For true historical VaR, historical portfolio weights are required.
+
         Args:
             holdings: Dictionary of holdings {asset_id: {'quantity': X, 'current_price': Y}}
             price_history: Historical prices {asset_id: [{'date': 'YYYY-MM-DD', 'price': X}, ...]}
             confidence_level: Confidence level (0.95 or 0.99)
-        
+
         Returns:
             Dictionary with:
             - var: VaR value (decimal fraction)
@@ -102,14 +105,14 @@ class VaRCalculator:
                 'confidence_level': confidence_level,
                 'data_quality': 'no_holdings'
             }
-        
+
         # Calculate current portfolio value
         portfolio_value = 0.0
         for asset_id, holding in holdings.items():
             quantity = holding.get('quantity', 0)
             price = holding.get('current_price', 0)
             portfolio_value += quantity * price
-        
+
         if portfolio_value == 0:
             return {
                 'var': 0.0,
@@ -118,25 +121,25 @@ class VaRCalculator:
                 'confidence_level': confidence_level,
                 'data_quality': 'zero_value'
             }
-        
+
         # Calculate daily returns for each asset
         asset_returns = {}
         for asset_id, history in price_history.items():
             if not history or len(history) < 2:
                 continue
-            
+
             returns = []
             for i in range(1, len(history)):
                 prev_price = history[i-1].get('price', 0)
                 curr_price = history[i].get('price', 0)
-                
+
                 if prev_price > 0:
                     ret = (curr_price - prev_price) / prev_price
                     returns.append(ret)
-            
+
             if returns:
                 asset_returns[asset_id] = returns
-        
+
         if not asset_returns:
             return {
                 'var': 0.0,
@@ -145,34 +148,45 @@ class VaRCalculator:
                 'confidence_level': confidence_level,
                 'data_quality': 'no_price_history'
             }
-        
-        # Calculate portfolio returns (weighted by current holdings)
-        # Simplified approach: weight each asset's returns by its % of portfolio
-        max_history_length = max(len(returns) for returns in asset_returns.values())
+
+        # Use only the common date range for all assets
+        min_history_length = min(len(returns) for returns in asset_returns.values())
+        if min_history_length < 30:
+            logger.warning(
+                f"Insufficient common history for VaR calculation (min {min_history_length} days, need 30+)"
+            )
+            return {
+                'var': 0.0,
+                'var_usd': 0.0,
+                'portfolio_value': portfolio_value,
+                'confidence_level': confidence_level,
+                'data_quality': 'insufficient_common_history',
+                'sample_size': min_history_length
+            }
+
         portfolio_returns = []
-        
-        for i in range(max_history_length):
+        for i in range(min_history_length):
             daily_return = 0.0
-            total_weight = 0.0
-            
             for asset_id, returns in asset_returns.items():
-                if i < len(returns):
-                    holding = holdings.get(asset_id, {})
-                    quantity = holding.get('quantity', 0)
-                    price = holding.get('current_price', 0)
-                    asset_value = quantity * price
-                    
-                    weight = asset_value / portfolio_value if portfolio_value > 0 else 0
-                    daily_return += returns[i] * weight
-                    total_weight += weight
-            
-            if total_weight > 0:
-                portfolio_returns.append(daily_return)
-        
+                holding = holdings.get(asset_id, {})
+                quantity = holding.get('quantity', 0)
+                price = holding.get('current_price', 0)
+                asset_value = quantity * price
+                weight = asset_value / portfolio_value if portfolio_value > 0 else 0
+                # Use the most recent min_history_length days (align from the end)
+                daily_return += returns[-(min_history_length - i)] * weight
+            portfolio_returns.append(daily_return)
+
+        # Warn about the constant composition assumption
+        logger.warning(
+            "VaR calculation assumes constant portfolio composition over the historical window. "
+            "If portfolio weights changed, VaR may be inaccurate."
+        )
+
         # Calculate VaR from portfolio returns
         var = self.calculate_historical_var(portfolio_returns, confidence_level)
         var_usd = var * portfolio_value
-        
+
         return {
             'var': round(var, 4),
             'var_usd': round(var_usd, 2),
