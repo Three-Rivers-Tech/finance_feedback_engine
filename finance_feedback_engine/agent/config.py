@@ -1,5 +1,5 @@
 from typing import List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class AutonomousAgentConfig(BaseModel):
     """Configuration for the autonomous trading agent."""
@@ -48,6 +48,14 @@ class TradingAgentConfig(BaseModel):
     max_correlated_assets: int = Field(2, gt=0)
     max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
     var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
+
+    @field_validator('correlation_threshold', 'max_var_pct', 'var_confidence', mode='before')
+    @classmethod
+    def normalize_percentage_fields(cls, v):
+        """Normalize percentage values: if value > 1, treat as percentage and divide by 100."""
+        if isinstance(v, (int, float)) and v > 1:
+            return v / 100
+        return v
 
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]

@@ -57,7 +57,9 @@ class TradingLoopAgent:
         self.is_running = False
         self.state = AgentState.IDLE
         self._current_decision = None
-        self.analysis_failures = {}
+        # Track analysis failures and their timestamps for time-based decay
+        self.analysis_failures = {}  # {failure_key: count}
+        self.analysis_failure_timestamps = {}  # {failure_key: last_failure_datetime}
         self.daily_trade_count = 0
         self.last_trade_date = datetime.date.today()
 
@@ -138,6 +140,11 @@ class TradingLoopAgent:
             logger.info(f"New day detected. Resetting daily trade count from {self.daily_trade_count} to 0.")
             self.daily_trade_count = 0
             self.last_trade_date = today
+            # Reset all analysis failures on new day
+            if self.analysis_failures:
+                logger.info("Resetting analysis_failures for all assets (new day).")
+                self.analysis_failures.clear()
+                self.analysis_failure_timestamps.clear()
 
         # The trade_monitor runs in a separate process, so we don't need to switch
         # to a monitoring state here. The DecisionEngine will get the monitoring
@@ -155,11 +162,21 @@ class TradingLoopAgent:
         MAX_RETRIES = 3
         RETRY_DELAY_SECONDS = 60
 
+        # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
+        current_time = datetime.datetime.now()
+        decay_seconds = 3600  # 1 hour; make configurable if needed
+        for key in list(self.analysis_failures.keys()):
+            last_fail = self.analysis_failure_timestamps.get(key)
+            if last_fail and (current_time - last_fail).total_seconds() > decay_seconds:
+                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
+                self.analysis_failures.pop(key, None)
+                self.analysis_failure_timestamps.pop(key, None)
+
         for asset_pair in self.config.asset_pairs:
             failure_key = f"analysis:{asset_pair}"
-            
+
             if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
-                logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures.")
+                logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset).")
                 continue
 
             for attempt in range(MAX_RETRIES):
@@ -167,9 +184,10 @@ class TradingLoopAgent:
                     logger.debug(f"Analyzing {asset_pair} (Attempt {attempt + 1}/{MAX_RETRIES})...")
                     decision = self.engine.analyze_asset(asset_pair)
 
-                    # Reset failure count on success
+                    # Reset failure count and timestamp on success
                     self.analysis_failures[failure_key] = 0
-                    
+                    self.analysis_failure_timestamps[failure_key] = current_time
+
                     if decision and decision.get('action') in ["BUY", "SELL"]:
                         if await self._should_execute(decision):
                             self._current_decision = decision
@@ -179,11 +197,12 @@ class TradingLoopAgent:
                             logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
                     else:
                         logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
-                    
+
                     break  # Analysis successful, break retry loop
 
                 except Exception as e:
                     logger.warning(f"Analysis attempt {attempt + 1} for {asset_pair} failed: {e}")
+                    self.analysis_failure_timestamps[failure_key] = current_time
                     if attempt < MAX_RETRIES - 1:
                         await asyncio.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
                     else:
