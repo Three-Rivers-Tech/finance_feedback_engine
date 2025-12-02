@@ -131,8 +131,13 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
             # If unable to parse, return original normalized string
             return s
-        except Exception:
-            # Be resilient: return the input unchanged on unexpected errors
+        except ValueError:
+            # Let validation errors (like empty input) propagate to caller
+            raise
+        except Exception as e:
+            # Be resilient: return the input unchanged on unexpected parsing errors
+            # but let validation errors (empty input) propagate
+            logger.error("Unexpected error formatting product_id: %s", e)
             return asset_pair
 
     def get_balance(self) -> Dict[str, float]:

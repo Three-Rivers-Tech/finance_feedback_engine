@@ -269,15 +269,16 @@ class ModelInstaller:
             # Accept exact match, startswith, or base-name match (before colon or dash)
             matched_name = None
             for inst_name in installed:
+                # Match exact, or base name before common separators (: or -)
+                base_colon = inst_name.split(':')[0]
+                base_dash = inst_name.split('-')[0]
                 if (
                     inst_name == req_norm
-                    or inst_name.startswith(req_norm)
-                    or inst_name.split(':')[0] == req_norm
-                    or inst_name.split('-')[0] == req_norm
+                    or base_colon == req_norm
+                    or base_dash == req_norm
                 ):
                     matched_name = inst_name
                     break
-
             if matched_name:
                 logger.info(f"Verified {model} is installed (matched: {matched_name})")
                 return True
