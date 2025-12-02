@@ -1,3 +1,18 @@
+# Ignore accidental pip or tooling output files with leading '=' (e.g., '=5.3.0')
+=*
+
+# Common temporary outputs
+*.log
+*.tmp
+*.temp
+*.cache
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
 # Prevent committing secrets
 config/config.local.yaml
 # Local configuration (contains secrets, do not commit)
