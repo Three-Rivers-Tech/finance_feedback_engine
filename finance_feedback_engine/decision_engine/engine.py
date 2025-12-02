@@ -295,9 +295,6 @@ class DecisionEngine:
             'portfolio': portfolio,
             'memory_context': memory_context,
             'monitoring_context': monitoring_context,
-            'balance': balance,
-            'portfolio': portfolio,
-            'memory_context': memory_context,
             'timestamp': datetime.utcnow().isoformat(),
             'price_change': self._calculate_price_change(market_data),
             'volatility': self._calculate_volatility(market_data)
@@ -306,6 +303,74 @@ class DecisionEngine:
         # Detect market regime using historical data
         regime = self._detect_market_regime(asset_pair)
         context['regime'] = regime
+
+        # --- Inject multi-timeframe pulse context (if internal TradeMonitor running) ---
+        try:
+            if self.monitoring_provider and getattr(self.monitoring_provider, 'trade_monitor', None):
+                tm = self.monitoring_provider.trade_monitor
+                if tm:
+                    mt_ctx = tm.get_latest_market_context(asset_pair)
+                    if mt_ctx:
+                        context['multi_timeframe_trend'] = mt_ctx.get('trend_alignment', {})
+                        context['multi_timeframe_entry_signals'] = mt_ctx.get('entry_signals', {})
+                        context['multi_timeframe_sources'] = mt_ctx.get('data_sources', {})
+                        # Data source path (ordered list of providers actually used per timeframe)
+                        ds_map = mt_ctx.get('data_sources', {})
+                        context['data_source_path'] = [v for _, v in sorted(ds_map.items())]
+                        # Pulse age seconds (approximate)
+                        try:
+                            import time
+                            pulse_age = time.time() - tm._last_pulse_time
+                        except Exception:
+                            pulse_age = None
+                        context['monitor_pulse_age_seconds'] = pulse_age
+        except Exception as e:
+            logger.debug(f"Multi-timeframe injection failed: {e}")
+
+        # --- Inject real VaR & correlation analysis ---
+        try:
+            from finance_feedback_engine.risk.var_calculator import VaRCalculator
+            from finance_feedback_engine.risk.correlation_analyzer import CorrelationAnalyzer
+            var_calc = VaRCalculator()
+            corr_analyzer = CorrelationAnalyzer()
+            # Portfolio breakdowns for dual-platform risk (if available)
+            coinbase_holdings = portfolio.get('coinbase_holdings', {}) if portfolio else {}
+            coinbase_history = portfolio.get('coinbase_price_history', {}) if portfolio else {}
+            oanda_holdings = portfolio.get('oanda_holdings', {}) if portfolio else {}
+            oanda_history = portfolio.get('oanda_price_history', {}) if portfolio else {}
+            # Compute VaR (95% and 99%)
+            var_95 = var_calc.calculate_dual_portfolio_var(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.95
+            )
+            var_99 = var_calc.calculate_dual_portfolio_var(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.99
+            )
+            context['var_snapshot'] = {
+                'portfolio_value': var_95.get('total_portfolio_value', 0.0),
+                'var_95': var_95['combined_var']['var_usd'] if 'combined_var' in var_95 else 0.0,
+                'var_99': var_99['combined_var']['var_usd'] if 'combined_var' in var_99 else 0.0,
+                'data_quality': var_95.get('coinbase_var', {}).get('data_quality', 'unknown')
+            }
+            # Correlation analysis
+            correlation_result = corr_analyzer.analyze_dual_platform_correlations(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history
+            )
+            context['correlation_alerts'] = correlation_result.get('overall_warnings', [])
+            context['correlation_summary'] = corr_analyzer.format_correlation_summary(correlation_result)
+        except Exception as e:
+            logger.debug(f"Risk context injection failed: {e}")
+            # Fallback to placeholder if error
+            port_val = 0.0
+            if portfolio:
+                port_val = portfolio.get('total_value_usd', 0.0)
+            context['var_snapshot'] = {
+                'portfolio_value': port_val,
+                'var_95': 0.0,
+                'var_99': 0.0,
+                'data_quality': 'placeholder'
+            }
+            context['correlation_alerts'] = []
+            context['correlation_summary'] = ''
 
         return context
 
@@ -1892,7 +1957,16 @@ Present your judgment with clear reasoning and final decision.
             ).get('unrealized_pnl'),
             'executed': False,
             'ai_provider': self.ai_provider,
-            'model_name': self.model_name
+            'model_name': self.model_name,
+            # --- Multi-timeframe and risk context fields ---
+            'multi_timeframe_trend': context.get('multi_timeframe_trend'),
+            'multi_timeframe_entry_signals': context.get('multi_timeframe_entry_signals'),
+            'multi_timeframe_sources': context.get('multi_timeframe_sources'),
+            'data_source_path': context.get('data_source_path'),
+            'monitor_pulse_age_seconds': context.get('monitor_pulse_age_seconds'),
+            'var_snapshot': context.get('var_snapshot'),
+            'correlation_alerts': context.get('correlation_alerts'),
+            'correlation_summary': context.get('correlation_summary')
         }
         
         # Add ensemble metadata if available

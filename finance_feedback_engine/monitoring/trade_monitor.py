@@ -5,7 +5,7 @@ import logging
 import threading
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional, Set, Tuple
 from queue import Queue, Empty
 
 from .trade_tracker import TradeTrackerThread
@@ -45,8 +45,12 @@ class TradeMonitor:
         portfolio_initial_balance: float = 0.0,
         portfolio_stop_loss_percentage: float = 0.0,
         portfolio_take_profit_percentage: float = 0.0,
-        monitoring_context_provider=None, # Optionally pass a pre-initialized provider
-        orchestrator=None # Orchestrator instance for control signals
+        monitoring_context_provider=None,  # Optionally pass a pre-initialized provider
+        orchestrator=None,  # Orchestrator instance for control signals
+        # --- Multi-timeframe market pulse configuration ---
+        unified_data_provider=None,  # Instance of UnifiedDataProvider (optional)
+        timeframe_aggregator=None,   # Instance of TimeframeAggregator (optional)
+        pulse_interval: int = 300    # 5-minute pulse for multi-timeframe updates
     ):
         """
         Initialize trade monitor.
@@ -100,10 +104,17 @@ class TradeMonitor:
         self._running = False
         self._monitoring_state = 'active'
         
+        # --- Multi-timeframe market pulse state ---
+        self.unified_data_provider = unified_data_provider
+        self.timeframe_aggregator = timeframe_aggregator
+        self.pulse_interval = pulse_interval
+        self._last_pulse_time = time.time()
+        # Cache: asset_pair -> (analysis_dict, timestamp)
+        self._multi_timeframe_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
+
         logger.info(
-            f"TradeMonitor initialized | "
-            f"Max concurrent: {self.MAX_CONCURRENT_TRADES} | "
-            f"Detection interval: {detection_interval}s"
+            f"TradeMonitor initialized | Max concurrent: {self.MAX_CONCURRENT_TRADES} | "
+            f"Detection interval: {detection_interval}s | Pulse interval: {pulse_interval}s"
         )
     
     def start(self):
@@ -192,7 +203,10 @@ class TradeMonitor:
                         # 5. Check portfolio P&L thresholds
                         self._check_portfolio_pnl_limits()
                         
-                        # 6. Log status
+                        # 6. Execute multi-timeframe market data pulse (non-trading)
+                        self._maybe_execute_market_pulse()
+
+                        # 7. Log status
                         self._log_status()
                         
                     except Exception as e:
@@ -459,6 +473,92 @@ class TradeMonitor:
             f"Pending: {self.pending_queue.qsize()} | "
             f"Total tracked: {len(self.tracked_trade_ids)}"
         )
+
+    # ------------------------------------------------------------------
+    # Multi-timeframe market pulse / caching
+    # ------------------------------------------------------------------
+    def _maybe_execute_market_pulse(self):
+        """Run a multi-timeframe analysis pulse every `pulse_interval` seconds.
+
+        This updates cached market context for watched asset pairs WITHOUT
+        triggering new trade decisions automatically. The DecisionEngine or
+        agent can later request this cached context via
+        `get_latest_market_context(asset_pair)`.
+        """
+        if not self.timeframe_aggregator or not self.unified_data_provider:
+            return  # Feature not configured
+
+        now = time.time()
+        if (now - self._last_pulse_time) < self.pulse_interval:
+            return  # Not time yet
+
+        self._last_pulse_time = now
+        logger.info("Executing multi-timeframe market pulse (no auto-trading)")
+
+        watched_assets = self._get_assets_to_pulse()
+        if not watched_assets:
+            logger.debug("No assets to pulse; skipping multi-timeframe update")
+            return
+
+        for asset in watched_assets:
+            try:
+                analysis = self.timeframe_aggregator.analyze_multi_timeframe(asset)
+                self._multi_timeframe_cache[asset] = (analysis, now)
+                logger.debug(
+                    f"Updated multi-timeframe cache for {asset}: "
+                    f"trend={analysis['trend_alignment']['direction']} "
+                    f"conf={analysis['trend_alignment']['confluence_strength']}%"
+                )
+            except Exception as e:
+                logger.warning(f"Pulse failed for {asset}: {e}")
+
+    def _get_assets_to_pulse(self) -> List[str]:
+        """Determine which asset pairs to include in the pulse.
+
+        Strategy:
+        - All active positions' product_ids
+        - Recently expected trades (still in expectation window)
+        - (Future) configurable watchlist
+        """
+        assets: Set[str] = set()
+
+        # Active positions
+        try:
+            portfolio = self.platform.get_portfolio_breakdown()
+            futures_positions = portfolio.get('futures_positions', [])
+            for pos in futures_positions:
+                pid = pos.get('product_id')
+                if pid:
+                    # Standardize to generic asset pair (remove hyphens for internal use)
+                    assets.add(pid.replace('-', '').upper())
+        except Exception as e:
+            logger.debug(f"Could not derive assets from portfolio: {e}")
+
+        # Expected trades (decision associations)
+        with self._expected_trades_lock:
+            for asset_key in self.expected_trades.keys():
+                assets.add(asset_key.replace('-', '').upper())
+
+        return sorted(list(assets))
+
+    def get_latest_market_context(self, asset_pair: str) -> Optional[Dict[str, Any]]:
+        """Retrieve last cached multi-timeframe analysis for an asset.
+
+        Args:
+            asset_pair: Asset pair (e.g., 'BTCUSD')
+
+        Returns:
+            Analysis dictionary or None if unavailable / stale.
+        """
+        key = asset_pair.replace('-', '').upper()
+        cached = self._multi_timeframe_cache.get(key)
+        if not cached:
+            return None
+        analysis, ts = cached
+        # Consider stale if older than 2 * pulse_interval
+        if (time.time() - ts) > (self.pulse_interval * 2):
+            return None
+        return analysis
     
     @property
     def is_running(self) -> bool:

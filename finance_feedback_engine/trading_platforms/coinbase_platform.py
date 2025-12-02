@@ -547,12 +547,19 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         Get Coinbase account information including portfolio breakdown.
 
         Returns:
-            Account details with portfolio metrics
+            Account details with portfolio metrics and leverage info
         """
         logger.info("Fetching Coinbase account info")
         
         try:
             portfolio = self.get_portfolio_breakdown()
+            
+            # Extract max leverage from futures positions (Coinbase sets this per product)
+            max_leverage = 1.0  # Spot default
+            futures_positions = portfolio.get('futures_positions', [])
+            if futures_positions:
+                leverages = [pos.get('leverage', 1.0) for pos in futures_positions if pos.get('leverage')]
+                max_leverage = max(leverages) if leverages else 10.0  # Default to 10x if not specified
             
             return {
                 'platform': 'coinbase_advanced',
@@ -560,6 +567,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'status': 'active',
                 'mode': 'signal_only',
                 'execution_enabled': False,
+                'max_leverage': max_leverage,  # Dynamically fetched from current positions
                 'balances': self.get_balance(),
                 'portfolio': portfolio
             }
