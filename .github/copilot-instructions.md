@@ -97,8 +97,8 @@ pytest -k "ensemble"                    # Run tests matching pattern
 - Test fixtures in `tests/conftest.py` provide pre-configured engines
 - Config: `config/config.test.mock.yaml` for automated testing
 - Test structure mirrors `finance_feedback_engine/` module organization
-- Integration tests validate end-to-end workflows (test_phase1_integration.py)
-- Unit tests focus on individual components (test_ensemble_manager_validation.py)
+- Integration tests validate end-to-end workflows (tests/test_phase1_integration.py)
+- Unit tests focus on individual components (tests/test_ensemble_manager_validation.py)
 
 **Debugging:**
 - Add `-v` to CLI for DEBUG logs
@@ -107,7 +107,7 @@ pytest -k "ensemble"                    # Run tests matching pattern
 - Validate regime: ADX >25 = trending, ATR/price = volatility measure
 - Failed providers logged to `data/failures/` when quorum breaks
 - Asset pair validation: use `standardize_asset_pair()` from `finance_feedback_engine/utils/validation.py`
-- Decision validation: `decision_validation.py` enforces schema before persistence/execution
+- Decision validation: `finance_feedback_engine/decision_engine/decision_validation.py` enforces schema before persistence/execution
 
 ## Project-Specific Conventions
 
