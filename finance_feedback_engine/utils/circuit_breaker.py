@@ -1,4 +1,10 @@
-"""Circuit breaker pattern implementation for fault tolerance."""
+"""Circuit breaker pattern implementation for fault tolerance.
+
+Thread/async safety added: protects shared mutable state with
+`threading.Lock` for synchronous paths and `asyncio.Lock` for async paths.
+This ensures atomic counters and correct HALF_OPEN single-request probing
+under concurrent load.
+"""
 
 import time
 import logging
@@ -6,6 +12,7 @@ from enum import Enum
 from typing import Callable, Any, Optional
 from functools import wraps
 import asyncio
+import threading
 
 
 logger = logging.getLogger(__name__)
@@ -70,6 +77,15 @@ class CircuitBreaker:
         self.total_failures = 0
         self.total_successes = 0
         self.circuit_open_count = 0
+
+        # Concurrency locks (sync + async)
+        self._sync_lock = threading.Lock()
+        try:
+            # Async lock requires loop only when first awaited; creation is cheap.
+            self._async_lock = asyncio.Lock()
+        except Exception:  # pragma: no cover - very unlikely
+            # Fallback in strange contexts; will raise if used.
+            self._async_lock = None
         
         logger.info(
             "%s initialized: threshold=%d, timeout=%.1fs",
@@ -103,64 +119,70 @@ class CircuitBreaker:
 
     def _execute_with_circuit(self, runner: Callable[[], Any]) -> Any:
         """Core circuit breaker logic for synchronous execution."""
-        self.total_calls += 1
-        if self.state == CircuitState.OPEN:
-            if self._should_attempt_reset():
-                logger.info(
-                    "%s entering HALF_OPEN state (testing recovery)",
-                    self.name
-                )
-                self.state = CircuitState.HALF_OPEN
-            else:
-                logger.warning(
-                    "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
-                    self.name, self.failure_count, self.failure_threshold
-                )
-                raise CircuitBreakerOpenError(
-                    f"Circuit breaker '{self.name}' is OPEN. "
-                    "Service unavailable, please try again later."
-                )
-        try:
-            result = runner()
-            self._on_success()
-            return result
-        except Exception as exc:
-            if isinstance(exc, self.expected_exception):
-                self._on_failure()
-            raise
+        with self._sync_lock:
+            self.total_calls += 1
+            if self.state == CircuitState.OPEN:
+                if self._should_attempt_reset():
+                    logger.info(
+                        "%s entering HALF_OPEN state (testing recovery)",
+                        self.name
+                    )
+                    self.state = CircuitState.HALF_OPEN
+                else:
+                    logger.warning(
+                        "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
+                        self.name, self.failure_count, self.failure_threshold
+                    )
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker '{self.name}' is OPEN. "
+                        "Service unavailable, please try again later."
+                    )
+            # Execute runner while holding lock to guarantee single HALF_OPEN probe
+            try:
+                result = runner()
+                self._on_success()
+                return result
+            except Exception as exc:
+                if isinstance(exc, self.expected_exception):
+                    self._on_failure()
+                raise
 
     async def _execute_with_circuit_async(
         self, runner: Callable[[], Any], is_async: bool
     ) -> Any:
         """Core circuit breaker logic for async execution."""
-        self.total_calls += 1
-        if self.state == CircuitState.OPEN:
-            if self._should_attempt_reset():
-                logger.info(
-                    "%s entering HALF_OPEN state (testing recovery)",
-                    self.name
-                )
-                self.state = CircuitState.HALF_OPEN
-            else:
-                logger.warning(
-                    "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
-                    self.name, self.failure_count, self.failure_threshold
-                )
-                raise CircuitBreakerOpenError(
-                    f"Circuit breaker '{self.name}' is OPEN. "
-                    "Service unavailable, please try again later."
-                )
-        try:
-            if is_async:
-                result = await runner()
-            else:
-                result = runner()
-            self._on_success()
-            return result
-        except Exception as exc:
-            if isinstance(exc, self.expected_exception):
-                self._on_failure()
-            raise
+        if self._async_lock is None:
+            # Fallback to unsynchronized behavior (should not happen normally)
+            return await runner() if is_async else runner()
+        async with self._async_lock:
+            self.total_calls += 1
+            if self.state == CircuitState.OPEN:
+                if self._should_attempt_reset():
+                    logger.info(
+                        "%s entering HALF_OPEN state (testing recovery)",
+                        self.name
+                    )
+                    self.state = CircuitState.HALF_OPEN
+                else:
+                    logger.warning(
+                        "%s is OPEN, rejecting call (fail fast). Failures: %d/%d",
+                        self.name, self.failure_count, self.failure_threshold
+                    )
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker '{self.name}' is OPEN. "
+                        "Service unavailable, please try again later."
+                    )
+            try:
+                if is_async:
+                    result = await runner()
+                else:
+                    result = runner()
+                self._on_success()
+                return result
+            except Exception as exc:
+                if isinstance(exc, self.expected_exception):
+                    self._on_failure()
+                raise
     
     def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt recovery."""
