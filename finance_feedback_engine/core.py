@@ -532,12 +532,12 @@ class FinanceFeedbackEngine:
             logger.error(f"Critical error during pre-execution monitoring checks: {e}")
             raise
 
-    def backtest(
+    async def backtest(
         self,
         asset_pair: str,
         start: str,
         end: str,
-        strategy: str = 'sma_crossover',
+        strategy: str = "sma_crossover",
         short_window: Optional[int] = None,
         long_window: Optional[int] = None,
         initial_balance: Optional[float] = None,
@@ -560,7 +560,7 @@ class FinanceFeedbackEngine:
         if self._backtester is None:
             bt_conf = self.config.get('backtesting', {})
             self._backtester = Backtester(self.data_provider, bt_conf)
-        return self._backtester.run(
+        return await self._backtester.run(
             asset_pair=asset_pair,
             start=start,
             end=end,

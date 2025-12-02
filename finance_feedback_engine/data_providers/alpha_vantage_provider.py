@@ -47,6 +47,7 @@ class AlphaVantageProvider:
         self._owned_session = False
         import asyncio
         self._session_lock = asyncio.Lock()
+        self._context_count = 0  # Track active async context manager entries
 
         
         # Timeout configuration (industry best practice)
@@ -76,13 +77,23 @@ class AlphaVantageProvider:
             await self.session.close()
 
     async def __aenter__(self):
-        """Async context manager entry."""
+        """Async context manager entry.
+
+        Supports nested async with usage: only closes session when all contexts exit.
+        """
+        self._context_count += 1
         await self._ensure_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit."""
-        await self.close()
+        """Async context manager exit.
+
+        Only closes the session when all nested contexts have exited.
+        """
+        if self._context_count > 0:
+            self._context_count -= 1
+        if self._context_count == 0:
+            await self.close()
         return False
 
     async def _async_request(

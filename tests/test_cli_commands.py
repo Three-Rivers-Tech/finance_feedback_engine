@@ -423,37 +423,49 @@ def test_config_editor_cancel(mock_confirm):
 # INSTALL-DEPS COMMAND TESTS
 # ============================================================================
 
-@patch('subprocess.run')
-@patch('builtins.open', new_callable=mock_open, read_data='click>=8.0\n')
-def test_install_deps_check_only(mock_file, mock_subprocess):
+def test_install_deps_check_only():
     """Test install-deps in check-only mode."""
     runner = CliRunner()
     
-    # Mock pip list output
-    mock_subprocess.return_value.stdout = json.dumps([
-        {'name': 'click', 'version': '8.1.0'}
-    ])
-    mock_subprocess.return_value.returncode = 0
-    
-    result = runner.invoke(cli, ['install-deps'])
-    
-    # Should check dependencies
-    assert result.exit_code == 0 or 'click' in result.output
+    # Mock Path.exists to say requirements.txt exists
+    # Mock requirements file content
+    with patch('finance_feedback_engine.cli.main._parse_requirements_file') as mock_parse:
+        mock_parse.return_value = ['click']
+        
+        # Mock pip list output with subprocess.run at the module level
+        with patch('finance_feedback_engine.cli.main.subprocess.run') as mock_subprocess:
+            mock_result = MagicMock()
+            mock_result.stdout = json.dumps([
+                {'name': 'click', 'version': '8.1.0'}
+            ])
+            mock_result.returncode = 0
+            mock_subprocess.return_value = mock_result
+            
+            result = runner.invoke(cli, ['install-deps'])
+            
+            # Should check dependencies
+            assert result.exit_code == 0 or 'click' in result.output
 
 
-@patch('subprocess.run')
-@patch('builtins.open', new_callable=mock_open, read_data='click>=8.0\n')
-def test_install_deps_auto_install(mock_file, mock_subprocess):
+def test_install_deps_auto_install():
     """Test install-deps with auto-install flag."""
     runner = CliRunner()
     
-    mock_subprocess.return_value.returncode = 0
-    mock_subprocess.return_value.stdout = json.dumps([])
-    
-    result = runner.invoke(cli, ['install-deps', '--auto-install'])
-    
-    # Should attempt installation
-    assert result.exit_code == 0
+    # Mock requirements file content
+    with patch('finance_feedback_engine.cli.main._parse_requirements_file') as mock_parse:
+        mock_parse.return_value = ['click']
+        
+        # Mock pip list output with subprocess.run at the module level
+        with patch('finance_feedback_engine.cli.main.subprocess.run') as mock_subprocess:
+            mock_result = MagicMock()
+            mock_result.stdout = json.dumps([])
+            mock_result.returncode = 0
+            mock_subprocess.return_value = mock_result
+            
+            result = runner.invoke(cli, ['install-deps', '--auto-install'])
+            
+            # Should attempt installation
+            assert result.exit_code == 0
 
 
 @patch('pathlib.Path.exists')
