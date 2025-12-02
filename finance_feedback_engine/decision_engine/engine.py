@@ -314,7 +314,7 @@ class DecisionEngine:
         }
 
         # Detect market regime using historical data
-        regime = self._detect_market_regime(asset_pair)
+        regime = await self._detect_market_regime(asset_pair)
         context['regime'] = regime
 
         # --- Inject multi-timeframe pulse context (if internal TradeMonitor running) ---
@@ -387,7 +387,7 @@ class DecisionEngine:
 
         return context
 
-    def _detect_market_regime(self, asset_pair: str) -> str:
+    async def _detect_market_regime(self, asset_pair: str) -> str:
         """
         Detect the current market regime using historical data.
 
@@ -406,7 +406,8 @@ class DecisionEngine:
             end_date = datetime.utcnow().date()
             start_date = end_date - timedelta(days=30)
             
-            historical_data = self.data_provider.get_historical_data(
+            # Await async historical data fetch if coroutine
+            historical_data = await self.data_provider.get_historical_data(
                 asset_pair,
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")

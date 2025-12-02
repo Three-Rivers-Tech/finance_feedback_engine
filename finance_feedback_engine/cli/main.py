@@ -753,7 +753,8 @@ def analyze(ctx, asset_pair, provider):
 
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
 
-        decision = engine.analyze_asset(asset_pair)
+        import asyncio
+        decision = asyncio.run(engine.analyze_asset(asset_pair))
 
         # Check for Phase 1 quorum failure (NO_DECISION action)
         if decision.get('action') == 'NO_DECISION':
