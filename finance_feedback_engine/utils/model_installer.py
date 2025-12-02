@@ -232,31 +232,47 @@ class ModelInstaller:
             True if verification succeeds
         """
         try:
-            # Use `ollama show --format json` for structured verification
+            # Prefer 'ollama list' parsing for version-safe verification
             result = subprocess.run(
-                ['ollama', 'show', model, '--format', 'json'],
+                ['ollama', 'list'],
                 capture_output=True,
                 text=True,
                 timeout=10
             )
             if result.returncode != 0:
-                logger.error(f"Verification failed for {model}: ollama show returned {result.returncode}\n{result.stderr}")
+                logger.error(
+                    f"Verification failed for {model}: 'ollama list' returned {result.returncode}\n{result.stderr}"
+                )
                 return False
 
-            info = json.loads(result.stdout or '{}')
-            digest = info.get('digest') or info.get('details', {}).get('digest')
-            # Some versions return a list under 'models'
-            if not digest and isinstance(info.get('models'), list) and info['models']:
-                digest = info['models'][0].get('digest')
+            lines = result.stdout.strip().split('\n')
+            # Skip header if present
+            entries = [ln.strip() for ln in lines if ln.strip()][1:] if lines else []
+            installed = set()
+            for ln in entries:
+                try:
+                    name = ln.split()[0]
+                    if name:
+                        installed.add(name)
+                except Exception:
+                    continue
 
-            if not digest:
-                logger.error(f"Verification failed for {model}: missing digest in metadata")
-                return False
+            if model in installed:
+                logger.info(f"Verified {model} is installed")
+                return True
 
-            logger.info(f"Verified {model} with digest {digest}")
-            return True
-        except json.JSONDecodeError:
-            logger.error(f"Verification failed for {model}: could not parse JSON output")
+            # Fallback: attempt a lightweight show without --format
+            show = subprocess.run(
+                ['ollama', 'show', model],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if show.returncode == 0:
+                logger.info(f"Verified {model} via 'ollama show' output")
+                return True
+
+            logger.error(f"Verification failed for {model}: not listed by 'ollama list' and 'ollama show' failed ({show.returncode})")
             return False
         except subprocess.TimeoutExpired:
             logger.error(f"Verification timed out for {model}")

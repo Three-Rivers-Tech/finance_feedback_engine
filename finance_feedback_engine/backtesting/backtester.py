@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+import asyncio
 import random
 import logging
 
@@ -110,8 +111,11 @@ class Backtester:
         candles = []
         if use_real and hasattr(self.data_provider, "get_historical_data"):
             try:
-                candles = self.data_provider.get_historical_data(
-                    asset_pair, start, end
+                # Ensure async provider method is executed synchronously
+                candles = asyncio.run(
+                    self.data_provider.get_historical_data(
+                        asset_pair, start, end
+                    )
                 )
             except Exception:
                 candles = []
@@ -301,7 +305,7 @@ class Backtester:
         seed_int = int(seed_hash[:16], 16)  # Use first 16 hex digits for seed
         local_rng = random.Random(seed_int)
 
-        seed = self.data_provider.get_market_data(asset_pair)
+        seed = asyncio.run(self.data_provider.get_market_data(asset_pair))
         base_close = float(seed.get("close", 100))
         current = base_close
         candles: List[Candle] = []

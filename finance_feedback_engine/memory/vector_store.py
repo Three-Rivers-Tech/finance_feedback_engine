@@ -133,6 +133,8 @@ class VectorMemory:
 
         logger.debug(f"Added/Updated record {id} to vector store")
         return True
+
+    def find_similar(self, text: str, top_k: int = 5) -> List[Tuple[str, float, Dict[str, Any]]]:
         """
         Find similar records using cosine similarity.
 
@@ -170,21 +172,6 @@ class VectorMemory:
         ).flatten()
 
         # Get top-k indices
-        top_indices = np.argsort(similarities)[::-1][:top_k]
-
-        # Return results
-        results = []
-        for idx in top_indices:
-            record_id = self.ids[idx]
-            similarity = float(similarities[idx])
-            metadata = self.metadata[record_id].copy()
-            # Remove vector from returned metadata for cleanliness
-            metadata.pop('vector', None)
-
-            results.append((record_id, similarity, metadata))
-
-        logger.debug(f"Found {len(results)} similar records for query")
-        return results
         top_indices = np.argsort(similarities)[::-1][:top_k]
 
         # Return results

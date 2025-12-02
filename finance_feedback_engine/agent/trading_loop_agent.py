@@ -63,6 +63,16 @@ class TradingLoopAgent:
         self.daily_trade_count = 0
         self.last_trade_date = datetime.date.today()
 
+        # State machine handler map
+        self.state_handlers = {
+            AgentState.IDLE: self.handle_idle_state,
+            AgentState.PERCEPTION: self.handle_perception_state,
+            AgentState.REASONING: self.handle_reasoning_state,
+            AgentState.RISK_CHECK: self.handle_risk_check_state,
+            AgentState.EXECUTION: self.handle_execution_state,
+            AgentState.LEARNING: self.handle_learning_state,
+        }
+
     async def run(self):
         """
         The main trading loop, implemented as a state machine.
@@ -73,26 +83,19 @@ class TradingLoopAgent:
 
         while self.is_running:
             try:
-                if self.state == AgentState.IDLE:
-                    await self.handle_idle_state()
-                elif self.state == AgentState.PERCEPTION:
-                    await self.handle_perception_state()
-                elif self.state == AgentState.REASONING:
-                    await self.handle_reasoning_state()
-                elif self.state == AgentState.RISK_CHECK:
-                    await self.handle_risk_check_state()
-                elif self.state == AgentState.EXECUTION:
-                    await self.handle_execution_state()
-                elif self.state == AgentState.LEARNING:
-                    await self.handle_learning_state()
-
+                handler = self.state_handlers.get(self.state)
+                if handler:
+                    await handler()
+                else:
+                    logger.error(f"No handler found for state {self.state}. Stopping agent.")
+                    self.stop()
             except asyncio.CancelledError:
                 logger.info("Trading loop cancelled.")
                 break
             except Exception as e:
                 logger.error(f"An error occurred in the trading loop: {e}", exc_info=True)
                 self.state = AgentState.IDLE  # Go to idle on error and wait before retrying
-                await asyncio.sleep(300)  # Backoff on error
+                await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
 
     async def _transition_to(self, new_state: AgentState):
         """Helper method to handle state transitions with logging."""
@@ -160,14 +163,12 @@ class TradingLoopAgent:
         logger.info("State: REASONING - Running DecisionEngine...")
 
         MAX_RETRIES = 3
-        RETRY_DELAY_SECONDS = 60
 
         # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
         current_time = datetime.datetime.now()
-        decay_seconds = 3600  # 1 hour; make configurable if needed
         for key in list(self.analysis_failures.keys()):
             last_fail = self.analysis_failure_timestamps.get(key)
-            if last_fail and (current_time - last_fail).total_seconds() > decay_seconds:
+            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
                 logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
@@ -204,7 +205,7 @@ class TradingLoopAgent:
                     logger.warning(f"Analysis attempt {attempt + 1} for {asset_pair} failed: {e}")
                     self.analysis_failure_timestamps[failure_key] = current_time
                     if attempt < MAX_RETRIES - 1:
-                        await asyncio.sleep(RETRY_DELAY_SECONDS * (attempt + 1))
+                        await asyncio.sleep(self.config.reasoning_retry_delay_seconds * (attempt + 1))
                     else:
                         self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
                         logger.error(
@@ -215,7 +216,6 @@ class TradingLoopAgent:
 
         logger.info("Analysis complete. No actionable trades found. Going back to IDLE.")
         await self._transition_to(AgentState.IDLE)
-
     async def handle_risk_check_state(self):
         """
         RISK_CHECK: Running the RiskGatekeeper.

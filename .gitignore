@@ -88,3 +88,6 @@ coverage.xml
 *.tmp
 *.temp
 /tmp/
+
+# Node Modules
+node_modules
