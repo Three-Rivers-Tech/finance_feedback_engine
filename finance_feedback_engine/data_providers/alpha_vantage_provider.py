@@ -157,16 +157,6 @@ class AlphaVantageProvider:
         if self.session is None:
             await self._ensure_session()
 
-    async def _ensure_session(self):
-        """
-        Ensure that self.session is initialized, guarded by a lock to prevent race conditions.
-        """
-        # Defensive: allow for possible missing lock (e.g., after unpickling)
-        self.__post_init_session_lock()
-        async with self._session_lock:
-            if self.session is None:
-                self.session = aiohttp.ClientSession()
-                self._owned_session = True
         retry = ExponentialRetry(attempts=3)
         client = RetryClient(session=self.session, retry_options=retry)
         try:
@@ -177,6 +167,28 @@ class AlphaVantageProvider:
                 return await resp.json()
         finally:
             await client.close()
+
+        retry = ExponentialRetry(attempts=3)
+        client = RetryClient(session=self.session, retry_options=retry)
+        try:
+            async with client.get(
+                self.BASE_URL, params=params, timeout=timeout
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+        finally:
+            await client.close()
+
+    async def _ensure_session(self):
+        """
+        Ensure that self.session is initialized, guarded by a lock to prevent race conditions.
+        """
+        # Defensive: allow for possible missing lock (e.g., after unpickling)
+        self.__post_init_session_lock()
+        async with self._session_lock:
+            if self.session is None:
+                self.session = aiohttp.ClientSession()
+                self._owned_session = True
         
 
     async def get_market_data(self, asset_pair: str) -> Dict[str, Any]:

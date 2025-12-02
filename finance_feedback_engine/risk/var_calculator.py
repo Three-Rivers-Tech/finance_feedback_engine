@@ -185,7 +185,7 @@ class VaRCalculator:
                 'portfolio_value': portfolio_value,
                 'confidence_level': confidence_level,
                 'data_quality': 'missing_price_history',
-                'missing_assets': list(missing_history)
+                'missing_assets': sorted(list(missing_history))
             }
 
         portfolio_returns = []
