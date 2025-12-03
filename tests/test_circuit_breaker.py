@@ -194,7 +194,7 @@ class TestCircuitBreakerMetrics:
                 cb.call_sync(lambda: 1/0)
         
         assert cb.total_successes == 3
-        assert cb.failure_count == 2
+        assert cb.total_failures == 2
         assert cb.total_calls == 5
 
 

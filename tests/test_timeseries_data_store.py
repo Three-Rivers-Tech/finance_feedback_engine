@@ -31,6 +31,7 @@ class TestTimeSeriesDataStore:
     def test_save_data_basic(self, store):
         """Test saving data with save_data method."""
         data = {"timestamp": datetime.now().isoformat(), "value": 100.5}
+        expected_timestamp = data['timestamp']
         # Assuming save_data takes series_name and data
         store.save_data("test_series", data)
         
@@ -40,7 +41,7 @@ class TestTimeSeriesDataStore:
         assert len(loaded) == 1
         saved_item = loaded[0]
         assert saved_item['value'] == 100.5
-        assert saved_item['timestamp'] == data['timestamp']
+        assert saved_item['timestamp'] == expected_timestamp
 
     def test_load_data_basic(self, store):
         """Test loading data with load_data method."""
