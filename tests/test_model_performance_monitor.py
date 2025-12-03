@@ -106,7 +106,7 @@ class TestModelPerformanceMonitor:
             'confidence': 85
         }
         monitor.record_prediction(features_df, prediction, datetime.now())
-        monitor.record_actual_outcome('test_eval_1', {'success': True}, datetime.now())
+        monitor.record_actual_outcome('test_eval_1', {'success': True, 'profit': 10.0}, datetime.now())
         
         # Evaluate
         performance = monitor.evaluate_performance()
@@ -126,7 +126,7 @@ class TestModelPerformanceMonitor:
         # Assert exact values based on recorded data
         assert performance['accuracy'] == pytest.approx(1.0, abs=1e-6)
         assert performance['win_rate'] == pytest.approx(1.0, abs=1e-6)
-        assert performance['total_pnl'] == pytest.approx(0.0, abs=1e-6)
+        assert performance['total_pnl'] == pytest.approx(10.0, abs=1e-6)
         assert performance['num_predictions'] == 1
         assert performance['num_outcomes'] == 1
 
@@ -193,7 +193,7 @@ class TestPerformanceMetrics:
             if i % 2 == 0:
                 monitor.record_actual_outcome(
                     prediction_id=f'test_pred_{i}',
-                    actual_outcome={'success': True},
+                    actual_outcome={'success': True, 'profit': 10.0 * (i + 1)},
                     timestamp=datetime.now()
                 )
         
@@ -214,4 +214,4 @@ class TestPerformanceMetrics:
         assert performance['num_outcomes'] == 3
         assert performance['accuracy'] == pytest.approx(1.0, abs=1e-6)  # All recorded outcomes are successful
         assert performance['win_rate'] == pytest.approx(1.0, abs=1e-6)
-        assert performance['total_pnl'] == pytest.approx(0.0, abs=1e-6)  # No profit values specified
+        assert performance['total_pnl'] == pytest.approx(90.0, abs=1e-6)
