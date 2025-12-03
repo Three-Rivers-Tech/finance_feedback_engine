@@ -245,8 +245,8 @@ class DecisionEngine:
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
         
-        # Get AI recommendation
-        ai_response = self._query_ai(prompt)
+        # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
+        ai_response = self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
 
         # Validate AI response action to ensure it's one of the allowed values
         if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
@@ -1013,12 +1013,19 @@ Format response as a structured technical analysis demonstration.
         
         return "\n".join(lines)
 
-    def _query_ai(self, prompt: str) -> Dict[str, Any]:
+    def _query_ai(
+        self,
+        prompt: str,
+        asset_pair: Optional[str] = None,
+        market_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
 
         Args:
             prompt: AI prompt
+            asset_pair: Optional asset pair for two-phase routing
+            market_data: Optional market data for two-phase routing
 
         Returns:
             AI response
@@ -1027,7 +1034,7 @@ Format response as a structured technical analysis demonstration.
         
         # Ensemble mode: query multiple providers and aggregate
         if self.ai_provider == 'ensemble':
-            return self._ensemble_ai_inference(prompt)
+            return self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
         
         # Route to appropriate single provider
         if self.ai_provider == 'local':
@@ -1267,13 +1274,21 @@ Format response as a structured technical analysis demonstration.
             logger.warning(f"Provider {provider} failed: {e}")
             return provider, None
 
-    def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
+    def _ensemble_ai_inference(
+        self,
+        prompt: str,
+        asset_pair: Optional[str] = None,
+        market_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Ensemble AI inference using multiple providers with weighted voting.
         Dynamically adjusts weights when providers fail to respond.
+        Supports two-phase escalation to premium providers when configured.
 
         Args:
             prompt: AI prompt
+            asset_pair: Optional asset pair for two-phase routing
+            market_data: Optional market data for two-phase escalation checks
 
         Returns:
             Aggregated decision from ensemble with failure handling
@@ -1283,6 +1298,29 @@ Format response as a structured technical analysis demonstration.
         if not self.ensemble_manager:
             logger.error("Ensemble manager not initialized")
             return self._rule_based_decision(prompt)
+        
+        # Check for two-phase mode
+        two_phase_config = self.config.get('ensemble', {}).get('two_phase', {})
+        two_phase_enabled = two_phase_config.get('enabled', False)
+        
+        if two_phase_enabled and asset_pair and market_data:
+            logger.info("Two-phase ensemble mode enabled, using smart premium API escalation")
+            # Use two-phase aggregation with query function wrapper
+            def query_function(provider: str, prompt: str) -> Dict[str, Any]:
+                """Wrapper to query individual providers."""
+                provider_name, decision = self._query_single_provider(provider, prompt)
+                return decision if decision else {}
+            
+            try:
+                return self.ensemble_manager.aggregate_decisions_two_phase(
+                    prompt=prompt,
+                    asset_pair=asset_pair,
+                    market_data=market_data,
+                    query_function=query_function
+                )
+            except Exception as e:
+                logger.error(f"Two-phase ensemble failed: {e}, falling back to standard ensemble")
+                # Fall through to standard ensemble below
         
         # Check for debate mode
         if self.ensemble_manager.debate_mode:
