@@ -165,11 +165,15 @@ class AdvancedBacktester:
         for timestamp, candle in data.iterrows():
             market_data = candle.to_dict()
             
+            # Extract base and quote currencies (assuming 3-char codes)
+            base_currency = asset_pair[:3] if len(asset_pair) >= 6 else asset_pair
+            quote_currency = asset_pair[3:] if len(asset_pair) >= 6 else 'USD'
+            
             decision = decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
-                balance={'USD': current_balance}, # Assuming USD as quote currency
-                portfolio={'holdings': [{'asset': asset_pair.replace('USD', ''), 'units': portfolio_units}]}
+                balance={quote_currency: current_balance},
+                portfolio={'holdings': [{'asset': base_currency, 'units': portfolio_units}]}
             )
 
             action = decision.get('action', 'HOLD')
