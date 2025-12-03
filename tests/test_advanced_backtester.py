@@ -52,16 +52,13 @@ def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_hi
 
 def test_advanced_backtester_simple_strategy(sample_historical_data):
     class SimpleDecisionEngine(DecisionEngine):
-        def generate_decision(self, asset_pair, market_data, balance, portfolio):
-            # The timestamp is the name of the series, which is the index of the row
-            timestamp = market_data.name
+        def generate_decision(self, asset_pair, market_data, balance, portfolio, timestamp: datetime):
             if timestamp.day == 1:
                 return {'action': 'BUY', 'suggested_amount': 10000}
             elif timestamp.day == 31:
                 return {'action': 'SELL'}
             else:
                 return {'action': 'HOLD'}
-
     backtester_provider = MockHistoricalDataProvider(sample_historical_data)
     backtester = AdvancedBacktester(historical_data_provider=backtester_provider)
     
@@ -76,5 +73,39 @@ def test_advanced_backtester_simple_strategy(sample_historical_data):
     assert "metrics" in results
     assert "trades" in results
     assert results['metrics']['initial_balance'] == 10000.0
-    assert results['metrics']['total_trades'] == 2
-    assert results['metrics']['net_return_pct'] > 0
+    assert results['metrics']['total_trades'] == 2 # One BUY, one SELL
+    assert results['metrics']['winning_trades'] == 1
+    assert results['metrics']['losing_trades'] == 0
+    assert pytest.approx(results['metrics']['win_rate']) == 100.0
+
+    # Calculate expected values based on the mock data and backtester logic
+    # initial_balance = 10000.0
+    # Day 1 close price: 102.0
+    # Day 31 close price: 132.0 (102 + 30)
+    # fee_percentage = 0.001
+    # slippage_percentage = 0.0001
+    # commission_per_trade = 0.0
+
+    # BUY on Day 1
+    # effective_buy_price = 102.0 * (1 + 0.0001) = 102.0102
+    # max_principal_spendable = 10000.0 / (1 + 0.001) = 9990.00999
+    # trade_amount_quote = min(10000.0, 9990.00999) = 9990.00999
+    # units_traded = 9990.00999 / 102.0102 = 97.931535 (approx)
+    # fee_buy = 9990.00999 * 0.001 = 9.99000999 (approx)
+    # balance_after_buy = 10000.0 - 9990.00999 - 9.99000999 = 0.00000002 (approx 0)
+    # entry_price = 102.0102
+
+    # SELL on Day 31
+    # effective_sell_price = 132.0 * (1 - 0.0001) = 131.9868
+    # trade_value_sell = 97.931535 * 131.9868 = 12925.7533 (approx)
+    # fee_sell = 12925.7533 * 0.001 = 12.9257533 (approx)
+    # final_balance = 0.0 + 12925.7533 - 12.9257533 = 12912.8275 (approx)
+    # pnl_value = (effective_sell_price - entry_price) * units_traded
+    # pnl_value = (131.9868 - 102.0102) * 97.931535 = 29.9766 * 97.931535 = 2935.5342 (approx)
+
+    # total_return_pct = (12912.8275 - 10000) / 10000 * 100 = 29.128275%
+    
+    assert pytest.approx(results['metrics']['total_return_pct'], rel=1e-2) == 29.13 # Adjusted for small floating point differences
+    assert pytest.approx(results['metrics']['final_value'], rel=1e-2) == 12912.83
+    assert pytest.approx(results['metrics']['max_drawdown_pct'], abs=1.0) <= 0.0 # Should be 0 or very close to 0 for this strategy
+
