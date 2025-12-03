@@ -32,8 +32,21 @@ def test_engine_initialization(mock_engine):
 
 def test_analyze_asset(mock_engine):
     """Test the analyze_asset method (synchronous)."""
-    # Mock the underlying decision generation to avoid AI/network calls
-    with patch.object(mock_engine.decision_engine, 'generate_decision', return_value={'action': 'HOLD', 'confidence': 50}) as mock_gen:
+    import asyncio
+    
+    # Mock the underlying async data provider call
+    async def mock_market_data(*args, **kwargs):
+        return {
+            'open': 50000.0,
+            'high': 51000.0,
+            'low': 49000.0,
+            'close': 50500.0,
+            'volume': 1000000
+        }
+    
+    # Mock the decision generation to avoid AI/network calls
+    with patch.object(mock_engine.data_provider, 'get_comprehensive_market_data', side_effect=mock_market_data), \
+         patch.object(mock_engine.decision_engine, 'generate_decision', return_value={'action': 'HOLD', 'confidence': 50}) as mock_gen:
         decision = mock_engine.analyze_asset('BTCUSD')
         assert decision is not None
         assert 'action' in decision
