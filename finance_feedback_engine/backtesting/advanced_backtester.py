@@ -249,6 +249,8 @@ class AdvancedBacktester:
         # 3. Iterate through data and execute strategy
         for timestamp, candle in data.iterrows():
             market_data = candle.to_dict()
+            market_data['timestamp'] = timestamp.isoformat() # Add timestamp to market_data for decision engine
+
             
             # Extract base and quote currencies (assuming 3-char codes)
             # This logic should be more robust, potentially using a currency parsing utility
