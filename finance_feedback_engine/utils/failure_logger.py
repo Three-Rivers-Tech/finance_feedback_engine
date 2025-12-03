@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -134,21 +135,6 @@ def send_telegram_notification(message: str, config: Dict[str, Any]) -> bool:
     """
     Send notification via Telegram Bot API.
     
-    TODO: Implement Telegram Bot API integration
-    - Use config['telegram']['bot_token'] for authentication
-    - Use config['telegram']['chat_id'] for destination
-    - Send message using requests.post to Telegram API
-    - Handle rate limits and errors gracefully
-    
-    Example implementation:
-        import requests
-        bot_token = config['telegram']['bot_token']
-        chat_id = config['telegram']['chat_id']
-        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        data = {'chat_id': chat_id, 'text': message}
-        response = requests.post(url, data=data)
-        return response.status_code == 200
-    
     Args:
         message: Message text to send
         config: Configuration dictionary with telegram settings
@@ -156,30 +142,34 @@ def send_telegram_notification(message: str, config: Dict[str, Any]) -> bool:
     Returns:
         True if notification sent successfully
     """
-    # Check if Telegram is enabled
     telegram_config = config.get('telegram', {})
     
     if not telegram_config.get('enabled', False):
         logger.debug("Telegram notifications disabled")
         return False
     
-    if not telegram_config.get('bot_token') or not telegram_config.get('chat_id'):
+    bot_token = telegram_config.get('bot_token')
+    chat_id = telegram_config.get('chat_id')
+    
+    if not bot_token or not chat_id:
         logger.warning("Telegram bot_token or chat_id not configured")
         return False
     
-    # TODO: Implement actual Telegram API call
-    logger.info(f"[STUB] Would send Telegram notification: {message[:100]}")
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    data = {'chat_id': chat_id, 'text': message}
     
-    # Placeholder for future implementation
-    # When implemented, this should:
-    # 1. Import requests
-    # 2. Construct Telegram API URL
-    # 3. POST message to Telegram
-    # 4. Handle response and errors
-    # 5. Return success/failure
-    
-    return False  # Not yet implemented
-
+    try:
+        response = requests.post(url, data=data, timeout=10)
+        response.raise_for_status()
+        if response.status_code == 200:
+            logger.info("Telegram notification sent successfully.")
+            return True
+        else:
+            logger.warning(f"Failed to send Telegram notification. Status: {response.status_code}, Response: {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error sending Telegram notification: {e}")
+        return False
 
 # Global instance
 _logger = None
