@@ -365,8 +365,18 @@ class TestThreadSafety:
     """Test thread-safe operations of the agent."""
 
     @pytest.mark.asyncio
-    async def test_concurrent_trade_tracking(self):
-        """Test that concurrent trade tracking is thread-safe."""
+    async def test_active_trade_count_returns_valid_integer(self):
+        """Test that _get_active_trade_count returns a valid non-negative integer.
+        
+        Note: This is a basic validation test. The _get_active_trade_count method
+        is not yet implemented in TradingAgentOrchestrator but is mocked in other
+        tests for max_concurrent_trades enforcement.
+        
+        TODO: Once _get_active_trade_count is implemented with proper thread-safe
+        tracking (e.g., using threading.Lock), replace this test with a real
+        concurrency test that spawns multiple async tasks or threads to verify
+        race condition protection.
+        """
         config = {
             'watchlist': ['BTCUSD'],
             'check_interval_seconds': 60,
@@ -383,20 +393,28 @@ class TestThreadSafety:
             config=config_obj
         )
         
-        # Simulate concurrent trade operations
-        # In a real scenario, this would use threading/asyncio
-        # Here we test the logic
-        
-        initial_count = orchestrator._get_active_trade_count() if hasattr(orchestrator, '_get_active_trade_count') else 0
-        assert isinstance(initial_count, int)
-        assert initial_count >= 0
+        # Check if method exists (placeholder until implemented)
+        if hasattr(orchestrator, '_get_active_trade_count'):
+            initial_count = orchestrator._get_active_trade_count()
+            assert isinstance(initial_count, int), "Active trade count must be an integer"
+            assert initial_count >= 0, "Active trade count cannot be negative"
+        else:
+            # Method not yet implemented - test passes as placeholder
+            assert True
 
 
 class TestWatchlistManagement:
     """Test watchlist asset management."""
 
-    def test_watchlist_validation(self):
-        """Test that watchlist assets are validated."""
+    def test_watchlist_accepts_assets(self):
+        """Test that watchlist accepts asset pairs without validation.
+        
+        Note: Current implementation does not validate watchlist asset pairs at config time.
+        Assets are passed through as-is. Validation (if needed) would occur during analysis
+        via standardize_asset_pair() in the engine/data provider layer.
+        
+        This test verifies the watchlist is stored correctly in the config object.
+        """
         config = {
             'watchlist': ['BTCUSD', 'ETHUSD', 'INVALID'],
             'check_interval_seconds': 60,
@@ -408,14 +426,18 @@ class TestWatchlistManagement:
         
         engine = MagicMock()
         
-        # Watchlist should accept standard formats
+        # Watchlist should accept asset pairs (including invalid ones at config time)
         config_obj = TradingAgentConfig(**config)
         orchestrator = TradingAgentOrchestrator(
             engine=engine,
             config=config_obj
         )
         
-        assert len(config_obj.watchlist) > 0
+        # Verify all watchlist items are preserved (no filtering at config level)
+        assert len(config_obj.watchlist) == 3
+        assert 'BTCUSD' in config_obj.watchlist
+        assert 'ETHUSD' in config_obj.watchlist
+        assert 'INVALID' in config_obj.watchlist  # Currently accepted; would fail during analysis
 
     def test_empty_watchlist_handling(self):
         """Test handling of empty watchlist."""

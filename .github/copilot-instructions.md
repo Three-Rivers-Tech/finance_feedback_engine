@@ -183,12 +183,12 @@ The engine supports multiple AI providers:
 - Register via `PlatformFactory.register_platform('name', Class)`
 - Unified mode: aggregates multiple platforms (set `trading_platform: unified`, configure `platforms` list)
 
-**Config Loading (tiered):**
-1. `config/config.yaml` (base defaults, committed)
-2. `config/config.local.yaml` (local overrides, gitignored) — deep merge over base
-3. Environment variables: `ALPHA_VANTAGE_API_KEY` overrides both config files
-   - Env vars checked first via `os.environ.get()` in `core.py`
+**Config Loading (tiered, highest priority first):**
+1. **Environment variables** (highest priority): `ALPHA_VANTAGE_API_KEY`, `COINBASE_API_KEY`, etc.
+   - Checked first via `os.environ.get()` in `core.py`
    - Use `export ALPHA_VANTAGE_API_KEY=...` to override without editing files
+2. `config/config.local.yaml` (local overrides, gitignored) — deep merge over base
+3. `config/config.yaml` (base defaults, committed, lowest priority)
 
 **Market Regime Detection:**
 - ADX (Average Directional Index): >25 = trending market
@@ -284,7 +284,7 @@ See `docs/ENSEMBLE_FALLBACK_SYSTEM.md` for complete fallback logic.
 - Market regime classification: check `market_regime` field in decision
 - Position sizing: validate against `DecisionEngine.calculate_position_size()` logic
 - Platform errors: circuit breaker logs to console when threshold exceeded
-- Config precedence: `config.local.yaml` > `config.yaml` > env vars
+- Config precedence: **env vars** > `config.local.yaml` > `config.yaml` (highest to lowest)
 
 **Common Issues:**
 - "Insufficient providers": Check AI provider availability, ensure 3+ configured

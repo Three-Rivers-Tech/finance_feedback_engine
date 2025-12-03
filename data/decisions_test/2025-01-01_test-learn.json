@@ -1,0 +1,25 @@
+{
+  "id": "test-learn",
+  "asset_pair": "ETHUSD",
+  "signal_only": false,
+  "action": "BUY",
+  "confidence": 80,
+  "amount": 0.1,
+  "timestamp": "2025-01-01T00:00:01Z",
+  "entry_price": 100.0,
+  "recommended_position_size": 1.0,
+  "ai_provider": "ensemble",
+  "ensemble_metadata": {
+    "provider_decisions": {
+      "local": {
+        "action": "BUY"
+      }
+    },
+    "providers_used": [
+      "local"
+    ]
+  },
+  "market_data": {
+    "close": 100.0
+  }
+}
