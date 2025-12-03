@@ -60,11 +60,35 @@ Reasoning: Strong bullish momentum with positive sentiment
 
 ---
 
-### 2. Gemini CLI (Free - Recommended for Advanced Analysis)
+### 2. Gemini CLI (Free - Requires Manual Activation)
 
 **Provider ID**: `gemini`
 
+**Status**: ⚠️ **Disabled by Default** - Requires manual activation (see below)
+
 **Description**: Uses Google's official Gemini CLI tool for AI-powered trading analysis. Provides access to Gemini 2.5 Pro with 1M token context window through free OAuth authentication or API key.
+
+**Activation Required**:
+1. Uncomment the Gemini integration in `finance_feedback_engine/decision_engine/engine.py`:
+   ```python
+   # Around line 1041, change from:
+   # elif self.ai_provider == 'gemini':
+   #     return self._gemini_ai_inference(prompt)
+   
+   # To:
+   elif self.ai_provider == 'gemini':
+       return self._gemini_ai_inference(prompt)
+   ```
+
+2. Uncomment the `_gemini_ai_inference` method (around line 1145 in the same file)
+
+3. Ensure `gemini_cli_provider.py` exists in `finance_feedback_engine/decision_engine/`
+
+**Why Disabled by Default**:
+- Requires external Node.js dependency (v20+)
+- Requires OAuth authentication setup
+- May not be needed for all users
+- Keeps default installation lightweight
 
 **Advantages**:
 - ✅ **Free tier** - OAuth: 60 req/min, 1,000 req/day | API key: 100 req/day
@@ -342,17 +366,19 @@ When this configuration is active, the system will:
 
 ## Provider Comparison
 
-| Feature | Qwen CLI | Local LLM (Ollama) | All Local (Ensemble) | Codex CLI | Copilot CLI |
-|---------|----------|-------------------|-----------|-------------|
-| **Cost** | Free | Free (one-time download) | Free (uses local models) | Free (local) | Subscription |
-| **Setup** | OAuth + Node.js v20+ | Auto-download | Add to `ensemble` config | npm install | GitHub auth |
-| **Quality** | High | High (3B params) | Very High (multi-model) | High (GPT-4 class) | High |
-| **Speed** | ~5-15s | ~5-20s | ~10-30s (per model) | ~10-15s | ~5-10s |
-| **Reasoning** | Natural language | Natural language | Aggregated | Natural language | Natural language |
-| **Privacy** | Cloud / Self-hosted | 100% local | 100% local | Local | Cloud |
-| **Internet** | Required | Not required | Not required | Initial setup | Required |
-| **Hardware** | Standard | Standard CPU | Standard CPU | Standard | Standard |
-| **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+| Feature | Qwen CLI | Gemini CLI* | Local LLM (Ollama) | All Local (Ensemble) | Codex CLI | Copilot CLI |
+|---------|----------|-------------|-------------------|----------------------|-----------|-------------|
+| **Cost** | Free | Free | Free (one-time download) | Free (uses local models) | Free (local) | Subscription |
+| **Setup** | OAuth + Node.js v20+ | Manual activation + OAuth | Auto-download | Add to `ensemble` config | npm install | GitHub auth |
+| **Quality** | High | Very High | High (3B params) | Very High (multi-model) | High (GPT-4 class) | High |
+| **Speed** | ~5-15s | ~5-15s | ~5-20s | ~10-30s (per model) | ~10-15s | ~5-10s |
+| **Reasoning** | Natural language | Natural language | Natural language | Aggregated | Natural language | Natural language |
+| **Privacy** | Cloud / Self-hosted | Cloud | 100% local | 100% local | Local | Cloud |
+| **Internet** | Required | Required | Not required | Not required | Initial setup | Required |
+| **Hardware** | Standard | Standard | Standard CPU | Standard CPU | Standard | Standard |
+| **API Charges** | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None | ❌ None |
+
+*Gemini CLI: Disabled by default, requires manual activation (see section 2)
 
 *Note: Qwen CLI privacy depends on the chosen authentication method. Cloud-based authentication uses remote servers, while self-hosted options allow local deployment.*
 
