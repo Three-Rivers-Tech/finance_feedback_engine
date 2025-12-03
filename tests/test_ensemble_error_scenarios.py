@@ -131,7 +131,7 @@ class TestEnsembleFallbackSystem:
         provider_decisions = {}
         failed_providers = ['local', 'codex', 'qwen', 'cli']
         
-        with pytest.raises(ValueError):
+        with pytest.raises(InsufficientProvidersError):
             manager.aggregate_decisions(
                 provider_decisions=provider_decisions,
                 failed_providers=failed_providers
