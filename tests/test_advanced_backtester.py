@@ -109,5 +109,5 @@ def test_advanced_backtester_simple_strategy(sample_historical_data):
     
     assert pytest.approx(results['metrics']['total_return_pct'], rel=1e-2) == 5.65 # Adjusted for small floating point differences
     assert pytest.approx(results['metrics']['final_value'], rel=1e-2) == 10564.97
-    assert results['metrics']['max_drawdown_pct'] <= 0.0 # Should be 0 or very close to 0 for this strategy
+    assert pytest.approx(results['metrics']['max_drawdown_pct'], abs=0.01) == 0.0 # Should be 0 or very close to 0 for this strategy
 
