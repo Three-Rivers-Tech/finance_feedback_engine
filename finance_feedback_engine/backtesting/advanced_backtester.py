@@ -3,12 +3,23 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Callable, Optional, Union, Tuple
 import logging
 import numpy as np
+from dataclasses import dataclass
+from datetime import datetime, timezone # Added datetime import
 
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
-# TODO: Import HistoricalDataProvider
-# from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
+from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class Position:
+    asset_pair: str
+    units: float
+    entry_price: float
+    entry_timestamp: datetime
+    side: str = "LONG" # For now, only support LONG positions
+    stop_loss_price: Optional[float] = None
+    take_profit_price: Optional[float] = None
 
 class AdvancedBacktester:
     """
@@ -50,19 +61,21 @@ class AdvancedBacktester:
     """
 
     def __init__(self,
-                 historical_data_provider: Any, # TODO: Specify type HistoricalDataProvider
+                 historical_data_provider: HistoricalDataProvider,
                  initial_balance: float = 10000.0,
                  fee_percentage: float = 0.001, # 0.1% fee
                  slippage_percentage: float = 0.0001, # 0.01% slippage
-                 commission_per_trade: float = 0.0 # Fixed commission
+                 commission_per_trade: float = 0.0, # Fixed commission
+                 stop_loss_percentage: float = 0.02, # 2% stop loss
+                 take_profit_percentage: float = 0.05 # 5% take profit
                  ):
-        if not isinstance(historical_data_provider, object): # TODO: Change to HistoricalDataProvider
-             raise TypeError("historical_data_provider must be an instance of HistoricalDataProvider.")
         self.historical_data_provider = historical_data_provider
         self.initial_balance = initial_balance
         self.fee_percentage = fee_percentage
         self.slippage_percentage = slippage_percentage
         self.commission_per_trade = commission_per_trade
+        self.stop_loss_percentage = stop_loss_percentage
+        self.take_profit_percentage = take_profit_percentage
         logger.info(f"Initialized AdvancedBacktester with initial balance: ${initial_balance:.2f}")
 
     def _execute_trade(self,
@@ -70,7 +83,8 @@ class AdvancedBacktester:
                        current_price: float,
                        action: str,
                        amount_to_trade: float, # In base currency for BUY, quote for SELL
-                       direction: str # "BUY" or "SELL"
+                       direction: str, # "BUY" or "SELL"
+                       trade_timestamp: datetime # Pass the timestamp from the candle
                        ) -> Tuple[float, float, float, Dict[str, Any]]: # new_balance, units, fee, trade_details
         """
         Simulates the execution of a single trade, applying fees and slippage.
@@ -108,18 +122,88 @@ class AdvancedBacktester:
             return current_balance, 0.0, 0.0, {"status": "REJECTED", "reason": "Invalid trade action"}
 
         trade_details = {
-            "timestamp": datetime.now(timezone.utc).isoformat(), # TODO: Use data timestamp
+            "timestamp": trade_timestamp.isoformat(), # Use the passed timestamp
             "action": direction,
             "entry_price": current_price,
             "effective_price": effective_price,
             "units_traded": units_traded,
             "trade_value": trade_value,
             "fee": fee,
-            "status": "EXECUTED"
+            "status": "EXECUTED",
+            "pnl_value": 0.0 # Placeholder, will be calculated when closing a position
         }
 
         logger.debug(f"Trade executed: {trade_details}")
         return new_balance, units_traded, fee, trade_details
+
+    def _calculate_performance_metrics(self,
+                                       trades_history: List[Dict[str, Any]],
+                                       equity_curve: List[float],
+                                       initial_balance: float,
+                                       num_trading_days: int) -> Dict[str, Any]:
+        """
+        Calculates comprehensive performance metrics from the backtest results.
+        """
+        metrics = {}
+
+        # Convert equity curve to a pandas Series for easier calculations
+        equity_series = pd.Series(equity_curve)
+
+        # Total Return
+        total_return = (equity_series.iloc[-1] - initial_balance) / initial_balance
+        metrics["total_return_pct"] = total_return * 100
+
+        # Annualized Return (assuming daily data)
+        # TODO: Adjust this for actual frequency if not daily
+        if num_trading_days > 0:
+            years = num_trading_days / 252 # Approx. trading days in a year
+            if years > 0:
+                metrics["annualized_return_pct"] = ((1 + total_return)**(1/years) - 1) * 100
+            else:
+                metrics["annualized_return_pct"] = 0.0
+        else:
+            metrics["annualized_return_pct"] = 0.0
+
+
+        # Volatility (Annualized Standard Deviation of Daily Returns)
+        returns = equity_series.pct_change().dropna()
+        if not returns.empty:
+            annualized_volatility = returns.std() * np.sqrt(252) # Assuming daily data
+            metrics["annualized_volatility"] = annualized_volatility
+
+            # Sharpe Ratio (assuming risk-free rate is 0 for simplicity)
+            # TODO: Allow configuration of risk-free rate
+            if annualized_volatility > 0:
+                metrics["sharpe_ratio"] = (metrics["annualized_return_pct"] / 100) / annualized_volatility
+            else:
+                metrics["sharpe_ratio"] = 0.0
+        else:
+            metrics["annualized_volatility"] = 0.0
+            metrics["sharpe_ratio"] = 0.0
+
+        # Max Drawdown
+        if not equity_series.empty:
+            peak = equity_series.expanding(min_periods=1).max()
+            drawdown = (equity_series - peak) / peak
+            max_drawdown = drawdown.min()
+            metrics["max_drawdown_pct"] = max_drawdown * 100
+        else:
+            metrics["max_drawdown_pct"] = 0.0
+
+        # Win Rate and Trade Statistics
+        winning_trades = [t for t in trades_history if t.get("pnl_value", 0) > 0]
+        losing_trades = [t for t in trades_history if t.get("pnl_value", 0) < 0]
+        
+        metrics["total_trades"] = len(trades_history)
+        metrics["winning_trades"] = len(winning_trades)
+        metrics["losing_trades"] = len(losing_trades)
+        metrics["win_rate"] = (len(winning_trades) / len(trades_history)) * 100 if len(trades_history) > 0 else 0.0
+        
+        # Average Win/Loss
+        metrics["avg_win"] = np.mean([t["pnl_value"] for t in winning_trades]) if winning_trades else 0.0
+        metrics["avg_loss"] = np.mean([t["pnl_value"] for t in losing_trades]) if losing_trades else 0.0
+        
+        return metrics
 
 
     def run_backtest(self,
@@ -157,78 +241,182 @@ class AdvancedBacktester:
 
         # 2. Initialize portfolio
         current_balance = self.initial_balance
-        portfolio_units = 0.0 # For the base asset (e.g., BTC units)
+        open_positions: Dict[str, Position] = {} # For the base asset (e.g., BTC units)
         total_fees = 0.0
         trades_history: List[Dict[str, Any]] = []
+        equity_curve: List[float] = [self.initial_balance] # Track portfolio value over time
 
         # 3. Iterate through data and execute strategy
         for timestamp, candle in data.iterrows():
             market_data = candle.to_dict()
             
             # Extract base and quote currencies (assuming 3-char codes)
+            # This logic should be more robust, potentially using a currency parsing utility
             base_currency = asset_pair[:3] if len(asset_pair) >= 6 else asset_pair
-            quote_currency = asset_pair[3:] if len(asset_pair) >= 6 else 'USD'
-            
+            quote_currency = asset_pair[3:] if len(asset_pair) >= 6 else 'USD' # Default to USD if not found
+
+            # Prepare portfolio state for decision engine
+            portfolio_for_decision_engine = []
+            for pos in open_positions.values():
+                portfolio_for_decision_engine.append({
+                    'asset_pair': pos.asset_pair,
+                    'units': pos.units,
+                    'entry_price': pos.entry_price,
+                    'side': pos.side,
+                    'current_price': candle['close'] # Pass current price for P&L calculation
+                })
+
             decision = decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance={quote_currency: current_balance},
-                portfolio={'holdings': [{'asset': base_currency, 'units': portfolio_units}]}
-            )
+                portfolio={'holdings': portfolio_for_decision_engine},
+                timestamp=timestamp
 
             action = decision.get('action', 'HOLD')
             amount_to_trade = decision.get('suggested_amount', 0.0) # Using 'suggested_amount' from DecisionEngine
 
-            if action == 'BUY' and amount_to_trade > 0 and portfolio_units == 0: # Enter new position
+            # Handle existing open position for the asset pair
+            current_position = open_positions.get(asset_pair)
+
+            # Check for Stop Loss or Take Profit hit for the current position
+            if current_position:
+                # Assuming LONG position
+                if current_position.stop_loss_price and candle['close'] <= current_position.stop_loss_price:
+                    logger.info(f"Stop Loss hit for {asset_pair} at {timestamp}. Closing position.")
+                    action = 'SELL'
+                elif current_position.take_profit_price and candle['close'] >= current_position.take_profit_price:
+                    logger.info(f"Take Profit hit for {asset_pair} at {timestamp}. Closing position.")
+                    action = 'SELL'
+
+            if action == 'BUY' and amount_to_trade > 0:
                 if current_balance > 0:
-                    trade_amount_usd = min(amount_to_trade, current_balance)
-                    new_balance, units, fee, trade_details = self._execute_trade(
-                        current_balance, candle['close'], "BUY", trade_amount_usd, "BUY"
+                    # Calculate how much of the quote currency to spend, accounting for fees
+                    # The total cost (trade_value + fee) must not exceed current_balance
+                    # Also consider slippage in effective price for units calculation
+                    effective_buy_price = candle['close'] * (1 + self.slippage_percentage)
+                    
+                    # Maximum amount of quote currency we can spend including fee
+                    max_spendable_total = current_balance
+                    # If commission_per_trade is fixed, deduct it first
+                    if self.commission_per_trade > 0:
+                        max_spendable_total -= self.commission_per_trade
+                    
+                    # Max principal we can trade given remaining balance and percentage fee
+                    max_principal_spendable = max_spendable_total / (1 + self.fee_percentage)
+                    
+                    trade_amount_quote = min(amount_to_trade, max_principal_spendable)
+                    
+                    if trade_amount_quote <= 0:
+                        logger.info(f"Skipping BUY for {asset_pair} due to insufficient effective balance to cover principal and fees at {timestamp}")
+                        continue # Skip this iteration
+
+                    # Execute trade
+                    new_balance, units_traded, fee, trade_details = self._execute_trade(
+                        current_balance, candle['close'], "BUY", trade_amount_quote, "BUY", timestamp
                     )
+
                     if trade_details['status'] == 'EXECUTED':
                         current_balance = new_balance
-                        portfolio_units += units
                         total_fees += fee
                         trades_history.append(trade_details)
-                else:
-                    logger.info(f"Skipping BUY due to insufficient balance at {timestamp}")
 
-            elif action == 'SELL' and portfolio_units > 0: # Exit existing position
-                sell_units = portfolio_units # Sell all units
-                new_balance, units, fee, trade_details = self._execute_trade(
-                    current_balance, candle['close'], "SELL", sell_units, "SELL"
+                        if current_position:
+                            # Averaging down/up
+                            total_cost = (current_position.units * current_position.entry_price) + (units_traded * trade_details['effective_price'])
+                            total_units = current_position.units + units_traded
+                            current_position.entry_price = total_cost / total_units
+                            current_position.units = total_units
+                            logger.info(f"Position for {asset_pair} averaged. New units: {current_position.units:.4f}, Avg Entry: {current_position.entry_price:.4f}")
+                        else:
+                            # Open a new position
+                            open_positions[asset_pair] = Position(
+                                asset_pair=asset_pair,
+                                units=units_traded,
+                                entry_price=trade_details['effective_price'],
+                                entry_timestamp=timestamp,
+                                side="LONG",
+                                stop_loss_price=trade_details['effective_price'] * (1 - self.stop_loss_percentage),
+                                take_profit_price=trade_details['effective_price'] * (1 + self.take_profit_percentage)
+                            )
+                            logger.info(f"Opened new LONG position for {asset_pair}: {units_traded:.4f} units at {trade_details['effective_price']:.4f}, SL: {open_positions[asset_pair].stop_loss_price:.4f}, TP: {open_positions[asset_pair].take_profit_price:.4f}")
+                else:
+                    logger.info(f"Skipping BUY for {asset_pair} due to insufficient balance at {timestamp}")
+
+            elif action == 'SELL' and current_position and current_position.units > 0:
+                # Sell all units of the current position
+                sell_units = current_position.units
+                
+                # Execute trade
+                new_balance, units_traded_neg, fee, trade_details = self._execute_trade(
+                    current_balance, candle['close'], "SELL", sell_units, "SELL", timestamp
                 )
+
                 if trade_details['status'] == 'EXECUTED':
                     current_balance = new_balance
-                    portfolio_units = 0 # Position is closed
                     total_fees += fee
+                    
+                    # Calculate PnL for the closed position
+                    pnl = (trade_details['effective_price'] - current_position.entry_price) * sell_units
+                    trade_details['pnl_value'] = pnl
+                    trade_details['entry_price'] = current_position.entry_price # Add entry price to trade details
+                    
                     trades_history.append(trade_details)
-                else:
-                    logger.info(f"Skipping SELL due to no units to sell at {timestamp}")
-
+                    
+                    # Close the position
+                    del open_positions[asset_pair]
+                    logger.info(f"Closed LONG position for {asset_pair}: {sell_units:.4f} units at {trade_details['effective_price']:.4f}. PnL: {pnl:.2f}")
+            elif action == 'HOLD':
+                logger.debug(f"Holding for {asset_pair} at {timestamp}. Current balance: {current_balance:.2f}, units: {current_position.units if current_position else 0:.4f}")
+            
+            # Update equity curve at the end of each iteration
+            current_portfolio_value = current_balance
+            if current_position: # Check if there's an open position for the current asset
+                current_portfolio_value += current_position.units * candle['close']
+            equity_curve.append(current_portfolio_value)
+        
         # 4. Final P&L calculation (if any open positions)
         final_value = current_balance
-        if portfolio_units > 0:
-            # Liquidate remaining position at the last close price
-            trade_value = portfolio_units * data['close'].iloc[-1]
-            fee = (trade_value * self.fee_percentage) + self.commission_per_trade
-            final_value += trade_value - fee
-            total_fees += fee
+        if open_positions:
+            for pos in open_positions.values():
+                if pos.asset_pair == asset_pair: # Only consider the asset being backtested
+                    # Liquidate remaining position at the last close price
+                    trade_value = pos.units * data['close'].iloc[-1]
+                    fee = (trade_value * self.fee_percentage) + self.commission_per_trade
+                    final_value += trade_value - fee
+                    total_fees += fee
+                    # Add this final liquidation as a trade
+                    final_liquidation_trade = {
+                        "timestamp": data.index[-1].isoformat(),
+                        "action": "SELL (Liquidation)",
+                        "entry_price": pos.entry_price,
+                        "effective_price": data['close'].iloc[-1],
+                        "units_traded": -pos.units,
+                        "trade_value": trade_value,
+                        "fee": fee,
+                        "status": "EXECUTED (Liquidation)",
+                        "pnl_value": (data['close'].iloc[-1] - pos.entry_price) * pos.units # Calculate PnL for liquidation
+                    }
+                    trades_history.append(final_liquidation_trade)
+                    logger.info(f"Liquidating remaining position for {pos.asset_pair}: {pos.units:.4f} units at final price {data['close'].iloc[-1]:.4f}. PnL: {final_liquidation_trade['pnl_value']:.2f}")
 
-        net_return_pct = ((final_value - self.initial_balance) / self.initial_balance) * 100 if self.initial_balance != 0 else 0
-
+        # Ensure equity_curve has a final value if the backtest data was processed
+        if not equity_curve:
+            equity_curve.append(self.initial_balance) # Start with initial balance if no data was processed
+        
         # 5. Calculate performance metrics
+        num_trading_days = len(data) if not data.empty else 0
+        calculated_metrics = self._calculate_performance_metrics(trades_history, equity_curve, self.initial_balance, num_trading_days)
+        
+        # Merge calculated metrics with basic metrics
         metrics = {
             "initial_balance": self.initial_balance,
             "final_value": final_value,
-            "net_return_pct": net_return_pct,
-            "total_trades": len(trades_history),
             "total_fees": total_fees,
-            "win_rate": 0.0, # TODO: Calculate actual win rate from trades_history
-            "max_drawdown_pct": 0.0 # TODO: Calculate max drawdown
+            **calculated_metrics # Unpack calculated metrics
         }
         
-        logger.info(f"Backtest completed for {asset_pair}. Final value: ${final_value:.2f}, Net Return: {net_return_pct:.2f}%")
+        logger.info(f"Backtest completed for {asset_pair}. Final value: ${final_value:.2f}, Net Return: {metrics.get('total_return_pct', 0.0):.2f}%")
 
         return {
             "metrics": metrics,
@@ -239,6 +427,9 @@ class AdvancedBacktester:
                 "end_date": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
                 "initial_balance": self.initial_balance,
                 "fee_percentage": self.fee_percentage,
-                "slippage_percentage": self.slippage_percentage
+                "slippage_percentage": self.slippage_percentage,
+                "stop_loss_percentage": self.stop_loss_percentage,
+                "take_profit_percentage": self.take_profit_percentage,
+                "equity_curve": equity_curve # Add equity curve to config for full context
             }
         }
