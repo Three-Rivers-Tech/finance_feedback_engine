@@ -94,7 +94,7 @@ python main.py analyze "BTC/USD"     # Slash separator (quotes needed)
 python main.py analyze BTCUSD --provider codex    # Codex CLI (local, no API charges)
 python main.py analyze btc-usd --provider cli     # GitHub Copilot CLI (any format works!)
 python main.py analyze eur_usd --provider qwen    # Qwen CLI (free, requires Node.js v20+)
-# python main.py analyze BTCUSD --provider gemini   # Gemini CLI (free, requires Node.js v20+)
+# python main.py analyze BTCUSD --provider gemini   # Gemini CLI (disabled by default - see AI_PROVIDERS.md for activation)
 python main.py analyze ETHUSD --provider local    # Local rule-based
 python main.py analyze gbp-jpy --provider ensemble # Multi-provider voting 🆕
 ```
@@ -208,7 +208,11 @@ python main.py status
 
 ### Live Trade Monitoring 🆕
 
-Start automatic monitoring of open positions:
+**Note**: Monitor commands are gated for safety. To use manual CLI commands, set `monitoring.manual_cli: true` in your config (not recommended for production).
+
+**Recommended Approach**: Use the integrated monitoring context that auto-starts via `config.monitoring.enabled: true` and provides real-time position awareness to the AI decision engine. Alternatively, use the multi-platform dashboard for portfolio aggregation.
+
+**Legacy Manual Commands** (requires `monitoring.manual_cli: true`):
 
 ```bash
 python main.py monitor start
