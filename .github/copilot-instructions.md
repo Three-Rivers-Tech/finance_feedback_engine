@@ -92,13 +92,51 @@ pytest tests/                           # Run all tests
 pytest tests/test_phase1_robustness.py  # Specific test file
 pytest -v                               # Verbose mode
 pytest -k "ensemble"                    # Run tests matching pattern
+pytest --cov=finance_feedback_engine    # Run with coverage report
 ```
 - Use `MockPlatform` for local/CI tests (set `trading_platform: mock` in config)
 - Test fixtures in `tests/conftest.py` provide pre-configured engines
 - Config: `config/config.test.mock.yaml` for automated testing
 - Test structure mirrors `finance_feedback_engine/` module organization
-- Integration tests validate end-to-end workflows (tests/test_phase1_integration.py)
-- Unit tests focus on individual components (tests/test_ensemble_manager_validation.py)
+- Integration tests validate end-to-end workflows (`test_phase1_integration.py`)
+- Unit tests focus on individual components (`test_ensemble_manager_validation.py`)
+- Key test areas: asset validation, ensemble fallback, signal-only mode, kill-switch logic
+
+**AI Provider Options
+
+The engine supports multiple AI providers:
+
+1. **Ensemble** (`--provider ensemble`): Combines multiple providers with weighted voting 🆕
+   - Automatically handles provider failures
+   - Configurable weights and voting strategies
+   - Best for production use with high reliability
+
+2. **Local LLM** (`--provider local`): Uses Ollama with Llama-3.2-3B model
+   - Free, runs locally via Ollama
+   - Auto-installed on first use
+   - No API charges
+
+3. **Codex CLI** (`--provider codex`): Uses local Codex CLI tool
+   - Install: `npm install -g @openai/codex`
+   - Runs locally without token costs
+
+4. **GitHub Copilot CLI** (`--provider cli`): Uses GitHub Copilot CLI
+   - Install: Follow [Copilot CLI setup](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
+   - Requires GitHub Copilot subscription
+
+5. **Qwen CLI** (`--provider qwen`): Uses free Qwen CLI tool
+   - Install: Requires Node.js v20+
+   - Free, no API charges
+
+6. **Gemini CLI** (`--provider gemini`): Uses Gemini CLI (currently disabled)
+   - Requires Node.js v20+ and Google AI API key
+   - See `finance_feedback_engine/decision_engine/engine.py` for activation
+
+**Provider Internals:**
+- Providers implement `.query(prompt) -> dict` returning `{action, confidence, reasoning}`
+- Located in `finance_feedback_engine/decision_engine/*_provider.py`
+- Register in `config.yaml` under `ensemble.enabled_providers`
+- Set weights in `ensemble.provider_weights` (must sum to 1.0)
 
 **Debugging:**
 - Add `-v` to CLI for DEBUG logs

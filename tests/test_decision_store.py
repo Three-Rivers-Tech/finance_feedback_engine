@@ -61,7 +61,7 @@ class TestDecisionStore:
         
         # Get decisions for BTCUSD
         decisions = store.get_decisions(asset_pair='BTCUSD', limit=10)
-        assert len(decisions) >= 3
+        assert len(decisions) == 3
     
     def test_delete_decision(self, tmp_path):
         """Test deleting a decision."""
@@ -105,7 +105,7 @@ class TestDecisionStore:
             store.save_decision(decision)
         
         count = store.get_decision_count()
-        assert count >= 5
+        assert count == 5
 
 
 class TestDecisionStorePersistence:
@@ -223,7 +223,7 @@ class TestDecisionStoreEdgeCases:
         
         # Wipe all
         deleted_count = store.wipe_all_decisions()
-        assert deleted_count >= 3
+        assert deleted_count == 3
         
         # Verify empty
         assert store.get_decision_count() == 0
@@ -353,7 +353,7 @@ class TestDecisionStoreCleanup:
         
         # Should delete nothing
         assert deleted_count == 0
-        assert store.get_decision_count() >= 3
+        assert store.get_decision_count() == 3
 
 
 class TestDecisionStoreErrorHandling:
