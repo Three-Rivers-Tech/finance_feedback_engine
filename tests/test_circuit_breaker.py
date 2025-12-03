@@ -124,7 +124,7 @@ class TestCircuitBreakerStateTransitions:
         
         # Open circuit
         for _ in range(2):
-            with pytest.raises(ValueError):
+            with pytest.raises(ZeroDivisionError):
                 cb.call_sync(lambda: 1/0)
         
         time.sleep(0.15)
@@ -142,7 +142,7 @@ class TestCircuitBreakerStateTransitions:
         
         # Open circuit
         for _ in range(2):
-            with pytest.raises(ValueError):
+            with pytest.raises(ZeroDivisionError):
                 cb.call_sync(lambda: 1/0)
         
         time.sleep(0.15)
@@ -173,7 +173,7 @@ class TestCircuitBreakerMetrics:
         cb = CircuitBreaker(failure_threshold=10)
         
         for _ in range(3):
-            with pytest.raises(ValueError):
+            with pytest.raises(Exception):
                 cb.call_sync(lambda: 1/0)
         
         assert cb.failure_count == 3
@@ -193,7 +193,7 @@ class TestCircuitBreakerMetrics:
             with pytest.raises(ZeroDivisionError):
                 cb.call_sync(lambda: 1/0)
         
-        assert cb.success_count == 3
+        assert cb.total_successes == 3
         assert cb.failure_count == 2
         assert cb.total_calls == 5
 
@@ -253,13 +253,13 @@ class TestCircuitBreakerEdgeCases:
         """Test circuit with zero failure threshold."""
         cb = CircuitBreaker(failure_threshold=0)
         
-        # Should open immediately on any failure
+        # Circuit should open immediately on any failure
         with pytest.raises(ZeroDivisionError):
             cb.call_sync(lambda: 1/0)
         
-        # Circuit may be open depending on implementation
-        # Just verify it doesn't crash
-        assert cb.total_calls >= 1
+        # Circuit should be OPEN immediately after first failure with threshold=0
+        assert cb.state == CircuitState.OPEN
+        assert cb.total_calls == 1
     
     def test_very_short_timeout(self):
         """Test circuit with very short recovery timeout."""
