@@ -1894,39 +1894,73 @@ Present your judgment with clear reasoning and final decision.
                     sizing_stop_loss_percentage,
                 )
         else:
-            # Signal-only mode: No position sizing when balance is unavailable
-            # or when HOLD without an existing position
-            recommended_position_size = None
-            sizing_stop_loss_percentage = None
-            risk_percentage = None
-            stop_loss_price = None
+            # Signal-only mode: Calculate position sizing for human approval
+            # Even without balance, provide suggested sizing for Telegram human-in-the-loop
             signal_only = True
             
+            # Use default balance for position sizing calculation
+            # This provides a recommendation that humans can approve/adjust
+            default_balance = 10000.0  # Default $10k for sizing recommendations
+            
+            # Get risk parameters from the agent config
+            agent_config = self.config.get('agent', {})
+            risk_percentage = agent_config.get('risk_percentage', 0.01)
+            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
+            
             if action == 'HOLD' and not has_existing_position:
+                # HOLD without position: no sizing needed
+                recommended_position_size = None
+                sizing_stop_loss_percentage = None
+                risk_percentage = None
+                stop_loss_price = None
                 logger.info(
                     "HOLD without existing position - no position sizing shown"
                 )
-            elif signal_only_default:
-                logger.info(
-                    "Signal-only mode enabled by default - no position sizing shown"
-                )
-            elif not has_valid_balance:
-                balance_type = (
-                    'Coinbase'
-                    if is_crypto
-                    else 'Oanda'
-                    if is_forex
-                    else 'platform'
-                )
-                logger.warning(
-                    "No valid %s balance for %s - providing signal only",
-                    balance_type,
-                    asset_pair,
-                )
             else:
-                logger.warning(
-                    "Portfolio data unavailable - providing signal only"
+                # Calculate position sizing for human approval
+                recommended_position_size = self.calculate_position_size(
+                    account_balance=default_balance,
+                    risk_percentage=risk_percentage,
+                    entry_price=current_price,
+                    stop_loss_percentage=sizing_stop_loss_percentage
                 )
+                
+                if current_price > 0 and sizing_stop_loss_percentage > 0:
+                    stop_loss_price = (
+                        current_price * (1 - sizing_stop_loss_percentage)
+                        if action == 'BUY'
+                        else current_price * (1 + sizing_stop_loss_percentage)
+                    )
+                else:
+                    stop_loss_price = None
+                
+                if signal_only_default:
+                    logger.info(
+                        "Signal-only mode: Position sizing calculated for human approval (%.4f units based on $%.2f default balance)",
+                        recommended_position_size,
+                        default_balance
+                    )
+                elif not has_valid_balance:
+                    balance_type = (
+                        'Coinbase'
+                        if is_crypto
+                        else 'Oanda'
+                        if is_forex
+                        else 'platform'
+                    )
+                    logger.warning(
+                        "No valid %s balance for %s - using default $%.2f for sizing recommendation (%.4f units for human approval)",
+                        balance_type,
+                        asset_pair,
+                        default_balance,
+                        recommended_position_size
+                    )
+                else:
+                    logger.warning(
+                        "Portfolio data unavailable - using default $%.2f for sizing recommendation (%.4f units for human approval)",
+                        default_balance,
+                        recommended_position_size
+                    )
 
         # Override suggested_amount to 0 for HOLD with no position
         suggested_amount = ai_response.get('amount', 0)

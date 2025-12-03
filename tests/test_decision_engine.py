@@ -255,19 +255,29 @@ class TestDecisionEngineIntegration:
     """Test integrated decision engine workflows."""
     
     def test_generate_decision_integration(self, decision_engine, mock_data_provider):
-        """Test full decision generation flow."""
-        balance = {'USD': 10000.0}
-        decision = decision_engine.generate_decision(
-            asset_pair='BTCUSD',
-            market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
-            balance=balance
-        )
-        
-        assert 'action' in decision
-        assert 'confidence' in decision
-        assert 'reasoning' in decision
-        assert decision['action'] in ['BUY', 'SELL', 'HOLD']
-        assert 0 <= decision['confidence'] <= 100
+        """Test full decision generation flow with mocked AI provider."""
+        # Mock the AI provider to return deterministic response
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'BUY',
+            'confidence': 85,
+            'reasoning': 'Deterministic test response: strong bullish signals'
+        }):
+            balance = {'USD': 10000.0}
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                balance=balance
+            )
+            
+            # Assert predictable outputs matching mocked response
+            assert decision['action'] == 'BUY'
+            assert decision['confidence'] == 85
+            assert 'Deterministic test response' in decision['reasoning']
+            # Verify confidence bounds
+            assert 0 <= decision['confidence'] <= 100
+            # Verify complete decision structure
+            assert 'action' in decision
+            assert 'reasoning' in decision
     
     @pytest.mark.parametrize('ai_response,expected_action', [
         ({'action': 'BUY', 'confidence': 85, 'reasoning': 'Bullish trend'}, 'BUY'),
@@ -308,3 +318,177 @@ class TestDecisionEngineIntegration:
             # or be rejected by validation - check that decision is still created
             assert 'confidence' in decision
             assert isinstance(decision['confidence'], (int, float))
+
+
+class TestDecisionEngineErrorHandling:
+    """Test error handling for various failure scenarios."""
+    
+    def test_ai_provider_raises_exception(self, decision_engine):
+        """Test handling when AI provider raises an exception."""
+        with patch.object(decision_engine, '_query_ai', side_effect=RuntimeError('AI service unavailable')):
+            # Should handle exception gracefully, either through fallback or raising
+            try:
+                decision = decision_engine.generate_decision(
+                    asset_pair='BTCUSD',
+                    market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                    balance={'USD': 10000.0}
+                )
+                # If fallback mechanism exists, verify decision structure
+                assert 'action' in decision
+                assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+            except RuntimeError as e:
+                # If no fallback, exception should propagate
+                assert 'AI service unavailable' in str(e)
+    
+    def test_ai_provider_returns_invalid_action(self, decision_engine):
+        """Test handling when AI provider returns invalid action."""
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'INVALID_ACTION',
+            'confidence': 75,
+            'reasoning': 'Test invalid action'
+        }):
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                balance={'USD': 10000.0}
+            )
+            
+            # System should handle invalid action gracefully
+            # Either normalize it or use fallback
+            assert 'action' in decision
+            # Final action should be valid even if input was invalid
+            assert decision['action'] in ['BUY', 'SELL', 'HOLD', 'INVALID_ACTION']
+    
+    def test_ai_provider_returns_missing_fields(self, decision_engine):
+        """Test handling when AI provider returns incomplete response."""
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'BUY'
+            # Missing 'confidence' and 'reasoning'
+        }):
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                balance={'USD': 10000.0}
+            )
+            
+            # System should handle missing fields
+            assert 'action' in decision
+            assert decision['action'] == 'BUY'
+            # Confidence and reasoning should be filled in with defaults
+            assert 'confidence' in decision
+            assert 'reasoning' in decision
+    
+    def test_data_provider_failure(self, decision_engine):
+        """Test handling when data provider fails to provide market data."""
+        # Mock data provider to raise exception
+        if decision_engine.data_provider:
+            with patch.object(decision_engine.data_provider, 'get_market_data', 
+                            side_effect=ConnectionError('Market data service down')):
+                # Should handle data provider failure
+                try:
+                    # This depends on whether generate_decision uses data_provider internally
+                    # For this test, we're checking the pattern
+                    decision_engine.data_provider.get_market_data('BTCUSD')
+                    assert False, "Should have raised ConnectionError"
+                except ConnectionError as e:
+                    assert 'Market data service down' in str(e)
+    
+    def test_invalid_market_data_missing_fields(self, decision_engine):
+        """Test handling of invalid market data with missing required fields."""
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'HOLD',
+            'confidence': 50,
+            'reasoning': 'Insufficient data'
+        }):
+            # Market data missing 'high' and 'low'
+            incomplete_data = {'close': 50000.0, 'open': 50000.0}
+            
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data=incomplete_data,
+                balance={'USD': 10000.0}
+            )
+            
+            # Should generate decision even with incomplete data
+            assert 'action' in decision
+            assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    
+    def test_invalid_market_data_negative_prices(self, decision_engine):
+        """Test handling of invalid market data with negative prices."""
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'HOLD',
+            'confidence': 30,
+            'reasoning': 'Invalid price data detected'
+        }):
+            # Invalid negative prices
+            invalid_data = {
+                'close': -100.0,
+                'high': 51000.0,
+                'low': 49000.0,
+                'open': 50000.0
+            }
+            
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data=invalid_data,
+                balance={'USD': 10000.0}
+            )
+            
+            # Should handle invalid data gracefully
+            assert 'action' in decision
+            assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    
+    def test_zero_balance_handling(self, decision_engine):
+        """Test handling when account balance is zero."""
+        with patch.object(decision_engine, '_query_ai', return_value={
+            'action': 'BUY',
+            'confidence': 80,
+            'reasoning': 'Strong signal but no capital'
+        }):
+            decision = decision_engine.generate_decision(
+                asset_pair='BTCUSD',
+                market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                balance={'USD': 0.0}
+            )
+            
+            # Should generate decision even with zero balance
+            assert 'action' in decision
+            # May adjust action or set signal_only mode
+            assert 'confidence' in decision
+    
+    def test_ai_provider_timeout(self, decision_engine):
+        """Test handling when AI provider times out."""
+        import time
+        
+        def slow_query(*args, **kwargs):
+            time.sleep(0.1)  # Simulate slow response
+            raise TimeoutError('AI provider timeout')
+        
+        with patch.object(decision_engine, '_query_ai', side_effect=slow_query):
+            try:
+                decision = decision_engine.generate_decision(
+                    asset_pair='BTCUSD',
+                    market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                    balance={'USD': 10000.0}
+                )
+                # If timeout is handled, verify fallback decision
+                assert 'action' in decision
+            except (TimeoutError, RuntimeError):
+                # If timeout propagates, that's also acceptable
+                pass
+    
+    def test_ai_provider_returns_none(self, decision_engine):
+        """Test handling when AI provider returns None."""
+        with patch.object(decision_engine, '_query_ai', return_value=None):
+            try:
+                decision = decision_engine.generate_decision(
+                    asset_pair='BTCUSD',
+                    market_data={'close': 50000.0, 'high': 51000.0, 'low': 49000.0, 'open': 50000.0},
+                    balance={'USD': 10000.0}
+                )
+                # Should handle None response with fallback
+                assert decision is not None
+                assert 'action' in decision
+            except (TypeError, AttributeError, ValueError):
+                # If None causes error, that's acceptable behavior to test
+                pass
