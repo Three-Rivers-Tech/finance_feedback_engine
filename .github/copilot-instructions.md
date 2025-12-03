@@ -93,14 +93,17 @@ pytest tests/test_phase1_robustness.py  # Specific test file
 pytest -v                               # Verbose mode
 pytest -k "ensemble"                    # Run tests matching pattern
 pytest --cov=finance_feedback_engine    # Run with coverage report
+pytest -m "not slow"                    # Skip slow tests (marker defined in pyproject.toml)
 ```
 - Use `MockPlatform` for local/CI tests (set `trading_platform: mock` in config)
 - Test fixtures in `tests/conftest.py` provide pre-configured engines
-- Config: `config/config.test.mock.yaml` for automated testing
+- Config: `config/config.test.mock.yaml` for automated testing (MockPlatform with simulated balance)
 - Test structure mirrors `finance_feedback_engine/` module organization
 - Integration tests validate end-to-end workflows (`test_phase1_integration.py`)
 - Unit tests focus on individual components (`test_ensemble_manager_validation.py`)
 - Key test areas: asset validation, ensemble fallback, signal-only mode, kill-switch logic
+- Coverage configured in `pyproject.toml`: 70% minimum threshold, excludes test files
+- Pytest markers: `slow`, `integration`, `unit` (see `pyproject.toml` for full list)
 
 **AI Provider Options
 
@@ -145,7 +148,11 @@ The engine supports multiple AI providers:
 - Validate regime: ADX >25 = trending, ATR/price = volatility measure
 - Failed providers logged to `data/failures/` when quorum breaks
 - Asset pair validation: use `standardize_asset_pair()` from `finance_feedback_engine/utils/validation.py`
+  - Converts any format (btc-usd, BTC_USD, "BTC/USD") to uppercase without separators (BTCUSD)
+  - Used in `core.py`, `cli/main.py`, and `monitoring/trade_monitor.py`
 - Decision validation: `finance_feedback_engine/decision_engine/decision_validation.py` enforces schema before persistence/execution
+  - Use `validate_decision_comprehensive()` for detailed error reporting
+  - Returns `(is_valid: bool, errors: List[str])`
 
 ## Project-Specific Conventions
 
@@ -159,8 +166,10 @@ The engine supports multiple AI providers:
 - Default: ~1% risk per trade, ~2% stop-loss
 - Formula: `Position Size = (Account Balance × Risk%) / (Entry Price × Stop Loss%)`
 - Signal-only mode: auto when balance unavailable or `signal_only_default: true`
-  - Sets sizing fields to `null`, adds `signal_only: true` to decision
-  - Provides action/confidence/reasoning without position sizing
+  - **IMPORTANT**: Position sizing IS calculated using default $10k balance for human approval
+  - Enables human-in-the-loop workflows (e.g., Telegram approval before execution)
+  - Sets `signal_only: true` flag to indicate recommended sizing requires approval
+  - Provides full decision with action/confidence/reasoning/position_size for review
 
 **Ensemble Mechanics:**
 - Provider weights: configurable in `config.yaml` ensemble section (default: equal 20% each)
@@ -177,7 +186,9 @@ The engine supports multiple AI providers:
 **Config Loading (tiered):**
 1. `config/config.yaml` (base defaults, committed)
 2. `config/config.local.yaml` (local overrides, gitignored) — deep merge over base
-3. Environment variables: `ALPHA_VANTAGE_API_KEY` overrides config
+3. Environment variables: `ALPHA_VANTAGE_API_KEY` overrides both config files
+   - Env vars checked first via `os.environ.get()` in `core.py`
+   - Use `export ALPHA_VANTAGE_API_KEY=...` to override without editing files
 
 **Market Regime Detection:**
 - ADX (Average Directional Index): >25 = trending market

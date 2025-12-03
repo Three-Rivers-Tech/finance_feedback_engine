@@ -272,6 +272,7 @@ class AdvancedBacktester:
                 balance={quote_currency: current_balance},
                 portfolio={'holdings': portfolio_for_decision_engine},
                 timestamp=timestamp
+            )
 
             action = decision.get('action', 'HOLD')
             amount_to_trade = decision.get('suggested_amount', 0.0) # Using 'suggested_amount' from DecisionEngine
