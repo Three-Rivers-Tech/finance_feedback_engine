@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class FinanceFeedbackEngine:
     """
     Main engine for managing trading decisions with AI feedback.
-    
+
     This engine coordinates between:
     - Data providers (Alpha Vantage)
     - Trading platforms (Coinbase, Oanda, etc.)
@@ -43,7 +43,7 @@ class FinanceFeedbackEngine:
                 - persistence: Persistence configuration
         """
         self.config = config
-        
+
         # Ensure Ollama models are installed (one-time setup)
         try:
             logger.info("Checking Ollama model installation...")
@@ -51,7 +51,7 @@ class FinanceFeedbackEngine:
         except Exception as e:
             logger.warning(f"Model installation check failed: {e}")
             # Continue anyway - system may work with fewer models
-        
+
         # Initialize data provider
         import os
         api_key = os.environ.get('ALPHA_VANTAGE_API_KEY') \
@@ -60,13 +60,13 @@ class FinanceFeedbackEngine:
             api_key=api_key,
             config=config
         )
-        
+
         # Initialize historical data provider for backtesting
         self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
-        
+
         # Initialize trading platform
         platform_name = config.get('trading_platform', 'coinbase')
-        
+
         # Handle unified/multi-platform mode
         if platform_name.lower() == 'unified':
             # Convert platforms list to unified credentials format
@@ -81,7 +81,7 @@ class FinanceFeedbackEngine:
                     "  - name: oanda\n"
                     "    credentials: {...}"
                 )
-            
+
             # Transform platforms list into nested dict format
             unified_credentials = {}
             for platform_config in platforms_list:
@@ -92,10 +92,10 @@ class FinanceFeedbackEngine:
                         f"{platform_config}"
                     )
                     continue
-                
+
                 platform_key = platform_config.get('name', '').lower()
                 platform_creds = platform_config.get('credentials', {})
-                
+
                 # Validate name is non-empty string
                 if not platform_key or not isinstance(platform_key, str):
                     logger.warning(
@@ -103,7 +103,7 @@ class FinanceFeedbackEngine:
                         f"'name': {platform_config}"
                     )
                     continue
-                
+
                 # Validate credentials is a dict
                 if not isinstance(platform_creds, dict):
                     logger.warning(
@@ -112,7 +112,7 @@ class FinanceFeedbackEngine:
                         f"{type(platform_creds).__name__})"
                     )
                     continue
-                
+
                 # Normalize key names (coinbase_advanced -> coinbase)
                 if platform_key in ['coinbase', 'coinbase_advanced']:
                     unified_credentials['coinbase'] = platform_creds
@@ -122,7 +122,7 @@ class FinanceFeedbackEngine:
                     logger.warning(
                         f"Unknown platform in unified config: {platform_key}"
                     )
-            
+
             # Ensure we have at least one valid platform configured
             if not unified_credentials:
                 logger.error(
@@ -135,19 +135,19 @@ class FinanceFeedbackEngine:
                     "Unified platform mode requires at least one valid "
                     "platform with 'name' and 'credentials'"
                 )
-            
+
             platform_credentials = unified_credentials
         else:
             # Single platform mode (legacy)
             platform_credentials = config.get('platform_credentials', {})
-        
+
         self.trading_platform = PlatformFactory.create_platform(
             platform_name, platform_credentials
         )
-        
+
         # Initialize decision engine
         self.decision_engine = DecisionEngine(config, self.data_provider)
-        
+
         # Initialize persistence
         persistence_config = config.get('persistence', {})
         self.decision_store = DecisionStore(persistence_config)
@@ -158,7 +158,7 @@ class FinanceFeedbackEngine:
         if memory_enabled:
             self.memory_engine = PortfolioMemoryEngine(config)
             logger.info("Portfolio Memory Engine enabled")
-        
+
         # Initialize monitoring context provider (lazy init)
         self.monitoring_provider = None
         self.trade_monitor = None
@@ -174,7 +174,7 @@ class FinanceFeedbackEngine:
         self._monitor_pulse_interval = config.get('monitoring', {}).get(
             'pulse_interval_seconds', 300
         )
-        
+
         # Auto-enable monitoring integration if enabled in config
         if self._monitoring_enabled:
             self._auto_enable_monitoring()
@@ -186,7 +186,7 @@ class FinanceFeedbackEngine:
         self._backtester: Optional[Backtester] = None
 
         logger.info("Finance Feedback Engine initialized successfully")
-    
+
     def _auto_enable_monitoring(self):
         """Auto-enable monitoring integration with default settings."""
         try:
@@ -194,22 +194,22 @@ class FinanceFeedbackEngine:
                 MonitoringContextProvider,
                 TradeMetricsCollector
             )
-            
+
             # Create metrics collector
             metrics_collector = TradeMetricsCollector()
-            
+
             # Create monitoring provider (no trade monitor needed for context)
             self.monitoring_provider = MonitoringContextProvider(
                 platform=self.trading_platform,
                 trade_monitor=None,  # Optional, can add later
                 metrics_collector=metrics_collector
             )
-            
+
             # Attach to decision engine
             self.decision_engine.set_monitoring_context(
                 self.monitoring_provider
             )
-            
+
             logger.info(
                 "Monitoring context auto-enabled - "
                 "AI has position awareness by default"
@@ -279,7 +279,7 @@ class FinanceFeedbackEngine:
             )
         except Exception as e:
             logger.warning(f"Failed to auto-start TradeMonitor: {e}")
-    
+
     def enable_monitoring_integration(
         self,
         trade_monitor=None,
@@ -287,25 +287,25 @@ class FinanceFeedbackEngine:
     ):
         """
         Enable live monitoring context integration for AI decisions.
-        
+
         Args:
             trade_monitor: Optional TradeMonitor instance
             metrics_collector: Optional TradeMetricsCollector instance
         """
         from .monitoring import MonitoringContextProvider
-        
+
         self.trade_monitor = trade_monitor
         self.monitoring_provider = MonitoringContextProvider(
             platform=self.trading_platform,
             trade_monitor=trade_monitor,
             metrics_collector=metrics_collector
         )
-        
+
         # Attach to decision engine
         self.decision_engine.set_monitoring_context(
             self.monitoring_provider
         )
-        
+
         logger.info(
             "Monitoring context integration enabled - "
             "AI will have full awareness of active positions/trades"
@@ -461,7 +461,7 @@ class FinanceFeedbackEngine:
         decision = self.decision_store.get_decision_by_id(decision_id)
         if not decision:
             raise ValueError(f"Decision {decision_id} not found")
-        
+
         # Pre-execution safety checks
         self._preexecution_checks(decision, monitoring_context=None)
 
@@ -548,7 +548,7 @@ class FinanceFeedbackEngine:
         fee_percentage: Optional[float] = None,
     ) -> Dict[str, Any]:
         """DEPRECATED: Use AdvancedBacktester directly via CLI.
-        
+
         This method is maintained for backward compatibility but will be removed.
         Use: python main.py backtest ASSET --start DATE --end DATE
 
@@ -556,9 +556,9 @@ class FinanceFeedbackEngine:
             asset_pair: Symbol pair (e.g. 'BTCUSD').
             start: Start date (YYYY-MM-DD).
             end: End date (YYYY-MM-DD).
-            strategy: Strategy identifier (deprecated, ignored).
-            short_window: Override for short SMA window (deprecated, ignored).
-            long_window: Override for long SMA window (deprecated, ignored).
+            strategy: Strategy identifier (deprecated, still passed to legacy Backtester).
+            short_window: Override for short SMA window (deprecated, still passed to legacy Backtester).
+            long_window: Override for long SMA window (deprecated, still passed to legacy Backtester).
             initial_balance: Override starting balance.
             fee_percentage: Override per trade fee percent.
         Returns:
@@ -584,11 +584,11 @@ class FinanceFeedbackEngine:
             initial_balance=initial_balance,
             fee_percentage=fee_percentage,
         )
-    
+
     # ===================================================================
     # Portfolio Memory Methods
     # ===================================================================
-    
+
     def record_trade_outcome(
         self,
         decision_id: str,
@@ -599,14 +599,14 @@ class FinanceFeedbackEngine:
     ) -> Optional[Dict[str, Any]]:
         """
         Record the outcome of a completed trade for learning.
-        
+
         Args:
             decision_id: ID of the original decision
             exit_price: Price at which position was closed
             exit_timestamp: When position was closed (default: now)
             hit_stop_loss: Whether stop loss was triggered
             hit_take_profit: Whether take profit was triggered
-        
+
         Returns:
             TradeOutcome dict if memory engine enabled, None otherwise
         """
@@ -616,12 +616,12 @@ class FinanceFeedbackEngine:
                 "Cannot record trade outcome."
             )
             return None
-        
+
         # Get original decision
         decision = self.decision_store.get_decision_by_id(decision_id)
         if not decision:
             raise ValueError(f"Decision {decision_id} not found")
-        
+
         # Record outcome
         outcome = self.memory_engine.record_trade_outcome(
             decision=decision,
@@ -630,7 +630,7 @@ class FinanceFeedbackEngine:
             hit_stop_loss=hit_stop_loss,
             hit_take_profit=hit_take_profit
         )
-        
+
         logger.info(
             f"Trade outcome recorded: {outcome.asset_pair} "
             f"P&L: ${outcome.realized_pnl:.2f}"
@@ -706,89 +706,89 @@ class FinanceFeedbackEngine:
             logger.debug(f"No ensemble manager available or learning update skipped: {e}")
 
         return outcome.to_dict()
-    
+
     def get_performance_snapshot(
         self,
         window_days: Optional[int] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Get portfolio performance snapshot.
-        
+
         Args:
             window_days: Number of days to analyze (None = all time)
-        
+
         Returns:
             PerformanceSnapshot dict if memory engine enabled, None otherwise
         """
         if not self.memory_engine:
             logger.warning("Portfolio memory engine not enabled")
             return None
-        
+
         snapshot = self.memory_engine.analyze_performance(
             window_days=window_days
         )
-        
+
         return snapshot.to_dict()
-    
+
     def get_memory_context(
         self,
         asset_pair: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Get portfolio memory context for a given asset.
-        
+
         Args:
             asset_pair: Optional asset pair filter
-        
+
         Returns:
             Context dict if memory engine enabled, None otherwise
         """
         if not self.memory_engine:
             return None
-        
+
         return self.memory_engine.generate_context(asset_pair=asset_pair)
-    
+
     def get_provider_recommendations(self) -> Optional[Dict[str, Any]]:
         """
         Get AI provider weight recommendations based on performance.
-        
+
         Returns:
             Recommendations dict if memory engine enabled, None otherwise
         """
         if not self.memory_engine:
             logger.warning("Portfolio memory engine not enabled")
             return None
-        
+
         return self.memory_engine.get_provider_recommendations()
-    
+
     def save_memory(self) -> None:
         """Save portfolio memory to disk."""
         if self.memory_engine:
             self.memory_engine.save_memory()
             logger.info("Portfolio memory saved")
-    
+
     def get_memory_summary(self) -> Optional[Dict[str, Any]]:
         """
         Get summary of portfolio memory state.
-        
+
         Returns:
             Summary dict if memory engine enabled, None otherwise
         """
         if not self.memory_engine:
             return None
-        
+
         return self.memory_engine.get_summary()
-    
+
     async def close(self) -> None:
         """
         Cleanup engine resources (async session cleanup for data providers).
-        
+
         Call this method when shutting down the engine to properly close
         async resources like aiohttp sessions. Can be used in async context
         managers or shutdown hooks.
         """
         import inspect
-        
+
         try:
             if hasattr(self.data_provider, 'close'):
                 close_result = self.data_provider.close()
@@ -798,11 +798,11 @@ class FinanceFeedbackEngine:
                 logger.info("Data provider resources closed successfully")
         except Exception as e:
             logger.error(f"Error during engine cleanup: {e}")
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit - cleanup resources."""
         await self.close()
