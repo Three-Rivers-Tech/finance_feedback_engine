@@ -389,7 +389,7 @@ class EnsembleDecisionManager:
         )
         
         # Add comprehensive ensemble metadata
-        final_decision['ensemble_metadata'] = {
+        ensemble_metadata = {
             'providers_used': provider_names,
             'providers_failed': failed_providers,
             'num_active': active_providers,
@@ -414,6 +414,14 @@ class EnsembleDecisionManager:
             'min_local_providers': self.min_local_providers,
             'quorum_penalty_applied': quorum_penalty_applied
         }
+        
+        # Add confidence adjustment factor if it was applied
+        if 'confidence_adjustment_factor' in final_decision:
+            ensemble_metadata['confidence_adjustment_factor'] = final_decision.pop('confidence_adjustment_factor')
+            if 'original_confidence' in final_decision: # Check if original_confidence exists
+                ensemble_metadata['original_confidence'] = final_decision.pop('original_confidence')
+
+        final_decision['ensemble_metadata'] = ensemble_metadata
         
         if 'voting_power' in final_decision:
             final_decision['ensemble_metadata']['voting_power'] = (
@@ -836,7 +844,7 @@ class EnsembleDecisionManager:
         Returns:
             Tuple of (decision dict, fallback_tier)
         """
-        fallback_tier = 'primary'
+        fallback_tier = self.voting_strategy
         
         try:
             # Tier 1: Primary voting strategy

@@ -101,6 +101,22 @@ class FinancialDataValidator:
 
         return errors
 
+    def is_valid_price(self, price: Union[int, float]) -> bool:
+        """Validates a single price value."""
+        return not self._validate_value(price, "price")
+
+    def is_valid_volume(self, volume: Union[int, float]) -> bool:
+        """Validates a single volume value."""
+        return not self._validate_value(volume, "volume")
+
+    def is_valid_timestamp(self, timestamp: Any) -> bool:
+        """Validates a single timestamp value."""
+        return not self._validate_value(timestamp, "timestamp")
+
+    def is_valid_currency_pair(self, currency_pair: str) -> bool:
+        """Validates a single currency pair string."""
+        return not self._validate_value(currency_pair, "currency_pair")
+
     def validate_single_entry(self, data: Dict[str, Any]) -> List[str]:
         """
         Validates a single dictionary entry (e.g., a single tick or candle).

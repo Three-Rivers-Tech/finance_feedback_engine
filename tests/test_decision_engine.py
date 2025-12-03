@@ -357,7 +357,7 @@ class TestDecisionEngineErrorHandling:
             # Either normalize it or use fallback
             assert 'action' in decision
             # Final action should be valid even if input was invalid
-            assert decision['action'] in ['BUY', 'SELL', 'HOLD', 'INVALID_ACTION']
+            assert decision['action'] in ['BUY', 'SELL', 'HOLD']
     
     def test_ai_provider_returns_missing_fields(self, decision_engine):
         """Test handling when AI provider returns incomplete response."""

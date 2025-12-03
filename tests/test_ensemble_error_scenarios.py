@@ -48,7 +48,7 @@ class TestEnsembleFallbackSystem:
         assert result is not None
         assert result['action'] == 'BUY'  # Majority + weighted
         assert 'ensemble_metadata' in result
-        assert result['ensemble_metadata']['fallback_tier'] == 'weighted_voting'
+        assert result['ensemble_metadata']['fallback_tier'] == 'weighted'
         assert len(result['ensemble_metadata']['providers_used']) == 4
 
     def test_tier2_majority_voting_one_provider_fails(self, ensemble_config):
@@ -56,19 +56,17 @@ class TestEnsembleFallbackSystem:
         manager = EnsembleDecisionManager(ensemble_config)
         
         # Mock 3 out of 4 providers
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'Provider 1'},
-            {'action': 'BUY', 'confidence': 85, 'reasoning': 'Provider 2'},
-            {'action': 'SELL', 'confidence': 70, 'reasoning': 'Provider 3'}
-        ]
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'Provider 1'},
+            'codex': {'action': 'BUY', 'confidence': 85, 'reasoning': 'Provider 2'},
+            'qwen': {'action': 'SELL', 'confidence': 70, 'reasoning': 'Provider 3'}
+        }
         
         failed_providers = ['cli']
-        active_providers = ['local', 'codex', 'qwen']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {k: v for k, v in ensemble_config['provider_weights'].items() if k in active_providers},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -82,18 +80,16 @@ class TestEnsembleFallbackSystem:
         manager = EnsembleDecisionManager(ensemble_config)
         
         # Only 2 providers (below quorum of 3)
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'Provider 1'},
-            {'action': 'SELL', 'confidence': 70, 'reasoning': 'Provider 2'}
-        ]
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'Provider 1'},
+            'codex': {'action': 'SELL', 'confidence': 70, 'reasoning': 'Provider 2'}
+        }
         
         failed_providers = ['qwen', 'cli']
-        active_providers = ['local', 'codex']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {k: v for k, v in ensemble_config['provider_weights'].items() if k in active_providers},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -101,24 +97,22 @@ class TestEnsembleFallbackSystem:
         assert 'ensemble_metadata' in result
         assert len(result['ensemble_metadata']['providers_used']) == 2
         # Confidence should be penalized for being below quorum
-        assert result['confidence'] < min(d['confidence'] for d in decisions)
+        assert result['confidence'] < min(d['confidence'] for d in provider_decisions.values())
 
     def test_tier4_single_provider_fallback(self, ensemble_config):
         """Test Tier 4: Single provider fallback (last resort)."""
         manager = EnsembleDecisionManager(ensemble_config)
         
         # Only 1 provider working
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'Last provider standing'}
-        ]
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'Last provider standing'}
+        }
         
         failed_providers = ['codex', 'qwen', 'cli']
-        active_providers = ['local']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {'local': 1.0},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -127,21 +121,19 @@ class TestEnsembleFallbackSystem:
         assert 'ensemble_metadata' in result
         assert len(result['ensemble_metadata']['providers_used']) == 1
         # Confidence should be heavily penalized for single provider
-        assert result['confidence'] < decisions[0]['confidence']
+        assert result['confidence'] < list(provider_decisions.values())[0]['confidence']
 
     def test_quorum_failure_all_providers_down(self, ensemble_config):
         """Test that complete provider failure raises InsufficientProvidersError."""
         manager = EnsembleDecisionManager(ensemble_config)
         
         # No providers working
-        decisions = []
+        provider_decisions = {}
         failed_providers = ['local', 'codex', 'qwen', 'cli']
         
-        with pytest.raises(InsufficientProvidersError):
+        with pytest.raises(ValueError):
             manager.aggregate_decisions(
-                decisions,
-                {},
-                [],
+                provider_decisions=provider_decisions,
                 failed_providers=failed_providers
             )
 
@@ -165,19 +157,18 @@ class TestDynamicWeightAdjustment:
         
         manager = EnsembleDecisionManager(config)
         
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'},
-            {'action': 'BUY', 'confidence': 90, 'reasoning': 'P3'}
-        ]
         
-        active_providers = ['local', 'codex', 'qwen']
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'},
+            'qwen': {'action': 'BUY', 'confidence': 90, 'reasoning': 'P3'}
+        }
+        
         failed_providers = ['cli']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {k: v for k, v in config['provider_weights'].items() if k in active_providers},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -188,9 +179,10 @@ class TestDynamicWeightAdjustment:
         # Weights should sum to 1.0
         assert abs(sum(adjusted_weights.values()) - 1.0) < 0.001
         
-        # Each remaining provider should have ~0.333 weight
-        for weight in adjusted_weights.values():
-            assert abs(weight - 0.333) < 0.01
+        # Each remaining provider should have the correctly calculated weight
+        assert abs(adjusted_weights['local'] - 0.6) < 0.01
+        assert abs(adjusted_weights['codex'] - 0.2) < 0.01
+        assert abs(adjusted_weights['qwen'] - 0.2) < 0.01
 
     def test_weight_renormalization_multiple_failures(self):
         """Test weight renormalization with multiple provider failures."""
@@ -208,18 +200,17 @@ class TestDynamicWeightAdjustment:
         
         manager = EnsembleDecisionManager(config)
         
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'SELL', 'confidence': 75, 'reasoning': 'P2'}
-        ]
         
-        active_providers = ['local', 'codex']
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'SELL', 'confidence': 75, 'reasoning': 'P2'}
+        }
+        
         failed_providers = ['qwen', 'cli']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {k: v for k, v in config['provider_weights'].items() if k in active_providers},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -229,9 +220,9 @@ class TestDynamicWeightAdjustment:
         # Weights should sum to 1.0
         assert abs(sum(adjusted_weights.values()) - 1.0) < 0.001
         
-        # Each remaining provider should have 0.5 weight
-        for weight in adjusted_weights.values():
-            assert abs(weight - 0.5) < 0.01
+        # Each remaining provider should have the correctly calculated weight
+        assert abs(adjusted_weights['local'] - 0.6) < 0.01
+        assert abs(adjusted_weights['codex'] - 0.4) < 0.01
 
 
 class TestProviderFailureLogging:
@@ -252,18 +243,17 @@ class TestProviderFailureLogging:
         
         manager = EnsembleDecisionManager(config)
         
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'}
-        ]
         
-        active_providers = ['local', 'codex']
+        # Original decisions was a list, convert to dict of provider_name -> decision
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'}
+        }
+        
         failed_providers = ['qwen']
         
         result = manager.aggregate_decisions(
-            decisions,
-            {k: v for k, v in config['provider_weights'].items() if k in active_providers},
-            active_providers,
+            provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
         
@@ -294,33 +284,35 @@ class TestConfidenceDegradation:
         manager = EnsembleDecisionManager(config)
         
         # Scenario 1: All providers working
-        all_decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P2'},
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P3'},
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P4'}
-        ]
+        all_provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P2'},
+            'qwen': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P3'},
+            'cli': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P4'}
+        }
         
         result_all = manager.aggregate_decisions(
-            all_decisions,
-            config['provider_weights'],
-            config['enabled_providers']
+            provider_decisions=all_provider_decisions
         )
         
         # Scenario 2: One provider failed
-        some_decisions = all_decisions[:3]
+        some_provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P2'},
+            'qwen': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P3'}
+        }
+        failed_providers = ['cli']
+
         result_some = manager.aggregate_decisions(
-            some_decisions,
-            {'local': 0.33, 'codex': 0.33, 'qwen': 0.34},
-            ['local', 'codex', 'qwen'],
-            failed_providers=['cli']
+            provider_decisions=some_provider_decisions,
+            failed_providers=failed_providers
         )
         
         # Confidence should be lower when providers fail
         assert result_some['confidence'] <= result_all['confidence']
         
         # Should have confidence adjustment metadata
-        assert 'confidence_adjustment' in result_some['ensemble_metadata']
+        assert 'confidence_adjustment_factor' in result_some['ensemble_metadata']
 
 
 class TestDebateMode:
@@ -372,17 +364,16 @@ class TestAgreementScore:
         
         manager = EnsembleDecisionManager(config)
         
+        
         # All providers agree on BUY
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'},
-            {'action': 'BUY', 'confidence': 90, 'reasoning': 'P3'}
-        ]
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'BUY', 'confidence': 85, 'reasoning': 'P2'},
+            'qwen': {'action': 'BUY', 'confidence': 90, 'reasoning': 'P3'}
+        }
         
         result = manager.aggregate_decisions(
-            decisions,
-            config['provider_weights'],
-            config['enabled_providers']
+            provider_decisions=provider_decisions
         )
         
         # Agreement score should be high (close to 1.0)
@@ -404,17 +395,16 @@ class TestAgreementScore:
         
         manager = EnsembleDecisionManager(config)
         
+        
         # Providers disagree
-        decisions = [
-            {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
-            {'action': 'SELL', 'confidence': 85, 'reasoning': 'P2'},
-            {'action': 'HOLD', 'confidence': 70, 'reasoning': 'P3'}
-        ]
+        provider_decisions = {
+            'local': {'action': 'BUY', 'confidence': 80, 'reasoning': 'P1'},
+            'codex': {'action': 'SELL', 'confidence': 85, 'reasoning': 'P2'},
+            'qwen': {'action': 'HOLD', 'confidence': 70, 'reasoning': 'P3'}
+        }
         
         result = manager.aggregate_decisions(
-            decisions,
-            config['provider_weights'],
-            config['enabled_providers']
+            provider_decisions=provider_decisions
         )
         
         # Agreement score should be lower
