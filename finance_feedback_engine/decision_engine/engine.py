@@ -247,6 +247,14 @@ class DecisionEngine:
         
         # Get AI recommendation
         ai_response = self._query_ai(prompt)
+
+        # Validate AI response action to ensure it's one of the allowed values
+        if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
+            logger.warning(
+                f"AI provider returned an invalid action: "
+                f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
+            )
+            ai_response['action'] = 'HOLD'
         
         # Parse and structure decision
         decision = self._create_decision(
@@ -1906,6 +1914,14 @@ Present your judgment with clear reasoning and final decision.
             agent_config = self.config.get('agent', {})
             risk_percentage = agent_config.get('risk_percentage', 0.01)
             sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
+
+            # Compatibility: Convert legacy percentage values (>1) to decimals
+            if risk_percentage > 1:
+                logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
+                risk_percentage /= 100
+            if sizing_stop_loss_percentage > 1:
+                logger.warning(f"Detected legacy sizing_stop_loss_percentage {sizing_stop_loss_percentage}%. Converting to decimal: {sizing_stop_loss_percentage/100:.3f}")
+                sizing_stop_loss_percentage /= 100
             
             if action == 'HOLD' and not has_existing_position:
                 # HOLD without position: no sizing needed

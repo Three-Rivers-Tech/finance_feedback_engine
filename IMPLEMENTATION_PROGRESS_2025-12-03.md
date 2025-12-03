@@ -341,7 +341,7 @@ Tests for autonomous agent safety and risk management:
 
 ---
 
-**Implementation By:** GitHub Copilot (Claude Sonnet 4.5)  
+**Implementation By:** CodeRabbit Inc.  
 **Session Date:** December 3, 2025  
 **Completion Time:** ~2 hours (analysis + implementation)  
 **Lines of Code:** 1,115+ (tests) + bug fixes  

@@ -42,34 +42,29 @@ class TestFinancialDataValidator:
         validator = FinancialDataValidator()
         
         # Test various valid prices
-        assert validator.validate_price(100.50) is True
-        assert validator.validate_price(0.01) is True
-        assert validator.validate_price(50000) is True
+        assert validator.is_valid_price(100.50)
+        assert validator.is_valid_price(0.01)
+        assert validator.is_valid_price(50000)
     
     def test_validate_price_invalid(self):
         """Test validation of invalid prices."""
         validator = FinancialDataValidator()
         
         # Test invalid prices
-        with pytest.raises((ValueError, AssertionError)):
-            validator.validate_price(-10.5)
+        assert validator.is_valid_price(-10.5) is False
     
     def test_validate_volume_valid(self):
         """Test validation of valid volumes."""
         validator = FinancialDataValidator()
         
-        assert validator.validate_volume(1000) is True
-        assert validator.validate_volume(0) is True  # Zero volume may be valid
+        assert validator.is_valid_volume(1000)
+        assert validator.is_valid_volume(0)  # Zero volume may be valid
     
     def test_validate_volume_invalid(self):
         """Test validation of invalid volumes."""
         validator = FinancialDataValidator()
         
-        try:
-            result = validator.validate_volume(-100)
-            assert not result or True  # Should reject negative
-        except (ValueError, AssertionError):
-            pass
+        assert validator.is_valid_volume(-100) is False
     
     def test_validate_timestamp(self):
         """Test timestamp validation."""
@@ -77,7 +72,7 @@ class TestFinancialDataValidator:
         
         # Valid timestamp
         valid_ts = datetime.utcnow().isoformat()
-        result = validator.validate_timestamp(valid_ts)
+        result = validator.is_valid_timestamp(valid_ts)
         # Just check it doesn't raise an exception
         assert True
     
@@ -86,8 +81,8 @@ class TestFinancialDataValidator:
         validator = FinancialDataValidator()
         
         # Valid pairs
-        assert validator.validate_currency_pair('BTCUSD') is True
-        assert validator.validate_currency_pair('EURUSD') is True
+        assert validator.is_valid_currency_pair('BTCUSD')
+        assert validator.is_valid_currency_pair('EURUSD')
     
     def test_validate_dataframe(self):
         """Test DataFrame validation."""
@@ -101,32 +96,9 @@ class TestFinancialDataValidator:
         })
         
         # Validate DataFrame (should not raise exception)
-        try:
-            result = validator.validate_dataframe(df)
-            assert True
-        except AttributeError:
-            # Method might not exist
-            pass
+        result = validator.validate_dataframe(df)
+        assert result == {}
     
-    def test_validate_ohlc_data(self):
-        """Test OHLC data validation."""
-        validator = FinancialDataValidator()
-        
-        valid_ohlc = {
-            'open': 100.0,
-            'high': 110.0,
-            'low': 95.0,
-            'close': 105.0
-        }
-        
-        try:
-            result = validator.validate_ohlc(valid_ohlc)
-            assert True
-        except (AttributeError, KeyError):
-            # Method might have different name or not exist
-            pass
-
-
 class TestEdgeCases:
     """Test edge cases for data validation."""
     
@@ -134,31 +106,20 @@ class TestEdgeCases:
         """Test handling of zero price."""
         validator = FinancialDataValidator()
         
-        try:
-            result = validator.validate_price(0.0)
-            # Zero might be invalid for prices
-            assert isinstance(result, bool)
-        except (ValueError, AttributeError):
-            pass
+        assert validator.is_valid_price(0.0) is True
     
     def test_very_large_price(self):
         """Test handling of very large prices."""
         validator = FinancialDataValidator()
         
         large_price = 1000000000.0
-        result = validator.validate_price(large_price)
-        # Should handle large values
-        assert True
+        assert validator.is_valid_price(large_price)
     
     def test_none_values(self):
         """Test handling of None values."""
         validator = FinancialDataValidator()
         
-        try:
-            validator.validate_price(None)
-            assert False  # Should raise or return False
-        except (TypeError, ValueError, AttributeError):
-            assert True  # Expected to fail
+        assert validator.is_valid_price(None) is False
 
 
 class TestBatchValidation:
@@ -172,29 +133,8 @@ class TestBatchValidation:
         
         # Validate each price
         for price in prices:
-            try:
-                validator.validate_price(price)
-            except AttributeError:
-                # Method might not exist
-                break
-        
-        assert True
+            assert validator.is_valid_price(price)
     
-    def test_validate_price_series(self):
-        """Test validating a pandas Series of prices."""
-        validator = FinancialDataValidator()
-        
-        price_series = pd.Series([100.0, 200.0, 300.0])
-        
-        try:
-            # Try to validate series
-            result = validator.validate_price_series(price_series)
-            assert True
-        except AttributeError:
-            # Method might not exist
-            pass
-
-
 class TestIntegration:
     """Integration tests for validator."""
     
@@ -213,12 +153,7 @@ class TestIntegration:
         }
         
         # Validate each field
-        try:
-            validator.validate_currency_pair(market_data['asset_pair'])
-            validator.validate_timestamp(market_data['timestamp'])
-            validator.validate_price(market_data['close'])
-            validator.validate_volume(market_data['volume'])
-            assert True
-        except (AttributeError, KeyError):
-            # Some methods might not exist
-            pass
+        assert validator.is_valid_currency_pair(market_data['asset_pair'])
+        assert validator.is_valid_timestamp(market_data['timestamp'])
+        assert validator.is_valid_price(market_data['close'])
+        assert validator.is_valid_volume(market_data['volume'])
