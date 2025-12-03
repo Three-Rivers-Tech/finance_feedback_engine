@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Tuple, Optional
 import logging
 import json
 import os
+import copy
 
 # TODO: Import a persistence layer for storing monitoring data
 # from finance_feedback_engine.persistence.monitoring_data_store import MonitoringDataStore
@@ -71,9 +72,17 @@ class ModelPerformanceMonitor:
         """
         Records a model prediction along with the features used.
         """
+        if 'prediction_id' not in prediction:
+            raise ValueError("prediction must contain 'prediction_id'")
+        
+        if isinstance(features, pd.DataFrame):
+            features_copy = features.copy(deep=True)
+        else:
+            features_copy = copy.deepcopy(features)
+        
         self.predictions.append({
             'prediction_id': prediction['prediction_id'],
-            'features': features,
+            'features': features_copy,
             'prediction': prediction,
             'timestamp': timestamp
         })
@@ -83,6 +92,20 @@ class ModelPerformanceMonitor:
         """
         Records the actual outcome corresponding to a previous prediction.
         """
+    def record_actual_outcome(self, prediction_id: str, actual_outcome: Any, timestamp: datetime):
+        """
+        Records the actual outcome corresponding to a previous prediction.
+        
+        Args:
+            prediction_id: The ID of the prediction this outcome corresponds to.
+            actual_outcome: A dictionary containing 'success' (bool) and 'profit' (float) keys.
+            timestamp: When the outcome was observed.
+        """
+        if not isinstance(actual_outcome, dict):
+            raise TypeError("actual_outcome must be a dictionary with 'success' and 'profit' keys")
+        if 'success' not in actual_outcome or 'profit' not in actual_outcome:
+            raise ValueError("actual_outcome must contain 'success' and 'profit' keys")
+        
         self.outcomes[prediction_id] = {
             'actual_outcome': actual_outcome,
             'timestamp': timestamp
@@ -133,8 +156,6 @@ class ModelPerformanceMonitor:
             "num_predictions": num_predictions,
             "num_outcomes": num_outcomes,
         }
-
-        self.historical_metrics.append(metrics)
 
         self.historical_metrics.append(metrics)
         self.last_evaluation_time = datetime.now(timezone.utc)
