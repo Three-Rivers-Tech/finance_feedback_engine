@@ -100,7 +100,8 @@ class TestBacktesterMaxDrawdown:
             initial_balance=10000.0
         )
         
-        # Max drawdown must be present in results
-        assert 'max_drawdown' in results, "max_drawdown should always be calculated"
-        assert isinstance(results['max_drawdown'], (int, float))
-        assert results['max_drawdown'] <= 0, "Drawdown should be negative or zero"
+        # Max drawdown must be present in results metrics
+        assert 'metrics' in results, "metrics should be present in results"
+        assert 'max_drawdown_pct' in results['metrics'], "max_drawdown_pct should be in metrics"
+        assert isinstance(results['metrics']['max_drawdown_pct'], (int, float))
+        assert results['metrics']['max_drawdown_pct'] <= 0, "Drawdown should be negative or zero"
