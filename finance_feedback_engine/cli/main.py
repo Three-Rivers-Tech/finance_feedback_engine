@@ -21,6 +21,8 @@ from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
     display_portfolio_dashboard
 )
+from finance_feedback_engine.backtesting.advanced_backtester import AdvancedBacktester
+from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 
 
 console = Console()
@@ -1547,6 +1549,147 @@ def backtest(
                 f"{rl.get('total_reward', 0):.2f}"
             )
             console.print(rl_table)
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
+@cli.command(name='advanced-backtest')
+@click.argument('asset_pair')
+@click.option('--start', '-s', required=True, help='Start date YYYY-MM-DD')
+@click.option('--end', '-e', required=True, help='End date YYYY-MM-DD')
+@click.option(
+    '--initial-balance',
+    type=float,
+    help='Override starting balance (default from config)'
+)
+@click.option(
+    '--fee-percentage',
+    type=float,
+    help='Override fee percentage per trade (default from config)'
+)
+@click.option(
+    '--slippage-percentage',
+    type=float,
+    help='Override slippage percentage per trade (default from config)'
+)
+@click.option(
+    '--commission-per-trade',
+    type=float,
+    help='Override fixed commission per trade (default from config)'
+)
+@click.option(
+    '--stop-loss-percentage',
+    type=float,
+    help='Override portfolio stop-loss percentage (default from config)'
+)
+@click.option(
+    '--take-profit-percentage',
+    type=float,
+    help='Override portfolio take-profit percentage (default from config)'
+)
+@click.pass_context
+def advanced_backtest(
+    ctx,
+    asset_pair,
+    start,
+    end,
+    initial_balance,
+    fee_percentage,
+    slippage_percentage,
+    commission_per_trade,
+    stop_loss_percentage,
+    take_profit_percentage,
+):
+    """Run an advanced historical trading strategy simulation."""
+    import asyncio
+    from ..utils.validation import standardize_asset_pair
+    
+    try:
+        asset_pair = standardize_asset_pair(asset_pair)
+        config = ctx.obj['config']
+
+        console.print(
+            f"[bold blue]Running Advanced Backtest for {asset_pair} from {start} to {end}...[/bold blue]"
+        )
+
+        # Get advanced_backtesting config or set defaults
+        ab_config = config.get('advanced_backtesting', {})
+        
+        # Override with CLI options if provided
+        initial_balance = initial_balance if initial_balance is not None else ab_config.get('initial_balance', 10000.0)
+        fee_percentage = fee_percentage if fee_percentage is not None else ab_config.get('fee_percentage', 0.001)
+        slippage_percentage = slippage_percentage if slippage_percentage is not None else ab_config.get('slippage_percentage', 0.0001)
+        commission_per_trade = commission_per_trade if commission_per_trade is not None else ab_config.get('commission_per_trade', 0.0)
+        stop_loss_percentage = stop_loss_percentage if stop_loss_percentage is not None else ab_config.get('stop_loss_percentage', 0.02)
+        take_profit_percentage = take_profit_percentage if take_profit_percentage is not None else ab_config.get('take_profit_percentage', 0.05)
+
+        engine = FinanceFeedbackEngine(config) # This initializes the HistoricalDataProvider and DecisionEngine
+
+        # Initialize AdvancedBacktester
+        backtester = AdvancedBacktester(
+            historical_data_provider=engine.historical_data_provider,
+            initial_balance=initial_balance,
+            fee_percentage=fee_percentage,
+            slippage_percentage=slippage_percentage,
+            commission_per_trade=commission_per_trade,
+            stop_loss_percentage=stop_loss_percentage,
+            take_profit_percentage=take_profit_percentage
+        )
+
+        results = backtester.run_backtest(
+            asset_pair=asset_pair,
+            start_date=start,
+            end_date=end,
+            decision_engine=engine.decision_engine
+        )
+
+        # Display results
+        metrics = results.get('metrics', {})
+        trades_history = results.get('trades', [])
+
+        table = Table(title="Advanced Backtest Summary")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", style="green", justify="right")
+
+        table.add_row("Initial Balance", f"${metrics.get('initial_balance', 0):.2f}")
+        table.add_row("Final Value", f"${metrics.get('final_value', 0):.2f}")
+        table.add_row("Total Return %", f"{metrics.get('total_return_pct', 0):.2f}%")
+        table.add_row("Annualized Return %", f"{metrics.get('annualized_return_pct', 0):.2f}%")
+        table.add_row("Max Drawdown %", f"{metrics.get('max_drawdown_pct', 0):.2f}%")
+        table.add_row("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
+        table.add_row("Total Trades", str(metrics.get('total_trades', 0)))
+        table.add_row("Win Rate %", f"{metrics.get('win_rate', 0):.2f}%")
+        table.add_row("Average Win", f"${metrics.get('avg_win', 0):.2f}")
+        table.add_row("Average Loss", f"${metrics.get('avg_loss', 0):.2f}")
+        table.add_row("Total Fees", f"${metrics.get('total_fees', 0):.2f}")
+
+        console.print(table)
+
+        if trades_history:
+            trades_table = Table(title="Advanced Backtest Trades")
+            trades_table.add_column("Timestamp", style="cyan")
+            trades_table.add_column("Action", style="magenta")
+            trades_table.add_column("Entry Price", justify="right")
+            trades_table.add_column("Effective Price", justify="right")
+            trades_table.add_column("Units Traded", justify="right")
+            trades_table.add_column("Fee", justify="right")
+            trades_table.add_column("PnL", justify="right")
+            
+            for t in trades_history:
+                pnl_color = "green" if t.get('pnl_value', 0) >= 0 else "red"
+                trades_table.add_row(
+                    t['timestamp'].split('T')[0] if 'T' in t['timestamp'] else t['timestamp'],
+                    t['action'],
+                    f"${t.get('entry_price', 0):.2f}",
+                    f"${t.get('effective_price', 0):.2f}",
+                    f"{t.get('units_traded', 0):.6f}",
+                    f"${t.get('fee', 0):.2f}",
+                    f"[{pnl_color}]${t.get('pnl_value', 0):.2f}[/{pnl_color}]"
+                )
+            console.print(trades_table)
+
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")

@@ -10,6 +10,7 @@ import pandas as pd
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
+from finance_feedback_engine.utils.failure_logger import send_telegram_notification
 
 logger = logging.getLogger(__name__)
 
