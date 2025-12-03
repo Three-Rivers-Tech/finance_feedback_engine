@@ -64,7 +64,7 @@ class TestAPIClientConcepts:
         client.set_timeout(30)
         
         assert client.timeout == 30
-        assert client.timeout == 30 or True
+
     
     def test_set_headers(self):
         """Test setting custom headers."""
@@ -187,9 +187,32 @@ class TestAuthentication:
         except (TypeError, AttributeError, NotImplementedError):
             pytest.skip("APIClientBase is abstract or method not implemented")
     
-    def test_bearer_token(self):
+    @pytest.mark.asyncio
+    async def test_bearer_token(self):
         """Test bearer token authentication."""
-        client = APIClientBase(base_url='https://api.example.com')
+        class TestBearerClient(APIClientBase):
+            def _get_auth_headers(self):
+                return {'Authorization': f'Bearer {self.api_key}'}
+            
+            async def _send_request_async(self, method, endpoint, params=None, data=None, json_data=None, headers=None, retries=3, backoff_factor=0.5, timeout=10):
+                # Simulate merging auth headers with provided headers
+                request_headers = self._get_auth_headers()
+                if headers:
+                    request_headers.update(headers)
+                # Capture the merged headers
+                self.captured_headers = request_headers
+                return {}  # Mock response
+        
+        token = 'sample_token'
+        client = TestBearerClient(base_url='https://api.example.com', api_key=token)
+        
+        await client._send_request_async('GET', '/test')
+        
+        assert 'Authorization' in client.captured_headers
+        assert client.captured_headers['Authorization'] == f'Bearer {token}'
+        # Ensure no other authentication headers are present
+        auth_related_headers = [h for h in client.captured_headers.keys() if any(keyword in h.lower() for keyword in ['auth', 'bearer', 'token', 'api-key', 'apikey'])]
+        assert len(auth_related_headers) == 1 and auth_related_headers[0] == 'Authorization'
 class TestConnectionManagement:
     """Test connection management."""
     
