@@ -11,7 +11,6 @@ import os
 import copy
 import asyncio
 from pathlib import Path
-from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from packaging.requirements import Requirement
@@ -34,25 +33,25 @@ logger = logging.getLogger(__name__)
 
 def _parse_requirements_file(req_file: Path) -> list:
     """Parse requirements.txt and return list of package names.
-    
+
     Returns base names only.
     """
     packages = []
     if not req_file.exists():
         return packages
-    
+
     with open(req_file, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             # Skip comments and empty lines
             if not line or line.startswith('#'):
                 continue
-            
+
             # Remove inline comments
             line = line.split('#')[0].strip()
             if not line:
                 continue
-            
+
             # Try using packaging library first (most robust)
             try:
                 req = Requirement(line)
@@ -62,7 +61,7 @@ def _parse_requirements_file(req_file: Path) -> list:
                 pass  # Fall back to regex approach
             except Exception:
                 pass  # Invalid requirement, try regex fallback
-            
+
             # Fallback: Use regex to extract package name
             # Handles operators: ~=, !=, <=, <, >, ==, >=
             # Also strips extras [extra1,extra2] and environment markers
@@ -102,24 +101,24 @@ def _get_installed_packages() -> dict:
 
 def _check_dependencies() -> tuple:
     """Check which dependencies are missing.
-    
+
     Returns (missing, installed) tuples.
     """
     req_file = Path('requirements.txt')
     if not req_file.exists():
         return ([], [])
-    
+
     required = _parse_requirements_file(req_file)
     installed_dict = _get_installed_packages()
-    
+
     missing = []
     installed = []
-    
+
     for pkg in required:
         pkg_lower = pkg.lower()
         # Normalize both hyphen and underscore for comparison
         pkg_normalized = pkg_lower.replace('-', '_')
-        
+
         # Check both forms (hyphen and underscore)
         if (pkg_lower in installed_dict or
                 pkg_normalized in installed_dict or
@@ -127,17 +126,17 @@ def _check_dependencies() -> tuple:
             installed.append(pkg)
         else:
             missing.append(pkg)
-    
+
     return (missing, installed)
 
 
 def setup_logging(verbose: bool = False, config: dict = None):
     """Setup logging configuration.
-    
+
     Args:
         verbose: If True, override config and use DEBUG level
         config: Configuration dict containing ('logging', 'level') key
-    
+
     Priority: --verbose flag > config value > INFO default
     """
     # Map string level names to logging constants
@@ -148,7 +147,7 @@ def setup_logging(verbose: bool = False, config: dict = None):
         'ERROR': logging.ERROR,
         'CRITICAL': logging.CRITICAL
     }
-    
+
     # Priority 1: --verbose flag overrides everything
     if verbose:
         level = logging.DEBUG
@@ -167,14 +166,14 @@ def setup_logging(verbose: bool = False, config: dict = None):
     # Priority 3: Default to INFO
     else:
         level = logging.INFO
-    
+
     # Apply to root logger via basicConfig
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         force=True  # Override any existing config
     )
-    
+
     # Also set the root logger level explicitly
     logging.getLogger().setLevel(level)
 
@@ -191,7 +190,7 @@ def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
 
 def _deep_fill_missing(target: dict, source: dict) -> dict:
     """Fill missing keys in target from source.
-    
+
     Does not overwrite existing values.
     """
     for k, v in source.items():
@@ -213,7 +212,7 @@ def load_tiered_config() -> dict:
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     base_config_path = Path('config/config.yaml')
     local_config_path = Path('config/config.local.yaml')
 
@@ -235,7 +234,7 @@ def load_tiered_config() -> dict:
                 _deep_fill_missing(config, base_config)
     else:
         logger.warning(f"Base config file not found: {base_config_path}")
-    
+
     # 3. Apply environment variables
     env_var_mappings = {
         'ALPHA_VANTAGE_API_KEY': ('alpha_vantage_api_key',),
@@ -265,7 +264,7 @@ def load_tiered_config() -> dict:
                     current_level[key] = value
                 else:
                     current_level = current_level.setdefault(key, {})
-    
+
     return config
 
 
@@ -276,12 +275,12 @@ def load_config(config_path: str) -> dict:
     tiered loading process.
     """
     path = Path(config_path)
-    
+
     if not path.exists():
         raise click.ClickException(
             f"Configuration file not found: {config_path}"
         )
-    
+
     with open(path, 'r', encoding='utf-8') as f:
         if path.suffix in ['.yaml', '.yml']:
             config = yaml.safe_load(f)
@@ -351,11 +350,11 @@ def cli(ctx, config, verbose, interactive):
         # Indicate that tiered loading was used, might not have a single path
         # Set a placeholder
         ctx.obj['config_path'] = 'tiered'
-    
+
     # Store the final config
     ctx.obj['config'] = final_config
     ctx.obj['verbose'] = verbose
-    
+
     # Setup logging with config and verbose flag
     # Verbose flag takes priority over config setting
     setup_logging(verbose=verbose, config=final_config)
@@ -577,7 +576,7 @@ def config_editor(ctx, output):
             ("decision_engine", "ai_provider"),
             ["ensemble", "local", "cli", "gemini"],
         )
-        
+
         if ai_choice == "ensemble":
             console.print("Using ensemble mode (default: free local models)")
             _set_nested(updated_config, ("ensemble", "enabled_providers"), ["local"])
@@ -800,19 +799,19 @@ def install_deps(ctx, auto_install):
 def analyze(ctx, asset_pair, provider):
     """Analyze an asset pair and generate trading decision."""
     from ..utils.validation import standardize_asset_pair
-    
+
     try:
         # Standardize asset pair input (uppercase, remove separators)
         asset_pair = standardize_asset_pair(asset_pair)
-        
+
         config = ctx.obj['config']
-        
+
         # Override provider if specified
         if provider:
             if 'decision_engine' not in config:
                 config['decision_engine'] = {}
             config['decision_engine']['ai_provider'] = provider.lower()
-            
+
             if provider.lower() == 'ensemble':
                 console.print(
                     "[yellow]Using ensemble mode (multiple providers)[/yellow]"
@@ -821,7 +820,7 @@ def analyze(ctx, asset_pair, provider):
                 console.print(
                     f"[yellow]Using AI provider: {provider}[/yellow]"
                 )
-        
+
         try:
             engine = FinanceFeedbackEngine(config)
         except ValueError as e:
@@ -867,7 +866,7 @@ def analyze(ctx, asset_pair, provider):
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
 
         import asyncio
-        
+
         # Support both async and sync implementations/mocks
         result = engine.analyze_asset(asset_pair)
         if asyncio.iscoroutine(result):
@@ -928,7 +927,7 @@ def analyze(ctx, asset_pair, provider):
                 "\n[bold yellow]No decision generated. Insufficient successful provider responses to meet quorum requirements.[/bold yellow]"
             )
             return
-        
+
         # Display decision (tolerant of minimal mock dicts)
         console.print("\n[bold green]Trading Decision Generated[/bold green]")
         console.print(f"Decision ID: {decision.get('id', 'N/A')}")
@@ -938,7 +937,7 @@ def analyze(ctx, asset_pair, provider):
             console.print(f"Confidence: {decision.get('confidence', 0)}%")
         if 'reasoning' in decision:
             console.print(f"Reasoning: {decision.get('reasoning', '')}")
-        
+
         # Check if signal-only mode (no position sizing)
         if decision.get('signal_only'):
             console.print(
@@ -946,7 +945,7 @@ def analyze(ctx, asset_pair, provider):
                 "Portfolio data unavailable, no position sizing provided"
                 "[/yellow]"
             )
-        
+
         # Display position type and sizing (only if available)
         if (
             decision.get('position_type') and
@@ -968,10 +967,10 @@ def analyze(ctx, asset_pair, provider):
                 f"  Stop Loss: {decision.get('stop_loss_fraction', 0.02)*100:.1f}% "
                 "from entry"
             )
-        
+
         if decision.get('suggested_amount', 0) > 0:
             console.print(f"Suggested Amount: {decision.get('suggested_amount')}")
-        
+
         # Market data section optional
         md = decision.get('market_data', {}) or {}
         if md:
@@ -988,7 +987,7 @@ def analyze(ctx, asset_pair, provider):
             console.print(f"  Price Change: {decision.get('price_change', 0):.2f}%")
         if 'volatility' in decision:
             console.print(f"  Volatility: {decision.get('volatility', 0):.2f}%")
-        
+
         # Display additional technical data if available
         md = decision.get('market_data', {}) or {}
         if 'trend' in md:
@@ -999,19 +998,19 @@ def analyze(ctx, asset_pair, provider):
                 f"{md.get('price_range_pct', 0):.2f}%)"
             )
             console.print(f"  Body %: {md.get('body_pct', 0):.2f}%")
-            
+
         if 'rsi' in md:
             console.print(
                 f"  RSI: {md.get('rsi', 0):.2f} ("
                 f"{md.get('rsi_signal', 'neutral')})"
             )
-            
+
         if md.get('type') == 'crypto' and 'volume' in md:
             console.print("\nCrypto Metrics:")
             console.print(f"  Volume: {md.get('volume', 0):,.0f}")
             if 'market_cap' in md and md.get('market_cap', 0) > 0:
                 console.print(f"  Market Cap: ${md.get('market_cap', 0):,.0f}")
-        
+
         # Display sentiment analysis if available
         if 'sentiment' in md and md['sentiment'].get('available'):
             sent = md['sentiment']
@@ -1025,7 +1024,7 @@ def analyze(ctx, asset_pair, provider):
             if sent.get('top_topics'):
                 topics = ', '.join(sent.get('top_topics', [])[:3])
                 console.print(f"  Topics: {topics}")
-        
+
         # Display macro indicators if available
         if 'macro' in md and md['macro'].get('available'):
             console.print("\nMacroeconomic Indicators:")
@@ -1034,7 +1033,7 @@ def analyze(ctx, asset_pair, provider):
                 console.print(
                     f"  {name}: {data.get('value')} ({data.get('date')})"
                 )
-        
+
         # Display ensemble metadata if available
         if decision.get('ensemble_metadata'):
             meta = decision['ensemble_metadata']
@@ -1051,7 +1050,7 @@ def analyze(ctx, asset_pair, provider):
             console.print(
                 f"  Confidence Variance: {meta['confidence_variance']:.1f}"
             )
-            
+
             # Show individual provider decisions
             console.print("\n[bold]Provider Decisions:[/bold]")
             for provider, pdecision in (meta.get('provider_decisions', {}) or {}).items():
@@ -1067,13 +1066,13 @@ def analyze(ctx, asset_pair, provider):
                     f"  [{provider.upper()}] {pdecision['action']} "
                     f"({pdecision['confidence']}%) - {weight_str}"
                 )
-            
+
             # Display local priority metadata if available
             if meta.get('local_models_used'):
                 console.print(f"  Local Models Used: {', '.join(meta['local_models_used'])}")
             if meta.get('local_priority_applied'):
                 console.print("  Local Priority Applied: Yes")
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1086,19 +1085,19 @@ def balance(ctx):
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         balances = engine.get_balance()
-        
+
         # Display balances in a table
         table = Table(title="Account Balances")
         table.add_column("Asset", style="cyan")
         table.add_column("Balance", style="green", justify="right")
-        
+
         for asset, amount in balances.items():
             table.add_row(asset, f"{amount:,.2f}")
-        
+
         console.print(table)
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1111,11 +1110,11 @@ def dashboard(ctx):
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         # For now, we only have one platform instance
         # Future: support multiple platforms from config
         platforms = [engine.trading_platform]
-        
+
         # Aggregate portfolio data
         aggregator = PortfolioDashboardAggregator(platforms)
         # Support tests that patch get_aggregated_portfolio
@@ -1123,7 +1122,7 @@ def dashboard(ctx):
             aggregated_data = aggregator.get_aggregated_portfolio()
         else:
             aggregated_data = aggregator.aggregate()
-        
+
         # Display unified dashboard; if aggregator returns simple dict, print summary
         try:
             display_portfolio_dashboard(aggregated_data)
@@ -1138,7 +1137,7 @@ def dashboard(ctx):
                     console.print(f"Platforms: {', '.join(plats)}")
             else:
                 raise
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1153,7 +1152,7 @@ def history(ctx, asset, limit):
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         decisions = engine.get_decision_history(asset_pair=asset, limit=limit)
         # Some tests may mock a non-iterable; guard here
         if not isinstance(decisions, (list, tuple)) or not decisions:
@@ -1164,11 +1163,11 @@ def history(ctx, asset, limit):
                 decisions = store.get_decision_history(asset_pair=asset, limit=limit)
             except Exception:
                 decisions = []
-        
+
         if not decisions:
             console.print("[yellow]No decisions found[/yellow]")
             return
-        
+
         # Display decisions in a table
         table = Table(title=f"Decision History ({len(decisions)} decisions)")
         table.add_column("ID", style="dim")
@@ -1177,12 +1176,12 @@ def history(ctx, asset, limit):
         table.add_column("Action", style="magenta")
         table.add_column("Confidence", style="green", justify="right")
         table.add_column("Executed", style="yellow")
-        
+
         for decision in decisions:
             timestamp = str(decision.get('timestamp', ''))
             timestamp = timestamp.split('T')[1][:8] if 'T' in timestamp else timestamp[:8]
             executed = "✓" if decision.get('executed') else "✗"
-            
+
             table.add_row(
                 decision.get('id', ''),
                 timestamp,
@@ -1191,9 +1190,9 @@ def history(ctx, asset, limit):
                 f"{decision.get('confidence', '')}%",
                 executed
             )
-        
+
         console.print(table)
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1207,11 +1206,11 @@ def execute(ctx, decision_id):
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         # If no decision_id provided, show recent decisions and let user select
         if not decision_id:
             console.print("[bold blue]Recent Trading Decisions:[/bold blue]\n")
-            
+
             # Get recent decisions (limit to 10)
             decisions = engine.get_decision_history(limit=10)
             if not isinstance(decisions, (list, tuple)):
@@ -1222,17 +1221,17 @@ def execute(ctx, decision_id):
                     decisions = store.get_decision_history(limit=10)
                 except Exception:
                     decisions = []
-            
+
             # Filter out HOLD decisions since they don't execute trades
             decisions = [d for d in decisions if d.get('action') != 'HOLD']
-            
+
             if not decisions:
                 console.print(
                     "[yellow]No executable decisions found. Generate some "
                     "BUY/SELL decisions first with 'analyze' command.[/yellow]"
                 )
                 return
-            
+
             # Display decisions in a table with numbers
             num_decisions = len(decisions)
             title = f"Select a Decision to Execute ({num_decisions} available)"
@@ -1243,13 +1242,13 @@ def execute(ctx, decision_id):
             table.add_column("Action", style="magenta")
             table.add_column("Confidence", style="green", justify="right")
             table.add_column("Executed", style="yellow")
-            
+
             for i, decision in enumerate(decisions, 1):
                 # Just time part of timestamp
                 timestamp = str(decision.get('timestamp', ''))
                 timestamp = timestamp.split('T')[1][:8] if 'T' in timestamp else timestamp[:8]
                 executed = "✓" if decision.get('executed') else "✗"
-                
+
                 table.add_row(
                     str(i),
                     timestamp,
@@ -1258,21 +1257,21 @@ def execute(ctx, decision_id):
                     f"{decision.get('confidence', '')}%",
                     executed
                 )
-            
+
             console.print(table)
             console.print()
-            
+
             # Prompt user to select
             while True:
                 try:
                     choice = console.input(
                         "Enter decision number to execute (or 'q' to quit): "
                     ).strip()
-                    
+
                     if choice.lower() in ['q', 'quit', 'exit']:
                         console.print("[dim]Cancelled.[/dim]")
                         return
-                    
+
                     choice_num = int(choice)
                     if 1 <= choice_num <= len(decisions):
                         selected_decision = decisions[choice_num - 1]
@@ -1286,19 +1285,19 @@ def execute(ctx, decision_id):
                             f"[red]Invalid choice. Please enter a number "
                             f"between 1 and {len(decisions)}.[/red]"
                         )
-                        
+
                 except ValueError:
                     console.print(
                         "[red]Invalid input. Please enter a number or "
                         "'q' to quit.[/red]"
                     )
-        
+
         console.print(
             f"[bold blue]Executing decision {decision_id}...[/bold blue]"
         )
-        
+
         result = engine.execute_decision(decision_id)
-        
+
         if result.get('success'):
             console.print(
                 "[bold green]✓ Trade executed successfully[/bold green]"
@@ -1307,10 +1306,10 @@ def execute(ctx, decision_id):
             console.print(
                 "[bold red]✗ Trade execution failed[/bold red]"
             )
-        
+
         console.print(f"Platform: {result.get('platform')}")
         console.print(f"Message: {result.get('message')}")
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1322,7 +1321,7 @@ def status(ctx):
     """Show engine status and configuration."""
     try:
         config = ctx.obj['config']
-        
+
         console.print("[bold]Finance Feedback Engine Status[/bold]\n")
         console.print(
             f"Trading Platform: {config.get('trading_platform', 'Not configured')}"
@@ -1333,13 +1332,13 @@ def status(ctx):
         console.print(
             f"Storage Path: {config.get('persistence', {}).get('storage_path', 'data/decisions')}"
         )
-        
+
         # Try to initialize engine and fetch account info for dynamic leverage
         engine = FinanceFeedbackEngine(config)
         console.print(
             "\n[bold green]✓ Engine initialized successfully[/bold green]"
         )
-        
+
         # Fetch and display dynamic leverage from exchange
         try:
             account_info = engine.trading_platform.get_account_info()
@@ -1352,7 +1351,7 @@ def status(ctx):
                 console.print(f"\nMax leverage: {account_info['max_leverage']:.1f}x (from exchange)")
         except Exception as e:
             logger.debug(f"Could not fetch leverage info: {e}")
-        
+
     except Exception as e:
         console.print(
             "\n[bold red]✗ Engine initialization failed[/bold red]"
@@ -1373,21 +1372,21 @@ def wipe_decisions(ctx, confirm):
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         # Get current count
         count = engine.decision_store.get_decision_count()
-        
+
         if count == 0:
             console.print("[yellow]No decisions to wipe.[/yellow]")
             # Tests expect cancellation wording in some scenarios
             console.print("[dim]Cancelled.[/dim]")
             return
-        
+
         console.print(
             f"[bold yellow]Warning: This will delete all {count} "
             f"stored decisions![/bold yellow]"
         )
-        
+
         # Confirm unless --confirm flag or interactive mode
         if not confirm:
             if ctx.obj.get('interactive'):
@@ -1400,17 +1399,17 @@ def wipe_decisions(ctx, confirm):
                     default=False
                 )
                 response = 'y' if response else 'n'
-            
+
             if response.lower() != 'y':
                 console.print("[yellow]Cancelled.[/yellow]")
                 return
-        
+
         # Wipe all decisions
         deleted = engine.decision_store.wipe_all_decisions()
         console.print(
             f"[bold green]✓ Wiped {deleted} decisions[/bold green]"
         )
-        
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
@@ -1465,7 +1464,7 @@ def backtest(
 ):
     """Run AI-driven backtest with comprehensive performance metrics."""
     from finance_feedback_engine.utils.validation import standardize_asset_pair
-    
+
     try:
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
@@ -1476,7 +1475,7 @@ def backtest(
 
         # Get advanced_backtesting config or set defaults
         ab_config = config.get('advanced_backtesting', {})
-        
+
         # Override with CLI options if provided
         initial_balance = initial_balance if initial_balance is not None else ab_config.get('initial_balance', 10000.0)
         fee_percentage = fee_percentage if fee_percentage is not None else ab_config.get('fee_percentage', 0.001)
@@ -1540,7 +1539,7 @@ def backtest(
             trades_table.add_column("Units", justify="right")
             trades_table.add_column("Fee", justify="right")
             trades_table.add_column("PnL", justify="right")
-            
+
             for trade in trades_history[:20]:  # Show first 20 trades
                 timestamp = trade.get('timestamp', '').split('T')[0] if 'T' in trade.get('timestamp', '') else trade.get('timestamp', '')
                 trades_table.add_row(
@@ -1553,7 +1552,7 @@ def backtest(
                     f"${trade.get('pnl_value', 0):.2f}"
                 )
             console.print(trades_table)
-            
+
             if len(trades_history) > 20:
                 console.print(f"[dim]... and {len(trades_history) - 20} more trades[/dim]")
 
@@ -1614,7 +1613,7 @@ def advanced_backtest(
     """Run an advanced historical trading strategy simulation."""
     import asyncio
     from ..utils.validation import standardize_asset_pair
-    
+
     try:
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
@@ -1625,7 +1624,7 @@ def advanced_backtest(
 
         # Get advanced_backtesting config or set defaults
         ab_config = config.get('advanced_backtesting', {})
-        
+
         # Override with CLI options if provided
         initial_balance = initial_balance if initial_balance is not None else ab_config.get('initial_balance', 10000.0)
         fee_percentage = fee_percentage if fee_percentage is not None else ab_config.get('fee_percentage', 0.001)
@@ -1685,7 +1684,7 @@ def advanced_backtest(
             trades_table.add_column("Units Traded", justify="right")
             trades_table.add_column("Fee", justify="right")
             trades_table.add_column("PnL", justify="right")
-            
+
             for t in trades_history:
                 pnl_color = "green" if t.get('pnl_value', 0) >= 0 else "red"
                 trades_table.add_row(
@@ -1762,13 +1761,13 @@ def metrics(ctx):
                     "[dim]Metrics will appear here once trades complete[/dim]"
                 )
                 return
-            
+
             metric_files = list(metrics_dir.glob("trade_*.json"))
-            
+
             if not metric_files:
                 console.print("[yellow]No completed trades yet[/yellow]")
                 return
-            
+
             # Load all metrics
             all_metrics = []
             for file in metric_files:
@@ -1778,58 +1777,58 @@ def metrics(ctx):
                         all_metrics.append(metric)
                 except Exception as e:
                     console.print(f"[dim]Warning: Could not load {file.name}: {e}[/dim]")
-            
+
             if not all_metrics:
                 console.print("[yellow]No valid metrics found[/yellow]")
                 return
-            
+
             # Calculate aggregate stats
             winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
             losing = [m for m in all_metrics if m.get('realized_pnl', 0) <= 0]
-            
+
             total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
             avg_pnl = total_pnl / len(all_metrics)
             win_rate = (len(winning) / len(all_metrics) * 100) if all_metrics else 0
-            
+
             # Display summary
             console.print(f"Total Trades:     {len(all_metrics)}")
             console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
             console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
             console.print(f"Win Rate:         {win_rate:.1f}%")
-            
+
             pnl_color = "green" if total_pnl >= 0 else "red"
             console.print(f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]")
-            
+
             avg_color = "green" if avg_pnl >= 0 else "red"
             console.print(f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]")
-            
+
             # Show recent trades
             console.print("\n[bold]Recent Trades:[/bold]\n")
-            
+
             table = Table()
             table.add_column("Product", style="cyan")
             table.add_column("Side", style="white")
             table.add_column("Duration", style="yellow")
             table.add_column("PnL", style="white", justify="right")
             table.add_column("Exit Reason", style="dim")
-            
+
             # Sort by exit time and show last 10
             sorted_metrics = sorted(
                 all_metrics,
                 key=lambda m: m.get('exit_time', ''),
                 reverse=True
             )[:10]
-            
+
             for m in sorted_metrics:
                 product = m.get('product_id', 'N/A')
                 side = m.get('side', 'N/A')
                 duration = m.get('holding_duration_hours', 0)
                 pnl = m.get('realized_pnl', 0)
                 reason = m.get('exit_reason', 'unknown')
-                
+
                 pnl_color = "green" if pnl >= 0 else "red"
                 pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
-                
+
                 table.add_row(
                     product,
                     side,
@@ -1837,7 +1836,7 @@ def metrics(ctx):
                     pnl_str,
                     reason
                 )
-            
+
             console.print(table)
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
@@ -1858,35 +1857,35 @@ def retrain_meta_learner(ctx, force):
     """Check stacking ensemble performance and retrain if needed."""
     try:
         from train_meta_learner import run_training
-        
+
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        
+
         console.print("\n[bold cyan]Checking meta-learner performance...[/bold cyan]")
-        
+
         # Ensure memory is loaded (use memory_engine per project conventions)
         mem = getattr(engine, 'memory_engine', getattr(engine, 'memory', None))
         if not getattr(mem, 'trade_outcomes', None):
             console.print("[yellow]No trade history found in memory. Cannot check performance.[/yellow]")
             return
         perf = mem.get_strategy_performance_summary() if hasattr(mem, 'get_strategy_performance_summary') else {}
-        
+
         stacking_perf = perf.get('stacking')
-        
+
         if not stacking_perf:
             console.print("[yellow]No performance data found for the 'stacking' strategy.[/yellow]")
             console.print("Generate some decisions using the stacking strategy to gather data.")
             return
-            
+
         win_rate = stacking_perf.get('win_rate', 0)
         total_trades = stacking_perf.get('total_trades', 0)
-        
+
         console.print(f"Stacking strategy performance: {win_rate:.2f}% win rate over {total_trades} trades.")
-        
+
         # Define retraining criteria
         win_rate_threshold = 55.0
         min_trades_threshold = 20
-        
+
         should_retrain = False
         if force:
             console.print("[yellow]--force flag detected. Forcing retraining...[/yellow]")
@@ -1898,7 +1897,7 @@ def retrain_meta_learner(ctx, force):
         else:
             console.print(f"[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]")
             should_retrain = True
-            
+
         if should_retrain:
             run_training()
             console.print("[bold green]✓ Meta-learner retraining process complete.[/bold green]")
@@ -2070,7 +2069,7 @@ async def _run_live_market_view(engine, agent):
 def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown):
     """Starts the autonomous trading agent."""
     import asyncio
-    
+
     if 1 <= take_profit <= 100:
         console.print(f"[yellow]Warning: Detected legacy take-profit percentage {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]")
         take_profit /= 100
@@ -2109,7 +2108,7 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown):
             tasks = [loop.create_task(agent.run())]
             if enable_live_view:
                 tasks.append(loop.create_task(_run_live_market_view(engine, agent)))
-            
+
             loop.run_until_complete(asyncio.gather(*tasks))
         except KeyboardInterrupt:
             console.print("\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]")
