@@ -1,3 +1,5 @@
+import sys
+import os
 import pytest
 from click.testing import CliRunner
 import pandas as pd
@@ -6,6 +8,9 @@ from unittest.mock import MagicMock
 from pathlib import Path
 import yaml
 import shutil
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
 # --- Fixtures for CLI Testing ---
