@@ -9,6 +9,8 @@ import sys
 import re
 import os
 import copy
+import asyncio
+import logging
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -26,6 +28,8 @@ from finance_feedback_engine.data_providers.historical_data_provider import Hist
 
 
 console = Console()
+logger = logging.getLogger(__name__)
+
 
 
 def _parse_requirements_file(req_file: Path) -> list:
@@ -1417,28 +1421,34 @@ def wipe_decisions(ctx, confirm):
 @click.option('--start', '-s', required=True, help='Start date YYYY-MM-DD')
 @click.option('--end', '-e', required=True, help='End date YYYY-MM-DD')
 @click.option(
-    '--strategy',
-    default='sma_crossover',
-    show_default=True,
-    help='Strategy name'
-)
-@click.option(
-    '--real-data',
-    is_flag=True,
-    help='Use real Alpha Vantage historical daily candles if available'
-)
-@click.option('--short-window', type=int, help='Override short SMA window')
-@click.option('--long-window', type=int, help='Override long SMA window')
-@click.option(
     '--initial-balance',
     type=float,
-    help='Override starting balance'
+    help='Override starting balance (default: 10000)'
 )
-@click.option('--fee', type=float, help='Override fee percentage per trade')
 @click.option(
-    '--rl-learning-rate',
+    '--fee-percentage',
     type=float,
-    help='Override RL learning rate for ensemble_weight_rl'
+    help='Override fee percentage (default: 0.001 = 0.1%)'
+)
+@click.option(
+    '--slippage-percentage',
+    type=float,
+    help='Override slippage percentage (default: 0.0001 = 0.01%)'
+)
+@click.option(
+    '--commission-per-trade',
+    type=float,
+    help='Override fixed commission per trade (default: 0.0)'
+)
+@click.option(
+    '--stop-loss-percentage',
+    type=float,
+    help='Override stop-loss percentage (default: 0.02 = 2%)'
+)
+@click.option(
+    '--take-profit-percentage',
+    type=float,
+    help='Override take-profit percentage (default: 0.05 = 5%)'
 )
 @click.pass_context
 def backtest(
@@ -1446,112 +1456,114 @@ def backtest(
     asset_pair,
     start,
     end,
-    strategy,
-    real_data,
-    short_window,
-    long_window,
     initial_balance,
-    fee,
-    rl_learning_rate,
+    fee_percentage,
+    slippage_percentage,
+    commission_per_trade,
+    stop_loss_percentage,
+    take_profit_percentage,
 ):
-    """Run a simple historical strategy simulation (experimental)."""
+    """Run AI-driven backtest with comprehensive performance metrics."""
+    from finance_feedback_engine.utils.validation import standardize_asset_pair
+    
     try:
+        asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
-        bt_conf = config.setdefault('backtesting', {})
-        if real_data:
-            bt_conf['use_real_data'] = True
-        if rl_learning_rate is not None:
-            rl_conf = bt_conf.setdefault('rl', {})
-            rl_conf['learning_rate'] = rl_learning_rate
-        engine = FinanceFeedbackEngine(config)
 
         console.print(
-            f"[bold blue]Backtesting {asset_pair} {start}→{end} [{strategy}]"  # noqa: E501
+            f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
+        )
+        console.print(
+            f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
         )
 
-        results = asyncio.run(engine.backtest(
-            asset_pair=asset_pair,
-            start=start,
-            end=end,
-            strategy=strategy,
-            short_window=short_window,
-            long_window=long_window,
+        # Get advanced_backtesting config or set defaults
+        ab_config = config.get('advanced_backtesting', {})
+        
+        # Override with CLI options if provided
+        initial_balance = initial_balance if initial_balance is not None else ab_config.get('initial_balance', 10000.0)
+        fee_percentage = fee_percentage if fee_percentage is not None else ab_config.get('fee_percentage', 0.001)
+        slippage_percentage = slippage_percentage if slippage_percentage is not None else ab_config.get('slippage_percentage', 0.0001)
+        commission_per_trade = commission_per_trade if commission_per_trade is not None else ab_config.get('commission_per_trade', 0.0)
+        stop_loss_percentage = stop_loss_percentage if stop_loss_percentage is not None else ab_config.get('stop_loss_percentage', 0.02)
+        take_profit_percentage = take_profit_percentage if take_profit_percentage is not None else ab_config.get('take_profit_percentage', 0.05)
+
+        engine = FinanceFeedbackEngine(config)
+
+        # Initialize AdvancedBacktester
+        backtester = AdvancedBacktester(
+            historical_data_provider=engine.historical_data_provider,
             initial_balance=initial_balance,
-            fee_percentage=fee,
-        ))
+            fee_percentage=fee_percentage,
+            slippage_percentage=slippage_percentage,
+            commission_per_trade=commission_per_trade,
+            stop_loss_percentage=stop_loss_percentage,
+            take_profit_percentage=take_profit_percentage
+        )
 
-        # Be tolerant of minimal mocked structures
+        results = backtester.run_backtest(
+            asset_pair=asset_pair,
+            start_date=start,
+            end_date=end,
+            decision_engine=engine.decision_engine
+        )
+
+        # Display results
         metrics = results.get('metrics', {})
-        strat = results.get('strategy', {'name': strategy})
+        trades_history = results.get('trades', [])
 
-        table = Table(title="Backtest Summary")
+        table = Table(title="AI-Driven Backtest Summary")
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green", justify="right")
 
-        table.add_row("Strategy", strat.get('name', strategy))
-        if 'short_window' in strat:
-            table.add_row("Short SMA", str(strat['short_window']))
-        if 'long_window' in strat:
-            table.add_row("Long SMA", str(strat['long_window']))
-        if strategy == 'ensemble_weight_rl':
-            provs = strat.get('providers', [])
-            table.add_row("Providers", ",".join(provs))
-        table.add_row("Candles", str(results.get('candles_used', 0)))
-        if 'starting_balance' in metrics:
-            table.add_row("Starting Balance", f"${metrics.get('starting_balance', 0):.2f}")
-        if 'final_balance' in metrics:
-            table.add_row("Final Balance", f"${metrics.get('final_balance', 0):.2f}")
-        if 'net_return_pct' in metrics:
-            table.add_row("Net Return %", f"{metrics.get('net_return_pct', 0):.2f}%")
-        if 'total_trades' in metrics:
-            table.add_row("Total Trades", str(metrics.get('total_trades', 0)))
-        if 'win_rate' in metrics:
-            table.add_row("Win Rate %", f"{metrics.get('win_rate', 0):.2f}%")
-        if 'max_drawdown_pct' in metrics:
-            table.add_row("Max Drawdown %", f"{metrics.get('max_drawdown_pct', 0):.2f}%")
+        table.add_row("Initial Balance", f"${metrics.get('initial_balance', 0):.2f}")
+        table.add_row("Final Value", f"${metrics.get('final_value', 0):.2f}")
+        table.add_row("Total Return %", f"{metrics.get('total_return_pct', 0):.2f}%")
+        if 'annualized_return_pct' in metrics:
+            table.add_row("Annualized Return %", f"{metrics.get('annualized_return_pct', 0):.2f}%")
+        table.add_row("Max Drawdown %", f"{metrics.get('max_drawdown_pct', 0):.2f}%")
+        if 'sharpe_ratio' in metrics:
+            table.add_row("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
+        table.add_row("Total Trades", str(metrics.get('total_trades', 0)))
+        table.add_row("Win Rate %", f"{metrics.get('win_rate', 0):.2f}%")
+        if 'avg_win' in metrics:
+            table.add_row("Average Win", f"${metrics.get('avg_win', 0):.2f}")
+        if 'avg_loss' in metrics:
+            table.add_row("Average Loss", f"${metrics.get('avg_loss', 0):.2f}")
+        table.add_row("Total Fees", f"${metrics.get('total_fees', 0):.2f}")
 
-        if metrics.get('insufficient_data'):
-            console.print(
-                "[yellow]Insufficient data: windows too large; metrics placeholder.[/yellow]"  # noqa: E501
-            )
         console.print(table)
 
-        if results.get('trades'):
-            trades_table = Table(title="Trades")
-            trades_table.add_column("Time", style="cyan")
-            trades_table.add_column("Type", style="magenta")
-            trades_table.add_column("Price", justify="right")
-            trades_table.add_column("Size", justify="right")
+        if trades_history:
+            trades_table = Table(title="Backtest Trades")
+            trades_table.add_column("Timestamp", style="cyan")
+            trades_table.add_column("Action", style="magenta")
+            trades_table.add_column("Entry Price", justify="right")
+            trades_table.add_column("Effective Price", justify="right")
+            trades_table.add_column("Units", justify="right")
             trades_table.add_column("Fee", justify="right")
             trades_table.add_column("PnL", justify="right")
-            for t in results['trades']:
+            
+            for trade in trades_history[:20]:  # Show first 20 trades
+                timestamp = trade.get('timestamp', '').split('T')[0] if 'T' in trade.get('timestamp', '') else trade.get('timestamp', '')
                 trades_table.add_row(
-                    t['timestamp'].split('T')[0],
-                    t['type'],
-                    f"${t['price']:.2f}",
-                    f"{t['size']:.6f}",
-                    f"${t['fee']:.2f}",
-                    f"${t.get('pnl', 0):.2f}",
+                    timestamp,
+                    trade.get('action', 'N/A'),
+                    f"${trade.get('entry_price', 0):.2f}",
+                    f"${trade.get('effective_price', 0):.2f}",
+                    f"{abs(trade.get('units_traded', 0)):.6f}",
+                    f"${trade.get('fee', 0):.2f}",
+                    f"${trade.get('pnl_value', 0):.2f}"
                 )
             console.print(trades_table)
-
-        # RL metadata table if using ensemble_weight_rl
-        if strategy == 'ensemble_weight_rl' and 'rl_metadata' in results:
-            rl = results['rl_metadata']
-            weights = rl.get('final_weights', {})
-            rl_table = Table(title="RL Final Weights & Reward")
-            rl_table.add_column("Provider", style="cyan")
-            rl_table.add_column("Final Weight", justify="right")
-            for p, w in weights.items():
-                rl_table.add_row(p, f"{w:.4f}")
-            rl_table.add_row(
-                "Total Reward",
-                f"{rl.get('total_reward', 0):.2f}"
-            )
-            console.print(rl_table)
+            
+            if len(trades_history) > 20:
+                console.print(f"[dim]... and {len(trades_history) - 20} more trades[/dim]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise click.Abort()
 
 

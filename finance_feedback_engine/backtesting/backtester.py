@@ -1,4 +1,8 @@
-"""Minimal backtesting engine.
+"""DEPRECATED: Minimal backtesting engine.
+
+⚠️ DEPRECATION NOTICE: This backtester is deprecated in favor of AdvancedBacktester.
+   Use AdvancedBacktester for AI-driven strategies, better metrics, and realistic trading simulation.
+   This module is kept for legacy compatibility only.
 
 Provides a light `Backtester` for an SMA (short/long) crossover strategy on
 historical or synthetic candles. Synthetic data is used when the provider
@@ -62,6 +66,13 @@ class Backtester:
         data_provider: Any,
         config: Optional[Dict[str, Any]] = None,
     ):
+        import warnings
+        warnings.warn(
+            "Backtester is deprecated. Use AdvancedBacktester for AI-driven "
+            "strategies and better performance metrics.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.data_provider = data_provider
         self.config = config or {}
         bt_conf = self.config or {}

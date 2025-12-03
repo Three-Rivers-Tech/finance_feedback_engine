@@ -9,7 +9,8 @@ try:
     print("✓ DecisionEngine imported successfully")
     
     # Check that two-phase method exists
-    assert hasattr(EnsembleDecisionManager, 'aggregate_decisions_two_phase')
+    if not hasattr(EnsembleDecisionManager, 'aggregate_decisions_two_phase'):
+        raise AttributeError("EnsembleDecisionManager missing aggregate_decisions_two_phase method")
     print("✓ aggregate_decisions_two_phase method exists")
     
     print("\n✅ All imports successful! Two-phase wiring complete.")
