@@ -59,6 +59,8 @@ class ModelPerformanceMonitor:
         self.last_evaluation_time: Optional[datetime] = None
         self.historical_metrics: List[Dict[str, Any]] = []
         self.historical_drift_scores: List[Dict[str, Any]] = []
+        self.predictions: List[Dict[str, Any]] = []
+        self.outcomes: Dict[str, Dict[str, Any]] = {}
 
         # TODO: Initialize persistence layer
         # self.data_store = MonitoringDataStore(model_id)
@@ -69,20 +71,23 @@ class ModelPerformanceMonitor:
         """
         Records a model prediction along with the features used.
         """
-        # TODO: Store features, prediction, and timestamp.
-        # This data will be used later for evaluation and drift detection.
-        # It should be stored efficiently, perhaps in a buffer or stream.
+        self.predictions.append({
+            'prediction_id': prediction['prediction_id'],
+            'features': features,
+            'prediction': prediction,
+            'timestamp': timestamp
+        })
         logger.debug(f"Recorded prediction for {self.model_id} at {timestamp}: {prediction}")
-        # self.data_store.save_prediction_data(features, prediction, timestamp)
 
     def record_actual_outcome(self, prediction_id: str, actual_outcome: Any, timestamp: datetime):
         """
         Records the actual outcome corresponding to a previous prediction.
         """
-        # TODO: Link actual outcome to a recorded prediction.
-        # This is crucial for calculating accuracy and other performance metrics.
+        self.outcomes[prediction_id] = {
+            'actual_outcome': actual_outcome,
+            'timestamp': timestamp
+        }
         logger.debug(f"Recorded actual outcome for prediction_id {prediction_id} at {timestamp}: {actual_outcome}")
-        # self.data_store.save_actual_outcome(prediction_id, actual_outcome, timestamp)
 
     def evaluate_performance(self) -> Dict[str, Any]:
         """
@@ -99,25 +104,37 @@ class ModelPerformanceMonitor:
         """
         logger.info(f"Evaluating performance for model {self.model_id}...")
         
-        # Placeholder for fetching data
-        # recent_predictions = self.data_store.load_predictions_since(self.last_evaluation_time)
-        # recent_outcomes = self.data_store.load_outcomes_since(self.last_evaluation_time)
+        # Get matched predictions and outcomes
+        matched = []
+        for pred in self.predictions:
+            pid = pred['prediction_id']
+            if pid in self.outcomes:
+                matched.append((pred, self.outcomes[pid]))
 
-        # Dummy metrics
+        # Calculate metrics
+        num_predictions = len(self.predictions)
+        num_outcomes = len(self.outcomes)
+        if matched:
+            correct = sum(1 for pred, out in matched if out['actual_outcome'].get('success', False))
+            accuracy = correct / len(matched)
+            win_rate = accuracy  # Assuming success means win for simplicity
+            total_pnl = sum(out['actual_outcome'].get('profit', 0.0) for pred, out in matched)
+        else:
+            accuracy = 0.0
+            win_rate = 0.0
+            total_pnl = 0.0
+
         metrics = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "model_id": self.model_id,
-            "accuracy": 0.0, # TODO: calculate actual accuracy
-            "win_rate": 0.0, # TODO: calculate actual win rate
-            "total_pnl": 0.0, # TODO: calculate actual P&L
-            "num_predictions": 0,
-            "num_outcomes": 0,
-            # TODO: Add more financial KPIs like Sharpe Ratio, Max Drawdown (requires portfolio context)
+            "accuracy": accuracy,
+            "win_rate": win_rate,
+            "total_pnl": total_pnl,
+            "num_predictions": num_predictions,
+            "num_outcomes": num_outcomes,
         }
 
-        # TODO: Populate metrics with real calculations
-        # metrics["accuracy"] = calculate_accuracy(...)
-        # metrics["win_rate"] = calculate_win_rate(...)
+        self.historical_metrics.append(metrics)
 
         self.historical_metrics.append(metrics)
         self.last_evaluation_time = datetime.now(timezone.utc)
