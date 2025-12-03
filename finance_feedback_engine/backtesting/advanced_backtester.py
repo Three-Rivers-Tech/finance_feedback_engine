@@ -270,8 +270,7 @@ class AdvancedBacktester:
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance={quote_currency: current_balance},
-                portfolio={'holdings': portfolio_for_decision_engine},
-                timestamp=timestamp
+                portfolio={'holdings': portfolio_for_decision_engine}
             )
 
             action = decision.get('action', 'HOLD')
