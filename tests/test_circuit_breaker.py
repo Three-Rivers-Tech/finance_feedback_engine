@@ -1,5 +1,5 @@
-"""Tests for utils.circuit_breaker module."""
 
+"""Tests for utils.circuit_breaker module."""
 import pytest
 import time
 import asyncio
