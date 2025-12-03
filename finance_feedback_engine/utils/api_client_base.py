@@ -167,32 +167,4 @@ class APIClientBase(ABC):
 
 
 
-    # Test successful request
-    print("--- Testing Successful Request (using httpbin.org) ---")
-    dummy_client = DummyAPIClient(base_url="https://httpbin.org", api_key="test_key")
-    try:
-        response_data = dummy_client.get_dummy_data("success")
-        print(f"Success response: {response_data.get('args', 'No args')}")
-    except RequestException as e:
-        print(f"Error: {e}")
 
-    # Test request with expected retry (simulated by making a POST to a GET endpoint, will get 405)
-    print("\n--- Testing Retries for Server Error (e.g., 405 Method Not Allowed) ---")
-    try:
-        # httpbin.org/get expects GET, so POST will return 405
-        # We need a 5xx error for retry, let's pretend a 405 is retryable for this test.
-        # A more realistic test would use a mock server that returns 500.
-        # For actual 5xx simulation:
-        # response_data = dummy_client._send_request("GET", "/status/500", retries=2)
-        response_data = dummy_client.post_dummy_data({"test": "data"}) # This would return a 200 actually
-        print(f"Post response: {response_data.get('json', 'No JSON')}")
-    except RequestException as e:
-        print(f"Error after retries: {e}")
-
-    # Test request with timeout
-    print("\n--- Testing Timeout ---")
-    try:
-        # httpbin.org/delay/x will delay for x seconds
-        dummy_client._send_request("GET", "/delay/5", timeout=2, retries=1)
-    except RequestException as e:
-        print(f"Expected Timeout Error: {e}")

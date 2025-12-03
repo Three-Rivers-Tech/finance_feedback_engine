@@ -37,22 +37,14 @@ class TestDisplayPortfolioDashboard:
         }
         
         # Should not raise exception
-        try:
-            display_portfolio_dashboard(aggregated_data)
-        except Exception:
-            # May fail if console output is an issue, but test structure is correct
-            pass
+        display_portfolio_dashboard(aggregated_data)
     
     def test_display_accepts_dict(self):
         """Test that display accepts dictionary parameter."""
         # Minimal aggregated data
         data = {}
         
-        try:
-            display_portfolio_dashboard(data)
-        except Exception:
-            # Expected to potentially fail with empty data
-            pass
+        display_portfolio_dashboard(data)
 
 
 class TestPortfolioDashboardIntegration:
@@ -75,12 +67,8 @@ class TestPortfolioDashboardIntegration:
     
     def test_aggregator_with_single_platform(self):
         """Test aggregator with single platform."""
-        try:
-            aggregator = PortfolioDashboardAggregator(platforms=['mock'])
-            assert aggregator is not None
-        except Exception:
-            # May fail if mock platform not configured, but test structure is valid
-            pass
+        aggregator = PortfolioDashboardAggregator(platforms=['mock'])
+        assert hasattr(aggregator, 'platforms') or hasattr(aggregator, '_platforms')
 
 
 class TestPortfolioDashboardEdgeCases:
@@ -93,8 +81,5 @@ class TestPortfolioDashboardEdgeCases:
     
     def test_display_with_empty_data(self):
         """Test displaying empty aggregated data."""
-        try:
-            display_portfolio_dashboard({})
-        except Exception:
-            # May raise exception for missing keys, which is acceptable
-            pass
+        result = display_portfolio_dashboard({})
+        assert result is None
