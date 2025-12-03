@@ -10,7 +10,7 @@ import re
 import os
 import copy
 import asyncio
-import logging
+from pathlib import Path
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -1470,9 +1470,6 @@ def backtest(
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
 
-        console.print(
-            f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
-        )
         console.print(
             f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
         )

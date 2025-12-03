@@ -1,3 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+venv/
+.pytest_cache/
+.coverage
+
+# Coverage/Reports
+coverage.xml
+coverage.json
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+finance_feedback_engine.egg-info/
+
+# IDE/editor
+.idea/
+.vscode/
+.DS_Store
+
+# Node
+node_modules/
+
+# Data artifacts (not versioned)
+data/decisions/
+data/decisions_test_run/
+data/memory/
+data/trade_metrics/
+data/api_costs/
 # Ignore accidental pip or tooling output files with leading '=' (e.g., '=5.3.0')
 =*
 
