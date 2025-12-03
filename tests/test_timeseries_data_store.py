@@ -25,7 +25,8 @@ class TestTimeSeriesDataStore:
 
     def test_init(self, store, temp_dir):
         """Test store initialization."""
-        assert hasattr(store, 'data_dir')
+        assert hasattr(store, 'storage_path')
+        assert store.storage_path == temp_dir
         assert os.path.exists(temp_dir)
 
     def test_save_data_basic(self, store):
@@ -47,6 +48,7 @@ class TestTimeSeriesDataStore:
         """Test loading data with load_data method."""
         # Save some data first
         data = {"timestamp": datetime.now().isoformat(), "value": 42.0}
+        expected_timestamp = data['timestamp']
         store.save_data("test_series", data)
         
         # Load it back
@@ -54,9 +56,10 @@ class TestTimeSeriesDataStore:
         # Verify data was loaded correctly
         assert loaded is not None
         assert isinstance(loaded, list)
-        assert len(loaded) > 0
-        # Check that the saved data is present (compare by value since timestamp may vary)
-        assert any(item.get('value') == 42.0 for item in loaded), f"Saved data not found in loaded result: {loaded}"
+        assert len(loaded) == 1
+        saved_item = loaded[0]
+        assert saved_item['value'] == 42.0
+        assert saved_item['timestamp'] == expected_timestamp
 
     def test_save_multiple_data_points(self, store):
         """Test saving multiple data points sequentially."""
