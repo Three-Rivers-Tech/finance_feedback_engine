@@ -6,6 +6,7 @@ from datetime import datetime
 import logging
 
 from .data_providers.alpha_vantage_provider import AlphaVantageProvider
+from .data_providers.historical_data_provider import HistoricalDataProvider
 from .trading_platforms.platform_factory import PlatformFactory
 from .decision_engine.engine import DecisionEngine
 from .persistence.decision_store import DecisionStore
@@ -59,6 +60,9 @@ class FinanceFeedbackEngine:
             api_key=api_key,
             config=config
         )
+        
+        # Initialize historical data provider for backtesting
+        self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
         
         # Initialize trading platform
         platform_name = config.get('trading_platform', 'coinbase')
@@ -543,20 +547,30 @@ class FinanceFeedbackEngine:
         initial_balance: Optional[float] = None,
         fee_percentage: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """Run a historical strategy simulation.
+        """DEPRECATED: Use AdvancedBacktester directly via CLI.
+        
+        This method is maintained for backward compatibility but will be removed.
+        Use: python main.py backtest ASSET --start DATE --end DATE
 
         Args:
             asset_pair: Symbol pair (e.g. 'BTCUSD').
             start: Start date (YYYY-MM-DD).
             end: End date (YYYY-MM-DD).
-            strategy: Strategy identifier (currently only 'sma_crossover').
-            short_window: Override for short SMA window.
-            long_window: Override for long SMA window.
+            strategy: Strategy identifier (deprecated, ignored).
+            short_window: Override for short SMA window (deprecated, ignored).
+            long_window: Override for long SMA window (deprecated, ignored).
             initial_balance: Override starting balance.
             fee_percentage: Override per trade fee percent.
         Returns:
             Dict with strategy metadata, performance metrics and trade log.
         """
+        import warnings
+        warnings.warn(
+            "FinanceFeedbackEngine.backtest() is deprecated. "
+            "Use AdvancedBacktester directly via CLI: python main.py backtest ASSET --start DATE --end DATE",
+            DeprecationWarning,
+            stacklevel=2
+        )
         if self._backtester is None:
             bt_conf = self.config.get('backtesting', {})
             self._backtester = Backtester(self.data_provider, bt_conf)

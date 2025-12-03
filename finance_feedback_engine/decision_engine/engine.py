@@ -415,7 +415,7 @@ class DecisionEngine:
             end_date = datetime.utcnow().date()
             start_date = end_date - timedelta(days=30)
             
-            # Fetch historical data (handle async if needed)
+            # Fetch historical data (handle both sync and async providers)
             import asyncio
             import inspect
             historical_data_coro = self.data_provider.get_historical_data(
@@ -423,9 +423,20 @@ class DecisionEngine:
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")
             )
-            # Check if it's a coroutine and await it
+            
+            # Handle coroutines properly - check if event loop is already running
             if inspect.iscoroutine(historical_data_coro):
-                historical_data = asyncio.run(historical_data_coro)
+                try:
+                    # Try to get the running loop
+                    loop = asyncio.get_running_loop()
+                    # If we're here, we're already in an async context - cannot use asyncio.run()
+                    # Create a task and wait for it (this won't work in sync context)
+                    # Instead, we'll call the sync version or skip regime detection
+                    logger.warning("Cannot run async regime detection in sync context, skipping")
+                    return "UNKNOWN"
+                except RuntimeError:
+                    # No running loop, safe to use asyncio.run()
+                    historical_data = asyncio.run(historical_data_coro)
             else:
                 historical_data = historical_data_coro
             
@@ -1032,6 +1043,10 @@ Format response as a structured technical analysis demonstration.
         """
         logger.info(f"Querying AI provider: {self.ai_provider}")
         
+        # Mock mode: fast random decisions for backtesting
+        if self.ai_provider == 'mock':
+            return self._mock_ai_inference(prompt)
+        
         # Ensemble mode: query multiple providers and aggregate
         if self.ai_provider == 'ensemble':
             return self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
@@ -1049,6 +1064,58 @@ Format response as a structured technical analysis demonstration.
         #     return self._gemini_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
+
+    def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        Fast mock AI provider for backtesting and testing.
+        Generates random but realistic trading decisions.
+        
+        Args:
+            prompt: AI prompt (unused in mock mode)
+        
+        Returns:
+            Mock AI response with random action
+        """
+        import random
+        
+        # Weighted random actions (favor HOLD for realistic trading)
+        actions = ['BUY'] * 2 + ['SELL'] * 2 + ['HOLD'] * 6  # 20% buy, 20% sell, 60% hold
+        action = random.choice(actions)
+        
+        # Random confidence (biased toward medium-high)
+        confidence = random.randint(60, 85)
+        
+        # Generate contextual reasoning
+        reasoning_templates = {
+            'BUY': [
+                "Technical indicators suggest upward momentum",
+                "Market sentiment is bullish, entry opportunity identified",
+                "Price action shows potential breakout pattern",
+            ],
+            'SELL': [
+                "Risk management suggests taking profits at current levels",
+                "Technical resistance detected, prudent to exit position",
+                "Market volatility increasing, reducing exposure",
+            ],
+            'HOLD': [
+                "Insufficient signal strength, maintaining current position",
+                "Market conditions unclear, waiting for better entry",
+                "Current position within acceptable risk parameters",
+            ]
+        }
+        
+        reasoning = random.choice(reasoning_templates[action])
+        
+        response = {
+            'action': action,
+            'confidence': confidence,
+            'reasoning': f"Mock AI: {reasoning}",
+            'amount': 0  # Position sizing handled separately
+        }
+        
+        logger.debug(f"Mock AI decision: {action} (confidence: {confidence})")
+        return response
+
 
     def _local_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
