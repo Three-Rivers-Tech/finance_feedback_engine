@@ -1,0 +1,19 @@
+# Backtesting-optimized configuration
+# Use this config for fast backtests with mock AI provider
+
+# Inherit from base config but override AI provider
+decision_engine:
+  ai_provider: "mock"  # Fast random decisions for backtesting
+  
+# Advanced backtesting settings
+advanced_backtesting:
+  initial_balance: 10000.0
+  fee_percentage: 0.001  # 0.1%
+  slippage_percentage: 0.0001  # 0.01%
+  commission_per_trade: 0.0
+  stop_loss_percentage: 0.02  # 2%
+  take_profit_percentage: 0.05  # 5%
+
+# Other settings can be inherited from main config
+alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+trading_platform: "mock"
