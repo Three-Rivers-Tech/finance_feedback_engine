@@ -42,27 +42,24 @@ class TestFinancialDataValidator:
         validator = FinancialDataValidator()
         
         # Test various valid prices
-        assert validator.validate_price(100.50) or True
-        assert validator.validate_price(0.01) or True
-        assert validator.validate_price(50000) or True
+        assert validator.validate_price(100.50) is True
+        assert validator.validate_price(0.01) is True
+        assert validator.validate_price(50000) is True
     
     def test_validate_price_invalid(self):
         """Test validation of invalid prices."""
         validator = FinancialDataValidator()
         
         # Test invalid prices
-        try:
-            result = validator.validate_price(-10.5)
-            assert not result or True  # Should reject negative
-        except (ValueError, AssertionError):
-            pass  # Expected to raise
+        with pytest.raises((ValueError, AssertionError)):
+            validator.validate_price(-10.5)
     
     def test_validate_volume_valid(self):
         """Test validation of valid volumes."""
         validator = FinancialDataValidator()
         
-        assert validator.validate_volume(1000) or True
-        assert validator.validate_volume(0) or True  # Zero volume may be valid
+        assert validator.validate_volume(1000) is True
+        assert validator.validate_volume(0) is True  # Zero volume may be valid
     
     def test_validate_volume_invalid(self):
         """Test validation of invalid volumes."""
@@ -89,8 +86,8 @@ class TestFinancialDataValidator:
         validator = FinancialDataValidator()
         
         # Valid pairs
-        assert validator.validate_currency_pair('BTCUSD') or True
-        assert validator.validate_currency_pair('EURUSD') or True
+        assert validator.validate_currency_pair('BTCUSD') is True
+        assert validator.validate_currency_pair('EURUSD') is True
     
     def test_validate_dataframe(self):
         """Test DataFrame validation."""
