@@ -66,6 +66,8 @@ async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Dep
 
         return {"status": "ok"}
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         logger.error(f"Telegram webhook error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -131,7 +133,8 @@ async def create_decision(
             reasoning=decision.get("reasoning", "")
         )
     except Exception as e:
-        import traceback
+        if isinstance(e, HTTPException):
+            raise
         error_id = str(uuid.uuid4())
         logger.exception(f"Decision creation failed. Reference ID: {error_id}")
         raise HTTPException(

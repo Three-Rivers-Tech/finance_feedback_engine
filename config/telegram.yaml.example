@@ -25,7 +25,6 @@ ngrok_auth_token: null  # or set NGROK_AUTHTOKEN env var
 # Redis configuration for approval queue
 # Redis is required for the approval queue to function
 use_redis: true
-use_redis: true
 redis_host: localhost
 redis_port: 6379
 

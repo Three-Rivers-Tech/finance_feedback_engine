@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from dataclasses import dataclass
 from datetime import datetime, timezone # Added datetime import
+from tqdm import tqdm
 
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
@@ -356,10 +357,44 @@ class AdvancedBacktester:
         equity_curve: List[float] = [self.initial_balance] # Track portfolio value over time
 
         # 3. Iterate through data and execute strategy
-        for timestamp, candle in data.iterrows():
+        total_candles = len(data)
+        logger.info(f"Processing {total_candles} candles for backtest")
+
+        for idx, (timestamp, candle) in enumerate(tqdm(
+            data.iterrows(),
+            total=total_candles,
+            desc=f"Backtesting {asset_pair}",
+            unit="candle",
+            ncols=100
+        )):
             market_data = candle.to_dict()
             market_data['timestamp'] = timestamp.isoformat() # Add timestamp to market_data for decision engine
 
+            # Build historical context window (last 50 candles for technical indicators)
+            window_size = 50
+            if idx >= window_size:
+                historical_window = data.iloc[idx - window_size:idx]
+                market_data['historical_data'] = historical_window.to_dict('records')
+            else:
+                # Not enough history yet - provide what we have
+                market_data['historical_data'] = data.iloc[:idx].to_dict('records') if idx > 0 else []
+
+            # Calculate market regime data (ADX, ATR) from historical window
+            if idx >= 20:  # Need at least 14-20 candles for ADX
+                try:
+                    from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
+                    regime_detector = MarketRegimeDetector()
+                    recent_data = data.iloc[max(0, idx - 50):idx + 1]
+                    regime_info = regime_detector.detect_regime(recent_data)
+                    market_data['market_regime_data'] = regime_info
+                    market_data['market_regime'] = regime_info.get('regime', 'UNKNOWN')
+                except Exception as e:
+                    logger.debug(f"Could not compute market regime at {timestamp}: {e}")
+                    market_data['market_regime_data'] = {}
+                    market_data['market_regime'] = 'UNKNOWN'
+            else:
+                market_data['market_regime_data'] = {}
+                market_data['market_regime'] = 'UNKNOWN'
 
             # Extract base and quote currencies (assuming 3-char codes)
             # This logic should be more robust, potentially using a currency parsing utility

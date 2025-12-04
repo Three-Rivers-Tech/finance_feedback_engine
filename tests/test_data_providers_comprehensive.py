@@ -67,7 +67,7 @@ class TestAlphaVantageProvider:
         for _ in range(5):
             try:
                 provider.get_market_data('AAPL')
-            except:
+            except Exception:
                 pass
 
         # Circuit breaker should be open
@@ -346,7 +346,7 @@ class TestUnifiedDataProvider:
         # Should attempt fallback
         try:
             data = provider.get_market_data('AAPL')
-        except:
+        except ValueError:
             pass  # Expected if no fallback configured
 
         provider.alpha_vantage.get_market_data.assert_called_once()

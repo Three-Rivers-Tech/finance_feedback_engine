@@ -116,41 +116,55 @@ class RedisManager:
 
             if has_systemctl:
                 # Enable and start Redis service via systemd
-                try:
-                    result = subprocess.run(
-                        ["sudo", "systemctl", "enable", "redis"],
-                        check=True,
-                        capture_output=True,
-                        timeout=10
-                    )
-                    logger.debug(f"systemctl enable output: {result.stdout.decode()}")
-                except subprocess.CalledProcessError as e:
-                    logger.error(f"❌ Failed to enable Redis service: {e}")
-                    logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
-                    logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
-                    return False
-                except subprocess.TimeoutExpired as e:
-                    logger.error(f"❌ Timeout enabling Redis service: {e}")
-                    return False
+                # Try both "redis" and "redis-server" service names (distro-dependent)
+                service_names = ["redis", "redis-server"]
+                service_started = False
 
-                try:
-                    result = subprocess.run(
-                        ["sudo", "systemctl", "start", "redis"],
-                        check=True,
-                        capture_output=True,
-                        timeout=10
-                    )
-                    logger.debug(f"systemctl start output: {result.stdout.decode()}")
-                except subprocess.CalledProcessError as e:
-                    logger.error(f"❌ Failed to start Redis service: {e}")
-                    logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
-                    logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
-                    return False
-                except subprocess.TimeoutExpired as e:
-                    logger.error(f"❌ Timeout starting Redis service: {e}")
-                    return False
+                for service_name in service_names:
+                    logger.debug(f"Trying systemctl with service name: {service_name}")
 
-                logger.info("✅ Redis installed and started via systemd")
+                    # Try enable
+                    try:
+                        result = subprocess.run(
+                            ["sudo", "systemctl", "enable", service_name],
+                            check=True,
+                            capture_output=True,
+                            timeout=10
+                        )
+                        logger.debug(f"systemctl enable {service_name} - stdout: {result.stdout.decode()}")
+                    except subprocess.CalledProcessError as e:
+                        logger.warning(f"⚠️  Failed to enable {service_name} service")
+                        logger.debug(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+                        logger.debug(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                        continue  # Try next service name
+                    except subprocess.TimeoutExpired as e:
+                        logger.warning(f"⚠️  Timeout enabling {service_name} service: {e}")
+                        continue  # Try next service name
+
+                    # Try start
+                    try:
+                        result = subprocess.run(
+                            ["sudo", "systemctl", "start", service_name],
+                            check=True,
+                            capture_output=True,
+                            timeout=10
+                        )
+                        logger.debug(f"systemctl start {service_name} - stdout: {result.stdout.decode()}")
+                        logger.info(f"✅ Redis installed and started via systemd ({service_name})")
+                        service_started = True
+                        break  # Success, exit loop
+                    except subprocess.CalledProcessError as e:
+                        logger.warning(f"⚠️  Failed to start {service_name} service")
+                        logger.debug(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+                        logger.debug(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                        continue  # Try next service name
+                    except subprocess.TimeoutExpired as e:
+                        logger.warning(f"⚠️  Timeout starting {service_name} service: {e}")
+                        continue  # Try next service name
+
+                if not service_started:
+                    logger.error(f"❌ Failed to start Redis via systemd (tried: {', '.join(service_names)})")
+                    return False
             else:
                 # Try alternative service management (SysVinit, Upstart, etc.)
                 try:
