@@ -59,22 +59,16 @@ class HistoricalDataProvider:
         self.api_key = api_key
         self.cache_dir = Path(cache_dir) if cache_dir else Path("data/historical_cache")
         try:
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            if self.cache_dir is not None:
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
         except Exception:
             logger.debug(
                 "Could not create historical cache directory; proceeding without cache."
             )
             self.cache_dir = None
-            try:
-                self.cache_dir.mkdir(parents=True, exist_ok=True)
-            except Exception:
-                logger.debug(
-                    "Could not create historical cache directory; proceeding without cache."
-                )
-                self.cache_dir = None
-            # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
-            # self.validator = FinancialDataValidator()
-            # self.data_store = TimeSeriesDataStore() # For caching/persistence
+        # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
+        # self.validator = FinancialDataValidator()
+        # self.data_store = TimeSeriesDataStore() # For caching/persistence
 
     def _fetch_raw_data(
         self, asset_pair: str, start_date: datetime, end_date: datetime
