@@ -309,3 +309,89 @@ class UnifiedDataProvider:
                 results[tf] = ([], 'failed')
         
         return results
+
+    def aggregate_all_timeframes(
+        self,
+        asset_pair: str,
+        timeframes: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Fetch and synchronize multi-timeframe data with metadata.
+        
+        Args:
+            asset_pair: Asset pair (e.g., "BTCUSD")
+            timeframes: List of timeframes (default: ['1m','5m','15m','1h','4h','1d'])
+        
+        Returns:
+            {
+                "asset_pair": str,
+                "timestamp": str,  # ISO 8601 UTC
+                "timeframes": {
+                    "1m": {
+                        "candles": List[Dict],
+                        "source_provider": str,
+                        "last_updated": str,
+                        "is_cached": bool,
+                        "candles_count": int
+                    },
+                    # ... other timeframes
+                },
+                "metadata": {
+                    "requested_timeframes": List[str],
+                    "available_timeframes": List[str],
+                    "missing_timeframes": List[str],
+                    "cache_hit_rate": float
+                }
+            }
+        """
+        from datetime import datetime, timezone
+        
+        if timeframes is None:
+            timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
+        
+        # Get raw multi-timeframe data
+        raw_data = self.get_multi_timeframe_data(asset_pair, timeframes)
+        
+        # Build enriched response
+        timestamp_utc = datetime.now(timezone.utc).isoformat()
+        result = {
+            "asset_pair": asset_pair,
+            "timestamp": timestamp_utc,
+            "timeframes": {},
+            "metadata": {
+                "requested_timeframes": timeframes,
+                "available_timeframes": [],
+                "missing_timeframes": [],
+                "cache_hit_rate": 0.0
+            }
+        }
+        
+        cache_hits = 0
+        for tf in timeframes:
+            candles, provider = raw_data.get(tf, ([], 'unavailable'))
+            
+            # Check if data available
+            if candles and provider != 'failed':
+                result["metadata"]["available_timeframes"].append(tf)
+            else:
+                result["metadata"]["missing_timeframes"].append(tf)
+                logger.warning(f"Missing {tf} data for {asset_pair}")
+            
+            # Check cache status (heuristic: if provider is same as previous call, likely cached)
+            is_cached = provider in ['coinbase', 'alpha_vantage', 'oanda']  # Real providers suggest cache hit
+            if is_cached and candles:
+                cache_hits += 1
+            
+            result["timeframes"][tf] = {
+                "candles": candles,
+                "source_provider": provider,
+                "last_updated": timestamp_utc,  # Approximation (real impl would track per-TF)
+                "is_cached": is_cached,
+                "candles_count": len(candles)
+            }
+        
+        # Calculate cache hit rate
+        if len(timeframes) > 0:
+            result["metadata"]["cache_hit_rate"] = cache_hits / len(timeframes)
+        
+        return result
