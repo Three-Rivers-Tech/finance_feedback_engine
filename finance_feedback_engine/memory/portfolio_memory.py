@@ -209,7 +209,7 @@ class PortfolioMemoryEngine:
         entry_price = decision.get('entry_price') or decision.get(
             'market_data', {}
         ).get('close', 0)
-        position_size = decision.get('recommended_position_size', 0)
+        position_size = decision.get('recommended_position_size') or decision.get('position_size', 0)
 
         ai_provider = decision.get('ai_provider', 'unknown')
         ensemble_metadata = decision.get('ensemble_metadata', {})
@@ -272,10 +272,10 @@ class PortfolioMemoryEngine:
         )
 
         # Store in history
-        self.trade_history.append(outcome)
+        self.trade_outcomes.append(outcome)
 
         # Update provider performance
-        self._update_provider_performance(outcome)
+        self._update_provider_performance(outcome, decision)
 
         # Add to experience buffer
         self.experience_buffer.append(outcome)
@@ -305,7 +305,7 @@ class PortfolioMemoryEngine:
         data = {
             "version": "1.0",
             "saved_at": datetime.now().isoformat(),
-            "trade_history": [outcome.to_dict() for outcome in self.trade_history],
+            "trade_history": [outcome.to_dict() for outcome in self.trade_outcomes],
             "provider_performance": self.provider_performance,
             "experience_buffer": [outcome.to_dict() for outcome in self.experience_buffer]
         }
@@ -342,7 +342,7 @@ class PortfolioMemoryEngine:
 
         if not os.path.exists(filepath):
             logger.info(f"No portfolio memory found at {filepath}, creating new instance")
-            return cls()
+            return cls(config={})
 
         try:
             with open(filepath, 'r') as f:
@@ -354,12 +354,12 @@ class PortfolioMemoryEngine:
                 logger.warning(f"Portfolio memory version mismatch: {version} vs 1.0")
 
             # Create instance
-            instance = cls()
+            instance = cls(config={})
 
             # Restore trade history
             for trade_dict in data.get("trade_history", []):
                 outcome = TradeOutcome(**trade_dict)
-                instance.trade_history.append(outcome)
+                instance.trade_outcomes.append(outcome)
 
             # Restore provider performance
             instance.provider_performance = data.get("provider_performance", {})
@@ -369,13 +369,13 @@ class PortfolioMemoryEngine:
                 outcome = TradeOutcome(**exp_dict)
                 instance.experience_buffer.append(outcome)
 
-            logger.info(f"Portfolio memory loaded from {filepath}: {len(instance.trade_history)} trades")
+            logger.info(f"Portfolio memory loaded from {filepath}: {len(instance.trade_outcomes)} trades")
             return instance
 
         except Exception as e:
             logger.error(f"Failed to load portfolio memory from {filepath}: {e}")
             logger.info("Creating new portfolio memory instance")
-            return cls()
+            return cls(config={})
 
     # Create outcome record (old continuation)
         outcome = TradeOutcome(
