@@ -207,6 +207,15 @@ class DecisionEngine:
         """
         logger.info("Generating decision for %s", asset_pair)
 
+        # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
+        # to accurately simulate production behavior. Keeping the parameter for backward
+        # compatibility but it no longer changes decision logic.
+        if self.backtest_mode:
+            logger.warning(
+                "backtest_mode=True is deprecated. Backtests now use real AI providers "
+                "for accurate simulation. Use 'mock' provider for fast rule-based testing."
+            )
+
         # Get live monitoring context if available
         monitoring_context = None
         if self.monitoring_provider:
@@ -266,6 +275,85 @@ class DecisionEngine:
         )
 
         return decision
+
+    def _generate_backtest_decision(
+        self,
+        asset_pair: str,
+        market_data: Dict[str, Any],
+        balance: Dict[str, float]
+    ) -> Dict[str, Any]:
+        """
+        Generate rule-based decision for backtesting (SMA/ADX strategy).
+
+        Logic:
+        - Calculate SMA(20) from historical data
+        - Get ADX from market_regime_data
+        - BUY if price > SMA and ADX > 25
+        - SELL if price < SMA and ADX > 25
+        - HOLD if ADX < 25 (choppy market)
+        - Confidence = min(ADX * 2, 100)
+        """
+        close_price = market_data.get('close', 0)
+        historical_data = market_data.get('historical_data', [])
+        market_regime_data = market_data.get('market_regime_data', {})
+        adx = market_regime_data.get('adx', 0)
+
+        # Calculate SMA(20)
+        sma_20 = close_price  # Default to current price if no history
+        if historical_data and len(historical_data) >= 20:
+            recent_closes = [candle.get('close', 0) for candle in historical_data[-20:]]
+            sma_20 = sum(recent_closes) / len(recent_closes)
+        elif historical_data:
+            # Use available data
+            recent_closes = [candle.get('close', 0) for candle in historical_data]
+            sma_20 = sum(recent_closes) / len(recent_closes) if recent_closes else close_price
+
+        # Determine action
+        action = 'HOLD'
+        reasoning = f'Backtest Mode: SMA(20)={sma_20:.2f}, Price={close_price:.2f}, ADX={adx:.1f}. '
+
+        if not close_price or close_price == 0:
+            reasoning += 'No close price available.'
+            confidence = 0
+        elif adx < 25:
+            reasoning += 'No clear trend (ADX < 25), holding.'
+            confidence = min(int(adx * 2), 100)
+        elif close_price > sma_20:
+            action = 'BUY'
+            reasoning += f'Price > SMA → BUY signal. ADX={adx:.1f} (trending market).'
+            confidence = min(int(adx * 2), 100)
+        else:  # close_price < sma_20
+            action = 'SELL'
+            reasoning += f'Price < SMA → SELL signal. ADX={adx:.1f} (trending market).'
+            confidence = min(int(adx * 2), 100)
+
+        # Position sizing (1% risk, 2% stop loss)
+        risk_pct = self.config.get('position_sizing', {}).get('risk_percentage', 0.01)
+        stop_loss_pct = self.config.get('position_sizing', {}).get('stop_loss_percentage', 0.02)
+
+        available_balance = balance.get('USD', 0)
+        position_size = 0
+        if close_price > 0 and action in ['BUY', 'SELL']:
+            position_size = (available_balance * risk_pct) / (close_price * stop_loss_pct)
+
+        # Stop loss and take profit levels
+        stop_loss = close_price * 0.98  # 2% below entry
+        take_profit = close_price * 1.05  # 5% above entry
+
+        return {
+            'id': f'backtest_{asset_pair}_{market_data.get("timestamp", "unknown")}',
+            'asset_pair': asset_pair,
+            'action': action,
+            'confidence': confidence,
+            'reasoning': reasoning,
+            'amount': position_size,
+            'position_size': position_size,
+            'stop_loss': stop_loss,
+            'take_profit': take_profit,
+            'timestamp': market_data.get('timestamp'),
+            'backtest_mode': True,
+            'signal_only': False
+        }
 
 
     def _specific_local_inference(self, prompt: str, model_name: str) -> Dict[str, Any]:
@@ -1794,42 +1882,8 @@ Present your judgment with clear reasoning and final decision.
         # Normalize amount back onto the decision for downstream consumers
         decision['amount'] = float(amount)
 
-        # Extract price change from prompt
-        if 'Price Change:' in prompt:
-            try:
-                price_change_line = [
-                    line for line in prompt.split('\n')
-                    if 'Price Change:' in line
-                ][0]
-                price_change = float(
-                    price_change_line.split(':')[1]
-                    .strip()
-                    .replace('%', '')
-                )
-
-                if price_change > 2:
-                    return {
-                        'action': 'SELL',
-                        'confidence': 65,
-                        'reasoning': 'Price increased; taking profit.',
-                        'amount': 0.1,
-                    }
-                elif price_change < -2:
-                    return {
-                        'action': 'BUY',
-                        'confidence': 70,
-                        'reasoning': 'Price dropped; buying opportunity.',
-                        'amount': 0.1,
-                    }
-            except Exception as e:
-                logger.error(f"Error parsing price change: {e}")
-
-        return {
-            'action': 'HOLD',
-            'confidence': 60,
-            'reasoning': 'No strong signal detected.',
-            'amount': 0
-        }
+        # All checks passed
+        return True
 
     def _create_decision(
         self,
@@ -2123,6 +2177,7 @@ Present your judgment with clear reasoning and final decision.
             'executed': False,
             'ai_provider': self.ai_provider,
             'model_name': self.model_name,
+            'backtest_mode': self.backtest_mode,  # Track if decision was generated in backtest context
             # --- Multi-timeframe and risk context fields ---
             'multi_timeframe_trend': context.get('multi_timeframe_trend'),
             'multi_timeframe_entry_signals': context.get('multi_timeframe_entry_signals'),
