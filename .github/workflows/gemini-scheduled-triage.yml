@@ -133,7 +133,7 @@ jobs:
       - name: 'Set TRIAGED_ISSUES from Gemini output'
         id: 'set_triaged_issues'
         run: |-
-          # Replace <output_field> with the actual output key from the Gemini action
+           TRIAGED_ISSUES="${{ steps.gemini_issue_analysis.outputs.triaged_issues }}"
           TRIAGED_ISSUES="${{ steps.gemini_issue_analysis.outputs.triaged_issues }}"
           echo "TRIAGED_ISSUES=${TRIAGED_ISSUES}" >> "$GITHUB_ENV"
           echo "triaged_issues=${TRIAGED_ISSUES}" >> "$GITHUB_OUTPUT"
