@@ -195,7 +195,6 @@ history = engine.get_decision_history()
 - ✅ No hardcoded credentials
 - ✅ Environment variable support
 - ✅ .gitignore for sensitive files
-- ✅ CodeQL security scan passed
 - ✅ Best practices documented
 
 ## 📈 Future Enhancements
