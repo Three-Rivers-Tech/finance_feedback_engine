@@ -46,3 +46,11 @@ ollama
 
 # Telegram integration
 python-telegram-bot>=20.0
+
+# FastAPI and server dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pyngrok>=7.0.0
+
+# Redis for approval queue
+redis>=5.0.0

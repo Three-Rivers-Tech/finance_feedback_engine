@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, Optional, List
 import socket
+import os
 from datetime import datetime
 import logging
 
@@ -156,6 +157,19 @@ class FinanceFeedbackEngine:
         self.memory_engine: Optional[PortfolioMemoryEngine] = None
         if memory_enabled:
             self.memory_engine = PortfolioMemoryEngine(config)
+
+            # Auto-load persisted memory if exists
+            from finance_feedback_engine.memory.portfolio_memory import PortfolioMemory
+            memory_path = "data/memory/portfolio_memory.json"
+            try:
+                if os.path.exists(memory_path):
+                    self.memory_engine.portfolio_memory = PortfolioMemory.load_from_disk(memory_path)
+                    logger.info(f"Loaded portfolio memory from {memory_path}")
+                else:
+                    logger.info("No persisted memory found, starting fresh")
+            except Exception as e:
+                logger.warning(f"Failed to load portfolio memory: {e}, starting fresh")
+
             logger.info("Portfolio Memory Engine enabled")
 
         # Initialize monitoring context provider (lazy init)
