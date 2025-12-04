@@ -209,7 +209,7 @@ class PortfolioMemoryEngine:
         entry_price = decision.get('entry_price') or decision.get(
             'market_data', {}
         ).get('close', 0)
-        position_size = decision.get('recommended_position_size') or decision.get('position_size', 0)
+        position_size = decision.get('recommended_position_size', decision.get('position_size', 0))
 
         ai_provider = decision.get('ai_provider', 'unknown')
         ensemble_metadata = decision.get('ensemble_metadata', {})
