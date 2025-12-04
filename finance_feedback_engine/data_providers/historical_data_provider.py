@@ -65,6 +65,13 @@ class HistoricalDataProvider:
                 "Could not create historical cache directory; proceeding without cache."
             )
             self.cache_dir = None
+            try:
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+            except Exception:
+                logger.debug(
+                    "Could not create historical cache directory; proceeding without cache."
+                )
+                self.cache_dir = None
             # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
             # self.validator = FinancialDataValidator()
             # self.data_store = TimeSeriesDataStore() # For caching/persistence

@@ -258,8 +258,8 @@ class TestBacktestPulseInjection:
             for call in mock_decision_engine.generate_decision_calls
         )        # May not inject pulse for ALL calls (early calls have insufficient data)
         # but should inject for at least some calls
+        assert pulse_injected, "Pulse should be injected in at least some decision calls"
         assert result is not None
-
     def test_backtest_with_pulse_injection_disabled(
         self, mock_decision_engine, sample_backtest_data
     ):

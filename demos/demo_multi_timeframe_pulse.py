@@ -214,13 +214,16 @@ def demo_backtest_pulse_workflow():
     current_time = datetime.now()
     timestamps = [current_time - timedelta(minutes=200-i) for i in range(200)]
 
+    base_price = 50000
+    price_changes = np.cumsum(np.random.randn(200) * 50)  # Random walk
+
     historical_data = pd.DataFrame({
         'timestamp': timestamps,
-        'open': 50000 + np.random.randn(200) * 100,
-        'high': 50100 + np.random.randn(200) * 100,
-        'low': 49900 + np.random.randn(200) * 100,
-        'close': 50000 + np.random.randn(200) * 100,
-        'volume': 1000 + np.random.randn(200) * 100
+        'open': base_price + price_changes,
+        'high': base_price + price_changes + np.abs(np.random.randn(200) * 50),
+        'low': base_price + price_changes - np.abs(np.random.randn(200) * 50),
+        'close': base_price + price_changes + np.random.randn(200) * 30,
+        'volume': np.abs(1000 + np.random.randn(200) * 100)
     })
 
     # Compute pulse at timestamp 150 (using data from 0-150, not 151-200)
