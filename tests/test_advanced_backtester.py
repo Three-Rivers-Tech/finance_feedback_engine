@@ -7,10 +7,8 @@ from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from tests.mocks.mock_data_provider import MockHistoricalDataProvider
 
 # Configure logging for debugging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+import logging
 logger = logging.getLogger(__name__)
-
-@pytest.fixture
 def sample_historical_data():
     logger.info("Creating sample_historical_data fixture")
     dates = pd.to_datetime(pd.date_range(start="2023-01-01", end="2023-01-31", freq='D'))
@@ -44,7 +42,8 @@ def mock_decision_engine(sample_historical_data):
 
 def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_historical_data):
     logger.info("="*80)
-    logger.info("TEST: test_advanced_backtester_runs_without_errors STARTED")
+def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_historical_data, caplog):
+    caplog.set_level(logging.DEBUG)
     logger.info("="*80)
 
     # The backtester itself uses a mock provider that gives it the full dataset
@@ -71,7 +70,8 @@ def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_hi
 def test_advanced_backtester_simple_strategy(sample_historical_data):
     logger.info("="*80)
     logger.info("TEST: test_advanced_backtester_simple_strategy STARTED")
-    logger.info("="*80)
+def test_advanced_backtester_simple_strategy(sample_historical_data, caplog):
+    caplog.set_level(logging.DEBUG)
 
     class SimpleDecisionEngine(DecisionEngine):
         def generate_decision(self, asset_pair, market_data, balance, portfolio):

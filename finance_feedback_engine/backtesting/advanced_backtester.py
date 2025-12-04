@@ -67,7 +67,9 @@ class AdvancedBacktester:
                  slippage_percentage: float = 0.0001, # 0.01% slippage
                  commission_per_trade: float = 0.0, # Fixed commission
                  stop_loss_percentage: float = 0.02, # 2% stop loss
-                 take_profit_percentage: float = 0.05 # 5% take profit
+                 take_profit_percentage: float = 0.05, # 5% take profit
+                 unified_data_provider=None,  # For multi-timeframe pulse
+                 timeframe_aggregator=None    # For technical indicators
                  ):
         self.historical_data_provider = historical_data_provider
         self.initial_balance = initial_balance
@@ -76,6 +78,8 @@ class AdvancedBacktester:
         self.commission_per_trade = commission_per_trade
         self.stop_loss_percentage = stop_loss_percentage
         self.take_profit_percentage = take_profit_percentage
+        self.unified_data_provider = unified_data_provider
+        self.timeframe_aggregator = timeframe_aggregator
         logger.info(f"Initialized AdvancedBacktester with initial balance: ${initial_balance:.2f}")
 
     def _execute_trade(self,
@@ -193,24 +197,123 @@ class AdvancedBacktester:
         # Win Rate and Trade Statistics
         winning_trades = [t for t in trades_history if t.get("pnl_value", 0) > 0]
         losing_trades = [t for t in trades_history if t.get("pnl_value", 0) < 0]
-        
+
         metrics["total_trades"] = len(trades_history)
         metrics["winning_trades"] = len(winning_trades)
         metrics["losing_trades"] = len(losing_trades)
         metrics["win_rate"] = (len(winning_trades) / len(trades_history)) * 100 if len(trades_history) > 0 else 0.0
-        
+
         # Average Win/Loss
         metrics["avg_win"] = np.mean([t["pnl_value"] for t in winning_trades]) if winning_trades else 0.0
         metrics["avg_loss"] = np.mean([t["pnl_value"] for t in losing_trades]) if losing_trades else 0.0
-        
+
         return metrics
+
+    def _compute_historical_pulse(
+        self,
+        asset_pair: str,
+        current_timestamp: datetime,
+        historical_data: pd.DataFrame
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Compute multi-timeframe pulse at a specific historical timestamp.
+
+        Uses historical data up to (but not including) current_timestamp to
+        calculate technical indicators across multiple timeframes, simulating
+        what would have been known at that point in time.
+
+        Args:
+            asset_pair: Asset pair (e.g., 'BTCUSD')
+            current_timestamp: The timestamp for which to compute the pulse
+            historical_data: Full historical DataFrame with OHLCV data
+
+        Returns:
+            Pulse dict with timeframes and indicators, or None if cannot compute
+        """
+        if not self.unified_data_provider or not self.timeframe_aggregator:
+            return None
+
+        try:
+            # Get historical data up to current_timestamp (lookback window)
+            # We need enough data to compute indicators (at least 50 candles for daily)
+            lookback_data = historical_data[historical_data.index < current_timestamp]
+
+            if len(lookback_data) < 50:  # Minimum data for indicators
+                return None
+
+            # Convert DataFrame to list of candle dicts for aggregator
+            timeframes_data = {}
+
+            # For each timeframe, aggregate historical data
+            timeframe_configs = [
+                ('1m', 1),
+                ('5m', 5),
+                ('15m', 15),
+                ('1h', 60),
+                ('4h', 240),
+                ('daily', 1440)
+            ]
+
+            for tf_name, minutes in timeframe_configs:
+                # Resample to target timeframe
+                if minutes == 1:
+                    # Already 1-minute data (assuming base data is 1m)
+                    tf_data = lookback_data.tail(100)  # Last 100 candles
+                else:
+                    # Resample to larger timeframe
+                    resampled = lookback_data.resample(f'{minutes}min').agg({
+                        'open': 'first',
+                        'high': 'max',
+                        'low': 'min',
+                        'close': 'last',
+                        'volume': 'sum'
+                    }).dropna()
+                    tf_data = resampled.tail(100)
+
+                if len(tf_data) < 30:  # Need minimum data for indicators
+                    continue
+
+                # Convert to candle list
+                candles = []
+                for idx, row in tf_data.iterrows():
+                    candles.append({
+                        'timestamp': idx.isoformat(),
+                        'open': row['open'],
+                        'high': row['high'],
+                        'low': row['low'],
+                        'close': row['close'],
+                        'volume': row.get('volume', 0)
+                    })
+
+                # Compute trend and indicators
+                trend_data = self.timeframe_aggregator._detect_trend(
+                    candles,
+                    period=14
+                )
+
+                timeframes_data[tf_name] = trend_data
+
+            if not timeframes_data:
+                return None
+
+            # Return pulse structure
+            return {
+                'timestamp': current_timestamp.timestamp(),
+                'age_seconds': 0,  # Fresh computation
+                'timeframes': timeframes_data
+            }
+
+        except Exception as e:
+            logger.debug(f"Failed to compute historical pulse at {current_timestamp}: {e}")
+            return None
 
 
     def run_backtest(self,
                      asset_pair: str,
                      start_date: Union[str, datetime],
                      end_date: Union[str, datetime],
-                     decision_engine: DecisionEngine
+                     decision_engine: DecisionEngine,
+                     inject_pulse: bool = True  # Enable multi-timeframe pulse by default
                      ) -> Dict[str, Any]:
         """
         Runs a backtest for a given asset, date range, and strategy.
@@ -220,6 +323,9 @@ class AdvancedBacktester:
             start_date (Union[str, datetime]): The start date for the backtest.
             end_date (Union[str, datetime]): The end date for the backtest.
             decision_engine (DecisionEngine): The AI decision engine to use for generating signals.
+            inject_pulse (bool): Whether to inject multi-timeframe pulse data into decisions.
+                                 Requires unified_data_provider and timeframe_aggregator.
+                                 Default True for enhanced decision quality.
 
         Returns:
             Dict[str, Any]: A dictionary containing backtest results, trades, and performance metrics.
@@ -231,7 +337,10 @@ class AdvancedBacktester:
         - Add support for Stop Loss and Take Profit levels.
         - Support for different backtest modes (e.g., vectorization vs. event-driven).
         """
-        logger.info(f"Starting backtest for {asset_pair} from {start_date} to {end_date}...")
+        logger.info(
+            f"Starting backtest for {asset_pair} from {start_date} to {end_date} "
+            f"(pulse injection: {inject_pulse})..."
+        )
 
         # 1. Fetch historical data
         data = self.historical_data_provider.get_historical_data(asset_pair, start_date, end_date)
@@ -251,7 +360,7 @@ class AdvancedBacktester:
             market_data = candle.to_dict()
             market_data['timestamp'] = timestamp.isoformat() # Add timestamp to market_data for decision engine
 
-            
+
             # Extract base and quote currencies (assuming 3-char codes)
             # This logic should be more robust, potentially using a currency parsing utility
             base_currency = asset_pair[:3] if len(asset_pair) >= 6 else asset_pair
@@ -268,11 +377,30 @@ class AdvancedBacktester:
                     'current_price': candle['close'] # Pass current price for P&L calculation
                 })
 
+            # --- Inject multi-timeframe pulse (if enabled) ---
+            pulse_context = None
+            if inject_pulse:
+                pulse_context = self._compute_historical_pulse(
+                    asset_pair,
+                    timestamp,
+                    data
+                )
+                if pulse_context:
+                    logger.debug(
+                        f"Injected historical pulse at {timestamp}: "
+                        f"{len(pulse_context.get('timeframes', {}))} timeframes"
+                    )
+
             decision = decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance={quote_currency: current_balance},
-                portfolio={'holdings': portfolio_for_decision_engine}
+                portfolio={'holdings': portfolio_for_decision_engine},
+                # Pass pulse via monitoring_context (same structure as live trading)
+                monitoring_context={
+                    'multi_timeframe_pulse': pulse_context,
+                    'has_monitoring_data': pulse_context is not None
+                } if pulse_context else None
             )
 
             action = decision.get('action', 'HOLD')
@@ -297,18 +425,18 @@ class AdvancedBacktester:
                     # The total cost (trade_value + fee) must not exceed current_balance
                     # Also consider slippage in effective price for units calculation
                     effective_buy_price = candle['close'] * (1 + self.slippage_percentage)
-                    
+
                     # Maximum amount of quote currency we can spend including fee
                     max_spendable_total = current_balance
                     # If commission_per_trade is fixed, deduct it first
                     if self.commission_per_trade > 0:
                         max_spendable_total -= self.commission_per_trade
-                    
+
                     # Max principal we can trade given remaining balance and percentage fee
                     max_principal_spendable = max_spendable_total / (1 + self.fee_percentage)
-                    
+
                     trade_amount_quote = min(amount_to_trade, max_principal_spendable)
-                    
+
                     if trade_amount_quote <= 0:
                         logger.info(f"Skipping BUY for {asset_pair} due to insufficient effective balance to cover principal and fees at {timestamp}")
                         continue # Skip this iteration
@@ -348,7 +476,7 @@ class AdvancedBacktester:
             elif action == 'SELL' and current_position and current_position.units > 0:
                 # Sell all units of the current position
                 sell_units = current_position.units
-                
+
                 # Execute trade
                 new_balance, units_traded_neg, fee, trade_details = self._execute_trade(
                     current_balance, candle['close'], "SELL", sell_units, "SELL", timestamp
@@ -357,26 +485,26 @@ class AdvancedBacktester:
                 if trade_details['status'] == 'EXECUTED':
                     current_balance = new_balance
                     total_fees += fee
-                    
+
                     # Calculate PnL for the closed position
                     pnl = (trade_details['effective_price'] - current_position.entry_price) * sell_units
                     trade_details['pnl_value'] = pnl
                     trade_details['entry_price'] = current_position.entry_price # Add entry price to trade details
-                    
+
                     trades_history.append(trade_details)
-                    
+
                     # Close the position
                     del open_positions[asset_pair]
                     logger.info(f"Closed LONG position for {asset_pair}: {sell_units:.4f} units at {trade_details['effective_price']:.4f}. PnL: {pnl:.2f}")
             elif action == 'HOLD':
                 logger.debug(f"Holding for {asset_pair} at {timestamp}. Current balance: {current_balance:.2f}, units: {current_position.units if current_position else 0:.4f}")
-            
+
             # Update equity curve at the end of each iteration
             current_portfolio_value = current_balance
             if current_position: # Check if there's an open position for the current asset
                 current_portfolio_value += current_position.units * candle['close']
             equity_curve.append(current_portfolio_value)
-        
+
         # 4. Final P&L calculation (if any open positions)
         final_value = current_balance
         if open_positions:
@@ -405,11 +533,11 @@ class AdvancedBacktester:
         # Ensure equity_curve has a final value if the backtest data was processed
         if not equity_curve:
             equity_curve.append(self.initial_balance) # Start with initial balance if no data was processed
-        
+
         # 5. Calculate performance metrics
         num_trading_days = len(data) if not data.empty else 0
         calculated_metrics = self._calculate_performance_metrics(trades_history, equity_curve, self.initial_balance, num_trading_days)
-        
+
         # Merge calculated metrics with basic metrics
         metrics = {
             "initial_balance": self.initial_balance,
@@ -417,7 +545,7 @@ class AdvancedBacktester:
             "total_fees": total_fees,
             **calculated_metrics # Unpack calculated metrics
         }
-        
+
         logger.info(f"Backtest completed for {asset_pair}. Final value: ${final_value:.2f}, Net Return: {metrics.get('total_return_pct', 0.0):.2f}%")
 
         return {

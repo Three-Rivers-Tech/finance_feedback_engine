@@ -58,6 +58,18 @@ cd finance_feedback_engine-2.0
 pip install -r requirements.txt
 ```
 
+**Note on Technical Indicators (pandas-ta):**
+The multi-timeframe pulse system uses **pandas-ta** for technical analysis:
+- ✅ **Pure Python** - No compilation required (unlike TA-Lib)
+- ✅ **Python 3.13 Compatible** - Works with latest Python versions
+- ✅ **No System Dependencies** - No need for C libraries or build tools
+- ✅ **Easy Deployment** - Simpler installation on cloud/Docker
+
+This is automatically installed via `requirements.txt` but can be installed separately:
+```bash
+pip install pandas-ta>=0.4.71b0
+```
+
 Or install in development mode:
 
 ```bash

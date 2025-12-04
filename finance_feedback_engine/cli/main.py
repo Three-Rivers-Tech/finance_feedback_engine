@@ -30,6 +30,147 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def _display_pulse_data(engine, asset_pair: str):
+    """Display multi-timeframe pulse technical analysis data.
+
+    Args:
+        engine: FinanceFeedbackEngine instance
+        asset_pair: Asset pair being analyzed
+    """
+    try:
+        console.print("\n[bold cyan]=== MULTI-TIMEFRAME PULSE DATA ===[/bold cyan]")
+
+        # Try to fetch pulse from monitoring context
+        pulse = None
+        if hasattr(engine, 'monitoring_context_provider'):
+            context = engine.monitoring_context_provider.get_monitoring_context(asset_pair)
+            pulse = context.get('multi_timeframe_pulse')
+
+        if not pulse or 'timeframes' not in pulse:
+            console.print("[yellow]Multi-timeframe pulse data not available[/yellow]")
+            console.print("[dim]Ensure TradeMonitor is running with unified_data_provider[/dim]")
+            return
+
+        # Display pulse age
+        age_seconds = pulse.get('age_seconds', 0)
+        age_mins = age_seconds / 60
+        freshness = "[green]FRESH[/green]" if age_mins < 10 else "[yellow]STALE[/yellow]"
+        console.print(f"Pulse Age: {age_mins:.1f} minutes ({freshness})")
+        console.print()
+
+        # Create table for timeframe data
+        from rich.table import Table
+
+        for tf, data in pulse['timeframes'].items():
+            table = Table(title=f"{tf.upper()} Timeframe", show_header=True)
+            table.add_column("Indicator", style="cyan")
+            table.add_column("Value", style="white")
+            table.add_column("Interpretation", style="dim")
+
+            # Trend
+            trend_color = "green" if data['trend'] == 'UPTREND' else "red" if data['trend'] == 'DOWNTREND' else "yellow"
+            table.add_row(
+                "Trend",
+                f"[{trend_color}]{data['trend']}[/{trend_color}]",
+                f"Signal Strength: {data.get('signal_strength', 0)}/100"
+            )
+
+            # RSI
+            rsi = data.get('rsi', 50)
+            if rsi > 70:
+                rsi_status = "[red]OVERBOUGHT[/red]"
+            elif rsi < 30:
+                rsi_status = "[green]OVERSOLD[/green]"
+            else:
+                rsi_status = "NEUTRAL"
+            table.add_row("RSI", f"{rsi:.1f}", rsi_status)
+
+            # MACD
+            macd = data.get('macd', {})
+            if macd.get('histogram', 0) > 0:
+                macd_status = "[green]BULLISH[/green] (positive histogram)"
+            elif macd.get('histogram', 0) < 0:
+                macd_status = "[red]BEARISH[/red] (negative histogram)"
+            else:
+                macd_status = "NEUTRAL"
+            table.add_row(
+                "MACD",
+                f"{macd.get('macd', 0):.2f}",
+                macd_status
+            )
+
+            # Bollinger Bands
+            bbands = data.get('bollinger_bands', {})
+            percent_b = bbands.get('percent_b', 0.5)
+            if percent_b > 1.0:
+                bb_status = "[red]Above upper band[/red] (overbought)"
+            elif percent_b < 0.0:
+                bb_status = "[green]Below lower band[/green] (oversold)"
+            else:
+                bb_status = f"Within bands ({percent_b:.1%})"
+            table.add_row(
+                "Bollinger %B",
+                f"{percent_b:.3f}",
+                bb_status
+            )
+
+            # ADX
+            adx_data = data.get('adx', {})
+            adx_val = adx_data.get('adx', 0)
+            if adx_val > 25:
+                adx_status = f"[green]STRONG TREND[/green] ({adx_val:.1f})"
+            elif adx_val > 20:
+                adx_status = f"Developing trend ({adx_val:.1f})"
+            else:
+                adx_status = f"[yellow]Weak/ranging[/yellow] ({adx_val:.1f})"
+
+            plus_di = adx_data.get('plus_di', 0)
+            minus_di = adx_data.get('minus_di', 0)
+            direction = "[green]+DI dominant[/green]" if plus_di > minus_di else "[red]-DI dominant[/red]"
+
+            table.add_row(
+                "ADX",
+                f"{adx_val:.1f}",
+                f"{adx_status} | {direction}"
+            )
+
+            # ATR & Volatility
+            atr = data.get('atr', 0)
+            volatility = data.get('volatility', 'medium')
+            vol_color = "red" if volatility == 'high' else "yellow" if volatility == 'medium' else "green"
+            table.add_row(
+                "ATR / Volatility",
+                f"{atr:.2f}",
+                f"[{vol_color}]{volatility.upper()}[/{vol_color}]"
+            )
+
+            console.print(table)
+            console.print()
+
+        # Cross-timeframe alignment
+        console.print("[bold]Cross-Timeframe Alignment:[/bold]")
+        trends = [data['trend'] for data in pulse['timeframes'].values()]
+        uptrends = trends.count('UPTREND')
+        downtrends = trends.count('DOWNTREND')
+        ranging = trends.count('RANGING')
+
+        if uptrends > downtrends and uptrends >= 3:
+            alignment = "[bold green]BULLISH ALIGNMENT[/bold green]"
+        elif downtrends > uptrends and downtrends >= 3:
+            alignment = "[bold red]BEARISH ALIGNMENT[/bold red]"
+        else:
+            alignment = "[yellow]MIXED SIGNALS[/yellow]"
+
+        console.print(f"  {alignment}")
+        console.print(f"  Breakdown: {uptrends} up, {downtrends} down, {ranging} ranging")
+
+        console.print("[bold cyan]=" * 40 + "[/bold cyan]\n")
+
+    except Exception as e:
+        console.print(f"[red]Error displaying pulse data: {e}[/red]")
+        logger.exception("Pulse display error")
+
+
 
 def _parse_requirements_file(req_file: Path) -> list:
     """Parse requirements.txt and return list of package names.
@@ -795,8 +936,13 @@ def install_deps(ctx, auto_install):
     ),
     help='AI provider (local/cli/codex/qwen/gemini/ensemble)'
 )
+@click.option(
+    '--show-pulse',
+    is_flag=True,
+    help='Display multi-timeframe technical analysis pulse data'
+)
 @click.pass_context
-def analyze(ctx, asset_pair, provider):
+def analyze(ctx, asset_pair, provider, show_pulse):
     """Analyze an asset pair and generate trading decision."""
     from ..utils.validation import standardize_asset_pair
 
@@ -1004,6 +1150,10 @@ def analyze(ctx, asset_pair, provider):
                 f"  RSI: {md.get('rsi', 0):.2f} ("
                 f"{md.get('rsi_signal', 'neutral')})"
             )
+
+        # Display multi-timeframe pulse if requested
+        if show_pulse:
+            _display_pulse_data(engine, asset_pair)
 
         if md.get('type') == 'crypto' and 'volume' in md:
             console.print("\nCrypto Metrics:")
