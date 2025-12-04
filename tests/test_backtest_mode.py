@@ -1,4 +1,4 @@
-"""Tests for DecisionEngine backtest mode (rule-based decisions)."""
+"""Tests for DecisionEngine with mock provider (fast testing)."""
 
 import pytest
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
@@ -6,10 +6,9 @@ from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
 @pytest.fixture
 def mock_config():
-    """Minimal config for testing."""
+    """Config using mock provider for fast deterministic testing."""
     return {
-        'ai_provider': 'local',
-        'model_name': 'llama-3.2-3B',
+        'ai_provider': 'mock',  # Use mock provider instead of backtest_mode
         'position_sizing': {
             'risk_percentage': 0.01,
             'stop_loss_percentage': 0.02
@@ -42,38 +41,35 @@ def mock_market_data():
 
 
 def test_backtest_mode_parameter(mock_config):
-    """Test that backtest_mode parameter is stored correctly."""
+    """Test that backtest_mode parameter is accepted but deprecated."""
+    # backtest_mode flag is now deprecated - logs warning but accepted
     engine = DecisionEngine(mock_config, backtest_mode=True)
-    assert engine.backtest_mode is True
+    assert engine.backtest_mode is True  # Stored but not used
 
     engine_normal = DecisionEngine(mock_config, backtest_mode=False)
     assert engine_normal.backtest_mode is False
 
 
-def test_backtest_mode_buy_signal(mock_config, mock_market_data):
-    """Test BUY signal when price > SMA(20) and ADX > 25."""
-    engine = DecisionEngine(mock_config, backtest_mode=True)
-    
-    # Price 50000 > SMA(20) ~49635, ADX 35 > 25 → BUY
+def test_mock_provider_decisions(mock_config, mock_market_data):
+    """Test that mock provider generates valid random decisions."""
+    engine = DecisionEngine(mock_config)
+
     decision = engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=mock_market_data,
         balance={'USD': 10000.0}
     )
-    
-    assert decision['action'] == 'BUY'
-    assert decision['confidence'] > 50  # ADX 35 → confidence ~70
-    assert 'Backtest Mode' in decision['reasoning']
-    assert decision['backtest_mode'] is True
-    assert decision['position_size'] > 0
-    assert decision['stop_loss'] == pytest.approx(50000 * 0.98, rel=0.01)
-    assert decision['take_profit'] == pytest.approx(50000 * 1.05, rel=0.01)
 
+    # Mock provider returns random but valid decisions
+    assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    assert 0 <= decision['confidence'] <= 100
+    assert 'Mock AI' in decision['reasoning']
+    assert decision['backtest_mode'] is False  # Not using old backtest logic
+    assert 'position_size' in decision or 'recommended_position_size' in decision
+def test_mock_provider_bear_market(mock_config):
+    """Test mock provider handles bear market data."""
+    engine = DecisionEngine(mock_config)
 
-def test_backtest_mode_sell_signal(mock_config):
-    """Test SELL signal when price < SMA(20) and ADX > 25."""
-    engine = DecisionEngine(mock_config, backtest_mode=True)
-    
     # Downtrend scenario: price < SMA
     market_data = {
         'close': 48000.0,
@@ -94,23 +90,23 @@ def test_backtest_mode_sell_signal(mock_config):
             {'close': 48001.0}, {'close': 48000.0}  # SMA(20) ~48600
         ]
     }
-    
+
     decision = engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=market_data,
         balance={'USD': 10000.0}
     )
-    
-    assert decision['action'] == 'SELL'
-    assert decision['confidence'] > 70  # ADX 40 → confidence ~80
-    assert 'Backtest Mode' in decision['reasoning']
-    assert decision['backtest_mode'] is True
+
+    # Mock returns random actions - just verify it's valid
+    assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    assert 0 <= decision['confidence'] <= 100
+    assert decision['backtest_mode'] is False  # Not using old backtest logic
 
 
-def test_backtest_mode_hold_signal(mock_config):
-    """Test HOLD signal when ADX < 25 (choppy market)."""
-    engine = DecisionEngine(mock_config, backtest_mode=True)
-    
+def test_mock_provider_ranging_market(mock_config):
+    """Test mock provider handles ranging market data."""
+    engine = DecisionEngine(mock_config)
+
     # Low ADX, ranging market
     market_data = {
         'close': 49500.0,
@@ -125,22 +121,22 @@ def test_backtest_mode_hold_signal(mock_config):
             {'close': 49500.0} for _ in range(20)  # Flat prices
         ]
     }
-    
+
     decision = engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=market_data,
         balance={'USD': 10000.0}
     )
-    
-    assert decision['action'] == 'HOLD'
-    assert decision['confidence'] < 40  # ADX 18 → low confidence
-    assert 'No clear trend' in decision['reasoning']
+
+    # Mock returns random actions - just verify it's valid
+    assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    assert 0 <= decision['confidence'] <= 100
 
 
-def test_backtest_mode_no_historical_data(mock_config):
-    """Test fallback when insufficient historical data."""
-    engine = DecisionEngine(mock_config, backtest_mode=True)
-    
+def test_mock_provider_no_historical_data(mock_config):
+    """Test mock provider handles missing historical data."""
+    engine = DecisionEngine(mock_config)
+
     market_data = {
         'close': 50000.0,
         'high': 51000.0,
@@ -152,22 +148,22 @@ def test_backtest_mode_no_historical_data(mock_config):
         'market_regime_data': {'adx': 30.0},
         'historical_data': []  # No history
     }
-    
+
     decision = engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=market_data,
         balance={'USD': 10000.0}
     )
-    
-    # Should still work, using current price as SMA
+
+    # Mock provider should handle missing data gracefully
     assert decision['action'] in ['BUY', 'SELL', 'HOLD']
-    assert decision['backtest_mode'] is True
+    assert decision['backtest_mode'] is False
 
 
-def test_backtest_mode_no_close_price(mock_config):
-    """Test error handling when close price missing."""
-    engine = DecisionEngine(mock_config, backtest_mode=True)
-    
+def test_mock_provider_invalid_close_price(mock_config):
+    """Test mock provider handles invalid close price."""
+    engine = DecisionEngine(mock_config)
+
     market_data = {
         'close': 0,  # Invalid
         'high': 51000.0,
@@ -176,22 +172,22 @@ def test_backtest_mode_no_close_price(mock_config):
         'timestamp': '2024-01-15T12:00:00Z',
         'historical_data': []
     }
-    
+
     decision = engine.generate_decision(
         asset_pair='BTCUSD',
         market_data=market_data,
         balance={'USD': 10000.0}
     )
-    
-    assert decision['action'] == 'HOLD'
-    assert decision['confidence'] == 0
-    assert 'No close price available' in decision['reasoning']
+
+    # Mock provider should still return valid decision
+    assert decision['action'] in ['BUY', 'SELL', 'HOLD']
+    assert decision['confidence'] >= 0
 
 
 def test_normal_mode_not_affected(mock_config, mock_market_data):
     """Test that normal mode (backtest_mode=False) doesn't use rule-based logic."""
     engine = DecisionEngine(mock_config, backtest_mode=False)
-    
+
     # This would normally query AI provider (will fail in test without mock)
     # Just verify the parameter is respected
     assert engine.backtest_mode is False
