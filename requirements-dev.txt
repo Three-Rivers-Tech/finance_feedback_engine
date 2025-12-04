@@ -15,7 +15,7 @@ bandit>=1.7.5
 # Pre-commit hooks
 pre-commit>=3.5.0
 
-# Test parallelization (for future use)
+# Test parallelization
 pytest-xdist>=3.5.0
 
 # Install main requirements too
