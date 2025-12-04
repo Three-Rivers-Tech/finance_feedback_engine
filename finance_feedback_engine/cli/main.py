@@ -1849,7 +1849,7 @@ def backtest(
     stop_loss_percentage,
     take_profit_percentage,
 ):
-    """Run AI-driven backtest with comprehensive performance metrics."""
+    """Run rule-based backtest with comprehensive performance metrics."""
     from finance_feedback_engine.utils.validation import standardize_asset_pair
 
     try:
@@ -1857,7 +1857,7 @@ def backtest(
         config = ctx.obj['config']
 
         console.print(
-            f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
+            f"[bold blue]Running Rule-Based Backtest for {asset_pair} {start}→{end}[/bold blue]"
         )
 
         # Get advanced_backtesting config or set defaults
@@ -1873,8 +1873,13 @@ def backtest(
 
         engine = FinanceFeedbackEngine(config)
 
-        # Use the main AI decision engine for backtesting (ensemble mode)
-        backtest_decision_engine = engine.decision_engine
+        # Create backtest-optimized decision engine (rule-based, no AI calls)
+        from finance_feedback_engine.decision_engine.engine import DecisionEngine
+        backtest_decision_engine = DecisionEngine(
+            config=config,
+            data_provider=engine.data_provider,
+            backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
+        )
 
         # Initialize AdvancedBacktester
         backtester = AdvancedBacktester(
@@ -1891,14 +1896,14 @@ def backtest(
             asset_pair=asset_pair,
             start_date=start,
             end_date=end,
-            decision_engine=backtest_decision_engine  # Use rule-based engine
+            decision_engine=backtest_decision_engine
         )
 
         # Display results
         metrics = results.get('metrics', {})
         trades_history = results.get('trades', [])
 
-        table = Table(title="AI-Driven Backtest Summary")
+        table = Table(title="Rule-Based Backtest Summary")
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green", justify="right")
 
