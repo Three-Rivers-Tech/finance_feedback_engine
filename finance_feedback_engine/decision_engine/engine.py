@@ -503,15 +503,20 @@ class DecisionEngine:
 
         # Calculate SMA(20) from historical data
         historical = market_data.get('historical_data', [])
-        if len(historical) >= 20:
-            sma_20 = sum([candle.get('close', 0) for candle in historical[-20:]]) / 20
-        else:
-            # Fallback to current price if insufficient history
-            sma_20 = close
+        if len(historical) < 20:
+            return self._create_hold_decision(
+                asset_pair, "Insufficient historical data for 20-period SMA calculation", balance
+            )
+        sma_20 = sum([candle.get('close', 0) for candle in historical[-20:]]) / 20
 
         # Get ADX from market regime or default to 30
+        # Get ADX from market regime or default to 30
         regime_data = market_data.get('market_regime_data', {})
-        adx = regime_data.get('adx', 30.0)
+        adx = regime_data.get('adx')
+        if adx is None:
+            return self._create_hold_decision(
+                asset_pair, "ADX unavailable for trend strength assessment", balance
+            )
 
         # Rule-based logic
         action = "HOLD"
@@ -536,12 +541,24 @@ class DecisionEngine:
         confidence = min(int((adx / 50.0) * 100), 100)
 
         # Calculate position size
+        # Get risk parameters from the agent config (matching main decision flow)
+        agent_config = self.config.get('agent', {})
+        risk_percentage = agent_config.get('risk_percentage', 0.01)
+        sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
+
+        # Compatibility: Convert legacy percentage values (>1) to decimals
+        if risk_percentage > 1:
+            risk_percentage /= 100
+        if sizing_stop_loss_percentage > 1:
+            sizing_stop_loss_percentage /= 100
+
+        # Calculate position size
         account_value = sum(balance.values())
         position_size = self.calculate_position_size(
             account_balance=account_value,
             entry_price=close,
-            risk_percentage=0.01,
-            stop_loss_percentage=0.02
+            risk_percentage=risk_percentage,
+            stop_loss_percentage=sizing_stop_loss_percentage
         )
 
         reasoning = " | ".join(reasoning_parts) + " | [Backtest Mode: Rule-Based]"
@@ -1894,20 +1911,23 @@ Present your judgment with clear reasoning and final decision.
         # Normalize amount back onto the decision for downstream consumers
         decision['amount'] = float(amount)
 
-        return True
-
-    def _rule_based_decision(self, prompt: str) -> Dict[str, Any]:
-        """
-        Simple rule-based decision as fallback.
-
-        Args:
-            prompt: Context prompt
-
-        Returns:
-            Rule-based decision
-        """
-        logger.info("Using rule-based decision")
-
+        # Use portfolio-level config for stop_loss and take_profit to match main engine logic
+        stop_loss = close * (1 - self.portfolio_stop_loss_percentage)
+        take_profit = close * (1 + self.portfolio_take_profit_percentage)
+        return {
+            'action': action,
+            'confidence': confidence,
+            'reasoning': reasoning,
+            'asset_pair': asset_pair,
+            'position_size': position_size,
+            'entry_price': close,
+            'stop_loss': stop_loss,
+            'take_profit': take_profit,
+            'market_regime': market_data.get('market_regime', 'UNKNOWN'),
+            'signal_only': False,
+            'timestamp': market_data.get('timestamp', ''),
+            'backtest_mode': True  # Uses portfolio-level config for stop_loss/take_profit
+        }
         # Extract price change from prompt
         if 'Price Change:' in prompt:
             try:

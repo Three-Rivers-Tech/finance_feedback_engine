@@ -36,12 +36,48 @@
 - **📈 Balance Management**: Real-time account balance and allocation tracking
 - **🎯 CLI Interface**: Rich command-line interface for easy interaction
 - **🔒 Signal-Only Mode**: Learn from real portfolio without execution risk 🆕
+- **📱 Telegram Approvals** (Optional): Mobile approval workflow for human-in-the-loop trading 🆕
+  - **REST API**: FastAPI-based web service for webhooks and monitoring
+  - **Redis Queue**: Persistent approval queue with auto-recovery
+  - **Auto-Setup**: One-command Redis installation and configuration
+  - **CLI Independence**: Web service is fully optional - CLI works standalone
+
+## 🏗️ Architecture
+
+### Hybrid Design: CLI + Optional Web Service
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CLI Mode (Default)                       │
+│  Full functionality without web dependencies                 │
+│  • Analyze assets  • Execute trades  • Backtest             │
+│  • Agent mode      • Monitoring      • Dashboard            │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│              Web Service Mode (Optional) 🆕                  │
+│  Telegram approval workflow for mobile trading               │
+│  • FastAPI REST API    • Redis approval queue               │
+│  • Webhook endpoints   • Real-time notifications            │
+│  • See docs/WEB_SERVICE_MIGRATION.md for setup              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**New in 2.0:** Optional web service layer enables mobile approvals via Telegram bot. This is **completely optional** - all core features work in CLI-only mode. [Learn more →](docs/WEB_SERVICE_MIGRATION.md)
 
 ## 📋 Requirements
 
+### Core Requirements
 - Python 3.8+
 - Alpha Vantage API key (premium recommended)
 - Trading platform credentials (Coinbase, Oanda, etc.)
+
+### Optional Web Service (Telegram Approvals) 🆕
+- Redis 5.x+ (auto-setup available)
+- Telegram bot token (from @BotFather)
+- HTTPS domain (production) or ngrok (development)
+
+**Note:** Web service is **optional** - CLI mode works independently. See [Web Service Migration Guide](docs/WEB_SERVICE_MIGRATION.md) for details.
 
 ## 🔧 Installation
 

@@ -14,6 +14,35 @@ telegram_bot: Optional['TelegramApprovalBot'] = None
 
 
 class TelegramApprovalBot:
+
+        @staticmethod
+        def _sanitize_decision_id(decision_id: str) -> str:
+            """
+            Sanitize decision_id to allow only alphanumerics, dashes, and underscores.
+            Prevents path traversal and unsafe filenames.
+            """
+            import re
+            return re.sub(r'[^A-Za-z0-9_-]', '_', decision_id)
+
+        async def _write_approval_file(self, decision_id: str, approval_data: dict, status: str):
+            """
+            Write approval/rejection file asynchronously with sanitized filename.
+
+            Args:
+                decision_id: Raw decision ID
+                approval_data: Data to write
+                status: 'approved' or 'rejected'
+            """
+            from pathlib import Path
+            import aiofiles
+
+            safe_id = self._sanitize_decision_id(decision_id)
+            approvals_dir = Path("data/approvals")
+            approvals_dir.mkdir(parents=True, exist_ok=True)
+            approval_file = approvals_dir / f"{safe_id}_{status}.json"
+            async with aiofiles.open(approval_file, 'w') as f:
+                import json
+                await f.write(json.dumps(approval_data, indent=2))
     """
     Telegram bot for interactive trading decision approvals.
 
@@ -68,8 +97,8 @@ class TelegramApprovalBot:
 
             import redis
             self.redis_client = redis.Redis(
-                host='localhost',
-                port=6379,
+                host=self.config.get('redis_host', 'localhost'),
+                port=self.config.get('redis_port', 6379),
                 decode_responses=True
             )
             self.redis_client.ping()
@@ -77,6 +106,11 @@ class TelegramApprovalBot:
         except Exception as e:
             logger.error(f"❌ Redis initialization failed: {e}. Using in-memory queue.")
             self.use_redis = False
+            if self.redis_client:
+                try:
+                    self.redis_client.close()
+                except Exception:
+                    logger.warning("⚠️ Error closing Redis client")
             self.redis_client = None
 
     async def setup_webhook(self, public_url: str):
@@ -164,7 +198,11 @@ class TelegramApprovalBot:
         """
         try:
             message_text = self.format_decision_message(decision)
-            keyboard = self.create_approval_keyboard(decision['decision_id'])
+            decision_id = decision.get('decision_id')
+            if not decision_id:
+                logger.error("❌ Cannot send approval request: missing decision_id")
+                raise ValueError("Decision must have a decision_id")
+            keyboard = self.create_approval_keyboard(decision_id)
 
             # TODO: Implement with python-telegram-bot
             # await self.bot.send_message(
@@ -200,7 +238,7 @@ class TelegramApprovalBot:
             # elif update.message and update.message.text:
             #     await self._handle_message(update.message)
 
-            logger.debug(f"Received Telegram update: {update_data}")
+            logger.debug(f"Received Telegram update_id: {update_data.get('update_id')}")
         except Exception as e:
             logger.error(f"❌ Error processing Telegram update: {e}")
             raise
@@ -213,9 +251,16 @@ class TelegramApprovalBot:
             query: CallbackQuery object from Telegram
             engine: FinanceFeedbackEngine instance
         """
+        # Authorization check
+        user_id = getattr(getattr(query, 'from_user', None), 'id', None)
+        if user_id is None or user_id not in self.allowed_users:
+            await query.answer("⛔ Unauthorized", show_alert=True)
+            logger.warning(f"⛔ Unauthorized Telegram user attempted action: user_id={user_id}")
+            return
+
         # TODO: Implement callback handling
         # callback_data = query.data  # Format: "approve:decision_id" or "reject:decision_id"
-        # action, decision_id = callback_data.split(':')
+        # action, decision_id = callback_data.split(":")
 
         # if action == 'approve':
         #     # Execute decision
@@ -241,22 +286,13 @@ class TelegramApprovalBot:
             decision_id: Decision ID to approve
             engine: FinanceFeedbackEngine instance
         """
-        # Save approval to queue/file
         approval_data = {
             "decision_id": decision_id,
             "approved": True,
             "timestamp": datetime.now().isoformat(),
             "source": "telegram"
         }
-
-        # Save to data/approvals/
-        approvals_dir = Path("data/approvals")
-        approvals_dir.mkdir(parents=True, exist_ok=True)
-
-        approval_file = approvals_dir / f"{decision_id}_approved.json"
-        with open(approval_file, 'w') as f:
-            json.dump(approval_data, f, indent=2)
-
+        await self._write_approval_file(decision_id, approval_data, status="approved")
         logger.info(f"✅ Decision {decision_id} approved via Telegram")
 
         # Execute via engine
@@ -280,14 +316,7 @@ class TelegramApprovalBot:
             "timestamp": datetime.now().isoformat(),
             "source": "telegram"
         }
-
-        approvals_dir = Path("data/approvals")
-        approvals_dir.mkdir(parents=True, exist_ok=True)
-
-        approval_file = approvals_dir / f"{decision_id}_rejected.json"
-        with open(approval_file, 'w') as f:
-            json.dump(approval_data, f, indent=2)
-
+        await self._write_approval_file(decision_id, approval_data, status="rejected")
         logger.info(f"❌ Decision {decision_id} rejected via Telegram")
 
     def close(self):

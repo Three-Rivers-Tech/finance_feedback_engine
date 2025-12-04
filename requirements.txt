@@ -44,13 +44,31 @@ scikit-learn>=1.0.0
 tenacity
 ollama
 
-# Telegram integration
+# Telegram integration (Approval workflow - see docs/TELEGRAM_APPROVAL_WORKFLOW.md)
 python-telegram-bot>=20.0
 
-# FastAPI and server dependencies
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-pyngrok>=7.0.0
+# ============================================================================
+# WEB SERVICE ARCHITECTURE (New in v2.0)
+# ============================================================================
+# The engine now supports an optional web API for:
+# - Telegram bot webhook endpoint (receive approval requests from users)
+# - REST API for decision monitoring and portfolio status
+# - Async approval queue (Redis-backed for persistence)
+#
+# This is OPTIONAL - CLI mode works independently without these dependencies.
+# To use Telegram approval workflow:
+#   1. Configure telegram.yaml (see config/telegram.yaml.example)
+#   2. Start API server: uvicorn finance_feedback_engine.api.app:app
+#   3. Bot auto-configures webhook via ngrok (dev) or custom domain (prod)
+# ============================================================================
 
-# Redis for approval queue
-redis>=5.0.0
+# FastAPI web framework (async REST API)
+fastapi>=0.104.0,<0.110.0
+
+# ASGI server (runs FastAPI application)
+uvicorn[standard]>=0.24.0,<0.26.0
+
+# Redis message broker (approval queue persistence)
+# Compatible with Redis 5.x-7.x (tested with 6.2+)
+# Required for: Telegram approval queue, async task coordination
+redis>=5.0.0,<8.0.0
