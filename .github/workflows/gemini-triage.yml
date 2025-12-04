@@ -155,5 +155,11 @@ jobs:
               });
               core.info(`Successfully set labels: ${selectedLabels.join(',')}`);
             } else {
-              core.info(`Failed to determine labels to set or issue/PR number. There may not be enough information in the issue or pull request.`)
+              let reason = 'Unknown reason';
+              if (!issueNumber) {
+                reason = 'issue or pull request number not found in workflow context';
+              } else if (selectedLabels.length === 0) {
+                reason = 'no valid labels selected from triage analysis';
+              }
+              core.setFailed(`Unable to apply labels: ${reason}`);
             }
