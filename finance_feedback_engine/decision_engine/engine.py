@@ -273,7 +273,8 @@ class DecisionEngine:
             from .local_llm_provider import LocalLLMProvider
 
             # Create temporary config overriding the model_name and including local settings
-            temp_config = self.config.copy()
+            import copy
+            temp_config = copy.deepcopy(self.config)
             temp_config['model_name'] = model_name
             temp_config.setdefault('decision_engine', {})
             temp_config['decision_engine']['local_models'] = self.local_models

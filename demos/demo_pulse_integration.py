@@ -19,9 +19,10 @@ import time
 
 def create_sample_pulse():
     """Create sample multi-timeframe pulse data."""
+    age_seconds = 45  # 45 seconds old
     return {
-        'timestamp': time.time(),
-        'age_seconds': 45,  # 45 seconds old
+        'timestamp': time.time() - age_seconds,
+        'age_seconds': age_seconds,
         'timeframes': {
             '1m': {
                 'trend': 'UPTREND',

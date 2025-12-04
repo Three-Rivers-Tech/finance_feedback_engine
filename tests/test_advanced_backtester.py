@@ -7,7 +7,6 @@ from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from tests.mocks.mock_data_provider import MockHistoricalDataProvider
 
 # Configure logging for debugging
-import logging
 logger = logging.getLogger(__name__)
 def sample_historical_data():
     logger.info("Creating sample_historical_data fixture")
