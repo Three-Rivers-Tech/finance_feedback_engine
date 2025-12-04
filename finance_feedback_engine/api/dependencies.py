@@ -1,6 +1,4 @@
 """FastAPI dependency injection for shared resources."""
-
-from typing import Optional
 from fastapi import HTTPException, status
 
 from ..core import FinanceFeedbackEngine

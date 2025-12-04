@@ -24,7 +24,7 @@ status_router = APIRouter()
 async def health_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
     """
     Health check endpoint.
-    
+
     Returns application health status including uptime, circuit breaker states,
     and portfolio information.
     """
@@ -36,7 +36,7 @@ async def health_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
 async def metrics():
     """
     Prometheus metrics endpoint (stubbed).
-    
+
     TODO Phase 2: Instrument metrics in core.py and decision_engine.py
     """
     from ..monitoring.prometheus import generate_metrics
@@ -48,28 +48,28 @@ async def metrics():
 async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Depends(get_engine)):
     """
     Telegram webhook endpoint for approval bot.
-    
+
     Receives updates from Telegram Bot API and processes approval requests.
     """
     try:
         # Import here to avoid circular dependency
         from ..integrations.telegram_bot import telegram_bot
-        
+
         if telegram_bot is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Telegram bot not initialized. Check config/telegram.yaml"
             )
-        
+
         update_data = await request.json()
         await telegram_bot.process_update(update_data, engine)
-        
+
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Telegram webhook error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Webhook processing failed: {str(e)}"
+            detail="Webhook processing failed"
         )
 
 
@@ -98,14 +98,15 @@ async def create_decision(
 ):
     """
     Trigger a new trading decision analysis.
-    
+
     Args:
         request: Analysis parameters
         engine: Engine instance from dependency injection
-        
+
     Returns:
         Decision result with ID for tracking
     """
+    import uuid
     try:
         decision = engine.analyze_asset(
             asset_pair=request.asset_pair,
@@ -113,19 +114,29 @@ async def create_decision(
             include_sentiment=request.include_sentiment,
             include_macro=request.include_macro
         )
-        
+
+        required_keys = {"decision_id", "asset_pair", "action", "confidence"}
+        missing_keys = required_keys - decision.keys()
+        if missing_keys:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid decision format"
+            )
+
         return DecisionResponse(
-            decision_id=decision.get("decision_id"),
-            asset_pair=decision.get("asset_pair"),
-            action=decision.get("action"),
-            confidence=decision.get("confidence"),
+            decision_id=decision["decision_id"],
+            asset_pair=decision["asset_pair"],
+            action=decision["action"],
+            confidence=decision["confidence"],
             reasoning=decision.get("reasoning", "")
         )
     except Exception as e:
-        logger.error(f"Decision creation failed: {e}")
+        import traceback
+        error_id = str(uuid.uuid4())
+        logger.exception(f"Decision creation failed. Reference ID: {error_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analysis failed: {str(e)}"
+            detail=f"Internal server error. Reference ID: {error_id}"
         )
 
 
@@ -136,11 +147,11 @@ async def list_recent_decisions(
 ):
     """
     List recent trading decisions.
-    
+
     Args:
         limit: Maximum number of decisions to return
         engine: Engine instance from dependency injection
-        
+
     Returns:
         List of recent decisions
     """
@@ -151,7 +162,7 @@ async def list_recent_decisions(
         logger.error(f"Failed to retrieve decisions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve decisions: {str(e)}"
+            detail="Failed to retrieve decisions"
         )
 
 
@@ -160,7 +171,7 @@ async def list_recent_decisions(
 async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
     """
     Get portfolio status summary.
-    
+
     Returns:
         Portfolio balance, active positions, recent performance
     """
@@ -170,22 +181,22 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             "active_positions": 0,
             "platform": None
         }
-        
+
         # Get balance from platform
         if hasattr(engine, 'platform'):
             balance_info = engine.platform.get_balance()
             status_data["balance"] = balance_info
             status_data["platform"] = engine.config.get("trading_platform", "unknown")
-            
+
             # Get portfolio breakdown if available
             if hasattr(engine.platform, 'get_portfolio_breakdown'):
                 breakdown = engine.platform.get_portfolio_breakdown()
                 status_data["active_positions"] = len(breakdown.get("positions", []))
-        
+
         return status_data
     except Exception as e:
         logger.error(f"Failed to get portfolio status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Status retrieval failed: {str(e)}"
+            detail="Status retrieval failed"
         )
