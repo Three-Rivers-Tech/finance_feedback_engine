@@ -167,34 +167,80 @@ Multi-timeframe analysis is critical for robust trading decisions. Research show
 **Feature Pulse Structure:**
 ```python
 {
-  "asset_pair": "BTCUSD",
-  "timestamp": "2025-01-28T10:05:00Z",
-  "timeframes": {
-    "1m": {
-      "rsi": 68.5,
-      "macd": {"macd": 120, "signal": 115, "histogram": 5},
-      "bbands": {"upper": 42500, "middle": 42000, "lower": 41500},
-      "adx": 28.3,
-      "atr": 150.2,
-      "trend": "bullish",  # derived from MACD, ADX
-      "volatility": "high",  # derived from ATR, Bollinger width
-      "signal_strength": 0.72  # composite score
-    },
-    "5m": { ... },
-    "15m": { ... },
-    "1h": { ... },
-    "4h": { ... },
-    "1d": { ... }
-  },
-  "aggregated_signals": {
-    "short_term_trend": "bullish",  # consensus from 1m, 5m, 15m
-    "medium_term_trend": "neutral",  # 1h, 4h
-    "long_term_trend": "bearish",  # 1d
-    "regime": "HIGH_VOLATILITY_CHOP",  # from market_regime_detector.py
-    "confidence": 0.68  # cross-timeframe agreement score
-  }
+   "asset_pair": "BTCUSD",
+   "timestamp": "2025-01-28T10:05:00Z",
+   "timeframes": {
+      "1m": { ... },
+      "5m": { ... },
+      ...
+   },
+   "aggregated_signals": {
+      "short_term_trend": "bullish",  # consensus from 1m, 5m, 15m (see aggregation rules below)
+      "medium_term_trend": "neutral",  # consensus from 1h, 4h
+      "long_term_trend": "bearish",  # consensus from 1d
+      "confidence": 0.68,  # weighted agreement score (see below)
+      "confidence_weights": {
+         "timeframes": {"1m": 0.2, "5m": 0.2, "15m": 0.2, "1h": 0.15, "4h": 0.15, "1d": 0.1},
+         "indicators": {"macd": 0.4, "adx": 0.2, "rsi": 0.15, "bbands": 0.15, "atr": 0.1}
+      },
+      "agreement_matrix": {
+         # For each timeframe and indicator, the direction (+1 bullish, 0 neutral, -1 bearish)
+         "1m": {"macd": 1, "adx": 1, "rsi": 1, "bbands": 0, "atr": 0},
+         "5m": { ... },
+         ...
+      },
+      "aggregation_method": "weighted_sum_v1"
+   },
+   "regime": "HIGH_VOLATILITY_CHOP",  # from market_regime_detector.py (see integration below)
+   ...
 }
 ```
+
+**Aggregation Algorithm and Integration Details:**
+
+1. **Confidence Score Formula:**
+    - For each timeframe and indicator, assign a direction: +1 (bullish), 0 (neutral), -1 (bearish).
+    - Use configurable weights for each timeframe and indicator (see `confidence_weights` above).
+    - Compute the normalized weighted sum of all matching directional signals:
+       $$
+       	ext{confidence} = \frac{\sum_{tf} \sum_{ind} w_{tf} \cdot w_{ind} \cdot \mathbb{1}[\text{direction}_{tf,ind} = \text{consensus}]}{\sum_{tf} \sum_{ind} w_{tf} \cdot w_{ind}}
+       $$
+    - Expose the weights and agreement matrix in the pulse for reproducibility.
+
+2. **Trend Aggregation (short/medium/long):**
+    - **Short-term:** Vote among 1m, 5m, 15m timeframes using MACD, ADX, RSI, BBANDS (weighted by `confidence_weights`).
+    - **Medium-term:** Vote among 1h, 4h.
+    - **Long-term:** Use 1d.
+    - For each group, sum weighted votes for each direction. If one direction > threshold (e.g., 60% of weighted votes), assign that trend. If tied or below threshold, set to "neutral".
+    - Tie-breaker: Prefer direction with higher MACD+ADX combined weight.
+    - **Configurable parameters:**
+       - Timeframe groupings (default: short=[1m,5m,15m], medium=[1h,4h], long=[1d])
+       - Indicator weights and thresholds (default: 60% for consensus)
+
+3. **Integration with `market_regime_detector.py`:**
+    - Invoked after per-timeframe indicators are computed and before final pulse population.
+    - Consumes: latest ADX and ATR values (typically from 15m, 1h, 4h, 1d), and optionally price.
+    - Returns a regime string (e.g., "HIGH_VOLATILITY_CHOP"). Does **not** mutate the pulse; regime is set in the pulse as a top-level field.
+    - Can be configured to use different timeframes or thresholds via parameters.
+
+**Pseudocode Flow:**
+```python
+# Input: multi_tf_data = {timeframe: OHLCV candles}
+indicators = compute_indicators(multi_tf_data)
+agreement_matrix = assign_directions(indicators)
+confidence, consensus = compute_weighted_confidence(agreement_matrix, weights)
+short_term_trend = aggregate_trend(agreement_matrix, group=['1m','5m','15m'])
+medium_term_trend = aggregate_trend(agreement_matrix, group=['1h','4h'])
+long_term_trend = aggregate_trend(agreement_matrix, group=['1d'])
+regime = market_regime_detector.get_regime(latest_adx, latest_atr, price)
+populate_pulse(...)
+```
+
+**Configurable Parameters:**
+- Timeframe groupings for trend aggregation
+- Indicator and timeframe weights for confidence
+- Consensus threshold for trend assignment
+- Regime detector timeframes and thresholds
 
 **Key Methods:**
 
@@ -355,10 +401,10 @@ pip install TA-Lib tsfresh
 | Limitation | Impact | Mitigation |
 |------------|--------|------------|
 | **5-min refresh = stale intra-minute signals** | May miss sub-minute reversals | Trade Monitor supports on-demand pulse refresh for critical assets |
-| **Missing 1m data for some assets** | Incomplete short-term analysis | Graceful degradation: use 5m as shortest timeframe, log warning |
+| **Missing 1m data for some assets** | Incomplete short-term analysis | **Graceful degradation:**<br>- Use 5m as shortest timeframe if 1m unavailable<br>- Log warning and add to `degraded_timeframes` in pulse metadata<br>- Downstream consumers can check `pulse['degraded_timeframes']` for unavailable/fallback timeframes |
 | **ta-lib indicators lag real-time** | RSI/MACD calculated on historical close | Acceptable for 5-min cadence; real-time tick data deferred to Phase 2 |
 | **No ML pattern recognition** | May miss complex multi-timeframe patterns | Baseline validates feature quality; add LSTM in Phase 2 if needed |
-| **Cache invalidation risk** | Stale data if market gaps (weekend → Monday) | TTL + timestamp validation, force refresh on market open |
+| **Cache invalidation risk** | Stale data if market gaps (weekend → Monday) | **Force refresh on market open:**<br>- Market open detected via exchange market hours schedule (UTC-based open events)<br>- Detection is per-exchange (global trigger), with optional per-asset overrides for assets with unique trading hours<br>- Scheduler service or market-open event handler calls `refresh_feature_pulse(asset_pair)` for all affected assets<br>- Logs emitted for forced refresh and any degraded timeframes<br>- Pulse metadata includes `last_forced_refresh` timestamp and `degraded_timeframes` |
 
 ---
 
