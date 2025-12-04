@@ -15,6 +15,7 @@ from .alpha_vantage_provider import AlphaVantageProvider
 
 logger = logging.getLogger(__name__)
 
+
 class HistoricalDataProvider:
     """
     Manages fetching, processing, and validating historical financial data.
@@ -53,91 +54,113 @@ class HistoricalDataProvider:
     - **Metadata Handling:** Store and retrieve metadata about data sources (e.g.,
       source, last updated, adjustments made).
     """
+
     def __init__(self, api_key: str, cache_dir: Optional[Union[str, Path]] = None):
-      self.api_key = api_key
-      self.cache_dir = Path(cache_dir) if cache_dir else Path('data/historical_cache')
-      try:
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-      except Exception:
-        logger.debug("Could not create historical cache directory; proceeding without cache.")
-        # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
-        # self.validator = FinancialDataValidator()
-        # self.data_store = TimeSeriesDataStore() # For caching/persistence
-
-    def _fetch_raw_data(self, asset_pair: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-      """
-      Fetch real historical OHLC data via Alpha Vantage provider.
-
-      Returns a DataFrame indexed by timestamp with columns: open, high, low, close, volume (if available).
-      Includes simple file-based caching to reduce repeated API calls.
-      """
-      # Build cache key
-      cache_file = None
-      try:
-        start_str = start_date.strftime('%Y-%m-%d')
-        end_str = end_date.strftime('%Y-%m-%d')
-        cache_file = self.cache_dir / f"{asset_pair}_{start_str}_{end_str}.parquet"
-        if cache_file.exists():
-          df = pd.read_parquet(cache_file)
-          # Ensure datetime index
-          if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index, utc=True)
-          df.index.name = 'timestamp'
-          logger.info(f"Loaded historical cache for {asset_pair} {start_str}->{end_str}")
-          return df
-      except Exception as e:
-        logger.debug(f"Historical cache load skipped: {e}")
-
-      # Fetch via Alpha Vantage provider (async method; call in sync context)
-      provider = AlphaVantageProvider(api_key=self.api_key)
-      start_str = start_date.strftime('%Y-%m-%d')
-      end_str = end_date.strftime('%Y-%m-%d')
-
-      candles: list = []
-      try:
-        import asyncio
-        coro = provider.get_historical_data(asset_pair, start=start_str, end=end_str)
+        self.api_key = api_key
+        self.cache_dir = Path(cache_dir) if cache_dir else Path("data/historical_cache")
         try:
-          loop = asyncio.get_running_loop()
-          # If already in an event loop, we cannot run; log and return empty
-          logger.warning("Async historical fetch in running loop is unsupported in this context")
-          candles = []
-        except RuntimeError:
-          candles = asyncio.run(coro)
-      except Exception as e:
-        logger.error(f"Error fetching historical data: {e}")
-        candles = []
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logger.debug(
+                "Could not create historical cache directory; proceeding without cache."
+            )
+            self.cache_dir = None
+            # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
+            # self.validator = FinancialDataValidator()
+            # self.data_store = TimeSeriesDataStore() # For caching/persistence
 
-      if not candles:
-        logger.warning(f"No historical candles fetched for {asset_pair} between {start_str} and {end_str}")
-        return pd.DataFrame()
+    def _fetch_raw_data(
+        self, asset_pair: str, start_date: datetime, end_date: datetime
+    ) -> pd.DataFrame:
+        """
+        Fetch real historical OHLC data via Alpha Vantage provider.
 
-      # Convert list of dicts to DataFrame; AlphaVantage returns keys: date, open, high, low, close
-      df = pd.DataFrame(candles)
-      if 'date' not in df.columns:
-        logger.warning("Historical data missing 'date' column; cannot construct time index.")
-        return pd.DataFrame()
-      df['timestamp'] = pd.to_datetime(df['date'], utc=True)
-      df = df.set_index('timestamp')
-      # Map/ensure expected columns
-      for col in ['open', 'high', 'low', 'close']:
-        if col not in df.columns:
-          df[col] = np.nan
-      # Volume may be absent for FX; fill NaN if missing
-      if 'volume' not in df.columns:
-        df['volume'] = np.nan
-      df = df[['open', 'high', 'low', 'close', 'volume']].sort_index()
+        Returns a DataFrame indexed by timestamp with columns: open, high, low, close, volume (if available).
+        Includes simple file-based caching to reduce repeated API calls.
+        """
+        # Build cache key
+        cache_file = None
+        try:
+            start_str = start_date.strftime("%Y-%m-%d")
+            end_str = end_date.strftime("%Y-%m-%d")
+            cache_file = self.cache_dir / f"{asset_pair}_{start_str}_{end_str}.parquet"
+            if cache_file.exists():
+                df = pd.read_parquet(cache_file)
+                # Ensure datetime index
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index, utc=True)
+                df.index.name = "timestamp"
+                logger.info(
+                    f"Loaded historical cache for {asset_pair} {start_str}->{end_str}"
+                )
+                return df
+        except Exception as e:
+            logger.debug(f"Historical cache load skipped: {e}")
 
-      # Save cache
-      try:
-        if cache_file is not None:
-          df.to_parquet(cache_file)
-      except Exception as e:
-        logger.debug(f"Could not write historical cache: {e}")
+        # Fetch via Alpha Vantage provider (async method; call in sync context)
+        provider = AlphaVantageProvider(api_key=self.api_key)
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
 
-      return df
+        candles: list = []
+        try:
+            import asyncio
 
-    def get_historical_data(self, asset_pair: str, start_date: Union[str, datetime], end_date: Union[str, datetime]) -> pd.DataFrame:
+            try:
+                loop = asyncio.get_running_loop()
+                # If already in an event loop, we cannot run; log and return empty
+                logger.warning(
+                    "Async historical fetch in running loop is unsupported in this context"
+                )
+                candles = []
+            except RuntimeError:
+                coro = provider.get_historical_data(
+                    asset_pair, start=start_str, end=end_str
+                )
+                candles = asyncio.run(coro)
+        except Exception as e:
+            logger.error(f"Error fetching historical data: {e}")
+            candles = []
+
+        if not candles:
+            logger.warning(
+                f"No historical candles fetched for {asset_pair} between {start_str} and {end_str}"
+            )
+            return pd.DataFrame()
+
+        # Convert list of dicts to DataFrame; AlphaVantage returns keys: date, open, high, low, close
+        df = pd.DataFrame(candles)
+        if "date" not in df.columns:
+            logger.warning(
+                "Historical data missing 'date' column; cannot construct time index."
+            )
+            return pd.DataFrame()
+        df["timestamp"] = pd.to_datetime(df["date"], utc=True)
+        df = df.set_index("timestamp")
+        # Map/ensure expected columns
+        for col in ["open", "high", "low", "close"]:
+            if col not in df.columns:
+                df[col] = np.nan
+        # Volume may be absent for FX; fill NaN if missing
+        if "volume" not in df.columns:
+            df["volume"] = np.nan
+        df = df[["open", "high", "low", "close", "volume"]].sort_index()
+
+        # Save cache
+        try:
+            if cache_file is not None:
+                df.to_parquet(cache_file)
+        except Exception as e:
+            logger.debug(f"Could not write historical cache: {e}")
+
+        return df
+
+    def get_historical_data(
+        self,
+        asset_pair: str,
+        start_date: Union[str, datetime],
+        end_date: Union[str, datetime],
+    ) -> pd.DataFrame:
         """
         Retrieves historical data for a given asset pair and date range.
 
@@ -187,13 +210,15 @@ class HistoricalDataProvider:
         # Ensure correct index and column names
         if not isinstance(raw_data.index, pd.DatetimeIndex):
             raw_data.index = pd.to_datetime(raw_data.index, utc=True)
-        raw_data.index.name = 'timestamp'
+        raw_data.index.name = "timestamp"
 
-        expected_cols = ['open', 'high', 'low', 'close', 'volume']
+        expected_cols = ["open", "high", "low", "close", "volume"]
         for col in expected_cols:
             if col not in raw_data.columns:
                 # TODO: Decide on strategy for missing columns (fill with NaN, error, default)
-                logger.warning(f"Missing expected column '{col}' in historical data for {asset_pair}. Filling with NaN.")
+                logger.warning(
+                    f"Missing expected column '{col}' in historical data for {asset_pair}. Filling with NaN."
+                )
                 raw_data[col] = np.nan
 
         # Sort by timestamp to ensure chronological order
@@ -202,13 +227,16 @@ class HistoricalDataProvider:
         # TODO: Persist fetched data to data_store
         # self.data_store.save_data(asset_pair, raw_data)
 
-        logger.info(f"Successfully fetched and processed historical data for {asset_pair}.")
+        logger.info(
+            f"Successfully fetched and processed historical data for {asset_pair}."
+        )
         return raw_data
+
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    dummy_api_key = "YOUR_ALPHA_VANTAGE_API_KEY" # Replace with actual key
+    dummy_api_key = "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with actual key
     provider = HistoricalDataProvider(dummy_api_key)
 
     asset = "BTCUSD"
