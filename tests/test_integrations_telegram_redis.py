@@ -60,11 +60,17 @@ class TestTelegramApprovalBot:
             }
         }
 
-        # Should reject unauthorized user
         approval_bot.process_update(update)
-        # Bot should not respond to unauthorized user
-        assert mock_bot.send_message.call_count == 0 or \
-               any('unauthorized' in str(call).lower() for call in mock_bot.send_message.call_args_list)
+
+        # Bot should either not respond or send unauthorized message
+        if mock_bot.send_message.called:
+            # If it responds, verify it's an unauthorized message
+            args, kwargs = mock_bot.send_message.call_args
+            message = kwargs.get('text', args[1] if len(args) > 1 else '')
+            assert 'unauthorized' in message.lower(), "Expected unauthorized message"
+        else:
+            # Not responding is also acceptable
+            assert mock_bot.send_message.call_count == 0
 
     def test_process_update_handles_approval_request(self, approval_bot, mock_bot):
         """Test process_update handles approval request."""

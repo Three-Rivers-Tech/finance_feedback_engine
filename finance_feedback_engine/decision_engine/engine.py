@@ -207,12 +207,6 @@ class DecisionEngine:
         """
         logger.info("Generating decision for %s", asset_pair)
 
-        # Use rule-based logic in backtest mode (fast, no AI hang)
-        if self.backtest_mode:
-            return self._generate_backtest_decision(
-                asset_pair, market_data, balance
-            )
-
         # Get live monitoring context if available
         monitoring_context = None
         if self.monitoring_provider:
@@ -293,7 +287,12 @@ class DecisionEngine:
             return response
         except Exception as e:
             logger.warning(f"Local model {model_name} failed: {e}")
-            return self._rule_based_decision(prompt)
+            return {
+                'action': 'HOLD',
+                'confidence': 0,
+                'reasoning': f'Local model {model_name} failed: {str(e)}',
+                'amount': 0
+            }
 
 
     def _create_decision_context(
@@ -470,135 +469,7 @@ class DecisionEngine:
 
         return ((high - low) / close) * 100
 
-    def _generate_backtest_decision(
-        self,
-        asset_pair: str,
-        market_data: Dict[str, Any],
-        balance: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """
-        Generate rule-based decision for backtesting (fast, no AI queries).
 
-        Uses SMA(20) crossover + ADX trend strength:
-        - BUY: Price > SMA(20) AND ADX > 25 (uptrend)
-        - SELL: Price < SMA(20) AND ADX > 25 (downtrend)
-        - HOLD: Otherwise (choppy/ranging market)
-
-        Args:
-            asset_pair: Asset pair being analyzed
-            market_data: Current market data with historical prices
-            balance: Account balances
-
-        Returns:
-            Decision dict matching AI decision schema
-        """
-        logger.info(f"[BACKTEST MODE] Generating rule-based decision for {asset_pair}")
-
-        # Extract current close price
-        close = market_data.get('close', 0)
-        if close == 0:
-            return self._create_hold_decision(
-                asset_pair, "No close price available", balance
-            )
-
-        # Calculate SMA(20) from historical data
-        historical = market_data.get('historical_data', [])
-        if len(historical) < 20:
-            return self._create_hold_decision(
-                asset_pair, "Insufficient historical data for 20-period SMA calculation", balance
-            )
-        sma_20 = sum([candle.get('close', 0) for candle in historical[-20:]]) / 20
-
-        # Get ADX from market regime or default to 30
-        # Get ADX from market regime or default to 30
-        regime_data = market_data.get('market_regime_data', {})
-        adx = regime_data.get('adx')
-        if adx is None:
-            return self._create_hold_decision(
-                asset_pair, "ADX unavailable for trend strength assessment", balance
-            )
-
-        # Rule-based logic
-        action = "HOLD"
-        reasoning_parts = []
-
-        if close > sma_20 and adx > 25:
-            action = "BUY"
-            reasoning_parts.append(
-                f"Price {close:.2f} > SMA(20) {sma_20:.2f} with strong trend (ADX={adx:.1f})"
-            )
-        elif close < sma_20 and adx > 25:
-            action = "SELL"
-            reasoning_parts.append(
-                f"Price {close:.2f} < SMA(20) {sma_20:.2f} with strong trend (ADX={adx:.1f})"
-            )
-        else:
-            reasoning_parts.append(
-                f"No clear trend: Price {close:.2f}, SMA(20) {sma_20:.2f}, ADX {adx:.1f}"
-            )
-
-        # Confidence based on ADX strength (0-100 scale)
-        confidence = min(int((adx / 50.0) * 100), 100)
-
-        # Calculate position size
-        # Get risk parameters from the agent config (matching main decision flow)
-        agent_config = self.config.get('agent', {})
-        risk_percentage = agent_config.get('risk_percentage', 0.01)
-        sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
-
-        # Compatibility: Convert legacy percentage values (>1) to decimals
-        if risk_percentage > 1:
-            risk_percentage /= 100
-        if sizing_stop_loss_percentage > 1:
-            sizing_stop_loss_percentage /= 100
-
-        # Calculate position size
-        account_value = sum(balance.values())
-        position_size = self.calculate_position_size(
-            account_balance=account_value,
-            entry_price=close,
-            risk_percentage=risk_percentage,
-            stop_loss_percentage=sizing_stop_loss_percentage
-        )
-
-        reasoning = " | ".join(reasoning_parts) + " | [Backtest Mode: Rule-Based]"
-
-        return {
-            'action': action,
-            'confidence': confidence,
-            'reasoning': reasoning,
-            'asset_pair': asset_pair,
-            'position_size': position_size,
-            'entry_price': close,
-            'stop_loss': close * 0.98,  # 2% stop loss
-            'take_profit': close * 1.05,  # 5% take profit
-            'market_regime': market_data.get('market_regime', 'UNKNOWN'),
-            'signal_only': False,
-            'timestamp': market_data.get('timestamp', ''),
-            'backtest_mode': True  # Flag to identify rule-based decisions
-        }
-
-    def _create_hold_decision(
-        self,
-        asset_pair: str,
-        reasoning: str,
-        balance: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """Create a HOLD decision for error cases."""
-        return {
-            'action': 'HOLD',
-            'confidence': 0,
-            'reasoning': reasoning,
-            'asset_pair': asset_pair,
-            'position_size': 0.0,
-            'entry_price': 0.0,
-            'stop_loss': 0.0,
-            'take_profit': 0.0,
-            'market_regime': 'UNKNOWN',
-            'signal_only': False,
-            'timestamp': '',
-            'backtest_mode': True
-        }
 
     def calculate_position_size(
         self,
@@ -1483,7 +1354,13 @@ Format response as a structured technical analysis demonstration.
 
         if not self.ensemble_manager:
             logger.error("Ensemble manager not initialized")
-            return self._rule_based_decision(prompt)
+            return {
+                'action': 'HOLD',
+                'confidence': 0,
+                'reasoning': 'Ensemble manager not initialized',
+                'amount': 0,
+                'ai_failure': True
+            }
 
         # Check for two-phase mode
         two_phase_config = self.config.get('ensemble', {}).get('two_phase', {})
@@ -1654,17 +1531,22 @@ Format response as a structured technical analysis demonstration.
         # Handle complete failure case
         if not valid_provider_decisions:
             logger.error(
-                "All %d providers failed or invalid, using rule-based fallback",
+                "All %d providers failed or invalid, returning HOLD decision",
                 len(enabled_providers),
             )
-            fallback = self._rule_based_decision(prompt)
-            fallback['ensemble_metadata'] = {
-                'providers_used': [],
-                'providers_failed': failed_providers,
-                'all_providers_failed': True,
-                'fallback_used': True
+            return {
+                'action': 'HOLD',
+                'confidence': 0,
+                'reasoning': f'All {len(enabled_providers)} AI providers failed',
+                'amount': 0,
+                'ai_failure': True,
+                'ensemble_metadata': {
+                    'providers_used': [],
+                    'providers_failed': failed_providers,
+                    'all_providers_failed': True,
+                    'fallback_used': True
+                }
             }
-            return fallback
 
         # Log success/failure summary
         logger.info(
@@ -1911,23 +1793,6 @@ Present your judgment with clear reasoning and final decision.
         # Normalize amount back onto the decision for downstream consumers
         decision['amount'] = float(amount)
 
-        # Use portfolio-level config for stop_loss and take_profit to match main engine logic
-        stop_loss = close * (1 - self.portfolio_stop_loss_percentage)
-        take_profit = close * (1 + self.portfolio_take_profit_percentage)
-        return {
-            'action': action,
-            'confidence': confidence,
-            'reasoning': reasoning,
-            'asset_pair': asset_pair,
-            'position_size': position_size,
-            'entry_price': close,
-            'stop_loss': stop_loss,
-            'take_profit': take_profit,
-            'market_regime': market_data.get('market_regime', 'UNKNOWN'),
-            'signal_only': False,
-            'timestamp': market_data.get('timestamp', ''),
-            'backtest_mode': True  # Uses portfolio-level config for stop_loss/take_profit
-        }
         # Extract price change from prompt
         if 'Price Change:' in prompt:
             try:

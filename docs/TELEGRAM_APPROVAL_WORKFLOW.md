@@ -383,7 +383,7 @@ uvicorn finance_feedback_engine.api.app:app \
   --log-level info
 
 # Behind reverse proxy (nginx/caddy)
-# See docs/PRODUCTION_DEPLOYMENT.md (TODO)
+# Production deployment steps: TODO — link to upcoming docs
 ```
 
 ---
