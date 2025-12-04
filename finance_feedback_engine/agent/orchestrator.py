@@ -46,6 +46,7 @@ class TradingAgentOrchestrator:
         print("Trading Agent Orchestrator initialized.")
         self._stop_event = threading.Event()
         self._paused_by_monitor = False # Flag to indicate if paused by monitoring
+        self.kill_switch_triggered = False  # Flag to indicate if kill-switch fired
         self.kill_switch_gain_pct = self.config.kill_switch_gain_pct
         self.kill_switch_loss_pct = self.config.kill_switch_loss_pct
         # Normalize max_drawdown_percent to decimal fraction (handle both percentage and decimal input)
@@ -100,15 +101,18 @@ class TradingAgentOrchestrator:
                         if drawdown_pct >= self.max_drawdown_pct:
                             print(f"Kill-switch triggered: portfolio drawdown of {drawdown_pct:.2%} exceeds threshold {self.max_drawdown_pct:.2%}")
                             print("Agent stopping due to kill-switch activation.")
+                            self.kill_switch_triggered = True
                             break
 
                     if pnl_pct >= self.kill_switch_gain_pct:
                         print(f"Kill-switch triggered: portfolio gain of {pnl_pct:.2%} exceeds threshold {self.kill_switch_gain_pct:.2%}")
                         print("Agent stopping due to kill-switch activation.")
+                        self.kill_switch_triggered = True
                         break
                     elif pnl_pct <= -self.kill_switch_loss_pct:
                         print(f"Kill-switch triggered: portfolio loss of {pnl_pct:.2%} exceeds threshold -{self.kill_switch_loss_pct:.2%}")
                         print("Agent stopping due to kill-switch activation.")
+                        self.kill_switch_triggered = True
                         break
             except Exception as e:
                 print(f"Error checking kill-switch: {e}")
