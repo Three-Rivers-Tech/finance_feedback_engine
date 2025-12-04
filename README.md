@@ -42,7 +42,7 @@
   - **Auto-Setup**: One-command Redis installation and configuration
   - **CLI Independence**: Web service is fully optional - CLI works standalone
 
-## 🏗️ Architecture
+## 🏗️ System Architecture Overview
 
 ### Hybrid Design: CLI + Optional Web Service
 

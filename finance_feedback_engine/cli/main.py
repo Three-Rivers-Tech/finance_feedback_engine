@@ -1873,13 +1873,8 @@ def backtest(
 
         engine = FinanceFeedbackEngine(config)
 
-        # Create backtest-optimized decision engine (rule-based, no AI hang)
-        from finance_feedback_engine.decision_engine.engine import DecisionEngine
-        backtest_decision_engine = DecisionEngine(
-            config=config,
-            data_provider=engine.data_provider,
-            backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
-        )
+        # Use the main AI decision engine for backtesting (ensemble mode)
+        backtest_decision_engine = engine.decision_engine
 
         # Initialize AdvancedBacktester
         backtester = AdvancedBacktester(
