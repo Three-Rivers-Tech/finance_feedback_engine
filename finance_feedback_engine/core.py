@@ -10,7 +10,6 @@ from .data_providers.historical_data_provider import HistoricalDataProvider
 from .trading_platforms.platform_factory import PlatformFactory
 from .decision_engine.engine import DecisionEngine
 from .persistence.decision_store import DecisionStore
-from .backtesting.backtester import Backtester
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .utils.model_installer import ensure_models_installed
 from .utils.failure_logger import log_quorum_failure

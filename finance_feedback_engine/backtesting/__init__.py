@@ -8,4 +8,4 @@ Backtester: Legacy SMA crossover backtester (deprecated)
 """
 
 from .advanced_backtester import AdvancedBacktester  # noqa: F401
-from .backtester import Backtester  # noqa: F401 - deprecated, kept for compatibility
+# Note: Backtester is deprecated and intentionally not exported to avoid misuse.
