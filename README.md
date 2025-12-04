@@ -447,7 +447,7 @@ All trading decisions are stored as JSON files in the configured storage path (d
 
 - [ ] Add more trading platforms (Binance, Kraken, etc.)
 - [x] **Long-term portfolio performance tracking** (see `docs/LONG_TERM_PERFORMANCE.md`) ✅
-- [ ] Implement backtesting functionality
+- [x] Implement backtesting functionality
 - [ ] Add portfolio management features
 - [ ] Create web dashboard
 - [ ] Add real-time WebSocket support

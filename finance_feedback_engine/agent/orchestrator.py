@@ -149,7 +149,11 @@ class TradingAgentOrchestrator:
                     print(f"Error processing {asset_pair}: {e}")
                     # Continue to next asset pair instead of crashing
     def _should_execute(self, decision) -> bool:
-        """Determines if a trade should be executed based on the approval policy."""
+        """Determines if a trade should be executed based on the approval policy and daily limits."""
+        if self.trades_today >= self.config.max_daily_trades:
+            print(f"Daily trade limit ({self.config.max_daily_trades}) reached. No more trades today.")
+            return False
+
         if self.config.autonomous_execution:
             return True
         
@@ -162,10 +166,6 @@ class TradingAgentOrchestrator:
             except (EOFError, click.exceptions.Abort):
                 print("Cannot prompt for approval in non-interactive mode. Skipping trade.")
                 return False
-        
-        # Logic for 'on_new_asset' would go here
-        # For now, default to asking
-        return click.confirm(f"Execute trade for {decision.asset_pair}?", default=True)
         
         # Logic for 'on_new_asset' would go here
         # For now, default to asking
