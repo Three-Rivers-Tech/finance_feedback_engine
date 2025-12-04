@@ -26,6 +26,10 @@ jobs:
       issues: 'write'
       pull-requests: 'write'
     steps:
+      - name: 'Ensure telemetry log directory exists'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/secure_gemini_logs"
+        shell: bash
       - name: 'Mint identity token'
         id: 'mint_identity_token'
         if: |-
@@ -73,7 +77,7 @@ jobs:
               "telemetry": {
                 "enabled": true,
                 "target": "local",
-                "outfile": "/home/cmp6510/secure_gemini_logs/telemetry.log" # Path changed for security; audit for secrets, redact sensitive data
+                "outfile": "$GITHUB_WORKSPACE/secure_gemini_logs/telemetry.log" # Path is now portable and directory is created above
               },
               "mcpServers": {
                 "github": {
