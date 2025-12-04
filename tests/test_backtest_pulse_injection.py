@@ -398,8 +398,10 @@ class TestPulseImpactOnBacktestResults:
                 mon_ctx is not None and
                 mon_ctx.get('multi_timeframe_pulse') is not None
             )
-            pulse_status_no['injected'] = has_pulse
-            pulse_status_no['not_injected'] = not has_pulse
+            if has_pulse:
+                pulse_status_no['injected'] = True
+            else:
+                pulse_status_no['not_injected'] = True
             return {'action': 'HOLD', 'confidence': 50, 'reasoning': 'Test', 'suggested_amount': 0}
 
         mock_engine_without = Mock()

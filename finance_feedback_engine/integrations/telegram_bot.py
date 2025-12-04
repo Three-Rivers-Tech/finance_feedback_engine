@@ -14,35 +14,6 @@ telegram_bot: Optional['TelegramApprovalBot'] = None
 
 
 class TelegramApprovalBot:
-
-        @staticmethod
-        def _sanitize_decision_id(decision_id: str) -> str:
-            """
-            Sanitize decision_id to allow only alphanumerics, dashes, and underscores.
-            Prevents path traversal and unsafe filenames.
-            """
-            import re
-            return re.sub(r'[^A-Za-z0-9_-]', '_', decision_id)
-
-        async def _write_approval_file(self, decision_id: str, approval_data: dict, status: str):
-            """
-            Write approval/rejection file asynchronously with sanitized filename.
-
-            Args:
-                decision_id: Raw decision ID
-                approval_data: Data to write
-                status: 'approved' or 'rejected'
-            """
-            from pathlib import Path
-            import aiofiles
-
-            safe_id = self._sanitize_decision_id(decision_id)
-            approvals_dir = Path("data/approvals")
-            approvals_dir.mkdir(parents=True, exist_ok=True)
-            approval_file = approvals_dir / f"{safe_id}_{status}.json"
-            async with aiofiles.open(approval_file, 'w') as f:
-                import json
-                await f.write(json.dumps(approval_data, indent=2))
     """
     Telegram bot for interactive trading decision approvals.
 
@@ -112,6 +83,35 @@ class TelegramApprovalBot:
                 except Exception:
                     logger.warning("⚠️ Error closing Redis client")
             self.redis_client = None
+
+    @staticmethod
+    def _sanitize_decision_id(decision_id: str) -> str:
+        """
+        Sanitize decision_id to allow only alphanumerics, dashes, and underscores.
+        Prevents path traversal and unsafe filenames.
+        """
+        import re
+        return re.sub(r'[^A-Za-z0-9_-]', '_', decision_id)
+
+    async def _write_approval_file(self, decision_id: str, approval_data: dict, status: str):
+        """
+        Write approval/rejection file asynchronously with sanitized filename.
+
+        Args:
+            decision_id: Raw decision ID
+            approval_data: Data to write
+            status: 'approved' or 'rejected'
+        """
+        from pathlib import Path
+        import aiofiles
+
+        safe_id = self._sanitize_decision_id(decision_id)
+        approvals_dir = Path("data/approvals")
+        approvals_dir.mkdir(parents=True, exist_ok=True)
+        approval_file = approvals_dir / f"{safe_id}_{status}.json"
+        async with aiofiles.open(approval_file, 'w') as f:
+            import json
+            await f.write(json.dumps(approval_data, indent=2))
 
     async def setup_webhook(self, public_url: str):
         """
