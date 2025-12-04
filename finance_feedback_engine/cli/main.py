@@ -1659,10 +1659,14 @@ def _get_action_color(action: str) -> str:
 
 def _save_approval_response(decision_id: str, approved: bool, modified: bool, decision: dict):
     """Save approval response to data/approvals/ directory."""
-    from datetime import datetime
-
     approvals_dir = Path("data/approvals")
     approvals_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize decision_id to prevent path traversal attacks
+    # Allow only alphanumerics, dashes, and underscores
+    sanitized_id = re.sub(r'[^a-zA-Z0-9_-]', '_', decision_id)
+    if not sanitized_id:
+        raise ValueError("Invalid decision_id: contains no valid characters")
 
     approval_data = {
         "decision_id": decision_id,
@@ -1680,8 +1684,19 @@ def _save_approval_response(decision_id: str, approved: bool, modified: bool, de
     if modified:
         status = "modified"
 
-    approval_file = approvals_dir / f"{decision_id}_{status}.json"
-    with open(approval_file, 'w') as f:
+    approval_file = approvals_dir / f"{sanitized_id}_{status}.json"
+
+    # Security check: ensure the resolved path is within approvals_dir
+    try:
+        approval_file_resolved = approval_file.resolve()
+        approvals_dir_resolved = approvals_dir.resolve()
+        if not str(approval_file_resolved).startswith(str(approvals_dir_resolved) + os.sep):
+            raise ValueError(f"Path traversal attempt detected: {approval_file}")
+    except (ValueError, OSError) as e:
+        logger.error(f"Security violation in approval file path: {e}")
+        raise
+
+    with open(approval_file, 'w', encoding='utf-8') as f:
         json.dump(approval_data, f, indent=2)
 
     logger.info(f"Approval response saved: {approval_file}")
