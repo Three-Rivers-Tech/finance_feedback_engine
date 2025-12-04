@@ -293,10 +293,25 @@ class Backtester:
                 market_data['market_regime_data'] = {}
                 market_data['market_regime'] = 'UNKNOWN'
 
-            # Extract base and quote currencies (assuming 3-char codes)
-            # This logic should be more robust, potentially using a currency parsing utility
-            base_currency = asset_pair[:3] if len(asset_pair) >= 6 else asset_pair
-            quote_currency = asset_pair[3:] if len(asset_pair) >= 6 else 'USD' # Default to USD if not found
+            # Extract base and quote currencies with robust parsing
+            # Remove common delimiters and attempt to split known currency codes
+            normalized_pair = asset_pair.replace('-', '').replace('/', '').replace('_', '').upper()
+
+            # List of known quote currencies to check (ordered by likelihood)
+            known_quotes = ['USDT', 'USDC', 'USD', 'EUR', 'GBP', 'JPY', 'BTC', 'ETH']
+            base_currency = None
+            quote_currency = 'USD'  # Default fallback
+
+            for quote in known_quotes:
+                if normalized_pair.endswith(quote):
+                    quote_currency = quote
+                    base_currency = normalized_pair[:-len(quote)]
+                    break
+
+            if not base_currency:
+                # Fallback to original 3-char split if no known quote found
+                base_currency = normalized_pair[:3] if len(normalized_pair) >= 6 else normalized_pair
+                quote_currency = normalized_pair[3:] if len(normalized_pair) >= 6 else 'USD'
 
             # Prepare portfolio state for decision engine
             portfolio_for_decision_engine = []
@@ -312,7 +327,7 @@ class Backtester:
             decision = decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
-                balance={quote_currency: current_balance},
+                balance={f'coinbase_{quote_currency}': current_balance} if 'BTC' in asset_pair or 'ETH' in asset_pair else {f'oanda_{quote_currency}': current_balance},
                 portfolio={'holdings': portfolio_for_decision_engine},
             )
 
@@ -396,19 +411,18 @@ class Backtester:
                 )
 
                 if trade_details['status'] == 'EXECUTED':
-                    current_balance = new_balance
-                    total_fees += fee
-
-                    # Calculate PnL for the closed position
+                    # Calculate P&L for this position close
                     pnl = (trade_details['effective_price'] - current_position.entry_price) * sell_units
                     trade_details['pnl_value'] = pnl
-                    trade_details['entry_price'] = current_position.entry_price # Add entry price to trade details
+                    trade_details['entry_price'] = current_position.entry_price
 
+                    current_balance = new_balance
+                    total_fees += fee
                     trades_history.append(trade_details)
 
                     # Close the position
                     del open_positions[asset_pair]
-                    logger.info(f"Closed LONG position for {asset_pair}: {sell_units:.4f} units at {trade_details['effective_price']:.4f}. PnL: {pnl:.2f}")
+                    logger.info(f"Closed LONG position for {asset_pair}: {sell_units:.4f} units at {trade_details['effective_price']:.4f}. Entry: {current_position.entry_price:.4f}, PnL: ${pnl:.2f}")
             elif action == 'HOLD':
                 logger.debug(f"Holding for {asset_pair} at {timestamp}. Current balance: {current_balance:.2f}, units: {current_position.units if current_position else 0:.4f}")
 
@@ -476,7 +490,7 @@ class Backtester:
                 "equity_curve": equity_curve # Add equity curve to config for full context
             }
         }
-    
+
     def save_results(self, results: Dict[str, Any], output_file: str):
         """
         Saves the trade history from a backtest to a JSON file.

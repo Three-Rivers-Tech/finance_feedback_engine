@@ -1313,7 +1313,7 @@ def history(ctx, asset, limit):
             # Fallback to DecisionStore for test patching
             try:
                 from finance_feedback_engine.persistence.decision_store import DecisionStore
-                store = DecisionStore()
+                store = DecisionStore(config={'storage_path': 'data/decisions'})
                 decisions = store.get_decision_history(asset_pair=asset, limit=limit)
             except Exception:
                 decisions = []
@@ -1371,7 +1371,7 @@ def execute(ctx, decision_id):
                 # Fallback to DecisionStore if engine is a mock
                 try:
                     from finance_feedback_engine.persistence.decision_store import DecisionStore
-                    store = DecisionStore()
+                    store = DecisionStore(config={'storage_path': 'data/decisions'})
                     decisions = store.get_decision_history(limit=10)
                 except Exception:
                     decisions = []
@@ -1485,7 +1485,7 @@ def approve(ctx, decision_id):
 
         # Load decision from storage
         from finance_feedback_engine.persistence.decision_store import DecisionStore
-        store = DecisionStore()
+        store = DecisionStore(config={'storage_path': 'data/decisions'})
 
         # Find decision by ID (glob match on filename)
         import glob
@@ -1591,12 +1591,8 @@ def approve(ctx, decision_id):
             if new_position <= 0:
                 console.print("[red]❌ Position size must be > 0[/red]")
                 raise click.Abort()
-            if not (0 <= new_stop_loss <= 100):
-                console.print("[red]❌ Stop loss must be 0-100%[/red]")
-                raise click.Abort()
-            if not (0 <= new_take_profit <= 100):
-                console.print("[red]❌ Take profit must be 0-100%[/red]")
-                raise click.Abort()
+            # Note: stop_loss and take_profit can be absolute prices or percentages
+            # No strict validation here - let platform handle it during execution
 
             # Update decision
             decision['position_size'] = new_position
