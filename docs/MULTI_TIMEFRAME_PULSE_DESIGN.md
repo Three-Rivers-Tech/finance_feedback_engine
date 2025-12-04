@@ -753,31 +753,53 @@ def calculate_cross_timeframe_agreement(timeframe_analyses: Dict) -> float:
     for group_name, group_config in TIMEFRAME_GROUPS.items():
         group_tfs = group_config["timeframes"]
         group_analyses = [timeframe_analyses[tf] for tf in group_tfs if tf in timeframe_analyses]
-        
+
         if not group_analyses:
             group_agreements[group_name] = 0.0
             continue
-        
-        # Step 1: Determine consensus direction (mode)
+
+        # Step 1: Determine consensus direction with tie-breaking
         directions = [a["trend"]["direction"] for a in group_analyses]
-        consensus_direction = max(set(directions), key=directions.count)
-        
+        consensus_direction = _get_consensus_direction(directions, group_analyses)
+
         # Step 2: Count aligned timeframes
         aligned_analyses = [
-            a for a in group_analyses 
+            a for a in group_analyses
             if a["trend"]["direction"] == consensus_direction
         ]
         aligned_count = len(aligned_analyses)
         total_count = len(group_analyses)
-        
+
         # Step 3: Average confidence of aligned timeframes
         if aligned_count > 0:
             avg_confidence = sum(a["trend"]["strength"] for a in aligned_analyses) / aligned_count
         else:
             avg_confidence = 0.0
-        
+
         # Step 4: Group agreement = alignment_ratio * confidence
         group_agreements[group_name] = (aligned_count / total_count) * avg_confidence
+
+def _get_consensus_direction(directions, group_analyses):
+    """
+    Given a list of directions and corresponding group_analyses, return the consensus direction.
+    If there is a tie for mode, break the tie by choosing the direction with the highest average trend["strength"].
+    """
+    from collections import Counter, defaultdict
+    counts = Counter(directions)
+    max_count = max(counts.values())
+    candidates = [d for d, c in counts.items() if c == max_count]
+    if len(candidates) == 1:
+        return candidates[0]
+    # Tie-break: highest average strength
+    strength_by_dir = defaultdict(list)
+    for a in group_analyses:
+        dir_ = a["trend"]["direction"]
+        if dir_ in candidates:
+            strength_by_dir[dir_].append(a["trend"]["strength"])
+    avg_strength = {d: (sum(strength_by_dir[d]) / len(strength_by_dir[d]) if strength_by_dir[d] else 0.0) for d in candidates}
+    # If still tied, pick first by sorted order for determinism
+    best = sorted(avg_strength.items(), key=lambda x: (-x[1], x[0]))[0][0]
+    return best
     
     # Step 5: Weighted sum
     cross_tf_agreement = (

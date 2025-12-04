@@ -210,19 +210,28 @@ def demo_backtest_pulse_workflow():
     import pandas as pd
     import numpy as np
 
-    # Create synthetic historical data (200 1-minute candles)
+
+    # Create synthetic historical data (200 1-minute candles) with valid OHLC constraints
     current_time = datetime.now()
     timestamps = [current_time - timedelta(minutes=200-i) for i in range(200)]
 
     base_price = 50000
     price_changes = np.cumsum(np.random.randn(200) * 50)  # Random walk
 
+    open_prices = base_price + price_changes
+    close_noise = np.random.randn(200) * 30
+    close_prices = open_prices + close_noise
+    noise_high = np.random.randn(200) * 50
+    noise_low = np.random.randn(200) * 50
+    high_prices = np.maximum(open_prices, close_prices) + np.abs(noise_high)
+    low_prices = np.minimum(open_prices, close_prices) - np.abs(noise_low)
+
     historical_data = pd.DataFrame({
         'timestamp': timestamps,
-        'open': base_price + price_changes,
-        'high': base_price + price_changes + np.abs(np.random.randn(200) * 50),
-        'low': base_price + price_changes - np.abs(np.random.randn(200) * 50),
-        'close': base_price + price_changes + np.random.randn(200) * 30,
+        'open': open_prices,
+        'high': high_prices,
+        'low': low_prices,
+        'close': close_prices,
         'volume': np.abs(1000 + np.random.randn(200) * 100)
     })
 
