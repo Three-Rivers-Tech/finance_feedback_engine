@@ -325,23 +325,24 @@ class TestBacktestPulseInjection:
 class TestPulseImpactOnBacktestResults:
     """Test that pulse actually impacts backtest decisions."""
 
+    @pytest.mark.slow
     def test_pulse_vs_no_pulse_comparison(self):
         """Compare backtest results with and without pulse injection."""
-        # Create deterministic historical data
-        dates = pd.date_range('2024-01-01', periods=100, freq='1min')
+        # OPTIMIZED: Reduced from 100 to 50 candles for faster testing
+        dates = pd.date_range('2024-01-01', periods=50, freq='1min')
         hist_data = pd.DataFrame({
-            'open': [50000] * 100,
-            'high': [50100] * 100,
-            'low': [49900] * 100,
-            'close': [50000 + i * 10 for i in range(100)],  # Slow uptrend
-            'volume': [500] * 100
+            'open': [50000] * 50,
+            'high': [50100] * 50,
+            'low': [49900] * 50,
+            'close': [50000 + i * 10 for i in range(50)],  # Slow uptrend
+            'volume': [500] * 50
         }, index=dates)
 
         hist_provider = Mock()
         hist_provider.get_historical_data.return_value = hist_data
 
-        # Decision engine that changes behavior based on pulse presence
-        decision_count = {'with_pulse': 0, 'without_pulse': 0}
+        # Track pulse injection in single shared dict
+        pulse_status = {'injected': False, 'not_injected': False}
 
         def make_pulse_aware_decision(**kwargs):
             mon_ctx = kwargs.get('monitoring_context')
@@ -351,8 +352,7 @@ class TestPulseImpactOnBacktestResults:
             )
 
             if has_pulse:
-                decision_count['with_pulse'] += 1
-                # More aggressive with pulse
+                pulse_status['injected'] = True
                 return {
                     'action': 'BUY',
                     'confidence': 80,
@@ -360,8 +360,7 @@ class TestPulseImpactOnBacktestResults:
                     'suggested_amount': 100
                 }
             else:
-                decision_count['without_pulse'] += 1
-                # Conservative without pulse
+                pulse_status['not_injected'] = True
                 return {
                     'action': 'HOLD',
                     'confidence': 50,
@@ -369,12 +368,12 @@ class TestPulseImpactOnBacktestResults:
                     'suggested_amount': 0
                 }
 
-        mock_engine = Mock()
-        mock_engine.generate_decision.side_effect = make_pulse_aware_decision
-
         # Backtest WITH pulse
         aggregator = Mock()
         aggregator._detect_trend.return_value = {'trend': 'UPTREND', 'rsi': 70, 'signal_strength': 80}
+
+        mock_engine_with = Mock()
+        mock_engine_with.generate_decision.side_effect = make_pulse_aware_decision
 
         backtester_with_pulse = AdvancedBacktester(
             historical_data_provider=hist_provider,
@@ -386,16 +385,26 @@ class TestPulseImpactOnBacktestResults:
             'BTCUSD',
             '2024-01-01',
             '2024-01-02',
-            mock_engine,
+            mock_engine_with,
             inject_pulse=True
         )
 
-        # Reset decision engine
-        mock_engine.reset_mock()
-        mock_engine.generate_decision.side_effect = make_pulse_aware_decision
-        decision_count = {'with_pulse': 0, 'without_pulse': 0}
+        # Backtest WITHOUT pulse (separate engine instance)
+        pulse_status_no = {'injected': False, 'not_injected': False}
 
-        # Backtest WITHOUT pulse
+        def make_decision_no_pulse(**kwargs):
+            mon_ctx = kwargs.get('monitoring_context')
+            has_pulse = (
+                mon_ctx is not None and
+                mon_ctx.get('multi_timeframe_pulse') is not None
+            )
+            pulse_status_no['injected'] = has_pulse
+            pulse_status_no['not_injected'] = not has_pulse
+            return {'action': 'HOLD', 'confidence': 50, 'reasoning': 'Test', 'suggested_amount': 0}
+
+        mock_engine_without = Mock()
+        mock_engine_without.generate_decision.side_effect = make_decision_no_pulse
+
         backtester_no_pulse = AdvancedBacktester(
             historical_data_provider=hist_provider
         )
@@ -404,14 +413,14 @@ class TestPulseImpactOnBacktestResults:
             'BTCUSD',
             '2024-01-01',
             '2024-01-02',
-            mock_engine,
+            mock_engine_without,
             inject_pulse=False
         )
 
-        # Results should differ
-        # (With pulse should have more trades since BUY action vs HOLD)
+        # Verify results exist
         assert result_with_pulse is not None
         assert result_no_pulse is not None
 
-        # Verify pulse actually changed decision behavior
-        # (pulse-aware decisions would lead to different trade counts)
+        # Verify pulse injection behavior differs
+        assert pulse_status['injected'], "Pulse should be injected when enabled"
+        assert not pulse_status_no['injected'], "Pulse should NOT be injected when disabled"

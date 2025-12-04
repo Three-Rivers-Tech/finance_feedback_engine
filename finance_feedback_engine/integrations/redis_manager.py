@@ -53,7 +53,7 @@ class RedisManager:
     @staticmethod
     def prompt_user_install() -> bool:
         """
-        Prompt user to install Redis with Rich formatting and 10s timeout.
+        Prompt user to install Redis with Rich formatting.
 
         Returns:
             True if user approves installation, False otherwise
@@ -101,22 +101,84 @@ class RedisManager:
                 timeout=120
             )
 
-            # Enable and start Redis service
-            subprocess.run(
-                ["sudo", "systemctl", "enable", "redis"],
-                capture_output=True,
-                timeout=10
-            )
-            subprocess.run(
-                ["sudo", "systemctl", "start", "redis"],
-                capture_output=True,
-                timeout=10
-            )
+            # Check if systemctl is available (systemd-based systems)
+            try:
+                subprocess.run(
+                    ["systemctl", "--version"],
+                    check=True,
+                    capture_output=True,
+                    timeout=5
+                )
+                has_systemctl = True
+            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+                has_systemctl = False
+                logger.warning("⚠️  systemctl not found - trying alternative service management")
 
-            logger.info("✅ Redis installed and started via systemd")
+            if has_systemctl:
+                # Enable and start Redis service via systemd
+                try:
+                    result = subprocess.run(
+                        ["sudo", "systemctl", "enable", "redis"],
+                        check=True,
+                        capture_output=True,
+                        timeout=10
+                    )
+                    logger.debug(f"systemctl enable output: {result.stdout.decode()}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"❌ Failed to enable Redis service: {e}")
+                    logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+                    logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                    return False
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"❌ Timeout enabling Redis service: {e}")
+                    return False
+
+                try:
+                    result = subprocess.run(
+                        ["sudo", "systemctl", "start", "redis"],
+                        check=True,
+                        capture_output=True,
+                        timeout=10
+                    )
+                    logger.debug(f"systemctl start output: {result.stdout.decode()}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"❌ Failed to start Redis service: {e}")
+                    logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+                    logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                    return False
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"❌ Timeout starting Redis service: {e}")
+                    return False
+
+                logger.info("✅ Redis installed and started via systemd")
+            else:
+                # Try alternative service management (SysVinit, Upstart, etc.)
+                try:
+                    result = subprocess.run(
+                        ["sudo", "service", "redis-server", "start"],
+                        check=True,
+                        capture_output=True,
+                        timeout=10
+                    )
+                    logger.debug(f"service start output: {result.stdout.decode()}")
+                    logger.info("✅ Redis installed and started via service command")
+                except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                    logger.error(f"❌ Failed to start Redis via service command: {e}")
+                    if isinstance(e, subprocess.CalledProcessError):
+                        logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+                        logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                    logger.warning("⚠️  Redis package installed but could not start service")
+                    logger.warning("   You may need to start Redis manually: sudo redis-server /etc/redis/redis.conf")
+                    return False
+                except subprocess.TimeoutExpired as e:
+                    logger.error(f"❌ Timeout starting Redis via service command: {e}")
+                    return False
+
             return True
         except subprocess.CalledProcessError as e:
             logger.error(f"❌ Redis installation failed: {e}")
+            logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
+            logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
             return False
         except subprocess.TimeoutExpired:
             logger.error("❌ Redis installation timed out")

@@ -21,6 +21,7 @@ class TradingAgentOrchestrator:
         self.engine = engine
         self.platform = platform
         self.trades_today = 0
+        self.analysis_failures = {}  # Track failed analysis attempts by asset pair
         # Snapshot initial portfolio value for P/L kill-switch calculations
         # Wait for a valid non-zero portfolio value (up to timeout)
         self.initial_portfolio_value = 0.0
@@ -186,4 +187,8 @@ class TradingAgentOrchestrator:
 
         # Logic for 'on_new_asset' would go here
         # For now, default to asking
-        return click.confirm(f"Execute trade for {decision.asset_pair}?", default=True)
+        try:
+            return click.confirm(f"Execute trade for {decision.asset_pair}?", default=True)
+        except (EOFError, click.exceptions.Abort):
+            print("Cannot prompt for approval in non-interactive mode. Skipping trade.")
+            return False
