@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class UnifiedDataProvider:
     """
     Unified data provider with intelligent cascading fallback.
-    
+
     Provider priority:
     1. Alpha Vantage (primary - comprehensive data with news/macro)
     2. Coinbase (fallback for crypto assets)
     3. Oanda (fallback for forex pairs)
-    
+
     Features:
     - Automatic provider selection based on asset type
     - Circuit breaker integration per provider
@@ -47,18 +47,18 @@ class UnifiedDataProvider:
             config: Additional configuration
         """
         self.config = config or {}
-        
+
         # Shared rate limiter (30 tokens capacity, 6 tokens/min refill)
         self.rate_limiter = RateLimiter(
             tokens_per_second=0.1,  # 6 per minute = 0.1 per second
             max_tokens=30
         )
-        
+
         # Initialize providers
         self.alpha_vantage = None
         self.coinbase = None
         self.oanda = None
-        
+
         if alpha_vantage_api_key:
             try:
                 self.alpha_vantage = AlphaVantageProvider(
@@ -69,7 +69,7 @@ class UnifiedDataProvider:
                 logger.info("Alpha Vantage provider initialized (primary)")
             except Exception as e:
                 logger.warning(f"Failed to initialize Alpha Vantage: {e}")
-        
+
         if coinbase_credentials:
             try:
                 self.coinbase = CoinbaseDataProvider(
@@ -79,7 +79,7 @@ class UnifiedDataProvider:
                 logger.info("Coinbase data provider initialized (crypto fallback)")
             except Exception as e:
                 logger.warning(f"Failed to initialize Coinbase data: {e}")
-        
+
         if oanda_credentials:
             try:
                 self.oanda = OandaDataProvider(
@@ -89,10 +89,10 @@ class UnifiedDataProvider:
                 logger.info("Oanda data provider initialized (forex fallback)")
             except Exception as e:
                 logger.warning(f"Failed to initialize Oanda data: {e}")
-        
+
         # In-memory cache: {(asset_pair, granularity): (candles, provider_name)}
         self._cache = TTLCache(maxsize=1000, ttl=300)  # 5 minutes TTL, thread-safe
-        
+
         logger.info("UnifiedDataProvider initialized with cascading fallback")
 
     def _is_crypto(self, asset_pair: str) -> bool:
@@ -141,11 +141,11 @@ class UnifiedDataProvider:
     ) -> Optional[Tuple[List[Dict[str, Any]], str]]:
         """
         Get candles from cache if available and fresh.
-        
+
         Args:
             asset_pair: Asset pair
             granularity: Timeframe
-        
+
         Returns:
             Tuple of (candles, provider_name) or None if expired/missing
         """
@@ -166,7 +166,7 @@ class UnifiedDataProvider:
     ) -> None:
         """
         Store candles in cache along with original provider name.
-        
+
         Args:
             asset_pair: Asset pair
             granularity: Timeframe
@@ -186,33 +186,33 @@ class UnifiedDataProvider:
     ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Fetch historical candles with cascading provider fallback.
-        
+
         Args:
             asset_pair: Asset pair (e.g., 'BTCUSD', 'EURUSD')
             granularity: Timeframe ('1m', '5m', '15m', '1h', '4h', '1d')
             limit: Number of candles to fetch
             force_provider: Force specific provider ('alpha_vantage', 'coinbase', 'oanda')
-        
+
         Returns:
             Tuple of (candles list, provider_name used)
-        
+
         Raises:
             ValueError: If all providers fail
         """
         logger.info(f"Fetching {granularity} candles for {asset_pair}")
-        
+
         # Check cache first
         cached = self._get_cached_candles(asset_pair, granularity)
         if cached is not None:
             candles, original_provider = cached
             return candles, original_provider
-        
+
         # Determine provider priority based on asset type
         is_crypto = self._is_crypto(asset_pair)
         is_forex = self._is_forex(asset_pair)
-        
+
         providers = []
-        
+
         if force_provider:
             # Force specific provider
             if force_provider == 'alpha_vantage' and self.alpha_vantage:
@@ -243,13 +243,13 @@ class UnifiedDataProvider:
                     providers.append(('coinbase', self.coinbase))
                 if self.oanda:
                     providers.append(('oanda', self.oanda))
-        
+
         # Try each provider in order
         last_error = None
         for provider_name, provider in providers:
             try:
                 logger.debug(f"Trying provider: {provider_name}")
-                
+
                 # Use provider-specific method if available
                 if hasattr(provider, 'get_candles'):
                     candles = provider.get_candles(asset_pair, granularity, limit)
@@ -257,7 +257,7 @@ class UnifiedDataProvider:
                     # Alpha Vantage doesn't have get_candles yet, skip for now
                     logger.debug(f"Provider {provider_name} doesn't support get_candles")
                     continue
-                
+
                 if candles:
                     # Success! Cache with provider info and return
                     self._cache_candles(asset_pair, granularity, candles, provider_name)
@@ -265,7 +265,7 @@ class UnifiedDataProvider:
                         f"Retrieved {len(candles)} candles from {provider_name}"
                     )
                     return candles, provider_name
-                
+
             except CircuitBreakerOpenError:
                 logger.warning(f"Circuit breaker open for {provider_name}")
                 last_error = f"{provider_name} circuit breaker open"
@@ -274,7 +274,7 @@ class UnifiedDataProvider:
                 logger.warning(f"Provider {provider_name} failed: {e}")
                 last_error = str(e)
                 continue
-        
+
         # All providers failed
         error_msg = f"All providers failed for {asset_pair}. Last error: {last_error}"
         logger.error(error_msg)
@@ -287,19 +287,19 @@ class UnifiedDataProvider:
     ) -> Dict[str, Tuple[List[Dict[str, Any]], str]]:
         """
         Fetch data across multiple timeframes.
-        
+
         Args:
             asset_pair: Asset pair
             timeframes: List of timeframes (default: ['1m', '5m', '15m', '1h', '4h', '1d'])
-        
+
         Returns:
             Dictionary mapping timeframe to (candles, provider_name)
         """
         if timeframes is None:
             timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
-        
+
         results = {}
-        
+
         for tf in timeframes:
             try:
                 candles, provider = self.get_candles(asset_pair, tf)
@@ -307,7 +307,7 @@ class UnifiedDataProvider:
             except Exception as e:
                 logger.warning(f"Failed to fetch {tf} data: {e}")
                 results[tf] = ([], 'failed')
-        
+
         return results
 
     def aggregate_all_timeframes(
@@ -317,11 +317,11 @@ class UnifiedDataProvider:
     ) -> Dict[str, Any]:
         """
         Fetch and synchronize multi-timeframe data with metadata.
-        
+
         Args:
             asset_pair: Asset pair (e.g., "BTCUSD")
             timeframes: List of timeframes (default: ['1m','5m','15m','1h','4h','1d'])
-        
+
         Returns:
             {
                 "asset_pair": str,
@@ -345,13 +345,13 @@ class UnifiedDataProvider:
             }
         """
         from datetime import datetime, timezone
-        
+
         if timeframes is None:
             timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
-        
+
         # Get raw multi-timeframe data
         raw_data = self.get_multi_timeframe_data(asset_pair, timeframes)
-        
+
         # Build enriched response
         timestamp_utc = datetime.now(timezone.utc).isoformat()
         result = {
@@ -365,23 +365,24 @@ class UnifiedDataProvider:
                 "cache_hit_rate": 0.0
             }
         }
-        
+
         cache_hits = 0
         for tf in timeframes:
             candles, provider = raw_data.get(tf, ([], 'unavailable'))
-            
+
             # Check if data available
             if candles and provider != 'failed':
                 result["metadata"]["available_timeframes"].append(tf)
             else:
                 result["metadata"]["missing_timeframes"].append(tf)
                 logger.warning(f"Missing {tf} data for {asset_pair}")
-            
-            # Check cache status (heuristic: if provider is same as previous call, likely cached)
-            is_cached = provider in ['coinbase', 'alpha_vantage', 'oanda']  # Real providers suggest cache hit
+
+            # Check cache status - would need actual cache tracking from get_candles()
+            # For now, mark as False since we can't reliably determine cache hits here
+            is_cached = False  # TODO: Implement proper cache tracking
             if is_cached and candles:
                 cache_hits += 1
-            
+
             result["timeframes"][tf] = {
                 "candles": candles,
                 "source_provider": provider,
@@ -389,9 +390,9 @@ class UnifiedDataProvider:
                 "is_cached": is_cached,
                 "candles_count": len(candles)
             }
-        
+
         # Calculate cache hit rate
         if len(timeframes) > 0:
             result["metadata"]["cache_hit_rate"] = cache_hits / len(timeframes)
-        
+
         return result
