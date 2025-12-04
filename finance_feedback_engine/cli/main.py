@@ -10,9 +10,13 @@ import re
 import os
 import copy
 import asyncio
+import glob
 from pathlib import Path
+from datetime import datetime
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
+from rich.prompt import Prompt, FloatPrompt
 from packaging.requirements import Requirement
 # from rich import print as rprint  # unused
 
@@ -1466,6 +1470,224 @@ def execute(ctx, decision_id):
 
 
 @cli.command()
+@click.argument('decision_id', required=True)
+@click.pass_context
+def approve(ctx, decision_id):
+    """
+    Interactively approve a trading decision.
+
+    Displays decision details and prompts for approval (yes/no/modify).
+    Modify option allows editing position size, stop loss, and take profit.
+    """
+    try:
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        # Load decision from storage
+        from finance_feedback_engine.persistence.decision_store import DecisionStore
+        store = DecisionStore()
+
+        # Find decision by ID (glob match on filename)
+        import glob
+        decision_files = glob.glob(f"data/decisions/*_{decision_id}.json")
+
+        if not decision_files:
+            # Try partial match
+            decision_files = glob.glob(f"data/decisions/*{decision_id}*.json")
+
+        if not decision_files:
+            console.print(f"[bold red]❌ Decision not found: {decision_id}[/bold red]")
+            console.print("[yellow]Use 'python main.py history' to see available decisions[/yellow]")
+            raise click.Abort()
+
+        # Load the decision
+        decision_file = decision_files[0]
+        with open(decision_file, 'r') as f:
+            decision = json.load(f)
+
+        # Display decision details in Rich Panel with Table
+        from rich.panel import Panel
+
+        console.print("\n[bold cyan]═══ TRADING DECISION APPROVAL ═══[/bold cyan]\n")
+
+        # Create summary table
+        table = Table(title="Decision Summary", show_header=True)
+        table.add_column("Field", style="cyan", width=20)
+        table.add_column("Value", style="white")
+
+        table.add_row("Decision ID", decision.get('decision_id', 'N/A'))
+        table.add_row("Asset Pair", decision.get('asset_pair', 'N/A'))
+        table.add_row("Action", f"[bold {_get_action_color(decision.get('action'))}]{decision.get('action')}[/bold {_get_action_color(decision.get('action'))}]")
+        table.add_row("Confidence", f"{decision.get('confidence', 0)}%")
+        table.add_row("Position Size", str(decision.get('position_size', 'N/A')))
+        table.add_row("Stop Loss", f"{decision.get('stop_loss', 'N/A')}%")
+        table.add_row("Take Profit", f"{decision.get('take_profit', 'N/A')}%")
+        table.add_row("Market Regime", decision.get('market_regime', 'Unknown'))
+
+        # Add sentiment if available
+        sentiment_data = decision.get('sentiment', {})
+        if sentiment_data and sentiment_data.get('available'):
+            sentiment_str = f"{sentiment_data.get('overall_sentiment', 'N/A')} (score: {sentiment_data.get('sentiment_score', 0):.2f})"
+            table.add_row("Sentiment", sentiment_str)
+
+        table.add_row("Signal Only", str(decision.get('signal_only', False)))
+
+        console.print(table)
+
+        # Display reasoning in panel
+        reasoning = decision.get('reasoning', 'No reasoning provided')
+        reasoning_panel = Panel(
+            reasoning,
+            title="[bold cyan]Reasoning[/bold cyan]",
+            border_style="cyan"
+        )
+        console.print("\n")
+        console.print(reasoning_panel)
+        console.print("\n")
+
+        # Prompt for action
+        from rich.prompt import Prompt
+
+        action = Prompt.ask(
+            "[bold cyan]Action?[/bold cyan]",
+            choices=["yes", "no", "modify"],
+            default="no"
+        )
+
+        if action == "no":
+            console.print("[yellow]❌ Decision rejected[/yellow]")
+            _save_approval_response(decision_id, approved=False, modified=False, decision=decision)
+            return
+
+        elif action == "modify":
+            console.print("\n[bold cyan]═══ MODIFY DECISION ═══[/bold cyan]\n")
+
+            # Prompt for modifications
+            from rich.prompt import FloatPrompt
+
+            current_position = decision.get('position_size', 0)
+            current_stop_loss = decision.get('stop_loss', 2.0)
+            current_take_profit = decision.get('take_profit', 5.0)
+
+            console.print(f"[cyan]Current position size: {current_position}[/cyan]")
+            new_position = FloatPrompt.ask(
+                "New position size",
+                default=float(current_position) if current_position else 0.0
+            )
+
+            console.print(f"[cyan]Current stop loss: {current_stop_loss}%[/cyan]")
+            new_stop_loss = FloatPrompt.ask(
+                "New stop loss (%)",
+                default=float(current_stop_loss)
+            )
+
+            console.print(f"[cyan]Current take profit: {current_take_profit}%[/cyan]")
+            new_take_profit = FloatPrompt.ask(
+                "New take profit (%)",
+                default=float(current_take_profit)
+            )
+
+            # Validate ranges
+            if new_position <= 0:
+                console.print("[red]❌ Position size must be > 0[/red]")
+                raise click.Abort()
+            if not (0 <= new_stop_loss <= 100):
+                console.print("[red]❌ Stop loss must be 0-100%[/red]")
+                raise click.Abort()
+            if not (0 <= new_take_profit <= 100):
+                console.print("[red]❌ Take profit must be 0-100%[/red]")
+                raise click.Abort()
+
+            # Update decision
+            decision['position_size'] = new_position
+            decision['stop_loss'] = new_stop_loss
+            decision['take_profit'] = new_take_profit
+            decision['modified'] = True
+            decision['modified_at'] = datetime.now().isoformat()
+
+            console.print("\n[green]✓ Decision modified[/green]")
+
+            # Show updated values
+            console.print(f"  Position size: {new_position}")
+            console.print(f"  Stop loss: {new_stop_loss}%")
+            console.print(f"  Take profit: {new_take_profit}%")
+
+            # Save and execute
+            _save_approval_response(decision_id, approved=True, modified=True, decision=decision)
+
+            console.print("\n[bold green]✓ Executing modified decision...[/bold green]")
+            result = engine.execute_decision(decision_id, modified_decision=decision)
+
+            if result.get('success'):
+                console.print("[bold green]✓ Trade executed successfully[/bold green]")
+            else:
+                console.print("[bold red]✗ Trade execution failed[/bold red]")
+            console.print(f"Message: {result.get('message')}")
+
+        else:  # yes
+            console.print("[green]✓ Decision approved[/green]")
+            _save_approval_response(decision_id, approved=True, modified=False, decision=decision)
+
+            console.print("\n[bold green]✓ Executing decision...[/bold green]")
+            result = engine.execute_decision(decision_id)
+
+            if result.get('success'):
+                console.print("[bold green]✓ Trade executed successfully[/bold green]")
+            else:
+                console.print("[bold red]✗ Trade execution failed[/bold red]")
+            console.print(f"Message: {result.get('message')}")
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
+def _get_action_color(action: str) -> str:
+    """Get color for action display."""
+    if action == 'BUY':
+        return 'green'
+    elif action == 'SELL':
+        return 'red'
+    elif action == 'HOLD':
+        return 'yellow'
+    else:
+        return 'white'
+
+
+def _save_approval_response(decision_id: str, approved: bool, modified: bool, decision: dict):
+    """Save approval response to data/approvals/ directory."""
+    from datetime import datetime
+
+    approvals_dir = Path("data/approvals")
+    approvals_dir.mkdir(parents=True, exist_ok=True)
+
+    approval_data = {
+        "decision_id": decision_id,
+        "approved": approved,
+        "modified": modified,
+        "timestamp": datetime.now().isoformat(),
+        "source": "cli"
+    }
+
+    if modified:
+        approval_data["modified_decision"] = decision
+
+    # Save to file
+    status = "approved" if approved else "rejected"
+    if modified:
+        status = "modified"
+
+    approval_file = approvals_dir / f"{decision_id}_{status}.json"
+    with open(approval_file, 'w') as f:
+        json.dump(approval_data, f, indent=2)
+
+    logger.info(f"Approval response saved: {approval_file}")
+
+
+@cli.command()
 @click.pass_context
 def status(ctx):
     """Show engine status and configuration."""
@@ -1636,6 +1858,14 @@ def backtest(
 
         engine = FinanceFeedbackEngine(config)
 
+        # Create backtest-optimized decision engine (rule-based, no AI hang)
+        from finance_feedback_engine.decision_engine.engine import DecisionEngine
+        backtest_decision_engine = DecisionEngine(
+            config=config,
+            data_provider=engine.data_provider,
+            backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
+        )
+
         # Initialize AdvancedBacktester
         backtester = AdvancedBacktester(
             historical_data_provider=engine.historical_data_provider,
@@ -1651,7 +1881,7 @@ def backtest(
             asset_pair=asset_pair,
             start_date=start,
             end_date=end,
-            decision_engine=engine.decision_engine
+            decision_engine=backtest_decision_engine  # Use rule-based engine
         )
 
         # Display results
@@ -1785,6 +2015,14 @@ def advanced_backtest(
 
         engine = FinanceFeedbackEngine(config) # This initializes the HistoricalDataProvider and DecisionEngine
 
+        # Create backtest-optimized decision engine (rule-based, no AI hang)
+        from finance_feedback_engine.decision_engine.engine import DecisionEngine
+        backtest_decision_engine = DecisionEngine(
+            config=config,
+            data_provider=engine.data_provider,
+            backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
+        )
+
         # Initialize AdvancedBacktester
         backtester = AdvancedBacktester(
             historical_data_provider=engine.historical_data_provider,
@@ -1800,7 +2038,7 @@ def advanced_backtest(
             asset_pair=asset_pair,
             start_date=start,
             end_date=end,
-            decision_engine=engine.decision_engine
+            decision_engine=backtest_decision_engine  # Use rule-based engine
         )
 
         # Display results
