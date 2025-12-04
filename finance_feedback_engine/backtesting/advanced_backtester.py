@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone # Added datetime import
 from tqdm import tqdm
 
+from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
+
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 
@@ -380,10 +382,10 @@ class AdvancedBacktester:
                 market_data['historical_data'] = data.iloc[:idx].to_dict('records') if idx > 0 else []
 
             # Calculate market regime data (ADX, ATR) from historical window
+            if idx == 0:
+                regime_detector = MarketRegimeDetector()
             if idx >= 20:  # Need at least 14-20 candles for ADX
                 try:
-                    from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
-                    regime_detector = MarketRegimeDetector()
                     recent_data = data.iloc[max(0, idx - 50):idx + 1]
                     regime_info = regime_detector.detect_regime(recent_data)
                     market_data['market_regime_data'] = regime_info

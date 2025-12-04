@@ -291,7 +291,8 @@ class DecisionEngine:
                 'action': 'HOLD',
                 'confidence': 0,
                 'reasoning': f'Local model {model_name} failed: {str(e)}',
-                'amount': 0
+                'amount': 0,
+                'ai_failure': True
             }
 
 
