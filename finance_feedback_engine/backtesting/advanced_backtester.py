@@ -396,11 +396,6 @@ class AdvancedBacktester:
                 market_data=market_data,
                 balance={quote_currency: current_balance},
                 portfolio={'holdings': portfolio_for_decision_engine},
-                # Pass pulse via monitoring_context (same structure as live trading)
-                monitoring_context={
-                    'multi_timeframe_pulse': pulse_context,
-                    'has_monitoring_data': pulse_context is not None
-                } if pulse_context else None
             )
 
             action = decision.get('action', 'HOLD')

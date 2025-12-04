@@ -8,9 +8,10 @@ from tests.mocks.mock_data_provider import MockHistoricalDataProvider
 
 # Configure logging for debugging
 logger = logging.getLogger(__name__)
+@pytest.fixture
 def sample_historical_data():
     logger.info("Creating sample_historical_data fixture")
-    dates = pd.to_datetime(pd.date_range(start="2023-01-01", end="2023-01-31", freq='D'))
+    dates = pd.to_datetime(pd.date_range(start="2023-01-01", end="2023-01-31", freq='D'), utc=True)
     data = {
         'open': [100 + i for i in range(len(dates))],
         'high': [105 + i for i in range(len(dates))],
@@ -39,8 +40,6 @@ def mock_decision_engine(sample_historical_data):
     logger.info("DecisionEngine initialized successfully")
     return engine
 
-def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_historical_data):
-    logger.info("="*80)
 def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_historical_data, caplog):
     caplog.set_level(logging.DEBUG)
     logger.info("="*80)
@@ -54,8 +53,8 @@ def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_hi
     logger.info("Starting backtest run")
     results = backtester.run_backtest(
         asset_pair="BTCUSD",
-        start_date="2023-01-01",
-        end_date="2023-01-31",
+        start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        end_date=datetime(2023, 1, 31, tzinfo=timezone.utc),
         decision_engine=mock_decision_engine
     )
     logger.info("Backtest run completed")
@@ -66,17 +65,14 @@ def test_advanced_backtester_runs_without_errors(mock_decision_engine, sample_hi
     assert results['metrics']['initial_balance'] == 10000.0
     logger.info("TEST: test_advanced_backtester_runs_without_errors PASSED")
     logger.info("="*80)
-def test_advanced_backtester_simple_strategy(sample_historical_data):
-    logger.info("="*80)
-    logger.info("TEST: test_advanced_backtester_simple_strategy STARTED")
 def test_advanced_backtester_simple_strategy(sample_historical_data, caplog):
     caplog.set_level(logging.DEBUG)
 
     class SimpleDecisionEngine(DecisionEngine):
-        def generate_decision(self, asset_pair, market_data, balance, portfolio):
+        def generate_decision(self, asset_pair, market_data, balance, portfolio, monitoring_context=None):
             from datetime import datetime
             logger.debug(f"SimpleDecisionEngine.generate_decision called for {market_data.get('timestamp')}")
-            current_timestamp = datetime.fromisoformat(market_data['timestamp'])
+            current_timestamp = datetime.fromisoformat(market_data['timestamp'].replace('Z', '+00:00'))
             if current_timestamp.day == 1:
                 logger.info(f"Day {current_timestamp.day}: Returning BUY")
                 return {'action': 'BUY', 'suggested_amount': 10000}
@@ -97,8 +93,8 @@ def test_advanced_backtester_simple_strategy(sample_historical_data, caplog):
     logger.info("Starting backtest run with simple strategy")
     results = backtester.run_backtest(
         asset_pair="BTCUSD",
-        start_date=datetime(2023, 1, 1),
-        end_date=datetime(2023, 1, 31),
+        start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        end_date=datetime(2023, 1, 31, tzinfo=timezone.utc),
         decision_engine=simple_engine
     )
     logger.info("Backtest run completed for simple strategy")
@@ -112,39 +108,9 @@ def test_advanced_backtester_simple_strategy(sample_historical_data, caplog):
     assert results['metrics']['losing_trades'] == 0
     assert pytest.approx(results['metrics']['win_rate']) == 50.0
 
-    # Calculate expected values based on the mock data and backtester logic
-    # initial_balance = 10000.0
-    # Day 1 close price: 102.0
-    # Day 31 close price: 132.0 (102 + 30)
-    # fee_percentage = 0.001
-    # slippage_percentage = 0.0001
-    # commission_per_trade = 0.0
-
-    # BUY on Day 1
-    # effective_buy_price = 102.0 * (1 + 0.0001) = 102.0102
-    # max_principal_spendable = 10000.0 / (1 + 0.001) = 9990.00999
-    # trade_amount_quote = min(10000.0, 9990.00999) = 9990.00999
-    # units_traded = 9990.00999 / 102.0102 = 97.931535 (approx)
-    # fee_buy = 9990.00999 * 0.001 = 9.99000999 (approx)
-    # balance_after_buy = 10000.0 - 9990.00999 - 9.99000999 = 0.00000002 (approx 0)
-    # entry_price = 102.0102
-
-    # SELL on Day 31
-    # effective_sell_price = 132.0 * (1 - 0.0001) = 131.9868
-    # trade_value_sell = 97.931535 * 131.9868 = 12925.7533 (approx)
-    # fee_sell = 12925.7533 * 0.001 = 12.9257533 (approx)
-    # final_balance = 0.0 + 12925.7533 - 12.9257533 = 12912.8275 (approx)
-    # pnl_value = (effective_sell_price - entry_price) * units_traded
-    # pnl_value = (131.9868 - 102.0102) * 97.931535 = 29.9766 * 97.931535 = 2935.5342 (approx)
-
-
-    # total_return_pct = (12912.8275 - 10000) / 10000 * 100 = 29.128275%
-
     logger.info(f"Metrics: {results['metrics']}")
-    assert pytest.approx(results['metrics']['total_return_pct'], rel=1e-2) == 5.65 # Adjusted for small floating point differences
-    assert pytest.approx(results['metrics']['final_value'], rel=1e-2) == 10564.97
-    # Max drawdown should be negative (e.g., -100% means portfolio went to $0 at some point)
-    # For this simple strategy where we go all-in, the drawdown can be significant
-    assert results['metrics']['max_drawdown_pct'] <= 0.0  # Should be negative or zero
+    assert pytest.approx(results['metrics']['total_return_pct'], rel=1e-2) == 29.13
+    assert pytest.approx(results['metrics']['final_value'], rel=1e-2) == 12912.83
+    assert results['metrics']['max_drawdown_pct'] <= 0.0
     logger.info("TEST: test_advanced_backtester_simple_strategy PASSED")
     logger.info("="*80)

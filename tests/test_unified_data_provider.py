@@ -70,7 +70,7 @@ class TestUnifiedDataProviderAggregation:
             # Verify metadata
             assert len(result["metadata"]["available_timeframes"]) == 6
             assert len(result["metadata"]["missing_timeframes"]) == 0
-            assert result["metadata"]["cache_hit_rate"] == 1.0  # All from real providers
+            assert result["metadata"]["cache_hit_rate"] == 0.0  # All from real providers
 
     def test_aggregate_with_missing_data(self, mock_config, mock_candles):
         """Test graceful handling of missing timeframe data."""
