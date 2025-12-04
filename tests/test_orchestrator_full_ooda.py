@@ -203,11 +203,9 @@ class TestKillSwitchMechanisms:
 
         orchestrator.run(test_mode=True)
 
-        # Assert kill-switch fired: run loop exited after one iteration (test_mode)
+        # Assert kill-switch fired
+        assert orchestrator.kill_switch_triggered is True
         assert orchestrator.initial_portfolio_value == 10000.0
-        # The run loop should have exited after one iteration, so kill-switch logic should have triggered
-        # Optionally, check for a dedicated flag if present
-        # For now, assert that the run loop exited and the config value is unchanged
 
     def test_kill_switch_stop_loss_trigger(self, orchestrator, mock_platform):
         """Test kill-switch activates on stop-loss threshold."""
@@ -218,7 +216,8 @@ class TestKillSwitchMechanisms:
 
         orchestrator.run(test_mode=True)
 
-        # Assert kill-switch fired: run loop exited after one iteration (test_mode)
+        # Assert kill-switch fired
+        assert orchestrator.kill_switch_triggered is True
         assert orchestrator.kill_switch_loss_pct == 0.02
 
     def test_kill_switch_max_drawdown_trigger(self, orchestrator, mock_platform):
@@ -231,7 +230,8 @@ class TestKillSwitchMechanisms:
 
         orchestrator.run(test_mode=True)
 
-        # Assert kill-switch fired: run loop exited after one iteration (test_mode)
+        # Assert kill-switch fired
+        assert orchestrator.kill_switch_triggered is True
         assert orchestrator.max_drawdown_pct == 0.15
 
     def test_peak_portfolio_value_updates(self, orchestrator, mock_platform):
@@ -245,8 +245,9 @@ class TestKillSwitchMechanisms:
 
         orchestrator.run(test_mode=True)
 
-        # Assert peak value updated
+        # Assert peak value updated and kill-switch NOT triggered
         assert orchestrator.peak_portfolio_value == 11000.0
+        assert orchestrator.kill_switch_triggered is False
 
 
 class TestPauseMechanism:
