@@ -4,15 +4,21 @@
 # Inherit from base config but override AI provider
 decision_engine:
   ai_provider: "mock"  # Fast random decisions for backtesting
-  
+
 # Advanced backtesting settings
 advanced_backtesting:
   initial_balance: 10000.0
   fee_percentage: 0.001  # 0.1%
-  slippage_percentage: 0.0001  # 0.01%
+  slippage_percentage: 0.0001  # 0.01% base slippage
+  slippage_impact_factor: 0.01  # 1% slippage per 1% of volume traded
   commission_per_trade: 0.0
   stop_loss_percentage: 0.02  # 2%
   take_profit_percentage: 0.05  # 5%
+  default_timeframe: '1h'  # Hourly candles (realistic for 5-min pulse monitoring)
+  rapid_test_timeframe: 'daily'  # Daily candles for fast testing
+  enable_risk_gatekeeper: true  # Enable RiskGatekeeper validation
+  enable_multi_timeframe_pulse: true  # Enable multi-timeframe technical analysis
+  maintenance_margin_pct: 0.5  # 50% maintenance margin default
 
 # Other settings can be inherited from main config
 alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
