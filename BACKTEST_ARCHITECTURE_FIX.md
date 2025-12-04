@@ -166,7 +166,7 @@ results_fast = backtester.run_backtest('BTCUSD', '2024-01-01', '2024-12-01', eng
 - `finance_feedback_engine/decision_engine/engine.py`
   - Line 207-212: Changed backtest_mode to log deprecation warning only
   - Line 2178: Added `backtest_mode` flag to decision dict for tracking
-  - Removed `_generate_backtest_decision()` from execution path
+    - `_generate_backtest_decision()` has been fully removed from `engine.py` (not present as a placeholder or dead code). Backtest logic now exclusively uses AI providers or mock providers as described above.
 
 ## Testing Updates Needed
 

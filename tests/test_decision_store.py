@@ -286,7 +286,7 @@ class TestDecisionStoreCleanup:
 
         config = {
             'storage_path': str(tmp_path / 'decisions'),
-            'storage_path': str(tmp_path / 'decisions')
+        }
         }
         store = DecisionStore(config=config)
 
@@ -365,7 +365,7 @@ class TestDecisionStoreErrorHandling:
 
         config = {
             'storage_path': str(tmp_path / 'readonly_decisions'),
-            'storage_path': str(tmp_path / 'readonly_decisions')
+        }
         }
         store = DecisionStore(config=config)
 
@@ -413,7 +413,7 @@ class TestDecisionStoreErrorHandling:
         """Test that get_decisions properly filters by asset pair."""
         config = {
             'storage_path': str(tmp_path / 'decisions_filter_test'),
-            'storage_path': str(tmp_path / 'decisions_filter_test')
+        }
         }
         store = DecisionStore(config=config)
 
