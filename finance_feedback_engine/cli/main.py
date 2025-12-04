@@ -26,7 +26,7 @@ from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
     display_portfolio_dashboard
 )
-from finance_feedback_engine.backtesting.advanced_backtester import AdvancedBacktester
+from finance_feedback_engine.backtesting.backtester import Backtester
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 
 
@@ -1836,6 +1836,11 @@ def wipe_decisions(ctx, confirm):
     type=float,
     help='Override take-profit percentage (default: 0.05 = 5%)'
 )
+@click.option(
+    '--output-file',
+    type=click.Path(),
+    help='Save backtest trade history to a JSON file (for pre-training).'
+)
 @click.pass_context
 def backtest(
     ctx,
@@ -1848,8 +1853,9 @@ def backtest(
     commission_per_trade,
     stop_loss_percentage,
     take_profit_percentage,
+    output_file
 ):
-    """Run rule-based backtest with comprehensive performance metrics."""
+    """Run AI-driven backtest using the decision engine."""
     from finance_feedback_engine.utils.validation import standardize_asset_pair
 
     try:
@@ -1857,7 +1863,7 @@ def backtest(
         config = ctx.obj['config']
 
         console.print(
-            f"[bold blue]Running Rule-Based Backtest for {asset_pair} {start}→{end}[/bold blue]"
+            f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"
         )
 
         # Get advanced_backtesting config or set defaults
@@ -1873,16 +1879,8 @@ def backtest(
 
         engine = FinanceFeedbackEngine(config)
 
-        # Create backtest-optimized decision engine (rule-based, no AI calls)
-        from finance_feedback_engine.decision_engine.engine import DecisionEngine
-        backtest_decision_engine = DecisionEngine(
-            config=config,
-            data_provider=engine.data_provider,
-            backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
-        )
-
-        # Initialize AdvancedBacktester
-        backtester = AdvancedBacktester(
+        # Initialize Backtester
+        backtester = Backtester(
             historical_data_provider=engine.historical_data_provider,
             initial_balance=initial_balance,
             fee_percentage=fee_percentage,
@@ -1896,14 +1894,24 @@ def backtest(
             asset_pair=asset_pair,
             start_date=start,
             end_date=end,
-            decision_engine=backtest_decision_engine
+            decision_engine=engine.decision_engine
         )
+
+        # Save results to file if requested
+        if output_file:
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(results['trades'], f, indent=2)
+                console.print(f"[bold green]✓ Backtest trade history saved to {output_file}[/bold green]")
+            except Exception as e:
+                console.print(f"[bold red]Error saving results to {output_file}: {e}[/bold red]")
+
 
         # Display results
         metrics = results.get('metrics', {})
         trades_history = results.get('trades', [])
 
-        table = Table(title="Rule-Based Backtest Summary")
+        table = Table(title="AI-Driven Backtest Summary")
         table.add_column("Metric", style="cyan")
         table.add_column("Value", style="green", justify="right")
 
@@ -1958,53 +1966,7 @@ def backtest(
         raise click.Abort()
 
 
-@cli.command(name='advanced-backtest')
-@click.argument('asset_pair')
-@click.option('--start', '-s', required=True, help='Start date YYYY-MM-DD')
-@click.option('--end', '-e', required=True, help='End date YYYY-MM-DD')
-@click.option(
-    '--initial-balance',
-    type=float,
-    help='Override starting balance (default from config)'
-)
-@click.option(
-    '--fee-percentage',
-    type=float,
-    help='Override fee percentage per trade (default from config)'
-)
-@click.option(
-    '--slippage-percentage',
-    type=float,
-    help='Override slippage percentage per trade (default from config)'
-)
-@click.option(
-    '--commission-per-trade',
-    type=float,
-    help='Override fixed commission per trade (default from config)'
-)
-@click.option(
-    '--stop-loss-percentage',
-    type=float,
-    help='Override portfolio stop-loss percentage (default from config)'
-)
-@click.option(
-    '--take-profit-percentage',
-    type=float,
-    help='Override portfolio take-profit percentage (default from config)'
-)
-@click.pass_context
-def advanced_backtest(
-    ctx,
-    asset_pair,
-    start,
-    end,
-    initial_balance,
-    fee_percentage,
-    slippage_percentage,
-    commission_per_trade,
-    stop_loss_percentage,
-    take_profit_percentage,
-):
+
     """Run an advanced historical trading strategy simulation."""
     import asyncio
     from ..utils.validation import standardize_asset_pair
@@ -2038,8 +2000,8 @@ def advanced_backtest(
             backtest_mode=True  # Enables fast SMA/ADX rules instead of AI
         )
 
-        # Initialize AdvancedBacktester
-        backtester = AdvancedBacktester(
+        # Initialize Backtester
+        backtester = Backtester(
             historical_data_provider=engine.historical_data_provider,
             initial_balance=initial_balance,
             fee_percentage=fee_percentage,
