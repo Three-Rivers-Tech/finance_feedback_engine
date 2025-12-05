@@ -600,9 +600,9 @@ stateDiagram-v2
     
     HALT --> [*]: Agent Stopped
     
-    note left of STARTUP: On agent start:<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
+    note left of STARTUP: On agent start -<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
     
-    note right of IDLE: Default: 300s<br/>(5 minutes between cycles)
+    note right of IDLE: Default 300s<br/>5 minutes between cycles
     
     note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
     
@@ -1038,9 +1038,9 @@ See [docs/LIVE_MONITORING_IMPLEMENTATION.md](docs/LIVE_MONITORING_IMPLEMENTATION
     
     HALT --> [*]: Agent Stopped
     
-    note left of STARTUP: On agent start:<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
+    note left of STARTUP: On agent start -<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
     
-    note right of IDLE: Default: 300s<br/>(5 minutes between cycles)
+    note right of IDLE: Default 300s<br/>5 minutes between cycles
     
     note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
     
