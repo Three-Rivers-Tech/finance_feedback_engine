@@ -65,6 +65,7 @@ class DecisionCache:
                 CREATE INDEX IF NOT EXISTS idx_asset_timestamp
                 ON decisions(asset_pair, timestamp)
             """)
+        conn.close()
 
     def _hash_market_data(self, market_data: Dict[str, Any]) -> str:
         """
