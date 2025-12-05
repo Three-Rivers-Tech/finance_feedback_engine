@@ -46,28 +46,25 @@ class DecisionCache:
 
     def _init_db(self):
         """Create database schema if not exists."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS decisions (
-                cache_key TEXT PRIMARY KEY,
-                asset_pair TEXT NOT NULL,
-                timestamp TEXT NOT NULL,
-                market_hash TEXT NOT NULL,
-                decision_json TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS decisions (
+                    cache_key TEXT PRIMARY KEY,
+                    asset_pair TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    market_hash TEXT NOT NULL,
+                    decision_json TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # Create index for faster lookups
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_asset_timestamp
-            ON decisions(asset_pair, timestamp)
-        """)
-
-        conn.commit()
-        conn.close()
+            # Create index for faster lookups
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_asset_timestamp
+                ON decisions(asset_pair, timestamp)
+            """)
 
     def _hash_market_data(self, market_data: Dict[str, Any]) -> str:
         """
@@ -90,6 +87,10 @@ class DecisionCache:
 
         # Generate MD5 hash
         return hashlib.md5(json_str.encode()).hexdigest()
+
+    def build_market_hash(self, market_data: Dict[str, Any]) -> str:
+        """Public wrapper to compute the market hash used in cache keys."""
+        return self._hash_market_data(market_data)
 
     def get(self, cache_key: str) -> Optional[Dict[str, Any]]:
         """
@@ -166,6 +167,11 @@ class DecisionCache:
         market_hash = self._hash_market_data(market_data)
         return f"{asset_pair}_{timestamp}_{market_hash}"
 
+    def build_cache_key(self, asset_pair: str, timestamp: str,
+                        market_data: Dict[str, Any]) -> str:
+        """Alias for generate_cache_key for clarity in public usage."""
+        return self.generate_cache_key(asset_pair, timestamp, market_data)
+
     def clear_old(self, days: int = 90):
         """
         Clear cached decisions older than specified days.
@@ -228,16 +234,15 @@ class DecisionCache:
             'by_asset_pair': by_asset
         }
 
-    def clear_all(self):
+    def clear_all(self) -> int:
         """Clear all cached decisions (use with caution)."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM decisions")
+            cursor.execute("DELETE FROM decisions")
 
-        deleted_count = cursor.rowcount
-        conn.commit()
-        conn.close()
+            deleted_count = cursor.rowcount
+            conn.commit()
 
         logger.warning(f"Cleared ALL {deleted_count} cached decisions")
 

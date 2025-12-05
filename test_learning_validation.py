@@ -4,7 +4,7 @@
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine, TradeOutcome
 from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 print("Testing Learning Validation Metrics...")
 
@@ -19,7 +19,7 @@ config = {
 memory = PortfolioMemoryEngine(config)
 
 # Simulate learning progression: early trades worse, later trades better
-base_date = datetime.utcnow()
+base_date = datetime.now(timezone.utc)
 providers = ['anthropic', 'openai', 'google']
 
 print("\n1. Adding 100 simulated trades showing learning progression...")
