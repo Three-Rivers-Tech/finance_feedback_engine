@@ -337,7 +337,6 @@ flowchart LR
 
 See [MULTI_TIMEFRAME_PULSE_COMPLETE.md](MULTI_TIMEFRAME_PULSE_COMPLETE.md) for implementation details.
 ### Ensemble Mode: Multi-Provider AI Aggregation 🆕
-### Ensemble Mode: Multi-Provider AI Aggregation 🆕
 
 Combine multiple AI providers for more robust decisions with intelligent fallback strategies:
 
@@ -693,12 +692,6 @@ graph TB
         MCP[MonitoringContextProvider<br/>get_monitoring_context]
     end
 ```
-
-## Live Trade Monitoring 🆕
-
-### Monitoring Architecture & Thread Management
-
-See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop_agent.py](finance_feedback_engine/agent/trading_loop_agent.py) for details.
 
 ---
 
