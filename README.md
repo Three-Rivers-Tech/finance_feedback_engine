@@ -270,11 +270,10 @@ flowchart LR
     end
     
     subgraph "Technical Indicators (Per Timeframe)"
-        direction TB
         RSI[RSI<br/>Overbought/Oversold<br/>70/30 thresholds]
         MACD[MACD<br/>Momentum Direction<br/>Line, Signal, Histogram]
         BB[Bollinger Bands<br/>Volatility + %B Position<br/>Upper/Middle/Lower]
-        ADX[ADX<br/>Trend Strength<br/>>&gt;25 = Strong Trend]
+        ADX[ADX<br/>Trend Strength<br/>>>25 = Strong Trend]
         ATR[ATR<br/>Volatility Measure<br/>Price Units]
     end
     
@@ -377,8 +376,8 @@ flowchart TD
         T3 -->|Fails| T4
     end
     
-    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 × (active/total)]
-    QUORUM{Local Provider<br/>Quorum Met?<br/>(min 3)}
+    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 * active ratio]
+    QUORUM{Local Provider<br/>Quorum Met?<br/>min 3}
     PENALTY[Apply 30% Confidence Penalty<br/>Add WARNING to reasoning]
     
     META[Attach Ensemble Metadata<br/>providers_used, providers_failed,<br/>adjusted_weights, fallback_tier]
@@ -503,7 +502,7 @@ stateDiagram-v2
         RebuildMemory --> AssociateMonitor: Populate PortfolioMemoryEngine
         AssociateMonitor --> [*]: Mark startup_complete
         
-        QueryPlatform --> RetryBackoff: Failure (attempt < 3)
+        QueryPlatform --> RetryBackoff: Failure attempt less than 3
         RetryBackoff --> QueryPlatform: Exponential delay (2^n seconds)
         QueryPlatform --> ForceComplete: Max retries reached
         ForceComplete --> [*]: Continue with empty state
@@ -525,7 +524,7 @@ stateDiagram-v2
         ProcessOutcomes --> RecordMemory: PortfolioMemoryEngine.record_outcome()
         RecordMemory --> [*]: Update experience buffer
         
-        note right of ProcessOutcomes: Updates:<br/>• Win rate<br/>• Provider performance<br/>• Risk-adjusted returns
+        note right of ProcessOutcomes: Updates: Win rate,<br/>Provider performance,<br/>Risk-adjusted returns
     }
     
     LEARNING --> PERCEPTION
@@ -539,7 +538,7 @@ stateDiagram-v2
         
         KillSwitchCheck --> HALT: P&L < -kill_switch_loss_pct
         
-        note right of KillSwitchCheck: Monitors:<br/>• Unrealized P&L %<br/>• Drawdown limits<br/>• Daily trade count
+        note right of KillSwitchCheck: Monitors: Unrealized P&L %,<br/>Drawdown limits,<br/>Daily trade count
     }
     
     PERCEPTION --> REASONING
@@ -548,19 +547,19 @@ stateDiagram-v2
         [*] --> LoopAssets
         LoopAssets --> AnalyzeAsset: For each asset_pair
         AnalyzeAsset --> RetryLogic: DecisionEngine.generate_decision()
-        RetryLogic --> CheckAction: Success (attempt < 3)
+        RetryLogic --> CheckAction: Success attempt less than 3
         CheckAction --> NextAsset: HOLD action
         CheckAction --> [*]: BUY/SELL action
         
         RetryLogic --> ExponentialBackoff: Failure
-        ExponentialBackoff --> AnalyzeAsset: Delay × attempt
-        ExponentialBackoff --> MarkFailure: Max retries (3)
+        ExponentialBackoff --> AnalyzeAsset: Delay times attempt
+        ExponentialBackoff --> MarkFailure: Max retries - 3
         MarkFailure --> NextAsset: Skip asset for decay period
         
         NextAsset --> LoopAssets: More assets
         NextAsset --> [*]: All processed
         
-        note right of RetryLogic: Failures tracked:<br/>• Per-asset counters<br/>• Time-based decay<br/>• Daily reset
+        note right of RetryLogic: Failures tracked: Per-asset counters,<br/>Time-based decay, Daily reset
     }
     
     REASONING --> RISK_CHECK: Actionable Decision
@@ -572,7 +571,7 @@ stateDiagram-v2
         ValidateTrade --> [*]: Approved
         ValidateTrade --> REJECTED: Denied
         
-        note right of ValidateTrade: Checks:<br/>• Max drawdown<br/>• Portfolio VaR<br/>• Correlation limits<br/>• Position concentration
+        note right of ValidateTrade: Checks: Max drawdown,<br/>Portfolio VaR, Correlation limits,<br/>Position concentration
     }
     
     RISK_CHECK --> EXECUTION: Trade Approved
@@ -833,7 +832,7 @@ stateDiagram-v2
         [*] --> Normal
         Normal --> IncrementFailures: execute_trade() fails
         IncrementFailures --> CheckThreshold: failure_count++
-        CheckThreshold --> Normal: count < threshold (3)
+        CheckThreshold --> Normal: count less than threshold - 3
         CheckThreshold --> [*]: count >= threshold
         
         Normal --> ResetCount: execute_trade() succeeds
@@ -1095,8 +1094,8 @@ See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop
         T3 -->|Fails| T4
     end
     
-    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 × (active/total)]
-    QUORUM{Local Provider<br/>Quorum Met?<br/>(min 3)}
+    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 * active ratio]
+    QUORUM{Local Provider<br/>Quorum Met?<br/>min 3}
     PENALTY[Apply 30% Confidence Penalty<br/>Add WARNING to reasoning]
     
     META[Attach Ensemble Metadata<br/>providers_used, providers_failed,<br/>adjusted_weights, fallback_tier]
@@ -1126,9 +1125,9 @@ See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop
     subgraph "Example: Weight Adjustment"
         direction LR
         ORIG[Original Weights<br/>local: 0.25, cli: 0.25,<br/>codex: 0.25, qwen: 0.25]
-        FAIL[cli FAILED ✗]
+        FAIL[cli FAILED]
         ACTIVE[Active Sum = 0.75<br/>3/4 providers]
-        ADJ[Adjusted Weights<br/>local: 0.333 (0.25/0.75)<br/>codex: 0.333<br/>qwen: 0.333]
+        ADJ[Adjusted Weights<br/>local: 0.333 at 0.25/0.75<br/>codex: 0.333<br/>qwen: 0.333]
         
         ORIG --> FAIL --> ACTIVE --> ADJ
     end
