@@ -223,17 +223,77 @@ if decision.get('signal_only'):
 
 ### Commands Tested Successfully
 
-| Command | Test Case | Result |
-|---------|-----------|--------|
-| `analyze` | Basic analysis | ✅ PASS |
-| `backtest` | Valid date range | ✅ PASS |
-| `backtest` | Invalid date range (start > end) | ✅ PROPERLY REJECTED |
-| `backtest` | Small date range | ✅ PASS |
-| `history` | No filter, no results | ✅ EXIT 0 |
-| `history` | Asset filter, no results | ✅ EXIT 0 |
-| `walk-forward` | Insufficient date range | ✅ PROPER ERROR |
-| `monte-carlo` | 5 simulations | ✅ PASS |
-| `monte-carlo` | 10 simulations | ✅ PASS |
+| Command | Test Case | Result | Evidence |
+|---------|-----------|--------|----------|
+| `analyze` | Basic analysis with position sizing | ✅ PASS | Shows position details, entry price $92,467.29 |
+| `backtest` | Valid date range (2024-01-01 to 2024-01-15) | ✅ PASS | Completed in 10 min, proper metrics table |
+| `backtest` | Invalid date range (start > end) | ✅ PROPERLY REJECTED | Error: "start_date must be before end_date" |
+| `backtest` | Small date range (15 days) | ✅ PASS | Handles RiskGatekeeper rejections correctly |
+| `history` | No filter, has results | ✅ EXIT 0 | Shows 5 decisions in table format |
+| `history` | Asset filter, no results | ✅ EXIT 0 | "No decisions found" with exit 0 |
+| `walk-forward` | Insufficient date range (4 days) | ✅ PROPER ERROR | Clear message: "Required: At least 14 days" |
+| `monte-carlo` | 5 simulations | ✅ PASS | VaR $20.82, proper confidence intervals |
+| `monte-carlo` | 10 simulations | ✅ PASS | Complete results with percentiles |
+| `status` | Engine status check | ✅ PASS | Shows Coinbase ($214.24) & Oanda ($204.52) balances |
+
+### Real-World Test Output Examples
+
+**Backtest Success:**
+```
+AI-Driven Backtest Summary     
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Metric              ┃     Value ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ Initial Balance     │ $10000.00 │
+│ Final Value         │ $10000.00 │
+│ Total Return %      │     0.00% │
+│ Sharpe Ratio        │      0.00 │
+│ Total Trades        │         0 │
+└─────────────────────┴───────────┘
+Note: 15 trade(s) were rejected by RiskGatekeeper
+```
+
+**Date Validation:**
+```bash
+$ python main.py backtest BTCUSD --start 2024-02-01 --end 2024-01-01
+Error: start_date (2024-02-01) must be before end_date (2024-01-01)
+Aborted!
+```
+
+**History Exit Code:**
+```bash
+$ python main.py history --asset NONEXISTENT123 --limit 5
+No decisions found
+$ echo $?
+0  # ✅ Correct exit code
+```
+
+**Walk-Forward Error Handling:**
+```
+Walk-Forward Error: No windows generated - date range too small
+
+Suggestion: Increase the date range or reduce window sizes.
+  Current: 2024-01-01 to 2024-01-05 (4 days)
+  Required: At least 14 days
+```
+
+**Monte-Carlo Results:**
+```
+Monte Carlo Simulation Results   
+┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃ Metric              ┃     Value ┃
+┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
+│ Base Final Balance  │ $10000.00 │
+│ Expected Return     │     $0.74 │
+│ Value at Risk (95%) │    $20.82 │
+│ Worst Case          │  $9976.32 │
+│ Best Case           │ $10025.94 │
+└─────────────────────┴───────────┘
+
+Confidence Intervals:
+  5th percentile:  $9979.18
+  95th percentile: $10022.56
+```
 
 ### All Critical Paths Verified
 
