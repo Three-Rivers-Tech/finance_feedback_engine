@@ -11,7 +11,7 @@ def test_short_position():
 
     # Simulate platform margin info (typical values)
     maintenance_margin_pct = 0.5  # 50% maintenance margin
-    max_leverage = 5.0
+
 
     print("\n📊 Testing liquidation price calculation:")
 
@@ -94,10 +94,6 @@ def test_short_position():
     print("  ✓ Correct P&L for SHORT (profit when price drops)")
     print("  ✓ Correct P&L for LONG (profit when price rises)")
     print("  ✓ Reversed stop-loss/take-profit for SHORT")
-
-
-if __name__ == "__main__":
-    test_short_position()
 
 
 if __name__ == "__main__":
