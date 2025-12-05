@@ -10,14 +10,15 @@ classDiagram
     }
 
     class CoinbaseAdvancedPlatform {
-        api_key: str
-        api_secret: str
-        passphrase: str
-        get_balance() Dict
-        execute_trade(decision) Dict
-        get_account_info() Dict
-        get_portfolio_breakdown() Dict
-        get_open_positions() List
+class CoinbaseAdvancedPlatform {
+    -api_key: str
+    -api_secret: str
+    get_balance() Dict
+    execute_trade(decision) Dict
+    get_account_info() Dict
+    get_portfolio_breakdown() Dict
+    get_open_positions() List
+}
     }
 
     class OandaPlatform {
@@ -28,18 +29,15 @@ classDiagram
         +execute_trade(decision) Dict
         +get_account_info() Dict
         +get_portfolio_breakdown() Dict
-        +get_open_positions() List
     class UnifiedTradingPlatform {
-        platforms: Dict
         get_balance() Dict
         execute_trade(decision) Dict
         get_account_info() Dict
         get_portfolio_breakdown() Dict
         get_open_positions() List
         aggregate_balances() Dict
-        route_trade(decision) str
+        -route_trade(decision) str
     }
-        +route_trade(decision) str
     }
 
     class MockPlatform {
