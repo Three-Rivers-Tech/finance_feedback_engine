@@ -241,7 +241,8 @@ flowchart TD
         ENV_CB[COINBASE_API_KEY<br/>COINBASE_API_SECRET]
         ENV_OA[OANDA_API_KEY<br/>OANDA_ACCOUNT_ID]
     end
-    
+```
+
 ### Multi-Timeframe Technical Analysis 🆕
 
 The engine analyzes **6 timeframes simultaneously** to detect cross-timeframe patterns and confluence:
