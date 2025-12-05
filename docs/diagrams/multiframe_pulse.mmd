@@ -1,0 +1,57 @@
+flowchart LR
+    subgraph "Data Ingestion"
+        REQ[Analysis Request BTCUSD]
+        UDP[UnifiedDataProvider aggregate_all_timeframes]
+        CACHE{Cache Valid? 5-min expiry}
+    end
+
+    subgraph "Multi-Source Fetching"
+        AV[Alpha Vantage Premium API]
+        CB_DATA[Coinbase Real-time]
+        OA_DATA[Oanda Forex data]
+    end
+
+    subgraph "6 Timeframes"
+        TF1[1-minute]
+        TF5[5-minute]
+        TF15[15-minute]
+        TF1H[1-hour]
+        TF4H[4-hour]
+        TFD[Daily]
+    end
+
+    subgraph "Technical Indicators"
+        RSI[RSI Overbought/Oversold 70/30]
+        MACD[MACD Momentum Line, Signal, Histogram]
+        BB[Bollinger Bands Volatility upper/middle/lower]
+        ADX[ADX Trend Strength >25 strong]
+        ATR[ATR Volatility Measure Price Units]
+    end
+
+    CLASSIFY[Trend Classification UPTREND/DOWNTREND/RANGING]
+
+    subgraph "Cross-Timeframe Analysis"
+        CONF[Confluence Score Agreement Count]
+        STRENGTH[Signal Strength 0-100]
+        DESC[Natural Language Description]
+    end
+
+    REQ --> UDP
+    UDP --> CACHE
+    CACHE -->|Miss| AV
+    CACHE -->|Miss| CB_DATA
+    CACHE -->|Miss| OA_DATA
+
+    AV & CB_DATA & OA_DATA --> TF1 & TF5 & TF15 & TF1H & TF4H & TFD
+
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> RSI
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> MACD
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> BB
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ADX
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ATR
+
+    RSI & MACD & BB & ADX & ATR --> CLASSIFY
+    CLASSIFY --> CONF & STRENGTH & DESC
+
+    style UDP fill:#2196F3,stroke:#0D47A1,color:#fff
+    style CONF fill:#4CAF50,stroke:#2E7D32,color:#fff

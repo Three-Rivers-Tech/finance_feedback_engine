@@ -1,0 +1,57 @@
+flowchart TD
+    START([Ensemble Request Initiated])
+    QUERY[Query All Enabled Providers in Parallel]
+
+    subgraph "Provider Queries Concurrent"
+        P1[local Ollama]
+        P2[codex Codex CLI]
+        P3[cli GitHub Copilot CLI]
+        P4[qwen Qwen CLI]
+        P5[gemini Gemini CLI]
+    end
+
+    COLLECT{Collect Responses}
+    DETECT[Detect Provider Failures]
+
+    CALC_WEIGHTS[Dynamic Weight Recalculation]
+
+    subgraph "4-Tier Fallback Strategy"
+        T1{Tier 1 Weighted Voting}
+        T2{Tier 2 Majority Voting}
+        T3{Tier 3 Simple Averaging}
+        T4[Tier 4 Single Provider]
+
+        T1 -->|Fails| T2
+        T2 -->|No Majority| T3
+        T3 -->|Fails| T4
+    end
+
+    CONFIDENCE[Confidence Adjustment]
+    QUORUM{Local Provider Quorum Met?}
+    PENALTY[Apply 30 Confidence Penalty]
+
+    META[Attach Ensemble Metadata]
+
+    DECISION([Final Aggregated Decision])
+
+    START --> QUERY
+    QUERY --> P1 & P2 & P3 & P4 & P5
+    P1 & P2 & P3 & P4 & P5 --> COLLECT
+    COLLECT --> DETECT
+
+    DETECT --> CALC_WEIGHTS
+
+    CALC_WEIGHTS --> T1
+    T1 & T2 & T3 & T4 --> CONFIDENCE
+
+    CONFIDENCE --> QUORUM
+    QUORUM -->|Yes| META
+    QUORUM -->|No| PENALTY
+    PENALTY --> META
+    META --> DECISION
+
+    style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style T2 fill:#FFC107,stroke:#F57C00,color:#333
+    style T3 fill:#FF9800,stroke:#E65100,color:#fff
+    style T4 fill:#F44336,stroke:#C62828,color:#fff
+    style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
