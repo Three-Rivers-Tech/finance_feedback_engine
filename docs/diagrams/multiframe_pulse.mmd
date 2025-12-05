@@ -38,6 +38,7 @@ flowchart LR
 
     REQ --> UDP
     UDP --> CACHE
+    CACHE -->|Hit| TF1 & TF5 & TF15 & TF1H & TF4H & TFD
     CACHE -->|Miss| AV
     CACHE -->|Miss| CB_DATA
     CACHE -->|Miss| OA_DATA

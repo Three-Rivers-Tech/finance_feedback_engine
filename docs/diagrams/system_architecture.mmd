@@ -1,7 +1,9 @@
 graph TB
+
     subgraph "Entry Points"
         CLI[CLI Commands<br/>main.py]
         WEB[Web Service<br/>FastAPI + Redis<br/>Optional]
+        TELEGRAM[Telegram Bot<br/>Approval Integration]
     end
 
     subgraph "Core Orchestration"
@@ -50,8 +52,10 @@ graph TB
         TMC[TradeMetricsCollector<br/>Performance Data]
     end
 
+
     CLI -->|analyze/execute/agent| ENGINE
-    WEB -->|Telegram approvals| ENGINE
+    WEB -->|approval request| TELEGRAM
+    TELEGRAM -->|approval/deny| ENGINE
     AGENT -->|continuous loop| ENGINE
 
     ENGINE -->|fetch data| AV
