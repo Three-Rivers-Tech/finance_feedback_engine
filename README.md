@@ -889,13 +889,18 @@ stateDiagram-v2
 - **[Ensemble System](docs/ENSEMBLE_SYSTEM.md)** - Multi-provider AI aggregation
 - **[Multi-Timeframe Pulse](MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system
 - **[Autonomous Agent](AGENTIC_LOOP_WORKFLOW.md)** - OODA loop implementation
-# execute_trade() is now protected by circuit breaker
 
-# Circuit breaker lifecycle:
-# 1. CLOSED: Normal operation, tracks failures
-# 2. OPEN: After 3 failures, blocks all calls for 60s
-# 3. HALF_OPEN: After timeout, allows one test call
-# 4. Back to CLOSED on success, or OPEN on failure
+## Circuit Breaker Protection for `execute_trade()`
+
+`execute_trade()` is protected by a circuit breaker to prevent cascading failures and ensure resilient API execution.
+
+**Lifecycle:**
+- **CLOSED:** Normal operation, tracks failures
+- **OPEN:** After 3 failures, blocks all calls for 60 seconds
+- **HALF_OPEN:** After timeout, allows one test call
+- **Transition:** Success returns to CLOSED; failure returns to OPEN
+
+See [finance_feedback_engine/trading_platforms/](finance_feedback_engine/trading_platforms/) and [utils/circuit_breaker.py](finance_feedback_engine/utils/circuit_breaker.py) for implementation details.
 ```
 
 See [finance_feedback_engine/trading_platforms/](finance_feedback_engine/trading_platforms/) for implementation details.
