@@ -19,7 +19,9 @@ ensemble:
 
   # Quicktest mode: Disable memory for maximum speed runs
   # WARNING: Only for testing/backtesting - NEVER enable in live trading
-  quicktest_mode: false# Advanced backtesting settings
+  quicktest_mode: false
+
+# Advanced backtesting settings
 advanced_backtesting:
   initial_balance: 10000.0
   fee_percentage: 0.001  # 0.1%

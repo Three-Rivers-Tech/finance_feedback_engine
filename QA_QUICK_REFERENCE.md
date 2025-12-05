@@ -35,21 +35,20 @@ Time:    15 minutes
 | balance | ✓ | 1-2s | Mock platform |
 | status | ✓ | 1-2s | - |
 | dashboard | ✓ | 1-2s | - |
-| history | ✓* | 1-2s | *Error handling needs fix |
+| history | ✓* | 1-2s | *Non-existent asset exits 1; expected 0 with empty result (workaround: omit --asset or use valid asset) |
 | wipe-decisions | ✓ | 1-2s | - |
 | install-deps | ✓ | 1-2s | - |
 | learning-report | ✓ | 1-2s | - |
 
 ---
 
-## ❌ What's Broken (2/22 Commands)
+## ❌ What's Broken (3/22 Commands)
 
 | Command | Issue | Fix |
 |---------|-------|-----|
 | backtest | Crashes with AttributeError | See C1 above |
 | walk-forward | Exit code 1, feature not working | TBD investigation |
 | monte-carlo | Exit code 2, feature not working | TBD investigation |
-
 ---
 
 ## 📋 Asset Pair Formats (All Equivalent)
@@ -118,7 +117,7 @@ python main.py history --limit 5
 python main.py history
 python main.py history --asset BTCUSD
 
-# Currently: first returns 0, second returns 1 (BUG)
+# Currently: base command exits 0; --asset NONEXISTENT exits 1 instead of 0 (expected empty result)
 python main.py history --asset NONEXISTENT
 ```
 

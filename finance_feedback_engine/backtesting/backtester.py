@@ -628,7 +628,7 @@ class Backtester:
                     self.decision_cache.put(
                         cache_key, decision, asset_pair,
                         timestamp.isoformat(),
-                        self.decision_cache._hash_market_data(market_data)
+                        self.decision_cache.build_market_hash(market_data)
                     )
 
             action = decision.get('action', 'HOLD')

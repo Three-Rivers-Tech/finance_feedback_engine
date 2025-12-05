@@ -2513,7 +2513,7 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
         severity_colors = {
             'NONE': 'green',
             'LOW': 'yellow',
-            'MEDIUM': 'orange',
+            'MEDIUM': 'dark_orange',
             'HIGH': 'red'
         }
         color = severity_colors.get(severity, 'white')
@@ -2752,11 +2752,12 @@ def prune_memory(ctx, keep_recent, confirm):
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
 
-        if not hasattr(engine, 'portfolio_memory') or engine.portfolio_memory is None:
+        # Use the standard memory_engine attribute for portfolio memory operations
+        if not hasattr(engine, 'memory_engine') or engine.memory_engine is None:
             console.print("[yellow]Portfolio memory not initialized.[/yellow]")
             return
 
-        memory = engine.portfolio_memory
+        memory = engine.memory_engine
         current_count = len(memory.trade_outcomes)
 
         console.print(f"Current trade outcomes: {current_count}")

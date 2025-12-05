@@ -22,7 +22,7 @@ class TradingAgentOrchestrator:
         self.platform = platform
 
         # SAFETY: Prevent quicktest mode in live trading
-        ensemble_config = getattr(config, 'ensemble_config', {})
+        ensemble_config = getattr(config, 'ensemble_config', None) or {}
         quicktest_mode = ensemble_config.get('quicktest_mode', False)
         if quicktest_mode:
             raise ValueError(

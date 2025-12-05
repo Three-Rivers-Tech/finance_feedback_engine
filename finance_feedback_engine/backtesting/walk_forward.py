@@ -59,7 +59,7 @@ class WalkForwardAnalyzer:
         while True:
             train_start = current_train_start
             train_end = train_start + timedelta(days=train_window_days)
-            test_start = train_end
+            test_start = train_end + timedelta(days=1)  # Ensure no overlap with train period
             test_end = test_start + timedelta(days=test_window_days)
 
             # Stop if test window exceeds overall end date
@@ -134,7 +134,7 @@ class WalkForwardAnalyzer:
 
         # Run walk-forward
         window_results = []
-        all_train_test_ratios = []
+        all_test_train_ratios = []
 
         for idx, (train_start, train_end, test_start, test_end) in enumerate(windows):
             logger.info(
@@ -184,10 +184,20 @@ class WalkForwardAnalyzer:
                 train_win_rate = train_metrics.get('win_rate_pct', 0)
                 test_win_rate = test_metrics.get('win_rate_pct', 0)
 
-                sharpe_ratio = test_sharpe / train_sharpe if train_sharpe != 0 else 0
+                # Handle negative Sharpe ratios where ratio logic breaks down
+                if train_sharpe > 0:
+                    sharpe_ratio = test_sharpe / train_sharpe
+                elif train_sharpe < 0 and test_sharpe < 0:
+                    # Both negative: flip to compare absolute performance
+                    sharpe_ratio = train_sharpe / test_sharpe
+                else:
+                    # Mixed signs: test significantly differs from train
+                    sharpe_ratio = 0.0
+
                 win_rate_ratio = test_win_rate / train_win_rate if train_win_rate != 0 else 0
 
-                all_train_test_ratios.append(sharpe_ratio)
+                all_test_train_ratios.append(sharpe_ratio)
+                all_test_train_ratios.append(win_rate_ratio)
 
                 window_results.append({
                     'window_id': idx + 1,
@@ -197,8 +207,8 @@ class WalkForwardAnalyzer:
                     'test_end': test_end,
                     'train_metrics': train_metrics,
                     'test_metrics': test_metrics,
-                    'train_test_sharpe_ratio': sharpe_ratio,
-                    'train_test_win_rate_ratio': win_rate_ratio
+                    'test_train_sharpe_ratio': sharpe_ratio,
+                    'test_train_win_rate_ratio': win_rate_ratio
                 })
 
             finally:
@@ -218,16 +228,16 @@ class WalkForwardAnalyzer:
         avg_test_win_rate = sum(test_win_rates) / len(test_win_rates) if test_win_rates else 0
 
         # Overfitting analysis
-        avg_train_test_ratio = sum(all_train_test_ratios) / len(all_train_test_ratios) if all_train_test_ratios else 0
+        avg_test_train_ratio = sum(all_test_train_ratios) / len(all_test_train_ratios) if all_test_train_ratios else 0
 
         # Classify overfitting severity
-        if avg_train_test_ratio > 0.8:
+        if avg_test_train_ratio > 0.8:
             overfitting_severity = 'NONE'
             overfitting_detected = False
-        elif avg_train_test_ratio > 0.5:
+        elif avg_test_train_ratio > 0.5:
             overfitting_severity = 'LOW'
             overfitting_detected = False
-        elif avg_train_test_ratio > 0.3:
+        elif avg_test_train_ratio > 0.3:
             overfitting_severity = 'MEDIUM'
             overfitting_detected = True
         else:
@@ -236,7 +246,7 @@ class WalkForwardAnalyzer:
 
         logger.info(
             f"Walk-Forward Complete: Avg Test Sharpe={avg_test_sharpe:.2f}, "
-            f"Train/Test Ratio={avg_train_test_ratio:.2f}, "
+            f"Test/Train Ratio={avg_test_train_ratio:.2f}, "
             f"Overfitting={overfitting_severity}"
         )
 
@@ -249,7 +259,7 @@ class WalkForwardAnalyzer:
                 'avg_win_rate_pct': avg_test_win_rate
             },
             'overfitting_analysis': {
-                'avg_train_test_ratio': avg_train_test_ratio,
+                'avg_test_train_ratio': avg_test_train_ratio,
                 'overfitting_detected': overfitting_detected,
                 'overfitting_severity': overfitting_severity,
                 'recommendation': self._get_overfitting_recommendation(overfitting_severity)
