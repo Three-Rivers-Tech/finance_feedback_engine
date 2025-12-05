@@ -43,24 +43,118 @@
 
 ## 🏗️ System Architecture Overview
 
-### Hybrid Design: CLI + Optional Web Service
+### Complete Data Flow & Component Interaction
 
+```mermaid
+graph TB
+    subgraph "Entry Points"
+        CLI[CLI Commands<br/>main.py]
+        WEB[Web Service<br/>FastAPI + Redis<br/><i>Optional</i>]
+    end
+    
+    subgraph "Core Orchestration"
+        ENGINE[FinanceFeedbackEngine<br/>core.py]
+        AGENT[TradingLoopAgent<br/>Autonomous OODA Loop]
+    end
+    
+    subgraph "Data Layer"
+        AV[Alpha Vantage<br/>Market Data]
+        UDP[UnifiedDataProvider<br/>Multi-Timeframe Pulse]
+        MRD[MarketRegimeDetector<br/>ADX/ATR Analysis]
+    end
+    
+    subgraph "Decision Making"
+        DE[DecisionEngine<br/>Prompt Builder]
+        ENS[EnsembleManager<br/>Multi-Provider Voting]
+        subgraph "AI Providers"
+            LOCAL[Local/Ollama]
+            CLI_AI[GitHub Copilot CLI]
+            CODEX[Codex CLI]
+            QWEN[Qwen CLI]
+            GEMINI[Gemini CLI]
+        end
+    end
+    
+    subgraph "Risk & Execution"
+        RG[RiskGatekeeper<br/>Drawdown/VaR/Correlation]
+        PF[PlatformFactory]
+        subgraph "Trading Platforms"
+            CB[Coinbase Advanced]
+            OA[Oanda Forex]
+            MOCK[Mock Platform]
+            UNI[UnifiedPlatform]
+        end
+        CB_BREAKER[CircuitBreaker<br/>Failure Protection]
+    end
+    
+    subgraph "Monitoring & Learning"
+        TM[TradeMonitor<br/>Live Position Tracking]
+        PME[PortfolioMemoryEngine<br/>ML Feedback Loop]
+        MCP[MonitoringContextProvider<br/>Pulse Integration]
+    end
+    
+    subgraph "Persistence"
+        DS[DecisionStore<br/>JSON Storage]
+        TMC[TradeMetricsCollector<br/>Performance Data]
+    end
+    
+    CLI -->|analyze/execute/agent| ENGINE
+    WEB -->|Telegram approvals| ENGINE
+    AGENT -->|continuous loop| ENGINE
+    
+    ENGINE -->|fetch data| AV
+    AV -->|OHLCV + sentiment| UDP
+    UDP -->|6 timeframes| MRD
+    MRD -->|regime + volatility| DE
+    
+    ENGINE -->|generate decision| DE
+    DE -->|ensemble mode| ENS
+    ENS -.->|weighted voting| LOCAL
+    ENS -.->|dynamic weights| CLI_AI
+    ENS -.->|fallback tiers| CODEX
+    ENS -.->|4-tier strategy| QWEN
+    ENS -.->|quorum check| GEMINI
+    
+    DE -->|position sizing| RG
+    RG -->|risk approved| PF
+    PF -->|create platform| CB
+    PF --> OA
+    PF --> MOCK
+    PF --> UNI
+    CB --> CB_BREAKER
+    CB_BREAKER -->|execute trade| TM
+    
+    TM -->|detect positions| MCP
+    MCP -->|inject context| DE
+    TM -->|track P&L| PME
+    PME -->|trade outcomes| DE
+    
+    DE -->|save decision| DS
+    TM -->|save metrics| TMC
+    PME -->|experience buffer| ENGINE
+    
+    click ENGINE "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/core.py" "Core Orchestrator"
+    click DE "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/engine.py" "Decision Engine"
+    click ENS "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/ensemble_manager.py" "Ensemble Manager"
+    click AGENT "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/agent/trading_loop_agent.py" "Trading Agent"
+    click TM "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_monitor.py" "Trade Monitor"
+    
+    style ENGINE fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style ENS fill:#FF9800,stroke:#E65100,color:#fff
+    style AGENT fill:#2196F3,stroke:#0D47A1,color:#fff
+    style TM fill:#9C27B0,stroke:#4A148C,color:#fff
+    style WEB fill:#ddd,stroke:#999,color:#333,stroke-dasharray: 5 5
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     CLI Mode (Default)                       │
-│  Full functionality without web dependencies                 │
-│  • Analyze assets  • Execute trades  • Backtest             │
-│  • Agent mode      • Monitoring      • Dashboard            │
-└─────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│              Web Service Mode (Optional) 🆕                  │
-│  Telegram approval workflow for mobile trading               │
-│  • FastAPI REST API    • Redis approval queue               │
-│  • Webhook endpoints   • Real-time notifications            │
-│  • See docs/WEB_SERVICE_MIGRATION.md for setup              │
-└─────────────────────────────────────────────────────────────┘
-```
+**Data Flow Summary:**
+1. **Analysis Request** → CLI/Agent invokes `FinanceFeedbackEngine.analyze_asset()`
+2. **Data Gathering** → Alpha Vantage provides multi-timeframe market data + sentiment
+3. **Regime Detection** → ADX/ATR classifies market conditions (trending/ranging/volatile)
+4. **Decision Generation** → AI providers analyze context, ensemble aggregates recommendations
+5. **Risk Validation** → RiskGatekeeper checks drawdown, VaR, position concentration
+6. **Execution** → Platform factory routes to Coinbase/Oanda/Mock with circuit breaker protection
+7. **Monitoring** → TradeMonitor detects positions, tracks real-time P&L
+8. **Learning** → Completed trades feed PortfolioMemoryEngine for continuous improvement
 
 **New in 2.0:** Optional web service layer enables mobile approvals via Telegram bot. This is **completely optional** - all core features work in CLI-only mode. [Learn more →](docs/WEB_SERVICE_MIGRATION.md)
 
@@ -121,6 +215,708 @@ Copy the example configuration and edit with your credentials:
 cp config/config.yaml config/config.local.yaml
 ```
 
+### Configuration Loading Hierarchy
+
+```mermaid
+flowchart TD
+    START([Configuration Loading Starts])
+    ENV{Environment<br/>Variables<br/>Set?}
+    LOCAL{config.local.yaml<br/>Exists?}
+    BASE[config/config.yaml<br/>Base Defaults]
+    MERGE[Merge Configuration<br/>Precedence: ENV > LOCAL > BASE]
+    VALIDATE[Validate Required Keys<br/>API keys, credentials]
+    RESULT([Final Config Object])
+    
+    START --> ENV
+    ENV -->|Yes| MERGE
+    ENV -->|No| LOCAL
+    LOCAL -->|Yes| MERGE
+    LOCAL -->|No| BASE
+    BASE --> MERGE
+    MERGE --> VALIDATE
+    VALIDATE --> RESULT
+    
+    subgraph "Environment Variables (Highest Priority)"
+        ENV_AV[ALPHA_VANTAGE_API_KEY]
+        ENV_CB[COINBASE_API_KEY<br/>COINBASE_API_SECRET]
+        ENV_OA[OANDA_API_KEY<br/>OANDA_ACCOUNT_ID]
+    end
+    
+All asset pair formats are automatically standardized to uppercase without separators for API compatibility. See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for details.
+
+### Multi-Timeframe Technical Analysis 🆕
+
+The engine analyzes **6 timeframes simultaneously** to detect cross-timeframe patterns and confluence:
+
+```mermaid
+flowchart LR
+    subgraph "Data Ingestion"
+        REQ[Analysis Request<br/>BTCUSD]
+        UDP[UnifiedDataProvider<br/>aggregate_all_timeframes]
+        CACHE{Cache<br/>Valid?<br/>5-min expiry}
+    end
+    
+    subgraph "Multi-Source Fetching"
+        AV[Alpha Vantage<br/>Premium API]
+        CB_DATA[Coinbase<br/>Real-time]
+        OA_DATA[Oanda<br/>Forex data]
+    end
+    
+    subgraph "6 Timeframes"
+        TF1[1-minute]
+        TF5[5-minute]
+        TF15[15-minute]
+        TF1H[1-hour]
+        TF4H[4-hour]
+        TFD[Daily]
+    end
+    
+    subgraph "Technical Indicators (Per Timeframe)"
+        direction TB
+        RSI[RSI<br/>Overbought/Oversold<br/>70/30 thresholds]
+        MACD[MACD<br/>Momentum Direction<br/>Line, Signal, Histogram]
+        BB[Bollinger Bands<br/>Volatility + %B Position<br/>Upper/Middle/Lower]
+        ADX[ADX<br/>Trend Strength<br/>>&gt;25 = Strong Trend]
+        ATR[ATR<br/>Volatility Measure<br/>Price Units]
+    end
+    
+    CLASSIFY[Trend Classification<br/>UPTREND / DOWNTREND / RANGING]
+    
+    subgraph "Cross-Timeframe Analysis"
+        CONF[Confluence Score<br/>Agreement Count / Total TFs]
+        STRENGTH[Signal Strength<br/>0-100 Composite Score]
+        DESC[Natural Language Description<br/>LLM-Friendly Summary]
+    end
+    
+    CACHE_STORE[(Cache Storage<br/>5-min TTL)]
+    INJECT[Inject into MonitoringContext]
+    PROMPT[DecisionEngine Prompt<br/>AI sees all timeframe signals]
+    
+    REQ --> UDP
+    UDP --> CACHE
+    CACHE -->|Miss| AV
+    CACHE -->|Miss| CB_DATA
+    CACHE -->|Miss| OA_DATA
+    CACHE -->|Hit| INJECT
+    
+    AV & CB_DATA & OA_DATA --> TF1
+    AV & CB_DATA & OA_DATA --> TF5
+    AV & CB_DATA & OA_DATA --> TF15
+    AV & CB_DATA & OA_DATA --> TF1H
+    AV & CB_DATA & OA_DATA --> TF4H
+    AV & CB_DATA & OA_DATA --> TFD
+    
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> RSI
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> MACD
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> BB
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ADX
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ATR
+    
+    RSI & MACD & BB & ADX & ATR --> CLASSIFY
+    CLASSIFY --> CONF
+    CLASSIFY --> STRENGTH
+    CLASSIFY --> DESC
+    
+    CONF & STRENGTH & DESC --> CACHE_STORE
+    CACHE_STORE --> INJECT
+    INJECT --> PROMPT
+    
+    style UDP fill:#2196F3,stroke:#0D47A1,color:#fff
+    style CACHE fill:#FFC107,stroke:#F57C00,color:#333
+    style CONF fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style INJECT fill:#9C27B0,stroke:#4A148C,color:#fff
+    
+    click UDP "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/data_providers/unified_data_provider.py" "UnifiedDataProvider"
+    click CLASSIFY "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/data_providers/timeframe_aggregator.py" "TimeframeAggregator"
+```
+
+**Pulse System Benefits:**
+- **Confluence Detection**: Identifies when multiple timeframes agree on direction
+- **Regime-Aware**: Different strategies for trending vs. ranging markets  
+- **Volatility Context**: ATR provides risk-adjusted position sizing inputs
+- **Reduced False Signals**: Cross-timeframe validation filters noise
+- **LLM-Optimized**: Natural language summaries for better AI comprehension
+
+See [MULTI_TIMEFRAME_PULSE_COMPLETE.md](MULTI_TIMEFRAME_PULSE_COMPLETE.md) for implementation details.
+        LOCAL_AI[decision_engine.ai_provider]
+### Ensemble Mode: Multi-Provider AI Aggregation 🆕
+
+Combine multiple AI providers for more robust decisions with intelligent fallback strategies:
+
+```bash
+# Analyze with ensemble mode (combines all providers)
+python main.py analyze BTCUSD --provider ensemble
+```
+
+#### Ensemble Decision Aggregation Flow
+
+```mermaid
+flowchart TD
+    START([Ensemble Request Initiated])
+    QUERY[Query All Enabled Providers in Parallel]
+    
+    subgraph "Provider Queries (Concurrent)"
+        P1[local<br/>Ollama]
+6. **Local** (`--provider local`): Simple rule-based decisions
+   - No setup required
+   - Good for testing and fallback
+
+### Autonomous Trading Agent 🆕
+
+Run the autonomous agent with continuous OODA (Observe-Orient-Decide-Act) loop:
+
+```bash
+python main.py run-agent --take-profit 0.05 --stop-loss 0.02 --max-daily-trades 5
+```
+
+#### Agent State Machine with Position Recovery
+
+```mermaid
+stateDiagram-v2
+    [*] --> STARTUP
+    
+    STARTUP --> POSITION_RECOVERY: Initialize Agent
+    
+    state POSITION_RECOVERY {
+        [*] --> QueryPlatform
+        QueryPlatform --> ExtractPositions: get_portfolio_breakdown()
+        ExtractPositions --> GenerateSyntheticDecisions: Found N positions
+        GenerateSyntheticDecisions --> RebuildMemory: Create decision records
+        RebuildMemory --> AssociateMonitor: Populate PortfolioMemoryEngine
+        AssociateMonitor --> [*]: Mark startup_complete
+        
+        QueryPlatform --> RetryBackoff: Failure (attempt < 3)
+        RetryBackoff --> QueryPlatform: Exponential delay (2^n seconds)
+        QueryPlatform --> ForceComplete: Max retries reached
+        ForceComplete --> [*]: Continue with empty state
+    }
+    
+    POSITION_RECOVERY --> IDLE: Recovery Complete
+    
+    state IDLE {
+        [*] --> WaitInterval
+        WaitInterval --> [*]: After analysis_frequency_seconds
+        note right of WaitInterval: Skip initial wait if<br/>positions recovered
+    }
+    
+    IDLE --> LEARNING: Timer Expires
+    
+    state LEARNING {
+        [*] --> FetchClosedTrades
+        FetchClosedTrades --> ProcessOutcomes: get_closed_trades()
+        ProcessOutcomes --> RecordMemory: PortfolioMemoryEngine.record_outcome()
+        RecordMemory --> [*]: Update experience buffer
+        
+        note right of ProcessOutcomes: Updates:<br/>• Win rate<br/>• Provider performance<br/>• Risk-adjusted returns
+    }
+    
+    LEARNING --> PERCEPTION
+    
+    state PERCEPTION {
+        [*] --> FetchPortfolio
+        FetchPortfolio --> KillSwitchCheck: get_portfolio_breakdown()
+        KillSwitchCheck --> DailyReset: P&L within limits
+        DailyReset --> GatherMarketData: Reset trade count if new day
+        GatherMarketData --> [*]
+        
+        KillSwitchCheck --> HALT: P&L < -kill_switch_loss_pct
+        
+        note right of KillSwitchCheck: Monitors:<br/>• Unrealized P&L %<br/>• Drawdown limits<br/>• Daily trade count
+    }
+    
+    PERCEPTION --> REASONING
+    
+    state REASONING {
+        [*] --> LoopAssets
+        LoopAssets --> AnalyzeAsset: For each asset_pair
+        AnalyzeAsset --> RetryLogic: DecisionEngine.generate_decision()
+        RetryLogic --> CheckAction: Success (attempt < 3)
+        CheckAction --> NextAsset: HOLD action
+        CheckAction --> [*]: BUY/SELL action
+        
+        RetryLogic --> ExponentialBackoff: Failure
+        ExponentialBackoff --> AnalyzeAsset: Delay × attempt
+        ExponentialBackoff --> MarkFailure: Max retries (3)
+        MarkFailure --> NextAsset: Skip asset for decay period
+        
+        NextAsset --> LoopAssets: More assets
+        NextAsset --> [*]: All processed
+        
+        note right of RetryLogic: Failures tracked:<br/>• Per-asset counters<br/>• Time-based decay<br/>• Daily reset
+    }
+    
+    REASONING --> RISK_CHECK: Actionable Decision
+    REASONING --> IDLE: No Actionable Decisions
+    
+    state RISK_CHECK {
+        [*] --> GetMonitoringContext
+        GetMonitoringContext --> ValidateTrade: RiskGatekeeper.validate_trade()
+        ValidateTrade --> [*]: Approved
+        ValidateTrade --> REJECTED: Denied
+        
+        note right of ValidateTrade: Checks:<br/>• Max drawdown<br/>• Portfolio VaR<br/>• Correlation limits<br/>• Position concentration
+    }
+    
+    RISK_CHECK --> EXECUTION: Trade Approved
+    RISK_CHECK --> PERCEPTION: Trade Rejected
+    
+    state EXECUTION {
+        [*] --> SendOrder
+        SendOrder --> AssociateDecision: TradingPlatform.execute_trade()
+        AssociateDecision --> IncrementCounter: TradeMonitor.associate_decision_to_trade()
+#### Monitoring Architecture & Thread Management
+
+```mermaid
+graph TB
+    subgraph "Main Thread - TradeMonitor"
+        INIT[Initialize TradeMonitor<br/>monitoring_context_provider]
+        LOOP[Detection Loop<br/>Every 30s]
+        DETECT[Poll Platform<br/>get_open_positions]
+        MATCH[Match Against<br/>expected_trades queue]
+        CLEANUP[Cleanup Completed<br/>Trackers]
+        QUEUE[Process Pending<br/>Trades Queue]
+    end
+    
+    subgraph "ThreadPoolExecutor (max_workers=2)"
+        direction LR
+        POOL[Thread Pool Manager]
+        T1[TradeTrackerThread #1<br/>Monitoring Position #1]
+        T2[TradeTrackerThread #2<br/>Monitoring Position #2]
+        PENDING[Pending Queue<br/>Overflow Positions]
+    end
+    
+    subgraph "TradeTrackerThread Lifecycle"
+        direction TB
+        ENTRY[Entry Snapshot<br/>Capture initial position]
+        POLL[Poll Loop<br/>Every 30s update]
+        UPDATE[Update P&L<br/>Track peak/drawdown]
+        CHECK[Check Exit Conditions<br/>Stop-loss/Take-profit]
+        EXIT_DETECT[Detect Position Close]
+        METRICS[Calculate Final Metrics<br/>P&L, holding time, exit reason]
+        CALLBACK[Trigger Callback<br/>TradeMetricsCollector]
+        TERMINATE[Thread Terminates]
+        
+        ENTRY --> POLL
+        POLL --> UPDATE
+        UPDATE --> CHECK
+        CHECK -->|Position Open| POLL
+        CHECK -->|Position Closed| EXIT_DETECT
+        EXIT_DETECT --> METRICS
+        METRICS --> CALLBACK
+        CALLBACK --> TERMINATE
+    end
+    
+    subgraph "Data Persistence"
+        TMC[TradeMetricsCollector<br/>data/trade_metrics/]
+        PME[PortfolioMemoryEngine<br/>experience_buffer]
+        AGG[Aggregate Statistics<br/>Win rate, avg P&L]
+    end
+    
+    subgraph "Feedback Loop"
+        MCP[MonitoringContextProvider<br/>get_monitoring_context]
+## 🏗️ Architecture
+
+### Platform Factory & Circuit Breaker Pattern
+
+The Finance Feedback Engine uses a factory pattern for platform creation and circuit breaker pattern for resilient API execution.
+
+#### Platform Class Hierarchy
+
+```mermaid
+classDiagram
+    class BaseTradingPlatform {
+        <<abstract>>
+        +credentials: Dict
+        +get_balance()* Dict
+        +execute_trade(decision)* Dict
+        +get_account_info()* Dict
+        +get_portfolio_breakdown()* Dict
+        +get_open_positions()* List
+    }
+    
+    class CoinbaseAdvancedPlatform {
+        +api_key: str
+        +api_secret: str
+        +passphrase: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List~FuturesPosition~
+        +_get_futures_balances() Dict
+        +_get_futures_positions() List
+    }
+    
+    class OandaPlatform {
+        +api_key: str
+        +account_id: str
+        +environment: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List~Position~
+        +_calculate_position_margin() float
+    }
+    
+    class UnifiedTradingPlatform {
+        +platforms: Dict~str, BaseTradingPlatform~
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +aggregate_balances() Dict
+        +route_trade(decision) str
+    }
+    
+    class MockPlatform {
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_account_info() Dict
+        +get_portfolio_breakdown() Dict
+        -_mock_data: Dict
+    }
+    
+    class PlatformFactory {
+        +_platforms: Dict~str, Class~
+        +create_platform(name, credentials)$ BaseTradingPlatform
+        +register_platform(name, platform_class)$ void
+    }
+    
+    class CircuitBreaker {
+        -failure_count: int
+        -last_failure_time: datetime
+        -failure_threshold: int
+        -recovery_timeout: int
+        -state: CircuitState
+        +call(func, *args) Any
+        +_is_open() bool
+        +_record_success() void
+        +_record_failure() void
+    }
+    
+    class CircuitState {
+        <<enumeration>>
+        CLOSED
+        OPEN
+        HALF_OPEN
+    }
+    
+    BaseTradingPlatform <|-- CoinbaseAdvancedPlatform
+    BaseTradingPlatform <|-- OandaPlatform
+    BaseTradingPlatform <|-- UnifiedTradingPlatform
+    BaseTradingPlatform <|-- MockPlatform
+    
+    PlatformFactory ..> BaseTradingPlatform : creates
+    PlatformFactory ..> CoinbaseAdvancedPlatform : instantiates
+    PlatformFactory ..> OandaPlatform : instantiates
+    PlatformFactory ..> UnifiedTradingPlatform : instantiates
+    PlatformFactory ..> MockPlatform : instantiates
+    
+    CoinbaseAdvancedPlatform --> CircuitBreaker : uses
+    OandaPlatform --> CircuitBreaker : uses
+    CircuitBreaker --> CircuitState : manages
+    
+    UnifiedTradingPlatform o-- CoinbaseAdvancedPlatform : aggregates
+    UnifiedTradingPlatform o-- OandaPlatform : aggregates
+    
+    click BaseTradingPlatform href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/trading_platforms/base_platform.py" "Base Platform Interface"
+    click PlatformFactory href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/trading_platforms/platform_factory.py" "Platform Factory"
+    click CircuitBreaker href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/utils/circuit_breaker.py" "Circuit Breaker"
+```
+
+#### Circuit Breaker State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED
+    
+    state CLOSED {
+        [*] --> Normal
+        Normal --> IncrementFailures: execute_trade() fails
+        IncrementFailures --> CheckThreshold: failure_count++
+        CheckThreshold --> Normal: count < threshold (3)
+        CheckThreshold --> [*]: count >= threshold
+        
+        Normal --> ResetCount: execute_trade() succeeds
+        ResetCount --> Normal: failure_count = 0
+    }
+    
+    CLOSED --> OPEN: Threshold Reached (3 failures)
+    
+    state OPEN {
+        [*] --> BlockCalls
+        BlockCalls --> CheckTimeout: All calls raise CircuitBreakerError
+        CheckTimeout --> BlockCalls: elapsed < recovery_timeout (60s)
+        CheckTimeout --> [*]: elapsed >= recovery_timeout
+        
+        note right of BlockCalls: Immediately fail all calls<br/>without attempting execution
+    }
+    
+    OPEN --> HALF_OPEN: Recovery Timeout Expired
+    
+    state HALF_OPEN {
+        [*] --> TestRecovery
+        TestRecovery --> EvaluateResult: Allow ONE test call
+        EvaluateResult --> [*]: Success
+        EvaluateResult --> ReOpen: Failure
+        
+        ReOpen --> [*]
+        
+        note right of TestRecovery: Next execute_trade() call<br/>tests if service recovered
+    }
+    
+    HALF_OPEN --> CLOSED: Test Call Succeeds
+    HALF_OPEN --> OPEN: Test Call Fails
+    
+    note left of CLOSED: Normal operation<br/>Tracks failures but allows all calls
+    
+    note right of OPEN: Blocking state<br/>Protects against cascading failures<br/>Waits for recovery timeout
+    
+    note left of HALF_OPEN: Testing state<br/>One call to verify recovery<br/>Success → CLOSED<br/>Failure → OPEN
+    
+    style CLOSED fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style OPEN fill:#F44336,stroke:#C62828,color:#fff
+    style HALF_OPEN fill:#FFC107,stroke:#F57C00,color:#333
+```
+
+**Circuit Breaker Configuration:**
+- `failure_threshold`: Number of failures before opening circuit (default: 3)
+- `recovery_timeout`: Seconds to wait before testing recovery (default: 60)
+- `expected_exception`: Exception type to catch (default: `aiohttp.ClientError`)
+
+**Usage Pattern:**
+- **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
+- **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
+- **[Ensemble System](docs/ENSEMBLE_SYSTEM.md)** - Multi-provider AI aggregation
+- **[Multi-Timeframe Pulse](MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system
+- **[Autonomous Agent](AGENTIC_LOOP_WORKFLOW.md)** - OODA loop implementation
+# execute_trade() is now protected by circuit breaker
+
+# Circuit breaker lifecycle:
+# 1. CLOSED: Normal operation, tracks failures
+# 2. OPEN: After 3 failures, blocks all calls for 60s
+# 3. HALF_OPEN: After timeout, allows one test call
+# 4. Back to CLOSED on success, or OPEN on failure
+```
+
+See [finance_feedback_engine/trading_platforms/](finance_feedback_engine/trading_platforms/) for implementation details.
+
+### Directory Structure
+
+```
+finance_feedback_engine/
+├── core.py                    # Main engine orchestrator
+├── data_providers/            # Market data providers
+│   ├── alpha_vantage_provider.py
+│   ├── unified_data_provider.py      # Multi-timeframe aggregation
+│   └── timeframe_aggregator.py       # Technical indicators
+├── trading_platforms/         # Trading platform integrations
+│   ├── base_platform.py       # Abstract base class
+│   ├── coinbase_platform.py   # Coinbase implementation
+│   ├── oanda_platform.py      # Oanda implementation
+│   ├── unified_platform.py    # Multi-platform aggregation
+│   └── platform_factory.py    # Platform factory
+├── decision_engine/           # AI-powered decision making
+│   ├── engine.py              # Prompt builder, position sizing
+│   └── ensemble_manager.py    # Multi-provider voting
+├── agent/                     # Autonomous trading
+│   ├── trading_loop_agent.py  # OODA state machine
+│   └── config.py              # Agent configuration
+├── monitoring/                # Live trade tracking
+│   ├── trade_monitor.py       # Main monitoring orchestrator
+│   ├── trade_tracker.py       # Per-trade thread
+│   ├── metrics_collector.py   # Performance data
+│   └── monitoring_context_provider.py  # Pulse integration
+├── memory/                    # ML feedback loop
+│   └── portfolio_memory.py    # Experience buffer
+├── risk/                      # Risk management
+│   └── gatekeeper.py          # Validation rules
+├── persistence/               # Decision storage
+│   └── decision_store.py
+├── utils/                     # Shared utilities
+│   ├── circuit_breaker.py     # Resilience pattern
+│   ├── validation.py          # Asset pair standardization
+│   └── market_regime_detector.py  # ADX/ATR classification
+└── cli/                       # Command-line interface
+    └── main.py
+``` TMC --> AGG
+    PME --> AGG
+    
+    PME -->|Generate context| MCP
+    MCP -->|Inject pulse + positions| DE_INJECT
+    DE_INJECT --> NEXT_DECISION
+    
+    NEXT_DECISION -.->|Avoid overtrading| LOOP
+    
+    style LOOP fill:#2196F3,stroke:#0D47A1,color:#fff
+    style POOL fill:#FF9800,stroke:#E65100,color:#fff
+    style ENTRY fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style EXIT_DETECT fill:#9C27B0,stroke:#4A148C,color:#fff
+    style PME fill:#00BCD4,stroke:#006064,color:#fff
+    style MCP fill:#FFC107,stroke:#F57C00,color:#333
+    
+    click INIT "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_monitor.py#L17" "TradeMonitor class"
+    click ENTRY "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_tracker.py" "TradeTrackerThread"
+    click TMC "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/metrics_collector.py" "Metrics Collector"
+    click PME "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/memory/portfolio_memory.py" "Portfolio Memory"
+```
+
+**Monitoring Features:**
+- **Automatic Detection**: Scans platform for new positions every 30s
+- **Thread-Safe Tracking**: Max 2 concurrent positions with dedicated threads
+- **Real-Time Updates**: Live P&L, peak profit, max drawdown tracking
+- **Exit Classification**: Detects take-profit, stop-loss, or manual exits
+- **ML Feedback**: Completed trades → PortfolioMemoryEngine → DecisionEngine context
+- **Overflow Handling**: Pending queue for positions when slots are full
+- **Metrics Storage**: Persistent JSON records in `data/trade_metrics/`
+- **Position Awareness**: MonitoringContextProvider injects active positions into AI prompts
+
+See [LIVE_MONITORING_IMPLEMENTATION.md](LIVE_MONITORING_IMPLEMENTATION.md) for full details.
+        
+        SendOrder --> LogFailure: Execution Error
+        LogFailure --> EXECUTION_FAILED
+        
+        note right of SendOrder: Circuit breaker<br/>protects against<br/>API failures
+    }
+    
+    EXECUTION --> LEARNING: Trade Executed
+    EXECUTION_FAILED --> PERCEPTION: Retry Next Cycle
+    
+    state HALT {
+        [*] --> StopAgent
+        StopAgent --> [*]: is_running = False
+    }
+    
+    HALT --> [*]: Agent Stopped
+    
+    note left of STARTUP: On agent start:<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
+    
+    note right of IDLE: Default: 300s<br/>(5 minutes between cycles)
+    
+    note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
+    
+    note right of PERCEPTION: Kill-switch protects against<br/>runaway losses
+    
+    note right of REASONING: Analyzes multiple assets<br/>per cycle with retry logic
+    
+    note right of RISK_CHECK: Final safety gate before<br/>execution
+    
+    note right of EXECUTION: Monitored by TradeMonitor<br/>for live P&L tracking
+    
+    style STARTUP fill:#00BCD4,stroke:#006064,color:#fff
+    style POSITION_RECOVERY fill:#00BCD4,stroke:#006064,color:#fff
+    style IDLE fill:#9E9E9E,stroke:#424242,color:#fff
+    style LEARNING fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style PERCEPTION fill:#2196F3,stroke:#0D47A1,color:#fff
+    style REASONING fill:#FF9800,stroke:#E65100,color:#fff
+    style RISK_CHECK fill:#FFC107,stroke:#F57C00,color:#333
+    style EXECUTION fill:#9C27B0,stroke:#4A148C,color:#fff
+    style HALT fill:#F44336,stroke:#C62828,color:#fff
+    style EXECUTION_FAILED fill:#F44336,stroke:#C62828,color:#fff
+```
+
+**Agent Features:**
+- **Position Recovery on Startup**: Automatically discovers open positions from platform and rebuilds state
+- **OODA Loop**: Continuous Observe → Orient (Learning) → Decide (Reasoning) → Act (Execution) cycle
+- **Kill-Switch Protection**: Halts trading if portfolio P&L breaches loss threshold
+- **Retry Logic**: Exponential backoff for transient failures (3 attempts per asset)
+- **Failure Tracking**: Per-asset failure counters with time-based decay
+- **Daily Limits**: Configurable max trades per day with automatic midnight reset
+- **Risk Gatekeeper**: Final validation before execution (drawdown, VaR, correlation)
+- **Memory Integration**: Learns from closed trades via PortfolioMemoryEngine
+
+See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop_agent.py](finance_feedback_engine/agent/trading_loop_agent.py) for details.
+        P5[gemini<br/>Gemini CLI]
+    end
+    
+    COLLECT{Collect<br/>Responses}
+    DETECT[Detect Provider Failures]
+    
+    CALC_WEIGHTS[Dynamic Weight Recalculation<br/>Renormalize Active Provider Weights]
+    
+    subgraph "4-Tier Fallback Strategy"
+        direction TB
+        T1{Tier 1:<br/>Weighted Voting}
+        T2{Tier 2:<br/>Majority Voting}
+        T3{Tier 3:<br/>Simple Averaging}
+        T4[Tier 4:<br/>Single Provider<br/>Highest Confidence]
+        
+        T1 -->|Fails or<br/>No Weights| T2
+        T2 -->|No Majority| T3
+        T3 -->|Fails| T4
+    end
+    
+    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 × (active/total)]
+    QUORUM{Local Provider<br/>Quorum Met?<br/>(min 3)}
+    PENALTY[Apply 30% Confidence Penalty<br/>Add WARNING to reasoning]
+    
+    META[Attach Ensemble Metadata<br/>providers_used, providers_failed,<br/>adjusted_weights, fallback_tier]
+    
+    DECISION([Final Aggregated Decision])
+    
+    START --> QUERY
+    QUERY --> P1 & P2 & P3 & P4 & P5
+    P1 & P2 & P3 & P4 & P5 --> COLLECT
+    COLLECT --> DETECT
+    
+    DETECT -->|Failures Detected| CALC_WEIGHTS
+    DETECT -->|All Success| CALC_WEIGHTS
+    
+    CALC_WEIGHTS --> T1
+    T1 -->|Success| CONFIDENCE
+    T2 -->|Success| CONFIDENCE
+    T3 -->|Success| CONFIDENCE
+    T4 --> CONFIDENCE
+    
+    CONFIDENCE --> QUORUM
+    QUORUM -->|Yes| META
+    QUORUM -->|No| PENALTY
+    PENALTY --> META
+    META --> DECISION
+    
+    subgraph "Example: Weight Adjustment"
+        direction LR
+        ORIG[Original Weights<br/>local: 0.25, cli: 0.25,<br/>codex: 0.25, qwen: 0.25]
+        FAIL[cli FAILED ✗]
+        ACTIVE[Active Sum = 0.75<br/>3/4 providers]
+        ADJ[Adjusted Weights<br/>local: 0.333 (0.25/0.75)<br/>codex: 0.333<br/>qwen: 0.333]
+        
+        ORIG --> FAIL --> ACTIVE --> ADJ
+    end
+    
+    style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style T2 fill:#FFC107,stroke:#F57C00,color:#333
+    style T3 fill:#FF9800,stroke:#E65100,color:#fff
+    style T4 fill:#F44336,stroke:#C62828,color:#fff
+    style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
+    style PENALTY fill:#FF5722,stroke:#BF360C,color:#fff
+    style ADJ fill:#9C27B0,stroke:#4A148C,color:#fff
+    
+    click CALC_WEIGHTS "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/ensemble_manager.py#L350" "View weight calculation"
+    click T1 "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/docs/ENSEMBLE_FALLBACK_SYSTEM.md" "Fallback documentation"
+```
+
+**Features:**
+- **Intelligent Voting**: Combines decisions from multiple AI providers using weighted voting (Tier 1)
+- **Dynamic Weight Adjustment**: Automatically renormalizes weights when providers fail
+- **4-Tier Fallback**: Progressive degradation (weighted → majority → averaging → single provider)
+- **Resilient**: Continues working even when most providers are unavailable
+- **Transparent**: Full metadata shows which providers succeeded/failed and how weights were adjusted
+- **Quorum Protection**: Requires minimum 3 local providers; applies 30% confidence penalty if not met
+
+**Example metadata when one provider fails:**
+```json
+{
+  "ensemble_metadata": {
+    "providers_used": ["local", "codex", "qwen"],
+    "providers_failed": ["cli"],
+    "weight_adjustment_applied": true,
+    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333},
+    "fallback_tier": "weighted_voting",
+    "quorum_penalty_applied": false
+  }
+}
+```
+
+See [docs/DYNAMIC_WEIGHT_ADJUSTMENT.md](docs/DYNAMIC_WEIGHT_ADJUSTMENT.md) and [docs/ENSEMBLE_FALLBACK_SYSTEM.md](docs/ENSEMBLE_FALLBACK_SYSTEM.md) for complete details.
 Edit `config/config.local.yaml` and add your:
 - Alpha Vantage API key
 - Trading platform credentials
@@ -528,13 +1324,15 @@ All trading decisions are stored as JSON files in the configured storage path (d
 
 - **[Long-Term Performance Tracking](docs/LONG_TERM_PERFORMANCE.md)** - 90-day portfolio metrics for AI decision-making 🆕
 - **[AI Providers](docs/AI_PROVIDERS.md)** - Guide to available AI providers
-- **[Live Trade Monitoring](docs/LIVE_TRADE_MONITORING.md)** - Real-time position tracking
+- **[Live Trade Monitoring](LIVE_MONITORING_IMPLEMENTATION.md)** - Real-time position tracking with thread-safe monitoring
 - **[Portfolio Memory Engine](PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
 - **[Signal-Only Mode](SIGNAL_ONLY_MODE.md)** - Trading signals without execution
 - **Backtesting & Simulation (README)** - See "Backtesting & Simulations" and Monte Carlo/WFA quick-start examples
 - **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
 - **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
-- **[Ensemble System](docs/ENSEMBLE_SYSTEM.md)** - Multi-provider AI aggregation
+- **[Ensemble System](docs/ENSEMBLE_FALLBACK_SYSTEM.md)** - Multi-provider AI aggregation with 4-tier fallback
+- **[Multi-Timeframe Pulse](MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system (6 timeframes, 5 indicators)
+- **[Autonomous Agent](AGENTIC_LOOP_WORKFLOW.md)** - OODA loop with position recovery and state machine
 
 ## 🤝 Contributing
 
