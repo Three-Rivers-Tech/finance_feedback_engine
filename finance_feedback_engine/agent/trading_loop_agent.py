@@ -190,7 +190,7 @@ class TradingLoopAgent:
 
                         # Generate synthetic decision ID
                         timestamp = datetime.datetime.utcnow().isoformat()
-                        hash_input = f"{product_id}_{timestamp}"
+                        hash_input = f"{product_id}_{timestamp}_{pos['platform']}_{pos['size']}"
                         hash_suffix = hashlib.md5(hash_input.encode()).hexdigest()[:8]
                         decision_id = f"RECOVERED_{asset_pair}_{int(time.time())}_{hash_suffix}"
 
@@ -325,9 +325,21 @@ class TradingLoopAgent:
         """
         logger.info("Starting autonomous trading agent...")
         self.is_running = True
+        logger.info("Starting autonomous trading agent...")
+        self.is_running = True
 
         # Block until position recovery completes
-        await self._recover_existing_positions()
+        try:
+            await asyncio.wait_for(
+                self._recover_existing_positions(),
+                timeout=60.0  # 60 second timeout
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Position recovery timed out after 60 seconds. "
+                "Starting agent with empty position state."
+            )
+            self._startup_complete.set()
 
         self.state = AgentState.IDLE  # Start in IDLE state
 
