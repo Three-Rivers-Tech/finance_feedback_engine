@@ -2646,12 +2646,11 @@ def learning_report(ctx, asset_pair):
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
 
-        # Get memory engine (assuming it's initialized in engine)
-        if not hasattr(engine, 'portfolio_memory') or engine.portfolio_memory is None:
-            console.print("[yellow]Portfolio memory not initialized. No learning data available.[/yellow]")
+        # Consistent memory engine usage and initialization check
+        if not hasattr(engine, 'memory_engine') or engine.memory_engine is None:
+            console.print("[yellow]Portfolio memory not initialized.[/yellow]")
             return
-
-        memory = engine.portfolio_memory
+        memory = engine.memory_engine
 
         # Generate metrics
         metrics = memory.generate_learning_validation_metrics(asset_pair=asset_pair)

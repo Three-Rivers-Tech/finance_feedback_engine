@@ -35,7 +35,6 @@
 - **⚙️ Modular Design**: Each component can be customized or replaced
 - **📈 Balance Management**: Real-time account balance and allocation tracking
 - **🎯 CLI Interface**: Rich command-line interface for easy interaction
-- **🔒 Signal-Only Mode**: Learn from real portfolio without execution risk 🆕
 - **📱 Telegram Approvals** (Optional): Mobile approval workflow for human-in-the-loop trading 🆕
   - **REST API**: FastAPI-based web service for webhooks and monitoring
   - **Redis Queue**: Persistent approval queue with auto-recovery
@@ -71,6 +70,8 @@
 - Python 3.8+
 - Alpha Vantage API key (premium recommended)
 - Trading platform credentials (Coinbase, Oanda, etc.)
+
+**Sentiment Source:** News sentiment uses Alpha Vantage `NEWS_SENTIMENT`; no Twitter or on-chain dependencies are required.
 
 ### Optional Web Service (Telegram Approvals) 🆕
 - Redis 5.x+ (auto-setup available)
@@ -253,6 +254,34 @@ python main.py execute <decision_id>
 ```bash
 python main.py status
 ```
+
+### Backtesting & Simulations
+
+Run historical and robustness analyses directly from the CLI.
+
+```bash
+# AI-driven backtest with defaults from config.advanced_backtesting
+python main.py backtest BTCUSD --start 2024-01-01 --end 2024-02-01 \
+  --initial-balance 10000 --fee-percentage 0.001 --slippage-percentage 0.0001
+
+# Walk-forward analysis (rolling train/test windows with overfitting check)
+python main.py walk-forward BTCUSD --start-date 2024-01-01 --end-date 2024-03-01 --train-ratio 0.7
+
+# Monte Carlo simulation with price perturbations
+python main.py monte-carlo BTCUSD --start-date 2024-01-01 --end-date 2024-03-01 \
+  --simulations 500 --noise-std 0.001
+```
+
+Notes:
+- Backtest accepts overrides for fees, slippage, commission, stop-loss, take-profit, and starting balance; set `trading_platform: mock` for dry runs.
+- Walk-forward windows auto-derive from the date range; ensure the span is long enough for both train and test windows (≥7-day train recommended).
+- Monte Carlo perturbs prices; inspect VaR/percentiles to understand tail risk.
+
+### Signal-Only Mode & Position Sizing
+
+- Default sizing targets ~1% portfolio risk with a ~2% stop loss; overrides available via config.
+- If balance is unavailable or `signal_only_default: true`, decisions return signals without position sizes (`signal_only: true`).
+- View suggested amounts, stop loss, and take profit in `analyze` output; size is skipped in signal-only scenarios.
 
 ### Live Trade Monitoring 🆕
 
@@ -483,9 +512,9 @@ All trading decisions are stored as JSON files in the configured storage path (d
 
 - [ ] Add more trading platforms (Binance, Kraken, etc.)
 - [x] **Long-term portfolio performance tracking** (see `docs/LONG_TERM_PERFORMANCE.md`) ✅
-- [x] Implement backtesting functionality
+- [x] Implement backtesting functionality (AI-driven + simulations)
+- [x] Create web dashboard (portfolio aggregation)
 - [ ] Add portfolio management features
-- [ ] Create web dashboard
 - [ ] Add real-time WebSocket support
 - [ ] Implement advanced AI models integration
 - [ ] Add risk management strategies
@@ -493,6 +522,7 @@ All trading decisions are stored as JSON files in the configured storage path (d
  - [ ] Two-phase ensemble escalation (free→premium) with budget limits 🆕
  - [ ] Telegram notifications for Phase 1 failures and trade executions 🆕
  - [ ] Adaptive Phase 1 threshold tuning based on premium provider value-add 🆕
+- [ ] Exit codes & troubleshooting guide for CLI commands
 
 ## 📚 Documentation
 
@@ -501,6 +531,7 @@ All trading decisions are stored as JSON files in the configured storage path (d
 - **[Live Trade Monitoring](docs/LIVE_TRADE_MONITORING.md)** - Real-time position tracking
 - **[Portfolio Memory Engine](PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
 - **[Signal-Only Mode](SIGNAL_ONLY_MODE.md)** - Trading signals without execution
+- **Backtesting & Simulation (README)** - See "Backtesting & Simulations" and Monte Carlo/WFA quick-start examples
 - **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
 - **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
 - **[Ensemble System](docs/ENSEMBLE_SYSTEM.md)** - Multi-provider AI aggregation
