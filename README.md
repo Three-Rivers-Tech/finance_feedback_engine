@@ -242,8 +242,6 @@ flowchart TD
         ENV_OA[OANDA_API_KEY<br/>OANDA_ACCOUNT_ID]
     end
     
-All asset pair formats are automatically standardized to uppercase without separators for API compatibility. See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for details.
-
 ### Multi-Timeframe Technical Analysis 🆕
 
 The engine analyzes **6 timeframes simultaneously** to detect cross-timeframe patterns and confluence:
@@ -338,7 +336,7 @@ flowchart LR
 - **LLM-Optimized**: Natural language summaries for better AI comprehension
 
 See [MULTI_TIMEFRAME_PULSE_COMPLETE.md](MULTI_TIMEFRAME_PULSE_COMPLETE.md) for implementation details.
-        LOCAL_AI[decision_engine.ai_provider]
+### Ensemble Mode: Multi-Provider AI Aggregation 🆕
 ### Ensemble Mode: Multi-Provider AI Aggregation 🆕
 
 Combine multiple AI providers for more robust decisions with intelligent fallback strategies:
@@ -357,6 +355,127 @@ flowchart TD
     
     subgraph "Provider Queries (Concurrent)"
         P1[local<br/>Ollama]
+        P2[codex<br/>Codex CLI]
+        P3[cli<br/>GitHub Copilot CLI]
+        P4[qwen<br/>Qwen CLI]
+        P5[gemini<br/>Gemini CLI]
+    end
+    
+    COLLECT{Collect<br/>Responses}
+    DETECT[Detect Provider Failures]
+    
+    CALC_WEIGHTS[Dynamic Weight Recalculation<br/>Renormalize Active Provider Weights]
+    
+    subgraph "4-Tier Fallback Strategy"
+        direction TB
+        T1{Tier 1:<br/>Weighted Voting}
+        T2{Tier 2:<br/>Majority Voting}
+        T3{Tier 3:<br/>Simple Averaging}
+        T4[Tier 4:<br/>Single Provider<br/>Highest Confidence]
+        
+        T1 -->|Fails or<br/>No Weights| T2
+        T2 -->|No Majority| T3
+        T3 -->|Fails| T4
+    end
+    
+    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 × (active/total)]
+    QUORUM{Local Provider<br/>Quorum Met?<br/>(min 3)}
+    PENALTY[Apply 30% Confidence Penalty<br/>Add WARNING to reasoning]
+    
+    META[Attach Ensemble Metadata<br/>providers_used, providers_failed,<br/>adjusted_weights, fallback_tier]
+    
+    DECISION([Final Aggregated Decision])
+    
+    START --> QUERY
+    QUERY --> P1 & P2 & P3 & P4 & P5
+    P1 & P2 & P3 & P4 & P5 --> COLLECT
+    COLLECT --> DETECT
+    
+    DETECT -->|Failures Detected| CALC_WEIGHTS
+    DETECT -->|All Success| CALC_WEIGHTS
+    
+    CALC_WEIGHTS --> T1
+    T1 -->|Success| CONFIDENCE
+    T2 -->|Success| CONFIDENCE
+    T3 -->|Success| CONFIDENCE
+    T4 --> CONFIDENCE
+    
+    CONFIDENCE --> QUORUM
+    QUORUM -->|Yes| META
+    QUORUM -->|No| PENALTY
+    PENALTY --> META
+    META --> DECISION
+    
+    subgraph "Example: Weight Adjustment"
+        direction LR
+        ORIG[Original Weights<br/>local:0.4, codex:0.3,<br/>cli:0.2, qwen:0.1]
+        FAIL[Gemini Fails]
+        ACTIVE[Active Providers<br/>local, codex, cli, qwen]
+        ADJ[Adjusted Weights<br/>local:0.4, codex:0.3,<br/>cli:0.2, qwen:0.1]
+    end
+    
+    style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style T2 fill:#FFC107,stroke:#F57C00,color:#333
+    style T3 fill:#FF9800,stroke:#E65100,color:#fff
+    style T4 fill:#F44336,stroke:#C62828,color:#fff
+    style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
+    style PENALTY fill:#FF5722,stroke:#BF360C,color:#fff
+    style ADJ fill:#9C27B0,stroke:#4A148C,color:#fff
+    
+    click CALC_WEIGHTS "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/ensemble_manager.py#L350" "View weight calculation"
+    click T1 "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/docs/ENSEMBLE_FALLBACK_SYSTEM.md" "Fallback documentation"
+```
+
+**Features:**
+- **Intelligent Voting**: Combines decisions from multiple AI providers using weighted voting (Tier 1)
+- **Dynamic Weight Adjustment**: Automatically renormalizes weights when providers fail
+- **4-Tier Fallback**: Progressive degradation (weighted → majority → averaging → single provider)
+- **Resilient**: Continues working even when most providers are unavailable
+- **Transparent**: Full metadata shows which providers succeeded/failed and how weights were adjusted
+- **Quorum Protection**: Requires minimum 3 local providers; applies 30% confidence penalty if not met
+
+**Example metadata when one provider fails:**
+```json
+{
+  "ensemble_metadata": {
+    "providers_used": ["local", "codex", "qwen"],
+    "providers_failed": ["gemini"],
+    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333},
+    "fallback_tier": 1,
+    "quorum_penalty_applied": false
+  }
+}
+```
+
+See [docs/DYNAMIC_WEIGHT_ADJUSTMENT.md](docs/DYNAMIC_WEIGHT_ADJUSTMENT.md) and [docs/ENSEMBLE_FALLBACK_SYSTEM.md](docs/ENSEMBLE_FALLBACK_SYSTEM.md) for complete details.
+
+### AI Provider Options
+
+The engine supports five AI providers:
+
+1. **Ensemble** (`--provider ensemble`): Combines multiple providers with weighted voting 🆕
+   - Automatically handles provider failures
+   - Configurable weights and voting strategies
+   - Best for production use with high reliability
+
+2. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
+  - Install: `npm install -g @openai/codex` or from https://github.com/openai/codex
+   - Runs locally without token costs
+
+3. **GitHub Copilot CLI** (`--provider cli`): Uses GitHub Copilot CLI
+  - Install: Follow [Copilot CLI setup](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
+   - Requires GitHub Copilot subscription
+
+4. **Qwen CLI** (`--provider qwen`): Uses free Qwen CLI tool
+   - Install: Requires Node.js v20+ and OAuth authentication
+   - Command: `qwen`
+   - Free to use
+
+5. **Gemini CLI** (`--provider gemini`): Uses free Google Gemini CLI
+   - Install: `npm install -g @google/gemini-cli` (requires Node.js v20+)
+   - Authentication: OAuth (60 req/min, 1000 req/day) or API key (100 req/day)
+   - Free tier with Gemini 2.5 Pro access
+
 6. **Local** (`--provider local`): Simple rule-based decisions
    - No setup required
    - Good for testing and fallback
@@ -464,6 +583,64 @@ stateDiagram-v2
         [*] --> SendOrder
         SendOrder --> AssociateDecision: TradingPlatform.execute_trade()
         AssociateDecision --> IncrementCounter: TradeMonitor.associate_decision_to_trade()
+        IncrementCounter --> [*]: daily_trade_count++
+        
+        SendOrder --> LogFailure: Execution Error
+        LogFailure --> EXECUTION_FAILED
+        
+        note right of SendOrder: Circuit breaker<br/>protects against<br/>API failures
+    }
+    
+    EXECUTION --> LEARNING: Trade Executed
+    EXECUTION_FAILED --> PERCEPTION: Retry Next Cycle
+    
+    state HALT {
+        [*] --> StopAgent
+        StopAgent --> [*]: is_running = False
+    }
+    
+    HALT --> [*]: Agent Stopped
+    
+    note left of STARTUP: On agent start:<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
+    
+    note right of IDLE: Default: 300s<br/>(5 minutes between cycles)
+    
+    note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
+    
+    note right of PERCEPTION: Kill-switch protects against<br/>runaway losses
+    
+    note right of REASONING: Analyzes multiple assets<br/>per cycle with retry logic
+    
+    note right of RISK_CHECK: Final safety gate before<br/>execution
+    
+    note right of EXECUTION: Monitored by TradeMonitor<br/>for live P&L tracking
+    
+    style STARTUP fill:#00BCD4,stroke:#006064,color:#fff
+    style POSITION_RECOVERY fill:#00BCD4,stroke:#006064,color:#fff
+    style IDLE fill:#9E9E9E,stroke:#424242,color:#fff
+    style LEARNING fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style PERCEPTION fill:#2196F3,stroke:#0D47A1,color:#fff
+    style REASONING fill:#FF9800,stroke:#E65100,color:#fff
+    style RISK_CHECK fill:#FFC107,stroke:#F57C00,color:#333
+    style EXECUTION fill:#9C27B0,stroke:#4A148C,color:#fff
+    style HALT fill:#F44336,stroke:#C62828,color:#fff
+    style EXECUTION_FAILED fill:#F44336,stroke:#C62828,color:#fff
+```
+
+**Agent Features:**
+- **Position Recovery on Startup**: Automatically discovers open positions from platform and rebuilds state
+- **OODA Loop**: Continuous Observe → Orient (Learning) → Decide (Reasoning) → Act (Execution) cycle
+- **Kill-Switch Protection**: Halts trading if portfolio P&L breaches loss threshold
+- **Retry Logic**: Exponential backoff for transient failures (3 attempts per asset)
+- **Failure Tracking**: Per-asset failure counters with time-based decay
+- **Daily Limits**: Configurable max trades per day with automatic midnight reset
+- **Risk Gatekeeper**: Final validation before execution (drawdown, VaR, correlation)
+- **Memory Integration**: Learns from closed trades via PortfolioMemoryEngine
+
+See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop_agent.py](finance_feedback_engine/agent/trading_loop_agent.py) for details.
+
+### Live Trade Monitoring 🆕
+
 #### Monitoring Architecture & Thread Management
 
 ```mermaid
@@ -514,7 +691,38 @@ graph TB
     
     subgraph "Feedback Loop"
         MCP[MonitoringContextProvider<br/>get_monitoring_context]
+    end
+```
+
+## Live Trade Monitoring 🆕
+
+### Monitoring Architecture & Thread Management
+
+See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop_agent.py](finance_feedback_engine/agent/trading_loop_agent.py) for details.
+
+---
+
 ## 🏗️ Architecture
+
+The Finance Feedback Engine is built with a modular architecture:
+
+```
+finance_feedback_engine/
+├── core.py                    # Main engine orchestrator
+├── data_providers/            # Market data providers
+│   └── alpha_vantage_provider.py
+├── trading_platforms/         # Trading platform integrations
+│   ├── base_platform.py       # Abstract base class
+│   ├── coinbase_platform.py   # Coinbase implementation
+│   ├── oanda_platform.py      # Oanda implementation
+│   └── platform_factory.py    # Platform factory
+├── decision_engine/           # AI-powered decision making
+│   └── engine.py
+├── persistence/               # Decision storage
+│   └── decision_store.py
+└── cli/                       # Command-line interface
+    └── main.py
+```
 
 ### Platform Factory & Circuit Breaker Pattern
 
@@ -737,7 +945,57 @@ finance_feedback_engine/
 │   └── market_regime_detector.py  # ADX/ATR classification
 └── cli/                       # Command-line interface
     └── main.py
-``` TMC --> AGG
+```
+
+### Monitoring Architecture & Thread Management
+
+```mermaid
+graph TB
+    subgraph "Main Thread - TradeMonitor"
+        INIT[Initialize TradeMonitor<br/>monitoring_context_provider]
+        DETECT[Detect New Positions<br/>poll_platforms()]
+        SPAWN[Spawn TradeTrackerThread<br/>for each position]
+        QUEUE[Process Pending<br/>Trades Queue]
+    end
+    
+    subgraph "ThreadPoolExecutor (max_workers=2)"
+        direction LR
+        POOL[Thread Pool<br/>max 2 concurrent]
+        TRACKER[TradeTrackerThread<br/>per position]
+        MONITOR[Monitor Position<br/>price + P&L]
+        EXIT_DETECT[Detect Exit<br/>take-profit/stop-loss/manual]
+        CALLBACK[Callback to Main<br/>on position close]
+        TERMINATE[Terminate Thread]
+    end
+    
+    subgraph "TradeTrackerThread Lifecycle"
+        direction TB
+        ENTRY[Position Entry<br/>start monitoring]
+        MONITOR
+        EXIT_DETECT
+        CALLBACK --> TERMINATE
+    end
+    
+    subgraph "Data Persistence"
+        TMC[TradeMetricsCollector<br/>data/trade_metrics/]
+        PME[PortfolioMemoryEngine<br/>experience buffer]
+        AGG[Aggregate Statistics<br/>Win rate, avg P&L]
+    end
+    
+    subgraph "Feedback Loop"
+        MCP[MonitoringContextProvider<br/>get_monitoring_context]
+    end
+    
+    INIT --> DETECT
+    DETECT --> SPAWN
+    SPAWN --> POOL
+    POOL --> TRACKER
+    TRACKER --> ENTRY
+    ENTRY --> MONITOR
+    MONITOR --> EXIT_DETECT
+    EXIT_DETECT --> CALLBACK
+    CALLBACK --> TERMINATE
+    TMC --> AGG
     PME --> AGG
     
     PME -->|Generate context| MCP
@@ -769,7 +1027,7 @@ finance_feedback_engine/
 - **Metrics Storage**: Persistent JSON records in `data/trade_metrics/`
 - **Position Awareness**: MonitoringContextProvider injects active positions into AI prompts
 
-See [LIVE_MONITORING_IMPLEMENTATION.md](LIVE_MONITORING_IMPLEMENTATION.md) for full details.
+See [docs/LIVE_MONITORING_IMPLEMENTATION.md](docs/LIVE_MONITORING_IMPLEMENTATION.md) for full details.
         
         SendOrder --> LogFailure: Execution Error
         LogFailure --> EXECUTION_FAILED
@@ -946,66 +1204,6 @@ python main.py analyze gbp-jpy --provider ensemble # Multi-provider voting 🆕
 
 All asset pair formats are automatically standardized to uppercase without separators for API compatibility. See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for details.
 
-### Ensemble Mode (NEW!)
-
-Combine multiple AI providers for more robust decisions:
-
-```bash
-# Analyze with ensemble mode (combines all providers)
-python main.py analyze BTCUSD --provider ensemble
-```
-
-**Features:**
-- **Intelligent Voting**: Combines decisions from multiple AI providers
-- **Dynamic Weight Adjustment**: Automatically handles provider failures by renormalizing weights
-- **Resilient**: Continues working even when some providers are unavailable
-- **Transparent**: Full metadata shows which providers succeeded/failed and how weights were adjusted
-
-**Example metadata when one provider fails:**
-```json
-{
-  "ensemble_metadata": {
-    "providers_used": ["local", "codex", "qwen"],
-    "providers_failed": ["cli"],
-    "weight_adjustment_applied": true,
-    "adjusted_weights": {"local": 0.333, "codex": 0.333, "qwen": 0.333}
-  }
-}
-```
-
-See [docs/DYNAMIC_WEIGHT_ADJUSTMENT.md](docs/DYNAMIC_WEIGHT_ADJUSTMENT.md) for details.
-
-### AI Provider Options
-
-The engine supports five AI providers:
-
-1. **Ensemble** (`--provider ensemble`): Combines multiple providers with weighted voting 🆕
-   - Automatically handles provider failures
-   - Configurable weights and voting strategies
-   - Best for production use with high reliability
-
-2. **Codex CLI** (`--provider codex`): Uses the local Codex CLI tool (no API charges)
-  - Install: `npm install -g @openai/codex` or from https://github.com/openai/codex
-   - Runs locally without token costs
-
-2. **GitHub Copilot CLI** (`--provider cli`): Uses GitHub Copilot CLI
-  - Install: Follow [Copilot CLI setup](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
-   - Requires GitHub Copilot subscription
-
-3. **Qwen CLI** (`--provider qwen`): Uses free Qwen CLI tool
-   - Install: Requires Node.js v20+ and OAuth authentication
-   - Command: `qwen`
-   - Free to use
-
-4. **Gemini CLI** (`--provider gemini`): Uses free Google Gemini CLI
-   - Install: `npm install -g @google/gemini-cli` (requires Node.js v20+)
-   - Authentication: OAuth (60 req/min, 1000 req/day) or API key (100 req/day)
-   - Free tier with Gemini 2.5 Pro access
-
-5. **Local** (`--provider local`): Simple rule-based decisions
-   - No setup required
-   - Good for testing and fallback
-
 ### Check Account Balance
 
 ```bash
@@ -1159,28 +1357,6 @@ platform_credentials:
   environment: "practice"  # or "live"
 ```
 
-## 🏗️ Architecture
-
-The Finance Feedback Engine is built with a modular architecture:
-
-```
-finance_feedback_engine/
-├── core.py                    # Main engine orchestrator
-├── data_providers/            # Market data providers
-│   └── alpha_vantage_provider.py
-├── trading_platforms/         # Trading platform integrations
-│   ├── base_platform.py       # Abstract base class
-│   ├── coinbase_platform.py   # Coinbase implementation
-│   ├── oanda_platform.py      # Oanda implementation
-│   └── platform_factory.py    # Platform factory
-├── decision_engine/           # AI-powered decision making
-│   └── engine.py
-├── persistence/               # Decision storage
-│   └── decision_store.py
-└── cli/                       # Command-line interface
-    └── main.py
-```
-
 ## 🤖 AI Integration
 
 ### Local AI Models
@@ -1324,15 +1500,15 @@ All trading decisions are stored as JSON files in the configured storage path (d
 
 - **[Long-Term Performance Tracking](docs/LONG_TERM_PERFORMANCE.md)** - 90-day portfolio metrics for AI decision-making 🆕
 - **[AI Providers](docs/AI_PROVIDERS.md)** - Guide to available AI providers
-- **[Live Trade Monitoring](LIVE_MONITORING_IMPLEMENTATION.md)** - Real-time position tracking with thread-safe monitoring
-- **[Portfolio Memory Engine](PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
-- **[Signal-Only Mode](SIGNAL_ONLY_MODE.md)** - Trading signals without execution
+- **[Live Trade Monitoring](docs/LIVE_MONITORING_IMPLEMENTATION.md)** - Real-time position tracking with thread-safe monitoring
+- **[Portfolio Memory Engine](docs/PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
+- **[Signal-Only Mode](docs/SIGNAL_ONLY_MODE.md)** - Trading signals without execution
 - **Backtesting & Simulation (README)** - See "Backtesting & Simulations" and Monte Carlo/WFA quick-start examples
 - **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
 - **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
 - **[Ensemble System](docs/ENSEMBLE_FALLBACK_SYSTEM.md)** - Multi-provider AI aggregation with 4-tier fallback
-- **[Multi-Timeframe Pulse](MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system (6 timeframes, 5 indicators)
-- **[Autonomous Agent](AGENTIC_LOOP_WORKFLOW.md)** - OODA loop with position recovery and state machine
+- **[Multi-Timeframe Pulse](docs/MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system (6 timeframes, 5 indicators)
+- **[Autonomous Agent](docs/AGENTIC_LOOP_WORKFLOW.md)** - OODA loop with position recovery and state machine
 
 ## 🤝 Contributing
 
