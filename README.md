@@ -354,9 +354,6 @@ finance_feedback_engine/
     └── main.py
 ```
 
-### Monitoring Architecture & Thread Management
-
-**[View monitoring architecture diagram →](docs/diagrams/monitoring_architecture.mmd)**
 
 **Monitoring Features:**
 - **Automatic Detection**: Scans platform for new positions every 30s

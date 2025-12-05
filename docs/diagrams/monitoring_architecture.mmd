@@ -32,10 +32,10 @@ graph TB
     ENTRY --> MONITOR
     MONITOR --> EXIT
     EXIT --> CALLBACK
-    CALLBACK --> TME
+    CALLBACK --> TMC
 
     TMC --> PME
-    PME -.->|Inject context| DECISION
+
 
     style T1 fill:#FF9800,stroke:#E65100,color:#fff
     style T2 fill:#FF9800,stroke:#E65100,color:#fff
