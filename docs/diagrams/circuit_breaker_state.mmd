@@ -1,0 +1,40 @@
+stateDiagram-v2
+    [*] --> CLOSED
+
+    state CLOSED {
+        [*] --> Normal
+        Normal --> IncrementFailures: execute_trade fails
+        IncrementFailures --> CheckThreshold: failure_count++
+        CheckThreshold --> Normal: count < 3
+        CheckThreshold --> [*]: count >= 3
+
+        Normal --> ResetCount: execute_trade succeeds
+        ResetCount --> Normal: failure_count = 0
+    }
+
+    CLOSED --> OPEN: Threshold Reached 3 failures
+
+    state OPEN {
+        [*] --> BlockCalls
+        BlockCalls --> CheckTimeout: All calls raise CircuitBreakerError
+        CheckTimeout --> BlockCalls: elapsed < 60s
+        CheckTimeout --> [*]: elapsed >= 60s
+    }
+
+    OPEN --> HALF_OPEN: Recovery Timeout Expired
+
+    state HALF_OPEN {
+        [*] --> TestRecovery
+        TestRecovery --> EvaluateResult: Allow ONE test call
+        EvaluateResult --> [*]: Success
+        EvaluateResult --> ReOpen: Failure
+
+        ReOpen --> [*]
+    }
+
+    HALF_OPEN --> CLOSED: Test Call Succeeds
+    HALF_OPEN --> OPEN: Test Call Fails
+
+    style CLOSED fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style OPEN fill:#F44336,stroke:#C62828,color:#fff
+    style HALF_OPEN fill:#FFC107,stroke:#F57C00,color:#333

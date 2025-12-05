@@ -1,0 +1,44 @@
+graph TB
+    subgraph "Main Thread"
+        INIT[Initialize TradeMonitor]
+        DETECT[Detect New Positions poll]
+        SPAWN[Spawn TradeTrackerThread]
+    end
+
+    subgraph "ThreadPool max 2"
+        T1[TradeTrackerThread 1]
+        T2[TradeTrackerThread 2]
+        PENDING[Pending Queue]
+    end
+
+    subgraph "Tracker Lifecycle"
+        ENTRY[Position Entry]
+        MONITOR[Monitor Position P&L]
+        EXIT[Detect Exit]
+        CALLBACK[Callback]
+    end
+
+    subgraph "Persistence"
+        TMC[TradeMetricsCollector]
+        PME[PortfolioMemoryEngine]
+    end
+
+    INIT --> DETECT
+    DETECT --> SPAWN
+    SPAWN --> T1 & T2
+    T1 & T2 --> PENDING
+
+    T1 --> ENTRY
+    ENTRY --> MONITOR
+    MONITOR --> EXIT
+    EXIT --> CALLBACK
+    CALLBACK --> TME
+
+    TMC --> PME
+    PME -.->|Inject context| DECISION
+
+    style T1 fill:#FF9800,stroke:#E65100,color:#fff
+    style T2 fill:#FF9800,stroke:#E65100,color:#fff
+    style ENTRY fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style EXIT fill:#9C27B0,stroke:#4A148C,color:#fff
+    style PME fill:#00BCD4,stroke:#006064,color:#fff
