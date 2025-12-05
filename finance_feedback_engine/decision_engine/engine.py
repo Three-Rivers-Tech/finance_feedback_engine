@@ -190,7 +190,8 @@ class DecisionEngine:
         market_data: Dict[str, Any],
         balance: Dict[str, float],
         portfolio: Optional[Dict[str, Any]] = None,
-        memory_context: Optional[Dict[str, Any]] = None
+        memory_context: Optional[Dict[str, Any]] = None,
+        monitoring_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Generate a trading decision based on market data and balances.
@@ -201,6 +202,7 @@ class DecisionEngine:
             balance: Account balances
             portfolio: Optional portfolio breakdown with holdings/allocations
             memory_context: Optional historical performance context
+            monitoring_context: Optional monitoring context with active positions and pulse
 
         Returns:
             Trading decision with recommendation
@@ -216,22 +218,33 @@ class DecisionEngine:
                 "for accurate simulation. Use 'mock' provider for fast rule-based testing."
             )
 
-        # Get live monitoring context if available
-        monitoring_context = None
-        if self.monitoring_provider:
+        # Merge monitoring context from parameter with live monitoring provider
+        # Parameter takes precedence (for backtesting)
+        if monitoring_context is None and self.monitoring_provider:
             try:
                 monitoring_context = (
                     self.monitoring_provider.get_monitoring_context(
                         asset_pair=asset_pair
                     )
                 )
+                # Handle active_positions as either list or dict
+                active_pos = monitoring_context.get('active_positions', [])
+                if isinstance(active_pos, dict):
+                    num_positions = len(active_pos.get('futures', []))
+                elif isinstance(active_pos, list):
+                    num_positions = len(active_pos)
+                else:
+                    num_positions = 0
+
                 logger.info(
                     "Monitoring context loaded: %d active positions, %d slots",
-                    len(monitoring_context.get('active_positions', {}).get('futures', [])),
+                    num_positions,
                     monitoring_context.get('slots_available', 0)
                 )
             except Exception as e:
                 logger.warning("Could not load monitoring context: %s", e)
+        elif monitoring_context:
+            logger.debug("Using provided monitoring context (backtesting mode)")
 
         # Create decision context
         context = self._create_decision_context(
@@ -1890,8 +1903,15 @@ Present your judgment with clear reasoning and final decision.
         # Check monitoring context for active positions (futures/margin)
         monitoring_context = context.get('monitoring_context')
         if monitoring_context and not has_existing_position:
-            active_positions = monitoring_context.get('active_positions', {})
-            futures_positions = active_positions.get('futures', [])
+            active_positions = monitoring_context.get('active_positions', [])
+            # Handle both dict format (live) and list format (backtest)
+            if isinstance(active_positions, dict):
+                futures_positions = active_positions.get('futures', [])
+            elif isinstance(active_positions, list):
+                futures_positions = active_positions
+            else:
+                futures_positions = []
+
             for position in futures_positions:
                 if asset_pair in position.get('product_id', ''):
                     has_existing_position = True

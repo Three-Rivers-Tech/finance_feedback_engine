@@ -170,6 +170,9 @@ class PortfolioMemoryEngine:
         # Load existing memory
         self._load_memory()
 
+        # Read-only mode for walk-forward testing (prevents writes during test windows)
+        self._readonly = False
+
         logger.info(
             f"Portfolio Memory Engine initialized with "
             f"{len(self.experience_buffer)} experiences"
@@ -200,6 +203,13 @@ class PortfolioMemoryEngine:
         Returns:
             TradeOutcome object with computed P&L
         """
+        # Skip recording if in read-only mode (walk-forward test windows)
+        if self._readonly:
+            logger.debug("Skipping trade outcome recording (read-only mode)")
+            # Still create and return the outcome object for consistency
+            # but don't modify memory state
+            pass  # Will create outcome below and return it
+
         # Extract decision metadata
         decision_id = decision.get('id', 'unknown')
         asset_pair = decision.get('asset_pair', 'UNKNOWN')
@@ -271,20 +281,22 @@ class PortfolioMemoryEngine:
             hit_take_profit=hit_take_profit
         )
 
-        # Store in history
-        self.trade_outcomes.append(outcome)
+        # Only update memory state if not in read-only mode
+        if not self._readonly:
+            # Store in history
+            self.trade_outcomes.append(outcome)
 
-        # Update provider performance
-        self._update_provider_performance(outcome, decision)
+            # Update provider performance
+            self._update_provider_performance(outcome, decision)
 
-        # Add to experience buffer
-        self.experience_buffer.append(outcome)
+            # Add to experience buffer
+            self.experience_buffer.append(outcome)
 
-        # Auto-save to disk after recording
-        try:
-            self.save_to_disk()
-        except Exception as e:
-            logger.warning(f"Failed to auto-save portfolio memory: {e}")
+            # Auto-save to disk after recording
+            try:
+                self.save_to_disk()
+            except Exception as e:
+                logger.warning(f"Failed to auto-save portfolio memory: {e}")
 
         return outcome
 
@@ -1292,6 +1304,150 @@ class PortfolioMemoryEngine:
             'learning_rate': self.learning_rate,
             'context_window': self.context_window
         }
+
+    # ===================================================================
+    # Memory Snapshotting for Walk-Forward Testing
+    # ===================================================================
+
+    def snapshot(self) -> Dict[str, Any]:
+        """
+        Create a deep copy snapshot of current memory state.
+
+        Used for walk-forward testing to checkpoint memory before test windows
+        and prevent lookahead bias.
+
+        Returns:
+            Dictionary containing full memory state
+        """
+        from copy import deepcopy
+
+        snapshot_data = {
+            'trade_outcomes': deepcopy([outcome.to_dict() for outcome in self.trade_outcomes]),
+            'experience_buffer': deepcopy(list(self.experience_buffer)),
+            'provider_performance': deepcopy(dict(self.provider_performance)),
+            'regime_performance': deepcopy(dict(self.regime_performance)),
+            'strategy_performance': deepcopy(dict(self.strategy_performance)),
+            'performance_snapshots': deepcopy([snap.to_dict() for snap in self.performance_snapshots]),
+            'max_memory_size': self.max_memory_size,
+            'learning_rate': self.learning_rate,
+            'context_window': self.context_window,
+            'readonly': self._readonly
+        }
+
+        logger.debug(f"Created memory snapshot with {len(self.trade_outcomes)} outcomes")
+        return snapshot_data
+
+    def restore(self, snapshot: Dict[str, Any]) -> None:
+        """
+        Restore memory state from a snapshot.
+
+        Used in walk-forward testing to revert to checkpointed state after
+        test windows.
+
+        Args:
+            snapshot: Snapshot dictionary from snapshot() method
+        """
+        from copy import deepcopy
+
+        # Restore trade outcomes
+        self.trade_outcomes = [
+            TradeOutcome(**outcome_data)
+            for outcome_data in snapshot.get('trade_outcomes', [])
+        ]
+
+        # Restore experience buffer
+        self.experience_buffer = deque(
+            deepcopy(snapshot.get('experience_buffer', [])),
+            maxlen=self.max_memory_size
+        )
+
+        # Restore provider performance
+        self.provider_performance = defaultdict(
+            lambda: {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'total_pnl': 0.0,
+                'confidence_calibration': []
+            }
+        )
+        for provider, stats in snapshot.get('provider_performance', {}).items():
+            self.provider_performance[provider] = deepcopy(stats)
+
+        # Restore regime performance
+        self.regime_performance = defaultdict(
+            lambda: {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'total_pnl': 0.0
+            }
+        )
+        for regime, stats in snapshot.get('regime_performance', {}).items():
+            self.regime_performance[regime] = deepcopy(stats)
+
+        # Restore strategy performance
+        self.strategy_performance = defaultdict(
+            lambda: {
+                'total_trades': 0,
+                'winning_trades': 0,
+                'total_pnl': 0.0,
+            }
+        )
+        for strategy, stats in snapshot.get('strategy_performance', {}).items():
+            self.strategy_performance[strategy] = deepcopy(stats)
+
+        # Restore performance snapshots
+        self.performance_snapshots = [
+            PerformanceSnapshot(**snap_data)
+            for snap_data in snapshot.get('performance_snapshots', [])
+        ]
+
+        # Restore config values
+        self.max_memory_size = snapshot.get('max_memory_size', self.max_memory_size)
+        self.learning_rate = snapshot.get('learning_rate', self.learning_rate)
+        self.context_window = snapshot.get('context_window', self.context_window)
+        self._readonly = snapshot.get('readonly', False)
+
+        logger.info(f"Restored memory snapshot with {len(self.trade_outcomes)} outcomes")
+
+    def set_readonly(self, enabled: bool) -> None:
+        """
+        Enable or disable read-only mode.
+
+        When read-only mode is enabled, record_trade_outcome() will not modify
+        the memory state. This is used during test windows in walk-forward testing
+        to prevent lookahead bias.
+
+        Args:
+            enabled: True to enable read-only mode, False to disable
+        """
+        self._readonly = enabled
+        status = "enabled" if enabled else "disabled"
+        logger.info(f"Portfolio memory read-only mode {status}")
+
+    def is_readonly(self) -> bool:
+        """Check if memory is in read-only mode."""
+        return self._readonly
+
+    def generate_learning_validation_metrics(
+        self,
+        asset_pair: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate comprehensive learning validation metrics.
+
+        Wrapper around backtesting.monte_carlo.generate_learning_validation_metrics()
+        for convenient access from memory engine.
+
+        Args:
+            asset_pair: Optional asset to filter analysis
+
+        Returns:
+            Comprehensive validation metrics dictionary
+        """
+        from finance_feedback_engine.backtesting.monte_carlo import (
+            generate_learning_validation_metrics
+        )
+        return generate_learning_validation_metrics(self, asset_pair)
 
 
 __all__ = ['PortfolioMemoryEngine', 'TradeOutcome', 'PerformanceSnapshot']

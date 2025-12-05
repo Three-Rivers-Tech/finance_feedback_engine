@@ -5,7 +5,21 @@
 decision_engine:
   ai_provider: "mock"  # Fast random decisions for backtesting
 
-# Advanced backtesting settings
+# Ensemble configuration for backtesting
+ensemble:
+  # Debate mode: ON - uses local providers for multi-model consensus
+  # Provides better decision quality while keeping backtests fast and free
+  debate_mode: true
+
+  # Debate providers: All local for backtesting
+  debate_providers:
+    bull: "local"     # Bullish case
+    bear: "local"     # Bearish case
+    judge: "local"    # Final judgment
+
+  # Quicktest mode: Disable memory for maximum speed runs
+  # WARNING: Only for testing/backtesting - NEVER enable in live trading
+  quicktest_mode: false# Advanced backtesting settings
 advanced_backtesting:
   initial_balance: 10000.0
   fee_percentage: 0.001  # 0.1%
@@ -19,6 +33,24 @@ advanced_backtesting:
   enable_risk_gatekeeper: true  # Enable RiskGatekeeper validation
   enable_multi_timeframe_pulse: true  # Enable multi-timeframe technical analysis
   maintenance_margin_pct: 0.5  # 50% maintenance margin default
+
+  # New training-first features
+  enable_decision_cache: true  # Cache decisions to avoid redundant AI queries
+  enable_portfolio_memory: true  # Enable learning from historical trades
+  memory_isolation_mode: false  # Share memory across runs for training
+  force_local_providers: true  # Restrict to free/local providers unless overridden
+  max_concurrent_positions: 5  # Maximum simultaneous open positions
+
+# Walk-forward analysis settings
+walk_forward:
+  train_ratio: 0.7  # 70% training, 30% testing
+  min_train_trades: 30  # Minimum trades in training window
+  rolling_window_days: 90  # 90-day rolling windows
+
+# Monte Carlo simulation settings
+monte_carlo:
+  num_simulations: 1000  # Number of price perturbation runs
+  price_noise_std: 0.001  # 0.1% price noise standard deviation
 
 # Other settings can be inherited from main config
 alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
