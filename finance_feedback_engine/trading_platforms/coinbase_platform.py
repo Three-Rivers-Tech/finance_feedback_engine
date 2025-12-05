@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     """
     Coinbase Advanced trading platform integration.
-    
+
     **STRATEGY FOCUS**: Perpetual futures long/short trading only.
     No spot holdings or position accumulation - pure futures trading.
-    
+
     Provides real-time access to:
     - Futures account balance and margin
     - Active long/short positions
@@ -42,10 +42,10 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         self.api_secret = credentials.get('api_secret')
         self.passphrase = credentials.get('passphrase')
         self.use_sandbox = credentials.get('use_sandbox', False)
-        
+
         # Initialize Coinbase client (lazy loading)
         self._client = None
-        
+
         logger.info(
             "Coinbase Advanced platform initialized "
             "(sandbox=%s)", self.use_sandbox
@@ -61,7 +61,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         if self._client is None:
             try:
                 from coinbase.rest import RESTClient
-                
+
                 # Initialize client with API credentials
                 # Note: coinbase-advanced-py handles base_url internally
                 self._client = RESTClient(
@@ -81,7 +81,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             except Exception as e:
                 logger.error("Failed to initialize Coinbase client: %s", e)
                 raise
-        
+
         return self._client
 
     def _format_product_id(self, asset_pair: str) -> str:
@@ -143,7 +143,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     def get_balance(self) -> Dict[str, float]:
         """
         Get account balances including futures and spot USD/USDC.
-        
+
         Returns futures trading account balance and spot USD/USDC balances.
 
         Returns:
@@ -153,41 +153,41 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             - 'SPOT_USDC': spot USDC balance (if any)
         """
         logger.info("Fetching account balances (futures + spot USD/USDC)")
-        
+
         # Assumption: The 'available_balance' from client.get_accounts() for spot USD/USDC
         # does not include staked amounts. Staked assets are typically not considered
         # 'available' for trading and thus are implicitly excluded from this calculation
         # for funds usable in futures trading. If staked assets were included in 'available_balance',
         # additional API calls or specific fields would be needed to differentiate them.
-        
+
         try:
             client = self._get_client()
             balances = {}
-            
+
             # Get futures balance summary
             try:
                 futures_summary = client.get_futures_balance_summary()
                 balance_summary = getattr(
                     futures_summary, 'balance_summary', None
                 )
-                
+
                 if balance_summary:
                     # balance_summary supports dict-style access
                     total_usd_balance = balance_summary['total_usd_balance']
                     futures_usd = float(total_usd_balance.get('value', 0))
-                    
+
                     if futures_usd > 0:
                         balances['FUTURES_USD'] = futures_usd
                         logger.info("Futures balance: $%.2f USD", futures_usd)
-                    
+
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
-            
+
             # Get spot balances for USD and USDC
             try:
                 accounts_response = client.get_accounts()
                 accounts_list = getattr(accounts_response, 'accounts', [])
-                
+
                 for account in accounts_list:
                     # Use attribute access for Coinbase Account objects
                     currency = getattr(account, 'currency', '')
@@ -201,7 +201,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             balance_value = float(
                                 getattr(available_balance, 'value', 0)
                             )
-                            
+
                             if balance_value > 0:
                                 balances[f'SPOT_{currency}'] = balance_value
                                 logger.info(
@@ -210,9 +210,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                                 )
             except Exception as e:
                 logger.warning("Could not fetch spot balances: %s", e)
-            
+
             return balances
-            
+
         except ImportError:
             logger.error(
                 "Coinbase library not installed. "
@@ -229,7 +229,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
         Get complete account breakdown including futures and spot USD/USDC.
-        
+
         Returns futures positions plus spot USD/USDC balances.
 
         Returns:
@@ -243,21 +243,21 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             - num_assets: Number of holdings (spot only)
         """
         logger.info("Fetching complete account breakdown")
-        
+
         try:
             client = self._get_client()
-            
+
             # Get futures balance and summary
             futures_positions = []
             futures_summary = {}
             futures_value = 0.0
-            
+
             try:
                 futures_response = client.get_futures_balance_summary()
                 balance_summary = getattr(
                     futures_response, 'balance_summary', None
                 )
-                
+
                 if balance_summary:
                     # balance_summary supports dict-style access
                     total_usd_balance = balance_summary['total_usd_balance']
@@ -265,9 +265,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     daily_pnl = balance_summary['daily_realized_pnl']
                     buying_power = balance_summary['futures_buying_power']
                     initial_margin = balance_summary['initial_margin']
-                    
+
                     futures_value = float(total_usd_balance.get('value', 0))
-                    
+
                     futures_summary = {
                         'total_balance_usd': futures_value,
                         'unrealized_pnl': float(
@@ -281,9 +281,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             initial_margin.get('value', 0)
                         )
                     }
-                    
+
                     logger.info("Futures account balance: $%.2f", futures_value)
-                
+
                 # Get individual futures positions (long/short)
                 positions_response = client.list_futures_positions()
                 positions_list = getattr(
@@ -337,24 +337,24 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         'daily_pnl': float(safe_get(pos, 'daily_realized_pnl', 0)),
                         'leverage': leverage_value
                     })
-                    
+
                 logger.info(
                     "Retrieved %d active futures positions (long/short)",
                     len(futures_positions)
                 )
-                
+
             except Exception as e:
                 logger.error("Error fetching futures data: %s", e)
                 raise
-            
+
             # Get spot USD/USDC balances
             holdings = []
             spot_value = 0.0
-            
+
             try:
                 accounts_response = client.get_accounts()
                 accounts_list = getattr(accounts_response, 'accounts', [])
-                
+
                 for account in accounts_list:
                     # Use attribute access for Coinbase Account objects
                     currency = getattr(account, 'currency', '')
@@ -366,7 +366,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             balance_value = float(
                                 getattr(available_balance, 'value', 0)
                             )
-                            
+
                             if balance_value > 0:
                                 holdings.append({
                                     'asset': currency,
@@ -380,10 +380,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                                 )
             except Exception as e:
                 logger.warning("Could not fetch spot balances: %s", e)
-            
+
             # Add futures positions to holdings with leverage adjustment.
             # Also sum margin exposures into futures_value if available.
             futures_margin_total = 0.0
+            futures_notional_total = 0.0
             # Reuse the same default used above; if the block that created
             # `futures_positions` didn't run (e.g., positions API failed),
             # fallback here as well.
@@ -400,37 +401,45 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                 contracts = float(pos.get('contracts', 0.0))
                 current_price = float(pos.get('current_price', 0.0))
-                notional = contracts * current_price
+
+                # Coinbase perpetual futures have a contract multiplier of 0.1
+                # (each contract represents 0.1 of the underlying asset, e.g., 0.1 ETH)
+                contract_multiplier = 0.1
+                notional = contracts * current_price * contract_multiplier
+
                 margin = notional / leverage if leverage > 0 else notional
                 futures_margin_total += margin
+                futures_notional_total += notional
 
                 holdings.append({
                     'asset': pos.get('product_id'),
                     'amount': contracts,
-                    'value_usd': margin,
+                    'value_usd': notional,  # Use notional for allocation calculations
                     'allocation_pct': 0.0
                 })
 
-            # Calculate total value and allocations. Use the full futures
-            # account value, not just the margin for open positions.
+            # Calculate total value and allocations. For allocation purposes,
+            # use total notional exposure (not account balance).
+            # This gives meaningful allocation percentages for leveraged positions.
+            total_notional = futures_notional_total + spot_value
             total_value = futures_value + spot_value
-            
-            if total_value > 0:
+
+            if total_notional > 0:
                 for holding in holdings:
                     try:
                         holding_value = float(holding.get('value_usd', 0))
                         holding['allocation_pct'] = (
-                            (holding_value / total_value) * 100
+                            (holding_value / total_notional) * 100
                         )
                     except Exception:
                         holding['allocation_pct'] = 0.0
-            
+
             logger.info(
                 "Total portfolio value: $%.2f "
                 "(futures: $%.2f, spot: $%.2f)",
                 total_value, futures_value, spot_value
             )
-            
+
             return {
                 'futures_positions': futures_positions,
                 'futures_summary': futures_summary,
@@ -444,7 +453,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'unrealized_pnl': futures_summary.get('unrealized_pnl', 0.0),
                 'platform': 'coinbase'
             }
-            
+
         except Exception as e:
             logger.error("Error fetching portfolio breakdown: %s", e)
             raise
@@ -517,7 +526,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         try:
             start_time = time.time()
-            
+
             if action == 'BUY':
                 order_result = client.market_order_buy(
                     client_order_id=client_order_id,
@@ -538,7 +547,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 except Exception as e:
                     logger.error("Failed to calculate base_size for SELL: %s", e)
                     raise
-                
+
                 order_result = client.market_order_sell(
                     client_order_id=client_order_id,
                     product_id=product_id,
@@ -607,17 +616,17 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             Account details with portfolio metrics and leverage info
         """
         logger.info("Fetching Coinbase account info")
-        
+
         try:
             portfolio = self.get_portfolio_breakdown()
-            
+
             # Extract max leverage from futures positions (Coinbase sets this per product)
             max_leverage = 1.0  # Spot default
             futures_positions = portfolio.get('futures_positions', [])
             if futures_positions:
                 leverages = [pos.get('leverage', 1.0) for pos in futures_positions if pos.get('leverage')]
                 max_leverage = max(leverages) if leverages else 10.0  # Default to 10x if not specified
-            
+
             return {
                 'platform': 'coinbase_advanced',
                 'account_type': 'trading',
