@@ -81,6 +81,12 @@ class Backtester:
                  override_maintenance_margin: Optional[float] = None,  # Override maintenance margin %
                  enable_risk_gatekeeper: bool = True,  # Enable RiskGatekeeper validation
                  timeframe_aggregator: Optional[Any] = None,  # TimeframeAggregator for multi-timeframe pulse
+                 enable_decision_cache: bool = True,  # Enable decision caching
+                 enable_portfolio_memory: bool = True,  # Enable portfolio memory for learning
+                 memory_isolation_mode: bool = False,  # Use isolated memory storage
+                 force_local_providers: bool = True,  # Restrict ensemble to local providers only
+                 max_concurrent_positions: int = 5,  # Max simultaneous open positions
+                 config: Optional[Dict[str, Any]] = None,  # Full config for memory engine
                  ):
         self.historical_data_provider = historical_data_provider
         self.platform = platform
@@ -92,6 +98,43 @@ class Backtester:
         self.commission_per_trade = commission_per_trade
         self.stop_loss_percentage = stop_loss_percentage
         self.take_profit_percentage = take_profit_percentage
+        self.max_concurrent_positions = max_concurrent_positions
+        self.force_local_providers = force_local_providers
+        self.config = config or {}
+
+        # Initialize decision cache
+        self.decision_cache = None
+        if enable_decision_cache:
+            try:
+                from finance_feedback_engine.backtesting.decision_cache import DecisionCache
+                self.decision_cache = DecisionCache()
+                logger.info("Decision cache enabled for backtesting")
+            except Exception as e:
+                logger.warning(f"Could not initialize decision cache: {e}")
+
+        # Initialize portfolio memory engine
+        self.memory_engine = None
+        if enable_portfolio_memory:
+            try:
+                from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+
+                # Determine storage path based on isolation mode
+                if memory_isolation_mode:
+                    memory_config = self.config.copy()
+                    memory_config['persistence'] = {
+                        'storage_path': 'data/memory_backtest'
+                    }
+                    logger.info("Using isolated portfolio memory for backtesting")
+                else:
+                    memory_config = self.config.copy()
+                    if 'persistence' not in memory_config:
+                        memory_config['persistence'] = {'storage_path': 'data'}
+                    logger.info("Using shared portfolio memory (training mode)")
+
+                self.memory_engine = PortfolioMemoryEngine(memory_config)
+            except Exception as e:
+                logger.warning(f"Could not initialize portfolio memory: {e}")
+
 
         # Fetch platform margin parameters
         self.platform_leverage = 1.0  # Default to no leverage
@@ -500,8 +543,36 @@ class Backtester:
                     'current_price': candle['close'] # Pass current price for P&L calculation
                 })
 
-            # Prepare monitoring context (multi-timeframe pulse if available)
-            monitoring_context = None
+            # Prepare monitoring context with active positions and multi-timeframe pulse
+            monitoring_context = {
+                'active_positions': [],
+                'slots_available': self.max_concurrent_positions - len(open_positions),
+                'multi_timeframe_pulse': None
+            }
+
+            # Add active positions with unrealized P&L
+            for pos in open_positions.values():
+                # Calculate unrealized P&L
+                if pos.side == "LONG":
+                    unrealized_pnl = (candle['close'] - pos.entry_price) * pos.units
+                else:  # SHORT
+                    unrealized_pnl = (pos.entry_price - candle['close']) * abs(pos.units)
+
+                unrealized_pnl_pct = (unrealized_pnl / abs(pos.entry_price * pos.units)) * 100 if pos.units != 0 else 0
+                holding_hours = (timestamp - pos.entry_timestamp).total_seconds() / 3600
+
+                monitoring_context['active_positions'].append({
+                    'asset_pair': pos.asset_pair,
+                    'side': pos.side,
+                    'entry_price': pos.entry_price,
+                    'current_price': candle['close'],
+                    'unrealized_pnl': unrealized_pnl,
+                    'unrealized_pnl_pct': unrealized_pnl_pct,
+                    'entry_timestamp': pos.entry_timestamp.isoformat(),
+                    'holding_hours': holding_hours
+                })
+
+            # Add multi-timeframe pulse if available
             if hasattr(self, 'timeframe_aggregator') and self.timeframe_aggregator and idx >= window_size:
                 try:
                     # Compute historical pulse using data available up to current timestamp
@@ -513,23 +584,52 @@ class Backtester:
                             candles=historical_slice.to_dict('records')
                         )
 
-                        monitoring_context = {
-                            'multi_timeframe_pulse': {
-                                'timestamp': timestamp.timestamp(),
-                                'age_seconds': 0,  # Computed on-demand for backtest
-                                'timeframes': pulse_data
-                            }
+                        monitoring_context['multi_timeframe_pulse'] = {
+                            'timestamp': timestamp.timestamp(),
+                            'age_seconds': 0,  # Computed on-demand for backtest
+                            'timeframes': pulse_data
                         }
                         logger.debug(f"Generated historical pulse for {asset_pair} at {timestamp}")
                 except Exception as e:
                     logger.debug(f"Could not generate pulse at {timestamp}: {e}")
 
-            decision = decision_engine.generate_decision(
-                asset_pair=asset_pair,
-                market_data=market_data,
-                balance={f'coinbase_{quote_currency}': current_balance} if 'BTC' in asset_pair or 'ETH' in asset_pair else {f'oanda_{quote_currency}': current_balance},
-                portfolio={'holdings': portfolio_for_decision_engine}
-            )
+            # Check decision cache first
+            decision = None
+            cache_key = None
+            if self.decision_cache:
+                cache_key = self.decision_cache.generate_cache_key(
+                    asset_pair, timestamp.isoformat(), market_data
+                )
+                decision = self.decision_cache.get(cache_key)
+                if decision:
+                    logger.debug(f"Using cached decision for {asset_pair} at {timestamp}")
+
+            # Generate decision if not cached
+            if decision is None:
+                # Get memory context if portfolio memory is enabled
+                memory_context = None
+                if self.memory_engine:
+                    try:
+                        memory_context = self.memory_engine.generate_context(asset_pair)
+                    except Exception as e:
+                        logger.debug(f"Could not generate memory context: {e}")
+
+                decision = decision_engine.generate_decision(
+                    asset_pair=asset_pair,
+                    market_data=market_data,
+                    balance={f'coinbase_{quote_currency}': current_balance} if 'BTC' in asset_pair or 'ETH' in asset_pair else {f'oanda_{quote_currency}': current_balance},
+                    portfolio={'holdings': portfolio_for_decision_engine},
+                    memory_context=memory_context,
+                    monitoring_context=monitoring_context
+                )
+
+                # Cache the decision
+                if self.decision_cache and cache_key:
+                    self.decision_cache.put(
+                        cache_key, decision, asset_pair,
+                        timestamp.isoformat(),
+                        self.decision_cache._hash_market_data(market_data)
+                    )
 
             action = decision.get('action', 'HOLD')
             amount_to_trade = decision.get('suggested_amount', 0.0) # Using 'suggested_amount' from DecisionEngine
