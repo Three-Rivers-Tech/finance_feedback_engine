@@ -1092,8 +1092,13 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         if decision.get('signal_only'):
             console.print(
                 "\n[yellow]⚠ Signal-Only Mode: "
-                "Portfolio data unavailable, no position sizing provided"
-                "[/yellow]"
+                "Portfolio data unavailable, no position sizing provided[/yellow]"
+            )
+            console.print(
+                "\n[dim]To enable position sizing:[/dim]\n"
+                "  [dim]1. Configure platform credentials in config/config.local.yaml[/dim]\n"
+                "  [dim]2. Or run: [cyan]python main.py config-editor[/cyan][/dim]\n"
+                "  [dim]3. Or set environment variables (see README.md)[/dim]"
             )
 
         # Display position type and sizing (only if available)
@@ -1320,7 +1325,8 @@ def history(ctx, asset, limit):
 
         if not decisions:
             console.print("[yellow]No decisions found[/yellow]")
-            return
+            # Exit with 0 - empty result set is valid, not an error
+            sys.exit(0)
 
         # Display decisions in a table
         table = Table(title=f"Decision History ({len(decisions)} decisions)")
@@ -1855,6 +1861,14 @@ def backtest(
     from finance_feedback_engine.utils.validation import standardize_asset_pair
 
     try:
+        # Validate date range
+        start_dt = datetime.strptime(start, '%Y-%m-%d')
+        end_dt = datetime.strptime(end, '%Y-%m-%d')
+        if start_dt >= end_dt:
+            raise click.BadParameter(
+                f"start_date ({start}) must be before end_date ({end})"
+            )
+
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
 
@@ -2385,6 +2399,394 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown):
 
     except Exception as e:
         console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
+# ============================================
+# Advanced Backtesting Commands
+# ============================================
+
+@cli.command(name='walk-forward')
+@click.argument('asset_pair')
+@click.option('--start-date', required=True, help='Start date (YYYY-MM-DD)')
+@click.option('--end-date', required=True, help='End date (YYYY-MM-DD)')
+@click.option('--train-ratio', default=0.7, help='Training window ratio (default: 0.7)')
+@click.option('--provider', default='ensemble', help='AI provider to use')
+@click.pass_context
+def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
+    """
+    Run walk-forward analysis with overfitting detection.
+
+    Splits data into rolling train/test windows to validate strategy robustness.
+    Reports overfitting severity: NONE/LOW/MEDIUM/HIGH.
+
+    Example:
+        python main.py walk-forward BTCUSD --start-date 2024-01-01 --end-date 2024-03-01
+    """
+    console.print(f"\n[bold cyan]📊 Walk-Forward Analysis: {asset_pair}[/bold cyan]")
+
+    try:
+        from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
+        from finance_feedback_engine.backtesting.backtester import Backtester
+        from datetime import datetime
+
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        # Calculate total date range
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        total_days = (end_dt - start_dt).days
+
+        # Convert train_ratio to window sizes
+        # Use train_ratio to determine train window, leave 30% for test, with 7-day steps
+        train_window_days = int(total_days * train_ratio * 0.7)  # 70% of train portion for window
+        test_window_days = max(7, int(total_days * (1 - train_ratio)))  # Remaining for test
+        step_days = max(1, test_window_days // 4)  # Quarter of test window for steps
+
+        # Ensure minimum viable windows
+        if train_window_days < 7:
+            train_window_days = 7
+        if test_window_days < 3:
+            test_window_days = 3
+
+        # Initialize Backtester with proper parameters
+        ab_config = config.get('advanced_backtesting', {})
+        backtester = Backtester(
+            historical_data_provider=engine.historical_data_provider,
+            initial_balance=ab_config.get('initial_balance', 10000.0),
+            fee_percentage=ab_config.get('fee_percentage', 0.001),
+            slippage_percentage=ab_config.get('slippage_percentage', 0.0001),
+            commission_per_trade=ab_config.get('commission_per_trade', 0.0),
+            stop_loss_percentage=ab_config.get('stop_loss_percentage', 0.02),
+            take_profit_percentage=ab_config.get('take_profit_percentage', 0.05),
+            config=config
+        )
+        decision_engine = engine.decision_engine
+        analyzer = WalkForwardAnalyzer()
+
+        console.print(f"[dim]Date range: {start_date} to {end_date} ({total_days} days)[/dim]")
+        console.print(f"[dim]Windows: train={train_window_days}d, test={test_window_days}d, step={step_days}d[/dim]")
+        console.print(f"[dim]Provider: {provider}[/dim]\n")
+
+        # Run analysis
+        results = analyzer.run_walk_forward(
+            backtester=backtester,
+            asset_pair=asset_pair,
+            start_date=start_date,
+            end_date=end_date,
+            train_window_days=train_window_days,
+            test_window_days=test_window_days,
+            step_days=step_days,
+            decision_engine=decision_engine
+        )
+
+        # Check for error (insufficient date range)
+        if 'error' in results:
+            console.print(f"[bold red]Walk-Forward Error:[/bold red] {results['error']}")
+            console.print("\n[yellow]Suggestion:[/yellow] Increase the date range or reduce window sizes.")
+            console.print(f"  Current: {start_date} to {end_date} ({(end_dt - start_dt).days} days)")
+            console.print(f"  Required: At least {train_window_days + test_window_days} days")
+            raise click.Abort()
+
+        # Display results table
+        table = Table(title="Walk-Forward Analysis Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Average Test Performance", justify="right", style="yellow")
+
+        agg_perf = results['aggregate_test_performance']
+
+        table.add_row("Avg Sharpe Ratio", f"{agg_perf['avg_sharpe_ratio']:.2f}")
+        table.add_row("Avg Return", f"{agg_perf['avg_return_pct']:.2f}%")
+        table.add_row("Avg Win Rate", f"{agg_perf['avg_win_rate_pct']:.1f}%")
+        table.add_row("Num Windows", f"{results['num_windows']}")
+
+        console.print(table)
+
+        # Overfitting assessment
+        overfitting = results['overfitting_analysis']
+        severity = overfitting['overfitting_severity']
+
+        severity_colors = {
+            'NONE': 'green',
+            'LOW': 'yellow',
+            'MEDIUM': 'orange',
+            'HIGH': 'red'
+        }
+        color = severity_colors.get(severity, 'white')
+
+        console.print(f"\n[bold {color}]Overfitting Severity: {severity}[/bold {color}]")
+        console.print(f"Recommendation: {overfitting['recommendation']}")
+
+    except Exception as e:
+        console.print(f"[bold red]Error running walk-forward analysis:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
+@cli.command(name='monte-carlo')
+@click.argument('asset_pair')
+@click.option('--start-date', required=True, help='Start date (YYYY-MM-DD)')
+@click.option('--end-date', required=True, help='End date (YYYY-MM-DD)')
+@click.option('--simulations', default=1000, help='Number of simulations (default: 1000)')
+@click.option('--noise-std', default=0.001, help='Price noise std dev (default: 0.001)')
+@click.option('--provider', default='ensemble', help='AI provider to use')
+@click.pass_context
+def monte_carlo(ctx, asset_pair, start_date, end_date, simulations, noise_std, provider):
+    """
+    Run Monte Carlo simulation with price perturbations.
+
+    Calculates confidence intervals and Value at Risk (VaR) for strategy returns.
+
+    Example:
+        python main.py monte-carlo BTCUSD --start-date 2024-01-01 --end-date 2024-03-01 --simulations 500
+    """
+    console.print(f"\n[bold cyan]🎲 Monte Carlo Simulation: {asset_pair}[/bold cyan]")
+
+    try:
+        from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
+        from finance_feedback_engine.backtesting.backtester import Backtester
+
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        # Initialize Backtester with proper parameters
+        ab_config = config.get('advanced_backtesting', {})
+        backtester = Backtester(
+            historical_data_provider=engine.historical_data_provider,
+            initial_balance=ab_config.get('initial_balance', 10000.0),
+            fee_percentage=ab_config.get('fee_percentage', 0.001),
+            slippage_percentage=ab_config.get('slippage_percentage', 0.0001),
+            commission_per_trade=ab_config.get('commission_per_trade', 0.0),
+            stop_loss_percentage=ab_config.get('stop_loss_percentage', 0.02),
+            take_profit_percentage=ab_config.get('take_profit_percentage', 0.05),
+            config=config
+        )
+        decision_engine = engine.decision_engine
+        simulator = MonteCarloSimulator()
+
+        console.print(f"[dim]Date range: {start_date} to {end_date}[/dim]")
+        console.print(f"[dim]Simulations: {simulations}, Noise: {noise_std:.3%}[/dim]")
+        console.print(f"[dim]Provider: {provider}[/dim]\n")
+
+        # Run simulation
+        results = simulator.run_monte_carlo(
+            backtester=backtester,
+            asset_pair=asset_pair,
+            start_date=start_date,
+            end_date=end_date,
+            decision_engine=decision_engine,
+            num_simulations=simulations,
+            price_noise_std=noise_std
+        )
+
+        # Display results table
+        table = Table(title="Monte Carlo Simulation Results")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right", style="green")
+
+        stats = results['statistics']
+        percentiles = results['percentiles']
+
+        table.add_row("Base Final Balance", f"${results['base_final_balance']:.2f}")
+        table.add_row("Expected Return", f"${stats['expected_return']:.2f}")
+        table.add_row("Value at Risk (95%)", f"${stats['var_95']:.2f}")
+        table.add_row("Worst Case", f"${stats['worst_case']:.2f}")
+        table.add_row("Best Case", f"${stats['best_case']:.2f}")
+        table.add_row("Std Deviation", f"${stats['std_dev']:.2f}")
+
+        console.print(table)
+
+        # Percentiles
+        console.print("\n[bold]Confidence Intervals:[/bold]")
+        console.print(f"  5th percentile:  ${percentiles['p5']:.2f}")
+        console.print(f"  25th percentile: ${percentiles['p25']:.2f}")
+        console.print(f"  50th percentile: ${percentiles['p50']:.2f}")
+        console.print(f"  75th percentile: ${percentiles['p75']:.2f}")
+        console.print(f"  95th percentile: ${percentiles['p95']:.2f}")
+
+        if 'note' in results:
+            console.print(f"\n[yellow]{results['note']}[/yellow]")
+
+    except Exception as e:
+        console.print(f"[bold red]Error running Monte Carlo simulation:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
+@cli.command(name='learning-report')
+@click.option('--asset-pair', default=None, help='Filter by asset pair (optional)')
+@click.pass_context
+def learning_report(ctx, asset_pair):
+    """
+    Generate comprehensive learning validation report.
+
+    Shows RL/meta-learning metrics:
+    - Sample efficiency (DQN/Rainbow)
+    - Cumulative regret (Multi-armed Bandits)
+    - Concept drift detection
+    - Thompson Sampling diagnostics
+    - Learning curve analysis
+
+    Example:
+        python main.py learning-report --asset-pair BTCUSD
+    """
+    console.print(f"\n[bold cyan]📈 Learning Validation Report[/bold cyan]")
+    if asset_pair:
+        console.print(f"[dim]Filtering by: {asset_pair}[/dim]")
+
+    try:
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        # Get memory engine (assuming it's initialized in engine)
+        if not hasattr(engine, 'portfolio_memory') or engine.portfolio_memory is None:
+            console.print("[yellow]Portfolio memory not initialized. No learning data available.[/yellow]")
+            return
+
+        memory = engine.portfolio_memory
+
+        # Generate metrics
+        metrics = memory.generate_learning_validation_metrics(asset_pair=asset_pair)
+
+        if 'error' in metrics:
+            console.print(f"[yellow]{metrics['error']}[/yellow]")
+            return
+
+        console.print(f"\n[bold]Total Trades Analyzed: {metrics['total_trades_analyzed']}[/bold]")
+
+        # Sample Efficiency
+        console.print("\n[bold cyan]1. Sample Efficiency (DQN/Rainbow)[/bold cyan]")
+        se = metrics['sample_efficiency']
+        if se.get('achieved_threshold'):
+            console.print(f"  ✓ Reached 60% win rate after {se['trades_to_60pct_win_rate']} trades")
+        else:
+            console.print(f"  ✗ 60% win rate threshold not yet achieved")
+        console.print(f"  Learning speed: {se['learning_speed_per_100_trades']:.2%} improvement per 100 trades")
+
+        # Cumulative Regret
+        console.print("\n[bold cyan]2. Cumulative Regret (Bandit Theory)[/bold cyan]")
+        cr = metrics['cumulative_regret']
+        console.print(f"  Total regret: ${cr['cumulative_regret']:.2f}")
+        console.print(f"  Optimal provider: {cr['optimal_provider']} (avg P&L: ${cr['optimal_avg_pnl']:.2f})")
+        console.print(f"  Avg regret per trade: ${cr['avg_regret_per_trade']:.2f}")
+
+        # Concept Drift
+        console.print("\n[bold cyan]3. Concept Drift Detection[/bold cyan]")
+        cd = metrics['concept_drift']
+        drift_colors = {'LOW': 'green', 'MEDIUM': 'yellow', 'HIGH': 'red'}
+        drift_color = drift_colors.get(cd['drift_severity'], 'white')
+        console.print(f"  Drift severity: [{drift_color}]{cd['drift_severity']}[/{drift_color}]")
+        console.print(f"  Drift score: {cd['drift_score']:.3f}")
+        console.print(f"  Window win rates: {[f'{wr:.1%}' for wr in cd['window_win_rates']]}")
+
+        # Thompson Sampling
+        console.print("\n[bold cyan]4. Thompson Sampling Diagnostics[/bold cyan]")
+        ts = metrics['thompson_sampling']
+        console.print(f"  Exploration rate: {ts['exploration_rate']:.1%}")
+        console.print(f"  Exploitation convergence: {ts['exploitation_convergence']:.1%}")
+        console.print(f"  Dominant provider: {ts['dominant_provider']}")
+        console.print(f"  Provider distribution: {ts['provider_distribution']}")
+
+        # Learning Curve
+        console.print("\n[bold cyan]5. Learning Curve Analysis[/bold cyan]")
+        lc = metrics['learning_curve']
+
+        table = Table()
+        table.add_column("Period", style="cyan")
+        table.add_column("Win Rate", justify="right", style="green")
+        table.add_column("Avg P&L", justify="right", style="yellow")
+
+        first = lc['first_100_trades']
+        last = lc['last_100_trades']
+
+        table.add_row("First 100 trades", f"{first['win_rate']:.1%}", f"${first['avg_pnl']:.2f}")
+        table.add_row("Last 100 trades", f"{last['win_rate']:.1%}", f"${last['avg_pnl']:.2f}")
+
+        console.print(table)
+
+        console.print(f"\n  Win rate improvement: {lc['win_rate_improvement_pct']:.1f}%")
+        console.print(f"  P&L improvement: {lc['pnl_improvement_pct']:.1f}%")
+
+        if lc['learning_detected']:
+            console.print("\n[bold green]✓ Learning detected: Strategy is improving over time[/bold green]")
+        else:
+            console.print("\n[bold yellow]⚠ No significant learning detected[/bold yellow]")
+
+        # Research attribution
+        console.print("\n[dim]Research Methods:[/dim]")
+        for metric, paper in metrics['research_methods'].items():
+            console.print(f"  [dim]- {metric}: {paper}[/dim]")
+
+    except Exception as e:
+        console.print(f"[bold red]Error generating learning report:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
+            import traceback
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
+@cli.command(name='prune-memory')
+@click.option('--keep-recent', default=1000, help='Keep N most recent trades (default: 1000)')
+@click.option('--confirm/--no-confirm', default=True, help='Confirm before pruning')
+@click.pass_context
+def prune_memory(ctx, keep_recent, confirm):
+    """
+    Prune old trade outcomes from portfolio memory.
+
+    Keeps only the N most recent trades to manage memory size.
+
+    Example:
+        python main.py prune-memory --keep-recent 500
+    """
+    console.print(f"\n[bold cyan]🗑️  Portfolio Memory Pruning[/bold cyan]")
+
+    try:
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        if not hasattr(engine, 'portfolio_memory') or engine.portfolio_memory is None:
+            console.print("[yellow]Portfolio memory not initialized.[/yellow]")
+            return
+
+        memory = engine.portfolio_memory
+        current_count = len(memory.trade_outcomes)
+
+        console.print(f"Current trade outcomes: {current_count}")
+        console.print(f"Will keep {keep_recent} most recent trades")
+
+        if current_count <= keep_recent:
+            console.print("[green]No pruning needed - memory size within limit.[/green]")
+            return
+
+        to_remove = current_count - keep_recent
+        console.print(f"[yellow]Will remove {to_remove} older trades[/yellow]")
+
+        if confirm:
+            response = Prompt.ask("\nProceed with pruning?", choices=["yes", "no"], default="no")
+            if response != "yes":
+                console.print("[yellow]Pruning cancelled.[/yellow]")
+                return
+
+        # Prune (keep last N)
+        memory.trade_outcomes = memory.trade_outcomes[-keep_recent:]
+
+        console.print(f"[green]✓ Pruned memory to {len(memory.trade_outcomes)} trades[/green]")
+
+        # Save if persistence is configured
+        if hasattr(memory, 'save'):
+            memory.save()
+            console.print("[green]✓ Saved pruned memory to disk[/green]")
+
+    except Exception as e:
+        console.print(f"[bold red]Error pruning memory:[/bold red] {str(e)}")
         if ctx.obj.get('verbose'):
             import traceback
             console.print(traceback.format_exc())

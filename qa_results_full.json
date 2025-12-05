@@ -1,0 +1,389 @@
+{
+  "summary": {
+    "test_run_date": "2025-12-05T14:08:38.274989",
+    "config_used": "config/config.test.mock.yaml",
+    "total_tests": 17,
+    "passed": 12,
+    "failed": 5,
+    "errors": 0,
+    "pass_rate": 70.6,
+    "by_severity": {
+      "P0": {
+        "total": 8,
+        "passed": 6,
+        "failed": 2
+      },
+      "P1": {
+        "total": 5,
+        "passed": 4,
+        "failed": 1
+      },
+      "P2": {
+        "total": 4,
+        "passed": 2,
+        "failed": 2
+      }
+    },
+    "deviations_found": 5,
+    "deviation_details": [
+      {
+        "command": "backtest",
+        "args": [
+          "BTCUSD"
+        ],
+        "deviations": [
+          "Expected success, got exit code 1"
+        ]
+      },
+      {
+        "command": "backtest",
+        "args": [
+          "BTCUSD"
+        ],
+        "deviations": [
+          "Expected failure, but succeeded"
+        ]
+      },
+      {
+        "command": "history",
+        "args": [],
+        "deviations": [
+          "Expected failure, but succeeded"
+        ]
+      },
+      {
+        "command": "walk-forward",
+        "args": [
+          "BTCUSD"
+        ],
+        "deviations": [
+          "Expected success, got exit code 1"
+        ]
+      },
+      {
+        "command": "monte-carlo",
+        "args": [
+          "BTCUSD"
+        ],
+        "deviations": [
+          "Expected success, got exit code 2"
+        ]
+      }
+    ]
+  },
+  "detailed_results": [
+    {
+      "timestamp": "2025-12-05T14:08:38.275004",
+      "severity": "P0",
+      "command": "analyze",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "provider": "local"
+      },
+      "expected_behavior": "Should return decision with BUY/SELL/HOLD action",
+      "execution_time_seconds": 10.133,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Using AI provider: local\nAnalyzing BTCUSD...\n\nTrading Decision Generated\nDecision ID: 33066b64-22ad-49ec-a815-a798f535346c\nAsset: BTCUSD\nAction: BUY\nConfidence: 90%\nReasoning: Bullish trend followed by long wick, close near high of the day and above 70% in daily range suggest strong bullish \nmomentum. RSI (not provided) would further validate this signal.\n\n\u26a0 Signal-Only Mode: Portfolio data unavailable, no position sizing provided\nSuggested Amount: 0.02\n\nMarket Data:\n  Open: $50000.00\n  Close: $",
+      "stderr_preview": "2025-12-05 14:08:39,229 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:08:39,246 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:08:39,269 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:08:39,269 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:08:39,269 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:08:48.408497",
+      "severity": "P0",
+      "command": "analyze",
+      "args": [
+        "btc-usd"
+      ],
+      "flags": {
+        "provider": "local"
+      },
+      "expected_behavior": "Should normalize asset pair format",
+      "execution_time_seconds": 11.285,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Using AI provider: local\nAnalyzing BTCUSD...\n\nTrading Decision Generated\nDecision ID: 33fa1b16-3241-474c-9ef2-fd6a04f43d51\nAsset: BTCUSD\nAction: BUY\nConfidence: 80%\nReasoning: Bullish candlestick pattern with large body size ($500.00) and close position in daily range (75.0% near high). Trend \nis trending bullish, and volatility is high at 3.96%. This suggests a strong buy signal.\n\n\u26a0 Signal-Only Mode: Portfolio data unavailable, no position sizing provided\nSuggested Amount: 2.5\n\nMarket Data:\n  O",
+      "stderr_preview": "2025-12-05 14:08:49,361 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:08:49,371 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:08:49,381 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:08:49,381 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:08:49,381 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:08:59.693959",
+      "severity": "P0",
+      "command": "analyze",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "provider": "ensemble"
+      },
+      "expected_behavior": "Should aggregate multiple providers",
+      "execution_time_seconds": 18.172,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Using ensemble mode (multiple providers)\nAnalyzing BTCUSD...\n\nTrading Decision Generated\nDecision ID: d7073920-bd4f-4794-989d-ba6e4cebf56c\nAsset: BTCUSD\nAction: BUY\nConfidence: 100%\nReasoning: ENSEMBLE DECISION (1 supporting):\n\n: Bullish candlestick pattern with large body size ($500.00), upper wick $500.00, and close position near high ($50500.00) \nsuggests conviction in a bull\n\n\u26a0 Signal-Only Mode: Portfolio data unavailable, no position sizing provided\nSuggested Amount: 0.005\n\nMarket Data:\n  O",
+      "stderr_preview": "2025-12-05 14:09:00,472 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:00,481 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:00,491 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:00,491 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:00,491 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:17.866472",
+      "severity": "P0",
+      "command": "analyze",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "provider": "invalid"
+      },
+      "expected_behavior": "Should fail with invalid provider",
+      "execution_time_seconds": 0.917,
+      "exit_code": 2,
+      "result_status": "PASS",
+      "stdout_preview": "",
+      "stderr_preview": "Usage: main.py analyze [OPTIONS] ASSET_PAIR\nTry 'main.py analyze --help' for help.\n\nError: Invalid value for '--provider' / '-p': 'invalid' is not one of 'local', 'cli', 'codex', 'qwen', 'gemini', 'ensemble'.\n",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:18.783671",
+      "severity": "P0",
+      "command": "backtest",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "start": "2024-01-01",
+        "end": "2024-01-31"
+      },
+      "expected_behavior": "Should backtest and return metrics",
+      "execution_time_seconds": 11.2,
+      "exit_code": 1,
+      "result_status": "FAIL",
+      "stdout_preview": "Running AI-Driven Backtest for BTCUSD 2024-01-01\u21922024-01-31\nError: 'list' object has no attribute 'get'\n",
+      "stderr_preview": "2025-12-05 14:09:19,714 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:19,723 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:19,733 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:19,733 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:19,733 ",
+      "notes": "",
+      "deviations": [
+        "Expected success, got exit code 1"
+      ]
+    },
+    {
+      "timestamp": "2025-12-05T14:09:29.984135",
+      "severity": "P0",
+      "command": "backtest",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "start": "2024-01-31",
+        "end": "2024-01-01"
+      },
+      "expected_behavior": "Should fail with invalid date range",
+      "execution_time_seconds": 1.56,
+      "exit_code": 0,
+      "result_status": "FAIL",
+      "stdout_preview": "Running AI-Driven Backtest for BTCUSD 2024-01-31\u21922024-01-01\nAI-Driven Backtest Summary \n\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\n\u2503 Metric          \u2503 Value \u2503\n\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529\n\u2502 Initial Balance \u2502 $0.00 \u2502\n\u2502 Final Value     \u2502 $0.00 \u2502\n\u2502 Total Return %  \u2502 0.00% \u2502\n\u2502 Max Drawdown %  \u2502 0.00% \u2502\n\u2502 Total Trades    \u2502     0 \u2502\n\u2502 Win Rate %      \u2502 0.00% \u2502\n\u2502 Total Fees      \u2502 $0.00 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n",
+      "stderr_preview": "2025-12-05 14:09:31,065 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:31,083 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:31,104 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:31,104 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:31,104 ",
+      "notes": "",
+      "deviations": [
+        "Expected failure, but succeeded"
+      ]
+    },
+    {
+      "timestamp": "2025-12-05T14:09:31.544505",
+      "severity": "P0",
+      "command": "balance",
+      "args": [],
+      "flags": {},
+      "expected_behavior": "Should return platform balance",
+      "execution_time_seconds": 1.068,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "     Account Balances      \n\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\n\u2503 Asset       \u2503   Balance \u2503\n\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529\n\u2502 FUTURES_USD \u2502 20,000.00 \u2502\n\u2502 SPOT_USD    \u2502  3,000.00 \u2502\n\u2502 SPOT_USDC   \u2502  2,000.00 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2534\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n",
+      "stderr_preview": "2025-12-05 14:09:32,352 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:32,362 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:32,375 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:32,375 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:32,375 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:32.612322",
+      "severity": "P0",
+      "command": "status",
+      "args": [],
+      "flags": {},
+      "expected_behavior": "Should display platform and provider status",
+      "execution_time_seconds": 1.021,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Finance Feedback Engine Status\n\nTrading Platform: mock\nAI Provider: local\nStorage Path: data/decisions_test\n\n\u2713 Engine initialized successfully\n",
+      "stderr_preview": "2025-12-05 14:09:33,392 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:33,402 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:33,413 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:33,413 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:33,413 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:33.633018",
+      "severity": "P1",
+      "command": "history",
+      "args": [],
+      "flags": {
+        "limit": "10"
+      },
+      "expected_behavior": "Should show decision history",
+      "execution_time_seconds": 1.313,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "                                Decision History (6 decisions)                                \n\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\n\u2503 ID                                   \u2503 Timestamp \u2503 Asset  \u2503 Action \u2503 Confidence \u2503 Executed \u2503\n\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529\n\u2502 d7073920-bd4f-4794-989d-ba6e4cebf56c \u2502 19:09:17  \u2502 BTCUSD \u2502 BUY    \u2502       100% \u2502 \u2717        \u2502\n\u2502 33fa1b16-3241-474c-9ef2",
+      "stderr_preview": "2025-12-05 14:09:34,716 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:34,727 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:34,739 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:34,739 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:34,739 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:34.946133",
+      "severity": "P1",
+      "command": "history",
+      "args": [],
+      "flags": {
+        "asset": "BTCUSD",
+        "limit": "5"
+      },
+      "expected_behavior": "Should filter history by asset",
+      "execution_time_seconds": 1.276,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "                                Decision History (5 decisions)                                \n\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\n\u2503 ID                                   \u2503 Timestamp \u2503 Asset  \u2503 Action \u2503 Confidence \u2503 Executed \u2503\n\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529\n\u2502 d7073920-bd4f-4794-989d-ba6e4cebf56c \u2502 19:09:17  \u2502 BTCUSD \u2502 BUY    \u2502       100% \u2502 \u2717        \u2502\n\u2502 33fa1b16-3241-474c-9ef2",
+      "stderr_preview": "2025-12-05 14:09:35,852 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:35,878 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:35,888 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:35,888 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:35,889 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:36.221847",
+      "severity": "P1",
+      "command": "history",
+      "args": [],
+      "flags": {
+        "asset": "INVALID",
+        "limit": "10"
+      },
+      "expected_behavior": "Should show empty history for invalid asset",
+      "execution_time_seconds": 1.486,
+      "exit_code": 0,
+      "result_status": "FAIL",
+      "stdout_preview": "No decisions found\n",
+      "stderr_preview": "2025-12-05 14:09:37,359 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:37,396 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:37,407 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:37,407 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:37,407 ",
+      "notes": "",
+      "deviations": [
+        "Expected failure, but succeeded"
+      ]
+    },
+    {
+      "timestamp": "2025-12-05T14:09:37.707492",
+      "severity": "P1",
+      "command": "dashboard",
+      "args": [],
+      "flags": {},
+      "expected_behavior": "Should display portfolio dashboard",
+      "execution_time_seconds": 1.541,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 Multi-Platform Portfolio Dashboard \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 Total Portfolio Value: $25,000.00                                                                                              \u2502\n\u2502 Unrealized P&L: $500.00                                                                                                        \u2502\n\u2502 Assets Across Platforms: 2                                                                               ",
+      "stderr_preview": "2025-12-05 14:09:38,837 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:38,876 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:38,888 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:38,888 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:38,888 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:39.248543",
+      "severity": "P1",
+      "command": "wipe-decisions",
+      "args": [],
+      "flags": {
+        "confirm": true
+      },
+      "expected_behavior": "Should wipe decisions with confirmation",
+      "execution_time_seconds": 1.196,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Warning: This will delete all 6 stored decisions!\n\u2713 Wiped 6 decisions\n",
+      "stderr_preview": "2025-12-05 14:09:40,219 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:40,228 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:40,241 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:40,242 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:40,242 ",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:40.444302",
+      "severity": "P2",
+      "command": "install-deps",
+      "args": [],
+      "flags": {},
+      "expected_behavior": "Should show dependency status",
+      "execution_time_seconds": 1.741,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "Checking project dependencies...\n\n                                       Dependency Status                                        \n\u250f\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2533\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2513\n\u2503 Status      \u2503 Count \u2503 Packages                                                               \u2503\n\u2521\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2547\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2529\n\u2502 \u2713 Installed \u2502    28 \u2502 requests, aiohttp, aiohttp-retry, python-dotenv, panda",
+      "stderr_preview": "",
+      "notes": "",
+      "deviations": []
+    },
+    {
+      "timestamp": "2025-12-05T14:09:42.185578",
+      "severity": "P2",
+      "command": "walk-forward",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "start-date": "2024-01-01",
+        "end-date": "2024-01-31",
+        "train-ratio": "0.7"
+      },
+      "expected_behavior": "Should run walk-forward analysis",
+      "execution_time_seconds": 1.013,
+      "exit_code": 1,
+      "result_status": "FAIL",
+      "stdout_preview": "\n\ud83d\udcca Walk-Forward Analysis: BTCUSD\nError running walk-forward analysis: cannot import name 'AdvancedBacktester' from 'finance_feedback_engine.backtesting.backtester'\n(/home/cmp6510/finance_feedback_engine-2.0/finance_feedback_engine/backtesting/backtester.py)\n",
+      "stderr_preview": "Aborted!\n",
+      "notes": "",
+      "deviations": [
+        "Expected success, got exit code 1"
+      ]
+    },
+    {
+      "timestamp": "2025-12-05T14:09:43.199013",
+      "severity": "P2",
+      "command": "monte-carlo",
+      "args": [
+        "BTCUSD"
+      ],
+      "flags": {
+        "start-date": "2024-01-01",
+        "end-date": "2024-01-31",
+        "num-simulations": "10"
+      },
+      "expected_behavior": "Should run monte-carlo simulation",
+      "execution_time_seconds": 1.528,
+      "exit_code": 2,
+      "result_status": "FAIL",
+      "stdout_preview": "",
+      "stderr_preview": "Usage: main.py monte-carlo [OPTIONS] ASSET_PAIR\nTry 'main.py monte-carlo --help' for help.\n\nError: No such option: --num-simulations Did you mean --simulations?\n",
+      "notes": "",
+      "deviations": [
+        "Expected success, got exit code 2"
+      ]
+    },
+    {
+      "timestamp": "2025-12-05T14:09:44.726618",
+      "severity": "P2",
+      "command": "learning-report",
+      "args": [],
+      "flags": {},
+      "expected_behavior": "Should generate learning report",
+      "execution_time_seconds": 1.44,
+      "exit_code": 0,
+      "result_status": "PASS",
+      "stdout_preview": "\n\ud83d\udcc8 Learning Validation Report\nPortfolio memory not initialized. No learning data available.\n",
+      "stderr_preview": "2025-12-05 14:09:45,804 - finance_feedback_engine.core - INFO - Checking Ollama model installation...\n2025-12-05 14:09:45,814 - finance_feedback_engine.utils.model_installer - INFO - Disk space check: 753.8GB available\n2025-12-05 14:09:45,837 - finance_feedback_engine.utils.model_installer - INFO - All required models already installed\n2025-12-05 14:09:45,837 - finance_feedback_engine.utils.circuit_breaker - INFO - AlphaVantage-API initialized: threshold=5, timeout=60.0s\n2025-12-05 14:09:45,838 ",
+      "notes": "",
+      "deviations": []
+    }
+  ]
+}
