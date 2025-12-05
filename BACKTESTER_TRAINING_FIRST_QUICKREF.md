@@ -166,13 +166,14 @@ python main.py prune-memory --keep-recent 1000
 from finance_feedback_engine.backtesting.decision_cache import DecisionCache
 
 cache = DecisionCache()
-cache_key = cache._build_cache_key(asset_pair, timestamp, market_data)
+cache_key = cache.build_cache_key(asset_pair, timestamp, market_data)
+market_hash = cache.build_market_hash(market_data)
 
 # Check cache
 decision = cache.get(cache_key)
 if decision is None:
     decision = generate_decision(...)
-    cache.set(cache_key, decision, asset_pair, timestamp, market_data)
+  cache.put(cache_key, decision, asset_pair, timestamp, market_hash)
 ```
 
 ### Using Memory Snapshots

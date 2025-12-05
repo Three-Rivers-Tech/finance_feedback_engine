@@ -132,13 +132,14 @@ def generate_learning_validation_metrics(
     """
     logger.info("Generating learning validation metrics based on RL/meta-learning research")
 
-    if not memory_engine or len(memory_engine.trade_outcomes) == 0:
+    trade_outcomes = getattr(memory_engine, "trade_outcomes", None) if memory_engine else None
+    if not trade_outcomes or not hasattr(trade_outcomes, "__iter__"):
         return {
             'error': 'No trade outcomes available for analysis',
             'total_trades': 0
         }
 
-    outcomes = memory_engine.trade_outcomes
+    outcomes = trade_outcomes
     if asset_pair:
         outcomes = [o for o in outcomes if o.asset_pair == asset_pair]
 

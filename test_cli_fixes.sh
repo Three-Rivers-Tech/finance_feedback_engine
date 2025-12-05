@@ -1,6 +1,18 @@
 #!/bin/bash
+set -e
 echo "=== Testing All QA Fixes ==="
 echo ""
+
+# Verify prerequisites
+if ! command -v python &> /dev/null; then
+  echo "❌ FATAL: python not found in PATH"
+  exit 1
+fi
+
+if [ ! -f main.py ]; then
+  echo "❌ FATAL: main.py not found in current directory"
+  exit 1
+fi
 
 echo "1. Testing C2: Invalid date range rejection"
 python main.py backtest BTCUSD --start 2024-02-01 --end 2024-01-01 2>&1 | grep -q "start_date.*must be before" && echo "✅ PASS" || echo "❌ FAIL"

@@ -144,8 +144,6 @@ Total Trades:           0
 - Zero results are misleading (looks like successful backtest with no trades)
 - Poor user experience and potential for analysis errors
 
-**Suggested Fix:**
-```python
 # In cli/main.py, backtest command
 from datetime import datetime
 
@@ -153,11 +151,10 @@ from datetime import datetime
 start_dt = datetime.strptime(start, '%Y-%m-%d')
 end_dt = datetime.strptime(end, '%Y-%m-%d')
 
-if start_dt >= end_dt:
+if start_dt > end_dt:
     raise click.BadParameter(
-        f"start_date ({start}) must be before end_date ({end})"
+        f"start_date ({start}) must be before or equal to end_date ({end})"
     )
-```
 
 **Testing Plan:**
 1. Add unit test for invalid date ranges
