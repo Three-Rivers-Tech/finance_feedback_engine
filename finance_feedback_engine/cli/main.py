@@ -2250,8 +2250,8 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous):
     try:
         console.print("[cyan]Starting trade monitor...[/cyan]")
         trade_monitor.start()
-    except Exception as e:
         console.print("[green]✓ Trade monitor started.[/green]")
+    except Exception as e:
         logger.error(f"Trade monitor startup failed: {e}", exc_info=True)
         raise
 
