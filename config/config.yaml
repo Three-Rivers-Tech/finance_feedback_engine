@@ -28,7 +28,7 @@ platform_credentials:
   api_secret: "YOUR_COINBASE_API_SECRET"
   use_sandbox: false  # true for testing, false for production
   # passphrase: "YOUR_PASSPHRASE"  # optional, for legacy API only
-  
+
   # ============================================
   # Option 2: Oanda (Forex Trading)
   # ============================================
@@ -41,7 +41,7 @@ platform_credentials:
   # api_key: "YOUR_OANDA_API_TOKEN"
   # account_id: "YOUR_OANDA_ACCOUNT_ID"
   # environment: "practice"  # 'practice' for demo, 'live' for real money
-  
+
   # ============================================
   # Option 3: Mock Platform (Testing)
   # ============================================
@@ -81,7 +81,7 @@ providers:
 #       api_key: "YOUR_COINBASE_API_KEY"
 #       api_secret: "YOUR_COINBASE_API_SECRET"
 #       use_sandbox: false
-#   
+#
 #   - name: "oanda"
 #     credentials:
 #       api_key: "YOUR_OANDA_API_TOKEN"
@@ -103,21 +103,21 @@ decision_engine:
   # - 'gemini': Free Google Gemini CLI (requires Node.js v20+)
   # - 'ensemble': Aggregate multiple providers for best signals
   ai_provider: "local"
-  
+
   # Model name/path (provider-specific)
   model_name: "llama3.2:3b-instruct-fp16"
-  
+
   # Local models list for ensemble (optional, defaults to auto-discovery)
   # local_models: ["llama3.2:3b-instruct-fp16", "mistral:7b-instruct"]
-  
+
   # Local priority mode: boost local providers in ensemble
   # Options: false (disabled), true (2x boost), "soft" (1.5x boost), or number (custom multiplier)
   # local_priority: "soft"
-  
+
   # Decision confidence threshold (0.0 - 1.0)
   # Only execute trades above this confidence level
   decision_threshold: 0.7
-  
+
   # Custom prompt template (optional)
   # prompt_template: "path/to/custom_prompt.txt"
 
@@ -144,25 +144,28 @@ ensemble:
     qwen: 0.16666666
     # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
     # they are used conditionally in asset_routing for Phase 2 escalation
-  
+
   # Voting strategy: 'weighted', 'majority', or 'stacking'
   voting_strategy: "weighted"
-  
+
+
   # Debate mode: Enable structured debate between providers
   # When enabled, uses bull/bear/judge workflow instead of ensemble voting
-  # WARNING: All providers in debate_providers must also be listed in enabled_providers above
-  debate_mode: false
-  
+  # DEFAULT: true - uses local providers by default for safety
+  # Can be customized to use premium providers (gemini, qwen) when API keys available
+  debate_mode: true
+
   # Debate providers: Specify which providers play which roles
+  # Default: Uses all local providers for zero-cost multi-model consensus
   debate_providers:
-    bull: "gemini"    # Provider for bullish case
-    bear: "qwen"      # Provider for bearish case  
+    bull: "local"     # Provider for bullish case
+    bear: "local"     # Provider for bearish case
     judge: "local"    # Provider for final judgment
-  
+
   # Minimum agreement threshold (0.0-1.0)
   # Higher = requires more consensus between providers
   agreement_threshold: 0.6
-  
+
   # Adaptive learning: adjust weights based on accuracy
   # TESTED: Dynamic weight adjustment, ensemble fallback system
   adaptive_learning: true  # ON BY DEFAULT - thoroughly tested
@@ -182,34 +185,34 @@ ensemble:
   two_phase:
     # Enable two-phase mode (default: false for backward compatibility)
     enabled: true
-  
+
     # Phase 1 quorum: minimum successful free providers required
     phase1_min_quorum: 3
-  
+
     # Phase 1 confidence threshold (0.0-1.0)
     # Escalate to Phase 2 if confidence below this
     phase1_confidence_threshold: 0.75
-  
+
     # Phase 1 agreement threshold (0.0-1.0)
     # Escalate if weighted vote share for winning action < this
     phase1_agreement_threshold: 0.6
-  
+
     # Require premium providers for high-stakes trades
     require_premium_for_high_stakes: true
-  
+
     # High-stakes position threshold (USD)
     high_stakes_position_threshold: 1000
-  
+
     # Asset-based routing using premium_providers
     asset_routing:
       crypto: "cli"      # Copilot for crypto analysis
       forex: "gemini"    # Gemini for forex analysis
       stock: "gemini"    # Gemini for stock analysis
       fallback: "gpt-oss:120b-cloud"  # OSS 120B cloud model as fallback
-    
+
       # Call Codex as tiebreaker when primary agrees with Phase 1
       codex_as_tiebreaker: true
-    
+
       # Maximum premium API calls per day (budget enforcement)
       max_premium_calls_per_day: 50
 
@@ -227,10 +230,10 @@ monitoring:
   manual_cli: false  # Keep false for safety; true re-enables commands
   # Pulse interval for multi-timeframe cached analysis
   pulse_interval_seconds: 300
-  
+
   # Include sentiment data in market analysis
   include_sentiment: true  # Alpha Vantage NEWS_SENTIMENT API
-  
+
   # Include macro indicators in market analysis
   include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
 
@@ -238,10 +241,10 @@ monitoring:
 persistence:
   # Path to store trading decisions
   storage_path: "data/decisions"
-  
+
   # Maximum decisions to keep in memory
   max_decisions: 1000
-  
+
   # Auto-cleanup old decisions (days)
   cleanup_days: 30
 
@@ -254,14 +257,14 @@ persistence:
 portfolio_memory:
   # Enable portfolio memory tracking
   enabled: true  # ON BY DEFAULT - thoroughly tested
-  
+
   # Maximum experiences to retain in memory buffer
   max_memory_size: 1000
-  
+
   # Learning rate for provider weight updates (0.0-1.0)
   # Higher = faster adaptation, Lower = more stable
   learning_rate: 0.1
-  
+
   # Number of recent trades to include in AI context
   context_window: 20
 
@@ -287,23 +290,23 @@ telegram:
 backtesting:
   # Enable backtesting (manual toggle)
   enabled: false
-  
+
   # Use real historical data from AlphaVantage (requires API key)
   # If false, uses synthetic candles
   use_real_data: false
-  
+
   # Starting paper balance for simulations
   initial_balance: 10000.0
-  
+
   # Per-trade fee as percentage of notional (0.1 = 0.1%)
   fee_percentage: 0.1
-  
+
   # Default strategy configuration
   strategy:
     name: "sma_crossover"  # Options: sma_crossover, ensemble_weight_rl
     short_window: 5        # Fast moving average period
     long_window: 20        # Slow moving average period
-  
+
   # Reinforcement learning config (for RL strategies)
   rl:
     learning_rate: 0.01
@@ -337,7 +340,7 @@ circuit_breaker:
 logging:
   # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   level: "INFO"
-  
+
   # Optional: Log file path (if omitted, logs to console only)
   # file: "logs/finance_engine.log"
 

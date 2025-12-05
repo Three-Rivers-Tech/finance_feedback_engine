@@ -20,6 +20,33 @@ class TradingAgentOrchestrator:
         self.config = config
         self.engine = engine
         self.platform = platform
+
+        # SAFETY: Prevent quicktest mode in live trading
+        ensemble_config = getattr(config, 'ensemble_config', {})
+        quicktest_mode = ensemble_config.get('quicktest_mode', False)
+        if quicktest_mode:
+            raise ValueError(
+                "quicktest_mode is ONLY allowed in testing/backtesting environments. "
+                "It is unsafe for live trading as it disables debate mode and memory. "
+                "Please set ensemble.quicktest_mode: false in your config."
+            )
+
+        # Warn if debate mode is disabled (should be standard)
+        debate_mode = ensemble_config.get('debate_mode', True)
+        if not debate_mode:
+            click.echo(
+                click.style(
+                    "⚠️  WARNING: debate_mode is disabled. Debate mode is the standard across this repo.",
+                    fg='yellow'
+                )
+            )
+            click.echo(
+                click.style(
+                    "   Consider setting ensemble.debate_mode: true in your config for multi-provider consensus.",
+                    fg='yellow'
+                )
+            )
+
         self.trades_today = 0
         self.analysis_failures = {}  # Track failed analysis attempts by asset pair
         # Snapshot initial portfolio value for P/L kill-switch calculations
