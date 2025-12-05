@@ -525,7 +525,7 @@ stateDiagram-v2
         ProcessOutcomes --> RecordMemory: PortfolioMemoryEngine.record_outcome()
         RecordMemory --> [*]: Update experience buffer
         
-        note right of ProcessOutcomes: Updates: Win rate,<br/>Provider performance,<br/>Risk-adjusted returns
+        note right of ProcessOutcomes: Updates - Win rate,<br/>Provider performance,<br/>Risk-adjusted returns
     }
     
     LEARNING --> PERCEPTION
@@ -539,7 +539,7 @@ stateDiagram-v2
         
         KillSwitchCheck --> HALT: P&L < -kill_switch_loss_pct
         
-        note right of KillSwitchCheck: Monitors: Unrealized P&L %,<br/>Drawdown limits,<br/>Daily trade count
+        note right of KillSwitchCheck: Monitors - Unrealized P&L %,<br/>Drawdown limits,<br/>Daily trade count
     }
     
     PERCEPTION --> REASONING
@@ -560,7 +560,7 @@ stateDiagram-v2
         NextAsset --> LoopAssets: More assets
         NextAsset --> [*]: All processed
         
-        note right of RetryLogic: Failures tracked: Per-asset counters,<br/>Time-based decay, Daily reset
+        note right of RetryLogic: Failures tracked - Per-asset counters,<br/>Time-based decay, Daily reset
     }
     
     REASONING --> RISK_CHECK: Actionable Decision
@@ -572,7 +572,7 @@ stateDiagram-v2
         ValidateTrade --> [*]: Approved
         ValidateTrade --> REJECTED: Denied
         
-        note right of ValidateTrade: Checks: Max drawdown,<br/>Portfolio VaR, Correlation limits,<br/>Position concentration
+        note right of ValidateTrade: Checks - Max drawdown,<br/>Portfolio VaR, Correlation limits,<br/>Position concentration
     }
     
     RISK_CHECK --> EXECUTION: Trade Approved
