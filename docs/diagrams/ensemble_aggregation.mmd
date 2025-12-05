@@ -10,7 +10,7 @@ flowchart TD
         P5[gemini Gemini CLI]
     end
 
-    COLLECT{Collect Responses}
+    COLLECT[Collect Responses]
     DETECT[Detect Provider Failures]
 
     CALC_WEIGHTS[Dynamic Weight Recalculation]
@@ -28,7 +28,7 @@ flowchart TD
 
     CONFIDENCE[Confidence Adjustment]
     QUORUM{Local Provider Quorum Met?}
-    PENALTY[Apply 30 Confidence Penalty]
+    PENALTY[Apply 30-Point Confidence Penalty]
 
     META[Attach Ensemble Metadata]
 

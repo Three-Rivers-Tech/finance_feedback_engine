@@ -70,7 +70,7 @@ stateDiagram-v2
         [*] --> GetMonitoringContext
         GetMonitoringContext --> ValidateTrade: RiskGatekeeper
         ValidateTrade --> [*]: Approved
-        ValidateTrade --> REJECTED: Denied
+        ValidateTrade --> [*]: Denied
     }
 
     RISK_CHECK --> EXECUTION: Approved
