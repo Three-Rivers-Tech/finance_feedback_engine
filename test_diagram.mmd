@@ -1,0 +1,97 @@
+classDiagram
+    class BaseTradingPlatform {
+        <<abstract>>
+        +credentials: Dict
+        +get_balance()* Dict
+        +execute_trade(decision)* Dict
+        +get_account_info()* Dict
+        +get_portfolio_breakdown()* Dict
+        +get_open_positions()* List
+    }
+
+    class CoinbaseAdvancedPlatform {
+        +api_key: str
+        +api_secret: str
+        +passphrase: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List~FuturesPosition~
+        +_get_futures_balances() Dict
+        +_get_futures_positions() List
+    }
+
+    class OandaPlatform {
+        +api_key: str
+        +account_id: str
+        +environment: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List~Position~
+        +_calculate_position_margin() float
+    }
+
+    class UnifiedTradingPlatform {
+        +platforms: Dict~str, BaseTradingPlatform~
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +aggregate_balances() Dict
+        +route_trade(decision) str
+    }
+
+    class MockPlatform {
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_account_info() Dict
+        +get_portfolio_breakdown() Dict
+        -_mock_data: Dict
+    }
+
+    class PlatformFactory {
+        +_platforms: Dict~str, Class~
+        +create_platform(name, credentials)$ BaseTradingPlatform
+        +register_platform(name, platform_class)$ void
+    }
+
+    class CircuitBreaker {
+        -failure_count: int
+        -last_failure_time: datetime
+        -failure_threshold: int
+        -recovery_timeout: int
+        -state: CircuitState
+        +call(func, *args) Any
+        +_is_open() bool
+        +_record_success() void
+        +_record_failure() void
+    }
+
+    class CircuitState {
+        <<enumeration>>
+        CLOSED
+        OPEN
+        HALF_OPEN
+    }
+
+    BaseTradingPlatform <|-- CoinbaseAdvancedPlatform
+    BaseTradingPlatform <|-- OandaPlatform
+    BaseTradingPlatform <|-- UnifiedTradingPlatform
+    BaseTradingPlatform <|-- MockPlatform
+
+    PlatformFactory ..> BaseTradingPlatform : creates
+    PlatformFactory ..> CoinbaseAdvancedPlatform : instantiates
+    PlatformFactory ..> OandaPlatform : instantiates
+    PlatformFactory ..> UnifiedTradingPlatform : instantiates
+    PlatformFactory ..> MockPlatform : instantiates
+
+    CoinbaseAdvancedPlatform --> CircuitBreaker : uses
+    OandaPlatform --> CircuitBreaker : uses
+    CircuitBreaker --> CircuitState : manages
+
+    UnifiedTradingPlatform o-- CoinbaseAdvancedPlatform : aggregates
+    UnifiedTradingPlatform o-- OandaPlatform : aggregates
+
+    click BaseTradingPlatform href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/trading_platforms/base_platform.py" "Base Platform Interface"
+    click PlatformFactory href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/trading_platforms/platform_factory.py" "Platform Factory"
+    click CircuitBreaker href "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/utils/circuit_breaker.py" "Circuit Breaker"

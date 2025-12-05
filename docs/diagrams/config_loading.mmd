@@ -1,0 +1,23 @@
+flowchart TD
+    START([Configuration Loading Starts])
+    ENV{Environment Variables Set?}
+    LOCAL{config.local.yaml Exists?}
+    BASE[config/config.yaml Base Defaults]
+    MERGE[Merge Configuration Precedence: ENV > LOCAL > BASE]
+    VALIDATE[Validate Required Keys API keys, credentials]
+    RESULT([Final Config Object])
+
+    START --> ENV
+    ENV -->|Yes| MERGE
+    ENV -->|No| LOCAL
+    LOCAL -->|Yes| MERGE
+    LOCAL -->|No| BASE
+    BASE --> MERGE
+    MERGE --> VALIDATE
+    VALIDATE --> RESULT
+
+    subgraph "Environment Variables Highest Priority"
+        ENV_AV[ALPHA_VANTAGE_API_KEY]
+        ENV_CB[COINBASE_API_KEY COINBASE_API_SECRET]
+        ENV_OA[OANDA_API_KEY OANDA_ACCOUNT_ID]
+    end

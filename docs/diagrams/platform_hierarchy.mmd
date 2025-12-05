@@ -1,0 +1,84 @@
+classDiagram
+    class BaseTradingPlatform {
+        <<abstract>>
+        +credentials: Dict
+        +get_balance()* Dict
+        +execute_trade(decision)* Dict
+        +get_account_info()* Dict
+        +get_portfolio_breakdown()* Dict
+        +get_open_positions()* List
+    }
+
+    class CoinbaseAdvancedPlatform {
+        +api_key: str
+        +api_secret: str
+        +passphrase: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List
+    }
+
+    class OandaPlatform {
+        +api_key: str
+        +account_id: str
+        +environment: str
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +get_open_positions() List
+    }
+
+    class UnifiedTradingPlatform {
+        +platforms: Dict
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_portfolio_breakdown() Dict
+        +aggregate_balances() Dict
+        +route_trade(decision) str
+    }
+
+    class MockPlatform {
+        +get_balance() Dict
+        +execute_trade(decision) Dict
+        +get_account_info() Dict
+        +get_portfolio_breakdown() Dict
+    }
+
+    class PlatformFactory {
+        +_platforms: Dict
+        +create_platform(name, credentials)$ BaseTradingPlatform
+        +register_platform(name, platform_class)$ void
+    }
+
+    class CircuitBreaker {
+        -failure_count: int
+        -last_failure_time: datetime
+        -failure_threshold: int
+        -recovery_timeout: int
+        -state: CircuitState
+        +call(func, *args) Any
+        +_is_open() bool
+        +_record_success() void
+        +_record_failure() void
+    }
+
+    class CircuitState {
+        <<enumeration>>
+        CLOSED
+        OPEN
+        HALF_OPEN
+    }
+
+    BaseTradingPlatform <|-- CoinbaseAdvancedPlatform
+    BaseTradingPlatform <|-- OandaPlatform
+    BaseTradingPlatform <|-- UnifiedTradingPlatform
+    BaseTradingPlatform <|-- MockPlatform
+
+    PlatformFactory ..> BaseTradingPlatform : creates
+    CoinbaseAdvancedPlatform --> CircuitBreaker : uses
+    OandaPlatform --> CircuitBreaker : uses
+    CircuitBreaker --> CircuitState : manages
+
+    UnifiedTradingPlatform o-- CoinbaseAdvancedPlatform : aggregates
+    UnifiedTradingPlatform o-- OandaPlatform : aggregates

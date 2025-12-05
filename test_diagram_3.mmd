@@ -1,0 +1,123 @@
+stateDiagram-v2
+    [*] --> STARTUP
+
+    STARTUP --> POSITION_RECOVERY: Initialize Agent
+
+    state POSITION_RECOVERY {
+        [*] --> QueryPlatform
+        QueryPlatform --> ExtractPositions: get_portfolio_breakdown()
+        ExtractPositions --> GenerateSyntheticDecisions: Found N positions
+        GenerateSyntheticDecisions --> RebuildMemory: Create decision records
+        RebuildMemory --> AssociateMonitor: Populate PortfolioMemoryEngine
+        AssociateMonitor --> [*]: Mark startup_complete
+
+        QueryPlatform --> RetryBackoff: Failure attempt less than 3
+        RetryBackoff --> QueryPlatform: Exponential delay (2^n seconds)
+        QueryPlatform --> ForceComplete: Max retries reached
+        ForceComplete --> [*]: Continue with empty state
+    }
+
+    POSITION_RECOVERY --> IDLE: Recovery Complete
+
+    state IDLE {
+        [*] --> WaitInterval
+        WaitInterval --> [*]: After analysis_frequency_seconds
+        note right of WaitInterval: Skip initial wait if<br/>positions recovered
+    }
+
+    IDLE --> LEARNING: Timer Expires
+
+    state LEARNING {
+        [*] --> FetchClosedTrades
+        FetchClosedTrades --> ProcessOutcomes: get_closed_trades()
+        ProcessOutcomes --> RecordMemory: PortfolioMemoryEngine.record_outcome()
+        RecordMemory --> [*]: Update experience buffer
+
+        note right of ProcessOutcomes: Updates - Win rate,<br/>Provider performance,<br/>Risk-adjusted returns
+    }
+
+    LEARNING --> PERCEPTION
+
+    state PERCEPTION {
+        [*] --> FetchPortfolio
+        FetchPortfolio --> KillSwitchCheck: get_portfolio_breakdown()
+        KillSwitchCheck --> DailyReset: P&L within limits
+        DailyReset --> GatherMarketData: Reset trade count if new day
+        GatherMarketData --> [*]
+
+        KillSwitchCheck --> HALT: P&L < -kill_switch_loss_pct
+
+        note right of KillSwitchCheck: Monitors - Unrealized P&L %,<br/>Drawdown limits,<br/>Daily trade count
+    }
+
+    PERCEPTION --> REASONING
+
+    state REASONING {
+        [*] --> LoopAssets
+        LoopAssets --> AnalyzeAsset: For each asset_pair
+        AnalyzeAsset --> RetryLogic: DecisionEngine.generate_decision()
+        RetryLogic --> CheckAction: Success attempt less than 3
+        CheckAction --> NextAsset: HOLD action
+        CheckAction --> [*]: BUY/SELL action
+
+        RetryLogic --> ExponentialBackoff: Failure
+        ExponentialBackoff --> AnalyzeAsset: Delay times attempt
+        ExponentialBackoff --> MarkFailure: Max retries - 3
+        MarkFailure --> NextAsset: Skip asset for decay period
+
+        NextAsset --> LoopAssets: More assets
+        NextAsset --> [*]: All processed
+
+        note right of RetryLogic: Failures tracked - Per-asset counters,<br/>Time-based decay, Daily reset
+    }
+
+    REASONING --> RISK_CHECK: Actionable Decision
+    REASONING --> IDLE: No Actionable Decisions
+
+    state RISK_CHECK {
+        [*] --> GetMonitoringContext
+        GetMonitoringContext --> ValidateTrade: RiskGatekeeper.validate_trade()
+        ValidateTrade --> [*]: Approved
+        ValidateTrade --> REJECTED: Denied
+
+        note right of ValidateTrade: Checks - Max drawdown,<br/>Portfolio VaR, Correlation limits,<br/>Position concentration
+    }
+
+    RISK_CHECK --> EXECUTION: Trade Approved
+    RISK_CHECK --> PERCEPTION: Trade Rejected
+
+    state EXECUTION {
+        [*] --> SendOrder
+        SendOrder --> AssociateDecision: TradingPlatform.execute_trade()
+        AssociateDecision --> IncrementCounter: TradeMonitor.associate_decision_to_trade()
+        IncrementCounter --> [*]: daily_trade_count++
+
+        SendOrder --> LogFailure: Execution Error
+        LogFailure --> EXECUTION_FAILED
+
+        note right of SendOrder: Circuit breaker<br/>protects against<br/>API failures
+    }
+
+    EXECUTION --> LEARNING: Trade Executed
+    EXECUTION_FAILED --> PERCEPTION: Retry Next Cycle
+
+    state HALT {
+        [*] --> StopAgent
+        StopAgent --> [*]: is_running = False
+    }
+
+    HALT --> [*]: Agent Stopped
+
+    note left of STARTUP: On agent start -<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
+
+    note right of IDLE: Default 300s<br/>5 minutes between cycles
+
+    note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
+
+    note right of PERCEPTION: Kill-switch protects against<br/>runaway losses
+
+    note right of REASONING: Analyzes multiple assets<br/>per cycle with retry logic
+
+    note right of RISK_CHECK: Final safety gate before<br/>execution
+
+    note right of EXECUTION: Monitored by TradeMonitor<br/>for live P&L tracking
