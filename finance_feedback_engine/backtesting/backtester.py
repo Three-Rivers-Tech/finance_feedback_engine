@@ -149,7 +149,8 @@ class Backtester:
                        candle_volume: float = 0.0,  # Candle volume for slippage calculation
                        side: str = "LONG",  # "LONG" or "SHORT" - position side being opened/closed
                        is_liquidation: bool = False,  # True if forced liquidation
-                       next_candle_open: Optional[float] = None  # For latency simulation
+                       next_candle_open: Optional[float] = None,  # For latency simulation
+                       candle_duration_seconds: float = 86400.0  # Duration of candle in seconds (default: 1 day)
                        ) -> Tuple[float, float, float, Dict[str, Any]]: # new_balance, units, fee, trade_details
         """
         Simulates the execution of a single trade, applying fees, volume-based slippage, and latency.
@@ -162,9 +163,9 @@ class Backtester:
 
         # If latency pushes into next candle and we have next candle data, use its open price
         fill_price = current_price
-        if next_candle_open is not None and latency_seconds > 60:  # Assuming 1-minute+ candles
+        if next_candle_open is not None and latency_seconds > candle_duration_seconds:
             fill_price = next_candle_open
-            logger.debug(f"Latency {latency_seconds:.2f}s pushed fill into next candle, using open price {fill_price:.2f}")
+            logger.debug(f"Latency {latency_seconds:.2f}s pushed fill into next candle (duration: {candle_duration_seconds:.0f}s), using open price {fill_price:.2f}")
 
         # Calculate volume-based dynamic slippage
         base_slippage = self.slippage_percentage
@@ -360,13 +361,17 @@ class Backtester:
             metrics["max_drawdown_pct"] = 0.0
 
         # Win Rate and Trade Statistics
-        winning_trades = [t for t in trades_history if t.get("pnl_value", 0) > 0]
-        losing_trades = [t for t in trades_history if t.get("pnl_value", 0) < 0]
+        # Only count trades that have a pnl_value (i.e., completed/closed trades)
+        completed_trades = [t for t in trades_history if "pnl_value" in t]
+        winning_trades = [t for t in completed_trades if t["pnl_value"] > 0]
+        losing_trades = [t for t in completed_trades if t["pnl_value"] < 0]
+        breakeven_trades = [t for t in completed_trades if t["pnl_value"] == 0]
 
-        metrics["total_trades"] = len(trades_history)
+        metrics["total_trades"] = len(completed_trades)  # Only completed trades
         metrics["winning_trades"] = len(winning_trades)
         metrics["losing_trades"] = len(losing_trades)
-        metrics["win_rate"] = (len(winning_trades) / len(trades_history)) * 100 if len(trades_history) > 0 else 0.0
+        metrics["breakeven_trades"] = len(breakeven_trades)
+        metrics["win_rate"] = (len(winning_trades) / len(completed_trades)) * 100 if len(completed_trades) > 0 else 0.0
 
         # Average Win/Loss
         metrics["avg_win"] = np.mean([t["pnl_value"] for t in winning_trades]) if winning_trades else 0.0
@@ -408,6 +413,16 @@ class Backtester:
         if data.empty:
             logger.error(f"No historical data available for backtest for {asset_pair}.")
             return {"metrics": {"net_return_pct": 0, "total_trades": 0}, "trades": []}
+
+        # Calculate candle duration from timestamp differences (for latency simulation)
+        candle_duration_seconds = 86400.0  # Default to 1 day in seconds
+        if len(data) >= 2:
+            time_diff = (data.index[1] - data.index[0]).total_seconds()
+            if time_diff > 0:
+                candle_duration_seconds = time_diff
+                logger.info(f"Detected candle duration: {candle_duration_seconds:.0f} seconds ({candle_duration_seconds/3600:.1f} hours)")
+        else:
+            logger.warning("Insufficient data to calculate candle duration, using default (1 day)")
 
         # 2. Initialize portfolio
         current_balance = self.initial_balance
@@ -513,8 +528,7 @@ class Backtester:
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance={f'coinbase_{quote_currency}': current_balance} if 'BTC' in asset_pair or 'ETH' in asset_pair else {f'oanda_{quote_currency}': current_balance},
-                portfolio={'holdings': portfolio_for_decision_engine},
-                monitoring_context=monitoring_context  # Pass pulse data to decision engine
+                portfolio={'holdings': portfolio_for_decision_engine}
             )
 
             action = decision.get('action', 'HOLD')
@@ -539,14 +553,16 @@ class Backtester:
                     if current_position.side == "LONG":
                         new_balance, units_traded_neg, fee, trade_details = self._execute_trade(
                             current_balance, liquidation_price, "SELL", sell_units, "SELL", timestamp,
-                            candle_volume=candle.get('volume', 0), side="LONG", is_liquidation=True
+                            candle_volume=candle.get('volume', 0), side="LONG", is_liquidation=True,
+                            candle_duration_seconds=candle_duration_seconds
                         )
                     else:  # SHORT
                         # Close SHORT by buying back
                         trade_amount_quote = sell_units * liquidation_price
                         new_balance, units_traded, fee, trade_details = self._execute_trade(
                             current_balance, liquidation_price, "BUY", trade_amount_quote, "BUY", timestamp,
-                            candle_volume=candle.get('volume', 0), side="SHORT", is_liquidation=True
+                            candle_volume=candle.get('volume', 0), side="SHORT", is_liquidation=True,
+                            candle_duration_seconds=candle_duration_seconds
                         )
 
                     if trade_details['status'] == 'EXECUTED':
@@ -604,7 +620,8 @@ class Backtester:
                         # Close LONG by selling
                         new_balance, units_traded_neg, fee, trade_details = self._execute_trade(
                             current_balance, exit_price, "SELL", sell_units, "SELL", timestamp,
-                            candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open
+                            candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open,
+                            candle_duration_seconds=candle_duration_seconds
                         )
                         pnl = (trade_details['effective_price'] - current_position.entry_price) * sell_units
                     else:  # SHORT
@@ -612,7 +629,8 @@ class Backtester:
                         trade_amount_quote = sell_units * exit_price
                         new_balance, units_traded, fee, trade_details = self._execute_trade(
                             current_balance, exit_price, "BUY", trade_amount_quote, "BUY", timestamp,
-                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open
+                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open,
+                            candle_duration_seconds=candle_duration_seconds
                         )
                         pnl = (current_position.entry_price - trade_details['effective_price']) * sell_units
 
@@ -707,7 +725,8 @@ class Backtester:
                         # Close SHORT position
                         new_balance, units_traded, fee, trade_details = self._execute_trade(
                             current_balance, candle['close'], "BUY", trade_amount_quote, "BUY", timestamp,
-                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open
+                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open,
+                            candle_duration_seconds=candle_duration_seconds
                         )
 
                         if trade_details['status'] == 'EXECUTED':
@@ -726,7 +745,8 @@ class Backtester:
                         # Open new LONG or average existing LONG
                         new_balance, units_traded, fee, trade_details = self._execute_trade(
                             current_balance, candle['close'], "BUY", trade_amount_quote, "BUY", timestamp,
-                            candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open
+                            candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open,
+                            candle_duration_seconds=candle_duration_seconds
                         )
 
                         if trade_details['status'] == 'EXECUTED':
@@ -778,7 +798,8 @@ class Backtester:
 
                     new_balance, units_traded_neg, fee, trade_details = self._execute_trade(
                         current_balance, candle['close'], "SELL", sell_units, "SELL", timestamp,
-                        candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open
+                        candle_volume=candle.get('volume', 0), side="LONG", next_candle_open=next_candle_open,
+                        candle_duration_seconds=candle_duration_seconds
                     )
 
                     if trade_details['status'] == 'EXECUTED':
@@ -802,7 +823,8 @@ class Backtester:
 
                         new_balance, units_traded, fee, trade_details = self._execute_trade(
                             current_balance, candle['close'], "SELL", short_units, "SELL", timestamp,
-                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open
+                            candle_volume=candle.get('volume', 0), side="SHORT", next_candle_open=next_candle_open,
+                            candle_duration_seconds=candle_duration_seconds
                         )
 
                         if trade_details['status'] == 'EXECUTED':
