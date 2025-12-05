@@ -1,0 +1,65 @@
+graph TB
+    subgraph "Main Thread - TradeMonitor"
+        INIT[Initialize TradeMonitor<br/>monitoring_context_provider]
+        DETECT[Detect New Positions<br/>poll_platforms()]
+        SPAWN[Spawn TradeTrackerThread<br/>for each position]
+        QUEUE[Process Pending<br/>Trades Queue]
+    end
+
+    subgraph "ThreadPoolExecutor (max_workers=2)"
+        direction LR
+        POOL[Thread Pool<br/>max 2 concurrent]
+        TRACKER[TradeTrackerThread<br/>per position]
+        MONITOR[Monitor Position<br/>price + P&L]
+        EXIT_DETECT[Detect Exit<br/>take-profit/stop-loss/manual]
+        CALLBACK[Callback to Main<br/>on position close]
+        TERMINATE[Terminate Thread]
+    end
+
+    subgraph "TradeTrackerThread Lifecycle"
+        direction TB
+        ENTRY[Position Entry<br/>start monitoring]
+        MONITOR
+        EXIT_DETECT
+        CALLBACK --> TERMINATE
+    end
+
+    subgraph "Data Persistence"
+        TMC[TradeMetricsCollector<br/>data/trade_metrics/]
+        PME[PortfolioMemoryEngine<br/>experience buffer]
+        AGG[Aggregate Statistics<br/>Win rate, avg P&L]
+    end
+
+    subgraph "Feedback Loop"
+        MCP[MonitoringContextProvider<br/>get_monitoring_context]
+    end
+
+    INIT --> DETECT
+    DETECT --> SPAWN
+    SPAWN --> POOL
+    POOL --> TRACKER
+    TRACKER --> ENTRY
+    ENTRY --> MONITOR
+    MONITOR --> EXIT_DETECT
+    EXIT_DETECT --> CALLBACK
+    CALLBACK --> TERMINATE
+    TMC --> AGG
+    PME --> AGG
+
+    PME -->|Generate context| MCP
+    MCP -->|Inject pulse + positions| DE_INJECT
+    DE_INJECT --> NEXT_DECISION
+
+    NEXT_DECISION -.->|Avoid overtrading| LOOP
+
+    style LOOP fill:#2196F3,stroke:#0D47A1,color:#fff
+    style POOL fill:#FF9800,stroke:#E65100,color:#fff
+    style ENTRY fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style EXIT_DETECT fill:#9C27B0,stroke:#4A148C,color:#fff
+    style PME fill:#00BCD4,stroke:#006064,color:#fff
+    style MCP fill:#FFC107,stroke:#F57C00,color:#333
+
+    click INIT "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_monitor.py#L17" "TradeMonitor class"
+    click ENTRY "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_tracker.py" "TradeTrackerThread"
+    click TMC "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/metrics_collector.py" "Metrics Collector"
+    click PME "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/memory/portfolio_memory.py" "Portfolio Memory"

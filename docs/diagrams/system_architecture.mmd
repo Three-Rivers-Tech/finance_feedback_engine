@@ -1,0 +1,98 @@
+graph TB
+    subgraph "Entry Points"
+        CLI[CLI Commands<br/>main.py]
+        WEB[Web Service<br/>FastAPI + Redis<br/>Optional]
+    end
+
+    subgraph "Core Orchestration"
+        ENGINE[FinanceFeedbackEngine<br/>core.py]
+        AGENT[TradingLoopAgent<br/>Autonomous OODA Loop]
+    end
+
+    subgraph "Data Layer"
+        AV[Alpha Vantage<br/>Market Data]
+        UDP[UnifiedDataProvider<br/>Multi-Timeframe Pulse]
+        MRD[MarketRegimeDetector<br/>ADX/ATR Analysis]
+    end
+
+    subgraph "Decision Making"
+        DE[DecisionEngine<br/>Prompt Builder]
+        ENS[EnsembleManager<br/>Multi-Provider Voting]
+        subgraph "AI Providers"
+            LOCAL[Local/Ollama]
+            CLI_AI[GitHub Copilot CLI]
+            CODEX[Codex CLI]
+            QWEN[Qwen CLI]
+            GEMINI[Gemini CLI]
+        end
+    end
+
+    subgraph "Risk & Execution"
+        RG[RiskGatekeeper<br/>Drawdown/VaR/Correlation]
+        PF[PlatformFactory]
+        subgraph "Trading Platforms"
+            CB[Coinbase Advanced]
+            OA[Oanda Forex]
+            MOCK[Mock Platform]
+            UNI[UnifiedPlatform]
+        end
+        CB_BREAKER[CircuitBreaker<br/>Failure Protection]
+    end
+
+    subgraph "Monitoring & Learning"
+        TM[TradeMonitor<br/>Live Position Tracking]
+        PME[PortfolioMemoryEngine<br/>ML Feedback Loop]
+        MCP[MonitoringContextProvider<br/>Pulse Integration]
+    end
+
+    subgraph "Persistence"
+        DS[DecisionStore<br/>JSON Storage]
+        TMC[TradeMetricsCollector<br/>Performance Data]
+    end
+
+    CLI -->|analyze/execute/agent| ENGINE
+    WEB -->|Telegram approvals| ENGINE
+    AGENT -->|continuous loop| ENGINE
+
+    ENGINE -->|fetch data| AV
+    AV -->|OHLCV + sentiment| UDP
+    UDP -->|6 timeframes| MRD
+    MRD -->|regime + volatility| DE
+
+    ENGINE -->|generate decision| DE
+    DE -->|ensemble mode| ENS
+    ENS -.->|weighted voting| LOCAL
+    ENS -.->|dynamic weights| CLI_AI
+    ENS -.->|fallback tiers| CODEX
+    ENS -.->|4-tier strategy| QWEN
+    ENS -.->|quorum check| GEMINI
+
+    DE -->|position sizing| RG
+    RG -->|risk approved| PF
+    PF -->|create platform| CB
+    PF --> OA
+    PF --> MOCK
+    PF --> UNI
+    CB --> CB_BREAKER
+    CB_BREAKER -->|execute trade| TM
+
+    TM -->|detect positions| MCP
+    MCP -->|inject context| DE
+    TM -->|track P&L| PME
+    PME -->|trade outcomes| DE
+
+    DE -->|save decision| DS
+    TM -->|save metrics| TMC
+    PME -->|experience buffer| ENGINE
+
+    click ENGINE "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/core.py" "Core Orchestrator"
+    click DE "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/engine.py" "Decision Engine"
+    click ENS "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/ensemble_manager.py" "Ensemble Manager"
+    click AGENT "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/agent/trading_loop_agent.py" "Trading Agent"
+    click TM "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/monitoring/trade_monitor.py" "Trade Monitor"
+
+    style ENGINE fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style ENS fill:#FF9800,stroke:#E65100,color:#fff
+    style AGENT fill:#2196F3,stroke:#0D47A1,color:#fff
+    style TM fill:#9C27B0,stroke:#4A148C,color:#fff
+    style WEB fill:#ddd,stroke:#999,color:#333,stroke-dasharray: 5 5
