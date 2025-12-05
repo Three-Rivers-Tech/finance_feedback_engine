@@ -14,7 +14,7 @@ advanced_backtesting:
   commission_per_trade: 0.0
   stop_loss_percentage: 0.02  # 2%
   take_profit_percentage: 0.05  # 5%
-  default_timeframe: '1h'  # Hourly candles (realistic for 5-min pulse monitoring)
+  default_timeframe: '1h'  # Hourly candles (realistic for 1h pulse monitoring)
   rapid_test_timeframe: 'daily'  # Daily candles for fast testing
   enable_risk_gatekeeper: true  # Enable RiskGatekeeper validation
   enable_multi_timeframe_pulse: true  # Enable multi-timeframe technical analysis
