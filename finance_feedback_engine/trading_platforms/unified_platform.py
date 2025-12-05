@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class UnifiedTradingPlatform(BaseTradingPlatform):
     """
     A unified trading platform that aggregates data from multiple platforms.
-    
-    Currently supports Coinbase Advanced (for crypto futures) and Oanda 
+
+    Currently supports Coinbase Advanced (for crypto futures) and Oanda
     (for forex).
     """
 
@@ -41,7 +41,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             self.platforms['coinbase'] = CoinbaseAdvancedPlatform(
                 coinbase_creds
             )
-        
+
         if 'oanda' in credentials and credentials['oanda']:
             logger.info("Initializing Oanda platform for unified access.")
             self.platforms['oanda'] = OandaPlatform(credentials['oanda'])
@@ -68,7 +68,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     combined_balances[f"{name}_{asset}"] = balance
             except (ValueError, TypeError, KeyError) as e:
                 logger.error("Failed to get balance from %s: %s", name, e)
-        
+
         return combined_balances
 
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,7 +79,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         - Forex (e.g., EUR_USD) trades are routed to Oanda.
         """
         asset_pair = decision.get('asset_pair', '').upper()
-        
+
         # Determine target platform
         target_platform = None
         # Expanded check for forex pairs, which might be standardized without '_'
@@ -103,8 +103,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
 
         if target_platform:
             logger.info(
-                "Routing trade for %s to %s", 
-                asset_pair, 
+                "Routing trade for %s to %s",
+                asset_pair,
                 target_platform.__class__.__name__
             )
             return target_platform.execute_trade(decision)
@@ -134,7 +134,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
         Get a combined portfolio breakdown from all platforms.
-        
+
         Merges portfolio data from Coinbase (futures) and Oanda (forex).
         """
         total_value_usd = 0
@@ -142,14 +142,14 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         all_holdings = []
         num_assets = 0
         cash_balances = {}
-        
+
         platform_breakdowns = {}
 
         for name, platform in self.platforms.items():
             try:
                 breakdown = platform.get_portfolio_breakdown()
                 platform_breakdowns[name] = breakdown
-                
+
                 total_value_usd += breakdown.get('total_value_usd', 0)
                 # Capture unrealized P&L if the platform exposes it
                 total_unrealized += breakdown.get('unrealized_pnl', 0.0)
@@ -164,13 +164,13 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                         cash_balances[name] = float(bal)
                     except Exception:
                         cash_balances[name] = 0.0
-                
+
                 # Add platform prefix to holdings
                 holdings = breakdown.get('holdings', [])
                 for holding in holdings:
                     holding['platform'] = name
                 all_holdings.extend(holdings)
-                
+
                 num_assets += breakdown.get('num_assets', 0)
 
             except (ValueError, TypeError, KeyError) as e:
@@ -178,15 +178,19 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     "Failed to get portfolio breakdown from %s: %s", name, e
                 )
 
-        # Recalculate allocation percentages across the entire portfolio
-        if total_value_usd > 0:
+        # Recalculate allocation percentages across the entire portfolio.
+        # Use total notional exposure (sum of all holdings' values) rather
+        # than account balance, so allocations make sense for leveraged positions.
+        total_notional_exposure = sum(
+            holding.get('value_usd', 0) for holding in all_holdings
+        )
+
+        if total_notional_exposure > 0:
             for holding in all_holdings:
                 allocation = (
-                    holding.get('value_usd', 0) / total_value_usd
+                    holding.get('value_usd', 0) / total_notional_exposure
                 ) * 100
-                holding['allocation_pct'] = (
-                    allocation if total_value_usd else 0
-                )
+                holding['allocation_pct'] = allocation
 
         # Sum cash balances across platforms
         cash_balance_usd = (

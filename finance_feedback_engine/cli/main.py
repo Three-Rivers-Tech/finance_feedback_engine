@@ -2246,6 +2246,11 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous):
     )
     engine.enable_monitoring_integration(trade_monitor=trade_monitor)
 
+    # Start trade monitor immediately to enable position tracking
+    console.print("[cyan]Starting trade monitor...[/cyan]")
+    trade_monitor.start()
+    console.print("[green]✓ Trade monitor started.[/green]")
+
     agent = TradingLoopAgent(
         config=agent_config,
         engine=engine,
