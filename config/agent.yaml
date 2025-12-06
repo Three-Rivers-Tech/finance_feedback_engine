@@ -23,5 +23,6 @@ max_drawdown_percent: 0.15
 asset_pairs:
   - BTCUSD
   - ETHUSD
+  - EURUSD
 # How often the agent should run its analysis loop, in seconds.
 analysis_frequency_seconds: 300
