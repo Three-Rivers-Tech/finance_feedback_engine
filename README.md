@@ -1,4 +1,8 @@
 # Finance Feedback Engine 2.0
+# Ensemble Decision Aggregation
+
+## Aggregation Flow and Metadata (Comprehensive)
+
 
 > **AI-Powered Trading Decision Tool** - A modular, plug-and-play finance tool for automated portfolio simulation and trading decisions using AI models and real-time market data.
 
@@ -29,6 +33,8 @@
   - **ML Feedback Loop**: Completed trades feed back into AI for continuous learning
   - **Comprehensive Metrics**: Exit reasons, holding time, peak P&L, max drawdown
 - **📊 Position Sizing**: Automatic position sizing with 1% risk / 2% stop loss defaults 🆕
+
+*Diagram: Comprehensive ensemble decision aggregation flow, including provider input, aggregation, fallback, dynamic weight adjustment, and detailed metadata. See [ENSEMBLE_FALLBACK_QUICKREF.md](ENSEMBLE_FALLBACK_QUICKREF.md) for further details.*
   - **Smart Signal-Only Mode**: Provides trading signals without position sizing when portfolio data unavailable 🆕
   - **Risk Management**: Calculates appropriate position sizes based on account balance
 - **💾 Persistent Decision Storage**: Track all trading decisions with timestamps

@@ -58,17 +58,17 @@ def monitor_backtest_progress():
                         parts = line.split("Processing")
                         if len(parts) > 1:
                             current_date = parts[1].strip().split()[0]
-                    except:
-                        pass
+                        except (IndexError, ValueError):
+                            pass
 
                 if "Generating decision for" in line:
                     try:
                         current_asset = line.split("for")[-1].strip().split()[0]
-                    except:
-                        pass
+                        except (IndexError, ValueError):
+                            pass
 
             # Display status
-            if outcome_files != last_outcome_count or True:  # Always update
+            if len(outcome_files) != last_outcome_count:
                 print(f"\r[{datetime.now().strftime('%H:%M:%S')}] ", end="", flush=True)
                 if current_date:
                     print(f"Date: {current_date} ", end="", flush=True)

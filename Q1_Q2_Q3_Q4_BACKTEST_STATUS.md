@@ -16,7 +16,7 @@ CPU: 7.6%
 Memory: 225 MB
 Start Time: 12:38 UTC
 Expected Duration: 15-20 minutes per quarter
-Timeout: 15 minutes per quarter
+Timeout: 25 minutes per quarter
 ```
 
 ### Progress Indicators
@@ -191,7 +191,7 @@ grep "Trade executed\|BUY\|SELL" /tmp/q1_backtest.log | tail -20
 Portfolio Backtest Results (Q1 2025)
 ====================================
 Initial Value: $10,000.00
-Final Value: $10,X,XXX.XX (5-15% gain expected)
+Final Value: $10,500–$11,500 (5-15% gain expected)
 Total Return: X.XX%
 Sharpe Ratio: 0.8-1.4
 Max Drawdown: -8% to -15%

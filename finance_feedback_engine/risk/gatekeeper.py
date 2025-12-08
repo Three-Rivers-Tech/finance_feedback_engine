@@ -123,7 +123,13 @@ class RiskGatekeeper:
         # 5. Volatility / Confidence Check
         volatility = decision.get("volatility", 0.0)
         # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
-        confidence = decision.get("confidence", 0) / 100.0
+        raw_confidence = decision.get("confidence", 0)
+        if not isinstance(raw_confidence, (int, float)) or not 0 <= raw_confidence <= 100:
+            logger.warning(
+                f"Invalid confidence value: {raw_confidence}. Expected integer 0-100. Defaulting to 0."
+            )
+            raw_confidence = 0
+        confidence = raw_confidence / 100.0
         if volatility > 0.05 and confidence < 0.80:
             logger.warning(
                 f"Volatility/confidence threshold: vol={volatility:.3f}, "

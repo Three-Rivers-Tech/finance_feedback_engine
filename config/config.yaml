@@ -314,35 +314,7 @@ backtesting:
     exploration_rate: 0.1
 
 # ============================================
-# Portfolio Management Configuration
-# ============================================
-# Multi-asset portfolio settings for correlation-aware trading
-portfolio:
-  # Maximum concurrent positions across all assets
-  max_positions: 5
-
-  # Correlation threshold for position sizing adjustment
-  # Reduces position size when correlation with existing positions exceeds this value
-  # Range: 0.0-1.0, recommended: 0.6-0.8
-  correlation_threshold: 0.7
-
-  # Lookback window for correlation calculation (trading days)
-  correlation_window: 30
-
-  # Portfolio-level risk limit (% of total portfolio value)
-  # Maximum loss before closing all positions
-  max_portfolio_risk: 0.02  # 2%
-
-  # Maximum drawdown before portfolio stop-loss triggers (%)
-  max_drawdown: 0.05  # 5%
-
-  # Position sizing method
-  # Options: 'equal_weight', 'risk_parity', 'correlation_adjusted'
-  position_sizing: "correlation_adjusted"
-
-  # Rebalancing frequency for portfolio backtest
-  # Options: 'daily', 'weekly', 'monthly'
-  rebalancing_frequency: "daily"
+...existing code...
 
 # ============================================
 # Safety & Execution Controls

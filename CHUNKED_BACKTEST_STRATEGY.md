@@ -70,7 +70,7 @@ data/memory/provider_performance.json
 {
   "llama3.2:3b-instruct-fp16": {
     "total_trades": 45,
-    "winning_trades": 28,  // 62% win rate
+    "winning_trades": 28,
     "total_pnl": 2500
   },
   "gemini": {...},
