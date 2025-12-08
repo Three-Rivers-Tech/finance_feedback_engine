@@ -1,0 +1,86 @@
+{
+  "period": "Full Year 2024",
+  "assets": [
+    "BTCUSD",
+    "ETHUSD",
+    "EURUSD"
+  ],
+  "initial_balance": 10000.0,
+  "final_balance": 8121.932954718786,
+  "total_return_pct": -18.78067045281214,
+  "annualized_sharpe": -49.0,
+  "max_quarterly_drawdown": -3.38,
+  "total_trades": 0,
+  "total_completed_trades": 0,
+  "total_winning_trades": 0,
+  "overall_win_rate": 0,
+  "total_pnl": -1878.0670452812137,
+  "quarterly_breakdown": [
+    {
+      "quarter": "Q1",
+      "start_date": "2024-01-01",
+      "end_date": "2024-03-31",
+      "initial_balance": 10000.0,
+      "final_value": 10000.0,
+      "return_pct": -5.02,
+      "sharpe_ratio": -18.67,
+      "max_drawdown": -5.02,
+      "total_trades": 0,
+      "completed_trades": 0,
+      "win_rate": 0.0,
+      "total_pnl": 0.0,
+      "winning_trades": 0
+    },
+    {
+      "quarter": "Q2",
+      "start_date": "2024-04-01",
+      "end_date": "2024-06-30",
+      "initial_balance": 10000.0,
+      "final_value": 10000.0,
+      "return_pct": -5.11,
+      "sharpe_ratio": -20.58,
+      "max_drawdown": -5.11,
+      "total_trades": 0,
+      "completed_trades": 0,
+      "win_rate": 0.0,
+      "total_pnl": 0.0,
+      "winning_trades": 0
+    },
+    {
+      "quarter": "Q3",
+      "start_date": "2024-07-01",
+      "end_date": "2024-09-30",
+      "initial_balance": 10000.0,
+      "final_value": 10000.0,
+      "return_pct": -5.01,
+      "sharpe_ratio": -28.99,
+      "max_drawdown": -4.08,
+      "total_trades": 0,
+      "completed_trades": 0,
+      "win_rate": 33.3,
+      "total_pnl": 0.0,
+      "winning_trades": 0
+    },
+    {
+      "quarter": "Q4",
+      "start_date": "2024-10-01",
+      "end_date": "2024-12-31",
+      "initial_balance": 10000.0,
+      "final_value": 10000.0,
+      "return_pct": -5.13,
+      "sharpe_ratio": -29.76,
+      "max_drawdown": -3.38,
+      "total_trades": 0,
+      "completed_trades": 0,
+      "win_rate": 0.0,
+      "total_pnl": 0.0,
+      "winning_trades": 0
+    }
+  ],
+  "memory_persistence": {
+    "outcomes_stored": 0,
+    "snapshots_stored": 0,
+    "vectors_file": "data/memory/vectors.pkl",
+    "learning_accumulated_across_quarters": true
+  }
+}

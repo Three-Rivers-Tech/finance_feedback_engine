@@ -4,6 +4,8 @@ import click
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
+from finance_feedback_engine.utils.market_schedule import MarketSchedule
+from finance_feedback_engine.utils.validation import standardize_asset_pair
 # Additional imports will be needed for data providers, persistence, etc.
 
 class TradingAgentOrchestrator:
@@ -149,24 +151,42 @@ class TradingAgentOrchestrator:
                 continue
 
             for asset_pair in self.config.asset_pairs:
+                asset_pair_std = standardize_asset_pair(asset_pair)
+                asset_type = self._infer_asset_type(asset_pair_std)
+                status = MarketSchedule.get_market_status(asset_pair_std, asset_type)
+
+                if status.get("warning"):
+                    print(
+                        f"Warning for {asset_pair_std}: {status['warning']} (session={status['session']})"
+                    )
+
+                if not status.get("is_open", False):
+                    minutes = status.get("time_to_close", 0)
+                    print(
+                        f"Market closed for {asset_pair_std} ({asset_type}). "
+                        f"Session={status.get('session', 'Closed')}. "
+                        f"Reopens in ~{minutes} minutes. Skipping."
+                    )
+                    continue
+
                 try:
-                    print(f"--- Analyzing {asset_pair} ---")
+                    print(f"--- Analyzing {asset_pair_std} ---")
 
                     # 1. PERCEIVE: Gather market data with retry logic
                     market_data = None
                     for attempt in range(3):
                         try:
                             market_data = self.engine.data_provider.get_comprehensive_market_data(
-                                asset_pair,
+                                asset_pair_std,
                                 include_sentiment=True,
                                 include_macro=True
                             )
                             break
                         except Exception as e:
-                            print(f"Attempt {attempt + 1}/3 failed for {asset_pair}: {e}")
+                            print(f"Attempt {attempt + 1}/3 failed for {asset_pair_std}: {e}")
                             if attempt == 2:
-                                print(f"Failed to fetch data for {asset_pair} after 3 attempts, skipping")
-                                self.analysis_failures[asset_pair] = time.time()
+                                print(f"Failed to fetch data for {asset_pair_std} after 3 attempts, skipping")
+                                self.analysis_failures[asset_pair_std] = time.time()
                                 continue
                             time.sleep(2 ** attempt)  # Exponential backoff
 
@@ -178,25 +198,45 @@ class TradingAgentOrchestrator:
                     context = f"Strategic Goal: {self.config.strategic_goal}. Risk Appetite: {self.config.risk_appetite}. Market Regime: {market_data.get('market_regime', 'Unknown')}"
 
                     # 3. DECIDE: Use the existing "oneshot" decision engine
-                    decision = self.engine.generate_decision(asset_pair)
+                    decision = self.engine.generate_decision(asset_pair_std)
 
                     if not decision or decision.decision == "HOLD":
                         print(f"Decision: HOLD. No action taken.")
                         continue
 
-                    print(f"Decision: {decision.decision} {asset_pair} with {decision.confidence*100:.2f}% confidence.")
+                    print(f"Decision: {decision.decision} {asset_pair_std} with {decision.confidence*100:.2f}% confidence.")
                     print(f"Reasoning: {decision.reasoning}")
 
                     # 4. ACT: Execute based on configuration
                     if self._should_execute(decision):
                         # platform.execute_trade(decision) # To be implemented
                         self.trades_today += 1
-                        print(f"EXECUTING TRADE: {decision.decision} {asset_pair}")
+                        print(f"EXECUTING TRADE: {decision.decision} {asset_pair_std}")
                     else:
                         print("Trade not executed due to approval policy.")
                 except Exception as e:
-                    print(f"Error processing {asset_pair}: {e}")
+                    print(f"Error processing {asset_pair_std}: {e}")
                     # Continue to next asset pair instead of crashing
+
+    @staticmethod
+    def _infer_asset_type(asset_pair: str) -> str:
+        """Infer asset type for routing schedule checks.
+
+        Crypto: BTC/ETH hardcoded (aligned with AlphaVantage provider). Forex: both legs in common FX set or 6-char pair. Otherwise defaults to stocks.
+        """
+        upper = asset_pair.upper()
+        if 'BTC' in upper or 'ETH' in upper:
+            return 'crypto'
+
+        fx_currencies = {'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'USD'}
+        if '_' in upper:
+            parts = upper.split('_')
+            if len(parts) == 2 and parts[0] in fx_currencies and parts[1] in fx_currencies:
+                return 'forex'
+        elif len(upper) == 6 and upper[:3] in fx_currencies and upper[3:] in fx_currencies:
+            return 'forex'
+
+        return 'stocks'
     def _should_execute(self, decision) -> bool:
         """Determines if a trade should be executed based on the approval policy and daily limits."""
         if self.trades_today >= self.config.max_daily_trades:

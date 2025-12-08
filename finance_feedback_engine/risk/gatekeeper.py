@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Dict, Tuple, Optional
 import logging
 
+from finance_feedback_engine.utils.market_schedule import MarketSchedule
+from finance_feedback_engine.utils.validation import validate_data_freshness
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +100,54 @@ class RiskGatekeeper:
             Tuple ``(is_allowed, message)`` where ``is_allowed`` is ``True``
             if the trade passes all checks, otherwise ``False``.
         """
-        # 1. Max Drawdown Check
+        # 0. Market Schedule Check (Earliest: prevents trading in closed markets)
+        asset_pair = decision.get("asset_pair", "")
+        asset_type = context.get("asset_type", "crypto")
+        timestamp = context.get("timestamp")  # Unix timestamp (for backtesting)
+
+        if timestamp:
+            market_status = MarketSchedule.get_market_status_at_timestamp(
+                asset_pair, asset_type, timestamp
+            )
+        else:
+            market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
+
+        if not market_status["is_open"]:
+            logger.warning(
+                f"Market closed for {asset_pair} ({asset_type}). "
+                f"Session: {market_status['session']}"
+            )
+            return False, f"Market closed ({market_status['session']})"
+
+        if market_status["warning"]:
+            logger.info(f"Market warning for {asset_pair}: {market_status['warning']}")
+
+        # 1. Data Freshness Check (Prevents stale data decisions)
+        market_data_timestamp = context.get("market_data_timestamp")
+        if market_data_timestamp:
+            # Determine timeframe for stocks
+            timeframe = "intraday"
+            if asset_type == "stocks":
+                timeframe = context.get("timeframe", "intraday")
+
+            try:
+                is_fresh, age_str, freshness_msg = validate_data_freshness(
+                    market_data_timestamp,
+                    asset_type=asset_type,
+                    timeframe=timeframe
+                )
+
+                if not is_fresh:
+                    logger.error(f"Rejecting trade: {freshness_msg}")
+                    return False, f"Stale market data ({age_str}): {freshness_msg}"
+
+                if freshness_msg:  # Warning but still usable
+                    logger.warning(f"Data freshness warning: {freshness_msg}")
+            except ValueError as e:
+                logger.error(f"Invalid market data timestamp: {e}")
+                return False, f"Invalid timestamp: {str(e)}"
+
+        # 2. Max Drawdown Check
         recent_perf = context.get("recent_performance", {})
         total_pnl = recent_perf.get("total_pnl", 0.0)
         if total_pnl < -self.max_drawdown_pct:
@@ -107,20 +157,20 @@ class RiskGatekeeper:
             )
             return False, f"Max drawdown exceeded ({total_pnl*100:.2f}%)"
 
-        # 2. Per-Platform Correlation Check (Enhanced)
+        # 3. Per-Platform Correlation Check (Enhanced)
         correlation_check_result = self._validate_correlation(decision, context)
         if not correlation_check_result[0]:
             return correlation_check_result
 
-        # 3. Combined Portfolio VaR Check (New)
+        # 4. Combined Portfolio VaR Check (New)
         var_check_result = self._validate_var(decision, context)
         if not var_check_result[0]:
             return var_check_result
 
-        # 4. Cross-Platform Correlation Warning (Non-blocking)
+        # 5. Cross-Platform Correlation Warning (Non-blocking)
         self._check_cross_platform_correlation(context)
 
-        # 5. Volatility / Confidence Check
+        # 6. Volatility / Confidence Check
         volatility = decision.get("volatility", 0.0)
         # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
         raw_confidence = decision.get("confidence", 0)

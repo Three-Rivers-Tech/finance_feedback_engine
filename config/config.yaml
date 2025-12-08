@@ -314,9 +314,6 @@ backtesting:
     exploration_rate: 0.1
 
 # ============================================
-...existing code...
-
-# ============================================
 # Safety & Execution Controls
 # ============================================
 # Prevent unsafe automated executions and provide circuit breaker protection

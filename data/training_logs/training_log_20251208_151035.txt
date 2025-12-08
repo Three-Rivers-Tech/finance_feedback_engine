@@ -1,0 +1,1338 @@
+2025-12-08 15:10:35,749 - INFO - ================================================================================
+2025-12-08 15:10:35,749 - INFO -                      MULTI-ASSET TRAINING - 2024 FULL YEAR                      
+2025-12-08 15:10:35,750 - INFO - ================================================================================
+2025-12-08 15:10:35,750 - INFO - Log file: data/training_logs/training_log_20251208_151035.txt
+2025-12-08 15:10:35,750 - INFO - 
+2025-12-08 15:10:35,750 - INFO - Configuration:
+2025-12-08 15:10:35,750 - INFO -   Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:35,750 - INFO -   Period: 2024-01-01 → 2024-12-31
+2025-12-08 15:10:35,750 - INFO -   Initial Balance: $10,000.00
+2025-12-08 15:10:35,750 - INFO -   Chunking: Quarterly (Q1, Q2, Q3, Q4)
+2025-12-08 15:10:35,750 - INFO -   Learning: Cross-quarter persistent memory
+2025-12-08 15:10:35,750 - INFO - 
+2025-12-08 15:10:35,750 - INFO - Starting training...
+2025-12-08 15:10:35,750 - INFO - 
+2025-12-08 15:10:35,762 - INFO - ChunkedBacktestRunner initialized:
+2025-12-08 15:10:35,762 - INFO -   Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:35,762 - INFO -   Initial Balance: $10,000.00
+2025-12-08 15:10:35,762 - INFO -   Correlation Threshold: 0.7
+2025-12-08 15:10:35,762 - INFO -   Per-Quarter Timeout: 1800s (30 minutes)
+2025-12-08 15:10:35,762 - INFO -   Memory Path: data/memory
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO -                          EXECUTING QUARTERLY BACKTESTS                          
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO - STARTING FULL YEAR 2025 CHUNKED BACKTEST
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO - Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:35,763 - INFO - Period: Q1 → Q4 2025 (4 quarterly chunks)
+2025-12-08 15:10:35,763 - INFO - Memory persists across chunks: data/memory
+2025-12-08 15:10:35,763 - INFO - 
+2025-12-08 15:10:35,763 - INFO - 
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO - Running Q1 2025 (2024-01-01 → 2024-03-31)
+2025-12-08 15:10:35,763 - INFO - ================================================================================
+2025-12-08 15:10:35,763 - INFO - Command: python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2024-01-01 --end 2024-03-31 --initial-balance 10000.0 --correlation-threshold 0.7 --max-positions 3
+2025-12-08 15:10:35,763 - INFO - Memory state: Persistent (vectors.pkl + outcome_*.json)
+2025-12-08 15:25:44,627 - INFO - ✓ Q1 2025 (2024-01-01 → 2024-03-31) complete
+2025-12-08 15:25:44,627 - INFO -   Return: -5.94%
+2025-12-08 15:25:44,627 - INFO -   Trades: 0
+2025-12-08 15:25:44,627 - INFO -   Win Rate: 0.0%
+2025-12-08 15:25:44,627 - INFO -   Sharpe: -17.79
+2025-12-08 15:25:44,628 - INFO - Memory Status:
+2025-12-08 15:25:44,628 - INFO -   Outcomes: 0 files
+2025-12-08 15:25:44,628 - INFO -   Snapshots: 0 files
+2025-12-08 15:25:44,628 - INFO -   Vectors: ✓ (0.00 MB)
+2025-12-08 15:25:44,628 - INFO -   Provider Perf: ✗
+2025-12-08 15:25:44,628 - INFO -   Regime Perf: ✗
+2025-12-08 15:25:44,628 - INFO - 
+2025-12-08 15:25:44,628 - INFO - ================================================================================
+2025-12-08 15:25:44,628 - INFO - Running Q2 2025 (2024-04-01 → 2024-06-30)
+2025-12-08 15:25:44,628 - INFO - ================================================================================
+2025-12-08 15:25:44,628 - INFO - Command: python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2024-04-01 --end 2024-06-30 --initial-balance 10000.0 --correlation-threshold 0.7 --max-positions 3
+2025-12-08 15:25:44,628 - INFO - Memory state: Persistent (vectors.pkl + outcome_*.json)
+2025-12-08 15:35:31,721 - INFO - ✓ Q2 2025 (2024-04-01 → 2024-06-30) complete
+2025-12-08 15:35:31,721 - INFO -   Return: -5.19%
+2025-12-08 15:35:31,722 - INFO -   Trades: 0
+2025-12-08 15:35:31,722 - INFO -   Win Rate: 0.0%
+2025-12-08 15:35:31,722 - INFO -   Sharpe: -25.13
+2025-12-08 15:35:31,722 - INFO - Memory Status:
+2025-12-08 15:35:31,722 - INFO -   Outcomes: 0 files
+2025-12-08 15:35:31,722 - INFO -   Snapshots: 0 files
+2025-12-08 15:35:31,722 - INFO -   Vectors: ✓ (0.00 MB)
+2025-12-08 15:35:31,722 - INFO -   Provider Perf: ✗
+2025-12-08 15:35:31,722 - INFO -   Regime Perf: ✗
+2025-12-08 15:35:31,722 - INFO - 
+2025-12-08 15:35:31,722 - INFO - ================================================================================
+2025-12-08 15:35:31,722 - INFO - Running Q3 2025 (2024-07-01 → 2024-09-30)
+2025-12-08 15:35:31,722 - INFO - ================================================================================
+2025-12-08 15:35:31,722 - INFO - Command: python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2024-07-01 --end 2024-09-30 --initial-balance 10000.0 --correlation-threshold 0.7 --max-positions 3
+2025-12-08 15:35:31,722 - INFO - Memory state: Persistent (vectors.pkl + outcome_*.json)
+2025-12-08 15:49:34,166 - INFO - ✓ Q3 2025 (2024-07-01 → 2024-09-30) complete
+2025-12-08 15:49:34,166 - INFO -   Return: -5.83%
+2025-12-08 15:49:34,166 - INFO -   Trades: 0
+2025-12-08 15:49:34,166 - INFO -   Win Rate: 0.0%
+2025-12-08 15:49:34,166 - INFO -   Sharpe: -16.91
+2025-12-08 15:49:34,167 - INFO - Memory Status:
+2025-12-08 15:49:34,167 - INFO -   Outcomes: 0 files
+2025-12-08 15:49:34,167 - INFO -   Snapshots: 0 files
+2025-12-08 15:49:34,167 - INFO -   Vectors: ✓ (0.00 MB)
+2025-12-08 15:49:34,167 - INFO -   Provider Perf: ✗
+2025-12-08 15:49:34,167 - INFO -   Regime Perf: ✗
+2025-12-08 15:49:34,167 - INFO - 
+2025-12-08 15:49:34,167 - INFO - ================================================================================
+2025-12-08 15:49:34,167 - INFO - Running Q4 2025 (2024-10-01 → 2024-12-31)
+2025-12-08 15:49:34,167 - INFO - ================================================================================
+2025-12-08 15:49:34,167 - INFO - Command: python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2024-10-01 --end 2024-12-31 --initial-balance 10000.0 --correlation-threshold 0.7 --max-positions 3
+2025-12-08 15:49:34,167 - INFO - Memory state: Persistent (vectors.pkl + outcome_*.json)
+2025-12-08 15:55:14,799 - ERROR - Backtest failed for Q4 2025 (2024-10-01 → 2024-12-31):
+2025-12-08 15:55:14,799 - ERROR - 2025-12-08 15:49:35,129 - finance_feedback_engine.decision_engine.engine - INFO - Local models configured: []
+2025-12-08 15:49:35,129 - finance_feedback_engine.decision_engine.engine - INFO - Local priority: False
+2025-12-08 15:49:35,129 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Local-First Ensemble initialized. Target Local Dominance: 60%
+2025-12-08 15:49:35,129 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble mode enabled
+2025-12-08 15:49:35,129 - finance_feedback_engine.memory.vector_store - INFO - Loaded 0 vectors from data/memory/vectors.pkl
+2025-12-08 15:49:35,130 - finance_feedback_engine.memory.vector_store - INFO - VectorMemory initialized with 0 stored vectors
+2025-12-08 15:49:35,130 - finance_feedback_engine.decision_engine.engine - INFO - Vector memory initialized successfully
+2025-12-08 15:49:35,130 - finance_feedback_engine.decision_engine.engine - INFO - Decision engine initialized with provider: ensemble
+2025-12-08 15:49:35,130 - finance_feedback_engine.risk.gatekeeper - INFO - RiskGatekeeper initialized: max_drawdown=5.0%, correlation_threshold=0.7, max_var=5.0% @ 95.0% confidence
+2025-12-08 15:49:35,130 - finance_feedback_engine.memory.portfolio_memory - INFO - Loaded 0 outcomes and 0 snapshots from disk
+2025-12-08 15:49:35,130 - finance_feedback_engine.memory.portfolio_memory - INFO - Portfolio Memory Engine initialized with 0 experiences
+2025-12-08 15:49:35,130 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - PortfolioBacktester initialized with 3 assets: ['BTCUSD', 'ETHUSD', 'EURUSD']
+2025-12-08 15:49:35,130 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Starting portfolio backtest from 2024-10-01 to 2024-12-31
+2025-12-08 15:49:35,130 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Assets: ['BTCUSD', 'ETHUSD', 'EURUSD'], Initial balance: $10,000.00
+2025-12-08 15:49:35,130 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loading historical data for BTCUSD
+2025-12-08 15:49:35,145 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Loaded historical cache for BTCUSD 2024-10-01->2024-12-31
+2025-12-08 15:49:35,145 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Successfully fetched and processed historical data for BTCUSD.
+2025-12-08 15:49:35,145 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loaded 92 candles for BTCUSD
+2025-12-08 15:49:35,145 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loading historical data for ETHUSD
+2025-12-08 15:49:35,147 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Loaded historical cache for ETHUSD 2024-10-01->2024-12-31
+2025-12-08 15:49:35,148 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Successfully fetched and processed historical data for ETHUSD.
+2025-12-08 15:49:35,148 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loaded 92 candles for ETHUSD
+2025-12-08 15:49:35,148 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loading historical data for EURUSD
+2025-12-08 15:49:35,150 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Loaded historical cache for EURUSD 2024-10-01->2024-12-31
+2025-12-08 15:49:35,151 - finance_feedback_engine.data_providers.historical_data_provider - INFO - Successfully fetched and processed historical data for EURUSD.
+2025-12-08 15:49:35,151 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Loaded 92 candles for EURUSD
+2025-12-08 15:49:35,151 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - Found 92 common trading dates
+2025-12-08 15:49:35,151 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for BTCUSD
+2025-12-08 15:49:35,152 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:49:35,153 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:49:35,153 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:49:35,153 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:49:35,153 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:49:35,153 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:49:35,153 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for BTCUSD ===
+2025-12-08 15:49:35,165 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:35,165 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:49:35,166 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:49:35,175 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:49:35,184 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:49:35,194 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:49:35,194 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:49:38,048 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (0%)
+2025-12-08 15:49:38,102 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (0%)
+2025-12-08 15:49:38,102 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (0%)
+2025-12-08 15:49:38,113 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:38,113 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:49:38,114 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:49:38,124 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:49:38,135 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:49:38,146 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:49:38,146 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:49:41,135 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:49:41,187 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:49:41,188 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:49:41,199 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:41,199 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:49:41,199 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:49:41,210 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:49:41,222 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:49:41,235 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:49:41,235 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:49:47,334 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (60%)
+2025-12-08 15:49:47,351 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: BUY (60%)
+2025-12-08 15:49:47,351 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> BUY (60%)
+2025-12-08 15:49:47,360 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:47,360 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:49:47,360 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:49:47,369 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:49:47,380 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:49:47,391 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:49:47,392 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:49:52,125 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:49:52,175 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:49:52,175 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:49:52,187 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:52,187 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:49:52,187 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:49:52,197 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:49:52,209 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:49:52,221 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:49:52,221 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:49:57,304 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:49:57,372 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:49:57,372 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:49:57,384 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:49:57,384 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:49:57,384 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:49:57,868 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:49:57,868 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (30%)
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (30%)
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (30%)
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - WARNING - All voting power is zero, using equal weights
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (0%) - Agreement: 1.00
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=0%, agreement=1.00)
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(0%<75.0%)) ===
+2025-12-08 15:50:02,995 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:50:03,006 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:03,018 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:03,018 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:50:03,018 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:03,029 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:03,029 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:03,029 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:50:03,040 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:03,055 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:50:03,067 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:03,067 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:07,248 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:07,306 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:50:07,306 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:50:07,316 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:07,316 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:50:07,316 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:50:07,327 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:07,338 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:50:07,351 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:07,351 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:50:12,713 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:12,764 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD BTCUSD (confidence: 60%)
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for ETHUSD
+2025-12-08 15:50:12,765 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:50:12,765 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:50:12,765 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:50:12,765 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:50:12,765 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:50:12,766 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:50:12,766 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:50:12,766 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:50:12,766 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:50:12,766 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:50:12,766 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for ETHUSD ===
+2025-12-08 15:50:12,778 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:12,778 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:12,778 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:50:12,788 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:12,801 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:50:12,813 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:12,813 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:16,054 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (80%)
+2025-12-08 15:50:16,106 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: BUY (80%)
+2025-12-08 15:50:16,106 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> BUY (80%)
+2025-12-08 15:50:16,116 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:16,116 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:50:16,116 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:50:16,124 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:16,135 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:50:16,146 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:16,146 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:50:19,480 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:19,526 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:50:19,526 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:50:19,537 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:19,537 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:50:19,537 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:50:19,545 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:19,554 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:50:19,565 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:19,565 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:50:23,302 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:23,322 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:50:23,322 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:50:23,331 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:23,331 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:50:23,332 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:50:23,339 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:23,349 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:50:23,361 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:23,361 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:50:26,909 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:26,959 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:50:26,959 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:50:26,969 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:26,969 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:50:26,969 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:50:26,978 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:26,987 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:50:26,997 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:26,997 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:50:31,044 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:50:31,101 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:50:31,101 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:50:31,111 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:31,111 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:50:31,111 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:50:31,586 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:50:31,586 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:50:36,254 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (40%)
+2025-12-08 15:50:36,254 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (40%)
+2025-12-08 15:50:36,254 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (40%)
+2025-12-08 15:50:36,254 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:50:36,254 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: BUY (96%) - Agreement: 1.00
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: BUY (confidence=96%, agreement=1.00)
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 2 NOT triggered - using Phase 1 result
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.engine - WARNING - No valid Coinbase balance for ETHUSD - using default $10000.00 for sizing recommendation (50.0000 units for human approval)
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: BUY ETHUSD (confidence: 96%)
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for EURUSD
+2025-12-08 15:50:36,255 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:50:36,255 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:50:36,256 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:50:36,256 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:50:36,256 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:50:36,256 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:50:36,256 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:50:36,256 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for EURUSD ===
+2025-12-08 15:50:36,268 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:36,268 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:36,268 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:50:36,279 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:36,292 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:50:36,305 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:36,305 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:50:39,938 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (80%)
+2025-12-08 15:50:39,996 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (80%)
+2025-12-08 15:50:39,997 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (80%)
+2025-12-08 15:50:40,007 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:40,007 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:50:40,008 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:50:40,017 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:40,030 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:50:40,044 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:40,044 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:50:43,185 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:50:43,237 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:50:43,237 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:50:43,247 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:43,247 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:50:43,247 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:50:43,256 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:43,267 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:50:43,276 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:43,276 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:50:46,789 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (60%)
+2025-12-08 15:50:46,807 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: BUY (60%)
+2025-12-08 15:50:46,807 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> BUY (60%)
+2025-12-08 15:50:46,817 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:46,817 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:50:46,818 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:50:46,826 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:46,835 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:50:46,847 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:46,847 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:50:50,290 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (60%)
+2025-12-08 15:50:50,335 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (60%)
+2025-12-08 15:50:50,335 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (60%)
+2025-12-08 15:50:50,344 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:50,344 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:50:50,344 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:50:50,353 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:50:50,362 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:50:50,373 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:50:50,373 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:50:54,718 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (40%)
+2025-12-08 15:50:54,775 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (40%)
+2025-12-08 15:50:54,775 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (40%)
+2025-12-08 15:50:54,785 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:50:54,785 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:50:54,785 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:50:55,236 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:50:55,236 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:51:00,836 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:51:00,836 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:51:00,836 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:51:00,836 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:51:00,837 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (96%) - Agreement: 1.00
+2025-12-08 15:51:00,837 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=96%, agreement=1.00)
+2025-12-08 15:51:00,837 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 2 NOT triggered - using Phase 1 result
+2025-12-08 15:51:00,837 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:51:00,837 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD EURUSD (confidence: 96%)
+2025-12-08 15:51:00,837 - finance_feedback_engine.risk.gatekeeper - INFO - Trade approved by RiskGatekeeper
+2025-12-08 15:51:00,837 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - BUY ETHUSD: 0.9599 units @ $100.01, cost=$96.10
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for BTCUSD
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:51:00,841 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:51:00,841 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:51:00,841 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for BTCUSD ===
+2025-12-08 15:51:00,851 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:00,851 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:00,851 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:51:00,859 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:00,868 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:51:00,878 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:00,878 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:04,137 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:04,192 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:51:04,192 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:51:04,201 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:04,202 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:51:04,202 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:51:04,210 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:04,220 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:51:04,232 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:04,232 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:51:07,331 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:07,375 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:51:07,375 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:51:07,384 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:07,384 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:51:07,384 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:51:07,393 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:07,402 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:51:07,411 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:07,411 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:51:11,161 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:11,180 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:51:11,180 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:51:11,190 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:11,190 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:51:11,190 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:51:11,199 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:11,209 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:51:11,221 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:11,221 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:51:14,592 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:14,657 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:51:14,657 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:51:14,671 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:14,671 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:51:14,671 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:51:14,682 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:14,695 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:51:14,709 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:14,709 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:51:19,056 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:51:19,120 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:51:19,121 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:51:19,132 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:19,132 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:51:19,132 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:51:19,626 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:51:19,626 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:51:26,777 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (30%)
+2025-12-08 15:51:26,777 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (30%)
+2025-12-08 15:51:26,777 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (30%)
+2025-12-08 15:51:26,777 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:51:26,778 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:51:26,778 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:51:26,778 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:51:26,778 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:51:26,789 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:26,799 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:26,799 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:51:26,799 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:26,809 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:26,809 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:26,810 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:51:26,818 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:26,828 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:51:26,837 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:26,837 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:30,308 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:30,360 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:51:30,360 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:51:30,371 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:30,371 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:51:30,371 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:51:30,380 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:30,390 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:51:30,402 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:30,402 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:51:33,591 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:33,642 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:51:33,642 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:51:33,642 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:51:33,643 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:51:33,643 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:51:33,643 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD BTCUSD (confidence: 60%)
+2025-12-08 15:51:33,643 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for ETHUSD
+2025-12-08 15:51:33,643 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:51:33,643 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:51:33,643 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:51:33,643 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:51:33,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:51:33,644 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:51:33,644 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:51:33,644 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:51:33,644 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:51:33,644 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for ETHUSD ===
+2025-12-08 15:51:33,654 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:33,654 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:33,654 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:51:33,663 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:33,672 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:51:33,682 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:33,682 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:36,748 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:36,799 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:51:36,800 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:51:36,809 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:36,809 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:51:36,810 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:51:36,819 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:36,833 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:51:36,843 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:36,843 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:51:39,930 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:39,979 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:51:39,980 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:51:39,990 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:39,990 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:51:39,990 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:51:40,000 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:40,009 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:51:40,025 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:40,025 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:51:43,902 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (60%)
+2025-12-08 15:51:43,923 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: BUY (60%)
+2025-12-08 15:51:43,923 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> BUY (60%)
+2025-12-08 15:51:43,934 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:43,934 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:51:43,934 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:51:43,945 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:43,957 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:51:43,968 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:43,968 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:51:47,414 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:51:47,460 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:51:47,460 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:51:47,470 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:47,470 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:51:47,470 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:51:47,479 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:47,489 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:51:47,499 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:47,499 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:51:51,415 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:51:51,472 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:51:51,473 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:51:51,482 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:51,482 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:51:51,482 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:51:51,915 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:51:51,915 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (30%)
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (30%)
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (30%)
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:51:56,350 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:51:56,360 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:56,369 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:56,369 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:51:56,369 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:56,378 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:56,378 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:56,378 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:51:56,389 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:56,398 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:51:56,409 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:56,409 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:51:59,651 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (70%)
+2025-12-08 15:51:59,702 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: BUY (70%)
+2025-12-08 15:51:59,702 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:51:59,714 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:51:59,714 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:51:59,714 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:51:59,722 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:51:59,733 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:51:59,743 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:51:59,743 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:52:02,900 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:02,945 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:52:02,945 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:52:02,945 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:52:02,946 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: BUY (84%) - Agreement: 1.00
+2025-12-08 15:52:02,946 - finance_feedback_engine.decision_engine.engine - WARNING - No valid Coinbase balance for ETHUSD - using default $10000.00 for sizing recommendation (49.9891 units for human approval)
+2025-12-08 15:52:02,946 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: BUY ETHUSD (confidence: 84%)
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for EURUSD
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:52:02,947 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:52:02,947 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:52:02,947 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for EURUSD ===
+2025-12-08 15:52:02,957 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:02,957 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:02,957 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:52:02,965 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:02,974 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:52:02,984 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:02,984 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:06,391 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:06,442 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:52:06,442 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:52:06,452 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:06,452 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:52:06,452 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:52:06,461 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:06,470 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:52:06,480 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:06,480 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:52:09,311 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:09,360 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:52:09,361 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:52:09,371 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:09,371 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:52:09,371 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:52:09,381 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:09,392 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:52:09,401 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:09,401 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:52:14,231 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:14,247 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:52:14,247 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:52:14,257 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:14,257 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:52:14,257 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:52:14,265 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:14,275 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:52:14,285 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:14,286 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:52:17,666 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:17,713 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:52:17,713 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:52:17,722 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:17,722 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:52:17,722 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:52:17,730 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:17,740 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:52:17,751 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:17,751 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:52:21,747 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:52:21,806 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:52:21,806 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:52:21,816 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:21,816 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:52:21,816 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:52:22,243 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:52:22,244 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:52:27,461 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:52:27,461 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:52:27,461 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:52:27,461 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:52:27,461 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:52:27,462 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:52:27,462 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:52:27,462 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:52:27,470 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:27,479 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:27,479 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:52:27,479 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:27,490 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:27,490 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:27,490 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:52:27,500 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:27,509 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:52:27,518 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:27,518 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:30,514 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:30,562 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:52:30,562 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:52:30,572 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:30,572 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:52:30,572 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:52:30,580 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:30,590 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:52:30,599 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:30,599 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:52:33,814 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:52:33,862 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (30%)
+2025-12-08 15:52:33,862 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:52:33,862 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:52:33,862 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:52:33,862 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:52:33,863 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD EURUSD (confidence: 60%)
+2025-12-08 15:52:33,863 - finance_feedback_engine.risk.gatekeeper - INFO - Trade approved by RiskGatekeeper
+2025-12-08 15:52:33,863 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - BUY ETHUSD: 0.8397 units @ $100.03, cost=$84.08
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for BTCUSD
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:52:33,865 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:52:33,865 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:52:33,865 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for BTCUSD ===
+2025-12-08 15:52:33,876 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:33,876 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:33,876 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:52:33,884 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:33,895 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:52:33,907 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:33,907 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:36,953 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:37,006 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:52:37,006 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:52:37,015 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:37,015 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:52:37,015 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:52:37,024 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:37,034 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:52:37,043 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:37,043 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:52:40,026 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:52:40,071 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:52:40,071 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:52:40,080 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:40,080 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:52:40,080 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:52:40,088 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:40,097 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:52:40,107 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:40,107 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:52:44,026 - finance_feedback_engine.decision_engine.local_llm_provider - WARNING - LLM response missing required fields or not JSON, attempting text parsing
+2025-12-08 15:52:44,027 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: BUY (50%)
+2025-12-08 15:52:44,027 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> BUY (50%)
+2025-12-08 15:52:44,037 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:44,037 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:52:44,037 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:52:44,047 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:44,057 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:52:44,068 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:44,068 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:52:47,540 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (60%)
+2025-12-08 15:52:47,584 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (60%)
+2025-12-08 15:52:47,584 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (60%)
+2025-12-08 15:52:47,595 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:47,595 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:52:47,595 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:52:47,603 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:47,613 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:52:47,622 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:47,622 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:52:51,727 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (30%)
+2025-12-08 15:52:51,778 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (30%)
+2025-12-08 15:52:51,778 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (30%)
+2025-12-08 15:52:51,787 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:51,787 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:52:51,787 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:52:52,206 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:52:52,207 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (40%)
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (40%)
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (40%)
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:52:57,128 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:52:57,137 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:57,146 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:57,147 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:52:57,147 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:57,156 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:52:57,156 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:52:57,156 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:52:57,165 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:52:57,175 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:52:57,184 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:52:57,184 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:00,045 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:00,095 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:53:00,095 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:53:00,106 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:00,106 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:53:00,106 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:53:00,114 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:00,124 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:53:00,134 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:00,135 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:53:03,385 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:03,430 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:53:03,430 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:53:03,430 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:53:03,430 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:53:03,431 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:53:03,431 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD BTCUSD (confidence: 60%)
+2025-12-08 15:53:03,431 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for ETHUSD
+2025-12-08 15:53:03,431 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:53:03,431 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:53:03,432 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:53:03,432 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:53:03,432 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:53:03,432 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:53:03,432 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:53:03,432 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:53:03,432 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:53:03,432 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:53:03,432 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:53:03,432 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for ETHUSD ===
+2025-12-08 15:53:03,443 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:03,443 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:03,444 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:53:03,451 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:03,460 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:53:03,469 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:03,469 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:06,687 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:06,738 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:53:06,738 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:53:06,748 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:06,748 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:53:06,748 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:53:06,756 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:06,767 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:53:06,776 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:06,777 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:53:09,975 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:10,023 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:53:10,023 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:53:10,033 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:10,033 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:53:10,033 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:53:10,043 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:10,053 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:53:10,064 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:10,064 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:53:12,689 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:12,705 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:53:12,705 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:53:12,714 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:12,714 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:53:12,714 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:53:12,722 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:12,732 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:53:12,743 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:12,743 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:53:16,488 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (60%)
+2025-12-08 15:53:16,532 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (60%)
+2025-12-08 15:53:16,533 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (60%)
+2025-12-08 15:53:16,543 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:16,543 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:53:16,543 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:53:16,552 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:16,563 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:53:16,572 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:16,572 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:53:20,482 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:20,539 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (50%)
+2025-12-08 15:53:20,539 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (50%)
+2025-12-08 15:53:20,550 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:20,550 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:53:20,550 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:53:20,983 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:53:20,983 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:53:26,219 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:53:26,228 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:26,237 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:26,238 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:53:26,238 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:26,247 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:26,247 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:26,247 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:53:26,255 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:26,265 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:53:26,275 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:26,275 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:29,368 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (70%)
+2025-12-08 15:53:29,421 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: BUY (70%)
+2025-12-08 15:53:29,421 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:53:29,432 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:29,432 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:53:29,432 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:53:29,442 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:29,452 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:53:29,465 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:29,465 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:53:32,923 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: BUY (84%) - Agreement: 1.00
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - WARNING - No valid Coinbase balance for ETHUSD - using default $10000.00 for sizing recommendation (49.9783 units for human approval)
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: BUY ETHUSD (confidence: 84%)
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for EURUSD
+2025-12-08 15:53:32,966 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:53:32,966 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:53:32,967 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:53:32,967 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:53:32,967 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:53:32,967 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:53:32,967 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:53:32,967 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:53:32,967 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:53:32,967 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:53:32,967 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:53:32,967 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for EURUSD ===
+2025-12-08 15:53:32,976 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:32,976 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:32,976 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:53:32,984 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:32,994 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:53:33,004 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:33,004 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:36,219 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (40%)
+2025-12-08 15:53:36,274 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (40%)
+2025-12-08 15:53:36,274 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (40%)
+2025-12-08 15:53:36,285 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:36,285 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:53:36,285 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:53:36,295 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:36,306 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:53:36,318 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:36,318 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:53:39,719 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (75%)
+2025-12-08 15:53:39,764 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: BUY (75%)
+2025-12-08 15:53:39,764 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> BUY (75%)
+2025-12-08 15:53:39,776 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:39,776 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:53:39,776 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:53:39,785 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:39,794 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:53:39,805 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:39,805 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:53:44,487 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:44,504 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:53:44,505 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:53:44,514 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:44,514 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:53:44,514 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:53:44,523 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:44,533 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:53:44,544 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:44,544 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:53:48,401 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (70%)
+2025-12-08 15:53:48,446 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (70%)
+2025-12-08 15:53:48,446 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (70%)
+2025-12-08 15:53:48,455 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:48,455 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:53:48,456 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:53:48,464 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:48,475 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:53:48,486 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:48,486 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:53:52,451 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:53:52,510 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (50%)
+2025-12-08 15:53:52,510 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (50%)
+2025-12-08 15:53:52,521 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:52,521 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:53:52,521 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:53:52,959 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:53:52,959 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (48%) - Agreement: 1.00
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=48%, agreement=1.00)
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(48%<75.0%)) ===
+2025-12-08 15:53:57,589 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:53:57,598 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:57,608 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:57,608 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:53:57,608 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:57,618 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:53:57,618 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:53:57,618 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:53:57,626 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:53:57,635 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:53:57,644 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:53:57,644 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:00,834 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (60%)
+2025-12-08 15:54:00,881 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (60%)
+2025-12-08 15:54:00,882 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:54:00,890 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:00,890 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:54:00,890 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:54:00,899 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:00,910 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:54:00,920 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:00,920 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:54:04,112 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (72%) - Agreement: 1.00
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.engine - INFO - HOLD without existing position - no position sizing shown
+2025-12-08 15:54:04,156 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: HOLD EURUSD (confidence: 72%)
+2025-12-08 15:54:04,156 - finance_feedback_engine.risk.gatekeeper - INFO - Trade approved by RiskGatekeeper
+2025-12-08 15:54:04,156 - finance_feedback_engine.backtesting.portfolio_backtester - INFO - BUY ETHUSD: 0.8315 units @ $100.05, cost=$83.28
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for BTCUSD
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:54:04,158 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:54:04,158 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:54:04,158 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for BTCUSD ===
+2025-12-08 15:54:04,168 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:04,168 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:04,168 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:54:04,177 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:04,186 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:54:04,196 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:04,196 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:07,354 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:07,405 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:54:07,406 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:54:07,416 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:07,416 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:54:07,416 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:54:07,426 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:07,436 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:54:07,448 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:07,448 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:54:10,592 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:10,635 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:54:10,635 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:54:10,645 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:10,645 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:54:10,645 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:54:10,654 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:10,663 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:54:10,673 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:10,673 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:54:14,779 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (60%)
+2025-12-08 15:54:14,806 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: BUY (60%)
+2025-12-08 15:54:14,806 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> BUY (60%)
+2025-12-08 15:54:14,820 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:14,820 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:54:14,820 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:54:14,831 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:14,844 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:54:14,854 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:14,854 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:54:18,051 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:18,097 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:54:18,097 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:54:18,108 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:18,108 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:54:18,108 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:54:18,117 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:18,130 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:54:18,140 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:18,140 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:54:22,171 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:22,233 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (50%)
+2025-12-08 15:54:22,234 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (50%)
+2025-12-08 15:54:22,245 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:22,245 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:54:22,245 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:54:22,692 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:54:22,692 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:54:27,130 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:54:27,140 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:27,150 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:27,150 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:54:27,150 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:27,160 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:27,160 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:27,160 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:54:27,168 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:27,178 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:54:27,187 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:27,187 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:30,347 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (60%)
+2025-12-08 15:54:30,398 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: BUY (60%)
+2025-12-08 15:54:30,398 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:54:30,408 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:30,408 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:54:30,408 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:54:30,417 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:30,427 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:54:30,437 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:30,437 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:54:34,107 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: BUY (72%) - Agreement: 1.00
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - WARNING - No valid Coinbase balance for BTCUSD - using default $10000.00 for sizing recommendation (49.9674 units for human approval)
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: BUY BTCUSD (confidence: 72%)
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for ETHUSD
+2025-12-08 15:54:34,152 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:54:34,152 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:54:34,153 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:54:34,153 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:54:34,153 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:54:34,153 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:54:34,153 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for ETHUSD ===
+2025-12-08 15:54:34,162 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:34,162 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:34,162 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:54:34,171 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:34,180 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:54:34,190 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:34,190 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:37,238 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:37,290 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (50%)
+2025-12-08 15:54:37,290 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (50%)
+2025-12-08 15:54:37,301 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:37,301 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:54:37,301 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:54:37,310 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:37,321 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:54:37,332 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:37,332 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:54:40,614 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:40,664 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:54:40,664 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:54:40,676 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:40,676 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:54:40,676 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:54:40,684 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:40,693 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:54:40,702 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:40,702 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+2025-12-08 15:54:46,590 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:46,608 - finance_feedback_engine.decision_engine.engine - INFO - mistral:7b-instruct: HOLD (50%)
+2025-12-08 15:54:46,608 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: mistral:7b-instruct -> HOLD (50%)
+2025-12-08 15:54:46,618 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:46,618 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: qwen2.5:7b-instruct
+2025-12-08 15:54:46,618 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: qwen2.5:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:54:46,627 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:46,637 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model qwen2.5:7b-instruct is already available
+2025-12-08 15:54:46,648 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:46,648 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: qwen2.5:7b-instruct
+2025-12-08 15:54:49,745 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:49,789 - finance_feedback_engine.decision_engine.engine - INFO - qwen2.5:7b-instruct: HOLD (50%)
+2025-12-08 15:54:49,789 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen2.5:7b-instruct -> HOLD (50%)
+2025-12-08 15:54:49,799 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:49,799 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: gemma2:9b
+2025-12-08 15:54:49,799 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: gemma2:9b, local_models: [], local_priority: False
+2025-12-08 15:54:49,807 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:49,818 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model gemma2:9b is already available
+2025-12-08 15:54:49,827 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:49,827 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: gemma2:9b
+2025-12-08 15:54:53,842 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:54:53,897 - finance_feedback_engine.decision_engine.engine - INFO - gemma2:9b: HOLD (50%)
+2025-12-08 15:54:53,897 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: gemma2:9b -> HOLD (50%)
+2025-12-08 15:54:53,907 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:53,907 - finance_feedback_engine.decision_engine.engine - INFO - Using Qwen CLI AI inference
+2025-12-08 15:54:53,907 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI provider initialized
+2025-12-08 15:54:54,344 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen CLI available: 0.2.2
+2025-12-08 15:54:54,344 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Querying Qwen CLI for trading decision
+2025-12-08 15:54:59,137 - finance_feedback_engine.decision_engine.qwen_cli_provider - INFO - Qwen decision parsed: HOLD (45%)
+2025-12-08 15:54:59,137 - finance_feedback_engine.decision_engine.engine - INFO - qwen: HOLD (45%)
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: qwen -> HOLD (45%)
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 6 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: HOLD (60%) - Agreement: 1.00
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1 result: HOLD (confidence=60%, agreement=1.00)
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 2: Escalating to premium provider (reason: low_confidence(60%<75.0%)) ===
+2025-12-08 15:54:59,138 - finance_feedback_engine.decision_engine.engine - ERROR - Two-phase ensemble failed: Invalid asset_type 'unknown'. Must be one of ('crypto', 'forex', 'stock'), falling back to standard ensemble
+2025-12-08 15:54:59,149 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:59,159 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:59,159 - finance_feedback_engine.decision_engine.engine - INFO - Querying 2 local providers sequentially
+2025-12-08 15:54:59,159 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:59,168 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:54:59,168 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:54:59,168 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:54:59,177 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:54:59,186 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:54:59,195 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:54:59,196 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:55:02,455 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: BUY (80%)
+2025-12-08 15:55:02,513 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: BUY (80%)
+2025-12-08 15:55:02,513 - finance_feedback_engine.decision_engine.engine - INFO - Querying provider: deepseek-r1:8b
+2025-12-08 15:55:02,524 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:55:02,524 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:55:02,524 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:55:02,533 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:55:02,543 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:55:02,554 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:55:02,554 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:55:05,598 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.engine - INFO - Ensemble query complete: 2 valid, 0 failed/invalid
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Aggregating 2 provider decisions (0 failed, 0.0% failure rate)
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Ensemble decision: BUY (96%) - Agreement: 1.00
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.engine - WARNING - No valid Coinbase balance for ETHUSD - using default $10000.00 for sizing recommendation (49.9674 units for human approval)
+2025-12-08 15:55:05,643 - finance_feedback_engine.decision_engine.engine - INFO - Decision created: BUY ETHUSD (confidence: 96%)
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.engine - INFO - Generating decision for EURUSD
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.engine - WARNING - No data provider available for regime detection
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.var_calculator - INFO - VaRCalculator initialized with 60-day lookback
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - CorrelationAnalyzer initialized with 30-day lookback
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 95.0% confidence
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (95.0%)
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.var_calculator - INFO - Calculating dual-portfolio VaR at 99.0% confidence
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.var_calculator - INFO - Dual-portfolio VaR: Coinbase=$0.00, Oanda=$0.00, Combined=$0.00 (99.0%)
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Performing dual-platform correlation analysis
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for coinbase platform
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing correlations for oanda platform
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Analyzing cross-platform correlations
+2025-12-08 15:55:05,644 - finance_feedback_engine.risk.correlation_analyzer - INFO - Dual-platform correlation analysis complete: 0 warnings
+2025-12-08 15:55:05,644 - finance_feedback_engine.memory.vector_store - WARNING - No vectors in store
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.engine - INFO - Querying AI provider: ensemble
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.engine - INFO - Using ensemble AI inference
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.engine - INFO - Two-phase ensemble mode enabled, using smart premium API escalation
+2025-12-08 15:55:05,644 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - === PHASE 1: Querying free-tier providers for EURUSD ===
+2025-12-08 15:55:05,653 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:55:05,653 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: llama3.2:3b-instruct-fp16
+2025-12-08 15:55:05,653 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: llama3.2:3b-instruct-fp16, local_models: [], local_priority: False
+2025-12-08 15:55:05,663 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:55:05,673 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model llama3.2:3b-instruct-fp16 is already available
+2025-12-08 15:55:05,684 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:55:05,684 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: llama3.2:3b-instruct-fp16
+2025-12-08 15:55:08,588 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (60%)
+2025-12-08 15:55:08,645 - finance_feedback_engine.decision_engine.engine - INFO - llama3.2:3b-instruct-fp16: HOLD (60%)
+2025-12-08 15:55:08,645 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: llama3.2:3b-instruct-fp16 -> HOLD (60%)
+2025-12-08 15:55:08,657 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:55:08,657 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: deepseek-r1:8b
+2025-12-08 15:55:08,657 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: deepseek-r1:8b, local_models: [], local_priority: False
+2025-12-08 15:55:08,665 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:55:08,676 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model deepseek-r1:8b is already available
+2025-12-08 15:55:08,685 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:55:08,685 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: deepseek-r1:8b
+2025-12-08 15:55:11,939 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM decision: HOLD (50%)
+2025-12-08 15:55:11,984 - finance_feedback_engine.decision_engine.engine - INFO - deepseek-r1:8b: HOLD (50%)
+2025-12-08 15:55:11,984 - finance_feedback_engine.decision_engine.ensemble_manager - INFO - Phase 1: deepseek-r1:8b -> HOLD (50%)
+2025-12-08 15:55:11,993 - finance_feedback_engine.decision_engine.engine - INFO - Discovered local models: ['gemma2:9b', 'gpt-oss:120b-cloud', 'qwen2.5:7b-instruct', 'mistral:7b-instruct', 'deepseek-r1:8b', 'llama3.2:3b-instruct-fp16']
+2025-12-08 15:55:11,993 - finance_feedback_engine.decision_engine.engine - INFO - Using specific local model: mistral:7b-instruct
+2025-12-08 15:55:11,994 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Initializing local LLM provider with model: mistral:7b-instruct, local_models: [], local_priority: False
+2025-12-08 15:55:12,002 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Ollama installed: ollama version is 0.12.11
+2025-12-08 15:55:12,012 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Model mistral:7b-instruct is already available
+2025-12-08 15:55:12,021 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Local LLM provider initialized successfully
+2025-12-08 15:55:12,021 - finance_feedback_engine.decision_engine.local_llm_provider - INFO - Querying local LLM: mistral:7b-instruct
+
+2025-12-08 15:55:14,799 - INFO - 
+2025-12-08 15:55:14,799 - INFO - ================================================================================
+2025-12-08 15:55:14,799 - INFO - FULL YEAR BACKTEST COMPLETE
+2025-12-08 15:55:14,799 - INFO - ================================================================================
+2025-12-08 15:55:14,800 - INFO - Summary saved to data/backtest_results/full_year_summary_20251208_155514.json
+2025-12-08 15:55:14,800 - INFO - ================================================================================
+2025-12-08 15:55:14,800 - INFO -                           TRAINING COMPLETE - SUMMARY                           
+2025-12-08 15:55:14,800 - INFO - ================================================================================
+2025-12-08 15:55:14,800 - INFO - Final Balance: $8,397.92
+2025-12-08 15:55:14,800 - INFO - Total Return: -16.02%
+2025-12-08 15:55:14,800 - INFO - Annualized Sharpe: -39.89
+2025-12-08 15:55:14,800 - INFO - Max Drawdown: -4.22%
+2025-12-08 15:55:14,800 - INFO - Total Trades: 0
+2025-12-08 15:55:14,800 - INFO - Win Rate: 0.0%
+2025-12-08 15:55:14,800 - INFO - 
+2025-12-08 15:55:14,800 - INFO - Memory Accumulated:
+2025-12-08 15:55:14,800 - INFO -   Outcomes: 0
+2025-12-08 15:55:14,800 - INFO -   Snapshots: 0
+2025-12-08 15:55:14,800 - INFO - 
+2025-12-08 15:55:14,800 - INFO - Quarterly Breakdown:
+2025-12-08 15:55:14,800 - INFO -   QQ1 2024: Return=-5.94%, Trades=0, WinRate=0.0%
+2025-12-08 15:55:14,800 - INFO -   QQ2 2024: Return=-5.19%, Trades=0, WinRate=0.0%
+2025-12-08 15:55:14,800 - INFO -   QQ3 2024: Return=-5.83%, Trades=0, WinRate=0.0%
+2025-12-08 15:55:14,800 - INFO - 
+2025-12-08 15:55:14,800 - INFO - Training COMPLETED SUCCESSFULLY
