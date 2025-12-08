@@ -24,7 +24,7 @@ data/memory/
 
 ### 1. **Portfolio Outcomes** (JSON, Append-only)
 - **File**: `data/memory/outcome_<decision_id>.json`
-- **Persistence**: Automatic on every trade exit
+- **Persistence**: Outcome files are append-only on disk by default—each trade exit creates a new file, and old files are retained/archived (not auto-deleted).
 - **Structure**: Single JSON object per trade with:
   - Entry/exit prices and timestamps
   - Realized P&L
@@ -32,9 +32,19 @@ data/memory/
   - Market conditions (volatility, regime)
   - Win/loss classification
 
-**Advantage**: 
-- Can load up to `max_memory_size` (default: 1000) most recent outcomes
-- Portfolio Memory Engine reconstructs experience buffer from these files
+**Persistence & Capping Model**:
+- On disk: All outcome files are retained by default (append-only, no auto-deletion).
+- In memory: Portfolio Memory Engine loads up to `max_memory_size` (default: 1000) of the most recent outcome files for experience replay and performance attribution. This cap only affects in-memory loading, not disk storage.
+- Capping is applied at load time: the engine selects the N most recent files (by timestamp or filename order) for in-memory use.
+- Optional pruning/archival: Pruning or archival policies can be configured for scheduled background cleanup if automatic deletion is desired. By default, pruning is disabled and all outcome files remain on disk unless manually deleted or archived.
+
+**Configuration Keys & Defaults**:
+- `max_memory_size`: limits the number of outcome files loaded into memory (default: 1000)
+- `pruning`: disabled by default; enable to allow scheduled cleanup or archival
+- `pruning_interval`: sets the interval for scheduled pruning (if enabled)
+To change behavior, update these keys in your config file (see `config/config.yaml` and `config/config.local.yaml`).
+
+**Advantage**:
 - Enables cross-quarter learning (Q2 learns from Q1 outcomes)
 
 ### 2. **Vector Memory** (Binary Pickle, ~5MB per 1000 vectors)

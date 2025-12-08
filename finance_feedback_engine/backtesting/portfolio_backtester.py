@@ -329,7 +329,7 @@ class PortfolioBacktester:
 
         # Close triggered positions
         for asset_pair in positions_to_close:
-            self._close_position(asset_pair, current_prices[asset_pair], "trigger")
+            self._close_position(asset_pair, current_prices[asset_pair], "trigger", date)
 
     def _generate_portfolio_decisions(
         self,
@@ -511,6 +511,10 @@ class PortfolioBacktester:
             return 1.0
 
         if not self.portfolio_state.positions:
+            return 1.0
+
+        # Guard against invalid threshold (avoid division by zero)
+        if self.correlation_threshold >= 1.0:
             return 1.0
 
         # Find maximum correlation with existing positions
