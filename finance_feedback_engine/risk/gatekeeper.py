@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 class RiskGatekeeper:
     """
     Validate trade decisions against risk constraints.
-    
+
     Hybrid risk management approach:
     - Per-platform correlation: Max 2 assets with >0.7 correlation
     - Combined portfolio VaR: <5% daily loss at 95% confidence
     - Cross-platform correlation: Warning-only when >0.5
-    
+
     Supports dual isolated portfolios (Coinbase + Oanda).
     """
 
@@ -43,7 +43,7 @@ class RiskGatekeeper:
         self.max_correlated_assets = max_correlated_assets
         self.max_var_pct = max_var_pct
         self.var_confidence = var_confidence
-        
+
         logger.info(
             f"RiskGatekeeper initialized: max_drawdown={max_drawdown_pct*100}%, "
             f"correlation_threshold={correlation_threshold}, "
@@ -75,7 +75,7 @@ class RiskGatekeeper:
     ) -> Tuple[bool, str]:
         """
         Validate a trade decision against risk constraints.
-        
+
         Enhanced with VaR and correlation analysis:
         1. Max drawdown check (legacy)
         2. Per-platform correlation check (enhanced)
@@ -86,7 +86,7 @@ class RiskGatekeeper:
         Args:
             decision: Dict with trade details. Expected keys:
                 ``action``, ``asset_category``, ``volatility``,
-                ``model_confidence``, ``platform`` (optional).
+                ``confidence``, ``platform`` (optional).
             context: Dict with portfolio context. Expected keys:
                 ``recent_performance`` (with ``total_pnl``),
                 ``holdings`` (asset_id → category),
@@ -122,7 +122,8 @@ class RiskGatekeeper:
 
         # 5. Volatility / Confidence Check
         volatility = decision.get("volatility", 0.0)
-        confidence = decision.get("model_confidence", 0.0)
+        # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
+        confidence = decision.get("confidence", 0) / 100.0
         if volatility > 0.05 and confidence < 0.80:
             logger.warning(
                 f"Volatility/confidence threshold: vol={volatility:.3f}, "
@@ -141,24 +142,24 @@ class RiskGatekeeper:
     ) -> Tuple[bool, str]:
         """
         Validate per-platform correlation constraints.
-        
+
         Uses correlation analysis if available, otherwise falls back
         to legacy category-based check.
-        
+
         Args:
             decision: Trade decision
             context: Portfolio context
-        
+
         Returns:
             Tuple (is_allowed, message)
         """
         # Check if we have correlation analysis in context
         correlation_analysis = context.get("correlation_analysis")
-        
+
         if correlation_analysis:
             # Use enhanced correlation analysis
             platform = decision.get("platform", "").lower()
-            
+
             # Determine which platform to check
             if "coinbase" in platform or decision.get("asset_pair", "").startswith("BTC"):
                 platform_analysis = correlation_analysis.get("coinbase", {})
@@ -167,13 +168,13 @@ class RiskGatekeeper:
             else:
                 # Unknown platform, skip correlation check
                 platform_analysis = {}
-            
+
             # Check for concentration warnings
             warning = platform_analysis.get("concentration_warning")
             if warning:
                 logger.warning(f"Correlation warning: {warning}")
                 return False, f"Correlation limit exceeded: {warning}"
-        
+
         else:
             # Fallback to legacy category-based correlation check
             asset_category = decision.get("asset_category")
@@ -189,7 +190,7 @@ class RiskGatekeeper:
                         f"assets in {asset_category} (limit: {self.max_correlated_assets})"
                     )
                     return False, "Correlation limit exceeded"
-        
+
         return True, "Correlation check passed"
 
     def _validate_var(
@@ -199,24 +200,24 @@ class RiskGatekeeper:
     ) -> Tuple[bool, str]:
         """
         Validate combined portfolio VaR constraint.
-        
+
         Args:
             decision: Trade decision
             context: Portfolio context with 'var_analysis'
-        
+
         Returns:
             Tuple (is_allowed, message)
         """
         var_analysis = context.get("var_analysis")
-        
+
         if not var_analysis:
             # No VaR analysis available, skip check
             return True, "VaR check skipped (no analysis)"
-        
+
         # Get combined portfolio VaR
         combined_var = var_analysis.get("combined_var", {})
         var_pct = combined_var.get("var", 0.0)
-        
+
         if var_pct > self.max_var_pct:
             logger.warning(
                 f"Portfolio VaR exceeded: {var_pct*100:.2f}% "
@@ -226,7 +227,7 @@ class RiskGatekeeper:
                 f"Portfolio VaR limit exceeded: {var_pct*100:.2f}% "
                 f"(max: {self.max_var_pct*100:.2f}%)"
             )
-        
+
         logger.debug(
             f"VaR check passed: {var_pct*100:.2f}% < {self.max_var_pct*100:.2f}%"
         )
@@ -235,18 +236,18 @@ class RiskGatekeeper:
     def _check_cross_platform_correlation(self, context: Dict) -> None:
         """
         Log warning for cross-platform correlation (non-blocking).
-        
+
         Args:
             context: Portfolio context with 'correlation_analysis'
         """
         correlation_analysis = context.get("correlation_analysis")
-        
+
         if not correlation_analysis:
             return
-        
+
         cross_platform = correlation_analysis.get("cross_platform", {})
         warning = cross_platform.get("warning")
-        
+
         if warning:
             logger.warning(f"⚠️  Cross-platform correlation: {warning}")
             # Note: This is warning-only, doesn't block trade

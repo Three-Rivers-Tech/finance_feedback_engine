@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""
+Chunked Portfolio Backtest Runner - 2025 Full Year
+
+Runs quarterly backtests (Q1, Q2, Q3, Q4) for multi-asset portfolios,
+accumulating learning/memory across chunks.
+
+Stores memories persistently:
+- Portfolio outcomes: data/memory/outcome_*.json
+- Performance snapshots: data/memory/snapshot_*.json
+- Vector memory: data/memory/vectors.pkl (pickle format)
+- Provider performance: data/memory/provider_performance.json
+- Regime performance: data/memory/regime_performance.json
+
+Memory persists across backtest chunks, enabling cross-quarter learning.
+"""
+
+import subprocess
+import json
+import logging
+from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass
+from typing import List, Dict, Any, Tuple
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+@dataclass
+class BacktestChunk:
+    """Single quarterly backtest period."""
+    quarter: int
+    start_date: str
+    end_date: str
+
+    def __str__(self) -> str:
+        return f"Q{self.quarter} 2025 ({self.start_date} → {self.end_date})"
+
+
+class ChunkedBacktestRunner:
+    """Execute backtests in quarterly chunks with persistent memory."""
+
+    # 2025 Quarterly breakdown
+    QUARTERS = [
+        BacktestChunk(1, "2025-01-01", "2025-03-31"),
+        BacktestChunk(2, "2025-04-01", "2025-06-30"),
+        BacktestChunk(3, "2025-07-01", "2025-09-30"),
+        BacktestChunk(4, "2025-10-01", "2025-12-31"),
+    ]
+
+    def __init__(
+        self,
+        assets: List[str],
+        initial_balance: float = 10000,
+        correlation_threshold: float = 0.7,
+        max_positions: int = None
+    ):
+        """
+        Initialize chunked backtest runner.
+
+        Args:
+            assets: List of trading pairs (e.g., ["BTCUSD", "ETHUSD", "EURUSD"])
+            initial_balance: Starting portfolio balance
+            correlation_threshold: Correlation threshold for position sizing
+            max_positions: Max concurrent positions (default: len(assets))
+        """
+        self.assets = assets
+        self.initial_balance = initial_balance
+        self.correlation_threshold = correlation_threshold
+        self.max_positions = max_positions or len(assets)
+
+        # Output paths
+        self.results_dir = Path("data/backtest_results")
+        self.results_dir.mkdir(parents=True, exist_ok=True)
+
+        self.memory_dir = Path("data/memory")
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"ChunkedBacktestRunner initialized:")
+        logger.info(f"  Assets: {', '.join(assets)}")
+        logger.info(f"  Initial Balance: ${initial_balance:,.2f}")
+        logger.info(f"  Correlation Threshold: {correlation_threshold}")
+        logger.info(f"  Memory Path: {self.memory_dir}")
+
+    def run_full_year(self) -> Dict[str, Any]:
+        """
+        Execute quarterly backtests for full 2025 year.
+
+        Returns:
+            Aggregated results across all quarters with cumulative metrics
+        """
+        logger.info("=" * 80)
+        logger.info("STARTING FULL YEAR 2025 CHUNKED BACKTEST")
+        logger.info("=" * 80)
+        logger.info(f"Assets: {', '.join(self.assets)}")
+        logger.info(f"Period: Q1 → Q4 2025 (4 quarterly chunks)")
+        logger.info(f"Memory persists across chunks: {self.memory_dir}")
+        logger.info("")
+
+        all_results = []
+        cumulative_metrics = {
+            "total_trades": 0,
+            "winning_trades": 0,
+            "total_pnl": 0,
+            "quarterly_returns": []
+        }
+
+        # Run each quarter
+        for chunk in self.QUARTERS:
+            logger.info("")
+            logger.info("=" * 80)
+            logger.info(f"Running {chunk}")
+            logger.info("=" * 80)
+
+            result = self._run_backtest_chunk(chunk)
+
+            if result:
+                all_results.append(result)
+
+                # Accumulate metrics
+                cumulative_metrics["total_trades"] += result.get("total_trades", 0)
+                cumulative_metrics["winning_trades"] += result.get("winning_trades", 0)
+                cumulative_metrics["total_pnl"] += result.get("total_pnl", 0)
+                cumulative_metrics["quarterly_returns"].append({
+                    "quarter": f"Q{chunk.quarter}",
+                    "return_pct": result.get("return_pct", 0)
+                })
+
+                # Log memory status after each quarter
+                self._log_memory_status()
+
+        # Calculate summary
+        summary = self._calculate_summary(all_results, cumulative_metrics)
+
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("FULL YEAR BACKTEST COMPLETE")
+        logger.info("=" * 80)
+        self._print_summary(summary)
+
+        # Save summary to file
+        self._save_summary(summary)
+
+        return summary
+
+    def _run_backtest_chunk(self, chunk: BacktestChunk) -> Dict[str, Any]:
+        """Execute single quarterly backtest."""
+
+        # Build CLI command
+        cmd = [
+            "python", "main.py", "portfolio-backtest",
+            *self.assets,
+            "--start", chunk.start_date,
+            "--end", chunk.end_date,
+            "--initial-balance", str(self.initial_balance),
+            "--correlation-threshold", str(self.correlation_threshold),
+            "--max-positions", str(self.max_positions)
+        ]
+
+        logger.info(f"Command: {' '.join(cmd)}")
+        logger.info(f"Memory state: Persistent (vectors.pkl + outcome_*.json)")
+
+        try:
+            # Run backtest - note that portfolio memory persists across runs
+            result = subprocess.run(
+                cmd,
+                cwd=Path(__file__).parent,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minute timeout per quarter
+            )
+
+            if result.returncode != 0:
+                logger.error(f"Backtest failed for {chunk}:")
+                logger.error(result.stderr)
+                return None
+
+            # Parse output (extract metrics from final table)
+            metrics = self._parse_backtest_output(result.stdout, chunk)
+
+            # Log results
+            logger.info(f"✓ {chunk} complete")
+            logger.info(f"  Return: {metrics.get('return_pct', 0):.2f}%")
+            logger.info(f"  Trades: {metrics.get('total_trades', 0)}")
+            logger.info(f"  Win Rate: {metrics.get('win_rate', 0):.1f}%")
+            logger.info(f"  Sharpe: {metrics.get('sharpe_ratio', 0):.2f}")
+
+            return metrics
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"Backtest timeout for {chunk} (>10 min)")
+            return None
+        except Exception as e:
+            logger.error(f"Backtest error for {chunk}: {e}")
+            return None
+
+    def _parse_backtest_output(self, output: str, chunk: BacktestChunk) -> Dict[str, Any]:
+        """Parse backtest CLI output to extract metrics."""
+
+        # Default metrics
+        metrics = {
+            "quarter": f"Q{chunk.quarter}",
+            "start_date": chunk.start_date,
+            "end_date": chunk.end_date,
+            "initial_balance": self.initial_balance,
+            "final_value": self.initial_balance,
+            "return_pct": 0.0,
+            "sharpe_ratio": 0.0,
+            "max_drawdown": 0.0,
+            "total_trades": 0,
+            "completed_trades": 0,
+            "win_rate": 0.0,
+            "total_pnl": 0.0,
+            "winning_trades": 0
+        }
+
+        # Extract from output using simple parsing
+        lines = output.split('\n')
+        for i, line in enumerate(lines):
+            # Look for metric lines in the table output
+            if 'Final Value' in line and '$' in line:
+                try:
+                    value = float(line.split('$')[1].split(',')[0] + line.split('$')[1].split(',')[1] if ',' in line else ''.join(c for c in line.split('$')[1].split()[0] if c.isdigit() or c == '.'))
+                    # More robust parsing
+                    parts = line.split()
+                    for j, part in enumerate(parts):
+                        if part.startswith('$'):
+                            try:
+                                metrics["final_value"] = float(part[1:].replace(',', ''))
+                            except:
+                                pass
+                except:
+                    pass
+
+            elif 'Total Return' in line and '%' in line:
+                try:
+                    parts = line.split()
+                    for part in parts:
+                        if part.endswith('%'):
+                            metrics["return_pct"] = float(part.rstrip('%'))
+                except:
+                    pass
+
+            elif 'Sharpe Ratio' in line:
+                try:
+                    parts = line.split()
+                    metrics["sharpe_ratio"] = float(parts[-1])
+                except:
+                    pass
+
+            elif 'Max Drawdown' in line and '%' in line:
+                try:
+                    parts = line.split()
+                    metrics["max_drawdown"] = float(parts[-1].rstrip('%'))
+                except:
+                    pass
+
+            elif 'Total Trades' in line:
+                try:
+                    metrics["total_trades"] = int(line.split()[-1])
+                except:
+                    pass
+
+            elif 'Completed Trades' in line:
+                try:
+                    metrics["completed_trades"] = int(line.split()[-1])
+                except:
+                    pass
+
+            elif 'Win Rate' in line and '%' in line:
+                try:
+                    parts = line.split()
+                    metrics["win_rate"] = float(parts[-1].rstrip('%'))
+                except:
+                    pass
+
+        # Calculate derived metrics
+        metrics["total_pnl"] = metrics["final_value"] - metrics["initial_balance"]
+        if metrics["completed_trades"] > 0:
+            metrics["winning_trades"] = int(metrics["completed_trades"] * metrics["win_rate"] / 100)
+
+        return metrics
+
+    def _log_memory_status(self) -> None:
+        """Log current memory usage and file counts."""
+
+        # Count outcome files
+        outcome_files = list(self.memory_dir.glob("outcome_*.json"))
+        snapshot_files = list(self.memory_dir.glob("snapshot_*.json"))
+        vectors_file = self.memory_dir / "vectors.pkl"
+
+        logger.info(f"Memory Status:")
+        logger.info(f"  Outcomes: {len(outcome_files)} files")
+        logger.info(f"  Snapshots: {len(snapshot_files)} files")
+        logger.info(f"  Vectors: {'✓' if vectors_file.exists() else '✗'} ({vectors_file.stat().st_size / 1024 / 1024:.2f} MB if exists)")
+
+        # Check provider/regime performance files
+        provider_perf = self.memory_dir / "provider_performance.json"
+        regime_perf = self.memory_dir / "regime_performance.json"
+        logger.info(f"  Provider Perf: {'✓' if provider_perf.exists() else '✗'}")
+        logger.info(f"  Regime Perf: {'✓' if regime_perf.exists() else '✗'}")
+
+    def _calculate_summary(
+        self,
+        quarterly_results: List[Dict[str, Any]],
+        cumulative: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Calculate full-year summary metrics."""
+
+        if not quarterly_results:
+            return {"error": "No quarterly results available"}
+
+        quarterly_returns = [r["return_pct"] for r in quarterly_results]
+        quarterly_sharpes = [r["sharpe_ratio"] for r in quarterly_results if r["sharpe_ratio"] != 0]
+        quarterly_drawdowns = [r["max_drawdown"] for r in quarterly_results]
+
+        # Full year return (geometric)
+        full_year_value = self.initial_balance
+        for q in quarterly_results:
+            q_return = q["return_pct"] / 100.0
+            full_year_value *= (1 + q_return)
+        full_year_return = ((full_year_value - self.initial_balance) / self.initial_balance) * 100
+
+        # Annualized Sharpe (average of quarterly, annualized)
+        avg_quarterly_sharpe = sum(quarterly_sharpes) / len(quarterly_sharpes) if quarterly_sharpes else 0
+        annualized_sharpe = avg_quarterly_sharpe * (4 ** 0.5)  # Annualize from quarterly
+
+        summary = {
+            "period": "Full Year 2025",
+            "assets": self.assets,
+            "initial_balance": self.initial_balance,
+            "final_balance": full_year_value,
+            "total_return_pct": full_year_return,
+            "annualized_sharpe": annualized_sharpe,
+            "max_quarterly_drawdown": max(quarterly_drawdowns) if quarterly_drawdowns else 0,
+            "total_trades": cumulative["total_trades"],
+            "total_completed_trades": sum(r.get("completed_trades", 0) for r in quarterly_results),
+            "total_winning_trades": cumulative["winning_trades"],
+            "overall_win_rate": (cumulative["winning_trades"] / cumulative["total_trades"] * 100) if cumulative["total_trades"] > 0 else 0,
+            "total_pnl": full_year_value - self.initial_balance,
+            "quarterly_breakdown": quarterly_results,
+            "memory_persistence": {
+                "outcomes_stored": len(list(self.memory_dir.glob("outcome_*.json"))),
+                "snapshots_stored": len(list(self.memory_dir.glob("snapshot_*.json"))),
+                "vectors_file": str(self.memory_dir / "vectors.pkl"),
+                "learning_accumulated_across_quarters": True
+            }
+        }
+
+        return summary
+
+    def _print_summary(self, summary: Dict[str, Any]) -> None:
+        """Print formatted summary to console."""
+
+        print("\n" + "=" * 80)
+        print("FULL YEAR 2025 BACKTEST SUMMARY")
+        print("=" * 80)
+        print(f"\nAssets: {', '.join(summary['assets'])}")
+        print(f"Period: {summary['period']}")
+        print(f"Initial Balance: ${summary['initial_balance']:,.2f}")
+        print(f"Final Balance: ${summary['final_balance']:,.2f}")
+        print(f"Total Return: {summary['total_return_pct']:.2f}%")
+        print(f"Annualized Sharpe: {summary['annualized_sharpe']:.2f}")
+        print(f"Max Quarterly Drawdown: {summary['max_quarterly_drawdown']:.2f}%")
+        print(f"\nTrading Statistics:")
+        print(f"  Total Trades: {summary['total_trades']}")
+        print(f"  Completed Trades: {summary['total_completed_trades']}")
+        print(f"  Winning Trades: {summary['total_winning_trades']}")
+        print(f"  Overall Win Rate: {summary['overall_win_rate']:.1f}%")
+        print(f"  Total P&L: ${summary['total_pnl']:,.2f}")
+
+        print(f"\nMemory Persistence (Accumulated Learning):")
+        print(f"  Outcomes stored: {summary['memory_persistence']['outcomes_stored']}")
+        print(f"  Snapshots stored: {summary['memory_persistence']['snapshots_stored']}")
+        print(f"  Vector memory: {summary['memory_persistence']['vectors_file']}")
+        print(f"  Cross-quarter learning: {summary['memory_persistence']['learning_accumulated_across_quarters']}")
+
+        print(f"\nQuarterly Breakdown:")
+        for q in summary['quarterly_breakdown']:
+            print(f"\n  Q{q.get('quarter', '?')} 2025:")
+            print(f"    Return: {q.get('return_pct', 0):.2f}%")
+            print(f"    Sharpe: {q.get('sharpe_ratio', 0):.2f}")
+            print(f"    Drawdown: {q.get('max_drawdown', 0):.2f}%")
+            print(f"    Trades: {q.get('total_trades', 0)}")
+            print(f"    Win Rate: {q.get('win_rate', 0):.1f}%")
+
+        print("\n" + "=" * 80)
+
+    def _save_summary(self, summary: Dict[str, Any]) -> None:
+        """Save summary to JSON file."""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = self.results_dir / f"full_year_summary_{timestamp}.json"
+
+        try:
+            with open(filename, 'w') as f:
+                json.dump(summary, f, indent=2)
+            logger.info(f"Summary saved to {filename}")
+        except Exception as e:
+            logger.error(f"Failed to save summary: {e}")
+
+
+if __name__ == "__main__":
+    # Run full year backtest with 3 assets
+    runner = ChunkedBacktestRunner(
+        assets=["BTCUSD", "ETHUSD", "EURUSD"],
+        initial_balance=10000,
+        correlation_threshold=0.7,
+        max_positions=3
+    )
+
+    # Execute quarterly backtests (memories persist across quarters)
+    full_year_results = runner.run_full_year()

@@ -63,7 +63,8 @@ Alpha Vantage (6 timeframes) + Sentiment
 - `finance_feedback_engine/persistence/decision_store.py`: Append-only JSON storage (`data/decisions/YYYY-MM-DD_<uuid>.json`)
 
 **Backtesting:**
-- `finance_feedback_engine/backtesting/backtester.py`: Standard backtester with cache and memory integration
+- `finance_feedback_engine/backtesting/backtester.py`: Standard backtester with cache and memory integration; supports margin/leverage, short positions, realistic slippage
+- `finance_feedback_engine/backtesting/advanced_backtester.py`: Simplified backtester (legacy); use standard `backtester.py` for production
 - `finance_feedback_engine/backtesting/decision_cache.py`: SQLite cache for AI decisions (avoids redundant LLM queries)
 - `finance_feedback_engine/backtesting/agent_backtester.py`: OODA loop simulation for agent testing
 - `finance_feedback_engine/backtesting/walk_forward.py`: Overfitting detection (train/test splits)
@@ -129,11 +130,18 @@ pytest tests/test_phase1_integration.py     # Integration suite
 - Integration: `test_phase1_integration.py`, `test_orchestrator_full_ooda.py`
 - Coverage requirement: 70% (enforced in `pyproject.toml`)
 
+**Test Fixtures (tests/conftest.py):**
+- `cli_runner`: Click CLI runner for command testing
+- `test_config_path`: Path to `config/config.test.mock.yaml`
+- `mock_engine`: Pre-configured FinanceFeedbackEngine instance
+- Scope patterns: `session` for shared resources, `function` for isolated tests
+
 **Asset Pair Formats:**
 All formats auto-standardized to uppercase without separators:
 - Input: `BTCUSD`, `btc-usd`, `"BTC/USD"`, `BTC_USD`
 - Standardized: `BTCUSD`
-- Use `finance_feedback_engine.utils.validation.standardize_asset_pair()`
+- **CRITICAL**: Always use `finance_feedback_engine.utils.validation.standardize_asset_pair()` for normalization
+- Used in: CLI commands, agent orchestrator, platform routing, decision persistence
 
 ## Project-Specific Conventions
 
@@ -189,6 +197,37 @@ All formats auto-standardized to uppercase without separators:
 1. Add provider to `config.yaml`: `ensemble.enabled_providers` list and `ensemble.provider_weights` dict
 2. Test fallback: `pytest tests/test_ensemble_fallback.py`
 3. Verify metadata: `cat data/decisions/*.json | jq '.ensemble_metadata'`
+
+## Common Pitfalls & Troubleshooting
+
+**Asset Pair Standardization:**
+- Always use `standardize_asset_pair()` before platform routing or decision storage
+- Failure to standardize causes inconsistent lookups and platform routing errors
+
+**Config Loading:**
+- `config/config.local.yaml` is git-ignored and overrides defaults — check it first when debugging config issues
+- Environment variables take highest precedence; unset them if config changes aren't applying
+- Backtest-specific config: Use `config/config.backtest.yaml` which forces debate mode ON and local providers
+
+**Ensemble Provider Failures:**
+- Dynamic weights auto-renormalize when providers fail — check `ensemble_metadata.active_weights` in decisions
+- InsufficientProvidersError raised when quorum not met (Phase 1 validation)
+- Test with `pytest tests/test_ensemble_fallback.py` to verify fallback tiers work
+
+**Platform-Specific Issues:**
+- Circuit breaker opens after 5 consecutive failures (60s cooldown) — check logs for "Circuit breaker OPEN"
+- Unified platform routes by asset type: crypto → Coinbase, forex → Oanda (see `platform_factory.py`)
+- Mock platform returns synthetic data; ensure `trading_platform: mock` in test configs
+
+**Backtesting:**
+- Decision cache (SQLite) prevents redundant LLM queries; clear with `rm data/backtest_cache.db` if stale
+- Memory isolation mode (`memory_isolation_mode: true`) uses separate storage for backtests
+- Position sizing requires balance; signal-only mode activates when balance unavailable
+
+**Testing:**
+- 70% coverage enforced in pytest; add `# pragma: no cover` only for defensive error handling
+- Use `mock_engine` fixture from `conftest.py` for integration tests
+- Quicktest mode ONLY for tests; `TradingAgentOrchestrator` raises ValueError if enabled in live mode
 
 ## Editing Safety Rules
 

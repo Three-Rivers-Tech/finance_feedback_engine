@@ -1917,57 +1917,48 @@ def backtest(
                 console.print(f"[bold red]Error saving results to {output_file}: {e}[/bold red]")
 
 
-        # Display results
+        # Display clean formatted results
+        from finance_feedback_engine.cli.backtest_formatter import format_single_asset_backtest
+
         metrics = results.get('metrics', {})
         trades_history = results.get('trades', [])
 
-        table = Table(title="AI-Driven Backtest Summary")
-        table.add_column("Metric", style="cyan")
-        table.add_column("Value", style="green", justify="right")
+        format_single_asset_backtest(
+            metrics=metrics,
+            trades=trades_history,
+            asset_pair=asset_pair,
+            start_date=start,
+            end_date=end,
+            initial_balance=initial_balance
+        )
 
-        table.add_row("Initial Balance", f"${metrics.get('initial_balance', 0):.2f}")
-        table.add_row("Final Value", f"${metrics.get('final_value', 0):.2f}")
-        table.add_row("Total Return %", f"{metrics.get('total_return_pct', 0):.2f}%")
-        if 'annualized_return_pct' in metrics:
-            table.add_row("Annualized Return %", f"{metrics.get('annualized_return_pct', 0):.2f}%")
-        table.add_row("Max Drawdown %", f"{metrics.get('max_drawdown_pct', 0):.2f}%")
-        if 'sharpe_ratio' in metrics:
-            table.add_row("Sharpe Ratio", f"{metrics.get('sharpe_ratio', 0):.2f}")
-        table.add_row("Total Trades", str(metrics.get('total_trades', 0)))
-        table.add_row("Win Rate %", f"{metrics.get('win_rate', 0):.2f}%")
-        if 'avg_win' in metrics:
-            table.add_row("Average Win", f"${metrics.get('avg_win', 0):.2f}")
-        if 'avg_loss' in metrics:
-            table.add_row("Average Loss", f"${metrics.get('avg_loss', 0):.2f}")
-        table.add_row("Total Fees", f"${metrics.get('total_fees', 0):.2f}")
-
-        console.print(table)
-
-        # Filter executed trades (those with pnl_value) from rejected trades
-        executed_trades = [t for t in trades_history if 'pnl_value' in t]
+        # Show gatekeeper rejection count if any
         rejected_trades = [t for t in trades_history if t.get('status') == 'REJECTED_BY_GATEKEEPER']
-
         if rejected_trades:
-            console.print(f"\n[yellow]Note: {len(rejected_trades)} trade(s) were rejected by RiskGatekeeper[/yellow]")
+            console.print(f"[yellow]⚠ Note: {len(rejected_trades)} trade(s) were rejected by RiskGatekeeper[/yellow]\n")
 
-        if executed_trades:
-            trades_table = Table(title="Executed Backtest Trades")
-            trades_table.add_column("Timestamp", style="cyan")
-            trades_table.add_column("Action", style="magenta")
-            trades_table.add_column("Entry Price", justify="right")
-            trades_table.add_column("Effective Price", justify="right")
-            trades_table.add_column("Units", justify="right")
-            trades_table.add_column("Fee", justify="right")
-            trades_table.add_column("PnL", justify="right")
+        # LEGACY: Show all trades if explicitly requested (kept for compatibility)
+        # Note: This is verbose and usually not needed
+        if False:  # Set to True if you want the detailed trade list
+            executed_trades = [t for t in trades_history if 'pnl_value' in t]
+            if executed_trades:
+                trades_table = Table(title="Executed Backtest Trades")
+                trades_table.add_column("Timestamp", style="cyan")
+                trades_table.add_column("Action", style="magenta")
+                trades_table.add_column("Entry Price", justify="right")
+                trades_table.add_column("Effective Price", justify="right")
+                trades_table.add_column("Units", justify="right")
+                trades_table.add_column("Fee", justify="right")
+                trades_table.add_column("PnL", justify="right")
 
-            for trade in executed_trades[:20]:  # Show first 20 executed trades
-                timestamp = trade.get('timestamp', '').split('T')[0] if 'T' in trade.get('timestamp', '') else trade.get('timestamp', '')
-                trades_table.add_row(
-                    timestamp,
-                    trade.get('action', 'N/A'),
-                    f"${trade.get('entry_price', 0):.2f}",
-                    f"${trade.get('effective_price', 0):.2f}",
-                    f"{abs(trade.get('units_traded', 0)):.6f}",
+                for trade in executed_trades[:20]:  # Show first 20 executed trades
+                    timestamp = trade.get('timestamp', '').split('T')[0] if 'T' in trade.get('timestamp', '') else trade.get('timestamp', '')
+                    trades_table.add_row(
+                        timestamp,
+                        trade.get('action', 'N/A'),
+                        f"${trade.get('entry_price', 0):.2f}",
+                        f"${trade.get('effective_price', 0):.2f}",
+                        f"{abs(trade.get('units_traded', 0)):.6f}",
                     f"${trade.get('fee', 0):.2f}",
                     f"${trade.get('pnl_value', 0):.2f}"
                 )
@@ -1980,6 +1971,99 @@ def backtest(
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        raise click.Abort()
+
+
+@cli.command()
+@click.argument('asset_pairs', nargs=-1, required=True)
+@click.option('--start', '-s', required=True, help='Start date YYYY-MM-DD')
+@click.option('--end', '-e', required=True, help='End date YYYY-MM-DD')
+@click.option(
+    '--initial-balance',
+    type=float,
+    default=10000,
+    help='Starting balance (default: 10000)'
+)
+@click.option(
+    '--correlation-threshold',
+    type=float,
+    default=0.7,
+    help='Correlation threshold for position sizing (default: 0.7)'
+)
+@click.option(
+    '--max-positions',
+    type=int,
+    help='Maximum concurrent positions (default: number of assets)'
+)
+@click.pass_context
+def portfolio_backtest(
+    ctx,
+    asset_pairs,
+    start,
+    end,
+    initial_balance,
+    correlation_threshold,
+    max_positions
+):
+    """
+    Run multi-asset portfolio backtest with correlation-aware position sizing.
+
+    Example:
+        python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2025-01-01 --end 2025-03-01
+    """
+    from finance_feedback_engine.backtesting.portfolio_backtester import PortfolioBacktester
+    from finance_feedback_engine.utils.validation import standardize_asset_pair
+    from finance_feedback_engine.cli.backtest_formatter import format_full_results
+
+    try:
+        # Validate inputs
+        if len(asset_pairs) < 2:
+            console.print("[bold red]Error: Portfolio backtest requires at least 2 assets[/bold red]")
+            raise click.Abort()
+
+        # Standardize asset pairs
+        asset_pairs = [standardize_asset_pair(ap) for ap in asset_pairs]
+
+        # Validate date range
+        start_dt = datetime.strptime(start, '%Y-%m-%d')
+        end_dt = datetime.strptime(end, '%Y-%m-%d')
+        if start_dt >= end_dt:
+            raise click.BadParameter(f"start_date ({start}) must be before end_date ({end})")
+
+        config = ctx.obj['config']
+
+        # Show startup info
+        console.print(f"[bold blue]Portfolio Backtest[/bold blue]")
+        console.print(f"Assets: [cyan]{', '.join(asset_pairs)}[/cyan]")
+        console.print(f"Period: [cyan]{start}[/cyan] → [cyan]{end}[/cyan]")
+        console.print(f"Initial Capital: [green]${initial_balance:,.2f}[/green]")
+
+        # Initialize portfolio backtester
+        backtester = PortfolioBacktester(
+            asset_pairs=asset_pairs,
+            initial_balance=initial_balance,
+            config=config
+        )
+
+        # Override config with CLI options
+        backtester.correlation_threshold = correlation_threshold
+        if max_positions:
+            backtester.max_positions = max_positions
+
+        # Run backtest
+        console.print("\n[yellow]⏳ Running backtest...[/yellow]")
+        results = backtester.run_backtest(
+            start_date=start,
+            end_date=end
+        )
+
+        # Display clean formatted results
+        format_full_results(results, asset_pairs, start, end, initial_balance)
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        import traceback
+        logger.error(f"Portfolio backtest error: {traceback.format_exc()}")
         raise click.Abort()
 
 
