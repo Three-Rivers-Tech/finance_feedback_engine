@@ -124,7 +124,7 @@ class RiskGatekeeper:
         volatility = decision.get("volatility", 0.0)
         # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
         raw_confidence = decision.get("confidence", 0)
-        if not isinstance(raw_confidence, (int, float)) or not 0 <= raw_confidence <= 100:
+        if isinstance(raw_confidence, bool) or not isinstance(raw_confidence, (int, float)) or not 0 <= raw_confidence <= 100:
             logger.warning(
                 f"Invalid confidence value: {raw_confidence}. Expected integer 0-100. Defaulting to 0."
             )
