@@ -63,7 +63,8 @@ class ChunkedBacktestRunner:
         initial_balance: float = 10000,
         correlation_threshold: float = 0.7,
         max_positions: int = None,
-        timeout_seconds: int = None
+        timeout_seconds: int = None,
+        year: int = 2025
     ):
         """
         Initialize chunked backtest runner.
@@ -75,11 +76,21 @@ class ChunkedBacktestRunner:
             max_positions: Max concurrent positions (default: len(assets))
             timeout_seconds: Per-quarter subprocess timeout in seconds.
                             Defaults to BACKTEST_TIMEOUT_SECONDS env var or DEFAULT_BACKTEST_TIMEOUT (1800s).
+            year: Year for backtest (default: 2025)
         """
         self.assets = assets
         self.initial_balance = initial_balance
         self.correlation_threshold = correlation_threshold
         self.max_positions = max_positions or len(assets)
+        self.year = year
+
+        # Update QUARTERS to use configured year
+        self.QUARTERS = [
+            BacktestChunk(1, f"{year}-01-01", f"{year}-03-31"),
+            BacktestChunk(2, f"{year}-04-01", f"{year}-06-30"),
+            BacktestChunk(3, f"{year}-07-01", f"{year}-09-30"),
+            BacktestChunk(4, f"{year}-10-01", f"{year}-12-31"),
+        ]
 
         # Load timeout from parameter, env var, or default (1800s = 30 min)
         if timeout_seconds is not None:
@@ -354,7 +365,7 @@ class ChunkedBacktestRunner:
         annualized_sharpe = avg_quarterly_sharpe * (4 ** 0.5)  # Annualize from quarterly
 
         summary = {
-            "period": "Full Year 2025",
+            "period": f"Full Year {self.year}",
             "assets": self.assets,
             "initial_balance": self.initial_balance,
             "final_balance": full_year_value,
@@ -380,32 +391,41 @@ class ChunkedBacktestRunner:
     def _print_summary(self, summary: Dict[str, Any]) -> None:
         """Print formatted summary to console."""
 
+        # Handle error cases
+        if "error" in summary:
+            print("\n" + "=" * 80)
+            print(f"FULL YEAR {self.year} BACKTEST SUMMARY")
+            print("=" * 80)
+            print(f"ERROR: {summary['error']}")
+            return
+
         print("\n" + "=" * 80)
-        print("FULL YEAR 2025 BACKTEST SUMMARY")
+        print(f"FULL YEAR {self.year} BACKTEST SUMMARY")
         print("=" * 80)
-        print(f"\nAssets: {', '.join(summary['assets'])}")
-        print(f"Period: {summary['period']}")
-        print(f"Initial Balance: ${summary['initial_balance']:,.2f}")
-        print(f"Final Balance: ${summary['final_balance']:,.2f}")
-        print(f"Total Return: {summary['total_return_pct']:.2f}%")
-        print(f"Annualized Sharpe: {summary['annualized_sharpe']:.2f}")
-        print(f"Max Quarterly Drawdown: {summary['max_quarterly_drawdown']:.2f}%")
+        print(f"\nAssets: {', '.join(summary.get('assets', []))}")
+        print(f"Period: {summary.get('period', 'N/A')}")
+        print(f"Initial Balance: ${summary.get('initial_balance', 0):,.2f}")
+        print(f"Final Balance: ${summary.get('final_balance', 0):,.2f}")
+        print(f"Total Return: {summary.get('total_return_pct', 0):.2f}%")
+        print(f"Annualized Sharpe: {summary.get('annualized_sharpe', 0):.2f}")
+        print(f"Max Quarterly Drawdown: {summary.get('max_quarterly_drawdown', 0):.2f}%")
         print(f"\nTrading Statistics:")
-        print(f"  Total Trades: {summary['total_trades']}")
-        print(f"  Completed Trades: {summary['total_completed_trades']}")
-        print(f"  Winning Trades: {summary['total_winning_trades']}")
-        print(f"  Overall Win Rate: {summary['overall_win_rate']:.1f}%")
-        print(f"  Total P&L: ${summary['total_pnl']:,.2f}")
+        print(f"  Total Trades: {summary.get('total_trades', 0)}")
+        print(f"  Completed Trades: {summary.get('total_completed_trades', 0)}")
+        print(f"  Winning Trades: {summary.get('total_winning_trades', 0)}")
+        print(f"  Overall Win Rate: {summary.get('overall_win_rate', 0):.1f}%")
+        print(f"  Total P&L: ${summary.get('total_pnl', 0):,.2f}")
 
         print(f"\nMemory Persistence (Accumulated Learning):")
-        print(f"  Outcomes stored: {summary['memory_persistence']['outcomes_stored']}")
-        print(f"  Snapshots stored: {summary['memory_persistence']['snapshots_stored']}")
-        print(f"  Vector memory: {summary['memory_persistence']['vectors_file']}")
-        print(f"  Cross-quarter learning: {summary['memory_persistence']['learning_accumulated_across_quarters']}")
+        mem = summary.get('memory_persistence', {})
+        print(f"  Outcomes stored: {mem.get('outcomes_stored', 0)}")
+        print(f"  Snapshots stored: {mem.get('snapshots_stored', 0)}")
+        print(f"  Vector memory: {mem.get('vectors_file', 'N/A')}")
+        print(f"  Cross-quarter learning: {mem.get('learning_accumulated_across_quarters', False)}")
 
         print(f"\nQuarterly Breakdown:")
-        for q in summary['quarterly_breakdown']:
-            print(f"\n  Q{q.get('quarter', '?')} 2025:")
+        for q in summary.get('quarterly_breakdown', []):
+            print(f"\n  Q{q.get('quarter', '?')} {self.year}:")
             print(f"    Return: {q.get('return_pct', 0):.2f}%")
             print(f"    Sharpe: {q.get('sharpe_ratio', 0):.2f}")
             print(f"    Drawdown: {q.get('max_drawdown', 0):.2f}%")
