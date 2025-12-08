@@ -18,6 +18,8 @@ Memory persists across backtest chunks, enabling cross-quarter learning.
 import subprocess
 import json
 import logging
+import os
+import re
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
@@ -43,6 +45,10 @@ class BacktestChunk:
 class ChunkedBacktestRunner:
     """Execute backtests in quarterly chunks with persistent memory."""
 
+    # Default subprocess timeout (30 minutes per quarter)
+    # Override via BACKTEST_TIMEOUT_SECONDS env var or timeout parameter
+    DEFAULT_BACKTEST_TIMEOUT = 1800
+
     # 2025 Quarterly breakdown
     QUARTERS = [
         BacktestChunk(1, "2025-01-01", "2025-03-31"),
@@ -56,7 +62,8 @@ class ChunkedBacktestRunner:
         assets: List[str],
         initial_balance: float = 10000,
         correlation_threshold: float = 0.7,
-        max_positions: int = None
+        max_positions: int = None,
+        timeout_seconds: int = None
     ):
         """
         Initialize chunked backtest runner.
@@ -66,11 +73,20 @@ class ChunkedBacktestRunner:
             initial_balance: Starting portfolio balance
             correlation_threshold: Correlation threshold for position sizing
             max_positions: Max concurrent positions (default: len(assets))
+            timeout_seconds: Per-quarter subprocess timeout in seconds.
+                            Defaults to BACKTEST_TIMEOUT_SECONDS env var or DEFAULT_BACKTEST_TIMEOUT (1800s).
         """
         self.assets = assets
         self.initial_balance = initial_balance
         self.correlation_threshold = correlation_threshold
         self.max_positions = max_positions or len(assets)
+
+        # Load timeout from parameter, env var, or default (1800s = 30 min)
+        if timeout_seconds is not None:
+            self.timeout_seconds = timeout_seconds
+        else:
+            env_timeout = os.environ.get('BACKTEST_TIMEOUT_SECONDS')
+            self.timeout_seconds = int(env_timeout) if env_timeout else self.DEFAULT_BACKTEST_TIMEOUT
 
         # Output paths
         self.results_dir = Path("data/backtest_results")
@@ -83,6 +99,7 @@ class ChunkedBacktestRunner:
         logger.info(f"  Assets: {', '.join(assets)}")
         logger.info(f"  Initial Balance: ${initial_balance:,.2f}")
         logger.info(f"  Correlation Threshold: {correlation_threshold}")
+        logger.info(f"  Per-Quarter Timeout: {self.timeout_seconds}s ({self.timeout_seconds / 60:.0f} minutes)")
         logger.info(f"  Memory Path: {self.memory_dir}")
 
     def run_full_year(self) -> Dict[str, Any]:
@@ -170,7 +187,7 @@ class ChunkedBacktestRunner:
                 cwd=Path(__file__).parent,
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 minute timeout per quarter
+                timeout=self.timeout_seconds
             )
 
             if result.returncode != 0:
@@ -191,7 +208,7 @@ class ChunkedBacktestRunner:
             return metrics
 
         except subprocess.TimeoutExpired:
-            logger.error(f"Backtest timeout for {chunk} (>10 min)")
+            logger.error(f"Backtest timeout for {chunk} (>{self.timeout_seconds}s / {self.timeout_seconds / 60:.0f} min)")
             return None
         except Exception as e:
             logger.error(f"Backtest error for {chunk}: {e}")
@@ -217,65 +234,69 @@ class ChunkedBacktestRunner:
             "winning_trades": 0
         }
 
-        # Extract from output using simple parsing
-        lines = output.split('\n')
-        for i, line in enumerate(lines):
-            # Look for metric lines in the table output
-            if 'Final Value' in line and '$' in line:
+        try:
+            # Parse Final Value: Extract dollar amount using regex
+            final_value_match = re.search(r'Final Value.*?\$([0-9,]+\.?\d*)', output)
+            if final_value_match:
                 try:
-                    value = float(line.split('$')[1].split(',')[0] + line.split('$')[1].split(',')[1] if ',' in line else ''.join(c for c in line.split('$')[1].split()[0] if c.isdigit() or c == '.'))
-                    # More robust parsing
-                    parts = line.split()
-                    for j, part in enumerate(parts):
-                        if part.startswith('$'):
-                            try:
-                                metrics["final_value"] = float(part[1:].replace(',', ''))
-                            except:
-                                pass
-                except:
-                    pass
+                    metrics["final_value"] = float(final_value_match.group(1).replace(',', ''))
+                except ValueError:
+                    logger.debug(f"Failed to parse Final Value: {final_value_match.group(1)}")
 
-            elif 'Total Return' in line and '%' in line:
+            # Parse Total Return percentage
+            total_return_match = re.search(r'Total Return.*?([-+]?\d+\.?\d*)%', output)
+            if total_return_match:
                 try:
-                    parts = line.split()
-                    for part in parts:
-                        if part.endswith('%'):
-                            metrics["return_pct"] = float(part.rstrip('%'))
-                except:
-                    pass
+                    metrics["return_pct"] = float(total_return_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Total Return: {total_return_match.group(1)}")
 
-            elif 'Sharpe Ratio' in line:
+            # Parse Sharpe Ratio
+            sharpe_match = re.search(r'Sharpe Ratio.*?([-+]?\d+\.?\d*)', output)
+            if sharpe_match:
                 try:
-                    parts = line.split()
-                    metrics["sharpe_ratio"] = float(parts[-1])
-                except:
-                    pass
+                    metrics["sharpe_ratio"] = float(sharpe_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Sharpe Ratio: {sharpe_match.group(1)}")
 
-            elif 'Max Drawdown' in line and '%' in line:
+            # Parse Max Drawdown percentage
+            drawdown_match = re.search(r'Max Drawdown.*?([-+]?\d+\.?\d*)%', output)
+            if drawdown_match:
                 try:
-                    parts = line.split()
-                    metrics["max_drawdown"] = float(parts[-1].rstrip('%'))
-                except:
-                    pass
+                    metrics["max_drawdown"] = float(drawdown_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Max Drawdown: {drawdown_match.group(1)}")
 
-            elif 'Total Trades' in line:
+            # Parse Total Trades (integer)
+            total_trades_match = re.search(r'Total Trades.*?(\d+)', output)
+            if total_trades_match:
                 try:
-                    metrics["total_trades"] = int(line.split()[-1])
-                except:
-                    pass
+                    metrics["total_trades"] = int(total_trades_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Total Trades: {total_trades_match.group(1)}")
 
-            elif 'Completed Trades' in line:
+            # Parse Completed Trades (integer)
+            completed_trades_match = re.search(r'Completed Trades.*?(\d+)', output)
+            if completed_trades_match:
                 try:
-                    metrics["completed_trades"] = int(line.split()[-1])
-                except:
-                    pass
+                    metrics["completed_trades"] = int(completed_trades_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Completed Trades: {completed_trades_match.group(1)}")
 
-            elif 'Win Rate' in line and '%' in line:
+            # Parse Win Rate percentage
+            win_rate_match = re.search(r'Win Rate.*?([-+]?\d+\.?\d*)%', output)
+            if win_rate_match:
                 try:
-                    parts = line.split()
-                    metrics["win_rate"] = float(parts[-1].rstrip('%'))
-                except:
-                    pass
+                    metrics["win_rate"] = float(win_rate_match.group(1))
+                except ValueError:
+                    logger.debug(f"Failed to parse Win Rate: {win_rate_match.group(1)}")
+
+        except KeyboardInterrupt:
+            raise
+        except GeneratorExit:
+            raise
+        except Exception as e:
+            logger.debug(f"Unexpected error during output parsing for {chunk}: {e}")
 
         # Calculate derived metrics
         metrics["total_pnl"] = metrics["final_value"] - metrics["initial_balance"]
@@ -295,7 +316,11 @@ class ChunkedBacktestRunner:
         logger.info(f"Memory Status:")
         logger.info(f"  Outcomes: {len(outcome_files)} files")
         logger.info(f"  Snapshots: {len(snapshot_files)} files")
-        logger.info(f"  Vectors: {'✓' if vectors_file.exists() else '✗'} ({vectors_file.stat().st_size / 1024 / 1024:.2f} MB if exists)")
+        if vectors_file.exists():
+            size_mb = vectors_file.stat().st_size / 1024 / 1024
+            logger.info(f"  Vectors: ✓ ({size_mb:.2f} MB)")
+        else:
+            logger.info(f"  Vectors: ✗ (not created yet)")
 
         # Check provider/regime performance files
         provider_perf = self.memory_dir / "provider_performance.json"
