@@ -106,7 +106,7 @@ grep "Ensemble decision:" /tmp/q1_backtest.log | wc -l
 
 ### Track memory files accumulating
 ```bash
-watch -n 2 'ls -1 data/memory/outcome_*.json | wc -l'
+watch -n 2 "ls -1 data/memory/outcome_*.json | wc -l"
 ```
 
 ### Monitor memory growth
