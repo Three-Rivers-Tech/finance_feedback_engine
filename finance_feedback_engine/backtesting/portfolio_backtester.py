@@ -221,7 +221,7 @@ class PortfolioBacktester:
             self._update_correlation_matrix(current_date)
 
             # Update existing positions (P&L, stop-loss, take-profit)
-            self._update_positions(current_prices)
+            self._update_positions(current_prices, current_date)
 
             # Generate decisions for each asset
             decisions = self._generate_portfolio_decisions(current_date, current_prices)
@@ -305,7 +305,7 @@ class PortfolioBacktester:
             returns_df = pd.DataFrame(returns_data)
             self.portfolio_state.correlation_matrix = returns_df.corr()
 
-    def _update_positions(self, current_prices: Dict[str, float]) -> None:
+    def _update_positions(self, current_prices: Dict[str, float], date: datetime) -> None:
         """Update existing positions (P&L, stop-loss, take-profit triggers)."""
         positions_to_close = []
 
