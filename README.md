@@ -45,7 +45,104 @@
 
 ### Complete Data Flow & Component Interaction
 
-**[View interactive diagram →](https://mermaid.live/edit#pako:eNrLSswrUSrJL8pVKknMTC0py0_RKYnPz8_JL9HRCEuBsQxK1AoxIxk1LBEzKBU2hBGqYhQ0PD3VLbkotVS_KDE5sThVKUSrIi1VKTMxPReyIikzHzE5FLFJoUIR-pJEjYrUVFWkqogyKGVWZgIFX1Zm5haliHVpKUvyknNyc3lSc3IrUrMyS1KrUlIrUnPy8vKrUhJzUvLzUkpqQVK8FHOqUsB6K9IqU0tyM3JVNJJyUhJzUopz81KqQgrzEnML8otSF-clVpQW5xRVVJSk5ubmlqYmpqZm5pZm5iZm5uamluQWFhZVFpQWV1SUFuRkFubmVOblFhYXl5cUF1UWFxaXVpSk5ubmVqTkVhanJqfnVJTmVpbklqZk5pRkljWk5xZmJ1YkJhUWVBTmlGYm5hZWlJbkVpQU5iZV5uQUVJZXlJqcmVBYHFFZXFJYUlpTkpqZUlFfVFCSmZkXkpqQlJKUWVJfn5uUWVhSV5iWkFqHFBSXVJaXVJZV1pQWFuUU1BZXlhYVVJTm5oclKJWUdoKUlZTmFhbm5qRm5hYmxiRWFhYW1uZmFhYWVgZGZsZGJiYAGVfK9KdmZlEFZXmlhbh1qYWpqbk5laU5qCmFhZm5uZWFubm1iZmVmZU1ubmpmalGJZnFVUUplZV5pblFLiBxfkl5QWVpQWlgWF1oWGlpUWVlZmlhalMgoqUOvU5hQmVpQWlhZVVpSWVuYVV5aWllZWVFGHFhSmFiCmZVZkxOQUJEiV5yYUlpalltQGl9UHpmenFJZXl5eUlBWnZhCHQgAFlQWJyZnJVZV5Ob) →
+```mermaid
+graph TB
+
+    subgraph "Entry Points"
+        CLI[CLI Commands<br/>main.py]
+        WEB[Web Service<br/>FastAPI + Redis<br/>Optional]
+        TELEGRAM[Telegram Bot<br/>Approval Integration]
+    end
+
+    subgraph "Core Orchestration"
+        ENGINE[FinanceFeedbackEngine<br/>core.py]
+        AGENT[TradingLoopAgent<br/>Autonomous OODA Loop]
+    end
+
+    subgraph "Data Layer"
+        AV[Alpha Vantage<br/>Market Data]
+        UDP[UnifiedDataProvider<br/>Multi-Timeframe Pulse]
+        MRD[MarketRegimeDetector<br/>ADX/ATR Analysis]
+    end
+
+    subgraph "Decision Making"
+        DE[DecisionEngine<br/>Prompt Builder]
+        ENS[EnsembleManager<br/>Multi-Provider Voting]
+        subgraph "AI Providers"
+            LOCAL[Local/Ollama]
+            CLI_AI[GitHub Copilot CLI]
+            CODEX[Codex CLI]
+            QWEN[Qwen CLI]
+            GEMINI[Gemini CLI]
+        end
+    end
+
+    subgraph "Risk & Execution"
+        RG[RiskGatekeeper<br/>Drawdown/VaR/Correlation]
+        PF[PlatformFactory]
+        subgraph "Trading Platforms"
+            CB[Coinbase Advanced]
+            OA[Oanda Forex]
+            MOCK[Mock Platform]
+            UNI[UnifiedPlatform]
+        end
+        CB_BREAKER[CircuitBreaker<br/>Failure Protection]
+    end
+
+    subgraph "Monitoring & Learning"
+        TM[TradeMonitor<br/>Live Position Tracking]
+        PME[PortfolioMemoryEngine<br/>ML Feedback Loop]
+        MCP[MonitoringContextProvider<br/>Pulse Integration]
+    end
+
+    subgraph "Persistence"
+        DS[DecisionStore<br/>JSON Storage]
+        TMC[TradeMetricsCollector<br/>Performance Data]
+    end
+
+
+    CLI -->|analyze/execute/agent| ENGINE
+    WEB -->|approval request| TELEGRAM
+    TELEGRAM -->|approval/deny| ENGINE
+    AGENT -->|continuous loop| ENGINE
+
+    ENGINE -->|fetch data| AV
+    AV -->|OHLCV + sentiment| UDP
+    UDP -->|6 timeframes| MRD
+    MRD -->|regime + volatility| DE
+
+    ENGINE -->|generate decision| DE
+    DE -->|ensemble mode| ENS
+    ENS -.->|weighted voting| LOCAL
+    ENS -.->|dynamic weights| CLI_AI
+    ENS -.->|fallback tiers| CODEX
+    ENS -.->|4-tier strategy| QWEN
+    ENS -.->|quorum check| GEMINI
+
+    DE -->|position sizing| RG
+    RG -->|risk approved| PF
+    PF -->|create platform| CB
+    PF --> OA
+    PF --> MOCK
+    PF --> UNI
+    CB --> CB_BREAKER
+    CB_BREAKER -->|execute trade| TM
+
+    TM -->|detect positions| MCP
+    MCP -->|inject context| DE
+    TM -->|track P&L| PME
+    PME -->|trade outcomes| DE
+
+    DE -->|save decision| DS
+    TM -->|save metrics| TMC
+    PME -->|experience buffer| ENGINE
+
+    style ENGINE fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style ENS fill:#FF9800,stroke:#E65100,color:#fff
+    style AGENT fill:#2196F3,stroke:#0D47A1,color:#fff
+    style TM fill:#9C27B0,stroke:#4A148C,color:#fff
+    style WEB fill:#ddd,stroke:#999,color:#333,stroke-dasharray: 5 5
+```
 
 **Data Flow Summary:**
 1. **Analysis Request** → CLI/Agent invokes `FinanceFeedbackEngine.analyze_asset()`
@@ -118,17 +215,100 @@ cp config/config.yaml config/config.local.yaml
 
 ### Configuration Loading Hierarchy
 
-**[View configuration flow diagram →](docs/diagrams/config_loading.mmd)**
-
 **Precedence:** Environment Variables > `config.local.yaml` > `config/config.yaml` (defaults)
+
+```mermaid
+flowchart TD
+    START([Configuration Loading Starts])
+    ENV{Environment Variables Set?}
+    LOCAL{config.local.yaml Exists?}
+    BASE[config/config.yaml Base Defaults]
+    MERGE[Merge Configuration Precedence: ENV > LOCAL > BASE]
+    VALIDATE[Validate Required Keys API keys, credentials]
+    RESULT([Final Config Object])
+
+    START --> ENV
+    ENV -->|Yes| MERGE
+    ENV -->|No| LOCAL
+    LOCAL -->|Yes| MERGE
+    LOCAL -->|No| BASE
+    BASE --> MERGE
+    MERGE --> VALIDATE
+    VALIDATE --> RESULT
+
+    subgraph "Environment Variables Highest Priority"
+        ENV_AV[ALPHA_VANTAGE_API_KEY]
+        ENV_CB[COINBASE_API_KEY COINBASE_API_SECRET]
+        ENV_OA[OANDA_API_KEY OANDA_ACCOUNT_ID]
+    end
+```
 
 ### Multi-Timeframe Technical Analysis 🆕
 
 The engine analyzes **6 timeframes simultaneously** to detect cross-timeframe patterns and confluence:
 
-**[View multi-timeframe pulse diagram →](docs/diagrams/multiframe_pulse.mmd)**
-
 **Timeframes:** 1-min, 5-min, 15-min, 1-hour, 4-hour, daily
+
+```mermaid
+flowchart LR
+    subgraph "Data Ingestion"
+        REQ[Analysis Request BTCUSD]
+        UDP[UnifiedDataProvider aggregate_all_timeframes]
+        CACHE{Cache Valid? 5-min expiry}
+    end
+
+    subgraph "Multi-Source Fetching"
+        AV[Alpha Vantage Premium API]
+        CB_DATA[Coinbase Real-time]
+        OA_DATA[Oanda Forex data]
+    end
+
+    subgraph "6 Timeframes"
+        TF1[1-minute]
+        TF5[5-minute]
+        TF15[15-minute]
+        TF1H[1-hour]
+        TF4H[4-hour]
+        TFD[Daily]
+    end
+
+    subgraph "Technical Indicators"
+        RSI[RSI Overbought/Oversold 70/30]
+        MACD[MACD Momentum Line, Signal, Histogram]
+        BB[Bollinger Bands Volatility upper/middle/lower]
+        ADX[ADX Trend Strength >25 strong]
+        ATR[ATR Volatility Measure Price Units]
+    end
+
+    CLASSIFY[Trend Classification UPTREND/DOWNTREND/RANGING]
+
+    subgraph "Cross-Timeframe Analysis"
+        CONF[Confluence Score Agreement Count]
+        STRENGTH[Signal Strength 0-100]
+        DESC[Natural Language Description]
+    end
+
+    REQ --> UDP
+    UDP --> CACHE
+    CACHE -->|Hit| TF1 & TF5 & TF15 & TF1H & TF4H & TFD
+    CACHE -->|Miss| AV
+    CACHE -->|Miss| CB_DATA
+    CACHE -->|Miss| OA_DATA
+
+    AV & CB_DATA & OA_DATA --> TF1 & TF5 & TF15 & TF1H & TF4H & TFD
+
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> RSI
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> MACD
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> BB
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ADX
+    TF1 & TF5 & TF15 & TF1H & TF4H & TFD --> ATR
+
+    RSI & MACD & BB & ADX & ATR --> CLASSIFY
+    CLASSIFY --> CONF & STRENGTH & DESC
+
+    style UDP fill:#2196F3,stroke:#0D47A1,color:#fff
+    style CONF fill:#4CAF50,stroke:#2E7D32,color:#fff
+```
 
 **Indicators:** RSI, MACD, Bollinger Bands, ADX, ATR (per timeframe)
 
@@ -158,7 +338,65 @@ python main.py analyze BTCUSD --provider ensemble
 
 #### Ensemble Decision Aggregation Flow
 
-**[View ensemble aggregation diagram →](docs/diagrams/ensemble_aggregation.mmd)**
+```mermaid
+flowchart TD
+    START([Ensemble Request Initiated])
+    QUERY[Query All Enabled Providers in Parallel]
+
+    subgraph "Provider Queries Concurrent"
+        P1[local Ollama]
+        P2[codex Codex CLI]
+        P3[cli GitHub Copilot CLI]
+        P4[qwen Qwen CLI]
+        P5[gemini Gemini CLI]
+    end
+
+    COLLECT[Collect Responses]
+    DETECT[Detect Provider Failures]
+
+    CALC_WEIGHTS[Dynamic Weight Recalculation]
+
+    subgraph "4-Tier Fallback Strategy"
+        T1{Tier 1 Weighted Voting}
+        T2{Tier 2 Majority Voting}
+        T3{Tier 3 Simple Averaging}
+        T4[Tier 4 Single Provider]
+
+        T1 -->|Fails| T2
+        T2 -->|No Majority| T3
+        T3 -->|Fails| T4
+    end
+
+    CONFIDENCE[Confidence Adjustment]
+    QUORUM{Local Provider Quorum Met?}
+    PENALTY[Apply 30-Point Confidence Penalty]
+
+    META[Attach Ensemble Metadata]
+
+    DECISION([Final Aggregated Decision])
+
+    START --> QUERY
+    QUERY --> P1 & P2 & P3 & P4 & P5
+    P1 & P2 & P3 & P4 & P5 --> COLLECT
+    COLLECT --> DETECT
+
+    DETECT --> CALC_WEIGHTS
+
+    CALC_WEIGHTS --> T1
+    T1 & T2 & T3 & T4 --> CONFIDENCE
+
+    CONFIDENCE --> QUORUM
+    QUORUM -->|Yes| META
+    QUORUM -->|No| PENALTY
+    PENALTY --> META
+    META --> DECISION
+
+    style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style T2 fill:#FFC107,stroke:#F57C00,color:#333
+    style T3 fill:#FF9800,stroke:#E65100,color:#fff
+    style T4 fill:#F44336,stroke:#C62828,color:#fff
+    style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
+```
 
 **Features:**
 - **Intelligent Voting**: Combines decisions from multiple AI providers using weighted voting (Tier 1)
@@ -224,7 +462,116 @@ python main.py run-agent --take-profit 0.05 --stop-loss 0.02 --max-daily-trades 
 
 #### Agent State Machine with Position Recovery
 
-**[View agent state machine diagram →](docs/diagrams/agent_state_machine.mmd)**
+```mermaid
+stateDiagram-v2
+    [*] --> STARTUP
+
+    STARTUP --> POSITION_RECOVERY: Initialize Agent
+
+    state POSITION_RECOVERY {
+        [*] --> QueryPlatform
+        QueryPlatform --> ExtractPositions: get_portfolio_breakdown
+        ExtractPositions --> GenerateSyntheticDecisions: Found N positions
+        GenerateSyntheticDecisions --> RebuildMemory: Create decision records
+        RebuildMemory --> AssociateMonitor: Populate PortfolioMemoryEngine
+        AssociateMonitor --> [*]: Mark startup_complete
+
+        QueryPlatform --> RetryBackoff: Failure
+        RetryBackoff --> QueryPlatform: Exponential delay
+        QueryPlatform --> ForceComplete: Max retries
+        ForceComplete --> [*]: Continue with empty state
+    }
+
+    POSITION_RECOVERY --> IDLE: Recovery Complete
+
+    state IDLE {
+        [*] --> WaitInterval
+        WaitInterval --> [*]: After analysis_frequency_seconds
+    }
+
+    IDLE --> LEARNING: Timer Expires
+
+    state LEARNING {
+        [*] --> FetchClosedTrades
+        FetchClosedTrades --> ProcessOutcomes: get_closed_trades
+        ProcessOutcomes --> RecordMemory: PortfolioMemoryEngine
+        RecordMemory --> [*]: Update experience
+    }
+
+    LEARNING --> PERCEPTION
+
+    state PERCEPTION {
+        [*] --> FetchPortfolio
+        FetchPortfolio --> KillSwitchCheck: get_portfolio_breakdown
+        KillSwitchCheck --> DailyReset: P&L within limits
+        DailyReset --> [*]: Reset trade count
+
+        KillSwitchCheck --> HALT: P&L breached
+    }
+
+    PERCEPTION --> REASONING
+
+    state REASONING {
+        [*] --> LoopAssets
+        LoopAssets --> AnalyzeAsset: For each asset
+        AnalyzeAsset --> RetryLogic: generate_decision
+        RetryLogic --> CheckAction: Success
+        CheckAction --> NextAsset: HOLD
+        CheckAction --> [*]: BUY/SELL
+
+        RetryLogic --> ExponentialBackoff: Failure
+        ExponentialBackoff --> AnalyzeAsset: Retry
+        ExponentialBackoff --> MarkFailure: Max retries
+        MarkFailure --> NextAsset: Skip
+
+        NextAsset --> LoopAssets: More assets
+        NextAsset --> [*]: All processed
+    }
+
+    REASONING --> RISK_CHECK: Actionable
+    REASONING --> IDLE: No Action
+
+    state RISK_CHECK {
+        [*] --> GetMonitoringContext
+        GetMonitoringContext --> ValidateTrade: RiskGatekeeper
+        ValidateTrade --> [*]: Approved
+        ValidateTrade --> [*]: Denied
+    }
+
+    RISK_CHECK --> EXECUTION: Approved
+    RISK_CHECK --> PERCEPTION: Rejected
+
+    state EXECUTION {
+        [*] --> SendOrder
+        SendOrder --> AssociateDecision: execute_trade
+        AssociateDecision --> IncrementCounter: TradeMonitor
+        IncrementCounter --> [*]: daily_trade_count++
+
+        SendOrder --> LogFailure: Error
+        LogFailure --> EXECUTION_FAILED
+    }
+
+    EXECUTION --> LEARNING: Executed
+    EXECUTION_FAILED --> PERCEPTION: Retry
+
+    state HALT {
+        [*] --> StopAgent
+        StopAgent --> [*]: is_running = False
+    }
+
+    HALT --> [*]: Agent Stopped
+
+    style STARTUP fill:#00BCD4,stroke:#006064,color:#fff
+    style POSITION_RECOVERY fill:#00BCD4,stroke:#006064,color:#fff
+    style IDLE fill:#9E9E9E,stroke:#424242,color:#fff
+    style LEARNING fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style PERCEPTION fill:#2196F3,stroke:#0D47A1,color:#fff
+    style REASONING fill:#FF9800,stroke:#E65100,color:#fff
+    style RISK_CHECK fill:#FFC107,stroke:#F57C00,color:#333
+    style EXECUTION fill:#9C27B0,stroke:#4A148C,color:#fff
+    style HALT fill:#F44336,stroke:#C62828,color:#fff
+    style EXECUTION_FAILED fill:#F44336,stroke:#C62828,color:#fff
+```
 
 **Agent Features:**
 - **Position Recovery on Startup**: Automatically discovers open positions from platform and rebuilds state
@@ -242,7 +589,51 @@ See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop
 
 #### Monitoring Architecture & Thread Management
 
-**[View monitoring architecture diagram →](docs/diagrams/monitoring_architecture.mmd)**
+```mermaid
+graph TB
+    subgraph "Main Thread"
+        INIT[Initialize TradeMonitor]
+        DETECT[Detect New Positions poll]
+        SPAWN[Spawn TradeTrackerThread]
+    end
+
+    subgraph "ThreadPool max 2"
+        T1[TradeTrackerThread 1]
+        T2[TradeTrackerThread 2]
+        PENDING[Pending Queue]
+    end
+
+    subgraph "Tracker Lifecycle"
+        ENTRY[Position Entry]
+        MONITOR[Monitor Position P&L]
+        EXIT[Detect Exit]
+        CALLBACK[Callback]
+    end
+
+    subgraph "Persistence"
+        TMC[TradeMetricsCollector]
+        PME[PortfolioMemoryEngine]
+    end
+
+    INIT --> DETECT
+    DETECT --> SPAWN
+    SPAWN --> T1 & T2
+    T1 & T2 --> PENDING
+
+    T1 --> ENTRY
+    ENTRY --> MONITOR
+    MONITOR --> EXIT
+    EXIT --> CALLBACK
+    CALLBACK --> TMC
+
+    TMC --> PME
+
+    style T1 fill:#FF9800,stroke:#E65100,color:#fff
+    style T2 fill:#FF9800,stroke:#E65100,color:#fff
+    style ENTRY fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style EXIT fill:#9C27B0,stroke:#4A148C,color:#fff
+    style PME fill:#00BCD4,stroke:#006064,color:#fff
+```
 
 ---
 
@@ -285,7 +676,48 @@ The Finance Feedback Engine uses a factory pattern for platform creation and cir
 
 #### Circuit Breaker State Machine
 
-**[View circuit breaker state machine diagram →](docs/diagrams/circuit_breaker_state.mmd)**
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED
+
+    state CLOSED {
+        [*] --> Normal
+        Normal --> IncrementFailures: execute_trade fails
+        IncrementFailures --> CheckThreshold: failure_count++
+        CheckThreshold --> Normal: count < 3
+        CheckThreshold --> [*]: count >= 3
+
+        Normal --> ResetCount: execute_trade succeeds
+        ResetCount --> Normal: failure_count = 0
+    }
+
+    CLOSED --> OPEN: Threshold Reached 3 failures
+
+    state OPEN {
+        [*] --> BlockCalls
+        BlockCalls --> CheckTimeout: All calls raise CircuitBreakerError
+        CheckTimeout --> BlockCalls: elapsed < 60s
+        CheckTimeout --> [*]: elapsed >= 60s
+    }
+
+    OPEN --> HALF_OPEN: Recovery Timeout Expired
+
+    state HALF_OPEN {
+        [*] --> TestRecovery
+        TestRecovery --> EvaluateResult: Allow ONE test call
+        EvaluateResult --> [*]: Success
+        EvaluateResult --> ReOpen: Failure
+
+        ReOpen --> [*]
+    }
+
+    HALF_OPEN --> CLOSED: Test Call Succeeds
+    HALF_OPEN --> OPEN: Test Call Fails
+
+    style CLOSED fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style OPEN fill:#F44336,stroke:#C62828,color:#fff
+    style HALF_OPEN fill:#FFC107,stroke:#F57C00,color:#333
+```
 
 **Circuit Breaker Configuration:**
 - `failure_threshold`: Number of failures before opening circuit (default: 3)
@@ -365,7 +797,7 @@ finance_feedback_engine/
 - **Metrics Storage**: Persistent JSON records in `data/trade_metrics/`
 - **Position Awareness**: MonitoringContextProvider injects active positions into AI prompts
 
-See [docs/LIVE_MONITORING_IMPLEMENTATION.md](docs/LIVE_MONITORING_IMPLEMENTATION.md) for full details.
+See [docs/LIVE_MONITORING_QUICKREF.md](docs/LIVE_MONITORING_QUICKREF.md) for full details.
         
         SendOrder --> LogFailure: Execution Error
         LogFailure --> EXECUTION_FAILED
@@ -561,7 +993,7 @@ The dashboard displays:
 - Per-platform allocation percentages
 - Real-time data from Coinbase, Oanda, etc.
 
-See [docs/PORTFOLIO_DASHBOARD.md](docs/PORTFOLIO_DASHBOARD.md) for details.
+For detailed dashboard documentation, see [docs/LIVE_MONITORING_QUICKREF.md](docs/LIVE_MONITORING_QUICKREF.md).
 
 ### View Decision History
 
@@ -838,7 +1270,7 @@ All trading decisions are stored as JSON files in the configured storage path (d
 
 - **[Long-Term Performance Tracking](docs/LONG_TERM_PERFORMANCE.md)** - 90-day portfolio metrics for AI decision-making 🆕
 - **[AI Providers](docs/AI_PROVIDERS.md)** - Guide to available AI providers
-- **[Live Trade Monitoring](docs/LIVE_MONITORING_IMPLEMENTATION.md)** - Real-time position tracking with thread-safe monitoring
+- **[Live Trade Monitoring](docs/LIVE_MONITORING_QUICKREF.md)** - Real-time position tracking with thread-safe monitoring
 - **[Portfolio Memory Engine](docs/PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
 - **[Signal-Only Mode](docs/SIGNAL_ONLY_MODE.md)** - Trading signals without execution
 - **Backtesting & Simulation (README)** - See "Backtesting & Simulations" and Monte Carlo/WFA quick-start examples
