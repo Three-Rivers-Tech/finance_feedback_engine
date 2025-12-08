@@ -1,0 +1,36 @@
+2025-12-08 15:10:25,347 - INFO - ================================================================================
+2025-12-08 15:10:25,348 - INFO -                      MULTI-ASSET TRAINING - 2024 FULL YEAR                      
+2025-12-08 15:10:25,348 - INFO - ================================================================================
+2025-12-08 15:10:25,348 - INFO - Log file: data/training_logs/training_log_20251208_151025.txt
+2025-12-08 15:10:25,348 - INFO - 
+2025-12-08 15:10:25,348 - INFO - Configuration:
+2025-12-08 15:10:25,348 - INFO -   Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:25,348 - INFO -   Period: 2024-01-01 → 2024-12-31
+2025-12-08 15:10:25,348 - INFO -   Initial Balance: $10,000.00
+2025-12-08 15:10:25,348 - INFO -   Chunking: Quarterly (Q1, Q2, Q3, Q4)
+2025-12-08 15:10:25,348 - INFO -   Learning: Cross-quarter persistent memory
+2025-12-08 15:10:25,348 - INFO - 
+2025-12-08 15:10:25,348 - INFO - Starting training...
+2025-12-08 15:10:25,348 - INFO - 
+2025-12-08 15:10:25,356 - INFO - ChunkedBacktestRunner initialized:
+2025-12-08 15:10:25,357 - INFO -   Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:25,357 - INFO -   Initial Balance: $10,000.00
+2025-12-08 15:10:25,357 - INFO -   Correlation Threshold: 0.7
+2025-12-08 15:10:25,357 - INFO -   Per-Quarter Timeout: 1800s (30 minutes)
+2025-12-08 15:10:25,357 - INFO -   Memory Path: data/memory
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO -                          EXECUTING QUARTERLY BACKTESTS                          
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO - STARTING FULL YEAR 2025 CHUNKED BACKTEST
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO - Assets: BTCUSD, ETHUSD, EURUSD
+2025-12-08 15:10:25,357 - INFO - Period: Q1 → Q4 2025 (4 quarterly chunks)
+2025-12-08 15:10:25,357 - INFO - Memory persists across chunks: data/memory
+2025-12-08 15:10:25,357 - INFO - 
+2025-12-08 15:10:25,357 - INFO - 
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO - Running Q1 2025 (2024-01-01 → 2024-03-31)
+2025-12-08 15:10:25,357 - INFO - ================================================================================
+2025-12-08 15:10:25,357 - INFO - Command: python main.py portfolio-backtest BTCUSD ETHUSD EURUSD --start 2024-01-01 --end 2024-03-31 --initial-balance 10000.0 --correlation-threshold 0.7 --max-positions 3
+2025-12-08 15:10:25,357 - INFO - Memory state: Persistent (vectors.pkl + outcome_*.json)

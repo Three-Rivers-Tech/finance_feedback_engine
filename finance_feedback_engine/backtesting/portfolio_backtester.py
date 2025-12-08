@@ -45,11 +45,15 @@ class PortfolioPosition:
     entry_time: datetime
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
-    unrealized_pnl: float = 0.0
+        unrealized_pnl: float = 0.0
+        side: str = "LONG"  # LONG or SHORT
 
     def update_pnl(self, current_price: float) -> float:
         """Update and return unrealized P&L."""
-        self.unrealized_pnl = (current_price - self.entry_price) * self.units
+        if self.side == "SHORT":
+            self.unrealized_pnl = (self.entry_price - current_price) * abs(self.units)
+        else:
+            self.unrealized_pnl = (current_price - self.entry_price) * self.units
         return self.unrealized_pnl
 
 
@@ -207,8 +211,8 @@ class PortfolioBacktester:
         self._load_historical_data(start_date, end_date)
 
         # Get common trading dates across all assets
-        trading_dates = self._get_common_trading_dates()
-        logger.info(f"Found {len(trading_dates)} common trading dates")
+        trading_dates = self._get_trading_dates()
+        logger.info(f"Found {len(trading_dates)} trading dates (union across assets)")
 
         # Main backtest loop
         for i, current_date in enumerate(trading_dates):
@@ -259,19 +263,13 @@ class PortfolioBacktester:
             self.price_history[asset_pair] = df
             logger.info(f"Loaded {len(df)} candles for {asset_pair}")
 
-    def _get_common_trading_dates(self) -> List[datetime]:
-        """Get dates where all assets have data."""
-        if not self.price_history:
-            return []
+    def _get_trading_dates(self) -> List[datetime]:
+        """Get union of all trading dates across assets (prevents empty loops)."""
+        all_dates = set()
+        for df in self.price_history.values():
+            all_dates |= set(df.index)
 
-        # Start with first asset's dates
-        common_dates = set(self.price_history[self.asset_pairs[0]].index)
-
-        # Intersect with other assets
-        for asset_pair in self.asset_pairs[1:]:
-            common_dates &= set(self.price_history[asset_pair].index)
-
-        return sorted(list(common_dates))
+        return sorted(list(all_dates))
 
     def _get_current_prices(self, date: datetime) -> Dict[str, float]:
         """Get current prices for all assets."""
@@ -317,19 +315,26 @@ class PortfolioBacktester:
             # Update unrealized P&L
             position.update_pnl(current_price)
 
-            # Check stop-loss
-            if position.stop_loss and current_price <= position.stop_loss:
-                logger.info(f"Stop-loss triggered for {asset_pair} at {current_price}")
-                positions_to_close.append(asset_pair)
-
-            # Check take-profit
-            elif position.take_profit and current_price >= position.take_profit:
-                logger.info(f"Take-profit triggered for {asset_pair} at {current_price}")
-                positions_to_close.append(asset_pair)
+            # Check stop-loss / take-profit with side awareness
+            if position.side == "SHORT":
+                if position.stop_loss and current_price >= position.stop_loss:
+                    logger.info(f"Stop-loss triggered for {asset_pair} at {current_price}")
+                    positions_to_close.append(asset_pair)
+                elif position.take_profit and current_price <= position.take_profit:
+                    logger.info(f"Take-profit triggered for {asset_pair} at {current_price}")
+                    positions_to_close.append(asset_pair)
+            else:
+                if position.stop_loss and current_price <= position.stop_loss:
+                    logger.info(f"Stop-loss triggered for {asset_pair} at {current_price}")
+                    positions_to_close.append(asset_pair)
+                elif position.take_profit and current_price >= position.take_profit:
+                    logger.info(f"Take-profit triggered for {asset_pair} at {current_price}")
+                    positions_to_close.append(asset_pair)
 
         # Close triggered positions
         for asset_pair in positions_to_close:
-            self._close_position(asset_pair, current_prices[asset_pair], "trigger", date)
+            if asset_pair in current_prices:
+                self._close_position(asset_pair, current_prices[asset_pair], "trigger", date)
 
     def _generate_portfolio_decisions(
         self,
@@ -368,8 +373,12 @@ class PortfolioBacktester:
                 "volume": current_candle.get('volume', 0)
             }
 
-            # Build balance dict
-            balance_dict = {"USD": self.portfolio_state.cash}
+            # Build balance dict (platform-scoped for routing; default to unified USD)
+            balance_dict = {
+                "USD": self.portfolio_state.cash,
+                "coinbase_USD": self.portfolio_state.cash,
+                "oanda_USD": self.portfolio_state.cash,
+            }
 
             # Build portfolio context with correlation info
             portfolio_dict = {
@@ -417,6 +426,7 @@ class PortfolioBacktester:
         """Execute validated trades with correlation-aware position sizing."""
         for asset_pair, decision in decisions.items():
             action = decision.get("action", "HOLD")
+            current_position = self.portfolio_state.positions.get(asset_pair)
 
             if action == "HOLD":
                 continue
@@ -455,9 +465,17 @@ class PortfolioBacktester:
 
             # Execute trade
             if action == "BUY":
-                self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                # Close existing SHORT or open/extend LONG
+                if current_position and current_position.side == "SHORT":
+                    self._close_position(asset_pair, current_prices[asset_pair], "decision_close_short", current_date)
+                else:
+                    self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
             elif action == "SELL":
-                self._execute_sell(asset_pair, current_prices[asset_pair], current_date)
+                # Close existing LONG; if none, open SHORT
+                if current_position and current_position.side == "LONG":
+                    self._close_position(asset_pair, current_prices[asset_pair], "decision_close_long", current_date)
+                elif not current_position:
+                    self._execute_short(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
 
     def _calculate_position_size(
         self,
@@ -562,14 +580,15 @@ class PortfolioBacktester:
         # Update cash
         self.portfolio_state.cash -= total_cost
 
-        # Create position
+        # Create/average position (LONG)
         position = PortfolioPosition(
             asset_pair=asset_pair,
             entry_price=execution_price,
             units=units,
             entry_time=date,
             stop_loss=execution_price * 0.98,  # 2% stop-loss
-            take_profit=execution_price * 1.05  # 5% take-profit
+            take_profit=execution_price * 1.05,  # 5% take-profit
+            side="LONG"
         )
         self.portfolio_state.positions[asset_pair] = position
 
@@ -588,9 +607,49 @@ class PortfolioBacktester:
 
         logger.info(f"BUY {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, cost=${total_cost:.2f}")
 
-    def _execute_sell(self, asset_pair: str, price: float, date: datetime) -> None:
-        """Execute sell order (close position)."""
-        self._close_position(asset_pair, price, "decision", date)
+    def _execute_short(
+        self,
+        asset_pair: str,
+        position_size: float,
+        price: float,
+        date: datetime,
+        decision: Dict[str, Any]
+    ) -> None:
+        """Open a SHORT position (SELL to open)."""
+        execution_price = price * (1 - self.slippage_rate)
+
+        units = position_size / execution_price
+
+        fee = position_size * self.fee_rate
+        proceeds = position_size - fee  # Cash received from opening short
+
+        # Update cash (receive proceeds)
+        self.portfolio_state.cash += proceeds
+
+        position = PortfolioPosition(
+            asset_pair=asset_pair,
+            entry_price=execution_price,
+            units=-units,  # Negative units for short
+            entry_time=date,
+            stop_loss=execution_price * 1.02,  # reversed for short
+            take_profit=execution_price * 0.95,  # reversed for short
+            side="SHORT"
+        )
+        self.portfolio_state.positions[asset_pair] = position
+
+        trade = {
+            "asset_pair": asset_pair,
+            "action": "SELL_OPEN",
+            "price": execution_price,
+            "units": -units,
+            "proceeds": proceeds,
+            "fee": fee,
+            "date": date,
+            "decision": decision
+        }
+        self.portfolio_state.trade_history.append(trade)
+
+        logger.info(f"OPEN SHORT {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, proceeds=${proceeds:.2f}")
 
     def _close_position(
         self,
@@ -605,29 +664,45 @@ class PortfolioBacktester:
 
         position = self.portfolio_state.positions[asset_pair]
 
-        # Apply slippage
-        execution_price = price * (1 - self.slippage_rate)
+        # Apply slippage (sell for LONG, buy-to-close for SHORT)
+        if position.side == "SHORT":
+            execution_price = price * (1 + self.slippage_rate)
+        else:
+            execution_price = price * (1 - self.slippage_rate)
 
-        # Calculate proceeds
-        gross_proceeds = position.units * execution_price
-        fee = gross_proceeds * self.fee_rate
-        net_proceeds = gross_proceeds - fee
+        if position.side == "SHORT":
+            units_abs = abs(position.units)
+            cost = units_abs * execution_price
+            fee = cost * self.fee_rate
+            pnl = (position.entry_price - execution_price) * units_abs - fee
 
-        # Update cash
-        self.portfolio_state.cash += net_proceeds
+            # Update cash: pay to buy back
+            self.portfolio_state.cash -= (cost + fee)
+            pnl_pct = (pnl / (position.entry_price * units_abs)) * 100 if position.entry_price > 0 else 0
+        else:
+            # LONG close
+            gross_proceeds = position.units * execution_price
+            fee = gross_proceeds * self.fee_rate
+            net_proceeds = gross_proceeds - fee
 
-        # Calculate P&L
-        cost = position.units * position.entry_price
-        pnl = net_proceeds - cost
-        pnl_pct = (pnl / cost) * 100
+            self.portfolio_state.cash += net_proceeds
+
+            cost = position.units * position.entry_price
+            pnl = net_proceeds - cost
+            pnl_pct = (pnl / cost) * 100 if cost != 0 else 0
+            units_abs = position.units
+            cost_basis = cost
 
         # Record trade
+        trade_action = "SELL" if position.side == "LONG" else "BUY_CLOSE"
+
         trade = {
             "asset_pair": asset_pair,
-            "action": "SELL",
+            "action": trade_action,
             "price": execution_price,
             "units": position.units,
-            "proceeds": net_proceeds,
+            "proceeds": None if position.side == "SHORT" else net_proceeds,
+            "cost": cost if position.side == "SHORT" else cost_basis,
             "fee": fee,
             "pnl": pnl,
             "pnl_pct": pnl_pct,
@@ -641,7 +716,7 @@ class PortfolioBacktester:
         del self.portfolio_state.positions[asset_pair]
 
         logger.info(
-            f"SELL {asset_pair}: {position.units:.4f} units @ ${execution_price:.2f}, "
+            f"{trade_action} {asset_pair}: {position.units:.4f} units @ ${execution_price:.2f}, "
             f"P&L=${pnl:.2f} ({pnl_pct:.2f}%), reason={reason}"
         )
 
