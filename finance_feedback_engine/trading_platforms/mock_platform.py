@@ -252,7 +252,6 @@ class MockTradingPlatform(BaseTradingPlatform):
 
             realized_pnl = 0.0
             if action == 'SELL':
-            else:  # SELL
                 # For mock platform, SELL closes existing position (shorts not yet supported)
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]

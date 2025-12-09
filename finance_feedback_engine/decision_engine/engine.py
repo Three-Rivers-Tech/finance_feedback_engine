@@ -180,287 +180,26 @@ class DecisionEngine:
 
         logger.info(f"Decision engine initialized with provider: {self.ai_provider}")
 
-    def set_monitoring_context(self, monitoring_provider):
-        """
-        Set the monitoring context provider for live trade awareness.
+    def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
+        """Calculate price change percentage."""
+        open_price = market_data.get('open', 0)
+        close_price = market_data.get('close', 0)
 
-        Args:
-            monitoring_provider: MonitoringContextProvider instance
-        """
-        self.monitoring_provider = monitoring_provider
-        logger.info("Monitoring context provider attached to decision engine")
+        if open_price == 0:
+            return 0.0
 
-    def generate_decision(
-        self,
-        asset_pair: str,
-        market_data: Dict[str, Any],
-        balance: Dict[str, float],
-        portfolio: Optional[Dict[str, Any]] = None,
-        memory_context: Optional[Dict[str, Any]] = None,
-        monitoring_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Generate a trading decision based on market data and balances.
+        return ((close_price - open_price) / open_price) * 100
 
-        Args:
-            asset_pair: Asset pair being analyzed
-            market_data: Current market data
-            balance: Account balances
-            portfolio: Optional portfolio breakdown with holdings/allocations
-            memory_context: Optional historical performance context
-            monitoring_context: Optional monitoring context with active positions and pulse
+    def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
+        """Calculate simple volatility indicator."""
+        high = market_data.get('high', 0)
+        low = market_data.get('low', 0)
+        close = market_data.get('close', 0)
 
-        Returns:
-            Trading decision with recommendation
-        """
-        logger.info("Generating decision for %s", asset_pair)
+        if close == 0:
+            return 0.0
 
-        # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
-        # to accurately simulate production behavior. Keeping the parameter for backward
-        # compatibility but it no longer changes decision logic.
-        if self.backtest_mode:
-            logger.warning(
-                "backtest_mode=True is deprecated. Backtests now use real AI providers "
-                "for accurate simulation. Use 'mock' provider for fast rule-based testing."
-            )
-
-        # Merge monitoring context from parameter with live monitoring provider
-        # Parameter takes precedence (for backtesting)
-        if monitoring_context is None and self.monitoring_provider:
-            try:
-                monitoring_context = (
-                    self.monitoring_provider.get_monitoring_context(
-                        asset_pair=asset_pair
-                    )
-                )
-                # Handle active_positions as either list or dict
-                active_pos = monitoring_context.get('active_positions', [])
-                if isinstance(active_pos, dict):
-                    num_positions = len(active_pos.get('futures', []))
-                elif isinstance(active_pos, list):
-                    num_positions = len(active_pos)
-                else:
-                    num_positions = 0
-
-                logger.info(
-                    "Monitoring context loaded: %d active positions, %d slots",
-                    num_positions,
-                    monitoring_context.get('slots_available', 0)
-                )
-            except Exception as e:
-                logger.warning("Could not load monitoring context: %s", e)
-        elif monitoring_context:
-            logger.debug("Using provided monitoring context (backtesting mode)")
-
-        # Create decision context
-        context = self._create_decision_context(
-            asset_pair,
-            market_data,
-            balance,
-            portfolio,
-            memory_context,
-            monitoring_context
-        )
-
-        # Retrieve semantic memory
-        if self.vector_memory:
-            query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
-            try:
-                similar = self.vector_memory.find_similar(query, top_k=3)
-                context['semantic_memory'] = similar
-            except Exception as e:
-                logger.error(f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}")
-                context['semantic_memory'] = []
-
-        # Generate AI prompt
-        prompt = self._create_ai_prompt(context)
-
-        # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
-        ai_response = self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
-
-        # Validate AI response action to ensure it's one of the allowed values
-        if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
-            logger.warning(
-                f"AI provider returned an invalid action: "
-                f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
-            )
-            ai_response['action'] = 'HOLD'
-                try:
-                    market_status = context.get('market_status', {})
-                    if not isinstance(market_status, dict):
-                        market_status = {}
-                    data_freshness = context.get('data_freshness', {})
-                    if not isinstance(data_freshness, dict):
-                        data_freshness = {}
-
-                    from datetime import datetime
-                    import pytz
-                    utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
-                    ny_tz = pytz.timezone('America/New_York')
-                    ny_time = utc_now.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
-                    utc_time = utc_now.strftime('%Y-%m-%d %H:%M:%S UTC')
-
-                    is_open = market_status.get('is_open', True)
-                    session = market_status.get('session', 'Unknown')
-                    time_to_close = market_status.get('time_to_close', 0)
-                    if not isinstance(time_to_close, str):
-                        time_to_close = str(time_to_close)
-                    market_warning = market_status.get('warning', '')
-
-                    is_fresh = data_freshness.get('is_fresh', True)
-                    age_str = data_freshness.get('age_minutes', 'Unknown')
-                    if not isinstance(age_str, str):
-                        age_str = str(age_str)
-                    freshness_msg = data_freshness.get('message', '')
-
-                    status_emoji = "✅" if is_open else "🔴"
-                    freshness_emoji = "✅" if is_fresh else "⚠️" if "WARNING" in str(freshness_msg) else "🔴"
-
-                    market_info += f"""
-        TEMPORAL CONTEXT:
-        -----------------
-        Current Time: {utc_time} (NY: {ny_time})
-        Market Status: {status_emoji} {"OPEN" if is_open else "CLOSED"} ({session} Session)
-        Time to Close: {time_to_close} mins
-        Data Age: {age_str} {freshness_emoji}"""
-
-                    if market_warning:
-                        market_info += f"\nMarket Warning: {market_warning}"
-                    if freshness_msg:
-                        market_info += f"\nFreshness Alert: {freshness_msg}"
-
-                    market_info += """
-
-        TIME-BASED RULES (MANDATORY):
-        """
-                except Exception as e:
-                    import logging
-                    logging.warning(f"Temporal context block failed: {e}")
-                    market_info += "\nTEMPORAL CONTEXT: unavailable due to error.\n"
-                    market_info += "\nTIME-BASED RULES (MANDATORY):\n"
-        market_data: Dict[str, Any],
-        balance: Dict[str, float],
-        portfolio: Optional[Dict[str, Any]] = None,
-        memory_context: Optional[Dict[str, Any]] = None,
-        monitoring_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Create context for decision making.
-
-        Args:
-            asset_pair: Asset pair
-            market_data: Market data
-            balance: Balances
-            portfolio: Optional portfolio breakdown
-            memory_context: Optional historical performance context
-            monitoring_context: Optional live monitoring context
-
-        Returns:
-            Decision context
-        """
-        context = {
-            'asset_pair': asset_pair,
-            'market_data': market_data,
-            'balance': balance,
-            'portfolio': portfolio,
-            'memory_context': memory_context,
-            'monitoring_context': monitoring_context,
-            'timestamp': datetime.utcnow().isoformat(),
-            'price_change': self._calculate_price_change(market_data),
-            'volatility': self._calculate_volatility(market_data)
-        }
-
-        # Detect market regime using historical data
-        regime = self._detect_market_regime(asset_pair)
-        context['regime'] = regime
-
-        # Add market schedule status
-        asset_type = market_data.get('asset_type', 'crypto')
-        try:
-            market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
-            context['market_status'] = market_status if market_status else {}
-        except Exception as e:
-            logger.warning(f"Failed to get market status: {e}")
-            context['market_status'] = {}
-
-        # Validate data freshness
-        data_timestamp = market_data.get('date')
-        if data_timestamp is None:
-            data_timestamp = market_data.get('timestamp')
-
-        if data_timestamp is not None:
-            try:
-                is_fresh, age_minutes, freshness_message = validate_data_freshness(
-                    data_timestamp, asset_type
-                )
-                context['data_freshness'] = {
-                    'is_fresh': is_fresh,
-                    'age_minutes': age_minutes,
-                    'message': freshness_message
-                }
-            except Exception as e:
-                logger.warning(f"Failed to validate data freshness: {e}")
-                context['data_freshness'] = {
-                    'is_fresh': False,
-                    'age_minutes': None,
-                    'message': f'Validation error: {str(e)}'
-                }
-        else:
-            context['data_freshness'] = {
-                'is_fresh': False,
-                'age_minutes': None,
-                'message': 'No timestamp available in market data'
-            }
-
-        # Note: Multi-timeframe pulse now injected via monitoring_context
-        # (see MonitoringContextProvider.get_monitoring_context and format_for_ai_prompt)
-
-        # --- Inject real VaR & correlation analysis ---
-        try:
-            from finance_feedback_engine.risk.var_calculator import VaRCalculator
-            from finance_feedback_engine.risk.correlation_analyzer import CorrelationAnalyzer
-            var_calc = VaRCalculator()
-            corr_analyzer = CorrelationAnalyzer()
-            # Portfolio breakdowns for dual-platform risk (if available)
-            coinbase_holdings = portfolio.get('coinbase_holdings', {}) if portfolio else {}
-            coinbase_history = portfolio.get('coinbase_price_history', {}) if portfolio else {}
-            oanda_holdings = portfolio.get('oanda_holdings', {}) if portfolio else {}
-            oanda_history = portfolio.get('oanda_price_history', {}) if portfolio else {}
-            # Compute VaR (95% and 99%)
-            var_95 = var_calc.calculate_dual_portfolio_var(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.95
-            )
-            var_99 = var_calc.calculate_dual_portfolio_var(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.99
-            )
-            context['var_snapshot'] = {
-                'portfolio_value': var_95.get('total_portfolio_value', 0.0),
-                'var_95': var_95['combined_var']['var_usd'] if 'combined_var' in var_95 else 0.0,
-                'var_99': var_99['combined_var']['var_usd'] if 'combined_var' in var_99 else 0.0,
-                'data_quality': var_95.get('coinbase_var', {}).get('data_quality', 'unknown')
-            }
-            # Correlation analysis
-            correlation_result = corr_analyzer.analyze_dual_platform_correlations(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history
-            )
-            context['correlation_alerts'] = correlation_result.get('overall_warnings', [])
-            context['correlation_summary'] = corr_analyzer.format_correlation_summary(correlation_result)
-        except Exception as e:
-            logger.debug(f"Risk context injection failed: {e}")
-            # Fallback to placeholder if error
-            port_val = 0.0
-            if portfolio:
-                port_val = portfolio.get('total_value_usd', 0.0)
-            context['var_snapshot'] = {
-                'portfolio_value': port_val,
-                'var_95': 0.0,
-                'var_99': 0.0,
-                'data_quality': 'placeholder'
-            }
-            context['correlation_alerts'] = []
-            context['correlation_summary'] = ''
-
-        return context
+        return ((high - low) / close) * 100
 
     def _detect_market_regime(self, asset_pair: str) -> str:
         """
@@ -525,105 +264,6 @@ class DecisionEngine:
         except Exception as e:
             logger.error("Error detecting market regime: %s", e)
             return "UNKNOWN"
-
-    def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
-        """Calculate price change percentage."""
-        open_price = market_data.get('open', 0)
-        close_price = market_data.get('close', 0)
-
-        if open_price == 0:
-            return 0.0
-
-        return ((close_price - open_price) / open_price) * 100
-
-    def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
-        """Calculate simple volatility indicator."""
-        high = market_data.get('high', 0)
-        low = market_data.get('low', 0)
-        close = market_data.get('close', 0)
-
-        if close == 0:
-            return 0.0
-
-        return ((high - low) / close) * 100
-
-
-
-    def calculate_position_size(
-        self,
-        account_balance: float,
-        risk_percentage: float = 0.01,
-        entry_price: float = 0,
-        stop_loss_percentage: float = 0.02
-    ) -> float:
-        """
-        Calculate appropriate position size based on risk management.
-
-        Args:
-            account_balance: Total account balance
-            risk_percentage: Percentage of account to risk as decimal fraction (default 0.01 = 1%)
-            entry_price: Entry price for the position
-            stop_loss_percentage: Stop loss distance as decimal fraction (default 0.02 = 2%)
-
-        Returns:
-            Suggested position size in units of asset
-        """
-        if entry_price == 0 or stop_loss_percentage == 0:
-            return 0.0
-
-        # Amount willing to risk in dollar terms
-        risk_amount = account_balance * risk_percentage
-
-        # Price distance of stop loss
-        stop_loss_distance = entry_price * stop_loss_percentage
-
-        # Position size = Risk Amount / Stop Loss Distance
-        position_size = risk_amount / stop_loss_distance
-
-        return position_size
-
-    def calculate_pnl(
-        self,
-        entry_price: float,
-        current_price: float,
-        position_size: float,
-        position_type: str = 'LONG',
-        unrealized: bool = False,
-    ) -> Dict[str, float]:
-        """
-        Calculate profit and loss for a position.
-
-        Args:
-            entry_price: Price at which position was entered
-            current_price: Current market price
-            position_size: Size of the position
-            position_type: 'LONG' or 'SHORT'
-            unrealized: Whether the P&L is unrealized (open position)
-
-        Returns:
-            Dictionary with P&L metrics
-        """
-        if entry_price == 0:
-            return {
-                'pnl_dollars': 0.0,
-                'pnl_percentage': 0.0,
-                'unrealized': unrealized
-            }
-
-        if position_type.upper() == 'LONG':
-            # Long: profit when price rises
-            pnl_dollars = (current_price - entry_price) * position_size
-            pnl_percentage = ((current_price - entry_price) / entry_price) * 100
-        else:  # SHORT
-            # Short: profit when price falls
-            pnl_dollars = (entry_price - current_price) * position_size
-            pnl_percentage = ((entry_price - current_price) / entry_price) * 100
-
-        return {
-            'pnl_dollars': pnl_dollars,
-            'pnl_percentage': pnl_percentage,
-            'unrealized': unrealized
-        }
 
     def _create_ai_prompt(self, context: Dict[str, Any]) -> str:
         """
@@ -942,220 +582,6 @@ Format response as a structured technical analysis demonstration.
 """
         return prompt
 
-    def _format_semantic_memory(self, semantic_memory: List[Tuple[str, float, Dict[str, Any]]]) -> str:
-        """
-        Format semantic memory for AI prompt.
-
-        Args:
-            semantic_memory: List of tuples (decision_id, similarity_score, metadata)
-
-        Returns:
-            Formatted string for prompt
-        """
-        if not semantic_memory:
-            return ""
-
-        lines = [
-            "=" * 60,
-            "HISTORICAL SIMILARITY ANALYSIS",
-            "=" * 60,
-        ]
-
-        for i, (decision_id, similarity, metadata) in enumerate(semantic_memory, 1):
-            decision = metadata.get('decision', {})
-            outcome = metadata.get('outcome', {})
-
-            # Extract key info
-            date = decision.get('market_data', {}).get('date', 'N/A')
-            action = decision.get('action', 'HOLD')
-            was_profitable = outcome.get('was_profitable', False)
-            pnl_percentage = outcome.get('pnl_percentage', 0.0)
-
-            # Format outcome
-            if was_profitable:
-                outcome_str = f"WON (+{pnl_percentage:.1f}%)"
-            else:
-                outcome_str = f"LOST ({pnl_percentage:.1f}%)"
-
-            # Extract context from market_data in decision
-            market_data = decision.get('market_data', {})
-            trend = market_data.get('trend', 'neutral')
-            rsi = market_data.get('rsi', 'N/A')
-            context_parts = []
-            if trend != 'neutral':
-                context_parts.append(f"{trend.title()} trend")
-            if rsi != 'N/A':
-                context_parts.append(f"RSI {rsi:.0f}")
-            context_str = ", ".join(context_parts) if context_parts else "Neutral conditions"
-
-            # Format the match line
-            match_line = f"match_{i}: [Sim: {similarity:.2f}] ({date}) -> We {action.upper()} and {outcome_str}. Context: {context_str}."
-            lines.append(match_line)
-
-        # Add the instruction
-        lines.extend([
-            "",
-            "If the retrieved historical trades resulted in losses (❌), be highly skeptical of a similar setup today."
-        ])
-
-        return "\n".join(lines)
-
-    def _format_memory_context(self, memory_context: Dict[str, Any]) -> str:
-        """
-        Format memory context for AI prompt.
-
-        Args:
-            memory_context: Memory context from PortfolioMemoryEngine
-
-        Returns:
-            Formatted string for prompt
-        """
-        lines = [
-            "",
-            "=" * 60,
-            "PORTFOLIO MEMORY & LEARNING CONTEXT",
-            "=" * 60,
-            f"Historical Trades: {memory_context.get('total_historical_trades', 0)}",
-            f"Recent Trades Analyzed: {memory_context.get('recent_trades_analyzed', 0)}",
-            "",
-        ]
-
-        # Long-term performance (e.g., 90 days)
-        long_term = memory_context.get('long_term_performance', {})
-        if long_term and long_term.get('has_data'):
-            period_days = long_term.get('period_days', 90)
-            lines.extend([
-                f"LONG-TERM PERFORMANCE ({period_days} days):",
-                "-" * 60,
-                f"  Total Realized P&L: "
-                f"${long_term.get('realized_pnl', 0):.2f}",
-                f"  Total Trades: {long_term.get('total_trades', 0)}",
-                f"  Win Rate: {long_term.get('win_rate', 0):.1f}%",
-                f"  Profit Factor: {long_term.get('profit_factor', 0):.2f}",
-                f"  ROI: {long_term.get('roi_percentage', 0):.1f}%",
-                "",
-                f"  Average Win: ${long_term.get('avg_win', 0):.2f}",
-                f"  Average Loss: ${long_term.get('avg_loss', 0):.2f}",
-                f"  Best Trade: ${long_term.get('best_trade', 0):.2f}",
-                f"  Worst Trade: ${long_term.get('worst_trade', 0):.2f}",
-                "",
-                f"  Recent Momentum: "
-                f"{long_term.get('recent_momentum', 'N/A')}",
-            ])
-
-            sharpe = long_term.get('sharpe_ratio')
-            if sharpe is not None:
-                lines.append(f"  Sharpe Ratio: {sharpe:.2f}")
-
-            avg_holding = long_term.get('average_holding_hours')
-            if avg_holding is not None:
-                lines.append(
-                    f"  Average Holding Period: {avg_holding:.1f} hours"
-                )
-
-            lines.append("")
-
-        # Recent performance
-        lines.append("Recent Performance:")
-        recent_perf = memory_context.get('recent_performance', {})
-        lines.append(
-            f"  Win Rate: {recent_perf.get('win_rate', 0):.1f}%"
-        )
-        lines.append(
-            f"  Total P&L: ${recent_perf.get('total_pnl', 0):.2f}"
-        )
-        lines.append(
-            f"  Wins: {recent_perf.get('winning_trades', 0)}, "
-            f"Losses: {recent_perf.get('losing_trades', 0)}"
-        )
-
-        # Current streak
-        streak = memory_context.get('current_streak', {})
-        if streak.get('type'):
-            lines.append(
-                f"  Current Streak: {streak.get('count', 0)} "
-                f"{streak.get('type', '')} trades"
-            )
-
-        # Action performance
-        action_perf = memory_context.get('action_performance', {})
-        if action_perf:
-            lines.append("")
-            lines.append("Historical Action Performance:")
-            for action, stats in action_perf.items():
-                lines.append(
-                    f"  {action}: {stats.get('win_rate', 0):.1f}% win rate, "
-                    f"${stats.get('total_pnl', 0):.2f} P&L "
-                    f"({stats.get('count', 0)} trades)"
-                )
-
-        # Asset-specific history
-        if memory_context.get('asset_specific'):
-            asset_stats = memory_context['asset_specific']
-            lines.append("")
-            lines.append(
-                f"{memory_context.get('asset_pair', 'This Asset')} "
-                f"Historical Performance:"
-            )
-            lines.append(
-                f"  {asset_stats.get('total_trades', 0)} trades, "
-                f"{asset_stats.get('win_rate', 0):.1f}% win rate, "
-                f"${asset_stats.get('total_pnl', 0):.2f} total P&L"
-            )
-
-        lines.append("=" * 60)
-        lines.append("")
-
-        # Performance-based guidance for AI
-        if long_term and long_term.get('has_data'):
-            lines.append(
-                "PERFORMANCE GUIDANCE FOR DECISION:"
-            )
-
-            # Check if long-term performance is poor
-            lt_pnl = long_term.get('realized_pnl', 0)
-            lt_win_rate = long_term.get('win_rate', 50)
-            momentum = long_term.get('recent_momentum', 'stable')
-
-            if lt_pnl < 0 and lt_win_rate < 45:
-                lines.append(
-                    "⚠ CAUTION: Long-term performance is negative. "
-                    "Consider being more conservative."
-                )
-            elif lt_pnl > 0 and lt_win_rate > 60:
-                lines.append(
-                    "✓ Long-term performance is strong. "
-                    "Current strategy is working well."
-                )
-
-            if momentum == 'declining':
-                lines.append(
-                    "⚠ Performance momentum is DECLINING. "
-                    "Recent trades performing worse than earlier ones."
-                )
-            elif momentum == 'improving':
-                lines.append(
-                    "✓ Performance momentum is IMPROVING. "
-                    "Recent trades performing better."
-                )
-
-            lines.append("")
-
-        lines.append(
-            "IMPORTANT: Consider this historical performance when making "
-            "your recommendation."
-        )
-        lines.append(
-            "If recent performance is poor, consider being more conservative."
-        )
-        lines.append(
-            "If specific actions (BUY/SELL) have performed poorly, factor "
-            "that into your decision."
-        )
-        lines.append("")
-
-        return "\n".join(lines)
-
     def _query_ai(
         self,
         prompt: str,
@@ -1197,58 +623,6 @@ Format response as a structured technical analysis demonstration.
         else:
             return self._rule_based_decision(prompt)
 
-    def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        Fast mock AI provider for backtesting and testing.
-        Generates random but realistic trading decisions.
-
-        Args:
-            prompt: AI prompt (unused in mock mode)
-
-        Returns:
-            Mock AI response with random action
-        """
-        import random
-
-        # Weighted random actions (favor HOLD for realistic trading)
-        actions = ['BUY'] * 2 + ['SELL'] * 2 + ['HOLD'] * 6  # 20% buy, 20% sell, 60% hold
-        action = random.choice(actions)
-
-        # Random confidence (biased toward medium-high)
-        confidence = random.randint(60, 85)
-
-        # Generate contextual reasoning
-        reasoning_templates = {
-            'BUY': [
-                "Technical indicators suggest upward momentum",
-                "Market sentiment is bullish, entry opportunity identified",
-                "Price action shows potential breakout pattern",
-            ],
-            'SELL': [
-                "Risk management suggests taking profits at current levels",
-                "Technical resistance detected, prudent to exit position",
-                "Market volatility increasing, reducing exposure",
-            ],
-            'HOLD': [
-                "Insufficient signal strength, maintaining current position",
-                "Market conditions unclear, waiting for better entry",
-                "Current position within acceptable risk parameters",
-            ]
-        }
-
-        reasoning = random.choice(reasoning_templates[action])
-
-        response = {
-            'action': action,
-            'confidence': confidence,
-            'reasoning': f"Mock AI: {reasoning}",
-            'amount': 0  # Position sizing handled separately
-        }
-
-        logger.debug(f"Mock AI decision: {action} (confidence: {confidence})")
-        return response
-
-
     def _local_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
@@ -1269,674 +643,6 @@ Format response as a structured technical analysis demonstration.
         except (ImportError, RuntimeError) as e:
             logger.warning(f"Local LLM unavailable, using rule-based fallback: {e}")
             return self._rule_based_decision(prompt)
-
-    def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        CLI-based AI inference using GitHub Copilot CLI.
-
-        Args:
-            prompt: AI prompt
-
-        Returns:
-            AI response from Copilot CLI
-        """
-        logger.info("Using GitHub Copilot CLI AI inference")
-
-        try:
-            from .copilot_cli_provider import CopilotCLIProvider
-
-            provider = CopilotCLIProvider(self.config)
-            return provider.query(prompt)
-        except (ImportError, ValueError) as e:
-            logger.warning(f"Copilot CLI unavailable, using fallback: {e}")
-            return {
-                'action': 'HOLD',
-                'confidence': 50,
-                'reasoning': 'Copilot CLI unavailable, using fallback decision.',
-                'amount': 0
-            }
-
-    def _codex_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        CLI-based AI inference using Codex CLI.
-
-        Args:
-            prompt: AI prompt
-
-        Returns:
-            AI response from Codex CLI
-        """
-        logger.info("Using Codex CLI AI inference")
-
-        try:
-            from .codex_cli_provider import CodexCLIProvider
-
-            provider = CodexCLIProvider(self.config)
-            return provider.query(prompt)
-        except (ImportError, ValueError) as e:
-            logger.warning(f"Codex CLI unavailable, using fallback: {e}")
-            return {
-                'action': 'HOLD',
-                'confidence': 50,
-                'reasoning': 'Codex CLI unavailable, using fallback decision.',
-                'amount': 0
-            }
-
-    def _qwen_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        CLI-based AI inference using Qwen CLI.
-
-        Args:
-            prompt: AI prompt
-
-        Returns:
-            AI response from Qwen CLI
-        """
-        logger.info("Using Qwen CLI AI inference")
-
-        try:
-            from .qwen_cli_provider import QwenCLIProvider
-
-            provider = QwenCLIProvider(self.config)
-            return provider.query(prompt)
-        except (ImportError, ValueError) as e:
-            logger.warning(f"Qwen CLI unavailable, using fallback: {e}")
-            return {
-                'action': 'HOLD',
-                'confidence': 50,
-                'reasoning': 'Qwen CLI unavailable, using fallback decision.',
-                'amount': 0
-            }
-
-    # def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
-    #     """
-    #     CLI-based AI inference using Gemini CLI.
-    #
-    #     Args:
-    #         prompt: AI prompt
-    #
-    #     Returns:
-    #         AI response from Gemini CLI
-    #     """
-    #     logger.info("Using Gemini CLI AI inference")
-    #
-    #     try:
-    #         from .gemini_cli_provider import GeminiCLIProvider
-    #
-    #         provider = GeminiCLIProvider(self.config)
-    #         return provider.query(prompt)
-    #     except (ImportError, ValueError) as e:
-    #         logger.warning(f"Gemini CLI unavailable, using fallback: {e}")
-    #         return {
-    #             'action': 'HOLD',
-    #             'confidence': 50,
-    #             'reasoning': 'Gemini CLI unavailable, using fallback.',
-    #             'amount': 0
-    #         }
-
-    def _get_all_local_models(self) -> list[str]:
-        """Get a list of all available local Ollama models."""
-        try:
-            result = subprocess.run(
-                ['ollama', 'list'],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False
-            )
-
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                if len(lines) <= 1:
-                    return []
-
-                # First line is header, skip it
-                model_lines = lines[1:]
-
-                # Extract model name from each line (first column)
-                model_names = [line.split()[0] for line in model_lines if line]
-                logger.info(f"Discovered local models: {model_names}")
-                return model_names
-            else:
-                logger.warning("Could not list local models, 'ollama list' failed.")
-                return []
-        except FileNotFoundError:
-            logger.warning("Ollama command not found, cannot discover local models.")
-            return []
-        except Exception as e:
-            logger.error(f"Error discovering local models: {e}")
-            return []
-
-    def _query_single_provider(self, provider: str, prompt: str) -> Tuple[str, Optional[Dict[str, Any]]]:
-        """
-        Query a single AI provider and handle its response.
-
-        Args:
-            provider: The name of the provider to query.
-            prompt: The prompt to send to the provider.
-
-        Returns:
-            A tuple of (provider_name, decision_dict) or (provider_name, None) on failure.
-        """
-        try:
-            decision = None
-            local_provider_map = (
-                self.config.get('local_providers')
-                if isinstance(self.config.get('local_providers'), dict)
-                else {}
-            )
-            all_discovered_local_models = self._get_all_local_models()
-
-            # Consult configured local_models first
-            if provider in self.local_models:
-                decision = self._specific_local_inference(prompt, provider)
-            elif provider == 'local' and self.local_models:
-                decision = self._specific_local_inference(prompt, self.local_models[0])
-            elif provider == 'local':
-                if 'local' in local_provider_map:
-                    model_name = local_provider_map['local']
-                    decision = self._specific_local_inference(prompt, model_name)
-                else:
-                    decision = self._local_ai_inference(prompt)
-            elif provider in local_provider_map:
-                model_name = local_provider_map[provider]
-                decision = self._specific_local_inference(prompt, model_name)
-            elif provider in all_discovered_local_models:
-                decision = self._specific_local_inference(prompt, provider)
-            elif provider == 'cli':
-                decision = self._cli_ai_inference(prompt)
-            elif provider == 'codex':
-                decision = self._codex_ai_inference(prompt)
-            elif provider == 'qwen':
-                decision = self._qwen_ai_inference(prompt)
-            else:
-                logger.warning(f"Unknown provider: {provider}")
-                return provider, None
-
-            if decision is None:
-                logger.warning(f"Provider {provider} did not return a decision.")
-                return provider, None
-
-            if self._is_valid_provider_response(decision, provider):
-                logger.info(
-                    f"{provider}: {decision['action']} "
-                    f"({decision['confidence']}%)"
-                )
-                return provider, decision
-            else:
-                logger.warning(
-                    f"Provider {provider} returned fallback/invalid "
-                    f"response, treating as failure"
-                )
-                return provider, None
-        except Exception as e:
-            logger.warning(f"Provider {provider} failed: {e}")
-            return provider, None
-
-    def _ensemble_ai_inference(
-        self,
-        prompt: str,
-        asset_pair: Optional[str] = None,
-        market_data: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Ensemble AI inference using multiple providers with weighted voting.
-        Dynamically adjusts weights when providers fail to respond.
-        Supports two-phase escalation to premium providers when configured.
-
-        Args:
-            prompt: AI prompt
-            asset_pair: Optional asset pair for two-phase routing
-            market_data: Optional market data for two-phase escalation checks
-
-        Returns:
-            Aggregated decision from ensemble with failure handling
-        """
-        logger.info("Using ensemble AI inference")
-
-        if not self.ensemble_manager:
-            logger.error("Ensemble manager not initialized")
-            return {
-                'action': 'HOLD',
-                'confidence': 0,
-                'reasoning': 'Ensemble manager not initialized',
-                'amount': 0,
-                'ai_failure': True
-            }
-
-        # Check for two-phase mode
-        two_phase_config = self.config.get('ensemble', {}).get('two_phase', {})
-        two_phase_enabled = two_phase_config.get('enabled', False)
-
-        if two_phase_enabled and asset_pair and market_data:
-            logger.info("Two-phase ensemble mode enabled, using smart premium API escalation")
-            # Use two-phase aggregation with query function wrapper
-            def query_function(provider: str, prompt: str) -> Dict[str, Any]:
-                """Wrapper to query individual providers."""
-                provider_name, decision = self._query_single_provider(provider, prompt)
-                return decision if decision else {}
-
-            try:
-                return self.ensemble_manager.aggregate_decisions_two_phase(
-                    prompt=prompt,
-                    asset_pair=asset_pair,
-                    market_data=market_data,
-                    query_function=query_function
-                )
-            except Exception as e:
-                logger.error(f"Two-phase ensemble failed: {e}, falling back to standard ensemble")
-                # Fall through to standard ensemble below
-
-        # Check for debate mode
-        if self.ensemble_manager.debate_mode:
-            return self._debate_ai_inference(prompt)
-
-        # Get enabled providers from ensemble config
-        enabled_providers = self.ensemble_manager.enabled_providers.copy()
-
-        all_discovered_local_models = self._get_all_local_models()
-
-        # Discover and add all available local models if 'all_local' is specified
-        if 'all_local' in enabled_providers:
-            enabled_providers.remove('all_local')
-            for model_name in all_discovered_local_models:
-                if model_name not in enabled_providers:
-                    enabled_providers.append(model_name)
-
-        # If 'local' is configured, expand it into specific local model names
-        # so the ensemble queries both the primary and the required secondary
-        # local models (if available or configured).
-        if 'local' in enabled_providers:
-            try:
-                # Import here to avoid top-level import cycles
-                from .local_llm_provider import LocalLLMProvider
-
-                primary_model = LocalLLMProvider.DEFAULT_MODEL
-                secondary_model = getattr(
-                    LocalLLMProvider, 'SECONDARY_MODEL', None
-                )
-            except Exception:
-                # Fallback to known defaults if import fails
-                primary_model = 'llama3.2:3b-instruct-fp16'
-                secondary_model = 'deepseek-r1:8b'
-
-            # Remove the abstract 'local' provider and replace with actual
-            # model names
-            enabled_providers = [p for p in enabled_providers if p != 'local']
-
-            # If user provided a mapping for local_providers, prefer that
-            local_provider_map = (
-                self.config.get('local_providers')
-                if isinstance(self.config.get('local_providers'), dict)
-                else {}
-            )
-            mapped_local = local_provider_map.get('local')
-            if mapped_local:
-                if mapped_local not in enabled_providers:
-                    enabled_providers.append(mapped_local)
-            else:
-                # Append primary and secondary model names
-                if primary_model and primary_model not in enabled_providers:
-                    enabled_providers.append(primary_model)
-                if (
-                    secondary_model
-                    and secondary_model not in enabled_providers
-                ):
-                    enabled_providers.append(secondary_model)
-
-        provider_decisions = {}
-        failed_providers = []
-
-        # Partition providers into local (GPU-bound) and remote groups
-        local_candidates = []
-        if self.local_models:
-            for model in self.local_models:
-                if model in enabled_providers:
-                    local_candidates.append(model)
-        else:
-            local_provider_map = (
-                self.config.get('local_providers')
-                if isinstance(self.config.get('local_providers'), dict)
-                else {}
-            )
-            all_discovered_local_models = self._get_all_local_models()
-            local_candidates = [
-                p for p in enabled_providers
-                if p == 'local' or p in local_provider_map or p in all_discovered_local_models
-            ]
-        remote_candidates = [p for p in enabled_providers if p not in local_candidates]
-
-        # Execute remote providers concurrently with per-task timeouts
-        if remote_candidates:
-            logger.info(f"Querying {len(remote_candidates)} remote providers concurrently")
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                future_to_provider = {
-                    executor.submit(self._query_single_provider, provider, prompt): provider
-                    for provider in remote_candidates
-                }
-                for future in as_completed(future_to_provider):
-                    provider = future_to_provider[future]
-                    try:
-                        provider_name, decision = future.result(timeout=10)  # per-task timeout
-                        if decision:
-                            provider_decisions[provider_name] = decision
-                        else:
-                            failed_providers.append(provider_name)
-                    except TimeoutError:
-                        logger.warning(f"Provider {provider} timed out")
-                        failed_providers.append(provider)
-                    except Exception as e:
-                        logger.warning(f"Provider {provider} failed: {e}")
-                        failed_providers.append(provider)
-
-        # Execute local providers sequentially to avoid GPU memory conflicts
-        if local_candidates:
-            logger.info(f"Querying {len(local_candidates)} local providers sequentially")
-            for provider in local_candidates:
-                logger.info(f"Querying provider: {provider}")
-                provider_name, decision = self._query_single_provider(provider, prompt)
-                if decision:
-                    provider_decisions[provider_name] = decision
-                else:
-                    failed_providers.append(provider_name)
-
-        # Filter to valid provider decisions only
-        valid_provider_decisions = {}
-        for p, d in provider_decisions.items():
-            if self._is_valid_provider_response(d, p):
-                valid_provider_decisions[p] = d
-            else:
-                failed_providers.append(p)  # treat invalid as failed
-
-        # Compute adjusted_weights if local_priority
-        adjusted_weights = None
-        if self.local_priority:
-            boost_factor = 1.0
-            if self.local_priority is True:
-                boost_factor = 2.0
-            elif isinstance(self.local_priority, (int, float)):
-                boost_factor = self.local_priority
-            elif self.local_priority == "soft":
-                boost_factor = 1.5
-            adjusted_weights = {}
-            for p in valid_provider_decisions:
-                base_weight = self.ensemble_manager.provider_weights.get(p, 1.0)
-                if p in local_candidates:
-                    adjusted_weights[p] = base_weight * boost_factor
-                else:
-                    adjusted_weights[p] = base_weight
-            # Normalize
-            total = sum(adjusted_weights.values())
-            if total > 0:
-                adjusted_weights = {p: w / total for p, w in adjusted_weights.items()}
-
-        # Handle complete failure case
-        if not valid_provider_decisions:
-            logger.error(
-                "All %d providers failed or invalid, returning HOLD decision",
-                len(enabled_providers),
-            )
-            return {
-                'action': 'HOLD',
-                'confidence': 0,
-                'reasoning': f'All {len(enabled_providers)} AI providers failed',
-                'amount': 0,
-                'ai_failure': True,
-                'ensemble_metadata': {
-                    'providers_used': [],
-                    'providers_failed': failed_providers,
-                    'all_providers_failed': True,
-                    'fallback_used': True
-                }
-            }
-
-        # Log success/failure summary
-        logger.info(
-            f"Ensemble query complete: {len(valid_provider_decisions)} valid, "
-            f"{len(failed_providers)} failed/invalid"
-        )
-
-        # Aggregate decisions with failure information
-        aggregated = self.ensemble_manager.aggregate_decisions(
-            valid_provider_decisions,
-            failed_providers=failed_providers,
-            adjusted_weights=adjusted_weights
-        )
-
-        # Add local metadata
-        aggregated['ensemble_metadata']['local_models_used'] = [p for p in valid_provider_decisions if p in local_candidates]
-        aggregated['ensemble_metadata']['local_priority_applied'] = self.local_priority is not None
-
-        return aggregated
-
-    def _debate_ai_inference(self, prompt: str) -> Dict[str, Any]:
-        """
-        Debate mode AI inference using bull, bear, and judge providers.
-
-        Args:
-            prompt: Base AI prompt with market data
-
-        Returns:
-            Final decision from judge provider
-        """
-        logger.info("Using debate mode AI inference")
-
-        debate_providers = self.ensemble_manager.debate_providers
-
-        # Create bull case prompt
-        bull_prompt = self._create_debate_prompt(prompt, 'bull')
-        bull_provider = debate_providers['bull']
-        logger.info(f"Querying bull case provider: {bull_provider}")
-        bull_name, bull_decision = self._query_single_provider(bull_provider, bull_prompt)
-        if not bull_decision:
-            logger.error(f"Bull provider {bull_provider} failed, falling back to regular ensemble")
-            return self._ensemble_ai_inference(prompt)
-
-        # Create bear case prompt
-        bear_prompt = self._create_debate_prompt(prompt, 'bear')
-        bear_provider = debate_providers['bear']
-        logger.info(f"Querying bear case provider: {bear_provider}")
-        bear_name, bear_decision = self._query_single_provider(bear_provider, bear_prompt)
-        if not bear_decision:
-            logger.error(f"Bear provider {bear_provider} failed, falling back to regular ensemble")
-            return self._ensemble_ai_inference(prompt)
-
-        # Create judge prompt with both cases
-        judge_prompt = self._create_judge_prompt(prompt, bull_decision, bear_decision)
-        judge_provider = debate_providers['judge']
-        logger.info(f"Querying judge provider: {judge_provider}")
-        judge_name, judge_decision = self._query_single_provider(judge_provider, judge_prompt)
-        if not judge_decision:
-            logger.error(f"Judge provider {judge_provider} failed, falling back to regular ensemble")
-            return self._ensemble_ai_inference(prompt)
-
-        # Synthesize debate decision
-        final_decision = self.ensemble_manager.debate_decisions(
-            bull_decision, bear_decision, judge_decision
-        )
-
-        return final_decision
-
-    def _create_debate_prompt(self, base_prompt: str, role: str) -> str:
-        """
-        Create debate prompt for bull or bear role.
-
-        Args:
-            base_prompt: Base market analysis prompt
-            role: 'bull' or 'bear'
-
-        Returns:
-            Modified prompt for the debate role
-        """
-        if role == 'bull':
-            debate_instruction = """
-DEBATE ROLE: BULLISH ADVOCATE
-============================
-You are arguing the BULLISH case for this asset. Focus exclusively on positive factors, technical strengths, and reasons to BUY or HOLD LONG.
-
-Key Guidelines:
-- Emphasize bullish technical indicators (RSI oversold, upward trends, support levels)
-- Highlight positive news sentiment and macroeconomic tailwinds
-- Argue for long positions and upward price movement
-- Downplay or explain away bearish signals as temporary
-- Provide strong reasoning for why the asset will RISE
-
-Present your bullish case with confidence and conviction.
-"""
-        elif role == 'bear':
-            debate_instruction = """
-DEBATE ROLE: BEARISH ADVOCATE
-============================
-You are arguing the BEARISH case for this asset. Focus exclusively on negative factors, technical weaknesses, and reasons to SELL or HOLD SHORT.
-
-Key Guidelines:
-- Emphasize bearish technical indicators (RSI overbought, downward trends, resistance levels)
-- Highlight negative news sentiment and macroeconomic headwinds
-- Argue for short positions and downward price movement
-- Downplay or explain away bullish signals as temporary
-- Provide strong reasoning for why the asset will FALL
-
-Present your bearish case with confidence and conviction.
-"""
-        else:
-            raise ValueError(f"Unknown debate role: {role}")
-
-        # Insert debate instruction before the analysis section
-        # Find the position to insert
-        analysis_marker = "ANALYSIS OUTPUT REQUIRED:"
-        if analysis_marker in base_prompt:
-            insert_pos = base_prompt.find(analysis_marker)
-            modified_prompt = (
-                base_prompt[:insert_pos] +
-                debate_instruction + "\n\n" +
-                base_prompt[insert_pos:]
-            )
-        else:
-            modified_prompt = debate_instruction + "\n\n" + base_prompt
-
-        return modified_prompt
-
-    def _create_judge_prompt(self, base_prompt: str, bull_case: Dict[str, Any], bear_case: Dict[str, Any]) -> str:
-        """
-        Create judge prompt that includes both bull and bear cases.
-
-        Args:
-            base_prompt: Base market analysis prompt
-            bull_case: Decision from bullish provider
-            bear_case: Decision from bearish provider
-
-        Returns:
-            Judge prompt with debate cases
-        """
-        judge_instruction = """
-DEBATE ROLE: IMPARTIAL JUDGE
-===========================
-You are the final arbiter in this debate between bullish and bearish advocates.
-
-Your task is to evaluate both arguments and make the definitive BUY/SELL/HOLD decision.
-
-DEBATE CASES:
-=============
-
-BULLISH CASE:
--------------
-""" + bull_case.get('reasoning', 'No reasoning provided') + f"""
-Action: {bull_case.get('action', 'HOLD')}
-Confidence: {bull_case.get('confidence', 50)}%
-
-BEARISH CASE:
--------------
-""" + bear_case.get('reasoning', 'No reasoning provided') + f"""
-Action: {bear_case.get('action', 'HOLD')}
-Confidence: {bear_case.get('confidence', 50)}%
-
-JUDGE GUIDELINES:
-================
-- Consider the strength of technical evidence in both cases
-- Evaluate which argument better explains current market conditions
-- Factor in news sentiment and macroeconomic context
-- Determine which position (long/short) has stronger supporting evidence
-- Make a clear BUY/SELL/HOLD decision with high confidence
-- If arguments are equally compelling, consider HOLD
-- Base decision on market fundamentals, not debate rhetoric
-
-Present your judgment with clear reasoning and final decision.
-"""
-
-        # Replace the original analysis section with judge instruction
-        analysis_marker = "ANALYSIS OUTPUT REQUIRED:"
-        if analysis_marker in base_prompt:
-            insert_pos = base_prompt.find(analysis_marker)
-            modified_prompt = (
-                base_prompt[:insert_pos] +
-                judge_instruction
-            )
-        else:
-            modified_prompt = base_prompt + "\n\n" + judge_instruction
-
-        return modified_prompt
-
-    def _is_valid_provider_response(
-        self,
-        decision: Dict[str, Any],
-        provider: str
-    ) -> bool:
-        """
-        Check if provider response is valid (not a fallback).
-
-        Args:
-            decision: Decision dict from provider
-            provider: Provider name
-
-        Returns:
-            True if valid response, False if fallback/invalid
-        """
-        # Check for fallback indicators in reasoning
-        reasoning = decision.get('reasoning', '')
-        if not isinstance(reasoning, str) or not reasoning.strip():
-            return False
-        reasoning_lower = reasoning.lower()
-        fallback_keywords = [
-            'unavailable',
-            'fallback',
-            'failed to',
-            'error',
-            'could not'
-        ]
-
-        if any(keyword in reasoning_lower for keyword in fallback_keywords):
-            return False
-
-        # Check for valid action
-        if decision.get('action') not in ['BUY', 'SELL', 'HOLD']:
-            return False
-
-        # Check for valid confidence range
-        confidence = decision.get('confidence', 0)
-        if (
-            not isinstance(confidence, (int, float)) or
-            confidence < 0 or
-            confidence > 100
-        ):
-            return False
-
-        amount = decision.get('amount', 0)
-        # Treat missing/None as zero, but reject negative or non-numeric
-        if amount is None:
-            amount = 0
-        if not isinstance(amount, (int, float)):
-            try:
-                amount = float(amount)
-            except (TypeError, ValueError):
-                return False
-        if amount < 0:
-            return False
-
-        # Normalize amount back onto the decision for downstream consumers
-        decision['amount'] = float(amount)
-
-        # All checks passed
-        return True
 
     def _create_decision(
         self,
@@ -2273,3 +979,274 @@ Present your judgment with clear reasoning and final decision.
         )
 
         return decision
+
+    def calculate_position_size(
+        self,
+        account_balance: float,
+        risk_percentage: float = 0.01,
+        entry_price: float = 0,
+        stop_loss_percentage: float = 0.02
+    ) -> float:
+        """
+        Calculate appropriate position size based on risk management.
+
+        Args:
+            account_balance: Total account balance
+            risk_percentage: Percentage of account to risk as decimal fraction (default 0.01 = 1%)
+            entry_price: Entry price for the position
+            stop_loss_percentage: Stop loss distance as decimal fraction (default 0.02 = 2%)
+
+        Returns:
+            Suggested position size in units of asset
+        """
+        if entry_price == 0 or stop_loss_percentage == 0:
+            return 0.0
+
+        # Amount willing to risk in dollar terms
+        risk_amount = account_balance * risk_percentage
+
+        # Price distance of stop loss
+        stop_loss_distance = entry_price * stop_loss_percentage
+
+        # Position size = Risk Amount / Stop Loss Distance
+        position_size = risk_amount / stop_loss_distance
+
+        return position_size
+
+    def set_monitoring_context(self, monitoring_provider):
+        """
+        Set the monitoring context provider for live trade awareness.
+
+        Args:
+            monitoring_provider: MonitoringContextProvider instance
+        """
+        self.monitoring_provider = monitoring_provider
+        logger.info("Monitoring context provider attached to decision engine")
+
+    def generate_decision(
+        self,
+        asset_pair: str,
+        market_data: Dict[str, Any],
+        balance: Dict[str, float],
+        portfolio: Optional[Dict[str, Any]] = None,
+        memory_context: Optional[Dict[str, Any]] = None,
+        monitoring_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate a trading decision based on market data and balances.
+
+        Args:
+            asset_pair: Asset pair being analyzed
+            market_data: Current market data
+            balance: Account balances
+            portfolio: Optional portfolio breakdown with holdings/allocations
+            memory_context: Optional historical performance context
+            monitoring_context: Optional monitoring context with active positions and pulse
+
+        Returns:
+            Trading decision with recommendation
+        """
+        logger.info("Generating decision for %s", asset_pair)
+
+        # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
+        # to accurately simulate production behavior. Keeping the parameter for backward
+        # compatibility but it no longer changes decision logic.
+        if self.backtest_mode:
+            logger.warning(
+                "backtest_mode=True is deprecated. Backtests now use real AI providers "
+                "for accurate simulation. Use 'mock' provider for fast rule-based testing."
+            )
+
+        # Merge monitoring context from parameter with live monitoring provider
+        # Parameter takes precedence (for backtesting)
+        if monitoring_context is None and self.monitoring_provider:
+            try:
+                monitoring_context = (
+                    self.monitoring_provider.get_monitoring_context(
+                        asset_pair=asset_pair
+                    )
+                )
+                # Handle active_positions as either list or dict
+                active_pos = monitoring_context.get('active_positions', [])
+                if isinstance(active_pos, dict):
+                    num_positions = len(active_pos.get('futures', []))
+                elif isinstance(active_pos, list):
+                    num_positions = len(active_pos)
+                else:
+                    num_positions = 0
+
+                logger.info(
+                    "Monitoring context loaded: %d active positions, %d slots",
+                    num_positions,
+                    monitoring_context.get('slots_available', 0)
+                )
+            except Exception as e:
+                logger.warning("Could not load monitoring context: %s", e)
+        elif monitoring_context:
+            logger.debug("Using provided monitoring context (backtesting mode)")
+
+        # Create decision context
+        context = self._create_decision_context(
+            asset_pair,
+            market_data,
+            balance,
+            portfolio,
+            memory_context,
+            monitoring_context
+        )
+
+        # Retrieve semantic memory
+        if self.vector_memory:
+            query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
+            try:
+                similar = self.vector_memory.find_similar(query, top_k=3)
+                context['semantic_memory'] = similar
+            except Exception as e:
+                logger.error(f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}")
+                context['semantic_memory'] = []
+
+        # Generate AI prompt
+        prompt = self._create_ai_prompt(context)
+
+        # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
+        ai_response = self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
+
+        # Validate AI response action to ensure it's one of the allowed values
+        if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
+            logger.warning(
+                f"AI provider returned an invalid action: "
+                f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
+            )
+            ai_response['action'] = 'HOLD'
+
+        # Create structured decision object
+        decision = self._create_decision(asset_pair, context, ai_response)
+
+        return decision
+
+    def _create_decision_context(
+        self,
+        asset_pair: str,
+        market_data: Dict[str, Any],
+        balance: Dict[str, float],
+        portfolio: Optional[Dict[str, Any]] = None,
+        memory_context: Optional[Dict[str, Any]] = None,
+        monitoring_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Create context for decision making.
+
+        Args:
+            asset_pair: Asset pair
+            market_data: Market data
+            balance: Balances
+            portfolio: Optional portfolio breakdown
+            memory_context: Optional historical performance context
+            monitoring_context: Optional live monitoring context
+
+        Returns:
+            Decision context
+        """
+        context = {
+            'asset_pair': asset_pair,
+            'market_data': market_data,
+            'balance': balance,
+            'portfolio': portfolio,
+            'memory_context': memory_context,
+            'monitoring_context': monitoring_context,
+            'timestamp': datetime.utcnow().isoformat(),
+            'price_change': self._calculate_price_change(market_data),
+            'volatility': self._calculate_volatility(market_data)
+        }
+
+        # Detect market regime using historical data
+        regime = self._detect_market_regime(asset_pair)
+        context['regime'] = regime
+
+        # Add market schedule status
+        asset_type = market_data.get('asset_type', 'crypto')
+        try:
+            market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
+            context['market_status'] = market_status if market_status else {}
+        except Exception as e:
+            logger.warning(f"Failed to get market status: {e}")
+            context['market_status'] = {}
+
+        # Validate data freshness
+        data_timestamp = market_data.get('date')
+        if data_timestamp is None:
+            data_timestamp = market_data.get('timestamp')
+
+        if data_timestamp is not None:
+            try:
+                is_fresh, age_minutes, freshness_message = validate_data_freshness(
+                    data_timestamp, asset_type
+                )
+                context['data_freshness'] = {
+                    'is_fresh': is_fresh,
+                    'age_minutes': age_minutes,
+                    'message': freshness_message
+                }
+            except Exception as e:
+                logger.warning(f"Failed to validate data freshness: {e}")
+                context['data_freshness'] = {
+                    'is_fresh': False,
+                    'age_minutes': None,
+                    'message': f'Validation error: {str(e)}'
+                }
+        else:
+            context['data_freshness'] = {
+                'is_fresh': False,
+                'age_minutes': None,
+                'message': 'No timestamp available in market data'
+            }
+
+        # Note: Multi-timeframe pulse now injected via monitoring_context
+        # (see MonitoringContextProvider.get_monitoring_context and format_for_ai_prompt)
+
+        # --- Inject real VaR & correlation analysis ---
+        try:
+            from finance_feedback_engine.risk.var_calculator import VaRCalculator
+            from finance_feedback_engine.risk.correlation_analyzer import CorrelationAnalyzer
+            var_calc = VaRCalculator()
+            corr_analyzer = CorrelationAnalyzer()
+            # Portfolio breakdowns for dual-platform risk (if available)
+            coinbase_holdings = portfolio.get('coinbase_holdings', {}) if portfolio else {}
+            coinbase_history = portfolio.get('coinbase_price_history', {}) if portfolio else {}
+            oanda_holdings = portfolio.get('oanda_holdings', {}) if portfolio else {}
+            oanda_history = portfolio.get('oanda_price_history', {}) if portfolio else {}
+            # Compute VaR (95% and 99%)
+            var_95 = var_calc.calculate_dual_portfolio_var(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.95
+            )
+            var_99 = var_calc.calculate_dual_portfolio_var(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.99
+            )
+            context['var_snapshot'] = {
+                'portfolio_value': var_95.get('total_portfolio_value', 0.0),
+                'var_95': var_95['combined_var']['var_usd'] if 'combined_var' in var_95 else 0.0,
+                'var_99': var_99['combined_var']['var_usd'] if 'combined_var' in var_99 else 0.0,
+                'data_quality': var_95.get('coinbase_var', {}).get('data_quality', 'unknown')
+            }
+            # Correlation analysis
+            correlation_result = corr_analyzer.analyze_dual_platform_correlations(
+                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history
+            )
+            context['correlation_alerts'] = correlation_result.get('overall_warnings', [])
+            context['correlation_summary'] = corr_analyzer.format_correlation_summary(correlation_result)
+        except Exception as e:
+            logger.debug(f"Risk context injection failed: {e}")
+            # Fallback to placeholder if error
+            port_val = 0.0
+            if portfolio:
+                port_val = portfolio.get('total_value_usd', 0.0)
+            context['var_snapshot'] = {
+                'portfolio_value': port_val,
+                'var_95': 0.0,
+                'var_99': 0.0,
+                'data_quality': 'placeholder'
+            }
+            context['correlation_alerts'] = []
+            context['correlation_summary'] = ''
+
+        return context
