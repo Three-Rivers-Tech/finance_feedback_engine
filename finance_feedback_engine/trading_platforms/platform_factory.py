@@ -7,6 +7,7 @@ from .base_platform import BaseTradingPlatform
 from .coinbase_platform import CoinbaseAdvancedPlatform
 from .oanda_platform import OandaPlatform
 from .unified_platform import UnifiedTradingPlatform
+from .mock_platform import MockTradingPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 class PlatformFactory:
     """
     Factory for creating trading platform instances.
-    
+
     Supports easy extension with new platforms.
     """
 
@@ -44,7 +45,7 @@ class PlatformFactory:
             futures_value = 20000.00
             spot_value = 5000.00  # USD + USDC
             total_value = futures_value + spot_value
-            
+
             return {
                 'total_value_usd': total_value,
                 'futures_value_usd': futures_value,
@@ -80,7 +81,8 @@ class PlatformFactory:
         'coinbase_advanced': CoinbaseAdvancedPlatform,
         'oanda': OandaPlatform,
         'unified': UnifiedTradingPlatform,
-        'mock': MockPlatform,
+        'mock': MockTradingPlatform,  # Comprehensive mock with state tracking
+        'mock_simple': MockPlatform,  # Lightweight inline mock (legacy)
     }
 
     @classmethod
@@ -102,14 +104,14 @@ class PlatformFactory:
             ValueError: If platform is not supported
         """
         platform_name = platform_name.lower()
-        
+
         if platform_name not in cls._platforms:
             available = ', '.join(cls._platforms.keys())
             raise ValueError(
                 f"Platform '{platform_name}' not supported. "
                 f"Available platforms: {available}"
             )
-        
+
         platform_class = cls._platforms[platform_name]
         logger.info("Creating platform instance: %s", platform_name)
 
@@ -146,11 +148,11 @@ class PlatformFactory:
 
         Args:
             platform_name: Name to register the platform under
-            platform_class: Platform class (must inherit from 
+            platform_class: Platform class (must inherit from
                             BaseTradingPlatform)
 
         Raises:
-            ValueError: If platform_class doesn't inherit from 
+            ValueError: If platform_class doesn't inherit from
                         BaseTradingPlatform
         """
         if not issubclass(platform_class, BaseTradingPlatform):
