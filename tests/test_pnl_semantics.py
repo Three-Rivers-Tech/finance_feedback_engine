@@ -14,7 +14,19 @@ import pytest
 from pathlib import Path
 
 
-def test_pnl_consistency_zero_trades():
+RESULTS_FILE = Path("data/backtest_results/full_year_summary_20251208_150530.json")
+
+@pytest.fixture
+def backtest_results():
+    """Load backtest results JSON, skip if not found."""
+    if not RESULTS_FILE.exists():
+        pytest.skip(f"Results file not found: {RESULTS_FILE}")
+    
+    with open(RESULTS_FILE, 'r') as f:
+        return json.load(f)
+
+
+def test_pnl_consistency_zero_trades(backtest_results):
     """
     When total_trades=0, PnL must be entirely unrealized.
 
@@ -23,14 +35,7 @@ def test_pnl_consistency_zero_trades():
     - unrealized_pnl (mark-to-market changes)
     - total_pnl (should equal unrealized_pnl when realized_pnl=0)
     """
-    # Load the backtest results
-    results_file = Path("data/backtest_results/full_year_summary_20251208_150530.json")
-
-    if not results_file.exists():
-        pytest.skip(f"Results file not found: {results_file}")
-
-    with open(results_file, 'r') as f:
-        results = json.load(f)
+    results = backtest_results
 
     # Test annual level
     annual_total_trades = results.get("total_trades", 0)
@@ -63,17 +68,11 @@ def test_pnl_consistency_zero_trades():
                 f"unrealized={q_unrealized_pnl}, total={q_total_pnl}"
 
 
-def test_pnl_summation():
+def test_pnl_summation(backtest_results):
     """
     Test that quarterly PnL values sum to annual PnL.
     """
-    results_file = Path("data/backtest_results/full_year_summary_20251208_150530.json")
-
-    if not results_file.exists():
-        pytest.skip(f"Results file not found: {results_file}")
-
-    with open(results_file, 'r') as f:
-        results = json.load(f)
+    results = backtest_results
 
     annual_realized_pnl = results.get("realized_pnl", 0)
     annual_unrealized_pnl = results.get("unrealized_pnl", 0)
@@ -105,17 +104,11 @@ def test_pnl_summation():
         f"does not match annual ({annual_total_pnl})"
 
 
-def test_win_rate_consistency():
+def test_win_rate_consistency(backtest_results):
     """
     Test that win_rate is 0 when total_trades=0.
     """
-    results_file = Path("data/backtest_results/full_year_summary_20251208_150530.json")
-
-    if not results_file.exists():
-        pytest.skip(f"Results file not found: {results_file}")
-
-    with open(results_file, 'r') as f:
-        results = json.load(f)
+    results = backtest_results
 
     # Annual level
     if results.get("total_trades", 0) == 0:
