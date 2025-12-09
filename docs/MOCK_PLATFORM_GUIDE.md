@@ -91,7 +91,7 @@ result = platform.execute_trade(decision)
 if result['success']:
     print(f"Order ID: {result['order_id']}")
     print(f"Execution Price: ${result['execution_price']:.2f}")
-    print(f"Slippage: {result['slippage_applied']:.3f}%")
+    print(f"Slippage: {result['slippage_pct']:.3f}%")
 ```
 
 ### Portfolio Breakdown
@@ -228,6 +228,7 @@ platform = MockTradingPlatform(
 ### Kill-Switch Scenario Testing
 
 ```python
+from datetime import datetime
 platform = MockTradingPlatform(
     initial_balance={'FUTURES_USD': 10000.0}
 )

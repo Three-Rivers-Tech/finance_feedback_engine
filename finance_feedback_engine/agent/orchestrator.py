@@ -161,7 +161,8 @@ class TradingAgentOrchestrator:
                     )
 
                 if not status.get("is_open", False):
-                    minutes = status.get("time_to_close", 0)
+                    # MarketSchedule provides time_to_open for closed sessions; fall back to 0 if absent
+                    minutes = status.get("time_to_open", status.get("time_until_next_session", 0))
                     print(
                         f"Market closed for {asset_pair_std} ({asset_type}). "
                         f"Session={status.get('session', 'Closed')}. "
@@ -235,8 +236,9 @@ class TradingAgentOrchestrator:
                 return 'forex'
         elif len(upper) == 6 and upper[:3] in fx_currencies and upper[3:] in fx_currencies:
             return 'forex'
-
         return 'stocks'
+
+    
     def _should_execute(self, decision) -> bool:
         """Determines if a trade should be executed based on the approval policy and daily limits."""
         if self.trades_today >= self.config.max_daily_trades:

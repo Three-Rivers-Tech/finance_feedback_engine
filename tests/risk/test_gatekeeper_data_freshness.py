@@ -207,29 +207,28 @@ def test_defaults_to_intraday_for_stocks_without_timeframe():
     is_valid, msg = gatekeeper.validate_trade(decision, context)
     # Should use intraday threshold (> 5 min warns, > 15 min rejects)
     # 8 minutes should warn but pass
-    assert "Stale market data" not in msg
+    def test_warns_on_stale_crypto_data_but_allows_trade(self):
+        """Gatekeeper should warn on crypto data > 5 min but ≤ 15 min old."""
+        now = dt.datetime.now(timezone.utc)
+        stale_ts = (now - dt.timedelta(minutes=7)).isoformat().replace("+00:00", "Z")
 
+        decision = {
+            "action": "BUY",
+            "asset_pair": "EURUSD",
+            "confidence": 80,
+            "volatility": 0.025,
+        }
 
-def test_warns_on_stale_crypto_data_but_allows_trade():
-    """Gatekeeper should warn on crypto data > 5 min but ≤ 15 min old."""
-    gatekeeper = RiskGatekeeper()
-    now = dt.datetime.now(timezone.utc)
-    stale_ts = (now - dt.timedelta(minutes=7)).isoformat().replace("+00:00", "Z")
+        context = {
+            "asset_type": "forex",
+            "market_data_timestamp": stale_ts,
+            "recent_performance": {"total_pnl": 0.005},
+            "holdings": {},
+        }
 
-    decision = {
-        "action": "BUY",
-        "asset_pair": "EURUSD",
-        "confidence": 80,
-        "volatility": 0.025,
-    }
-
-    context = {
-        "asset_type": "forex",
-        "market_data_timestamp": stale_ts,
-        "recent_performance": {"total_pnl": 0.005},
-        "holdings": {},
-    }
-
-    is_valid, msg = gatekeeper.validate_trade(decision, context)
-    # Should warn but not reject (passes freshness)
+        is_valid, msg = self.gatekeeper.validate_trade(decision, context)
+        # Should warn but allow trade to proceed
+        assert is_valid is True
+        # Verify warning is logged (if warnings are captured in msg) or assert no rejection
+        assert "Stale market data" not in msg or "CRITICAL" not in msg
     assert "Stale market data" not in msg

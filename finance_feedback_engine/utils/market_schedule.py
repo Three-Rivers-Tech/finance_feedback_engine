@@ -48,6 +48,7 @@ class MarketSchedule:
             "is_open": True,
             "session": "Open",
             "time_to_close": 0,
+            "time_to_open": 0,
             "warning": warning,
         }
 
@@ -68,10 +69,24 @@ class MarketSchedule:
             closed = True  # Sunday before 5 PM NY
 
         if closed:
+            # Forex reopens Sunday 5 PM New York time
+            days_until_sunday = (6 - weekday) % 7
+            open_date = now_ny.date() + _dt.timedelta(days=days_until_sunday)
+            open_dt = cls.NY_TZ.localize(
+                _dt.datetime.combine(open_date, _dt.time(hour=17, minute=0))
+            )
+
+            # If already past this week's Sunday open, roll forward a week
+            if open_dt < now_ny:
+                open_dt += _dt.timedelta(days=7)
+
+            time_to_open = int(max(0, (open_dt - now_ny).total_seconds() // 60))
+
             return {
                 "is_open": False,
                 "session": "Closed",
                 "time_to_close": 0,
+                "time_to_open": time_to_open,
                 "warning": "",
             }
 
@@ -103,6 +118,7 @@ class MarketSchedule:
             "is_open": True,
             "session": session,
             "time_to_close": time_to_close,
+            "time_to_open": 0,
             "warning": "",
         }
 
@@ -118,10 +134,26 @@ class MarketSchedule:
         is_open = is_weekday and within_hours
 
         if not is_open:
+            # Next open at 9:30 AM NY on the next business day (or later today before open)
+            if is_weekday and now_ny.time() < open_time:
+                next_open_date = now_ny.date()
+            else:
+                next_open_date = now_ny.date()
+                while True:
+                    next_open_date += _dt.timedelta(days=1)
+                    if next_open_date.weekday() <= 4:
+                        break
+
+            open_dt = cls.NY_TZ.localize(
+                _dt.datetime.combine(next_open_date, open_time)
+            )
+            time_to_open = int(max(0, (open_dt - now_ny).total_seconds() // 60))
+
             return {
                 "is_open": False,
                 "session": "Closed",
                 "time_to_close": 0,
+                "time_to_open": time_to_open,
                 "warning": "",
             }
 
@@ -137,6 +169,7 @@ class MarketSchedule:
             "is_open": True,
             "session": "New York",
             "time_to_close": time_to_close,
+            "time_to_open": 0,
             "warning": "",
         }
 
@@ -152,7 +185,12 @@ class MarketSchedule:
             timestamp: Unix timestamp (seconds since epoch).
 
         Returns:
-            Dictionary with is_open, session, time_to_close, warning keys.
+            Dictionary with:
+            - is_open: bool
+            - session: str
+            - time_to_close: minutes until current session closes (0 when closed)
+            - time_to_open: minutes until next session opens (0 when already open)
+            - warning: str
         """
         now_utc = _dt.datetime.utcfromtimestamp(timestamp).replace(tzinfo=pytz.UTC)
         return cls.get_market_status(asset_pair, asset_type, now_utc=now_utc)
