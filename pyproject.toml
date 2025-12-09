@@ -87,8 +87,6 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
-include_directories = True
-
 
 [tool.bandit]
 exclude_dirs = ["tests", "build", "dist"]
