@@ -11,6 +11,8 @@ import pandas as pd
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
 from finance_feedback_engine.utils.failure_logger import send_telegram_notification
+from finance_feedback_engine.utils.market_schedule import MarketSchedule
+from finance_feedback_engine.utils.validation import validate_data_freshness
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +147,9 @@ class DecisionEngine:
 
         # Monitoring context provider (optional, set via set_monitoring_context)
         self.monitoring_provider = None
+
+        # Initialize market schedule for session awareness
+        self.market_schedule = MarketSchedule()
 
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None
@@ -358,6 +363,29 @@ class DecisionEngine:
         # Detect market regime using historical data
         regime = self._detect_market_regime(asset_pair)
         context['regime'] = regime
+
+        # Add market schedule status
+        asset_type = market_data.get('asset_type', 'crypto')
+        market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
+        context['market_status'] = market_status
+
+        # Validate data freshness
+        data_timestamp = market_data.get('date') or market_data.get('timestamp')
+        if data_timestamp:
+            is_fresh, age_minutes, freshness_message = validate_data_freshness(
+                data_timestamp, asset_type
+            )
+            context['data_freshness'] = {
+                'is_fresh': is_fresh,
+                'age_minutes': age_minutes,
+                'message': freshness_message
+            }
+        else:
+            context['data_freshness'] = {
+                'is_fresh': False,
+                'age_minutes': None,
+                'message': 'No timestamp available in market data'
+            }
 
         # Note: Multi-timeframe pulse now injected via monitoring_context
         # (see MonitoringContextProvider.get_monitoring_context and format_for_ai_prompt)
@@ -609,6 +637,74 @@ Body Size: ${market_data.get('body_size', 0):.2f} ({market_data.get('body_pct', 
 Upper Wick: ${market_data.get('upper_wick', 0):.2f}
 Lower Wick: ${market_data.get('lower_wick', 0):.2f}
 Close Position: {market_data.get('close_position_in_range', 0.5):.1%} in daily range
+"""
+
+        # Add temporal context (market schedule and data freshness)
+        market_status = context.get('market_status', {})
+        data_freshness = context.get('data_freshness', {})
+
+        # Format timestamps
+        from datetime import datetime
+        import pytz
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        ny_tz = pytz.timezone('America/New_York')
+        ny_time = utc_now.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
+        utc_time = utc_now.strftime('%Y-%m-%d %H:%M:%S UTC')
+
+        # Market status info
+        is_open = market_status.get('is_open', True)
+        session = market_status.get('session', 'Unknown')
+        time_to_close = market_status.get('time_to_close', 0)
+        market_warning = market_status.get('warning', '')
+
+        # Data freshness info
+        is_fresh = data_freshness.get('is_fresh', True)
+        age_str = data_freshness.get('age_minutes', 'Unknown')
+        freshness_msg = data_freshness.get('message', '')
+
+        # Emoji indicators
+        status_emoji = "✅" if is_open else "🔴"
+        freshness_emoji = "✅" if is_fresh else "⚠️" if "WARNING" in freshness_msg else "🔴"
+
+        # Build temporal context section
+        market_info += f"""
+TEMPORAL CONTEXT:
+-----------------
+Current Time: {utc_time} (NY: {ny_time})
+Market Status: {status_emoji} {"OPEN" if is_open else "CLOSED"} ({session} Session)
+Time to Close: {time_to_close} mins
+Data Age: {age_str} {freshness_emoji}"""
+
+        if market_warning:
+            market_info += f"\nMarket Warning: {market_warning}"
+        if freshness_msg:
+            market_info += f"\nFreshness Alert: {freshness_msg}"
+
+        market_info += """
+
+TIME-BASED RULES (MANDATORY):
+-----------------------------
+1. ⚠️ If Market Status is CLOSED: You MUST recommend HOLD.
+   - Rationale: Cannot execute trades when markets are closed.
+   - Exception: Crypto markets (24/7) are exempt from this rule.
+
+2. ⚠️ If Data is STALE (marked with 🔴 or ⚠️): You MUST recommend HOLD.
+   - Rationale: Trading on outdated data leads to poor execution prices.
+   - Fresh data is critical for accurate decision-making.
+
+3. ⚠️ Friday Afternoon Forex Warning (if applicable):
+   - Be extremely cautious of holding positions over the weekend.
+   - Weekend gap risk: Markets reopen Monday with potential price jumps.
+   - Prefer closing positions or reducing exposure before Friday close.
+
+4. 📊 Session-Based Strategy Adjustments:
+   - Asian Session: Expect lower volatility; favor range-bound strategies.
+   - London Session: Moderate volatility; good for trend following.
+   - New York Session: High volatility; peak trading activity.
+   - Overlap Session (London + NY): Highest liquidity and volatility.
+
+⚠️ CRITICAL: You MUST acknowledge the Market Status and Data Freshness in your reasoning.
+   Failure to do so indicates you ignored critical temporal constraints.
 """
 
         # Add volume/market cap for crypto

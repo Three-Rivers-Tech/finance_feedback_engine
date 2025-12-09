@@ -226,7 +226,17 @@ class ChunkedBacktestRunner:
             return None
 
     def _parse_backtest_output(self, output: str, chunk: BacktestChunk) -> Dict[str, Any]:
-        """Parse backtest CLI output to extract metrics."""
+        """
+        Parse backtest CLI output to extract metrics.
+
+        NOTE: PnL Semantics:
+        - realized_pnl: Profit/loss from closed/executed trades (requires trades to be completed)
+        - unrealized_pnl: Mark-to-market loss/gain from equity curve changes (includes holdings change)
+        - total_pnl: Sum of realized_pnl + unrealized_pnl = final_value - initial_balance
+
+        When total_trades=0 but total_pnl<0, the loss is entirely unrealized (mark-to-market),
+        indicating price movements without corresponding trade execution.
+        """
 
         # Default metrics
         metrics = {
@@ -241,8 +251,11 @@ class ChunkedBacktestRunner:
             "total_trades": 0,
             "completed_trades": 0,
             "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
             "total_pnl": 0.0,
-            "winning_trades": 0
+            "winning_trades": 0,
+            "trade_history": []
         }
 
         try:
@@ -311,8 +324,21 @@ class ChunkedBacktestRunner:
 
         # Calculate derived metrics
         metrics["total_pnl"] = metrics["final_value"] - metrics["initial_balance"]
-        if metrics["completed_trades"] > 0:
+
+        # Distinguish realized vs unrealized PnL
+        # When completed_trades > 0, compute realized_pnl from win_rate and completed trades
+        # When completed_trades = 0, all PnL is unrealized (mark-to-market)
+        if metrics["completed_trades"] == 0:
+            metrics["realized_pnl"] = 0.0
+            metrics["unrealized_pnl"] = metrics["total_pnl"]
+            metrics["win_rate"] = 0.0
+            metrics["winning_trades"] = 0
+        else:
             metrics["winning_trades"] = int(metrics["completed_trades"] * metrics["win_rate"] / 100)
+            # Note: realized_pnl should come from trade_history, but we approximate from trade count
+            # This is a limitation of parsing CLI output - full accounting requires trade_history access
+            metrics["realized_pnl"] = metrics["total_pnl"]  # Approximate if trades executed
+            metrics["unrealized_pnl"] = 0.0
 
         return metrics
 
@@ -349,6 +375,24 @@ class ChunkedBacktestRunner:
         if not quarterly_results:
             return {"error": "No quarterly results available"}
 
+        # Recalculate quarterly values with proper chaining (each quarter compounds from previous)
+        # Also distinguish realized PnL (from executed trades) from unrealized PnL (mark-to-market)
+        current_balance = self.initial_balance
+        for q in quarterly_results:
+            q_return = q["return_pct"] / 100.0
+            q["initial_balance"] = current_balance
+            q["final_value"] = current_balance * (1 + q_return)
+
+            # Calculate realized vs unrealized PnL
+            realized_pnl = sum(t.get("pnl", 0) for t in q.get("trade_history", []) if "pnl" in t)
+            total_pnl = q["final_value"] - q["initial_balance"]
+            unrealized_pnl = total_pnl - realized_pnl
+
+            q["realized_pnl"] = realized_pnl
+            q["unrealized_pnl"] = unrealized_pnl
+            q["total_pnl"] = total_pnl
+            current_balance = q["final_value"]
+
         quarterly_returns = [r["return_pct"] for r in quarterly_results]
         quarterly_sharpes = [r["sharpe_ratio"] for r in quarterly_results if r["sharpe_ratio"] != 0]
         quarterly_drawdowns = [r["max_drawdown"] for r in quarterly_results]
@@ -364,6 +408,10 @@ class ChunkedBacktestRunner:
         avg_quarterly_sharpe = sum(quarterly_sharpes) / len(quarterly_sharpes) if quarterly_sharpes else 0
         annualized_sharpe = avg_quarterly_sharpe * (4 ** 0.5)  # Annualize from quarterly
 
+        # Calculate annual realized vs unrealized PnL
+        total_realized_pnl = sum(q.get("realized_pnl", 0) for q in quarterly_results)
+        total_unrealized_pnl = sum(q.get("unrealized_pnl", 0) for q in quarterly_results)
+
         summary = {
             "period": f"Full Year {self.year}",
             "assets": self.assets,
@@ -376,6 +424,8 @@ class ChunkedBacktestRunner:
             "total_completed_trades": sum(r.get("completed_trades", 0) for r in quarterly_results),
             "total_winning_trades": cumulative["winning_trades"],
             "overall_win_rate": (cumulative["winning_trades"] / cumulative["total_trades"] * 100) if cumulative["total_trades"] > 0 else 0,
+            "realized_pnl": total_realized_pnl,
+            "unrealized_pnl": total_unrealized_pnl,
             "total_pnl": full_year_value - self.initial_balance,
             "quarterly_breakdown": quarterly_results,
             "memory_persistence": {

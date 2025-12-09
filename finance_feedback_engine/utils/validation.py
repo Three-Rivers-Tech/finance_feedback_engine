@@ -95,19 +95,14 @@ def validate_data_freshness(
         # Handle 'Z' suffix (indicates UTC)
         clean_timestamp = data_timestamp.replace("Z", "+00:00")
 
-        # Try parsing with timezone info
-        try:
-            dt_obj = datetime.fromisoformat(clean_timestamp)
-        except ValueError:
-            # Fallback for formats without timezone
-            dt_obj = datetime.fromisoformat(data_timestamp)
-            if dt_obj.tzinfo is None:
-                dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+        # Parse timestamp
+        dt_obj = datetime.fromisoformat(clean_timestamp)
 
-        # Ensure UTC
+        # Ensure timezone is set (assume UTC if naive)
         if dt_obj.tzinfo is None:
             dt_obj = dt_obj.replace(tzinfo=timezone.utc)
-        else:
+        elif dt_obj.tzinfo != timezone.utc:
+            # Convert to UTC if in different timezone
             dt_obj = dt_obj.astimezone(timezone.utc)
     except (ValueError, TypeError) as e:
         raise ValueError(
