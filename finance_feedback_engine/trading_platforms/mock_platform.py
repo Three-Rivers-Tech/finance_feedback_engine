@@ -252,22 +252,23 @@ class MockTradingPlatform(BaseTradingPlatform):
 
             realized_pnl = 0.0
             if action == 'SELL':
-                # For mock platform, SELL can close existing position or create short
+            else:  # SELL
+                # For mock platform, SELL closes existing position (shorts not yet supported)
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]
 
                     # Close or reduce long position
                     if pos['contracts'] >= contracts:
                         # Calculate realized P&L
-                        realized_pnl = (execution_price - pos['entry_price']) * contracts * self._contract_multiplier
-                        self._balance['FUTURES_USD'] += (suggested_amount + realized_pnl - fee_amount)
+                        pnl = (execution_price - pos['entry_price']) * contracts * self._contract_multiplier
+                        self._balance['FUTURES_USD'] += (suggested_amount + pnl - fee_amount)
 
                         # Update position
                         pos['contracts'] -= contracts
                         if pos['contracts'] < 0.01:  # Close position if nearly zero
                             del self._positions[asset_pair_normalized]
 
-                        logger.info("Closed/reduced position, realized P&L: $%.2f", realized_pnl)
+                        logger.info("Closed/reduced position, realized P&L: $%.2f", pnl)
                     else:
                         # Not enough contracts to sell
                         logger.warning(
@@ -291,7 +292,6 @@ class MockTradingPlatform(BaseTradingPlatform):
                         'error': f'No position to sell for {asset_pair_normalized}',
                         'timestamp': decision.get('timestamp', datetime.utcnow().isoformat())
                     }
-
             # Record trade in history
             trade_record = {
                 'order_id': f"mock-{uuid.uuid4().hex[:8]}",
