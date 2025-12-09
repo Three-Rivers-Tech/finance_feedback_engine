@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 """
 MockTradingPlatform Quick Demo
 
@@ -13,7 +13,7 @@ Run this script to see a complete example of:
 """
 
 from finance_feedback_engine.trading_platforms import MockTradingPlatform
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def print_section(title):
@@ -59,7 +59,7 @@ def demo_trade_execution(platform):
         'asset_pair': 'BTCUSD',
         'suggested_amount': 10000.0,
         'entry_price': 50000.0,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     }
 
     print(f"\nExecuting BUY: {buy_decision['asset_pair']}")
@@ -85,14 +85,18 @@ def demo_trade_execution(platform):
         'asset_pair': 'ETH-USD',
         'suggested_amount': 5000.0,
         'entry_price': 2500.0,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     }
 
     print(f"\nExecuting BUY: {buy_eth_decision['asset_pair']}")
     print(f"  Amount: ${buy_eth_decision['suggested_amount']:,.2f}")
 
     result = platform.execute_trade(buy_eth_decision)
-    print(f"✅ Trade Successful! Order: {result['order_id']}")
+    result = platform.execute_trade(buy_eth_decision)
+    if result['success']:
+        print(f"✅ Trade Successful! Order: {result['order_id']}")
+    else:
+        print(f"\n❌ Trade Failed: {result.get('error')}")
 
 
 def demo_portfolio_breakdown(platform):
@@ -144,7 +148,11 @@ def demo_price_update(platform):
     print(f"  Unrealized P&L: ${portfolio['unrealized_pnl']:,.2f}")
 
     for pos in portfolio['futures_positions']:
-        pnl_pct = (pos['unrealized_pnl'] / (pos['entry_price'] * pos['contracts'] * 0.1)) * 100
+        # Calculate P&L percentage based on initial position value
+        # Coinbase futures contract multiplier is 0.1 (see MockTradingPlatform._contract_multiplier)
+        # Cost basis = entry_price * contracts * contract_multiplier
+        cost_basis = pos['entry_price'] * pos['contracts'] * 0.1
+        pnl_pct = (pos['unrealized_pnl'] / cost_basis) * 100
         print(f"\n  {pos['product_id']}:")
         print(f"    Current Price: ${pos['current_price']:,.2f}")
         print(f"    P&L: ${pos['unrealized_pnl']:,.2f} ({pnl_pct:+.2f}%)")
@@ -169,13 +177,17 @@ def demo_trade_history(platform):
         print(f"    Fee: ${trade['fee_amount']:.2f}")
         print(f"    Slippage: {trade['slippage_pct']:.3f}%")
 
-    # Calculate totals
-    total_fees = sum(t['fee_amount'] for t in history)
-    avg_slippage = sum(t['slippage_pct'] for t in history) / len(history)
+    # Calculate totals (guard against empty history)
+    if history:
+        total_fees = sum(t['fee_amount'] for t in history)
+        avg_slippage = sum(t['slippage_pct'] for t in history) / len(history)
 
-    print(f"\nSummary:")
-    print(f"  Total Fees Paid: ${total_fees:.2f}")
-    print(f"  Average Slippage: {avg_slippage:.3f}%")
+        print(f"\nSummary:")
+        print(f"  Total Fees Paid: ${total_fees:.2f}")
+        print(f"  Average Slippage: {avg_slippage:.3f}%")
+    else:
+        print(f"\nSummary:")
+        print(f"  No trades executed yet.")
 
 
 def demo_account_info(platform):

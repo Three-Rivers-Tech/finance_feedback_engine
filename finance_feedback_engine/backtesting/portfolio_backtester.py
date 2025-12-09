@@ -172,6 +172,8 @@ class PortfolioBacktester:
         self.correlation_threshold = config.get("portfolio", {}).get("correlation_threshold", 0.7)
         self.correlation_window = config.get("portfolio", {}).get("correlation_window", 30)
         self.max_portfolio_risk = config.get("portfolio", {}).get("max_portfolio_risk", 0.02)  # 2%
+        self.trading_dates_mode = config.get("backtesting", {}).get("trading_dates_mode", "intersection")
+        self.min_overlapping_trading_dates = config.get("backtesting", {}).get("min_overlapping_trading_dates", 5)
 
         # State tracking
         self.portfolio_state: Optional[PortfolioState] = None
@@ -212,7 +214,9 @@ class PortfolioBacktester:
 
         # Get common trading dates across all assets
         trading_dates = self._get_trading_dates()
-        logger.info(f"Found {len(trading_dates)} trading dates (union across assets)")
+        logger.info(
+            f"Found {len(trading_dates)} trading dates using {self.trading_dates_mode} mode"
+        )
 
         # Main backtest loop
         for i, current_date in enumerate(trading_dates):
@@ -264,12 +268,52 @@ class PortfolioBacktester:
             logger.info(f"Loaded {len(df)} candles for {asset_pair}")
 
     def _get_trading_dates(self) -> List[datetime]:
-        """Get union of all trading dates across assets (prevents empty loops)."""
-        all_dates = set()
-        for df in self.price_history.values():
-            all_dates |= set(df.index)
+        """Compute trading dates across assets using intersection by default."""
+        date_sets = []
 
-        return sorted(list(all_dates))
+        for asset, df in self.price_history.items():
+            if df.empty:
+                logger.warning(f"No historical data for {asset}; skipping date alignment")
+                continue
+            date_sets.append(set(df.index))
+
+        if not date_sets:
+            return []
+
+        mode = self.trading_dates_mode
+        if mode not in {"union", "intersection"}:
+            logger.warning(
+                "Unknown trading_dates_mode '%s'; defaulting to intersection",
+                self.trading_dates_mode,
+            )
+            mode = "intersection"
+        self.trading_dates_mode = mode
+
+        if mode == "union":
+            trading_dates = sorted(set().union(*date_sets))
+        else:
+            trading_dates = sorted(set.intersection(*date_sets))
+
+        self._validate_trading_dates(trading_dates)
+        return trading_dates
+
+    def _validate_trading_dates(self, trading_dates: List[datetime]) -> None:
+        """Validate overlap and alert when intersection is too small."""
+        if not trading_dates:
+            msg = (
+                "No overlapping trading dates found across assets. "
+                "Adjust date range or set backtesting.trading_dates_mode='union' if intentional."
+            )
+            logger.error(msg)
+            raise ValueError(msg)
+
+        if len(trading_dates) < self.min_overlapping_trading_dates:
+            logger.warning(
+                "Only %d trading dates available across all assets (mode=%s); "
+                "results may be unreliable. Consider expanding the date range or using union mode.",
+                len(trading_dates),
+                self.trading_dates_mode,
+            )
 
     def _get_current_prices(self, date: datetime) -> Dict[str, float]:
         """Get current prices for all assets."""
@@ -373,12 +417,8 @@ class PortfolioBacktester:
                 "volume": current_candle.get('volume', 0)
             }
 
-            # Build balance dict (platform-scoped for routing; default to unified USD)
-            balance_dict = {
-                "USD": self.portfolio_state.cash,
-                "coinbase_USD": self.portfolio_state.cash,
-                "oanda_USD": self.portfolio_state.cash,
-            }
+            # Unified cash balance; decision engine now falls back to USD when platform-specific keys are absent
+            balance_dict = {"USD": self.portfolio_state.cash}
 
             # Build portfolio context with correlation info
             portfolio_dict = {
@@ -465,9 +505,15 @@ class PortfolioBacktester:
 
             # Execute trade
             if action == "BUY":
-                # Close existing SHORT or open/extend LONG
-                if current_position and current_position.side == "SHORT":
-                    self._close_position(asset_pair, current_prices[asset_pair], "decision_close_short", current_date)
+                if current_position:
+                    if current_position.side == "SHORT":
+                        # Flip from short to long
+                        self._close_position(asset_pair, current_prices[asset_pair], "decision_close_short", current_date)
+                        self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                    elif current_position.side == "LONG":
+                        # Close existing long before re-entering to preserve history and P&L
+                        self._close_position(asset_pair, current_prices[asset_pair], "decision_close_long", current_date)
+                        self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
                 else:
                     self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
             elif action == "SELL":

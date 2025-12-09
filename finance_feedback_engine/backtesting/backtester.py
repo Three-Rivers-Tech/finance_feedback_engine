@@ -519,14 +519,13 @@ class Backtester:
                 self.memory_engine = memory_engine
                 self._decisions = {}  # Store decisions by ID
 
-            def analyze_asset(self, asset_pair):
+            async def analyze_asset(self, asset_pair):
                 """Generate a decision using the decision engine and current mock data."""
                 # Get current market data from mock provider
-                import asyncio
-                market_data = asyncio.run(self.mock_provider.get_comprehensive_market_data(
+                market_data = await self.mock_provider.get_comprehensive_market_data(
                     asset_pair=asset_pair,
                     include_sentiment=True
-                ))
+                )
 
                 # Get current balance from platform
                 balance = self.mock_platform.get_balance()
@@ -618,9 +617,10 @@ class Backtester:
 
         for trade in trades_history:
             if trade.get('success', False):
-                # Update running balance based on trade
-                # This is a simplified version - in reality the platform tracks this
-                running_balance = final_balance  # Simplified
+                # Update running balance based on trade P&L
+                pnl = trade.get('pnl_value', 0) or trade.get('realized_pnl', 0) or 0
+                fee = trade.get('fee_amount', 0)
+                running_balance += pnl - fee
                 equity_curve.append(running_balance)
 
         # Ensure we have at least initial balance
