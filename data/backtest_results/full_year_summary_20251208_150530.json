@@ -74,7 +74,7 @@
       "start_date": "2024-10-01",
       "end_date": "2024-12-31",
       "initial_balance": 8556.8,
-      "final_value": 8121.93,
+      "final_value": 8121.932954718786,
       "return_pct": -5.13,
       "sharpe_ratio": -29.76,
       "max_drawdown": -3.38,

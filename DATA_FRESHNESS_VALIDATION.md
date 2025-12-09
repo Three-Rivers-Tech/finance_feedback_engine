@@ -217,10 +217,10 @@ def validate_trade_with_freshness(decision, context, market_data):
 - Invalid timestamps raise `ValueError`
 - Defaults: `asset_type=crypto`, `timeframe=intraday`
 
-✅ **Integration Tests** (3):
-- Live trading (no timestamp override)
-- Multiple asset types
-- Multiple timeframes
+✅ **Usage Patterns Tested**:
+- All major asset types (crypto, forex, stocks)
+- All timeframes (intraday, daily)
+- Various timestamp formats and edge cases
 
 ---
 

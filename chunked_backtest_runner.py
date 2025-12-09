@@ -225,6 +225,56 @@ class ChunkedBacktestRunner:
             logger.error(f"Backtest error for {chunk}: {e}")
             return None
 
+    def _parse_trade_history(self, output: str) -> List[Dict[str, Any]]:
+        """Parses the trade history table from the backtest output."""
+        trade_history: List[Dict[str, Any]] = []
+        lines = output.splitlines()
+
+        try:
+            # Find the header of the trade history table
+            header_index = -1
+            for i, line in enumerate(lines):
+                if "┃" in line and "ID" in line and "Asset" in line and "PNL" in line:
+                    header_index = i
+                    break
+
+            if header_index == -1:
+                self.logger.info("Trade history table not found in output.")
+                return []
+
+            header_line = lines[header_index]
+            # Strip ANSI color codes
+            header_line = re.sub(r'\x1b\[[0-9;]*m', '', header_line)
+            headers = [h.strip().lower().replace(' ', '_') for h in header_line.split('┃')][1:-1]
+
+            # Data rows start after the header separator line (e.g., ┡━━━━... or ├─────...)
+            for line in lines[header_index + 2:]:
+                if '└' in line:  # End of table
+                    break
+                if '│' in line:
+                    # Strip ANSI color codes from data row
+                    line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                    values = [v.strip() for v in line.split('│')][1:-1]
+
+                    if len(values) == len(headers):
+                        trade = dict(zip(headers, values))
+                        try:
+                            # Perform type conversion
+                            trade['id'] = int(trade['id'])
+                            trade['entry_price'] = float(trade['entry_price'])
+                            trade['exit_price'] = float(trade['exit_price'])
+                            trade['amount'] = float(trade['amount'])
+                            trade['pnl'] = float(trade['pnl'])
+                            trade['fees'] = float(trade['fees'])
+                            trade_history.append(trade)
+                        except (ValueError, KeyError) as e:
+                            self.logger.warning(f"Could not parse trade row: '{line}'. Error: {e}")
+                            continue
+        except Exception as e:
+            self.logger.error(f"An error occurred while parsing trade history: {e}")
+
+        return trade_history
+
     def _parse_backtest_output(self, output: str, chunk: BacktestChunk) -> Dict[str, Any]:
         """
         Parse backtest CLI output to extract metrics.
@@ -322,23 +372,33 @@ class ChunkedBacktestRunner:
         except Exception as e:
             logger.debug(f"Unexpected error during output parsing for {chunk}: {e}")
 
+        # Parse trade history
+        metrics["trade_history"] = self._parse_trade_history(output)
+        
         # Calculate derived metrics
         metrics["total_pnl"] = metrics["final_value"] - metrics["initial_balance"]
 
         # Distinguish realized vs unrealized PnL
-        # When completed_trades > 0, compute realized_pnl from win_rate and completed trades
-        # When completed_trades = 0, all PnL is unrealized (mark-to-market)
-        if metrics["completed_trades"] == 0:
+        if metrics["trade_history"]:
+            realized_pnl = sum(trade.get("pnl", 0) for trade in metrics["trade_history"])
+            metrics["realized_pnl"] = realized_pnl
+            metrics["unrealized_pnl"] = metrics["total_pnl"] - realized_pnl
+        else:
             metrics["realized_pnl"] = 0.0
             metrics["unrealized_pnl"] = metrics["total_pnl"]
-            metrics["win_rate"] = 0.0
-            metrics["winning_trades"] = 0
+
+        if metrics["completed_trades"] > 0:
+            # Re-calculate winning trades from history if available
+            if metrics["trade_history"]:
+                winning_trades = sum(1 for trade in metrics["trade_history"] if trade.get("pnl", 0) > 0)
+                metrics["winning_trades"] = winning_trades
+                if metrics["completed_trades"] > 0:
+                     metrics["win_rate"] = (winning_trades / metrics["completed_trades"]) * 100
+            else: # Fallback to parsed win rate
+                metrics["winning_trades"] = int(metrics["completed_trades"] * metrics["win_rate"] / 100)
         else:
-            metrics["winning_trades"] = int(metrics["completed_trades"] * metrics["win_rate"] / 100)
-            # Note: realized_pnl should come from trade_history, but we approximate from trade count
-            # This is a limitation of parsing CLI output - full accounting requires trade_history access
-            metrics["realized_pnl"] = metrics["total_pnl"]  # Approximate if trades executed
-            metrics["unrealized_pnl"] = 0.0
+             metrics["win_rate"] = 0.0
+             metrics["winning_trades"] = 0
 
         return metrics
 

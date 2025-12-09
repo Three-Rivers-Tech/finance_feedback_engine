@@ -1,7 +1,16 @@
+
+
+
+
+
+
+
+
+
 """Integration test for MockTradingPlatform with TradingLoopAgent."""
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
 from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory
@@ -101,7 +110,7 @@ class TestMockPlatformIntegration:
             'asset_pair': 'BTCUSD',
             'suggested_amount': 5000.0,
             'entry_price': 50000.0,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
         platform.execute_trade(decision)
 
@@ -124,7 +133,10 @@ class TestMockPlatformIntegration:
         assert btc_position['unrealized_pnl'] < -500
 
         # In real scenario, agent would close position here
-        # For this test, we've verified the kill-switch would detect the loss    def test_multiple_backtest_runs_with_reset(self):
+        # In real scenario, agent would close position here
+        # For this test, we've verified the kill-switch would detect the loss
+
+    def test_multiple_backtest_runs_with_reset(self):
         """Test running multiple backtest iterations with reset."""
         platform = MockTradingPlatform()
 
@@ -139,7 +151,7 @@ class TestMockPlatformIntegration:
                 'asset_pair': 'BTCUSD',
                 'suggested_amount': 2000.0,
                 'entry_price': 50000.0,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
             result = platform.execute_trade(decision)
             assert result['success'] is True
@@ -191,8 +203,8 @@ class TestMockPlatformIntegration:
         # Check profit was realized
         final_balance = platform.get_balance()['FUTURES_USD']
 
-        # Should have made profit (minus fees and slippage)
-        assert final_balance > 25000.0 - 200  # Allow for fees/slippage
+        # Should have made profit after 3% price increase (accounting for fees/slippage)
+        assert final_balance > 25000.0  # Should be profitable overall
 
         # Verify trade history
         history = platform.get_trade_history()
@@ -215,7 +227,7 @@ class TestMockPlatformIntegration:
                 'asset_pair': 'BTCUSD',
                 'suggested_amount': 100.0,
                 'entry_price': 50000.0,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.now(timezone.utc).isoformat()
             }
             result = platform.execute_trade(decision)
             assert result['success'] is True
@@ -249,7 +261,7 @@ class TestMockPlatformIntegration:
             'asset_pair': 'BTCUSD',
             'suggested_amount': 1000.0,
             'entry_price': 50000.0,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
 
         forex_decision = {
@@ -258,7 +270,7 @@ class TestMockPlatformIntegration:
             'asset_pair': 'EURUSD',
             'suggested_amount': 1000.0,
             'entry_price': 1.10,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
 
         result1 = platform.execute_trade(crypto_decision)
