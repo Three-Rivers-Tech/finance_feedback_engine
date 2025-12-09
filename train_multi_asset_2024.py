@@ -19,7 +19,7 @@ Memory accumulates in:
     - data/memory/vectors.pkl (semantic memory)
 """
 
-import subprocess
+
 import sys
 import logging
 from pathlib import Path

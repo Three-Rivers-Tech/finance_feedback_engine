@@ -322,9 +322,10 @@ class TradingLoopAgent:
     async def run(self):
         """
         The main trading loop, implemented as a state machine.
+
+        This method handles initialization (position recovery) and then enters
+        a continuous loop that calls process_cycle() followed by a sleep interval.
         """
-        logger.info("Starting autonomous trading agent...")
-        self.is_running = True
         logger.info("Starting autonomous trading agent...")
         self.is_running = True
 
@@ -341,22 +342,24 @@ class TradingLoopAgent:
             )
             self._startup_complete.set()
 
-        self.state = AgentState.IDLE  # Start in IDLE state
-
+        # Main loop: process cycles with sleep intervals
         while self.is_running:
             try:
-                handler = self.state_handlers.get(self.state)
-                if handler:
-                    await handler()
+                # Execute one complete OODA cycle
+                cycle_successful = await self.process_cycle()
+
+                if not cycle_successful:
+                    logger.warning("Cycle execution failed, backing off before retry")
+                    await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
                 else:
-                    logger.error(f"No handler found for state {self.state}. Stopping agent.")
-                    self.stop()
+                    # Normal sleep between analysis cycles
+                    await asyncio.sleep(self.config.analysis_frequency_seconds)
+
             except asyncio.CancelledError:
                 logger.info("Trading loop cancelled.")
                 break
             except Exception as e:
-                logger.error(f"An error occurred in the trading loop: {e}", exc_info=True)
-                self.state = AgentState.IDLE  # Go to idle on error and wait before retrying
+                logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
                 await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
 
     async def _transition_to(self, new_state: AgentState):
@@ -367,21 +370,15 @@ class TradingLoopAgent:
 
     async def handle_idle_state(self):
         """
-        IDLE: Waiting for the next analysis interval before transitioning to learning.
-        """
-        # Skip initial wait if positions were recovered on startup
-        if self._recovered_positions and self.daily_trade_count == 0:
-            logger.info(
-                "State: IDLE - Positions recovered on startup, "
-                "skipping initial wait and transitioning immediately to LEARNING"
-            )
-            await self._transition_to(AgentState.LEARNING)
-            return
+        IDLE: Marks the end of an OODA cycle.
 
-        logger.info("State: IDLE - Waiting for next analysis interval...")
-        await asyncio.sleep(self.config.analysis_frequency_seconds)
-        # Periodically check for closed trades to learn from
-        await self._transition_to(AgentState.LEARNING)
+        The sleep between cycles is now handled externally (in run() or by the backtester),
+        so this state simply logs and returns, allowing the cycle to complete.
+        The next cycle will start from LEARNING state after the external sleep.
+        """
+        logger.info("State: IDLE - Cycle complete, waiting for next interval...")
+        # Note: Sleep is handled externally in run() or by backtester
+        # This state just marks the end of the cycle
 
     async def handle_perception_state(self):
         """
@@ -600,6 +597,54 @@ class TradingLoopAgent:
 
         logger.warning("Manual approval is required but not implemented in async loop. Skipping trade.")
         return False
+
+    async def process_cycle(self):
+        """
+        Process a single OODA cycle without the infinite loop.
+
+        This method exposes the inner logic of the run() method for controlled
+        execution in backtesting scenarios. It processes one complete cycle:
+        LEARNING -> PERCEPTION -> REASONING -> RISK_CHECK -> EXECUTION -> (back to IDLE)
+
+        The sleep between cycles is handled externally by the caller (e.g., run() method
+        or backtester), allowing for flexible timing control.
+
+        Returns:
+            bool: True if cycle completed successfully, False if agent should stop
+        """
+        if not self.is_running:
+            return False
+
+        try:
+            # Start from LEARNING state (check for completed trades)
+            # This matches the flow: sleep -> LEARNING -> PERCEPTION -> ... -> IDLE
+            self.state = AgentState.LEARNING
+
+            # Execute state machine until we return to IDLE or encounter error
+            max_iterations = 10  # Prevent infinite loops in one cycle
+            iterations = 0
+
+            while self.state != AgentState.IDLE and iterations < max_iterations:
+                handler = self.state_handlers.get(self.state)
+                if handler:
+                    await handler()
+                else:
+                    logger.error(f"No handler found for state {self.state}")
+                    return False
+                iterations += 1
+
+            if iterations >= max_iterations:
+                logger.warning("process_cycle exceeded max iterations, possible infinite loop")
+                return False
+
+            return True
+
+        except asyncio.CancelledError:
+            logger.info("Cycle cancelled.")
+            return False
+        except Exception as e:
+            logger.error(f"Error in process_cycle: {e}", exc_info=True)
+            return False
 
     def stop(self):
         """Stops the trading loop."""

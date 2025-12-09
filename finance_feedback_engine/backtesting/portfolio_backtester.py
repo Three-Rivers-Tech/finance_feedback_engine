@@ -45,8 +45,8 @@ class PortfolioPosition:
     entry_time: datetime
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
-        unrealized_pnl: float = 0.0
-        side: str = "LONG"  # LONG or SHORT
+    unrealized_pnl: float = 0.0
+    side: str = "LONG"  # LONG or SHORT
 
     def update_pnl(self, current_price: float) -> float:
         """Update and return unrealized P&L."""

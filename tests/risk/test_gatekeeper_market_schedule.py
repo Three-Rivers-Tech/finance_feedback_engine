@@ -99,7 +99,7 @@ class TestGatekeeperMarketSchedule:
 
     def test_allows_forex_during_london_session(self):
         """Gatekeeper should allow forex trades during London session."""
-        # 10 AM London (2 PM UTC, open in London)
+        # 10 AM London (9 AM UTC during BST, open in London)
         now_utc = _to_utc(dt.datetime(2024, 5, 13, 10, 0), MarketSchedule.LONDON_TZ)
         timestamp = _to_unix(now_utc)
 

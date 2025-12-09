@@ -71,6 +71,82 @@ class RiskGatekeeper:
             counts[category] = counts.get(category, 0) + 1
         return counts
 
+    def check_market_hours(self, decision: Dict) -> Tuple[bool, Dict]:
+        """
+        Check market hours and data freshness, overriding decision if needed.
+
+        This is a gatekeeper-level enforcement that overrides AI decisions
+        when markets are closed or data is stale, regardless of what the
+        AI recommended.
+
+        Args:
+            decision: Decision dictionary containing market_data with
+                     market_status and data_freshness
+
+        Returns:
+            Tuple of (needs_override, modified_decision)
+            - needs_override: True if decision was modified
+            - modified_decision: Updated decision dict (or original if no changes)
+        """
+        action = decision.get('action', 'HOLD')
+        market_data = decision.get('market_data', {})
+        market_status = market_data.get('market_status', {})
+        data_freshness = market_data.get('data_freshness', {})
+
+        needs_override = False
+        modified_decision = decision.copy()
+        reasoning = decision.get('reasoning', '')
+
+        # Rule 1: Block trades when market is closed
+        is_open = market_status.get('is_open', True)
+        asset_type = market_data.get('asset_type', market_data.get('type', 'crypto'))
+
+        # Crypto markets are 24/7, so only enforce for forex/stocks
+        if not is_open and asset_type != 'crypto' and action in ['BUY', 'SELL']:
+            logger.warning(
+                f"[GATEKEEPER] Market is CLOSED for {asset_type}. "
+                f"Overriding {action} → HOLD. Session: {market_status.get('session', 'Unknown')}"
+            )
+            modified_decision['action'] = 'HOLD'
+            modified_decision['suggested_amount'] = 0
+            modified_decision['recommended_position_size'] = None
+            modified_decision['reasoning'] = (
+                f"{reasoning}\n\n[BLOCKED BY GATEKEEPER: Market is Closed - "
+                f"{market_status.get('session', 'Unknown')} session. "
+                f"Cannot execute {action} orders when market is not open.]"
+            )
+            needs_override = True
+
+        # Rule 2: Block trades when data is stale
+        is_fresh = data_freshness.get('is_fresh', True)
+        freshness_msg = data_freshness.get('message', '')
+
+        if not is_fresh and action in ['BUY', 'SELL']:
+            age_str = data_freshness.get('age_minutes', 'Unknown age')
+            logger.error(
+                f"[GATEKEEPER] Data is STALE ({age_str}). "
+                f"Overriding {action} → HOLD. {freshness_msg}"
+            )
+            modified_decision['action'] = 'HOLD'
+            modified_decision['suggested_amount'] = 0
+            modified_decision['recommended_position_size'] = None
+
+            # Append gatekeeper block message
+            gatekeeper_msg = (
+                f"\n\n[BLOCKED BY GATEKEEPER: Data is Stale - {age_str}. "
+                f"{freshness_msg} Trading on outdated data is prohibited.]"
+            )
+            modified_decision['reasoning'] = f"{reasoning}{gatekeeper_msg}"
+            needs_override = True
+
+        if needs_override:
+            logger.warning(
+                f"[GATEKEEPER] Decision override applied: {decision['action']} → "
+                f"{modified_decision['action']} for {decision.get('asset_pair', 'Unknown')}"
+            )
+
+        return needs_override, modified_decision
+
     def validate_trade(
         self,
         decision: Dict,
@@ -80,11 +156,12 @@ class RiskGatekeeper:
         Validate a trade decision against risk constraints.
 
         Enhanced with VaR and correlation analysis:
-        1. Max drawdown check (legacy)
-        2. Per-platform correlation check (enhanced)
-        3. Combined portfolio VaR check (new)
-        4. Cross-platform correlation warning (new, non-blocking)
-        5. Volatility/confidence check (legacy)
+        1. Market hours and data freshness check (gatekeeper override)
+        2. Max drawdown check (legacy)
+        3. Per-platform correlation check (enhanced)
+        4. Combined portfolio VaR check (new)
+        5. Cross-platform correlation warning (new, non-blocking)
+        6. Volatility/confidence check (legacy)
 
         Args:
             decision: Dict with trade details. Expected keys:
@@ -100,7 +177,21 @@ class RiskGatekeeper:
             Tuple ``(is_allowed, message)`` where ``is_allowed`` is ``True``
             if the trade passes all checks, otherwise ``False``.
         """
-        # 0. Market Schedule Check (Earliest: prevents trading in closed markets)
+        # 0A. Gatekeeper Override Check (Market Hours & Data Freshness from Decision)
+        # This enforces temporal constraints by overriding the decision if needed
+        needs_override, modified_decision = self.check_market_hours(decision)
+        if needs_override:
+            # Update the original decision dict in-place with the modified values
+            decision.update(modified_decision)
+            logger.info(
+                f"[GATEKEEPER] Decision was overridden to HOLD due to temporal constraints"
+            )
+            # After override to HOLD, the trade is technically "allowed" but neutralized
+            # Return True since we've handled it, but log the override
+            return True, "Decision overridden to HOLD (temporal constraints)"
+
+        # 0B. Market Schedule Check (Legacy: from context for backward compatibility)
+        # This provides additional validation using context data
         asset_pair = decision.get("asset_pair", "")
         asset_type = context.get("asset_type", "crypto")
         timestamp = context.get("timestamp")  # Unix timestamp (for backtesting)
