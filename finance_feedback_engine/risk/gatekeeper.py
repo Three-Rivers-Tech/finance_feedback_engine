@@ -136,7 +136,7 @@ class RiskGatekeeper:
                 f"\n\n[BLOCKED BY GATEKEEPER: Data is Stale - {age_str}. "
                 f"{freshness_msg} Trading on outdated data is prohibited.]"
             )
-            modified_decision['reasoning'] = f"{reasoning}{gatekeeper_msg}"
+            modified_decision['reasoning'] = f"{modified_decision.get('reasoning', reasoning)}{gatekeeper_msg}"
             needs_override = True
 
         if needs_override:

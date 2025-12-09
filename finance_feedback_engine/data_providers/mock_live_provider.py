@@ -127,10 +127,15 @@ class MockLiveProvider:
 
         Returns:
             Close price at current index
+
+        Raises:
+            IndexError: If current_index is out of bounds.
         """
         if self.current_index >= self.total_candles:
-            logger.warning("Index out of bounds, returning last close price")
-            return float(self.historical_data.iloc[-1]['close'])
+            raise IndexError(
+                f"Index {self.current_index} out of bounds "
+                f"(total: {self.total_candles})"
+            )
 
         current_row = self.historical_data.iloc[self.current_index]
         return float(current_row['close'])
@@ -141,6 +146,9 @@ class MockLiveProvider:
 
         Returns:
             Dictionary with OHLCV data
+        
+        Raises:
+            IndexError: If current_index is out of bounds.
         """
         if self.current_index >= self.total_candles:
             raise IndexError(

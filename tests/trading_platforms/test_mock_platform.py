@@ -294,7 +294,8 @@ class TestMockTradingPlatform:
 
         # Check position reflects new price in breakdown
         breakdown = platform.get_portfolio_breakdown()
-        position = next(p for p in breakdown['futures_positions'] if p['product_id'] == 'BTC-USD')
+        position = next((p for p in breakdown['futures_positions'] if p['product_id'] == 'BTC-USD'), None)
+        assert position is not None, "BTC-USD position not found in portfolio breakdown"
 
         assert position['current_price'] == 55000.0
         # Unrealized P&L should be positive (bought at 50k, now at 55k)
