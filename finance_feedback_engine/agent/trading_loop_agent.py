@@ -451,7 +451,7 @@ class TradingLoopAgent:
             for attempt in range(MAX_RETRIES):
                 try:
                     logger.debug(f"Analyzing {asset_pair} (Attempt {attempt + 1}/{MAX_RETRIES})...")
-                    decision = self.engine.analyze_asset(asset_pair)
+                    decision = await self.engine.analyze_asset(asset_pair)
 
                     # Reset failure count and timestamp on success
                     self.analysis_failures[failure_key] = 0
@@ -624,7 +624,7 @@ class TradingLoopAgent:
             max_iterations = 10  # Prevent infinite loops in one cycle
             iterations = 0
 
-            while self.state != AgentState.IDLE and iterations < max_iterations:
+            while self.state != AgentState.IDLE and iterations < max_iterations and self.is_running:
                 handler = self.state_handlers.get(self.state)
                 if handler:
                     await handler()
@@ -645,8 +645,6 @@ class TradingLoopAgent:
         except Exception as e:
             logger.error(f"Error in process_cycle: {e}", exc_info=True)
             return False
-
-    def stop(self):
         """Stops the trading loop."""
         logger.info("Stopping autonomous trading agent...")
         self.is_running = False

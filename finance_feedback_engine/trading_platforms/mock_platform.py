@@ -250,7 +250,8 @@ class MockTradingPlatform(BaseTradingPlatform):
                         'daily_pnl': 0.0
                     }
 
-            else:  # SELL
+            realized_pnl = 0.0
+            if action == 'SELL':
                 # For mock platform, SELL can close existing position or create short
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]
@@ -258,15 +259,15 @@ class MockTradingPlatform(BaseTradingPlatform):
                     # Close or reduce long position
                     if pos['contracts'] >= contracts:
                         # Calculate realized P&L
-                        pnl = (execution_price - pos['entry_price']) * contracts * self._contract_multiplier
-                        self._balance['FUTURES_USD'] += (suggested_amount + pnl - fee_amount)
+                        realized_pnl = (execution_price - pos['entry_price']) * contracts * self._contract_multiplier
+                        self._balance['FUTURES_USD'] += (suggested_amount + realized_pnl - fee_amount)
 
                         # Update position
                         pos['contracts'] -= contracts
                         if pos['contracts'] < 0.01:  # Close position if nearly zero
                             del self._positions[asset_pair_normalized]
 
-                        logger.info("Closed/reduced position, realized P&L: $%.2f", pnl)
+                        logger.info("Closed/reduced position, realized P&L: $%.2f", realized_pnl)
                     else:
                         # Not enough contracts to sell
                         logger.warning(
@@ -302,7 +303,8 @@ class MockTradingPlatform(BaseTradingPlatform):
                 'execution_price': execution_price,
                 'notional_value': suggested_amount,
                 'fee_amount': fee_amount,
-                'slippage_pct': slippage_pct
+                'slippage_pct': slippage_pct,
+                'realized_pnl': realized_pnl
             }
             self._trade_history.append(trade_record)
 
@@ -323,7 +325,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                 'execution_price': execution_price,
                 'total_value': suggested_amount,
                 'fee_amount': fee_amount,
-                'slippage_applied': slippage_pct,
+                'slippage_pct': slippage_pct,
                 'latency_seconds': latency,
                 'response': trade_record,
                 'timestamp': trade_record['timestamp']

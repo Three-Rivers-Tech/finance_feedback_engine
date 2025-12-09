@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import pandas as pd
+import pytz
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
@@ -284,50 +285,59 @@ class DecisionEngine:
                 f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
             )
             ai_response['action'] = 'HOLD'
+                try:
+                    market_status = context.get('market_status', {})
+                    if not isinstance(market_status, dict):
+                        market_status = {}
+                    data_freshness = context.get('data_freshness', {})
+                    if not isinstance(data_freshness, dict):
+                        data_freshness = {}
 
-        # Parse and structure decision
-        decision = self._create_decision(
-            asset_pair=asset_pair,
-            context=context,
-            ai_response=ai_response
-        )
+                    from datetime import datetime
+                    import pytz
+                    utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+                    ny_tz = pytz.timezone('America/New_York')
+                    ny_time = utc_now.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
+                    utc_time = utc_now.strftime('%Y-%m-%d %H:%M:%S UTC')
 
-        return decision
+                    is_open = market_status.get('is_open', True)
+                    session = market_status.get('session', 'Unknown')
+                    time_to_close = market_status.get('time_to_close', 0)
+                    if not isinstance(time_to_close, str):
+                        time_to_close = str(time_to_close)
+                    market_warning = market_status.get('warning', '')
 
+                    is_fresh = data_freshness.get('is_fresh', True)
+                    age_str = data_freshness.get('age_minutes', 'Unknown')
+                    if not isinstance(age_str, str):
+                        age_str = str(age_str)
+                    freshness_msg = data_freshness.get('message', '')
 
+                    status_emoji = "✅" if is_open else "🔴"
+                    freshness_emoji = "✅" if is_fresh else "⚠️" if "WARNING" in str(freshness_msg) else "🔴"
 
+                    market_info += f"""
+        TEMPORAL CONTEXT:
+        -----------------
+        Current Time: {utc_time} (NY: {ny_time})
+        Market Status: {status_emoji} {"OPEN" if is_open else "CLOSED"} ({session} Session)
+        Time to Close: {time_to_close} mins
+        Data Age: {age_str} {freshness_emoji}"""
 
-    def _specific_local_inference(self, prompt: str, model_name: str) -> Dict[str, Any]:
-        """Query a specific local model by name."""
-        logger.info(f"Using specific local model: {model_name}")
-        try:
-            from .local_llm_provider import LocalLLMProvider
+                    if market_warning:
+                        market_info += f"\nMarket Warning: {market_warning}"
+                    if freshness_msg:
+                        market_info += f"\nFreshness Alert: {freshness_msg}"
 
-            # Create temporary config overriding the model_name and including local settings
-            import copy
-            temp_config = copy.deepcopy(self.config)
-            temp_config['model_name'] = model_name
-            temp_config.setdefault('decision_engine', {})
-            temp_config['decision_engine']['local_models'] = self.local_models
-            temp_config['decision_engine']['local_priority'] = self.local_priority
+                    market_info += """
 
-            provider = LocalLLMProvider(temp_config)
-            response = provider.query(prompt)
-            return response
-        except Exception as e:
-            logger.warning(f"Local model {model_name} failed: {e}")
-            return {
-                'action': 'HOLD',
-                'confidence': 0,
-                'reasoning': f'Local model {model_name} failed: {str(e)}',
-                'amount': 0,
-                'ai_failure': True
-            }
-
-
-    def _create_decision_context(
-        self,
-        asset_pair: str,
+        TIME-BASED RULES (MANDATORY):
+        """
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Temporal context block failed: {e}")
+                    market_info += "\nTEMPORAL CONTEXT: unavailable due to error.\n"
+                    market_info += "\nTIME-BASED RULES (MANDATORY):\n"
         market_data: Dict[str, Any],
         balance: Dict[str, float],
         portfolio: Optional[Dict[str, Any]] = None,
@@ -366,20 +376,35 @@ class DecisionEngine:
 
         # Add market schedule status
         asset_type = market_data.get('asset_type', 'crypto')
-        market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
-        context['market_status'] = market_status
+        try:
+            market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
+            context['market_status'] = market_status if market_status else {}
+        except Exception as e:
+            logger.warning(f"Failed to get market status: {e}")
+            context['market_status'] = {}
 
         # Validate data freshness
-        data_timestamp = market_data.get('date') or market_data.get('timestamp')
-        if data_timestamp:
-            is_fresh, age_minutes, freshness_message = validate_data_freshness(
-                data_timestamp, asset_type
-            )
-            context['data_freshness'] = {
-                'is_fresh': is_fresh,
-                'age_minutes': age_minutes,
-                'message': freshness_message
-            }
+        data_timestamp = market_data.get('date')
+        if data_timestamp is None:
+            data_timestamp = market_data.get('timestamp')
+
+        if data_timestamp is not None:
+            try:
+                is_fresh, age_minutes, freshness_message = validate_data_freshness(
+                    data_timestamp, asset_type
+                )
+                context['data_freshness'] = {
+                    'is_fresh': is_fresh,
+                    'age_minutes': age_minutes,
+                    'message': freshness_message
+                }
+            except Exception as e:
+                logger.warning(f"Failed to validate data freshness: {e}")
+                context['data_freshness'] = {
+                    'is_fresh': False,
+                    'age_minutes': None,
+                    'message': f'Validation error: {str(e)}'
+                }
         else:
             context['data_freshness'] = {
                 'is_fresh': False,
@@ -642,10 +667,6 @@ Close Position: {market_data.get('close_position_in_range', 0.5):.1%} in daily r
         # Add temporal context (market schedule and data freshness)
         market_status = context.get('market_status', {})
         data_freshness = context.get('data_freshness', {})
-
-        # Format timestamps
-        from datetime import datetime
-        import pytz
         utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
         ny_tz = pytz.timezone('America/New_York')
         ny_time = utc_now.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
@@ -1970,6 +1991,10 @@ Present your judgment with clear reasoning and final decision.
             else:
                 # Unknown type, use all balances as fallback
                 relevant_balance = balance
+
+            # Fallback for unified cash balance when platform-specific keys are absent
+            if not relevant_balance and 'USD' in balance:
+                relevant_balance = {'USD': balance['USD']}
 
         # Check if relevant balance data is available and valid
         has_valid_balance = (
