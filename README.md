@@ -345,63 +345,73 @@ python main.py analyze BTCUSD --provider ensemble
 #### Ensemble Decision Aggregation Flow
 
 ```mermaid
-flowchart TD
+graph TD
     START([Ensemble Request Initiated])
-    QUERY[Query All Enabled Providers in Parallel]
-
-    subgraph "Provider Queries Concurrent"
-        P1[local Ollama]
-        P2[codex Codex CLI]
-        P3[cli GitHub Copilot CLI]
-        P4[qwen Qwen CLI]
-        P5[gemini Gemini CLI]
+    START --> QUERY[Query All Enabled Providers in Parallel]
+    
+    subgraph "Providers"
+        P1[local]
+        P2[codex]
+        P3[cli]
+        P4[qwen]
+        P5[gemini]
     end
-
-    COLLECT[Collect Responses]
-    DETECT[Detect Provider Failures]
-
-    CALC_WEIGHTS[Dynamic Weight Recalculation]
-
+    
+    QUERY --> P1 & P2 & P3 & P4 & P5
+    
+    P1 & P2 & P3 & P4 & P5 --> COLLECT{Collect Responses}
+    
+    COLLECT --> DETECT[Detect Provider Failures]
+    
+    DETECT --> CALC_WEIGHTS[Dynamic Weight Recalculation<br><i>Renormalize weights of active providers</i>]
+    
+    subgraph "Example: Weight Adjustment"
+        direction LR
+        ORIG[Original Weights<br>local: 0.25, cli: 0.25,<br>codex: 0.25, qwen: 0.25]
+        FAIL[cli FAILED]
+        ACTIVE[Active Sum = 0.75<br>3/4 providers]
+        ADJ[Adjusted Weights<br>local: 0.333 (0.25/0.75)<br>codex: 0.333<br>qwen: 0.333]
+        
+        ORIG --> FAIL --> ACTIVE --> ADJ
+    end
+    
+    CALC_WEIGHTS --> T1
+    
     subgraph "4-Tier Fallback Strategy"
-        T1{Tier 1 Weighted Voting}
-        T2{Tier 2 Majority Voting}
-        T3{Tier 3 Simple Averaging}
-        T4[Tier 4 Single Provider]
-
-        T1 -->|Fails| T2
+        direction TB
+        T1{Tier 1: Weighted Voting}
+        T2{Tier 2: Majority Voting}
+        T3{Tier 3: Simple Averaging}
+        T4[Tier 4: Single Best Provider]
+        
+        T1 -->|Fails or No Weights| T2
         T2 -->|No Majority| T3
         T3 -->|Fails| T4
     end
-
-    CONFIDENCE[Confidence Adjustment]
-    QUORUM{Local Provider Quorum Met?}
-    PENALTY[Apply 30-Point Confidence Penalty]
-
-    META[Attach Ensemble Metadata]
-
-    DECISION([Final Aggregated Decision])
-
-    START --> QUERY
-    QUERY --> P1 & P2 & P3 & P4 & P5
-    P1 & P2 & P3 & P4 & P5 --> COLLECT
-    COLLECT --> DETECT
-
-    DETECT --> CALC_WEIGHTS
-
-    CALC_WEIGHTS --> T1
-    T1 & T2 & T3 & T4 --> CONFIDENCE
-
-    CONFIDENCE --> QUORUM
-    QUORUM -->|Yes| META
-    QUORUM -->|No| PENALTY
+    
+    T1 --> AGG_RESULT
+    T2 --> AGG_RESULT
+    T3 --> AGG_RESULT
+    T4 --> AGG_RESULT
+    
+    AGG_RESULT{Aggregated Result} --> CONFIDENCE[Confidence Adjustment]
+    
+    CONFIDENCE --> QUORUM{Local Provider Quorum Met? (min 3)}
+    QUORUM -- Yes --> META[Attach Ensemble Metadata]
+    QUORUM -- No --> PENALTY[Apply 30% Confidence Penalty]
     PENALTY --> META
+    
     META --> DECISION
-
+    
+    DECISION([Final Aggregated Decision])
+    
     style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
     style T2 fill:#FFC107,stroke:#F57C00,color:#333
     style T3 fill:#FF9800,stroke:#E65100,color:#fff
     style T4 fill:#F44336,stroke:#C62828,color:#fff
     style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
+    style PENALTY fill:#FF5722,stroke:#BF360C,color:#fff
+    style ADJ fill:#9C27B0,stroke:#4A148C,color:#fff
 ```
 
 **Features:**
