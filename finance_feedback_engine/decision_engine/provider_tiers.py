@@ -2,19 +2,19 @@
 
 from typing import Dict, List, Literal
 
-# Free tier: 5 Ollama models + Qwen CLI (zero cost)
+# Free tier: 5 Ollama models (zero cost, runs locally)
 FREE_TIER = [
     'llama3.2:3b-instruct-fp16',
     'deepseek-r1:8b',
     'mistral:7b-instruct',
     'qwen2.5:7b-instruct',
     'gemma2:9b',
-    'qwen'  # Qwen CLI (free tier with rate limits)
 ]
 
-# Premium tier: Cloud-based APIs (require payment or limited free tier)
+# Premium tier: Cloud-based CLI providers (free tier with rate limits or paid)
 PREMIUM_TIER = [
     'gemini',  # Gemini CLI (free tier: 60/min, 1000/day)
+    'qwen',    # Qwen CLI (free tier with rate limits)
     'cli',     # Copilot CLI (requires GitHub Copilot subscription)
     'codex'    # Codex CLI (fallback)
 ]
@@ -42,7 +42,7 @@ MODEL_DOWNLOAD_SIZES: Dict[str, float] = {
 def get_free_providers() -> List[str]:
     """
     Get list of free-tier providers.
-    
+
     Returns:
         List of provider names that are free to use
     """
@@ -52,7 +52,7 @@ def get_free_providers() -> List[str]:
 def get_premium_providers() -> List[str]:
     """
     Get list of premium-tier providers.
-    
+
     Returns:
         List of provider names that require payment or have strict limits
     """
@@ -62,7 +62,7 @@ def get_premium_providers() -> List[str]:
 def get_ollama_models() -> List[str]:
     """
     Get list of Ollama models from free tier.
-    
+
     Returns:
         List of Ollama model names (excludes CLI providers)
     """
@@ -72,24 +72,24 @@ def get_ollama_models() -> List[str]:
 def get_premium_provider_for_asset(asset_type: str) -> str:
     """
     Determine which premium provider to use based on asset type.
-    
+
     Asset-based routing:
     - Crypto (BTC, ETH, etc.) -> Copilot CLI (best for crypto analysis)
     - Forex/Stock -> Gemini (best for traditional markets)
-    
+
     Args:
         asset_type: Asset type from Alpha Vantage ('crypto', 'forex', 'stock')
-    
+
     Returns:
         Premium provider name ('cli' for crypto, 'gemini' for forex/stock)
-    
+
     Raises:
         ValueError: If asset_type is not one of the supported types
     """
     valid_types = ('crypto', 'forex', 'stock')
     if asset_type not in valid_types:
         raise ValueError(f"Invalid asset_type '{asset_type}'. Must be one of {valid_types}")
-    
+
     if asset_type == 'crypto':
         return 'cli'
     else:
@@ -100,7 +100,7 @@ def get_premium_provider_for_asset(asset_type: str) -> str:
 def get_fallback_provider() -> str:
     """
     Get the fallback premium provider (used when primary fails).
-    
+
     Returns:
         Fallback provider name ('codex')
     """
@@ -110,10 +110,10 @@ def get_fallback_provider() -> str:
 def get_tier(provider_name: str) -> Literal['free', 'premium', 'unknown']:
     """
     Get the tier classification for a provider.
-    
+
     Args:
         provider_name: Name of the provider
-    
+
     Returns:
         'free', 'premium', or 'unknown'
     """
@@ -128,10 +128,10 @@ def get_tier(provider_name: str) -> Literal['free', 'premium', 'unknown']:
 def is_ollama_model(provider_name: str) -> bool:
     """
     Check if provider is an Ollama model (vs CLI provider).
-    
+
     Args:
         provider_name: Name of the provider
-    
+
     Returns:
         True if Ollama model, False otherwise
     """
@@ -142,7 +142,7 @@ def get_total_vram_required() -> float:
     """
     Calculate total VRAM if all models loaded simultaneously.
     Note: System loads models sequentially to avoid this.
-    
+
     Returns:
         Total VRAM in GB
     """
@@ -152,7 +152,7 @@ def get_total_vram_required() -> float:
 def get_total_download_size() -> float:
     """
     Calculate total download size for all Ollama models.
-    
+
     Returns:
         Total download size in GB
     """

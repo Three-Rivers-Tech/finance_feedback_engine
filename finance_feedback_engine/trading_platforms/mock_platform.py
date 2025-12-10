@@ -260,7 +260,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                     if pos['contracts'] >= contracts:
                         # Calculate realized P&L
                         pnl = (execution_price - pos['entry_price']) * contracts * self._contract_multiplier
-                        self._balance['FUTURES_USD'] += (suggested_amount + pnl - fee_amount)
+                        self._balance['FUTURES_USD'] += (suggested_amount - fee_amount)
 
                         # Update position
                         pos['contracts'] -= contracts
