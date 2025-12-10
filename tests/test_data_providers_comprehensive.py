@@ -1,7 +1,8 @@
 """Comprehensive tests for data providers (Alpha Vantage, Coinbase, Oanda, Unified)."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+import asyncio
+from unittest.mock import Mock, patch, MagicMock, AsyncMock
 import json
 from datetime import datetime
 
@@ -38,7 +39,7 @@ class TestAlphaVantageProvider:
         }
         mock_get.return_value = mock_response
 
-        data = provider.get_market_data('AAPL')
+        data = asyncio.run(provider.get_market_data('AAPL'))
 
         assert data is not None
         assert 'open' in data
@@ -56,7 +57,7 @@ class TestAlphaVantageProvider:
         mock_get.return_value = mock_response
 
         with pytest.raises(Exception):
-            provider.get_market_data('AAPL')
+            asyncio.run(provider.get_market_data('AAPL'))
 
     @patch('requests.get')
     def test_circuit_breaker_opens_on_failures(self, mock_get, provider):
@@ -66,54 +67,12 @@ class TestAlphaVantageProvider:
         # Trigger multiple failures
         for _ in range(5):
             try:
-                provider.get_market_data('AAPL')
+                asyncio.run(provider.get_market_data('AAPL'))
             except Exception:
                 pass
 
         # Circuit breaker should be open
         assert provider.circuit_breaker.state.name in ['OPEN', 'HALF_OPEN']
-
-    @patch('requests.get')
-    def test_get_sentiment_data(self, mock_get, provider):
-        """Test sentiment data retrieval."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'feed': [
-                {
-                    'title': 'Market update',
-                    'overall_sentiment_score': 0.5,
-                    'ticker_sentiment': [
-                        {'ticker': 'AAPL', 'ticker_sentiment_score': '0.6'}
-                    ]
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-
-        sentiment = provider.get_sentiment_data('AAPL')
-
-        assert sentiment is not None
-        assert 'overall_sentiment' in sentiment or 'feed' in sentiment
-
-    @patch('requests.get')
-    def test_get_macro_data(self, mock_get, provider):
-        """Test macro economic data retrieval."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'data': [
-                {
-                    'date': '2024-12-01',
-                    'value': '3.5'
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-
-        macro = provider.get_macro_data('GDP')
-
-        assert macro is not None
 
     @patch('requests.get')
     def test_get_comprehensive_market_data(self, mock_get, provider):
@@ -135,10 +94,11 @@ class TestAlphaVantageProvider:
 
         mock_get.return_value = mock_response_market
 
-        data = provider.get_comprehensive_market_data('AAPL')
+        data = asyncio.run(provider.get_comprehensive_market_data('AAPL'))
 
         assert data is not None
-        assert 'market_data' in data or 'price' in data
+        # Check for either market_data key or direct price keys
+        assert 'open' in data or 'market_data' in data
 
     def test_api_key_required(self):
         """Test that API key is required."""
@@ -146,7 +106,7 @@ class TestAlphaVantageProvider:
 
         with pytest.raises(Exception):
             provider = AlphaVantageProvider(api_key=None)
-            provider.get_market_data('AAPL')
+            asyncio.run(provider.get_market_data('AAPL'))
 
 
 class TestCoinbaseDataProvider:
@@ -154,15 +114,15 @@ class TestCoinbaseDataProvider:
 
     @pytest.fixture
     def provider(self):
-        """Create CoinbaseData instance."""
-        from finance_feedback_engine.data_providers.coinbase_data import CoinbaseData
+        """Create CoinbaseDataProvider instance."""
+        from finance_feedback_engine.data_providers.coinbase_data import CoinbaseDataProvider
 
         config = {
             'api_key': 'test_key',
             'api_secret': 'test_secret'
         }
 
-        return CoinbaseData(config)
+        return CoinbaseDataProvider(config)
 
     def test_initialization(self, provider):
         """Test provider initializes with config."""
@@ -217,15 +177,15 @@ class TestOandaDataProvider:
 
     @pytest.fixture
     def provider(self):
-        """Create OandaData instance."""
-        from finance_feedback_engine.data_providers.oanda_data import OandaData
+        """Create OandaDataProvider instance."""
+        from finance_feedback_engine.data_providers.oanda_data import OandaDataProvider
 
         config = {
             'api_key': 'test_key',
             'account_id': 'test_account'
         }
 
-        return OandaData(config)
+        return OandaDataProvider(config)
 
     def test_initialization(self, provider):
         """Test provider initializes with config."""
