@@ -530,7 +530,7 @@ class Backtester:
                 balance = self.mock_platform.get_balance()
 
                 # Generate decision
-                decision = self.decision_engine.generate_decision(
+                decision = await self.decision_engine.generate_decision(
                     asset_pair=asset_pair,
                     market_data=market_data,
                     balance=balance,
