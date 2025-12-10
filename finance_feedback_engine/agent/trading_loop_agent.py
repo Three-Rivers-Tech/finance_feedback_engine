@@ -71,7 +71,7 @@ class TradingLoopAgent:
         self._max_startup_retries = 3
 
         # For preventing infinite loops on rejected trades
-        self._rejected_decisions_cache = {} # {decision_id: rejection_timestamp}
+        self._rejected_decisions_cache = {} # {decision_id: (rejection_timestamp, asset_pair)}
         self._rejection_cooldown_seconds = 300 # 5 minutes cooldown
 
         # State machine handler map
@@ -477,9 +477,9 @@ class TradingLoopAgent:
         self._current_decisions.clear() # Clear decisions from previous cycle
 
         # --- Cleanup expired rejected decisions ---
-        current_time = datetime.now()
+        current_time = datetime.datetime.now()
         expired_keys = [
-            d_id for d_id, timestamp in self._rejected_decisions_cache.items()
+            d_id for d_id, (timestamp, _) in self._rejected_decisions_cache.items()
             if (current_time - timestamp).total_seconds() > self._rejection_cooldown_seconds
         ]
         for key in expired_keys:
@@ -499,10 +499,8 @@ class TradingLoopAgent:
 
             # --- Check if asset was recently rejected ---
             asset_rejected = False
-            for d_id in self._rejected_decisions_cache.keys():
-                # Simple check: if decision_id contains asset_pair, consider it relevant
-                # A more robust check might involve parsing decision_id or storing asset_pair with rejection
-                if asset_pair in d_id:
+            for timestamp, cached_asset_pair in self._rejected_decisions_cache.values():
+                if asset_pair == cached_asset_pair:
                     logger.info(f"Skipping analysis for {asset_pair}: recently rejected. Cooldown active.")
                     asset_rejected = True
                     break
@@ -546,7 +544,7 @@ class TradingLoopAgent:
                             f"It will be skipped for a while.",
                             exc_info=True
                         )
-        
+
         # After analyzing all assets, transition based on collected decisions
         if self._current_decisions:
             logger.info(f"Collected {len(self._current_decisions)} actionable decisions. Proceeding to RISK_CHECK.")
@@ -584,8 +582,8 @@ class TradingLoopAgent:
                 approved_decisions.append(decision)
             else:
                 logger.info(f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}.")
-                self._rejected_decisions_cache[decision_id] = datetime.now() # Add to cache
-        
+                self._rejected_decisions_cache[decision_id] = (datetime.datetime.now(), asset_pair)  # Add to cache
+
         self._current_decisions = approved_decisions # Keep only approved decisions
 
         if self._current_decisions:
@@ -621,7 +619,7 @@ class TradingLoopAgent:
                     logger.error(f"Trade execution failed for {asset_pair}: {execution_result.get('message')}.")
             except Exception as e:
                 logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
-        
+
         # Clear all decisions after attempting execution
         self._current_decisions.clear()
 
