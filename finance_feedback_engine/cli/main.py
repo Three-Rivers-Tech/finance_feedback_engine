@@ -1860,13 +1860,29 @@ def backtest(
 
     try:
         # Validate date range (moved from below)
-        start_dt = datetime.strptime(start, "%Y-%m-%d")
-        end_dt = datetime.strptime(end, "%Y-%m-%d")
+        try:
+            start_dt = datetime.strptime(start, "%Y-%m-%d")
+        except ValueError:
+            raise click.BadParameter(
+                f"[bold red]Invalid start date format:[/bold red] {start}\n"
+                f"[yellow]Expected format:[/yellow] YYYY-MM-DD (e.g., 2024-01-01)",
+                param_hint="--start"
+            )
+
+        try:
+            end_dt = datetime.strptime(end, "%Y-%m-%d")
+        except ValueError:
+            raise click.BadParameter(
+                f"[bold red]Invalid end date format:[/bold red] {end}\n"
+                f"[yellow]Expected format:[/yellow] YYYY-MM-DD (e.g., 2024-01-31)",
+                param_hint="--end"
+            )
+
         if start_dt >= end_dt:
-            console.print(
+            raise click.BadParameter(
+                f"[bold red]Invalid date range:[/bold red] "
                 f"start_date ({start}) must be before end_date ({end})"
             )
-            raise click.Abort()
 
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
@@ -2528,7 +2544,9 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
         config = ctx.obj['config']
 
         # Override AI provider from CLI option
-        if provider and 'decision_engine' in config:
+        if provider:
+            if 'decision_engine' not in config:
+                config['decision_engine'] = {}
             config['decision_engine']['ai_provider'] = provider.lower()
 
         engine = FinanceFeedbackEngine(config)
@@ -2652,7 +2670,9 @@ def monte_carlo(ctx, asset_pair, start_date, end_date, simulations, noise_std, p
         config = ctx.obj['config']
 
         # Override AI provider from CLI option
-        if provider and 'decision_engine' in config:
+        if provider:
+            if 'decision_engine' not in config:
+                config['decision_engine'] = {}
             config['decision_engine']['ai_provider'] = provider.lower()
 
         engine = FinanceFeedbackEngine(config)

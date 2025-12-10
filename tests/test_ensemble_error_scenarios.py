@@ -179,8 +179,8 @@ class TestDynamicWeightAdjustment:
         # Weights should sum to 1.0
         assert abs(sum(adjusted_weights.values()) - 1.0) < 0.001
 
-        # Each remaining provider should have the correctly calculated weight
-        assert abs(adjusted_weights['local'] - (0.25 / (0.25 + 0.25 + 0.25))) > 0.01 # Should not be equal
+        # Each remaining provider should have the correctly calculated weight (standard renormalization after removing 'cli')
+        assert abs(adjusted_weights['local'] - (0.25 / (0.25 + 0.25 + 0.25))) < 0.01
         assert "cli" not in adjusted_weights
 
 

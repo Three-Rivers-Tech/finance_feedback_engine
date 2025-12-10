@@ -155,8 +155,7 @@ class DecisionEngine:
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None
         if self.ai_provider == 'ensemble':
-            from .ensemble_manager import EnsembleDecisionManager
-            self.ensemble_manager = EnsembleDecisionManager(config)
+            self._get_ensemble_manager()
             logger.info("Ensemble mode enabled")
 
         # Initialize vector memory for semantic search (optional)
@@ -179,6 +178,13 @@ class DecisionEngine:
             logger.warning(f"Failed to initialize vector memory: {e}. Proceeding without semantic search.")
 
         logger.info(f"Decision engine initialized with provider: {self.ai_provider}")
+
+    def _get_ensemble_manager(self):
+        """Lazily create and cache the ensemble manager."""
+        if self.ensemble_manager is None:
+            from .ensemble_manager import EnsembleDecisionManager
+            self.ensemble_manager = EnsembleDecisionManager(self.config)
+        return self.ensemble_manager
 
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage."""
@@ -612,16 +618,13 @@ Format response as a structured technical analysis demonstration.
         # Two-phase decision routing for single providers
         # This logic was part of _ensemble_ai_inference but is also relevant here
         if self.ai_provider in ['local', 'cli', 'codex', 'qwen', 'gemini']:
-            from .ensemble_manager import EnsembleDecisionManager
-            # Temporarily create an ensemble manager to use its two-phase logic
-            # This is a bit of a workaround but keeps the logic centralized.
-            temp_ensemble_manager = EnsembleDecisionManager(self.config)
-            if temp_ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
-                 return temp_ensemble_manager.aggregate_decisions_two_phase(
+            ensemble_manager = self._get_ensemble_manager()
+            if ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
+                return ensemble_manager.aggregate_decisions_two_phase(
                     prompt,
                     asset_pair,
                     market_data,
-                    lambda p, pr: self._query_single_provider(p, pr))
+                    lambda provider_name, provider_prompt: self._query_single_provider(provider_name, provider_prompt))
 
         # Route to appropriate single provider
         if self.ai_provider == 'local':
@@ -636,6 +639,84 @@ Format response as a structured technical analysis demonstration.
         #     return self._gemini_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
+
+    def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        Execute debate mode: structured debate with bull, bear, and judge providers.
+
+        Flow:
+        1. Query bull provider (bullish stance)
+        2. Query bear provider (bearish stance)
+        3. Query judge provider (final decision based on debate)
+        4. Synthesize decisions via ensemble_manager.debate_decisions()
+
+        Returns:
+            Decision with debate metadata
+        """
+        logger.info("Using debate mode ensemble")
+
+        bull_provider = self.ensemble_manager.debate_providers.get('bull')
+        bear_provider = self.ensemble_manager.debate_providers.get('bear')
+        judge_provider = self.ensemble_manager.debate_providers.get('judge')
+
+        failed_debate_providers = []
+        bull_case = None
+        bear_case = None
+        judge_decision = None
+
+        # Query bull provider (bullish case)
+        try:
+            bull_case = self._query_single_provider(bull_provider, prompt)
+            if not self.ensemble_manager._is_valid_provider_response(bull_case, bull_provider):
+                logger.warning(f"Debate: {bull_provider} (bull) returned invalid response")
+                failed_debate_providers.append(bull_provider)
+                bull_case = None
+            else:
+                logger.info(f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)")
+        except Exception as e:
+            logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
+            failed_debate_providers.append(bull_provider)
+
+        # Query bear provider (bearish case)
+        try:
+            bear_case = self._query_single_provider(bear_provider, prompt)
+            if not self.ensemble_manager._is_valid_provider_response(bear_case, bear_provider):
+                logger.warning(f"Debate: {bear_provider} (bear) returned invalid response")
+                failed_debate_providers.append(bear_provider)
+                bear_case = None
+            else:
+                logger.info(f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)")
+        except Exception as e:
+            logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
+            failed_debate_providers.append(bear_provider)
+
+        # Query judge provider (final decision)
+        try:
+            judge_decision = self._query_single_provider(judge_provider, prompt)
+            if not self.ensemble_manager._is_valid_provider_response(judge_decision, judge_provider):
+                logger.warning(f"Debate: {judge_provider} (judge) returned invalid response")
+                failed_debate_providers.append(judge_provider)
+                judge_decision = None
+            else:
+                logger.info(f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)")
+        except Exception as e:
+            logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
+            failed_debate_providers.append(judge_provider)
+
+        # Fallback: if any debate provider failed, use rule-based decision
+        if bull_case is None or bear_case is None or judge_decision is None:
+            logger.warning("Debate mode: Some providers failed, falling back to rule-based decision")
+            return self._rule_based_decision(prompt)
+
+        # Synthesize debate decisions
+        final_decision = self.ensemble_manager.debate_decisions(
+            bull_case=bull_case,
+            bear_case=bear_case,
+            judge_decision=judge_decision,
+            failed_debate_providers=failed_debate_providers
+        )
+
+        return final_decision
 
     def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
@@ -659,20 +740,73 @@ Format response as a structured technical analysis demonstration.
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Centralized ensemble logic, now also handling two-phase."""
+        """Centralized ensemble logic with debate mode and two-phase support."""
+        # Debate mode: structured debate with bull, bear, and judge providers
         if self.ensemble_manager.debate_mode:
-            # Debate mode logic remains separate
-            # ... (debate logic here, assuming it's correct)
-            pass
+            return self._debate_mode_inference(prompt)
 
-        # Two-phase logic is now the default for ensemble if enabled
+        # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
         if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
             return self.ensemble_manager.aggregate_decisions_two_phase(
                 prompt, asset_pair, market_data,
-                lambda p, pr: self._query_single_provider(p, pr)
+                lambda provider, prompt_text: self._query_single_provider(provider, prompt_text)
             )
         # Fallback to simple parallel query if two-phase is off
         return self._simple_parallel_ensemble(prompt)
+
+    def _simple_parallel_ensemble(self, prompt: str) -> Dict[str, Any]:
+        """
+        Simple parallel ensemble: query all enabled providers concurrently and aggregate.
+
+        Used when two-phase escalation is disabled. Queries all enabled providers
+        in parallel (up to MAX_WORKERS threads) and aggregates results using the
+        ensemble manager's standard aggregation method.
+
+        Args:
+            prompt: AI prompt to send to all providers
+
+        Returns:
+            Aggregated decision from all provider responses
+        """
+        logger.info(f"Using simple parallel ensemble with {len(self.ensemble_manager.enabled_providers)} providers")
+
+        provider_decisions = {}
+        failed_providers = []
+
+        # Query all enabled providers in parallel
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(self._query_single_provider, provider, prompt): provider
+                for provider in self.ensemble_manager.enabled_providers
+            }
+
+            for future in as_completed(futures, timeout=ENSEMBLE_TIMEOUT):
+                provider = futures[future]
+                try:
+                    decision = future.result(timeout=ENSEMBLE_TIMEOUT)
+                    if self.ensemble_manager._is_valid_provider_response(decision, provider):
+                        provider_decisions[provider] = decision
+                        logger.debug(f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
+                    else:
+                        logger.warning(f"Provider {provider} returned invalid response")
+                        failed_providers.append(provider)
+                except TimeoutError:
+                    logger.error(f"Provider {provider} timed out (>{ENSEMBLE_TIMEOUT}s)")
+                    failed_providers.append(provider)
+                except Exception as e:
+                    logger.error(f"Provider {provider} failed: {e}")
+                    failed_providers.append(provider)
+
+        # Fallback to rule-based decision if no providers succeeded
+        if not provider_decisions:
+            logger.warning("All providers failed in parallel ensemble, using rule-based fallback")
+            return self._rule_based_decision(prompt)
+
+        # Aggregate results using ensemble manager
+        return self.ensemble_manager.aggregate_decisions(
+            provider_decisions=provider_decisions,
+            failed_providers=failed_providers
+        )
 
     def _local_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """

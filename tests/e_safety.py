@@ -5,13 +5,13 @@ from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory
 
 
-def make_config():
+def make_config(storage_path: str = 'data/decisions_test'):
     return {
         'trading_platform': 'mock',
         'platform_credentials': {},
         'alpha_vantage_api_key': 'TEST',
         'decision_engine': {},
-        'persistence': {'storage_path': 'data/decisions_test'},
+        'persistence': {'storage_path': storage_path},
         'portfolio_memory': {'enabled': False},
         'monitoring': {'enable_context_integration': False},
         'safety': {'max_leverage': 5.0, 'max_position_pct': 50.0}
@@ -19,7 +19,7 @@ def make_config():
 
 
 def test_signal_only_blocks_execution(tmp_path, monkeypatch):
-    cfg = make_config()
+    cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     engine = FinanceFeedbackEngine(cfg)
 
     # Create a fake decision and save it
@@ -41,7 +41,7 @@ def test_signal_only_blocks_execution(tmp_path, monkeypatch):
 
 @freeze_time("2025-01-01T00:00:01Z")
 def test_mock_platform_executes(tmp_path):
-    cfg = make_config()
+    cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     engine = FinanceFeedbackEngine(cfg)
 
     # Create a fake decision allowed to execute
@@ -59,12 +59,12 @@ def test_mock_platform_executes(tmp_path):
 
     result = engine.execute_decision('test-exec')
     assert isinstance(result, dict)
-    assert result.get('success') or result.get('message')
+    assert result.get('success') is True, f"Expected successful execution, got: {result}"
 
 
 @freeze_time("2025-01-01T00:00:01Z")
 def test_breaker_opens_after_failures(tmp_path, monkeypatch):
-    cfg = make_config()
+    cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     engine = FinanceFeedbackEngine(cfg)
 
     # Prepare a decision
@@ -99,7 +99,7 @@ def test_breaker_opens_after_failures(tmp_path, monkeypatch):
 
 @freeze_time("2025-01-01T00:00:01Z")
 def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
-    cfg = make_config()
+    cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     # enable portfolio memory so record_trade_outcome is active
     cfg['portfolio_memory'] = {'enabled': True}
     engine = FinanceFeedbackEngine(cfg)
