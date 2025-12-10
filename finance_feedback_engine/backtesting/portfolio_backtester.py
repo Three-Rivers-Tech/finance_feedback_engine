@@ -160,7 +160,8 @@ class PortfolioBacktester:
                 correlation_threshold=portfolio_config.get("correlation_threshold", 0.7),
                 max_correlated_assets=portfolio_config.get("max_positions", 5),
                 max_var_pct=portfolio_config.get("max_portfolio_risk", 0.05),
-                var_confidence=0.95
+                var_confidence=0.95,
+                is_backtest=True
             )
 
         self.memory_engine = memory_engine or PortfolioMemoryEngine(config)
