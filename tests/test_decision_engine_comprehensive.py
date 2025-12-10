@@ -469,7 +469,6 @@ class TestEnsembleIntegration:
         # If ensemble routing works, we expect a decision dict
         assert decision is not None
         assert 'action' in decision
-        assert decision is not None or decision is None  # Either way, no exception
 
 
 class TestCircuitBreakerIntegration:
