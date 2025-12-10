@@ -194,12 +194,26 @@ class RiskGatekeeper:
         # This provides additional validation using context data
         asset_pair = decision.get("asset_pair", "")
         asset_type = context.get("asset_type", "crypto")
-        timestamp = context.get("timestamp")  # Unix timestamp (for backtesting)
+        timestamp = context.get("timestamp")  # Unix timestamp or ISO string (for backtesting)
 
         if timestamp:
-            market_status = MarketSchedule.get_market_status_at_timestamp(
-                asset_pair, asset_type, timestamp
-            )
+            # Convert ISO string to Unix timestamp if needed
+            try:
+                if isinstance(timestamp, str):
+                    # Handle ISO format string: "2025-01-01T12:30:45.123456"
+                    import datetime as _dt
+                    dt_obj = _dt.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    unix_timestamp = int(dt_obj.timestamp())
+                else:
+                    # Already a Unix timestamp
+                    unix_timestamp = int(timestamp)
+
+                market_status = MarketSchedule.get_market_status_at_timestamp(
+                    asset_pair, asset_type, unix_timestamp
+                )
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"Could not parse timestamp {timestamp}: {e}. Using live market status.")
+                market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
         else:
             market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
 

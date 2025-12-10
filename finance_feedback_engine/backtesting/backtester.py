@@ -503,9 +503,8 @@ class Backtester:
         # Create TradeMonitor (needed by TradingLoopAgent)
         # Use memory engine if available
         trade_monitor = TradeMonitor(
-            trading_platform=mock_platform,
-            portfolio_memory=self.memory_engine if self.memory_engine else None,
-            config=self.config if self.config else {}
+            platform=mock_platform,
+            portfolio_memory=self.memory_engine if self.memory_engine else None
         )
 
         # Create FinanceFeedbackEngine wrapper to provide analyze_asset interface
