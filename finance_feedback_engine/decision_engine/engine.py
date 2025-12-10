@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import subprocess
 import pandas as pd
 import pytz
+import asyncio
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
@@ -761,7 +762,7 @@ Format response as a structured technical analysis demonstration.
 
         # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
         if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
-            return self.ensemble_manager.aggregate_decisions_two_phase(
+            return await self.ensemble_manager.aggregate_decisions_two_phase(
                 prompt, asset_pair, market_data,
                 lambda provider, prompt_text: self._query_single_provider(provider, prompt_text)
             )
@@ -818,7 +819,7 @@ Format response as a structured technical analysis demonstration.
             )
 
         # Aggregate results using ensemble manager
-        return self.ensemble_manager.aggregate_decisions(
+        return await self.ensemble_manager.aggregate_decisions(
             provider_decisions=provider_decisions,
             failed_providers=failed_providers
         )
