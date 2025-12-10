@@ -5,6 +5,8 @@
 
 Concise, actionable guidance for AI coding agents. Focus on minimal, targeted edits. Reference concrete files, commands, and project-specific conventions.
 
+**Last Updated:** December 2025. Covers: 8 subsystems, multi-platform trading, ensemble AI, portfolio monitoring, web API, Telegram/Redis integrations.
+
 ## Big Picture Architecture
 
 Modular AI trading engine with 8 core subsystems in a training-first approach:
@@ -61,6 +63,19 @@ Alpha Vantage (6 timeframes) + Sentiment
 - `finance_feedback_engine/memory/portfolio_memory.py`: Experience replay, performance attribution, provider weight recommendations, regime detection
 - `finance_feedback_engine/monitoring/trade_monitor.py`: Auto-detects trades, real-time P&L tracking, ML feedback on close
 - `finance_feedback_engine/persistence/decision_store.py`: Append-only JSON storage (`data/decisions/YYYY-MM-DD_<uuid>.json`)
+
+**Risk & Learning:**
+- `finance_feedback_engine/risk/gatekeeper.py`: Enhanced risk validation (drawdown, VaR, position concentration)
+- `finance_feedback_engine/risk/var_calculator.py`: Value-at-risk calculations for portfolio risk assessment
+- `finance_feedback_engine/risk/correlation_analyzer.py`: Analyzes multi-asset correlations to prevent concentrated risk
+- `finance_feedback_engine/learning/feedback_analyzer.py`: Processes trade outcomes for AI provider weight optimization
+
+**Web & Integrations:**
+- `finance_feedback_engine/api/app.py`: FastAPI server for web service and webhooks
+- `finance_feedback_engine/api/routes.py`: REST endpoints (health, analysis, execution, approval workflows)
+- `finance_feedback_engine/integrations/telegram_bot.py`: Telegram approval requests + bot commands (optional)
+- `finance_feedback_engine/integrations/redis_manager.py`: Persistent approval queue and state management
+- `finance_feedback_engine/dashboard/portfolio_dashboard.py`: Rich terminal UI for portfolio monitoring
 
 **Backtesting:**
 - `finance_feedback_engine/backtesting/backtester.py`: Standard backtester with cache and memory integration; supports margin/leverage, short positions, realistic slippage
@@ -173,6 +188,60 @@ All formats auto-standardized to uppercase without separators:
 - **Circuit breaker**: 5 failures → open for 60s (see `trading_platforms/circuit_breaker.py`)
 - **Kill-switch**: Agent stops on `>X%` gain/loss or `>Y%` drawdown (config: `agent.yaml`)
 - **Max concurrent trades**: 2 (hard limit in `TradeMonitor`)
+- **Risk checks**: VaR limits, position concentration, correlation-based diversification (see `risk/gatekeeper.py`)
+
+## Web Service & Approval Workflows
+
+**FastAPI Integration (Optional):**
+- Start: `python main.py serve --port 8000` — runs REST API on http://localhost:8000
+- Health check: `curl http://localhost:8000/health`
+- Endpoints: `/analyze` (POST), `/execute` (POST), `/approvals` (GET/POST/DELETE)
+- Swagger UI: http://localhost:8000/docs for interactive testing
+- CORS enabled by default; configure in `config/config.local.yaml`
+
+**Telegram Approval Flow (Optional):**
+1. Set bot token in `config/config.local.yaml`: `telegram.bot_token`
+2. Approval request triggers: `TradingAgentOrchestrator.run()` with `approval_mode: telegram`
+3. User approves/denies via bot buttons → executes trade or skips
+4. Approval state persisted in Redis (auto-recovery on restart)
+5. Disable with `approval_mode: none` in config
+
+**Redis Queue Management:**
+- Auto-installed: `python main.py setup-redis` (Docker-based)
+- Persists approval queue across restarts
+- Clear stale approvals: `python main.py clear-approvals`
+- Check queue: `redis-cli LLEN finance_feedback_engine:approvals`
+
+## Risk Management Deep Dive
+
+**VaR Calculation:**
+- Method: Historical VaR (95% confidence) on trailing 252-day window
+- Used by: `RiskGatekeeper` to validate position size
+- Formula: `var_limit = portfolio_value * var_threshold` (config: `risk.var_limit`)
+
+**Correlation Analysis:**
+- Triggers: When portfolio has 3+ assets
+- Prevents: Adding highly correlated positions (threshold: 0.7)
+- Output: `ensemble_metadata.correlation_check` in decisions
+
+**Position Concentration:**
+- Max per asset: 30% of portfolio (configurable)
+- Max per sector: 40% (if market data includes sectors)
+- Rejected trades logged in decision metadata
+
+## Dashboard & Monitoring
+
+**Portfolio Dashboard:**
+- Launch: `python main.py dashboard` — rich TUI with live updates
+- Shows: Open positions, realized/unrealized P&L, portfolio metrics
+- Keyboard: `q` to quit, `r` to refresh, `s` to export snapshot
+- Updates: Real-time from `TradeMonitor`
+
+**Trade Monitoring:**
+- Automatic detection: Monitor watches for trades matching decision metadata
+- Tracking: Position entry price, current price, open time, unrealized P&L
+- Feedback: On trade close, `TradeMonitor` calls `PortfolioMemoryEngine.record_outcome()`
+- Max concurrent: 2 trades (hard limit to prevent monitoring lag)
 
 ## Integration & Extension Patterns
 
@@ -240,15 +309,26 @@ All formats auto-standardized to uppercase without separators:
 - **Never disable debate mode in live trading** — only for quicktest (testing/backtesting)
 
 **Before Committing:**
-- Run `pytest --cov=finance_feedback_engine` (min 70% coverage)
+- Run `pytest --cov=finance_feedback_engine` (min 70% coverage, enforced in `pyproject.toml`)
 - Check no secrets in `config/config.local.yaml` (should be git-ignored)
 - Validate config changes against `config/config.yaml` schema
 - Test with MockPlatform before live platforms
+- For API changes: test endpoints with `pytest tests/test_api*.py`
+- For integrations: test with mocks first (`tests/test_integrations_telegram_redis.py`)
+
+**Debugging Tips:**
+- **Decision cache stale?** Clear with: `rm data/backtest_cache.db`
+- **Provider not responding?** Check logs: `tail -f logs/` (if enabled in config)
+- **Risk gatekeeper blocking?** Check decision JSON: `cat data/decisions/latest.json | jq '.risk_context'`
+- **Telegram not sending?** Verify bot token: `python -c "import config; print(config.telegram.bot_token)"`
+- **API health check:** `curl -s http://localhost:8000/health | jq`
 
 **Documentation Updates:**
 - Update `CHANGELOG.md` for user-facing changes
 - Add quick reference in `*_QUICKREF.md` for major features
 - Update architecture diagrams in `docs/diagrams/` (Mermaid format)
+- For API endpoints: document in API docstrings and FastAPI auto-generates Swagger
+- For new providers: add provider info to README.md feature list and ensemble docs
 
 ---
 
@@ -258,6 +338,15 @@ All formats auto-standardized to uppercase without separators:
 - Memory system: `PORTFOLIO_MEMORY_QUICKREF.md`
 - Monitoring: `LIVE_MONITORING_QUICKREF.md`
 - Signal-only mode: `SIGNAL_ONLY_MODE_QUICKREF.md`
+- Web API: `GEMINI_CLI_INTEGRATION.md` (includes debate mode and approval workflows)
+
+**Recent Major Changes (Dec 2025):**
+- Separated risk modules into dedicated `finance_feedback_engine/risk/` directory
+- Added learning feedback analyzer for provider weight optimization
+- Integrated FastAPI web service with Telegram + Redis approval flows
+- Portfolio dashboard with real-time monitoring (Python Rich TUI)
+- VaR and correlation analysis for multi-asset risk management
+- Enhanced decision schema with `ensemble_metadata` and `risk_context` fields
 
 If any section is unclear or incomplete, specify which part to expand or clarify.
 ```
