@@ -262,7 +262,7 @@ class TestUnifiedDataProvider:
     def test_get_market_data_routes_correctly(self, provider):
         """Test market data routing to correct provider."""
         # Mock alpha vantage
-        provider.alpha_vantage = Mock()
+        provider.alpha_vantage = AsyncMock()
         provider.alpha_vantage.get_market_data.return_value = {
             'open': 100.0,
             'close': 103.0
@@ -297,7 +297,7 @@ class TestUnifiedDataProvider:
 
     def test_fallback_on_provider_failure(self, provider):
         """Test fallback when primary provider fails."""
-        provider.alpha_vantage = Mock()
+        provider.alpha_vantage = AsyncMock()
         provider.alpha_vantage.get_market_data.side_effect = Exception("Provider down")
 
         provider.coinbase = Mock()
@@ -334,7 +334,7 @@ class TestHistoricalDataProvider:
     @patch('requests.get')
     def test_get_historical_data(self, mock_get, provider):
         """Test retrieving historical data with date range."""
-        provider.alpha_vantage = Mock()
+        provider.alpha_vantage = AsyncMock()
         provider.alpha_vantage.get_market_data.return_value = {
             'open': 100.0,
             'close': 103.0,
