@@ -287,7 +287,7 @@ class EnsembleDecisionManager:
 
         return result
 
-    def aggregate_decisions(
+    async def aggregate_decisions(
         self,
         provider_decisions: Dict[str, Dict[str, Any]],
         failed_providers: Optional[List[str]] = None,
@@ -437,7 +437,7 @@ class EnsembleDecisionManager:
 
         return final_decision
 
-    def aggregate_decisions_two_phase(
+    async def aggregate_decisions_two_phase(
         self,
         prompt: str,
         asset_pair: str,
@@ -571,7 +571,7 @@ class EnsembleDecisionManager:
 
             for provider in self.enabled_providers:
                 try:
-                    decision = query_function(provider, prompt)
+                    decision = await query_function(provider, prompt)
                     if self._is_valid_provider_response(decision, provider):
                         provider_decisions[provider] = decision
                     else:
@@ -580,7 +580,7 @@ class EnsembleDecisionManager:
                     logger.error(f"Provider {provider} failed: {e}")
                     failed_providers.append(provider)
 
-            return self.aggregate_decisions(provider_decisions, failed_providers)
+            return await self.aggregate_decisions(provider_decisions, failed_providers)
 
         # ===== PHASE 1: Free Tier Providers =====
         logger.info(f"=== PHASE 1: Querying free-tier providers for {asset_pair} ===")
@@ -593,7 +593,7 @@ class EnsembleDecisionManager:
 
         for provider in free_tier:
             try:
-                decision = query_function(provider, prompt)
+                decision = await query_function(provider, prompt)
                 if self._is_valid_provider_response(decision, provider):
                     phase1_decisions[provider] = decision
                     logger.info(f"Phase 1: {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
@@ -618,7 +618,7 @@ class EnsembleDecisionManager:
             )
 
         # Aggregate Phase 1 decisions
-        phase1_result = self.aggregate_decisions(
+        phase1_result = await self.aggregate_decisions(
             provider_decisions=phase1_decisions,
             failed_providers=phase1_failed
         )
@@ -694,7 +694,7 @@ class EnsembleDecisionManager:
 
         # Try primary provider
         try:
-            primary_decision = query_function(primary_provider, prompt)
+            primary_decision = await query_function(primary_provider, prompt)
             if self._is_valid_provider_response(primary_decision, primary_provider):
                 phase2_decisions[primary_provider] = primary_decision
                 phase2_primary_used = primary_provider
@@ -707,7 +707,7 @@ class EnsembleDecisionManager:
                 if codex_as_tiebreaker and primary_decision.get('action') != phase1_action:
                     logger.info(f"Phase 2: {primary_provider} disagrees with Phase 1 -> calling Codex tiebreaker")
                     try:
-                        codex_decision = query_function(fallback_provider, prompt)
+                        codex_decision = await query_function(fallback_provider, prompt)
                         if self._is_valid_provider_response(codex_decision, fallback_provider):
                             phase2_decisions[fallback_provider] = codex_decision
                             codex_tiebreaker_used = True
@@ -727,7 +727,7 @@ class EnsembleDecisionManager:
             # Fallback to Codex
             logger.info(f"Phase 2: Falling back to {fallback_provider}")
             try:
-                fallback_decision = query_function(fallback_provider, prompt)
+                fallback_decision = await query_function(fallback_provider, prompt)
                 if self._is_valid_provider_response(fallback_decision, fallback_provider):
                     phase2_decisions[fallback_provider] = fallback_decision
                     phase2_fallback_used = True
@@ -772,7 +772,7 @@ class EnsembleDecisionManager:
 
         logger.info(f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions")
 
-        final_decision = self.aggregate_decisions(
+        final_decision = await self.aggregate_decisions(
             provider_decisions=all_decisions,
             failed_providers=all_failed
         )

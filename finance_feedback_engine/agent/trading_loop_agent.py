@@ -57,6 +57,7 @@ class TradingLoopAgent:
         self.is_running = False
         self.state = AgentState.IDLE
         self._current_decision = None
+        self._current_decisions = [] # New: to store multiple decisions
         # Track analysis failures and their timestamps for time-based decay
         self.analysis_failures = {}  # {failure_key: count}
         self.analysis_failure_timestamps = {}  # {failure_key: last_failure_datetime}
@@ -68,6 +69,10 @@ class TradingLoopAgent:
         self._recovered_positions = []  # List of recovered position metadata
         self._startup_retry_count = 0
         self._max_startup_retries = 3
+
+        # For preventing infinite loops on rejected trades
+        self._rejected_decisions_cache = {} # {decision_id: rejection_timestamp}
+        self._rejection_cooldown_seconds = 300 # 5 minutes cooldown
 
         # State machine handler map
         self.state_handlers = {
@@ -441,8 +446,69 @@ class TradingLoopAgent:
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
+    async def handle_reasoning_state(self):
+        """
+        REASONING: Running the DecisionEngine with retry logic for robustness.
+        Collects all actionable decisions for the current cycle.
+        """
+        logger.info("State: REASONING - Running DecisionEngine...")
+
+        MAX_RETRIES = 3
+        self._current_decisions.clear() # Clear decisions from previous cycle
+
+        # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
+        current_time = datetime.datetime.now()
+        for key in list(self.analysis_failures.keys()):
+            last_fail = self.analysis_failure_timestamps.get(key)
+            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
+                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
+                self.analysis_failures.pop(key, None)
+                self.analysis_failure_timestamps.pop(key, None)
+
+    async def handle_reasoning_state(self):
+        """
+        REASONING: Running the DecisionEngine with retry logic for robustness.
+        Collects all actionable decisions for the current cycle.
+        Skips recently rejected assets based on a cooldown.
+        """
+        logger.info("State: REASONING - Running DecisionEngine...")
+
+        MAX_RETRIES = 3
+        self._current_decisions.clear() # Clear decisions from previous cycle
+
+        # --- Cleanup expired rejected decisions ---
+        current_time = datetime.now()
+        expired_keys = [
+            d_id for d_id, timestamp in self._rejected_decisions_cache.items()
+            if (current_time - timestamp).total_seconds() > self._rejection_cooldown_seconds
+        ]
+        for key in expired_keys:
+            self._rejected_decisions_cache.pop(key)
+            logger.info(f"Removed expired rejected decision {key} from cache.")
+
+        # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
+        for key in list(self.analysis_failures.keys()):
+            last_fail = self.analysis_failure_timestamps.get(key)
+            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
+                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
+                self.analysis_failures.pop(key, None)
+                self.analysis_failure_timestamps.pop(key, None)
+
         for asset_pair in self.config.asset_pairs:
             failure_key = f"analysis:{asset_pair}"
+
+            # --- Check if asset was recently rejected ---
+            asset_rejected = False
+            for d_id in self._rejected_decisions_cache.keys():
+                # Simple check: if decision_id contains asset_pair, consider it relevant
+                # A more robust check might involve parsing decision_id or storing asset_pair with rejection
+                if asset_pair in d_id:
+                    logger.info(f"Skipping analysis for {asset_pair}: recently rejected. Cooldown active.")
+                    asset_rejected = True
+                    break
+            if asset_rejected:
+                continue
+
 
             if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
                 logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset).")
@@ -459,9 +525,8 @@ class TradingLoopAgent:
 
                     if decision and decision.get('action') in ["BUY", "SELL"]:
                         if await self._should_execute(decision):
-                            self._current_decision = decision
-                            await self._transition_to(AgentState.RISK_CHECK)
-                            return
+                            self._current_decisions.append(decision) # Collect decision
+                            logger.info(f"Actionable decision collected for {asset_pair}: {decision['action']}")
                         else:
                             logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
                     else:
@@ -481,75 +546,87 @@ class TradingLoopAgent:
                             f"It will be skipped for a while.",
                             exc_info=True
                         )
-
-        logger.info("Analysis complete. No actionable trades found. Going back to IDLE.")
-        await self._transition_to(AgentState.IDLE)
+        
+        # After analyzing all assets, transition based on collected decisions
+        if self._current_decisions:
+            logger.info(f"Collected {len(self._current_decisions)} actionable decisions. Proceeding to RISK_CHECK.")
+            await self._transition_to(AgentState.RISK_CHECK)
+        else:
+            logger.info("No actionable trades found for any asset. Going back to IDLE.")
+            await self._transition_to(AgentState.IDLE)
     async def handle_risk_check_state(self):
         """
-        RISK_CHECK: Running the RiskGatekeeper.
+        RISK_CHECK: Running the RiskGatekeeper for all collected decisions.
+        Approved decisions are moved to execution.
         """
         logger.info("State: RISK_CHECK - Running RiskGatekeeper...")
 
-        if not self._current_decision:
-            logger.warning("RISK_CHECK state reached without a decision. Returning to IDLE.")
+        if not self._current_decisions:
+            logger.info("No decisions to risk check. Returning to IDLE.")
             await self._transition_to(AgentState.IDLE)
             return
 
-        decision_id = self._current_decision.get('id')
-        asset_pair = self._current_decision.get('asset_pair')
+        approved_decisions = []
+        for decision in self._current_decisions:
+            decision_id = decision.get('id')
+            asset_pair = decision.get('asset_pair')
 
-        # Retrieve monitoring context for risk validation
-        try:
-            # Use the monitoring context provider to get context
-            monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
-        except Exception as e:
-            logger.warning(f"Failed to get monitoring context for risk validation: {e}")
-            monitoring_context = {}
+            # Retrieve monitoring context for risk validation
+            try:
+                monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
+            except Exception as e:
+                logger.warning(f"Failed to get monitoring context for risk validation: {e}")
+                monitoring_context = {}
 
-        # Validate trade with RiskGatekeeper
-        approved, reason = self.risk_gatekeeper.validate_trade(self._current_decision, monitoring_context)
-        if not approved:
-            logger.info(f"Trade rejected by RiskGatekeeper: {reason}. Skipping execution.")
-            # Reset decision and return to perception for next cycle
-            self._current_decision = None
-            await self._transition_to(AgentState.PERCEPTION)
-            return
+            approved, reason = self.risk_gatekeeper.validate_trade(decision, monitoring_context)
+            if approved:
+                logger.info(f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue.")
+                approved_decisions.append(decision)
+            else:
+                logger.info(f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}.")
+                self._rejected_decisions_cache[decision_id] = datetime.now() # Add to cache
+        
+        self._current_decisions = approved_decisions # Keep only approved decisions
 
-        logger.info(f"Trade approved by RiskGatekeeper for {asset_pair}. Proceeding to EXECUTION.")
-        await self._transition_to(AgentState.EXECUTION)
+        if self._current_decisions:
+            logger.info(f"Proceeding to EXECUTION with {len(self._current_decisions)} approved decisions.")
+            await self._transition_to(AgentState.EXECUTION)
+        else:
+            logger.info("No decisions approved by RiskGatekeeper. Going back to IDLE.")
+            await self._transition_to(AgentState.IDLE)
 
     async def handle_execution_state(self):
         """
-        EXECUTION: Sending orders to BaseTradingPlatform.
+        EXECUTION: Sending orders to BaseTradingPlatform for all approved decisions.
         """
         logger.info("State: EXECUTION - Sending orders to BaseTradingPlatform...")
 
-        if not self._current_decision:
-            logger.warning("EXECUTION state reached without a decision. Returning to PERCEPTION.")
-            await self._transition_to(AgentState.PERCEPTION)
+        if not self._current_decisions:
+            logger.warning("EXECUTION state reached without decisions. Returning to IDLE.")
+            await self._transition_to(AgentState.IDLE)
             return
 
-        decision_id = self._current_decision.get('id')
-        action = self._current_decision.get('action')
-        asset_pair = self._current_decision.get('asset_pair')
+        for decision in self._current_decisions:
+            decision_id = decision.get('id')
+            action = decision.get('action')
+            asset_pair = decision.get('asset_pair')
 
-        try:
-            execution_result = self.engine.execute_decision(decision_id)
-            if execution_result.get('success'):
-                logger.info(f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor.")
-                self.daily_trade_count += 1
-                # Link this decision to the next trade detected for this asset
-                self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
-                await self._transition_to(AgentState.LEARNING)
-            else:
-                logger.error(f"Trade execution failed: {execution_result.get('message')}. Returning to PERCEPTION.")
-                await self._transition_to(AgentState.PERCEPTION)
-        except Exception as e:
-            logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
-            await self._transition_to(AgentState.PERCEPTION) # Go back to perception on failure
+            try:
+                execution_result = self.engine.execute_decision(decision_id)
+                if execution_result.get('success'):
+                    logger.info(f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor.")
+                    self.daily_trade_count += 1
+                    self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+                else:
+                    logger.error(f"Trade execution failed for {asset_pair}: {execution_result.get('message')}.")
+            except Exception as e:
+                logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
+        
+        # Clear all decisions after attempting execution
+        self._current_decisions.clear()
 
-        # Clear decision after execution attempt
-        self._current_decision = None
+        # After attempting all executions, return to IDLE
+        await self._transition_to(AgentState.IDLE)
 
     async def handle_learning_state(self):
         """

@@ -5,7 +5,6 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import pandas as pd
 import pytz
 
@@ -207,7 +206,21 @@ class DecisionEngine:
 
         return ((high - low) / close) * 100
 
-    def _detect_market_regime(self, asset_pair: str) -> str:
+    async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        """
+        Simulate AI inference for backtesting.
+        """
+        logger.info("Mock AI inference")
+        # Simulate some asynchronous work
+        await asyncio.sleep(0.01) # Small delay to simulate async operation
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Mock decision for backtesting",
+            "amount": 0.0
+        }
+
+    async def _detect_market_regime(self, asset_pair: str) -> str:
         """
         Detect the current market regime using historical data.
 
@@ -228,28 +241,14 @@ class DecisionEngine:
 
             # Fetch historical data (handle both sync and async providers)
             import asyncio
-            import inspect
-            historical_data_coro = self.data_provider.get_historical_data(
+            historical_data_method = self.data_provider.get_historical_data(
                 asset_pair,
                 start_date.strftime("%Y-%m-%d"),
                 end_date.strftime("%Y-%m-%d")
             )
 
-            # Handle coroutines properly - check if event loop is already running
-            if inspect.iscoroutine(historical_data_coro):
-                try:
-                    # Try to get the running loop
-                    loop = asyncio.get_running_loop()
-                    # If we're here, we're already in an async context - cannot use asyncio.run()
-                    # Create a task and wait for it (this won't work in sync context)
-                    # Instead, we'll call the sync version or skip regime detection
-                    logger.warning("Cannot run async regime detection in sync context, skipping")
-                    return "UNKNOWN"
-                except RuntimeError:
-                    # No running loop, safe to use asyncio.run()
-                    historical_data = asyncio.run(historical_data_coro)
-            else:
-                historical_data = historical_data_coro
+            # Await the historical data method directly
+            historical_data = await historical_data_method
 
             if not historical_data or len(historical_data) < 14:
                 logger.warning("Insufficient historical data for regime detection")
@@ -588,7 +587,7 @@ Format response as a structured technical analysis demonstration.
 """
         return prompt
 
-    def _query_ai(
+    async def _query_ai(
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
@@ -609,18 +608,18 @@ Format response as a structured technical analysis demonstration.
 
         # Mock mode: fast random decisions for backtesting
         if self.ai_provider == 'mock':
-            return self._mock_ai_inference(prompt)
+            return await self._mock_ai_inference(prompt)
 
         # Ensemble mode: query multiple providers and aggregate
         if self.ai_provider == 'ensemble':
-            return self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
+            return await self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
 
         # Two-phase decision routing for single providers
         # This logic was part of _ensemble_ai_inference but is also relevant here
         if self.ai_provider in ['local', 'cli', 'codex', 'qwen', 'gemini']:
             ensemble_manager = self._get_ensemble_manager()
             if ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
-                return ensemble_manager.aggregate_decisions_two_phase(
+                return await ensemble_manager.aggregate_decisions_two_phase(
                     prompt,
                     asset_pair,
                     market_data,
@@ -628,19 +627,20 @@ Format response as a structured technical analysis demonstration.
 
         # Route to appropriate single provider
         if self.ai_provider == 'local':
-            return self._local_ai_inference(prompt)
+            return await self._local_ai_inference(prompt)
         elif self.ai_provider == 'cli':
-            return self._cli_ai_inference(prompt)
+            return await self._cli_ai_inference(prompt)
         elif self.ai_provider == 'codex':
-            return self._codex_ai_inference(prompt)
+            return await self._codex_ai_inference(prompt)
         elif self.ai_provider == 'qwen':
-            return self._qwen_ai_inference(prompt)
-        # elif self.ai_provider == 'gemini':
-        #     return self._gemini_ai_inference(prompt)
+            # Qwen CLI provider
+            return await self._cli_ai_inference(prompt)
+        elif self.ai_provider == 'gemini':
+            return await self._gemini_ai_inference(prompt)
         else:
-            return self._rule_based_decision(prompt)
+            raise ValueError(f"Unknown AI provider: {self.ai_provider}")
 
-    def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
+    async def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Execute debate mode: structured debate with bull, bear, and judge providers.
 
@@ -666,7 +666,7 @@ Format response as a structured technical analysis demonstration.
 
         # Query bull provider (bullish case)
         try:
-            bull_case = self._query_single_provider(bull_provider, prompt)
+            bull_case = await self._query_single_provider(bull_provider, prompt)
             if not self.ensemble_manager._is_valid_provider_response(bull_case, bull_provider):
                 logger.warning(f"Debate: {bull_provider} (bull) returned invalid response")
                 failed_debate_providers.append(bull_provider)
@@ -679,7 +679,7 @@ Format response as a structured technical analysis demonstration.
 
         # Query bear provider (bearish case)
         try:
-            bear_case = self._query_single_provider(bear_provider, prompt)
+            bear_case = await self._query_single_provider(bear_provider, prompt)
             if not self.ensemble_manager._is_valid_provider_response(bear_case, bear_provider):
                 logger.warning(f"Debate: {bear_provider} (bear) returned invalid response")
                 failed_debate_providers.append(bear_provider)
@@ -692,7 +692,7 @@ Format response as a structured technical analysis demonstration.
 
         # Query judge provider (final decision)
         try:
-            judge_decision = self._query_single_provider(judge_provider, prompt)
+            judge_decision = await self._query_single_provider(judge_provider, prompt)
             if not self.ensemble_manager._is_valid_provider_response(judge_decision, judge_provider):
                 logger.warning(f"Debate: {judge_provider} (judge) returned invalid response")
                 failed_debate_providers.append(judge_provider)
@@ -703,10 +703,15 @@ Format response as a structured technical analysis demonstration.
             logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
             failed_debate_providers.append(judge_provider)
 
-        # Fallback: if any debate provider failed, use rule-based decision
+        # Error: if any debate provider failed, raise error
         if bull_case is None or bear_case is None or judge_decision is None:
-            logger.warning("Debate mode: Some providers failed, falling back to rule-based decision")
-            return self._rule_based_decision(prompt)
+            logger.error("Debate mode: Critical debate providers failed")
+            raise RuntimeError(
+                f"Debate mode failed: Missing providers - "
+                f"bull={'OK' if bull_case else 'FAILED'}, "
+                f"bear={'OK' if bear_case else 'FAILED'}, "
+                f"judge={'OK' if judge_decision else 'FAILED'}"
+            )
 
         # Synthesize debate decisions
         final_decision = self.ensemble_manager.debate_decisions(
@@ -718,23 +723,32 @@ Format response as a structured technical analysis demonstration.
 
         return final_decision
 
-    def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
+    async def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
-        if provider_name == 'local':
-            return self._local_ai_inference(prompt)
-        elif provider_name == 'cli':
-            return self._cli_ai_inference(prompt)
-        elif provider_name == 'codex':
-            return self._codex_ai_inference(prompt)
-        elif provider_name == 'qwen':
-            return self._qwen_ai_inference(prompt)
-        elif provider_name == 'gemini':
-            return self._gemini_ai_inference(prompt)
-        else:
-            logger.warning(f"Unknown provider '{provider_name}' requested in single query.")
-            return self._rule_based_decision(prompt)
+        # Import inline to avoid circular dependencies
+        from .provider_tiers import is_ollama_model
 
-    def _ensemble_ai_inference(
+        # Route Ollama models to local inference with specific model
+        if is_ollama_model(provider_name):
+            return await self._local_ai_inference(prompt, model_name=provider_name)
+
+        # Route abstract provider names
+        if provider_name == 'local':
+            return await self._local_ai_inference(prompt)
+        elif provider_name == 'cli':
+            return await self._cli_ai_inference(prompt)
+        elif provider_name == 'codex':
+            return await self._codex_ai_inference(prompt)
+        elif provider_name == 'qwen':
+            # Qwen CLI provider (routed to CLI)
+            return await self._cli_ai_inference(prompt)
+        elif provider_name == 'gemini':
+            return await self._gemini_ai_inference(prompt)
+        else:
+            # Unknown provider - raise error, let ensemble manager handle
+            raise ValueError(f"Unknown AI provider: {provider_name}")
+
+    async def _ensemble_ai_inference(
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
@@ -743,7 +757,7 @@ Format response as a structured technical analysis demonstration.
         """Centralized ensemble logic with debate mode and two-phase support."""
         # Debate mode: structured debate with bull, bear, and judge providers
         if self.ensemble_manager.debate_mode:
-            return self._debate_mode_inference(prompt)
+            return await self._debate_mode_inference(prompt)
 
         # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
         if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
@@ -752,9 +766,9 @@ Format response as a structured technical analysis demonstration.
                 lambda provider, prompt_text: self._query_single_provider(provider, prompt_text)
             )
         # Fallback to simple parallel query if two-phase is off
-        return self._simple_parallel_ensemble(prompt)
+        return await self._simple_parallel_ensemble(prompt)
 
-    def _simple_parallel_ensemble(self, prompt: str) -> Dict[str, Any]:
+    async def _simple_parallel_ensemble(self, prompt: str) -> Dict[str, Any]:
         """
         Simple parallel ensemble: query all enabled providers concurrently and aggregate.
 
@@ -773,34 +787,35 @@ Format response as a structured technical analysis demonstration.
         provider_decisions = {}
         failed_providers = []
 
-        # Query all enabled providers in parallel
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = {
-                executor.submit(self._query_single_provider, provider, prompt): provider
-                for provider in self.ensemble_manager.enabled_providers
-            }
+        tasks = [
+            self._query_single_provider(provider, prompt)
+            for provider in self.ensemble_manager.enabled_providers
+        ]
 
-            for future in as_completed(futures, timeout=ENSEMBLE_TIMEOUT):
-                provider = futures[future]
-                try:
-                    decision = future.result(timeout=ENSEMBLE_TIMEOUT)
-                    if self.ensemble_manager._is_valid_provider_response(decision, provider):
-                        provider_decisions[provider] = decision
-                        logger.debug(f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
-                    else:
-                        logger.warning(f"Provider {provider} returned invalid response")
-                        failed_providers.append(provider)
-                except TimeoutError:
-                    logger.error(f"Provider {provider} timed out (>{ENSEMBLE_TIMEOUT}s)")
-                    failed_providers.append(provider)
-                except Exception as e:
-                    logger.error(f"Provider {provider} failed: {e}")
+        # Use asyncio.gather to run tasks concurrently with a timeout
+        # Note: ENSEMBLE_TIMEOUT is a global constant at the top of the file
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for provider, result in zip(self.ensemble_manager.enabled_providers, results):
+            if isinstance(result, Exception):
+                logger.error(f"Provider {provider} failed: {result}")
+                failed_providers.append(provider)
+            else:
+                decision = result
+                if self.ensemble_manager._is_valid_provider_response(decision, provider):
+                    provider_decisions[provider] = decision
+                    logger.debug(f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
+                else:
+                    logger.warning(f"Provider {provider} returned invalid response")
                     failed_providers.append(provider)
 
-        # Fallback to rule-based decision if no providers succeeded
+        # Raise error if all providers failed
         if not provider_decisions:
-            logger.warning("All providers failed in parallel ensemble, using rule-based fallback")
-            return self._rule_based_decision(prompt)
+            logger.error("All providers failed in parallel ensemble")
+            raise RuntimeError(
+                f"All {len(self.ensemble_manager.enabled_providers)} ensemble providers failed. "
+                f"Failed providers: {failed_providers}"
+            )
 
         # Aggregate results using ensemble manager
         return self.ensemble_manager.aggregate_decisions(
@@ -808,26 +823,46 @@ Format response as a structured technical analysis demonstration.
             failed_providers=failed_providers
         )
 
-    def _local_ai_inference(self, prompt: str) -> Dict[str, Any]:
+    async def _local_ai_inference(self, prompt: str, model_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
 
         Args:
             prompt: AI prompt
+            model_name: Optional specific Ollama model to use (overrides config)
 
         Returns:
             AI response from local LLM
         """
-        logger.info("Using local LLM AI inference (Ollama)")
+        model_info = f" (model: {model_name})" if model_name else ""
+        logger.info(f"Using local LLM AI inference (Ollama){model_info}")
 
         try:
             from .local_llm_provider import LocalLLMProvider
 
-            provider = LocalLLMProvider(self.config)
-            return provider.query(prompt)
+            # Create config with model override if specified
+            provider_config = dict(self.config, model_name=model_name or self.config.get('model_name', 'default'))
+            provider = LocalLLMProvider(provider_config)
+            # Run synchronous query in a separate thread
+            return await asyncio.to_thread(provider.query, prompt)
         except (ImportError, RuntimeError) as e:
-            logger.warning(f"Local LLM unavailable, using rule-based fallback: {e}")
-            return self._rule_based_decision(prompt)
+            logger.error(f"Local LLM failed: {e}")
+            raise
+
+    async def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        logger.info("CLI AI inference (placeholder)")
+        await asyncio.sleep(0.01)
+        return {"action": "HOLD", "confidence": 50, "reasoning": "CLI placeholder", "amount": 0.0}
+
+    async def _codex_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        logger.info("Codex AI inference (placeholder)")
+        await asyncio.sleep(0.01)
+        return {"action": "HOLD", "confidence": 50, "reasoning": "Codex placeholder", "amount": 0.0}
+
+    async def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
+        logger.info("Gemini AI inference (placeholder)")
+        await asyncio.sleep(0.01)
+        return {"action": "HOLD", "confidence": 50, "reasoning": "Gemini placeholder", "amount": 0.0}
 
     def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
         """
@@ -1244,7 +1279,7 @@ Format response as a structured technical analysis demonstration.
         self.monitoring_provider = monitoring_provider
         logger.info("Monitoring context provider attached to decision engine")
 
-    def generate_decision(
+    async def generate_decision(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
@@ -1307,7 +1342,7 @@ Format response as a structured technical analysis demonstration.
             logger.debug("Using provided monitoring context (backtesting mode)")
 
         # Create decision context
-        context = self._create_decision_context(
+        context = await self._create_decision_context(
             asset_pair,
             market_data,
             balance,
@@ -1330,7 +1365,7 @@ Format response as a structured technical analysis demonstration.
         prompt = self._create_ai_prompt(context)
 
         # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
-        ai_response = self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
+        ai_response = await self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
 
         # Validate AI response action to ensure it's one of the allowed values
         if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
@@ -1345,7 +1380,7 @@ Format response as a structured technical analysis demonstration.
 
         return decision
 
-    def _create_decision_context(
+    async def _create_decision_context(
         self,
         asset_pair: str,
         market_data: Dict[str, Any],
@@ -1381,7 +1416,7 @@ Format response as a structured technical analysis demonstration.
         }
 
         # Detect market regime using historical data
-        regime = self._detect_market_regime(asset_pair)
+        regime = await self._detect_market_regime(asset_pair)
         context['regime'] = regime
 
         # Add market schedule status

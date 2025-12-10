@@ -323,7 +323,7 @@ class FinanceFeedbackEngine:
             "AI will have full awareness of active positions/trades"
         )
 
-    def analyze_asset(
+    async def analyze_asset(
         self,
         asset_pair: str,
         include_sentiment: bool = True,
@@ -349,12 +349,11 @@ class FinanceFeedbackEngine:
         logger.info("Analyzing asset: %s", asset_pair)
 
         # Fetch comprehensive market data
-        import asyncio
-        market_data = asyncio.run(self.data_provider.get_comprehensive_market_data(
+        market_data = await self.data_provider.get_comprehensive_market_data(
             asset_pair,
             include_sentiment=include_sentiment,
             include_macro=include_macro
-        ))
+        )
 
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()
