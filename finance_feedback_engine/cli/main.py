@@ -1325,8 +1325,6 @@ def history(ctx, asset, limit):
 
         if not decisions:
             console.print("[yellow]No decisions found[/yellow]")
-            # Exit with 0 - empty result set is valid, not an error
-            sys.exit(0)
 
         # Display decisions in a table
         table = Table(title=f"Decision History ({len(decisions)} decisions)")
@@ -1861,13 +1859,14 @@ def backtest(
     from finance_feedback_engine.utils.validation import standardize_asset_pair
 
     try:
-        # Validate date range
-        start_dt = datetime.strptime(start, '%Y-%m-%d')
-        end_dt = datetime.strptime(end, '%Y-%m-%d')
+        # Validate date range (moved from below)
+        start_dt = datetime.strptime(start, "%Y-%m-%d")
+        end_dt = datetime.strptime(end, "%Y-%m-%d")
         if start_dt >= end_dt:
-            raise click.BadParameter(
+            console.print(
                 f"start_date ({start}) must be before end_date ({end})"
             )
+            raise click.Abort()
 
         asset_pair = standardize_asset_pair(asset_pair)
         config = ctx.obj['config']
@@ -2527,6 +2526,11 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
         from datetime import datetime
 
         config = ctx.obj['config']
+
+        # Override AI provider from CLI option
+        if provider and 'decision_engine' in config:
+            config['decision_engine']['ai_provider'] = provider.lower()
+
         engine = FinanceFeedbackEngine(config)
 
         # Calculate total date range
@@ -2646,6 +2650,11 @@ def monte_carlo(ctx, asset_pair, start_date, end_date, simulations, noise_std, p
         from finance_feedback_engine.backtesting.backtester import Backtester
 
         config = ctx.obj['config']
+
+        # Override AI provider from CLI option
+        if provider and 'decision_engine' in config:
+            config['decision_engine']['ai_provider'] = provider.lower()
+
         engine = FinanceFeedbackEngine(config)
 
         # Initialize Backtester with proper parameters
