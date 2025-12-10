@@ -6,6 +6,7 @@ This does not require qwen to be installed - just tests the module structure.
 
 import sys
 import os
+from unittest.mock import patch
 # Add the project root to the path (two levels up from this file)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
