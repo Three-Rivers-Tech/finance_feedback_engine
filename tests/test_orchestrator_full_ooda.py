@@ -11,8 +11,8 @@ from finance_feedback_engine.agent.config import TradingAgentConfig
 def mock_config():
     """Create a minimal TradingAgentConfig."""
     return TradingAgentConfig(
-        strategic_goal="maximize_returns",
-        risk_appetite="moderate",
+        strategic_goal="growth",
+        risk_appetite="medium",
         asset_pairs=["BTCUSD", "ETHUSD"],
         analysis_frequency_seconds=60,
         max_concurrent_trades=2,
@@ -105,7 +105,7 @@ class TestOrchestratorInitialization:
         """Test max_drawdown_percent handles both decimal and percentage inputs."""
         # Test decimal input (0.15 = 15%)
         config1 = TradingAgentConfig(
-            strategic_goal="test",
+            strategic_goal="balanced",
             risk_appetite="low",
             asset_pairs=["BTCUSD"],
             max_drawdown_percent=0.15
@@ -115,7 +115,7 @@ class TestOrchestratorInitialization:
 
         # Test percentage input (15.0 = 15%)
         config2 = TradingAgentConfig(
-            strategic_goal="test",
+            strategic_goal="balanced",
             risk_appetite="low",
             asset_pairs=["BTCUSD"],
             max_drawdown_percent=15.0
