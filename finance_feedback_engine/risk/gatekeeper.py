@@ -29,7 +29,8 @@ class RiskGatekeeper:
         correlation_threshold: float = 0.7,
         max_correlated_assets: int = 2,
         max_var_pct: float = 0.05,  # 5% max daily VaR
-        var_confidence: float = 0.95
+        var_confidence: float = 0.95,
+        is_backtest: bool = False
     ):
         """
         Initialize risk gatekeeper.
@@ -40,12 +41,14 @@ class RiskGatekeeper:
             max_correlated_assets: Max assets with high correlation per platform
             max_var_pct: Maximum portfolio VaR as % of portfolio value
             var_confidence: VaR confidence level (0.95 or 0.99)
+            is_backtest: If True, raise errors on timestamp parsing failures instead of falling back
         """
         self.max_drawdown_pct = max_drawdown_pct
         self.correlation_threshold = correlation_threshold
         self.max_correlated_assets = max_correlated_assets
         self.max_var_pct = max_var_pct
         self.var_confidence = var_confidence
+        self.is_backtest = is_backtest
 
         logger.info(
             f"RiskGatekeeper initialized: max_drawdown={max_drawdown_pct*100}%, "
@@ -212,6 +215,14 @@ class RiskGatekeeper:
                     asset_pair, asset_type, unix_timestamp
                 )
             except (ValueError, AttributeError) as e:
+                # In backtest mode, timestamp parsing failures are critical errors
+                # that should halt execution to prevent data corruption
+                if self.is_backtest:
+                    raise ValueError(
+                        f"Failed to parse timestamp in backtest mode for {asset_pair}: "
+                        f"timestamp={timestamp}, error={e}. Backtest requires valid timestamps."
+                    ) from e
+                # In live mode, fall back to current market status
                 logger.warning(f"Could not parse timestamp {timestamp}: {e}. Using live market status.")
                 market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
         else:

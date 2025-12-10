@@ -175,7 +175,7 @@ class Backtester:
         if enable_risk_gatekeeper:
             try:
                 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-                self.risk_gatekeeper = RiskGatekeeper()
+                self.risk_gatekeeper = RiskGatekeeper(is_backtest=True)
                 logger.info("RiskGatekeeper initialized for backtest validation")
             except Exception as e:
                 logger.warning(f"Could not initialize RiskGatekeeper: {e}")
