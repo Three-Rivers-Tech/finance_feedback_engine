@@ -31,15 +31,13 @@ config = {
 }
 
 try:
-    # This will fail since qwen is not installed, but we can catch the error
+    # Mock verification to test instantiation without requiring qwen binary
     with patch('finance_feedback_engine.decision_engine.qwen_cli_provider.QwenCLIProvider._verify_qwen_available', return_value=True):
         provider = QwenCLIProvider(config)
     print("   ✓ Instantiation successful (with mock verification)")
-except ValueError as e:
-    if "qwen" in str(e).lower():
-        print(f"   ✓ Correctly raises error when qwen not found: {e}")
-    else:
-        print(f"   ✗ Unexpected error: {e}")
+except Exception as e:
+    print(f"   ✗ Instantiation failed: {e}")
+    sys.exit(1)
 
 # Test 3: Verify methods exist
 print("\n3. Testing method signatures...")

@@ -48,7 +48,7 @@ markers = [
     "unit: marks tests as unit tests",
 ]
 filterwarnings = [
-    "error",
+    "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
 ]

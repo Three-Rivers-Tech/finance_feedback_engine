@@ -291,8 +291,8 @@ class TestUnifiedDataProvider:
         }
 
         with patch('finance_feedback_engine.data_providers.unified_data_provider.AlphaVantageProvider'):
-            with patch('finance_feedback_engine.data_providers.unified_data_provider.CoinbaseData'):
-                with patch('finance_feedback_engine.data_providers.unified_data_provider.OandaData'):
+            with patch('finance_feedback_engine.data_providers.unified_data_provider.CoinbaseDataProvider'):
+                with patch('finance_feedback_engine.data_providers.unified_data_provider.OandaDataProvider'):
                     return UnifiedDataProvider(config)
 
     def test_initialization(self, provider):
