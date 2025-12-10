@@ -11,6 +11,7 @@ import subprocess
 import json
 import re
 import sys
+import asyncio
 from .decision_validation import (
     is_valid_decision,
     try_parse_decision_json,
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class LocalLLMProvider:
     """
     Local LLM provider using Ollama.
-    
+
     Automatically deploys Llama-3.2-3B-Instruct (optimal for day traders):
     - 3B parameters (fits in 4-8GB RAM)
     - CPU-optimized inference
@@ -36,7 +37,7 @@ class LocalLLMProvider:
     FALLBACK_MODEL = "llama3.2:1b-instruct-fp16"  # Ultra-compact fallback
     # Enforce at least one secondary model for robustness
     SECONDARY_MODEL = "deepseek-r1:8b"
-    
+
     def __init__(self, config: Dict[str, Any]):
         """
         Initialize local LLM provider.
@@ -45,7 +46,7 @@ class LocalLLMProvider:
             config: Configuration dictionary
         """
         self.config = config
-        
+
         # Read local models and priority from config
         decision_engine_config = config.get('decision_engine', {})
         self.local_models = decision_engine_config.get('local_models', [])
@@ -53,23 +54,23 @@ class LocalLLMProvider:
             logger.warning("local_models must be a list, using empty list.")
             self.local_models = []
         self.local_priority = decision_engine_config.get('local_priority', False)
-        
+
         # Normalize model name: "default" -> actual default model
         requested_model = config.get('model_name', 'default')
         if requested_model == 'default':
             self.model_name = self.DEFAULT_MODEL
         else:
             self.model_name = requested_model
-        
+
         logger.info(
             f"Initializing local LLM provider with model: {self.model_name}, "
             f"local_models: {self.local_models}, local_priority: {self.local_priority}"
         )
-        
+
         # Verify Ollama installation (auto-install if needed)
         if not self._check_ollama_installed():
             raise RuntimeError("Failed to install or verify Ollama")
-        
+
         # Ensure model is available (auto-download if needed)
         self._ensure_model_available()
 
@@ -80,7 +81,7 @@ class LocalLLMProvider:
                 secondary_candidates = self.local_models[1:] if len(self.local_models) > 1 else [self.SECONDARY_MODEL]
             else:
                 secondary_candidates = [self.SECONDARY_MODEL]
-            
+
             for secondary_model in secondary_candidates:
                 if not self._is_model_available(secondary_model):
                     logger.info(
@@ -103,13 +104,13 @@ class LocalLLMProvider:
             raise  # Re-raise without wrapping
         except Exception as e:
             raise RuntimeError(f"Failed to ensure secondary model: {e}") from e
-        
+
         logger.info("Local LLM provider initialized successfully")
 
     def _check_ollama_installed(self) -> bool:
         """
         Check if Ollama is installed. If not, attempt automatic installation.
-        
+
         Returns:
             bool: True if Ollama is available or successfully installed
         """
@@ -121,7 +122,7 @@ class LocalLLMProvider:
                 timeout=5,
                 check=False
             )
-            
+
             if result.returncode == 0:
                 version = result.stdout.strip()
                 logger.info("Ollama installed: %s", version)
@@ -131,7 +132,7 @@ class LocalLLMProvider:
                     "Ollama command failed, attempting installation..."
                 )
                 return self._install_ollama()
-                
+
         except FileNotFoundError:
             logger.warning(
                 "Ollama not found in PATH, attempting installation..."
@@ -147,22 +148,22 @@ class LocalLLMProvider:
     def _install_ollama(self) -> bool:
         """
         Automatically install Ollama based on platform.
-        
+
         Returns:
             bool: True if installation successful
         """
         import platform
-        
+
         system = platform.system()
         logger.info(f"Detected platform: {system}")
-        
+
         try:
             if system == "Linux" or system == "Darwin":  # Linux or macOS
                 logger.info(f"Installing Ollama on {system}...")
                 logger.info(
                     "Running: curl -fsSL https://ollama.ai/install.sh | sh"
                 )
-                
+
                 # Download and execute install script
                 install_cmd = "curl -fsSL https://ollama.ai/install.sh | sh"
                 result = subprocess.run(
@@ -172,16 +173,16 @@ class LocalLLMProvider:
                     text=True,
                     timeout=300  # 5 minutes
                 )
-                
+
                 if result.returncode != 0:
                     logger.error("Installation failed: %s", result.stderr)
                     raise RuntimeError(
                         "Ollama installation failed: %s" % result.stderr
                     )
-                
+
                 logger.info(f"Ollama installed successfully on {system}")
                 logger.info(f"Installation output: {result.stdout}")
-                
+
             elif system == "Windows":
                 logger.error(
                     "Automatic installation not supported on Windows"
@@ -194,7 +195,7 @@ class LocalLLMProvider:
                 )
             else:
                 raise RuntimeError(f"Unsupported platform: {system}")
-            
+
             # Verify installation
             verify_result = subprocess.run(
                 ["ollama", "--version"],
@@ -202,7 +203,7 @@ class LocalLLMProvider:
                 text=True,
                 timeout=5
             )
-            
+
             if verify_result.returncode == 0:
                 logger.info(
                     "Installation verified: %s" % verify_result.stdout.strip()
@@ -210,7 +211,7 @@ class LocalLLMProvider:
                 return True
             else:
                 raise RuntimeError("Ollama installed but verification failed")
-                
+
         except subprocess.TimeoutExpired:
             raise RuntimeError("Ollama installation timed out (>5 minutes)")
         except Exception as e:
@@ -219,7 +220,7 @@ class LocalLLMProvider:
     def _ensure_model_available(self) -> None:
         """
         Ensure model is downloaded and ready.
-        
+
         Download strategy:
         1. Check if requested model is available -> use it
         2. If not, attempt to download requested model
@@ -230,7 +231,7 @@ class LocalLLMProvider:
         if self._is_model_available(self.model_name):
             logger.info(f"Model {self.model_name} is already available")
             return
-        
+
         # Model not available - need to download
         logger.info(
             f"Model {self.model_name} not found locally. "
@@ -239,21 +240,21 @@ class LocalLLMProvider:
         logger.info(
             "This is a one-time download. Please wait..."
         )
-        
+
         # Attempt to download requested model
         if self._download_model(self.model_name):
             logger.info(
                 f"Successfully downloaded {self.model_name}"
             )
             return
-        
+
         # Download failed - try fallback if we were trying primary
         if self.model_name == self.DEFAULT_MODEL:
             logger.warning(
                 f"Failed to download primary model {self.DEFAULT_MODEL}. "
                 f"Trying fallback {self.FALLBACK_MODEL}..."
             )
-            
+
             if self._download_model(self.FALLBACK_MODEL):
                 self.model_name = self.FALLBACK_MODEL
                 logger.info(
@@ -264,7 +265,7 @@ class LocalLLMProvider:
                     f"Performance may be reduced with fallback model."
                 )
                 return
-        
+
         # Both failed or custom model failed - hard error
         raise RuntimeError(
             f"Failed to download model: {self.model_name}\n"
@@ -274,15 +275,15 @@ class LocalLLMProvider:
             f"  3. Ollama service is running\n"
             f"Manual download: ollama pull {self.model_name}"
         )
-    
+
     def _download_model(self, model_name: str) -> bool:
         """
         Download a specific model from Ollama library.
-        
+
         Args:
             model_name: Name of model to download (e.g.,
                 'llama3.2:3b-instruct-fp16')
-            
+
         Returns:
             bool: True if download successful, False otherwise
         """
@@ -293,7 +294,7 @@ class LocalLLMProvider:
             logger.info(
                 "This may take several minutes depending on your connection."
             )
-            
+
             # Run ollama pull command
             result = subprocess.run(
                 ['ollama', 'pull', model_name],
@@ -302,14 +303,14 @@ class LocalLLMProvider:
                 timeout=600,  # 10 minute timeout for download
                 check=False
             )
-            
+
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
                 logger.error(
                     f"Download failed for {model_name}: {error_msg}"
                 )
                 return False
-            
+
             # Verify the model was actually downloaded
             if not self._is_model_available(model_name):
                 logger.error(
@@ -318,10 +319,10 @@ class LocalLLMProvider:
                     f"or permission issue."
                 )
                 return False
-            
+
             logger.info(f"Successfully downloaded {model_name}")
             return True
-            
+
         except subprocess.TimeoutExpired:
             logger.error(
                 f"Download timeout for {model_name} (>10 minutes). "
@@ -337,16 +338,16 @@ class LocalLLMProvider:
     def _delete_model(self, model_name: str) -> bool:
         """
         Delete a model to free disk space.
-        
+
         Args:
             model_name: Name of model to delete
-            
+
         Returns:
             bool: True if deletion successful, False otherwise
         """
         try:
             logger.info(f"Deleting model {model_name}...")
-            
+
             result = subprocess.run(
                 ['ollama', 'rm', model_name],
                 capture_output=True,
@@ -354,27 +355,27 @@ class LocalLLMProvider:
                 timeout=30,
                 check=False
             )
-            
+
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
                 logger.warning(
                     f"Failed to delete model {model_name}: {error_msg}"
                 )
                 return False
-            
+
             # Verify deletion
             if self._is_model_available(model_name):
                 logger.warning(
                     f"Model {model_name} still available after deletion"
                 )
                 return False
-            
+
             logger.info(
                 f"Model {model_name} deleted successfully. "
                 f"Freed ~2.5GB disk space."
             )
             return True
-            
+
         except subprocess.TimeoutExpired:
             logger.warning(f"Model {model_name} deletion timeout")
             return False
@@ -385,13 +386,13 @@ class LocalLLMProvider:
     def _unload_model(self) -> None:
         """
         Unload the current model from GPU memory to free resources.
-        
+
         This is called after each query to allow sequential loading
         of different models without memory conflicts.
         """
         try:
             logger.debug(f"Unloading model {self.model_name} from memory")
-            
+
             result = subprocess.run(
                 ['ollama', 'stop', self.model_name],
                 capture_output=True,
@@ -399,7 +400,7 @@ class LocalLLMProvider:
                 timeout=10,
                 check=False
             )
-            
+
             if result.returncode == 0:
                 logger.debug(f"Successfully unloaded model {self.model_name}")
             else:
@@ -407,7 +408,7 @@ class LocalLLMProvider:
                     f"Model {self.model_name} may not have been loaded: "
                     f"{result.stderr.strip()}"
                 )
-                
+
         except subprocess.TimeoutExpired:
             logger.warning(f"Timeout unloading model {self.model_name}")
         except Exception as e:
@@ -423,16 +424,16 @@ class LocalLLMProvider:
                 timeout=10,
                 check=False
             )
-            
+
             if result.returncode == 0:
                 # Parse model list
                 models = result.stdout.lower()
                 # Handle both full name and short name
                 model_base = model_name.split(':')[0].lower()
                 return model_base in models or model_name.lower() in models
-            
+
             return False
-            
+
         except Exception as e:
             logger.error(f"Error checking model availability: {e}")
             return False
@@ -449,7 +450,7 @@ class LocalLLMProvider:
         """
         try:
             logger.info(f"Querying local LLM: {self.model_name}")
-            
+
             # Create system prompt for trading
             full_prompt = (
                 "You are a professional day trading advisor. "
@@ -460,7 +461,7 @@ class LocalLLMProvider:
                 "amount (decimal number for position size).\n\n"
                 f"{prompt}"
             )
-            
+
             # Call Ollama with proper format
             result = subprocess.run(
                 [
@@ -473,16 +474,16 @@ class LocalLLMProvider:
                 timeout=60,
                 check=False
             )
-            
+
             if result.returncode != 0:
                 logger.error(f"Ollama inference failed: {result.stderr}")
                 return build_fallback_decision(
                     "Local LLM unavailable, using fallback decision."
                 )
-            
+
             response_text = result.stdout.strip()
             logger.debug(f"Raw LLM response: {response_text[:200]}")
-            
+
             decision = try_parse_decision_json(response_text)
             if decision:
                 # Safely convert confidence to int (default 60 if missing/invalid)
@@ -491,22 +492,22 @@ class LocalLLMProvider:
                     decision['confidence'] = int(confidence_val) if confidence_val is not None else 60
                 except (ValueError, TypeError):
                     decision['confidence'] = 60
-                
+
                 # Safely convert amount to float (default 0.1 if missing/invalid)
                 try:
                     amount_val = decision.get('amount', 0.1)
                     decision['amount'] = float(amount_val) if amount_val is not None else 0.1
                 except (ValueError, TypeError):
                     decision['amount'] = 0.1
-                
+
                 logger.info(
                     f"Local LLM decision: {decision['action']} "
                     f"({decision['confidence']}%)"
                 )
-                
+
                 # Unload model from memory to free GPU resources for next model
                 self._unload_model()
-                
+
                 return decision
 
             logger.warning(
@@ -514,7 +515,7 @@ class LocalLLMProvider:
                 "attempting text parsing"
             )
             return self._parse_text_response(response_text)
-            
+
         except subprocess.TimeoutExpired:
             logger.error("Local LLM inference timeout (>60s)")
             return build_fallback_decision(
@@ -529,7 +530,7 @@ class LocalLLMProvider:
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """Parse text response for trading decision."""
         text_upper = text.upper()
-        
+
         # Extract action
         if 'BUY' in text_upper and 'SELL' not in text_upper:
             action = 'BUY'
@@ -537,19 +538,19 @@ class LocalLLMProvider:
             action = 'SELL'
         else:
             action = 'HOLD'
-        
+
         # Extract confidence
         confidence_match = re.search(r'(\d+)\s*%', text)
         confidence = int(confidence_match.group(1)) if confidence_match else 65
-        
+
         # Extract reasoning (first meaningful line)
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         reasoning = lines[0][:200] if lines else "Local LLM analysis"
-        
+
         # Extract amount
         amount_match = re.search(r'(\d+\.?\d*)\s*(BTC|ETH|units?)', text, re.IGNORECASE)
         amount = float(amount_match.group(1)) if amount_match else 0.1
-        
+
         return {
             'action': action,
             'confidence': confidence,
@@ -567,20 +568,20 @@ class LocalLLMProvider:
                 timeout=10,
                 check=False
             )
-            
+
             if result.returncode == 0:
                 return {
                     'model_name': self.model_name,
                     'status': 'available',
                     'info': result.stdout
                 }
-            
+
             return {
                 'model_name': self.model_name,
                 'status': 'error',
                 'info': result.stderr
             }
-            
+
         except Exception as e:
             return {
                 'model_name': self.model_name,
