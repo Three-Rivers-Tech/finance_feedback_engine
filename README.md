@@ -147,7 +147,7 @@ graph TB
     style ENS fill:#FF9800,stroke:#E65100,color:#fff
     style AGENT fill:#2196F3,stroke:#0D47A1,color:#fff
     style TM fill:#9C27B0,stroke:#4A148C,color:#fff
-    style WEB fill:#ddd,stroke:#999,color:#333,stroke-dasharray: 5 5
+    style WEB fill:#f5f5f5,stroke:#999,color:#333,stroke-dasharray: 5 5
 ```
 
 **Data Flow Summary:**
