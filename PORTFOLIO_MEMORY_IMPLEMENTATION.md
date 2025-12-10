@@ -234,7 +234,7 @@ Recommended Weights:
 ## Integration Workflow
 
 ```mermaid
-graph TD
+flowchart TD
     A[Analyze Asset] -->|Include Memory Context| B[DecisionEngine]
     B -->|AI Prompt with History| C[Generate Decision]
     C --> D[Execute Trade]

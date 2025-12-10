@@ -442,19 +442,19 @@
 - [x] Create API endpoint tests (32 tests, boosted API coverage to 78-94%)
 - [x] Create integration tests for Telegram/Redis (35 tests)
 - [x] Create data provider tests (22 tests, boosted providers to 20-71%)
-- [ ] Fix TradingAgentConfig enum validation in test_orchestrator_full_ooda.py
-  - Change 'growth' → 'capital_preservation' (or valid enum value)
-  - Fix 'low'/'medium'/'high' risk_appetite values
-- [ ] Fix PortfolioMemoryEngine API mismatches in test_portfolio_memory_persistence.py
-  - Align `record_trade_outcome()` signature
-  - Fix `load_from_disk()` return type assertions
+- [x] Fix TradingAgentConfig enum validation in test_orchestrator_full_ooda.py
+  - Changed 'growth' → 'capital_preservation'
+  - Fixed 'low'/'medium'/'high' risk_appetite values to 'conservative'/'moderate'/'aggressive'
+- [x] Fix PortfolioMemoryEngine API mismatches in test_portfolio_memory_persistence.py
+  - Aligned `record_trade_outcome()` signature to use keyword arguments
+  - Fixed `load_from_disk()` return type assertion to expect a `PortfolioMemoryEngine` instance
 - [ ] Fix CLI approval flow mocking in test_cli_approval_flows.py
   - Adjust decision file path mocking
   - Fix CliRunner invocation
 
 ### Session 2: High-Value Coverage Gains
 - [ ] Create `tests/test_cli_commands_comprehensive.py` (~40-50 tests)
-  - Test all CLI commands: analyze, execute, monitor, backtest, dashboard, approve
+  - Test all CLI commands: analyze, execute, monitor, backtest, dashboard, approve, etc.
   - Mock FinanceFeedbackEngine, Rich console
   - Expected gain: +13% coverage (1,295 statements)
 
