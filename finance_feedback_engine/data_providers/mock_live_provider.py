@@ -408,10 +408,12 @@ class MockLiveProvider:
         - Pulse contains 6 timeframes: 1m, 5m, 15m, 1h, 4h, 1d
 
         Args:
-            base_timeframe: Minimum timeframe in historical data ('1m' or '5m')
-                           Determines how many candles per pulse interval.
-                           With '1m': 5 candles per pulse (5 minutes)
-                           With '5m': 1 candle per pulse (5 minutes)
+            base_timeframe: Minimum timeframe in historical data ('1m', '5m', '15m', '30m', '1h')
+                        Determines how many candles per pulse interval.
+                        With '1m': 5 candles per pulse (5 minutes)
+                        With others: 1 candle per pulse (5 minutes)
+        Raises:
+            ValueError: If base_timeframe is not supported.
         """
         self.pulse_mode = True
         self.base_timeframe = base_timeframe
@@ -425,7 +427,11 @@ class MockLiveProvider:
         )
 
     def _get_pulse_step(self, base_timeframe: str) -> int:
-        """Calculate how many candles to advance per 5-minute pulse."""
+        """Calculate how many candles to advance per 5-minute pulse.
+        Supported base_timeframes: '1m', '5m', '15m', '30m', '1h'.
+        Returns max(1, 5 // minutes_per_candle) to ensure at least 1 candle per pulse.
+        Raises ValueError for unsupported timeframes.
+        """
         timeframe_to_minutes = {
             '1m': 1,
             '5m': 5,
@@ -433,8 +439,10 @@ class MockLiveProvider:
             '30m': 30,
             '1h': 60,
         }
-        minutes_per_candle = timeframe_to_minutes.get(base_timeframe, 1)
-        return max(1, 5 // minutes_per_candle)  # 5-minute intervals
+        if base_timeframe not in timeframe_to_minutes:
+            raise ValueError(f"Unsupported base_timeframe: {base_timeframe}. Supported: {list(timeframe_to_minutes.keys())}")
+        minutes_per_candle = timeframe_to_minutes[base_timeframe]
+        return max(1, 5 // minutes_per_candle)
 
     def advance_pulse(self) -> bool:
         """

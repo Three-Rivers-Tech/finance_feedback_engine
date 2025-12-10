@@ -65,6 +65,9 @@ while mock_provider.advance_pulse():
 - Maps base timeframe to candles per 5-minute pulse
 - 1m → 5 candles (5 minutes)
 - 5m → 1 candle (5 minutes)
+- 15m → 1 candle (15 minutes, minimum 1 per pulse)
+- 30m → 1 candle (30 minutes, minimum 1 per pulse)
+- 1h → 1 candle (60 minutes, minimum 1 per pulse)
 
 ### 3. **Virtual Time Progression**
 - `current_index` tracks position in historical data
