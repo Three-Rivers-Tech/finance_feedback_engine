@@ -101,7 +101,8 @@ class TestAnalyzeCommand:
         result = runner.invoke(cli, ['analyze', 'BTCUSD'])
 
         # Command should execute without error
-        assert result.exit_code == 0 or 'Error' not in result.output
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert 'Error' not in result.output
 
     @patch('finance_feedback_engine.cli.main.FinanceFeedbackEngine')
     def test_analyze_with_provider(self, mock_ffe_class, mock_engine, runner):
@@ -111,7 +112,8 @@ class TestAnalyzeCommand:
         from finance_feedback_engine.cli.main import cli
         result = runner.invoke(cli, ['analyze', 'BTCUSD', '--provider', 'ensemble'])
 
-        assert result.exit_code == 0 or mock_engine.generate_decision.called
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        mock_engine.generate_decision.assert_called()
 
     @patch('finance_feedback_engine.cli.main.FinanceFeedbackEngine')
     def test_analyze_show_pulse(self, mock_ffe_class, mock_engine, runner):
@@ -510,11 +512,10 @@ class TestUtilityFunctions:
             }
         })
 
-        # Should not raise exception
-        try:
-            _display_pulse_data(engine, 'BTCUSD')
-        except Exception:
-            pass  # Display functions may fail without Rich console
+        # If Rich console is unavailable, skip this test
+        pytest.importorskip("rich")
+        _display_pulse_data(engine, 'BTCUSD')
+        engine.data_provider.get_comprehensive_market_data.assert_called_once_with('BTCUSD')
 
     def test_setup_logging_basic(self):
         """Test setup_logging function."""

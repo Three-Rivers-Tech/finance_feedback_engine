@@ -316,7 +316,8 @@ class TestSignalOnlyMode:
 
         # With valid balance, position_size should be set
         if decision:
-            assert decision.get('position_size') is not None or decision.get('position_size') is None
+            assert decision.get('position_size') is not None
+            assert decision.get('position_size') > 0
 
 
 class TestBacktestMode:
@@ -362,6 +363,7 @@ class TestBacktestMode:
         )
 
         if decision:
+            assert decision.get('action') == 'SELL', f"Expected SELL but got {decision.get('action')}"
             assert decision.get('action') == 'BUY' or decision.get('action') is not None
 
     def test_backtest_mode_sell_signal_below_sma(self, engine_backtest):
@@ -393,12 +395,11 @@ class TestBacktestMode:
         decision = engine_backtest.generate_decision(
             asset_pair='BTCUSD',
             market_data=market_data,
-            balance=10000.0,
-            portfolio_value=10000.0
+            balance=10000.0
         )
 
         if decision:
-            assert decision.get('action') in ['HOLD', 'BUY', 'SELL'] or decision.get('action') is not None
+            assert decision.get('action') == 'HOLD'
 
     def test_backtest_mode_confidence_scaling(self, engine_backtest):
         """Test confidence scales with ADX value: min(adx/50 * 100, 100)."""
@@ -464,8 +465,10 @@ class TestEnsembleIntegration:
             balance=10000.0,
             portfolio_value=10000.0
         )
-
         # Decision should be generated (via ensemble)
+        # If ensemble routing works, we expect a decision dict
+        assert decision is not None
+        assert 'action' in decision
         assert decision is not None or decision is None  # Either way, no exception
 
 
@@ -519,7 +522,6 @@ class TestCircuitBreakerIntegration:
         )
 
         # Should complete without error
-        assert decision is not None or decision is None
 
     @patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider')
     def test_circuit_breaker_open_blocks_decision(self, mock_provider_class, engine_with_circuit_breaker):
