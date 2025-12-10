@@ -255,21 +255,43 @@ class AlphaVantageProvider:
         asset_pair: str,
         start: str,
         end: str,
+        timeframe: str = '1h',
     ) -> list:
-        """Return a list of daily OHLC dictionaries within [start,end].
+        """Return a list of OHLC dictionaries within [start,end] for the specified timeframe.
 
-        Uses a single Alpha Vantage call (DIGITAL_CURRENCY_DAILY or FX_DAILY)
-        then slices the requested date range. Falls back to synthetic mock
-        candles if API fails. Each candle dict keys: date, open, high, low,
-        close.
+        Supports both daily and intraday timeframes:
+        - '1m', '5m', '15m', '30m', '1h': Intraday (last 100 candles from API, may need pagination)
+        - '1d': Daily (up to full history available)
+
+        Uses appropriate Alpha Vantage endpoints based on timeframe.
+        Falls back to synthetic mock candles if API fails.
+        Each candle dict keys: date, open, high, low, close.
+
+        Args:
+            asset_pair: Asset pair (e.g., 'BTCUSD', 'EURUSD')
+            start: Start date (YYYY-MM-DD format)
+            end: End date (YYYY-MM-DD format)
+            timeframe: Timeframe ('1m', '5m', '15m', '30m', '1h', '1d'). Defaults to '1h'.
+
+        Returns:
+            List of OHLC candle dictionaries
         """
+        # Validate timeframe
+        valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '1d']
+        if timeframe not in valid_timeframes:
+            logger.warning(
+                f"Invalid timeframe '{timeframe}', defaulting to '1h'. "
+                f"Valid options: {valid_timeframes}"
+            )
+            timeframe = '1h'
+
         try:
             start_dt = datetime.strptime(start, "%Y-%m-%d").date()
             end_dt = datetime.strptime(end, "%Y-%m-%d").date()
             if end_dt < start_dt:
                 raise ValueError("End date precedes start date")
 
-            # Decide endpoint by asset type (reuse logic from get_market_data)
+            # Decide endpoint by asset type
             if 'BTC' in asset_pair or 'ETH' in asset_pair:
                 # Crypto
                 if asset_pair.endswith('USD'):
@@ -278,103 +300,211 @@ class AlphaVantageProvider:
                 else:
                     symbol = asset_pair[:3]
                     market = asset_pair[3:]
-                params = {
-                    'function': 'DIGITAL_CURRENCY_DAILY',
-                    'symbol': symbol,
-                    'market': market,
-                    'apikey': self.api_key,
-                }
+
+                # Use INTRADAY for intraday, DAILY for daily
+                if timeframe == '1d':
+                    params = {
+                        'function': 'DIGITAL_CURRENCY_DAILY',
+                        'symbol': symbol,
+                        'market': market,
+                        'apikey': self.api_key,
+                    }
+                    series_key = 'Time Series (Digital Currency Daily)'
+                else:
+                    # Intraday: map timeframe to API interval
+                    interval_map = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min'}
+                    interval = interval_map.get(timeframe, '60min')
+                    params = {
+                        'function': 'DIGITAL_CURRENCY_INTRADAY',
+                        'symbol': symbol,
+                        'market': market,
+                        'interval': interval,
+                        'apikey': self.api_key,
+                    }
+                    series_key = f'Time Series Crypto ({interval})'
+
                 data = await self._async_request(params, timeout=15)
-                series_key = 'Time Series (Digital Currency Daily)'
             else:
+                # Forex
                 from_currency = asset_pair[:3]
                 to_currency = asset_pair[3:]
-                params = {
-                    'function': 'FX_DAILY',
-                    'from_symbol': from_currency,
-                    'to_symbol': to_currency,
-                    'apikey': self.api_key,
-                }
+
+                # Use INTRADAY for intraday, DAILY for daily
+                if timeframe == '1d':
+                    params = {
+                        'function': 'FX_DAILY',
+                        'from_symbol': from_currency,
+                        'to_symbol': to_currency,
+                        'apikey': self.api_key,
+                    }
+                    series_key = 'Time Series FX (Daily)'
+                else:
+                    # Intraday: map timeframe to API interval
+                    interval_map = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min'}
+                    interval = interval_map.get(timeframe, '60min')
+                    params = {
+                        'function': 'FX_INTRADAY',
+                        'from_symbol': from_currency,
+                        'to_symbol': to_currency,
+                        'interval': interval,
+                        'apikey': self.api_key,
+                    }
+                    series_key = f'Time Series FX ({interval})'
+
                 data = await self._async_request(params, timeout=15)
-                series_key = 'Time Series FX (Daily)'
 
             if series_key not in data:
                 logger.warning(
-                    "Historical data unexpected format for %s", asset_pair
+                    "Historical data unexpected format for %s (timeframe: %s, expected key: %s)",
+                    asset_pair, timeframe, series_key
                 )
-                return self._generate_mock_series(start_dt, end_dt)
+                return self._generate_mock_series(start_dt, end_dt, timeframe)
 
             time_series = data[series_key]
             candles = []
-            for date_str, day_data in time_series.items():
-                day_dt = datetime.strptime(date_str, "%Y-%m-%d").date()
-                if day_dt < start_dt or day_dt > end_dt:
-                    continue
-                # Field name differences for crypto vs forex
-                o_val = (
-                    day_data.get('1a. open (USD)')
-                    or day_data.get('1. open')
-                    or day_data.get('1. open', 0)
-                )
-                h_val = (
-                    day_data.get('2a. high (USD)')
-                    or day_data.get('2. high')
-                    or day_data.get('2. high', 0)
-                )
-                low_val = (
-                    day_data.get('3a. low (USD)')
-                    or day_data.get('3. low')
-                    or day_data.get('3. low', 0)
-                )
-                c_val = (
-                    day_data.get('4a. close (USD)')
-                    or day_data.get('4. close')
-                    or day_data.get('4. close', 0)
-                )
+
+            # Parse datetime based on timeframe
+            if timeframe == '1d':
+                # Daily format: YYYY-MM-DD
+                date_format = "%Y-%m-%d"
+            else:
+                # Intraday format: YYYY-MM-DD HH:MM:SS
+                date_format = "%Y-%m-%d %H:%M:%S"
+
+            for timestamp_str, candle_data in time_series.items():
                 try:
+                    if timeframe == '1d':
+                        candle_dt = datetime.strptime(timestamp_str, date_format).date()
+                    else:
+                        candle_dt = datetime.strptime(timestamp_str, date_format).date()
+
+                    # Filter by date range
+                    if candle_dt < start_dt or candle_dt > end_dt:
+                        continue
+
+                    # Field name differences for crypto vs forex
+                    o_val = (
+                        candle_data.get('1a. open (USD)')
+                        or candle_data.get('1. open')
+                        or candle_data.get('1. open', 0)
+                    )
+                    h_val = (
+                        candle_data.get('2a. high (USD)')
+                        or candle_data.get('2. high')
+                        or candle_data.get('2. high', 0)
+                    )
+                    low_val = (
+                        candle_data.get('3a. low (USD)')
+                        or candle_data.get('3. low')
+                        or candle_data.get('3. low', 0)
+                    )
+                    c_val = (
+                        candle_data.get('4a. close (USD)')
+                        or candle_data.get('4. close')
+                        or candle_data.get('4. close', 0)
+                    )
                     candles.append({
-                        'date': date_str,
+                        'date': timestamp_str,
                         'open': float(o_val),
                         'high': float(h_val),
                         'low': float(low_val),
                         'close': float(c_val),
                     })
-                except Exception:
+                except (ValueError, TypeError):
                     continue
+
             # Sort ascending by date
             candles.sort(key=lambda x: x['date'])
+
             if not candles:
-                return self._generate_mock_series(start_dt, end_dt)
+                logger.warning(
+                    "No candles extracted for %s (timeframe: %s) in date range %s to %s",
+                    asset_pair, timeframe, start_dt, end_dt
+                )
+                return self._generate_mock_series(start_dt, end_dt, timeframe)
+
+            logger.info(
+                "Fetched %d %s candles for %s from %s to %s",
+                len(candles), timeframe, asset_pair, start_dt, end_dt
+            )
             return candles
+
         except Exception as e:  # noqa: BLE001
             logger.error(
-                "Historical data fetch failed for %s: %s", asset_pair, e
+                "Historical data fetch failed for %s (timeframe: %s): %s", asset_pair, timeframe, e
             )
             try:
                 start_dt = datetime.strptime(start, "%Y-%m-%d").date()
                 end_dt = datetime.strptime(end, "%Y-%m-%d").date()
-                return self._generate_mock_series(start_dt, end_dt)
+                return self._generate_mock_series(start_dt, end_dt, timeframe)
             except Exception:
                 return []
 
-    def _generate_mock_series(self, start_dt, end_dt) -> list:
-        """Synthetic daily series fallback (linear drift)."""
-        span = (end_dt - start_dt).days + 1
+    def _generate_mock_series(self, start_dt, end_dt, timeframe: str = '1d') -> list:
+        """Synthetic series fallback (linear drift) supporting intraday timeframes.
+
+        Args:
+            start_dt: Start date
+            end_dt: End date
+            timeframe: Timeframe ('1m', '5m', '15m', '30m', '1h', '1d')
+
+        Returns:
+            List of mock OHLC candles
+        """
+        from datetime import timedelta
+
         base = 100.0
         out = []
-        for i in range(span):
-            from datetime import timedelta
-            d = start_dt + timedelta(days=i)
-            drift = 1 + (i / span) * 0.02  # +2% over full period
-            close = base * drift
-            out.append({
-                'date': d.isoformat(),
-                'open': close * 0.995,
-                'high': close * 1.01,
-                'low': close * 0.99,
-                'close': close,
-                'mock': True,
-            })
+
+        if timeframe == '1d':
+            # Daily candles
+            span = (end_dt - start_dt).days + 1
+            for i in range(span):
+                d = start_dt + timedelta(days=i)
+                drift = 1 + (i / span) * 0.02  # +2% over full period
+                close = base * drift
+                out.append({
+                    'date': d.isoformat(),
+                    'open': close * 0.995,
+                    'high': close * 1.01,
+                    'low': close * 0.99,
+                    'close': close,
+                    'mock': True,
+                })
+        else:
+            # Intraday candles
+            timeframe_to_minutes = {
+                '1m': 1,
+                '5m': 5,
+                '15m': 15,
+                '30m': 30,
+                '1h': 60,
+            }
+            minutes_per_candle = timeframe_to_minutes.get(timeframe, 60)
+
+            # Generate intraday candles from start to end
+            current = datetime.combine(start_dt, datetime.min.time())
+            end_datetime = datetime.combine(end_dt, datetime.max.time())
+
+            candle_index = 0
+            while current <= end_datetime:
+                # Market hours filter (optional: 0-24 for crypto, 9-17 for forex, skipped here)
+                drift = 1 + (candle_index / 1000) * 0.02  # Gentle drift
+                volatility = 1 + (candle_index % 10) * 0.001  # Intraday volatility
+                close = base * drift * volatility
+                
+                out.append({
+                    'date': current.strftime("%Y-%m-%d %H:%M:%S"),
+                    'open': close * 0.998,
+                    'high': close * 1.005,
+                    'low': close * 0.995,
+                    'close': close,
+                    'mock': True,
+                })
+
+                current += timedelta(minutes=minutes_per_candle)
+                candle_index += 1
+
         return out
 
     async def _enrich_market_data(

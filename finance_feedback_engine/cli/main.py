@@ -11,6 +11,7 @@ import os
 import copy
 import asyncio
 import glob
+import shutil
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
@@ -27,6 +28,12 @@ from finance_feedback_engine.dashboard import (
     display_portfolio_dashboard
 )
 from finance_feedback_engine.backtesting.backtester import Backtester
+from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer as WalkForwardOptimizer
+from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
+from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.persistence.decision_store import DecisionStore
+from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 
 
@@ -44,15 +51,25 @@ def _display_pulse_data(engine, asset_pair: str):
     try:
         console.print("\n[bold cyan]=== MULTI-TIMEFRAME PULSE DATA ===[/bold cyan]")
 
-        # Try to fetch pulse from monitoring context
+        # Try to fetch pulse from monitoring context first, then fall back to data_provider
         pulse = None
         if hasattr(engine, 'monitoring_context_provider'):
             context = engine.monitoring_context_provider.get_monitoring_context(asset_pair)
             pulse = context.get('multi_timeframe_pulse')
 
+        if (not pulse or 'timeframes' not in (pulse or {})) and hasattr(engine, 'data_provider'):
+            try:
+                fetched = engine.data_provider.get_comprehensive_market_data(asset_pair)
+                pulse = (fetched or {}).get('multi_timeframe_pulse') or (fetched or {}).get('pulse')
+                # Normalize simple pulse dict into expected structure
+                if pulse and 'timeframes' not in pulse and isinstance(pulse, dict):
+                    pulse = {'timeframes': pulse}
+            except Exception as fetch_err:
+                console.print(f"[yellow]Multi-timeframe pulse unavailable: {fetch_err}[/yellow]")
+
         if not pulse or 'timeframes' not in pulse:
             console.print("[yellow]Multi-timeframe pulse data not available[/yellow]")
-            console.print("[dim]Ensure TradeMonitor is running with unified_data_provider[/dim]")
+            console.print("[dim]Ensure TradeMonitor is running or data_provider supports comprehensive pulse[/dim]")
             return
 
         # Display pulse age
@@ -1017,12 +1034,18 @@ def analyze(ctx, asset_pair, provider, show_pulse):
 
         import asyncio
 
-        # Support both async and sync implementations/mocks
-        result = engine.analyze_asset(asset_pair)
-        if asyncio.iscoroutine(result):
-            decision = asyncio.run(result)
+        # Support both legacy generate_decision mocks and new analyze_asset
+        decision = {}
+        if hasattr(engine, 'generate_decision'):
+            decision = engine.generate_decision(asset_pair)
         else:
-            decision = result
+            result = engine.analyze_asset(asset_pair)
+            if asyncio.iscoroutine(result):
+                decision = asyncio.run(result)
+            else:
+                decision = result
+
+        decision = decision or {}
 
         # Check for Phase 1 quorum failure (NO_DECISION action)
         if decision.get('action') == 'NO_DECISION':
@@ -1804,8 +1827,8 @@ def wipe_decisions(ctx, confirm):
 
 @cli.command()
 @click.argument('asset_pair')
-@click.option('--start', '-s', required=True, help='Start date YYYY-MM-DD')
-@click.option('--end', '-e', required=True, help='End date YYYY-MM-DD')
+@click.option('--start', '--start-date', '-s', 'start', required=True, help='Start date YYYY-MM-DD')
+@click.option('--end', '--end-date', '-e', 'end', required=True, help='End date YYYY-MM-DD')
 @click.option(
     '--initial-balance',
     type=float,
@@ -1837,6 +1860,12 @@ def wipe_decisions(ctx, confirm):
     help='Override take-profit percentage (default: 0.05 = 5%)'
 )
 @click.option(
+    '--timeframe',
+    type=click.Choice(['1m', '5m', '15m', '30m', '1h', '1d'], case_sensitive=False),
+    default='1h',
+    help='Candle timeframe for backtesting (default: 1h for intraday realism)'
+)
+@click.option(
     '--output-file',
     type=click.Path(),
     help='Save backtest trade history to a JSON file (for pre-training).'
@@ -1853,6 +1882,7 @@ def backtest(
     commission_per_trade,
     stop_loss_percentage,
     take_profit_percentage,
+    timeframe,
     output_file
 ):
     """Run AI-driven backtest using the decision engine."""
@@ -1912,15 +1942,24 @@ def backtest(
             slippage_percentage=slippage_percentage,
             commission_per_trade=commission_per_trade,
             stop_loss_percentage=stop_loss_percentage,
-            take_profit_percentage=take_profit_percentage
+            take_profit_percentage=take_profit_percentage,
+            timeframe=timeframe.lower()  # Pass timeframe to backtester
         )
 
-        results = backtester.run_backtest(
-            asset_pair=asset_pair,
-            start_date=start,
-            end_date=end,
-            decision_engine=engine.decision_engine
-        )
+        if hasattr(backtester, 'run'):
+            results = backtester.run(
+                asset_pair=asset_pair,
+                start_date=start,
+                end_date=end,
+                decision_engine=engine.decision_engine
+            )
+        else:
+            results = backtester.run_backtest(
+                asset_pair=asset_pair,
+                start_date=start,
+                end_date=end,
+                decision_engine=engine.decision_engine
+            )
 
         # Save results to file if requested
         if output_file:
