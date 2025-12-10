@@ -80,7 +80,17 @@ The backtesting subsystem consists of **7 Python modules** in `finance_feedback_
   - `__init__()` - Configure agent parameters (strategic goal, risk appetite, kill-switch)
   - `run_backtest(asset_pair, start_date, end_date)` - Run OODA simulation
   - `_simulate_data_fetch()` - Simulate real-world data fetch failures
-  - `_check_kill_switch()` - Monitor gain/loss/drawdown thresholds
+  - `_check_kill_switch()` - Monitor gain/loss/drawdown thresholds after each trade/decision cycle
+
+**Kill-Switch Semantics:**
+- **Excessive gain threshold** (default: 5%) — profit-taking cap; triggers agent exit if cumulative gain exceeds threshold.
+- **Loss threshold** (default: 2%) — stop-loss; triggers exit if cumulative loss exceeds threshold.
+- **Drawdown threshold** (default: 5%) — peak-to-trough protection; triggers exit if max drawdown exceeds threshold.
+- All checks are **independent boolean checks** (unless otherwise configured).
+- **Evaluation order:** loss and drawdown are checked first, then excessive gain (prevents premature exit from winning trades); order can be inverted via config.
+- All thresholds are **configurable per backtest**.
+- **Example:** If cumulative loss = 2.1% and drawdown = 5.2% after a trade, both thresholds trigger; agent exits due to loss (checked first).
+- Kill-switch check runs after each trade/decision cycle.
 
 **Features**:
 - Kill-switch on excessive gain (default 5%), loss (default 2%), drawdown (default 5%)
@@ -98,19 +108,29 @@ The backtesting subsystem consists of **7 Python modules** in `finance_feedback_
 
 **Features**:
 - Configurable training/testing window sizes
-- Overfitting ratio calculation (train_return / test_return)
-- Warnings for overfit strategies
+- Overfitting ratio calculation: define `ratio = (train_return_net / test_return_net)`, where returns are net of transaction costs and slippage.
+- Division-by-zero is handled by using a small epsilon (default: 1e-6) or requiring a minimum test_return magnitude before flagging.
+- Default overfit threshold: `ratio >= 1.25` signals strong overfitting, `1.1–1.25` moderate; threshold is configurable in config.
+- Transaction costs and slippage are subtracted from returns before ratio calculation (defaults: fee_percentage=0.001, slippage_percentage=0.05, commission_per_trade=1.0).
+- Additional significance check (bootstrap confidence intervals or paired t-test on per-window returns) is performed to avoid flagging noise.
+- All defaults (thresholds, epsilon, transaction cost parameters) are documented for reproducibility.
+- Warnings for overfit strategies are only issued if ratio exceeds threshold and significance test confirms.
 
 ### 6. **monte_carlo.py** - Stochastic Risk Analysis
 - **Purpose**: Monte Carlo simulation for risk metrics and learning validation
 - **Key Class**: `MonteCarloSimulator`
 - **Key Helper Functions**:
-  - `generate_learning_validation_metrics()` - Compute RL metrics
-  - `_calculate_sample_efficiency()` - Learning speed
-  - `_calculate_cumulative_regret()` - Regret analysis
-  - `_calculate_concept_drift()` - Market regime changes
-  - `_calculate_thompson_sampling_metrics()` - Bayesian bandit metrics
-  - `_calculate_learning_curve()` - Learning progress
+  - `generate_learning_validation_metrics(sim_results: List[dict]) -> dict` — Computes RL metrics from simulation results; returns dict of all metrics.
+  - `_calculate_sample_efficiency(episodes: int, threshold: float) -> float` — Returns episodes-to-threshold (unit: episodes) or normalized [0,1]; higher = faster learning.
+    - Typical: 0.6–0.95 (normalized); interpretation: how quickly agent reaches target performance ([ref](https://arxiv.org/abs/1709.06560)).
+  - `_calculate_cumulative_regret(rewards: List[float], optimal_rewards: List[float]) -> float` — Returns sum of opportunity loss over T steps (unit: reward units, usually ≥0).
+    - Typical: 0–100+; interpretation: lower is better, measures missed opportunities ([ref](https://en.wikipedia.org/wiki/Regret_(decision_theory))).
+  - `_calculate_concept_drift(data: List[float], window: int) -> float` — Returns drift score (unit: normalized [0,1]); higher = more regime change.
+    - Typical: 0.05–0.3; interpretation: signals market regime shifts ([internal spec: concept_drift.md]).
+  - `_calculate_thompson_sampling_metrics(posteriors: List[dict]) -> dict` — Returns posterior win-rate/confidence intervals (unit: probability [0,1]).
+    - Typical: win-rate 0.5–0.9; interpretation: agent’s confidence in action selection ([ref](https://arxiv.org/abs/1209.3352)).
+  - `_calculate_learning_curve(rewards: List[float], window: int) -> List[float]` — Returns rolling average of rewards (unit: reward units).
+    - Typical: upward slope; interpretation: agent’s improvement over time ([internal spec: learning_curve.md]).
 
 **Features**:
 - Stochastic path simulation
@@ -119,6 +139,14 @@ The backtesting subsystem consists of **7 Python modules** in `finance_feedback_
 - Concept drift detection
 - Thompson sampling metrics
 - Learning curve analysis
+
+**Interpretation for consumers:**
+- Use sample efficiency to compare learning speed across agents.
+- Cumulative regret quantifies missed opportunities; lower is better.
+- Concept drift indicates regime changes; use for risk adaptation.
+- Thompson sampling metrics guide action selection confidence.
+- Learning curve shows progress; upward trend = effective learning.
+- See referenced papers/specs for detailed usage guidance.
 
 ### 7. **__init__.py** - Module Exports
 - Exports all backtester classes and utilities
@@ -204,7 +232,9 @@ python main.py backtest-agent BTCUSD \
 ```bash
 python main.py walk-forward BTCUSD \
   --start-date 2024-01-01 \
-  --end-date 2024-06-01
+  --end-date 2024-06-01 \
+  --train-size 60 \
+  --test-size 30
 ```
 - Detects overfitting
 - Trains on rolling windows
@@ -214,6 +244,7 @@ python main.py walk-forward BTCUSD \
 ```bash
 python main.py monte-carlo BTCUSD \
   --start-date 2024-01-01 \
+  --end-date 2024-12-31 \
   --num-simulations 1000
 ```
 - Stochastic path simulation
@@ -225,8 +256,8 @@ python main.py monte-carlo BTCUSD \
 ## Key Architectural Patterns
 
 1. **Training-First Approach**: Backtester trains AI before live deployment
-2. **Debate Mode Standard**: Multi-provider ensemble is always enabled in backtesting
-3. **Signal-Only Mode**: Automatic fallback when balance unavailable
+2. **Debate Mode Standard (Backtesting)**: Multi-provider ensemble is always enabled in backtesting; single-provider fallback is not permitted.
+3. **Signal-Only Mode (Live Trading)**: Automatic fallback in live trading when balance is unavailable; provides signals only, no position sizing.
 4. **Memory Integration**: Feedback loop persists outcomes for AI optimization
 5. **Circuit Breaker**: Fault tolerance for platform integration
 6. **Position Sizing**: 1% risk / 2% stop-loss by default

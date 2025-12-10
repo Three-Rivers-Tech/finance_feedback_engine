@@ -454,3 +454,23 @@ class TestMockLiveProvider:
 
         # Same data, different identifiers
         assert btc_provider.get_current_price() == eth_provider.get_current_price()
+
+    def test_get_pulse_step_all_supported_timeframes(self):
+        """Test _get_pulse_step for all supported base_timeframes."""
+        provider = MockLiveProvider(pd.DataFrame({
+            'open': [1]*10, 'high': [1]*10, 'low': [1]*10, 'close': [1]*10
+        }))
+        # Supported timeframes and expected pulse steps
+        expected = {
+            '1m': 5,    # 5 / 1
+            '5m': 1,    # 5 / 5
+            '15m': 1,   # 5 / 15 = 0.33 -> max(1, 0)
+            '30m': 1,   # 5 / 30 = 0.16 -> max(1, 0)
+            '1h': 1,    # 5 / 60 = 0.08 -> max(1, 0)
+        }
+        for tf, expected_step in expected.items():
+            step = provider._get_pulse_step(tf)
+            assert step == expected_step, f"Pulse step for {tf} should be {expected_step}, got {step}"
+        # Unsupported timeframe raises ValueError
+        with pytest.raises(ValueError, match="Unsupported base_timeframe"):
+            provider._get_pulse_step('unsupported')
