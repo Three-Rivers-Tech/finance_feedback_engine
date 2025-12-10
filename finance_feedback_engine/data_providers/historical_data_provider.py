@@ -71,7 +71,7 @@ class HistoricalDataProvider:
         # self.data_store = TimeSeriesDataStore() # For caching/persistence
 
     def _fetch_raw_data(
-        self, asset_pair: str, start_date: datetime, end_date: datetime
+        self, asset_pair: str, start_date: datetime, end_date: datetime, timeframe: str = '1h'
     ) -> pd.DataFrame:
         """
         Fetch real historical OHLC data via Alpha Vantage provider.
@@ -79,12 +79,12 @@ class HistoricalDataProvider:
         Returns a DataFrame indexed by timestamp with columns: open, high, low, close, volume (if available).
         Includes simple file-based caching to reduce repeated API calls.
         """
-        # Build cache key
+        # Build cache key (include timeframe in cache key)
         cache_file = None
         try:
             start_str = start_date.strftime("%Y-%m-%d")
             end_str = end_date.strftime("%Y-%m-%d")
-            cache_file = self.cache_dir / f"{asset_pair}_{start_str}_{end_str}.parquet"
+            cache_file = self.cache_dir / f"{asset_pair}_{timeframe}_{start_str}_{end_str}.parquet"
             if cache_file.exists():
                 df = pd.read_parquet(cache_file)
                 # Ensure datetime index
@@ -92,7 +92,7 @@ class HistoricalDataProvider:
                     df.index = pd.to_datetime(df.index, utc=True)
                 df.index.name = "timestamp"
                 logger.info(
-                    f"Loaded historical cache for {asset_pair} {start_str}->{end_str}"
+                    f"Loaded historical cache for {asset_pair} (timeframe: {timeframe}) {start_str}->{end_str}"
                 )
                 return df
         except Exception as e:
@@ -116,7 +116,7 @@ class HistoricalDataProvider:
                 candles = []
             except RuntimeError:
                 coro = provider.get_historical_data(
-                    asset_pair, start=start_str, end=end_str
+                    asset_pair, start=start_str, end=end_str, timeframe=timeframe
                 )
                 candles = asyncio.run(coro)
         except Exception as e:
@@ -125,7 +125,7 @@ class HistoricalDataProvider:
 
         if not candles:
             logger.warning(
-                f"No historical candles fetched for {asset_pair} between {start_str} and {end_str}"
+                f"No historical candles fetched for {asset_pair} (timeframe: {timeframe}) between {start_str} and {end_str}"
             )
             return pd.DataFrame()
 
@@ -161,6 +161,7 @@ class HistoricalDataProvider:
         asset_pair: str,
         start_date: Union[str, datetime],
         end_date: Union[str, datetime],
+        timeframe: str = '1h',
     ) -> pd.DataFrame:
         """
         Retrieves historical data for a given asset pair and date range.
@@ -169,6 +170,7 @@ class HistoricalDataProvider:
             asset_pair (str): The asset pair (e.g., "BTCUSD").
             start_date (Union[str, datetime]): The start date for the data (YYYY-MM-DD or datetime object).
             end_date (Union[str, datetime]): The end date for the data (YYYY-MM-DD or datetime object).
+            timeframe (str): The timeframe for candles ('1m', '5m', '15m', '30m', '1h', '1d'). Defaults to '1h'.
 
         Returns:
             pd.DataFrame: A DataFrame with historical data, indexed by datetime,
@@ -189,16 +191,16 @@ class HistoricalDataProvider:
             end_date = end_date.replace(tzinfo=timezone.utc)
 
         # TODO: Check data_store for cached data first
-        # cached_data = self.data_store.load_data(asset_pair, start_date, end_date)
+        # cached_data = self.data_store.load_data(asset_pair, start_date, end_date, timeframe)
         # if cached_data is not None and not cached_data.empty:
-        #     logger.info(f"Loaded historical data for {asset_pair} from cache.")
+        #     logger.info(f"Loaded historical data for {asset_pair} (timeframe: {timeframe}) from cache.")
         #     return cached_data
 
-        raw_data = self._fetch_raw_data(asset_pair, start_date, end_date)
+        raw_data = self._fetch_raw_data(asset_pair, start_date, end_date, timeframe)
 
         if raw_data.empty:
             logger.warning(
-                f"No historical data fetched for {asset_pair} between {start_date.date()} and {end_date.date()}."
+                f"No historical data fetched for {asset_pair} (timeframe: {timeframe}) between {start_date.date()} and {end_date.date()}."
             )
             return pd.DataFrame()
 
@@ -226,10 +228,10 @@ class HistoricalDataProvider:
         raw_data = raw_data.sort_index()
 
         # TODO: Persist fetched data to data_store
-        # self.data_store.save_data(asset_pair, raw_data)
+        # self.data_store.save_data(asset_pair, raw_data, timeframe)
 
         logger.info(
-            f"Successfully fetched and processed historical data for {asset_pair}."
+            f"Successfully fetched and processed {len(raw_data)} {timeframe} candles for {asset_pair}."
         )
         return raw_data
 

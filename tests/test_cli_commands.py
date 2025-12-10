@@ -48,7 +48,8 @@ def test_analyze_command_success(monkeypatch):
     assert captured["asset_pair"] == "ETHUSD"
     assert "Analyzing ETHUSD" in result.stdout
     assert "Trading Decision Generated" in result.stdout
-    assert "Action: [bold]BUY" in result.stdout
+    # Click's CliRunner strips rich formatting, so check for plain text version
+    assert "Action: BUY" in result.stdout or "Action: [bold]BUY" in result.stdout
     assert "Confidence: 82%" in result.stdout
     assert "Decision ID: dec-123" in result.stdout
 

@@ -86,6 +86,7 @@ class Backtester:
                  memory_isolation_mode: bool = False,  # Use isolated memory storage
                  force_local_providers: bool = True,  # Restrict ensemble to local providers only
                  max_concurrent_positions: int = 5,  # Max simultaneous open positions
+                 timeframe: str = '1h',  # Candle timeframe ('1m', '5m', '15m', '30m', '1h', '1d')
                  config: Optional[Dict[str, Any]] = None,  # Full config for memory engine
                  ):
         self.historical_data_provider = historical_data_provider
@@ -100,6 +101,7 @@ class Backtester:
         self.take_profit_percentage = take_profit_percentage
         self.max_concurrent_positions = max_concurrent_positions
         self.force_local_providers = force_local_providers
+        self.timeframe = timeframe  # Store timeframe for use in run_backtest
         self.config = config or {}
 
         # Initialize decision cache
@@ -180,7 +182,7 @@ class Backtester:
             except Exception as e:
                 logger.warning(f"Could not initialize RiskGatekeeper: {e}")
 
-        logger.info(f"Initialized Backtester with initial balance: ${initial_balance:.2f}, leverage: {self.platform_leverage}x")
+        logger.info(f"Initialized Backtester with initial balance: ${initial_balance:.2f}, leverage: {self.platform_leverage}x, timeframe: {timeframe}")
 
     def _execute_trade(self,
                        current_balance: float,
@@ -434,6 +436,9 @@ class Backtester:
         This method eliminates duplicate P&L calculation logic by leveraging the real
         TradingLoopAgent with mock platform and data provider.
 
+        Uses the timeframe specified in __init__ (default: '1h') for realistic
+        intraday market simulation.
+
         Args:
             asset_pair (str): The asset pair to backtest (e.g., "BTCUSD").
             start_date (Union[str, datetime]): The start date for the backtest.
@@ -452,17 +457,19 @@ class Backtester:
         from finance_feedback_engine.utils.validation import standardize_asset_pair
 
         logger.info(
-            f"Starting backtest for {asset_pair} from {start_date} to {end_date}..."
+            f"Starting backtest for {asset_pair} from {start_date} to {end_date} with timeframe={self.timeframe}..."
         )
 
-        # 1. Fetch historical data
-        data = self.historical_data_provider.get_historical_data(asset_pair, start_date, end_date)
+        # 1. Fetch historical data with the configured timeframe
+        data = self.historical_data_provider.get_historical_data(
+            asset_pair, start_date, end_date, timeframe=self.timeframe
+        )
         if data.empty:
             logger.error(f"No historical data available for backtest for {asset_pair}.")
             return {"metrics": {"net_return_pct": 0, "total_trades": 0}, "trades": []}
 
         total_candles = len(data)
-        logger.info(f"Processing {total_candles} candles for backtest")
+        logger.info(f"Processing {total_candles} {self.timeframe} candles for backtest")
 
         # Standardize asset pair
         asset_pair_std = standardize_asset_pair(asset_pair)
@@ -485,6 +492,12 @@ class Backtester:
             asset_pair=asset_pair_std,
             start_index=0
         )
+
+        # Initialize pulse mode for realistic multi-timeframe simulation
+        # This simulates how the real agent receives market data:
+        # - At 5-minute intervals (not per-candle)
+        # - With multi-timeframe pulse (1m, 5m, 15m, 1h, 4h, 1d simultaneously)
+        mock_provider.initialize_pulse_mode(base_timeframe=self.timeframe)
 
         # Create agent config for backtesting
         agent_config = TradingAgentConfig(
@@ -578,24 +591,33 @@ class Backtester:
         )
         agent.is_running = True  # Enable agent for processing
 
-        # 3. Execution Loop: Iterate through historical data
-        logger.info(f"Running agent through {total_candles} historical candles...")
+        # 3. Execution Loop: Iterate through historical data at 5-minute pulse intervals
+        logger.info(f"Running agent through {total_candles} historical candles (pulse-based 5min intervals)...")
 
         async def run_backtest_loop():
-            """Async function to run the backtest loop."""
-            for idx in tqdm(range(total_candles), desc=f"Backtesting {asset_pair}", unit="candle", ncols=100):
-                # Advance mock provider to next candle
-                if idx > 0:
-                    if not mock_provider.advance():
-                        logger.warning(f"Could not advance provider at index {idx}")
-                        break
+            """Async function to run the backtest loop using 5-minute pulses."""
+            pulse_count = 0
+            while mock_provider.advance_pulse():
+                pulse_count += 1
+
+                # Get multi-timeframe pulse data matching real agent behavior
+                try:
+                    pulse_data = await mock_provider.get_pulse_data()
+                    logger.debug(f"Pulse {pulse_count}: candles processed {mock_provider.current_index}/{total_candles}")
+                except Exception as e:
+                    logger.warning(f"Error getting pulse data at pulse {pulse_count}: {e}")
+                    break
 
                 # Process one cycle of the agent
+                # The agent now receives multi-timeframe pulse like in real-time
                 cycle_result = await agent.process_cycle()
 
                 if not cycle_result:
-                    logger.warning(f"Agent cycle failed at index {idx}, stopping backtest")
-                    break
+                    logger.debug(f"Agent cycle paused at pulse {pulse_count}, continuing...")
+                    # Don't break on cycle pause - agent may just be waiting
+
+                if pulse_count % 100 == 0:
+                    logger.info(f"Pulse {pulse_count}: candle index {mock_provider.current_index}/{total_candles}")
 
         # Run the async loop
         asyncio.run(run_backtest_loop())
@@ -658,11 +680,13 @@ class Backtester:
                 "asset_pair": asset_pair,
                 "start_date": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
                 "end_date": end_date.isoformat() if isinstance(end_date, datetime) else end_date,
+                "timeframe": self.timeframe,
                 "initial_balance": self.initial_balance,
                 "fee_percentage": self.fee_percentage,
                 "slippage_percentage": self.slippage_percentage,
                 "stop_loss_percentage": self.stop_loss_percentage,
                 "take_profit_percentage": self.take_profit_percentage,
+                "total_candles": total_candles,
                 "equity_curve": equity_curve
             }
         }
