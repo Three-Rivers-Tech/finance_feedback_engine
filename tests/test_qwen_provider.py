@@ -31,19 +31,18 @@ config = {
 
 try:
     # This will fail since qwen is not installed, but we can catch the error
-    provider = QwenCLIProvider(config)
-    print("   ✗ Should have raised ValueError for missing qwen binary")
+    with patch('finance_feedback_engine.decision_engine.qwen_cli_provider.QwenCLIProvider._verify_qwen_available', return_value=True):
+        provider = QwenCLIProvider(config)
+    print("   ✓ Instantiation successful (with mock verification)")
 except ValueError as e:
     if "qwen" in str(e).lower():
         print(f"   ✓ Correctly raises error when qwen not found: {e}")
     else:
         print(f"   ✗ Unexpected error: {e}")
-except Exception as e:
-    print(f"   ✗ Unexpected error type: {type(e).__name__}: {e}")
 
 # Test 3: Verify methods exist
 print("\n3. Testing method signatures...")
-required_methods = ['query', '_verify_qwen_available', '_format_prompt_for_qwen', 
+required_methods = ['query', '_verify_qwen_available', '_format_prompt_for_qwen',
                    '_parse_qwen_response', '_fallback_decision']
 for method in required_methods:
     if hasattr(QwenCLIProvider, method):

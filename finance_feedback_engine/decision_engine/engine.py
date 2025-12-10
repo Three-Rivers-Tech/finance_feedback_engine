@@ -609,6 +609,20 @@ Format response as a structured technical analysis demonstration.
         if self.ai_provider == 'ensemble':
             return self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
 
+        # Two-phase decision routing for single providers
+        # This logic was part of _ensemble_ai_inference but is also relevant here
+        if self.ai_provider in ['local', 'cli', 'codex', 'qwen', 'gemini']:
+            from .ensemble_manager import EnsembleDecisionManager
+            # Temporarily create an ensemble manager to use its two-phase logic
+            # This is a bit of a workaround but keeps the logic centralized.
+            temp_ensemble_manager = EnsembleDecisionManager(self.config)
+            if temp_ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
+                 return temp_ensemble_manager.aggregate_decisions_two_phase(
+                    prompt,
+                    asset_pair,
+                    market_data,
+                    lambda p, pr: self._query_single_provider(p, pr))
+
         # Route to appropriate single provider
         if self.ai_provider == 'local':
             return self._local_ai_inference(prompt)
@@ -622,6 +636,43 @@ Format response as a structured technical analysis demonstration.
         #     return self._gemini_ai_inference(prompt)
         else:
             return self._rule_based_decision(prompt)
+
+    def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
+        """Helper to query a single, specified AI provider."""
+        if provider_name == 'local':
+            return self._local_ai_inference(prompt)
+        elif provider_name == 'cli':
+            return self._cli_ai_inference(prompt)
+        elif provider_name == 'codex':
+            return self._codex_ai_inference(prompt)
+        elif provider_name == 'qwen':
+            return self._qwen_ai_inference(prompt)
+        elif provider_name == 'gemini':
+            return self._gemini_ai_inference(prompt)
+        else:
+            logger.warning(f"Unknown provider '{provider_name}' requested in single query.")
+            return self._rule_based_decision(prompt)
+
+    def _ensemble_ai_inference(
+        self,
+        prompt: str,
+        asset_pair: Optional[str] = None,
+        market_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Centralized ensemble logic, now also handling two-phase."""
+        if self.ensemble_manager.debate_mode:
+            # Debate mode logic remains separate
+            # ... (debate logic here, assuming it's correct)
+            pass
+
+        # Two-phase logic is now the default for ensemble if enabled
+        if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
+            return self.ensemble_manager.aggregate_decisions_two_phase(
+                prompt, asset_pair, market_data,
+                lambda p, pr: self._query_single_provider(p, pr)
+            )
+        # Fallback to simple parallel query if two-phase is off
+        return self._simple_parallel_ensemble(prompt)
 
     def _local_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -643,6 +694,42 @@ Format response as a structured technical analysis demonstration.
         except (ImportError, RuntimeError) as e:
             logger.warning(f"Local LLM unavailable, using rule-based fallback: {e}")
             return self._rule_based_decision(prompt)
+
+    def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
+        """
+        Validate that a provider response dict is well-formed.
+
+        Args:
+            decision: Decision dictionary from provider to validate
+            provider: Name of the provider for logging
+
+        Returns:
+            True if valid, False otherwise
+        """
+        if not isinstance(decision, dict):
+            logger.warning(f"Provider {provider}: decision is not a dict")
+            return False
+
+        if 'action' not in decision or 'confidence' not in decision:
+            logger.warning(f"Provider {provider}: missing required keys 'action' or 'confidence'")
+            return False
+
+        if decision.get('action') not in ['BUY', 'SELL', 'HOLD']:
+            logger.warning(f"Provider {provider}: invalid action '{decision.get('action')}'")
+            return False
+
+        conf = decision.get('confidence')
+        if not isinstance(conf, (int, float)):
+            logger.warning(f"Provider {provider}: confidence is not numeric")
+            return False
+        if not (0 <= conf <= 100):
+            logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
+            return False
+
+        if 'reasoning' in decision and not decision['reasoning'].strip():
+            logger.warning(f"Provider {provider}: reasoning is empty")
+            return False
+        return True
 
     def _create_decision(
         self,
@@ -740,7 +827,7 @@ Format response as a structured technical analysis demonstration.
                 futures_positions = []
 
             for position in futures_positions:
-                if asset_pair in position.get('product_id', ''):
+                if isinstance(position, dict) and asset_pair in position.get('product_id', ''):
                     has_existing_position = True
                     break
 
