@@ -51,10 +51,10 @@ def mock_engine(test_config_path):
         FinanceFeedbackEngine: Engine initialized with mock config
     """
     from finance_feedback_engine import FinanceFeedbackEngine
-    
+
     with open(test_config_path, encoding='utf-8') as f:
         config = yaml.safe_load(f)
-    
+
     return FinanceFeedbackEngine(config)
 
 
@@ -86,13 +86,13 @@ def cleanup_test_data():
         Path("data/test_metrics"),
         Path("data/test_memory")
     ]
-    
+
     for test_dir in test_dirs:
         if test_dir.exists():
             shutil.rmtree(test_dir, ignore_errors=True)
-    
+
     yield
-    
+
     # Cleanup after tests
     for test_dir in test_dirs:
         if test_dir.exists():
@@ -156,16 +156,19 @@ def mock_ai_model():
     return mock
     # return DummyAIModel({"model_name": "TestMockModel"}) # Alternative: use a simple concrete dummy
 
-# TODO: Add a fixture for a mocked trading platform
-# @pytest.fixture(scope="function")
-# def mock_trading_platform():
-#     """
-#     Provides a mocked trading platform for testing interactions.
-#     """
-#     mock = MagicMock(spec=BaseTradingPlatform)
-#     mock.get_balance.return_value = {"USD": 10000.0, "BTC": 0.5}
-#     mock.place_order.return_value = {"order_id": "mock_123", "status": "FILLED"}
-#     return mock
+@pytest.fixture(scope="function")
+def mock_trading_platform():
+    """
+    Provides a mocked trading platform for testing interactions.
+    """
+    from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+
+    mock = MagicMock(spec=BaseTradingPlatform)
+    mock.get_balance.return_value = {"USD": 10000.0, "BTC": 0.5}
+    mock.execute_trade.return_value = {"order_id": "mock_123", "status": "FILLED", "success": True, "message": "Mock trade executed"}
+    mock.get_portfolio_breakdown.return_value = {"total_value_usd": 10000.0, "positions": []}
+    mock.get_account_info.return_value = {"max_leverage": 10.0}
+    return mock
 
 
 # --- General Purpose Fixtures ---
@@ -182,4 +185,3 @@ def temporary_file_path(tmp_path_factory):
 # - Mocked external API responses (e.g., Alpha Vantage, Oanda)
 # - Pre-configured FinanceFeedbackEngine instance for integration tests
 # - Database connection fixtures (e.g., in-memory SQLite for testing persistence)
-

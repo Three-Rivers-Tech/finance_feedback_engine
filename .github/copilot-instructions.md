@@ -26,7 +26,7 @@ Alpha Vantage (6 timeframes) + Sentiment
 
 **Entry Points:**
 - **Analysis**: `FinanceFeedbackEngine.analyze_asset(asset_pair)` — gathers data, queries AI (ensemble/debate), validates risk, persists decision
-- **Agentic Loop**: `TradingAgentOrchestrator.run()` — OODA cycle with kill-switch, portfolio-level stop-loss/take-profit
+- **Agentic Loop**: `TradingLoopAgent.run()` — state machine cycle with kill-switch, portfolio-level stop-loss/take-profit
 - **Backtesting**: `python main.py backtest BTCUSD --start-date 2024-01-01` — trains AI on historical data, caches decisions (SQLite)
 - **CLI**: `python main.py analyze|execute|monitor|run-agent|backtest|walk-forward|monte-carlo|learning-report`
 
@@ -40,7 +40,7 @@ Alpha Vantage (6 timeframes) + Sentiment
 
 **Core Orchestration:**
 - `finance_feedback_engine/core.py`: Main engine; coordinates all subsystems; `analyze_asset()` entry point
-- `finance_feedback_engine/agent/orchestrator.py`: Autonomous OODA loop; kill-switch logic (gain/loss/drawdown); thread-safe monitoring integration
+- `finance_feedback_engine/agent/trading_loop_agent.py`: Autonomous trading loop with state machine (IDLE, PERCEPTION, REASONING, RISK_CHECK, EXECUTION, LEARNING); kill-switch logic; position recovery on startup
 
 **Decision Engine:**
 - `finance_feedback_engine/decision_engine/engine.py`: LLM prompt builder; position sizing (1% risk / 2% stop-loss); signal-only mode detection
@@ -81,7 +81,7 @@ Alpha Vantage (6 timeframes) + Sentiment
 - `finance_feedback_engine/backtesting/backtester.py`: Standard backtester with cache and memory integration; supports margin/leverage, short positions, realistic slippage
 - `finance_feedback_engine/backtesting/advanced_backtester.py`: Simplified backtester (legacy); use standard `backtester.py` for production
 - `finance_feedback_engine/backtesting/decision_cache.py`: SQLite cache for AI decisions (avoids redundant LLM queries)
-- `finance_feedback_engine/backtesting/agent_backtester.py`: OODA loop simulation for agent testing
+- `finance_feedback_engine/backtesting/agent_backtester.py`: State machine simulation for agent testing
 - `finance_feedback_engine/backtesting/walk_forward.py`: Overfitting detection (train/test splits)
 - `finance_feedback_engine/backtesting/monte_carlo.py`: Stochastic simulation + RL metrics (sample efficiency, cumulative regret)
 
@@ -184,7 +184,7 @@ All formats auto-standardized to uppercase without separators:
 3. `config/config.yaml` (defaults)
 
 **Safety Constraints:**
-- **Quicktest mode**: ONLY allowed in testing/backtesting; `TradingAgentOrchestrator` raises `ValueError` if enabled in live mode
+- **Quicktest mode**: ONLY allowed in testing/backtesting; `TradingLoopAgent` raises `ValueError` if enabled in live mode
 - **Circuit breaker**: 5 failures → open for 60s (see `trading_platforms/circuit_breaker.py`)
 - **Kill-switch**: Agent stops on `>X%` gain/loss or `>Y%` drawdown (config: `agent.yaml`)
 - **Max concurrent trades**: 2 (hard limit in `TradeMonitor`)
@@ -296,7 +296,7 @@ All formats auto-standardized to uppercase without separators:
 **Testing:**
 - 70% coverage enforced in pytest; add `# pragma: no cover` only for defensive error handling
 - Use `mock_engine` fixture from `conftest.py` for integration tests
-- Quicktest mode ONLY for tests; `TradingAgentOrchestrator` raises ValueError if enabled in live mode
+- Quicktest mode ONLY for tests; `TradingLoopAgent` raises ValueError if enabled in live mode
 
 ## Editing Safety Rules
 

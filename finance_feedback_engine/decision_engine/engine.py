@@ -615,17 +615,6 @@ Format response as a structured technical analysis demonstration.
         if self.ai_provider == 'ensemble':
             return await self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
 
-        # Two-phase decision routing for single providers
-        # This logic was part of _ensemble_ai_inference but is also relevant here
-        if self.ai_provider in ['local', 'cli', 'codex', 'qwen', 'gemini']:
-            ensemble_manager = self._get_ensemble_manager()
-            if ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
-                return await ensemble_manager.aggregate_decisions_two_phase(
-                    prompt,
-                    asset_pair,
-                    market_data,
-                    lambda provider_name, provider_prompt: self._query_single_provider(provider_name, provider_prompt))
-
         # Route to appropriate single provider
         if self.ai_provider == 'local':
             return await self._local_ai_inference(prompt)
