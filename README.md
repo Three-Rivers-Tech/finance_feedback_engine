@@ -1,55 +1,24 @@
-# Finance Feedback Engine 2.0
-# Ensemble Decision Aggregation
+# Finance Feedback Engine
 
-## Aggregation Flow and Metadata (Comprehensive)
+The Finance Feedback Engine is a Python-based tool designed to provide validation and feedback for financial data processing, particularly for applications interacting with market data APIs like Alpha Vantage.
 
+This project currently offers a set of utility functions for standardizing inputs and validating data quality.
 
-> **AI-Powered Trading Decision Tool** - A modular, plug-and-play finance tool for automated portfolio simulation and trading decisions using AI models and real-time market data.
+## Features
 
-## 🚀 Features
+The core functionalities are located in `finance_feedback_engine/utils/validation.py`.
 
-- **🔌 Plug-and-Play Architecture**: Easy to set up and configure
-- **📊 Real-Time Market Data**: Integration with Alpha Vantage Premium API
-- **🤖 AI-Powered Decisions**: Support for local AI models and CLI-based AI tools
-- **🎭 Ensemble Mode**: Combine multiple AI providers with intelligent voting 🆕
-  - **Dynamic Weight Adjustment**: Automatically handles provider failures
-  - **Resilient Operation**: Continues working even when some providers are down
-  - **Transparent Metadata**: Full visibility into provider health and decisions
-  - **Debate Mode**: Structured debate between bullish/bearish advocates with impartial judge 🆕
-- **💱 Multi-Asset Support**: Trade cryptocurrencies (BTC, ETH) and forex pairs (EUR/USD, etc.)
-- **🏦 Multi-Platform Integration**: 
-  - Coinbase Advanced with **Real Portfolio Tracking** 🆕
-  - Oanda (Forex) with **Position & Margin Tracking** 🆕
-  - Easily extensible for new platforms
-- **💼 Portfolio Awareness**: AI sees your actual holdings for context-aware recommendations 🆕
-- **📊 Long-Term Performance Tracking**: AI analyzes 90-day portfolio performance for better decisions 🆕
-  - **Realized P&L**: Total profit/loss over extended period
-  - **Win Rate & Profit Factor**: Historical success metrics
-  - **Performance Momentum**: Detects improving/declining trends
-  - **Risk-Adjusted Returns**: Sharpe ratio for professional-grade analysis
-- **🔍 Live Trade Monitoring**: Automatic detection and tracking of open positions 🆕
-  - **Real-time P&L Tracking**: Monitor unrealized profits/losses as they happen
-  - **Thread-Safe**: Max 2 concurrent trades with dedicated monitoring threads
-  - **ML Feedback Loop**: Completed trades feed back into AI for continuous learning
-  - **Comprehensive Metrics**: Exit reasons, holding time, peak P&L, max drawdown
-- **📊 Position Sizing**: Automatic position sizing with 1% risk / 2% stop loss defaults 🆕
+### 1. Asset Pair Standardization
 
-*Diagram: Comprehensive ensemble decision aggregation flow, including provider input, aggregation, fallback, dynamic weight adjustment, and detailed metadata. See [ENSEMBLE_FALLBACK_QUICKREF.md](ENSEMBLE_FALLBACK_QUICKREF.md) for further details.*
-  - **Smart Signal-Only Mode**: Provides trading signals without position sizing when portfolio data unavailable 🆕
-  - **Risk Management**: Calculates appropriate position sizes based on account balance
-- **💾 Persistent Decision Storage**: Track all trading decisions with timestamps
-- **⚙️ Modular Design**: Each component can be customized or replaced
-- **📈 Balance Management**: Real-time account balance and allocation tracking
-- **🎯 CLI Interface**: Rich command-line interface for easy interaction
-- **📱 Telegram Approvals** (Optional): Mobile approval workflow for human-in-the-loop trading 🆕
-  - **REST API**: FastAPI-based web service for webhooks and monitoring
-  - **Redis Queue**: Persistent approval queue with auto-recovery
-  - **Auto-Setup**: One-command Redis installation and configuration
-  - **CLI Independence**: Web service is fully optional - CLI works standalone
+**Function:** `standardize_asset_pair(asset_pair: str) -> str`
 
-## 🏗️ System Architecture Overview
+This utility cleans and standardizes financial asset pair strings (e.g., currency pairs, stock tickers) into a consistent, uppercase, separator-free format suitable for API calls.
 
-### Complete Data Flow & Component Interaction
+**Key Operations:**
+- Converts the input string to uppercase.
+- Removes all non-alphanumeric characters (e.g., `_`, `-`, `/`, ` `).
+- Validates that the input is a non-empty string and produces a non-empty result.
+- Logs a warning for unusually short asset pairs (less than 6 characters).
 
 ```mermaid
 graph TB
@@ -149,7 +118,6 @@ graph TB
     style TM fill:#9C27B0,stroke:#4A148C,color:#fff
     style WEB fill:#f5f5f5,stroke:#999,color:#333,stroke-dasharray: 5 5
 ```
-
 **Data Flow Summary:**
 1. **Analysis Request** → CLI/Agent invokes `FinanceFeedbackEngine.analyze_asset()`
 2. **Data Gathering** → Alpha Vantage provides multi-timeframe market data + sentiment
@@ -1089,115 +1057,76 @@ The decision engine is designed to be extended. You can add your own AI provider
 3. Register the platform in `platform_factory.py`
 
 Example:
+=======
+**Usage Example:**
+>>>>>>> 55cb33b (Refactor and enhance test suite for TradingAgentOrchestrator and related components)
 
 ```python
-from finance_feedback_engine.trading_platforms import BaseTradingPlatform, PlatformFactory
+from finance_feedback_engine.utils.validation import standardize_asset_pair
 
-class MyPlatform(BaseTradingPlatform):
-    def get_balance(self):
-        # Implementation
-        pass
-    
-    def execute_trade(self, decision):
-        # Implementation
-        pass
-    
-    def get_account_info(self):
-        # Implementation
-        pass
-
-# Register the platform
-PlatformFactory.register_platform('my_platform', MyPlatform)
+standardize_asset_pair('eur/usd')  # Returns 'EURUSD'
+standardize_asset_pair('BTC-USD')  # Returns 'BTCUSD'
+standardize_asset_pair('eth_usd')  # Returns 'ETHUSD'
 ```
 
-### Customizing the Decision Engine
+    ### 2. Data Freshness Validation
 
-Modify `finance_feedback_engine/decision_engine/engine.py` to:
-- Add custom trading strategies
-- Integrate different AI models
-- Implement advanced technical analysis
-- Add risk management rules
+**Function:** `validate_data_freshness(data_timestamp: str, asset_type: str = "crypto", timeframe: str = "intraday") -> Tuple[bool, str, str]`
 
-## 📝 Decision Storage
+This function protects against using stale market data by comparing a data point's timestamp against the current time. It uses configurable thresholds based on the asset type and timeframe to determine if the data is fresh enough for trading decisions.
 
-All trading decisions are stored as JSON files in the configured storage path (default: `data/decisions/`). Each decision includes:
+**Inputs:**
+- `data_timestamp`: An ISO 8601 formatted UTC timestamp string (e.g., `'2024-12-08T14:30:00Z'`).
+- `asset_type`: The type of asset (`"crypto"`, `"forex"`, `"stocks"`). Case-insensitive.
+- `timeframe`: For stocks only, specifies `"daily"` or `"intraday"` data.
 
-- Decision ID
-- Asset pair
-- Action (BUY/SELL/HOLD)
-- Confidence level
-- AI reasoning
-- Market data snapshot
-- Balance snapshot
-- Timestamp
-- Execution status
+**Returns:**
 
-## 🔍 Example Decision Output
+A tuple `(is_fresh, age_str, warning_message)`:
+- `is_fresh` (bool): `False` if data is critically stale, `True` otherwise.
+- `age_str` (str): A human-readable string describing the data's age (e.g., `"5.2 minutes"`).
+- `warning_message` (str): A descriptive warning or critical error message if the data is old.
 
-```json
-{
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "asset_pair": "BTCUSD",
-  "timestamp": "2024-01-15T14:30:00.000Z",
-  "action": "BUY",
-  "confidence": 75,
-  "reasoning": "Price dropped, good buying opportunity.",
-  "suggested_amount": 0.1,
-  "market_data": {
-    "close": 45000.0,
-    "high": 46000.0,
-    "low": 44500.0
-  },
-  "executed": false
-}
+**Freshness Thresholds:**
+
+| Asset Type      | Timeframe | Warning Threshold | Critical Threshold (is_fresh=False) |
+|-----------------|-----------|-------------------|-------------------------------------|
+| Crypto / Forex  | N/A       | > 5 minutes       | >= 15 minutes                       |
+| Stocks          | Intraday  | > 5 minutes       | >= 15 minutes                       |
+| Stocks          | Daily     | > 24 hours        | (No critical threshold)             |
+
+**Usage Example:**
+
+```python
+from finance_feedback_engine.utils.validation import validate_data_freshness
+
+# Example with fresh crypto data
+fresh_ts = "2024-10-26T12:00:00Z" # Assume current time is 12:02 UTC
+is_fresh, age, msg = validate_data_freshness(fresh_ts, asset_type="crypto")
+# is_fresh -> True
+# age -> "2.0 minutes"
+# msg -> ""
+
+# Example with stale stock data
+stale_ts = "2024-10-26T11:40:00Z" # Assume current time is 12:02 UTC
+is_fresh, age, msg = validate_data_freshness(stale_ts, asset_type="stocks", timeframe="intraday")
+# is_fresh -> False
+# age -> "22.0 minutes"
+# msg -> "CRITICAL: Stock intraday data is 22.0 minutes old..."
 ```
 
-## 🚦 Roadmap
+## Getting Started
 
-- [ ] Add more trading platforms (Binance, Kraken, etc.)
-- [x] **Long-term portfolio performance tracking** (see `docs/LONG_TERM_PERFORMANCE.md`) ✅
-- [x] Implement backtesting functionality (AI-driven + simulations)
-- [x] Create web dashboard (portfolio aggregation)
-- [ ] Add portfolio management features
-- [ ] Add real-time WebSocket support
-- [ ] Implement advanced AI models integration
-- [ ] Add risk management strategies
-- [ ] Create mobile app
- - [ ] Two-phase ensemble escalation (free→premium) with budget limits 🆕
- - [ ] Telegram notifications for Phase 1 failures and trade executions 🆕
- - [ ] Adaptive Phase 1 threshold tuning based on premium provider value-add 🆕
-- [ ] Exit codes & troubleshooting guide for CLI commands
+To use these utilities in your project, ensure the `finance_feedback_engine` package is in your Python path.
 
-## 📚 Documentation
+```python
+import logging
+from finance_feedback_engine.utils import validation
 
-- **[Long-Term Performance Tracking](docs/LONG_TERM_PERFORMANCE.md)** - 90-day portfolio metrics for AI decision-making 🆕
-- **[AI Providers](docs/AI_PROVIDERS.md)** - Guide to available AI providers
-- **[Live Trade Monitoring](docs/LIVE_MONITORING_QUICKREF.md)** - Real-time position tracking with thread-safe monitoring
-- **[Portfolio Memory Engine](docs/PORTFOLIO_MEMORY_ENGINE.md)** - ML feedback loop system
-- **[Signal-Only Mode](docs/SIGNAL_ONLY_MODE.md)** - Trading signals without execution
-- **Backtesting & Simulation (README)** - See "Backtesting & Simulations" and Monte Carlo/WFA quick-start examples
-- **[Asset Pair Validation](docs/ASSET_PAIR_VALIDATION.md)** - Flexible asset pair formats
-- **[Oanda Integration](docs/OANDA_INTEGRATION.md)** - Forex trading setup
-- **[Ensemble System](docs/ENSEMBLE_FALLBACK_SYSTEM.md)** - Multi-provider AI aggregation with 4-tier fallback
-- **[Multi-Timeframe Pulse](docs/MULTI_TIMEFRAME_PULSE_COMPLETE.md)** - Technical analysis system (6 timeframes, 5 indicators)
-- **[Autonomous Agent](docs/AGENTIC_LOOP_WORKFLOW.md)** - OODA loop with position recovery and state machine
+# Configure logging to see warnings and errors
+logging.basicConfig(level=logging.INFO)
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## ⚠️ Disclaimer
-
-This software is for educational and research purposes only. **Do not use it for actual trading without proper testing and risk assessment.** Trading cryptocurrencies and forex involves substantial risk of loss. Always consult with a financial advisor before making investment decisions.
-
-## 📧 Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
----
-
-**Made with ❤️ by Three Rivers Tech**
+# Use the functions
+pair = validation.standardize_asset_pair(" my-asset_pair/123 ")
+print(f"Standardized Pair: {pair}")
+```

@@ -446,54 +446,6 @@ class TradingLoopAgent:
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
-    async def handle_reasoning_state(self):
-        """
-        REASONING: Running the DecisionEngine with retry logic for robustness.
-        Collects all actionable decisions for the current cycle.
-        """
-        logger.info("State: REASONING - Running DecisionEngine...")
-
-        MAX_RETRIES = 3
-        self._current_decisions.clear() # Clear decisions from previous cycle
-
-        # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
-        current_time = datetime.datetime.now()
-        for key in list(self.analysis_failures.keys()):
-            last_fail = self.analysis_failure_timestamps.get(key)
-            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
-                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
-                self.analysis_failures.pop(key, None)
-                self.analysis_failure_timestamps.pop(key, None)
-
-    async def handle_reasoning_state(self):
-        """
-        REASONING: Running the DecisionEngine with retry logic for robustness.
-        Collects all actionable decisions for the current cycle.
-        Skips recently rejected assets based on a cooldown.
-        """
-        logger.info("State: REASONING - Running DecisionEngine...")
-
-        MAX_RETRIES = 3
-        self._current_decisions.clear() # Clear decisions from previous cycle
-
-        # --- Cleanup expired rejected decisions ---
-        current_time = datetime.datetime.now()
-        expired_keys = [
-            d_id for d_id, (timestamp, _) in self._rejected_decisions_cache.items()
-            if (current_time - timestamp).total_seconds() > self._rejection_cooldown_seconds
-        ]
-        for key in expired_keys:
-            self._rejected_decisions_cache.pop(key)
-            logger.info(f"Removed expired rejected decision {key} from cache.")
-
-        # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
-        for key in list(self.analysis_failures.keys()):
-            last_fail = self.analysis_failure_timestamps.get(key)
-            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
-                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
-                self.analysis_failures.pop(key, None)
-                self.analysis_failure_timestamps.pop(key, None)
-
         for asset_pair in self.config.asset_pairs:
             failure_key = f"analysis:{asset_pair}"
 
@@ -624,7 +576,7 @@ class TradingLoopAgent:
         self._current_decisions.clear()
 
         # After attempting all executions, return to IDLE
-        await self._transition_to(AgentState.IDLE)
+        await self._transition_to(AgentState.LEARNING)
 
     async def handle_learning_state(self):
         """
@@ -720,6 +672,8 @@ class TradingLoopAgent:
         except Exception as e:
             logger.error(f"Error in process_cycle: {e}", exc_info=True)
             return False
+
+    def stop(self):
         """Stops the trading loop."""
         logger.info("Stopping autonomous trading agent...")
         self.is_running = False
