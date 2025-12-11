@@ -255,13 +255,6 @@ class MockTradingPlatform(BaseTradingPlatform):
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]
 
-                    # For a SELL, the suggested_amount should correspond to the notional value
-                    # of the contracts being sold. We'll use the existing position's contracts
-                    # to determine the size of the sell order.
-                    contracts_to_sell = pos['contracts']
-                    suggested_amount = contracts_to_sell * execution_price * self._contract_multiplier
-                    contracts = contracts_to_sell # Use the contracts from the position
-
                     # Close or reduce long position
                     if pos['contracts'] >= contracts:
                         # Calculate realized P&L

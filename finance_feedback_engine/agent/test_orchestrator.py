@@ -41,8 +41,8 @@ def test_orchestrator_start_and_stop(mock_engine_and_platform, agent_config):
     mock_engine, mock_platform = mock_engine_and_platform
     orchestrator = TradingAgentOrchestrator(agent_config, mock_engine, mock_platform)
 
-    # Mock the main loop to prevent it from running forever
-    orchestrator._main_loop = MagicMock()
+    # Mock the main loop to block until stop_event is set
+    orchestrator._main_loop = MagicMock(side_effect=lambda: orchestrator._stop_event.wait())
 
     orchestrator.start()
     assert orchestrator.thread is not None

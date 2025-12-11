@@ -129,10 +129,11 @@ def validate_data_freshness(
     asset_kind = (asset_type or "crypto").lower()
     warning_msg = ""
     is_fresh = True
+    epsilon = 1e-6  # tolerate tiny timing drift when calculating age
 
     if asset_kind in ("crypto", "forex"):
         # Crypto and Forex: 5 min warning, 15 min critical
-        if age_minutes >= 15:
+        if (age_minutes - 15) > epsilon:
             is_fresh = False
             warning_msg = (
                 f"CRITICAL: {asset_kind.capitalize()} data is {age_str} old "
@@ -140,7 +141,7 @@ def validate_data_freshness(
                 f"Recommend skipping trade."
             )
             logger.error(warning_msg)
-        elif age_minutes > 5:
+        elif age_minutes >= 5:
             is_fresh = True  # Still usable but warn
             warning_msg = (
                 f"WARNING: {asset_kind.capitalize()} data is {age_str} old "
@@ -152,7 +153,7 @@ def validate_data_freshness(
         timeframe_kind = (timeframe or "intraday").lower()
         if timeframe_kind == "daily":
             # Daily data: 24 hour warning threshold
-            if age_minutes >= 24 * 60:  # 24 hours
+            if age_minutes > 24 * 60:  # 24 hours
                 is_fresh = True  # Still usable (daily data ages slower)
                 warning_msg = (
                     f"WARNING: Stock daily data is {age_str} old "
@@ -161,7 +162,7 @@ def validate_data_freshness(
                 logger.warning(warning_msg)
         else:  # intraday (default)
             # Intraday: 15 minute warning
-            if age_minutes >= 15:
+            if (age_minutes - 15) > epsilon:
                 is_fresh = False
                 warning_msg = (
                     f"CRITICAL: Stock intraday data is {age_str} old "
@@ -169,7 +170,7 @@ def validate_data_freshness(
                     f"Recommend skipping trade."
                 )
                 logger.error(warning_msg)
-            elif age_minutes > 5:
+            elif age_minutes >= 5:
                 is_fresh = True  # Still usable but warn
                 warning_msg = (
                     f"WARNING: Stock intraday data is {age_str} old "
@@ -178,14 +179,14 @@ def validate_data_freshness(
                 logger.warning(warning_msg)
     else:
         # Unknown asset type: default to crypto thresholds
-        if age_minutes >= 15:
+        if (age_minutes - 15) > epsilon:
             is_fresh = False
             warning_msg = (
                 f"CRITICAL: Data is {age_str} old (threshold: 15 minutes). "
                 f"Stale market data detected. Recommend skipping trade."
             )
             logger.error(warning_msg)
-        elif age_minutes > 5:
+        elif age_minutes >= 5:
             is_fresh = True
             warning_msg = (
                 f"WARNING: Data is {age_str} old "

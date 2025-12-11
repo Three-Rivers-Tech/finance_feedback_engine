@@ -11,7 +11,8 @@ def test_trading_agent_config_defaults():
     assert config.risk_appetite == "medium"
     assert config.max_drawdown_percent == 0.15
     assert config.autonomous.enabled is False
-    assert config.min_confidence_threshold == 70.0  # Before normalization
+    # Defaults are normalized to decimal fraction (70 -> 0.70)
+    assert config.min_confidence_threshold == pytest.approx(0.70)
 
 
 def test_percentage_field_normalization_above_one():
@@ -41,9 +42,8 @@ def test_percentage_field_normalization_at_or_below_one():
 def test_model_validator_normalizes_default_min_confidence():
     """Test that the model validator normalizes the default min_confidence_threshold."""
     config = TradingAgentConfig()
-    # The model validator runs after field validators and initialization
-    normalized_config = TradingAgentConfig.model_validate(config.model_dump())
-    assert normalized_config.min_confidence_threshold == pytest.approx(0.70)
+    # Defaults should be normalized during normal instantiation
+    assert config.min_confidence_threshold == pytest.approx(0.70)
 
 
 def test_bounded_field_validation():
