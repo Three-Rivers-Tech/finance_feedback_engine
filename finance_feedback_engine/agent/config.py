@@ -1,5 +1,5 @@
 from typing import List, Literal
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 class AutonomousAgentConfig(BaseModel):
     """Configuration for the autonomous trading agent."""
@@ -11,7 +11,7 @@ class TradingAgentConfig(BaseModel):
     """
     Configuration model for the Trading Agent.
     Defines the agent's behavior, risk parameters, and operational controls.
-    
+
     All percentage fields use decimal fraction notation (e.g., 0.05 = 5%).
     """
     # --- Execution Controls ---
@@ -49,11 +49,14 @@ class TradingAgentConfig(BaseModel):
     max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
     var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
 
-    @field_validator('correlation_threshold', 'max_var_pct', 'var_confidence', 'max_drawdown_percent', 'min_confidence_threshold', mode='before')
+    # Ensure field validators run for default values as well
+    model_config = ConfigDict(validate_default=True)
+
+    @field_validator('max_var_pct', 'var_confidence', 'max_drawdown_percent', 'min_confidence_threshold', mode='before')
     @classmethod
     def normalize_percentage_fields(cls, v):
         """Normalize percentage values: if value > 1, treat as percentage and divide by 100.
-        
+
         Handles both percentage notation (e.g., 70 -> 0.70) and decimal notation (e.g., 0.70 -> 0.70).
         Values > 1 are assumed to be percentages and divided by 100.
         Values <= 1 are assumed to be already in decimal format and returned as-is.
@@ -65,13 +68,41 @@ class TradingAgentConfig(BaseModel):
     @model_validator(mode='after')
     def normalize_default_percentages(self):
         """Normalize default percentage values that weren't caught by field validators.
-        
+
         Field validators with mode='before' only run on explicitly provided values,
         not on defaults. This model validator ensures defaults are also normalized.
         """
-        if self.min_confidence_threshold > 1:
+        # No longer needed when `validate_default=True` is set; keep for
+        # backward-compatibility if model_config isn't honored by runtime.
+        if hasattr(self, "min_confidence_threshold") and self.min_confidence_threshold > 1:
             self.min_confidence_threshold = self.min_confidence_threshold / 100
         return self
+
+    @field_validator('min_confidence_threshold', mode='before')
+    @classmethod
+    def normalize_min_confidence(cls, v):
+        """Normalize `min_confidence_threshold` specifically and clamp to [0, 1].
+
+        This ensures that both defaults and explicit values pass through the
+        same normalization logic: numeric values > 1 are treated as percentages
+        (e.g., 70 -> 0.70), otherwise values are treated as already in decimal
+        notation. The result is clamped between 0.0 and 1.0.
+        """
+        try:
+            if isinstance(v, (int, float)):
+                val = float(v)
+                if val > 1:
+                    val = val / 100.0
+                # clamp
+                if val < 0.0:
+                    return 0.0
+                if val > 1.0:
+                    return 1.0
+                return val
+        except Exception:
+            # Let other validators handle type errors
+            return v
+        return v
 
     # --- Data & Analysis Controls ---
     asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
