@@ -137,11 +137,11 @@ def try_parse_decision_json(payload: str) -> Optional[Dict[str, Any]]:
     return data if is_valid_decision(data) else None
 
 
-def build_fallback_decision(reasoning: str) -> Dict[str, Any]:
+def build_fallback_decision(reasoning: str, fallback_confidence: int = 50) -> Dict[str, Any]:
     """Standardized fallback decision structure."""
     return {
         'action': 'HOLD',
-        'confidence': 50,
+        'confidence': fallback_confidence,
         'reasoning': reasoning,
         'amount': 0
     }
