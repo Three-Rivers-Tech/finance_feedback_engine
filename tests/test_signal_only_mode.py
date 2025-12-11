@@ -135,7 +135,7 @@ async def test_none_balance_enables_signal_only_mode(engine):
     decision = await engine.generate_decision(
         asset_pair=context['asset_pair'],
         market_data=context['market_data'],
-        balance=safe_balance(context.get('balance')),
+        balance=context.get('balance'),
         portfolio=safe_dict(context.get('portfolio')),
         memory_context=safe_dict(context.get('memory_context'))
     )

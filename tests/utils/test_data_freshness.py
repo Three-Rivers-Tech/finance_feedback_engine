@@ -233,14 +233,14 @@ class TestValidateDataFreshness:
         assert is_fresh is True  # Still usable
 
     def test_edge_case_exactly_15_minutes_old_crypto(self):
-        """Data exactly 15 minutes old should be fresh for crypto (threshold is > 15)."""
+        """Data exactly 15 minutes old should warn but remain usable for crypto (critical is > 15)."""
         now = dt.datetime.now(timezone.utc)
         ts = (now - dt.timedelta(minutes=15)).isoformat().replace("+00:00", "Z")
 
         is_fresh, age_str, warning = validate_data_freshness(ts, "crypto")
-        # Exactly at threshold but not over it (> 15)
+        # Exactly at threshold but not over it (> 15): warn, still usable
         assert is_fresh is True
-        assert warning == ""
+        assert "WARNING" in warning
 
     def test_fractional_minute_age_string(self):
         """Age should show fractional minutes."""
