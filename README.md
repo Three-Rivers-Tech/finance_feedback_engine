@@ -758,9 +758,6 @@ stateDiagram-v2
 - **Transition:** Success returns to CLOSED; failure returns to OPEN
 
 See [finance_feedback_engine/trading_platforms/](finance_feedback_engine/trading_platforms/) and [utils/circuit_breaker.py](finance_feedback_engine/utils/circuit_breaker.py) for implementation details.
-```
-
-See [finance_feedback_engine/trading_platforms/](finance_feedback_engine/trading_platforms/) for implementation details.
 
 ### Directory Structure
 
@@ -814,48 +811,6 @@ finance_feedback_engine/
 - **Position Awareness**: MonitoringContextProvider injects active positions into AI prompts
 
 See [docs/LIVE_MONITORING_QUICKREF.md](docs/LIVE_MONITORING_QUICKREF.md) for full details.
-        
-        SendOrder --> LogFailure: Execution Error
-        LogFailure --> EXECUTION_FAILED
-        
-        note right of SendOrder: Circuit breaker<br/>protects against<br/>API failures
-    }
-    
-    EXECUTION --> LEARNING: Trade Executed
-    EXECUTION_FAILED --> PERCEPTION: Retry Next Cycle
-    
-    state HALT {
-        [*] --> StopAgent
-        StopAgent --> [*]: is_running = False
-    }
-    
-    HALT --> [*]: Agent Stopped
-    
-    note left of STARTUP: On agent start -<br/>1. Query platform for open positions<br/>2. Recover position metadata<br/>3. Generate synthetic decisions<br/>4. Rebuild memory from platform truth<br/>5. Associate with trade monitor
-    
-    note right of IDLE: Default 300s<br/>5 minutes between cycles
-    
-    note right of LEARNING: Closed trades queued by<br/>TradeMonitor when positions exit
-    
-    note right of PERCEPTION: Kill-switch protects against<br/>runaway losses
-    
-    note right of REASONING: Analyzes multiple assets<br/>per cycle with retry logic
-    
-    note right of RISK_CHECK: Final safety gate before<br/>execution
-    
-    note right of EXECUTION: Monitored by TradeMonitor<br/>for live P&L tracking
-    
-    style STARTUP fill:#00BCD4,stroke:#006064,color:#fff
-    style POSITION_RECOVERY fill:#00BCD4,stroke:#006064,color:#fff
-    style IDLE fill:#9E9E9E,stroke:#424242,color:#fff
-    style LEARNING fill:#4CAF50,stroke:#2E7D32,color:#fff
-    style PERCEPTION fill:#2196F3,stroke:#0D47A1,color:#fff
-    style REASONING fill:#FF9800,stroke:#E65100,color:#fff
-    style RISK_CHECK fill:#FFC107,stroke:#F57C00,color:#333
-    style EXECUTION fill:#9C27B0,stroke:#4A148C,color:#fff
-    style HALT fill:#F44336,stroke:#C62828,color:#fff
-    style EXECUTION_FAILED fill:#F44336,stroke:#C62828,color:#fff
-```
 
 **Agent Features:**
 - **Position Recovery on Startup**: Automatically discovers open positions from platform and rebuilds state
@@ -868,75 +823,6 @@ See [docs/LIVE_MONITORING_QUICKREF.md](docs/LIVE_MONITORING_QUICKREF.md) for ful
 - **Memory Integration**: Learns from closed trades via PortfolioMemoryEngine
 
 See [AGENTIC_LOOP_WORKFLOW.md](AGENTIC_LOOP_WORKFLOW.md) and [agent/trading_loop_agent.py](finance_feedback_engine/agent/trading_loop_agent.py) for details.
-        P5[gemini<br/>Gemini CLI]
-    end
-    
-    COLLECT{Collect<br/>Responses}
-    DETECT[Detect Provider Failures]
-    
-    CALC_WEIGHTS[Dynamic Weight Recalculation<br/>Renormalize Active Provider Weights]
-    
-    subgraph "4-Tier Fallback Strategy"
-        direction TB
-        T1{Tier 1:<br/>Weighted Voting}
-        T2{Tier 2:<br/>Majority Voting}
-        T3{Tier 3:<br/>Simple Averaging}
-        T4[Tier 4:<br/>Single Provider<br/>Highest Confidence]
-        
-        T1 -->|Fails or<br/>No Weights| T2
-        T2 -->|No Majority| T3
-        T3 -->|Fails| T4
-    end
-    
-    CONFIDENCE[Confidence Adjustment<br/>Factor = 0.7 + 0.3 * active ratio]
-    QUORUM{Local Provider<br/>Quorum Met?<br/>min 3}
-    PENALTY[Apply 30% Confidence Penalty<br/>Add WARNING to reasoning]
-    
-    META[Attach Ensemble Metadata<br/>providers_used, providers_failed,<br/>adjusted_weights, fallback_tier]
-    
-    DECISION([Final Aggregated Decision])
-    
-    START --> QUERY
-    QUERY --> P1 & P2 & P3 & P4 & P5
-    P1 & P2 & P3 & P4 & P5 --> COLLECT
-    COLLECT --> DETECT
-    
-    DETECT -->|Failures Detected| CALC_WEIGHTS
-    DETECT -->|All Success| CALC_WEIGHTS
-    
-    CALC_WEIGHTS --> T1
-    T1 -->|Success| CONFIDENCE
-    T2 -->|Success| CONFIDENCE
-    T3 -->|Success| CONFIDENCE
-    T4 --> CONFIDENCE
-    
-    CONFIDENCE --> QUORUM
-    QUORUM -->|Yes| META
-    QUORUM -->|No| PENALTY
-    PENALTY --> META
-    META --> DECISION
-    
-    subgraph "Example: Weight Adjustment"
-        direction LR
-        ORIG[Original Weights<br/>local: 0.25, cli: 0.25,<br/>codex: 0.25, qwen: 0.25]
-        FAIL[cli FAILED]
-        ACTIVE[Active Sum = 0.75<br/>3/4 providers]
-        ADJ[Adjusted Weights<br/>local: 0.333 at 0.25/0.75<br/>codex: 0.333<br/>qwen: 0.333]
-        
-        ORIG --> FAIL --> ACTIVE --> ADJ
-    end
-    
-    style T1 fill:#4CAF50,stroke:#2E7D32,color:#fff
-    style T2 fill:#FFC107,stroke:#F57C00,color:#333
-    style T3 fill:#FF9800,stroke:#E65100,color:#fff
-    style T4 fill:#F44336,stroke:#C62828,color:#fff
-    style CALC_WEIGHTS fill:#2196F3,stroke:#0D47A1,color:#fff
-    style PENALTY fill:#FF5722,stroke:#BF360C,color:#fff
-    style ADJ fill:#9C27B0,stroke:#4A148C,color:#fff
-    
-    click CALC_WEIGHTS "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/finance_feedback_engine/decision_engine/ensemble_manager.py#L350" "View weight calculation"
-    click T1 "https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/blob/main/docs/ENSEMBLE_FALLBACK_SYSTEM.md" "Fallback documentation"
-```
 
 **Features:**
 - **Intelligent Voting**: Combines decisions from multiple AI providers using weighted voting (Tier 1)
