@@ -325,22 +325,32 @@ graph TD
         P5[gemini]
     end
     
-    QUERY --> P1 & P2 & P3 & P4 & P5
-    
-    P1 & P2 & P3 & P4 & P5 --> COLLECT{Collect Responses}
+    QUERY --> P1
+    QUERY --> P2
+    QUERY --> P3
+    QUERY --> P4
+    QUERY --> P5
+
+    P1 --> COLLECT{Collect Responses}
+    P2 --> COLLECT
+    P3 --> COLLECT
+    P4 --> COLLECT
+    P5 --> COLLECT
     
     COLLECT --> DETECT[Detect Provider Failures]
     
-    DETECT --> CALC_WEIGHTS[Dynamic Weight Recalculation<br><i>Renormalize weights of active providers</i>]
+    DETECT --> CALC_WEIGHTS[Dynamic Weight Recalculation\nRenormalize weights of active providers]
     
     subgraph "Example: Weight Adjustment"
         direction LR
-        ORIG[Original Weights<br>local: 0.25, cli: 0.25,<br>codex: 0.25, qwen: 0.25]
+        ORIG[Original Weights\nlocal: 0.25, cli: 0.25,\ncodex: 0.25, qwen: 0.25]
         FAIL[cli FAILED]
-        ACTIVE[Active Sum = 0.75<br>3/4 providers]
-        ADJ[Adjusted Weights<br>local: 0.333 (0.25/0.75)<br>codex: 0.333<br>qwen: 0.333]
+        ACTIVE[Active Sum = 0.75\n3/4 providers]
+        ADJ[Adjusted Weights\nlocal: 0.333 (0.25/0.75)\ncodex: 0.333\nqwen: 0.333]
         
-        ORIG --> FAIL --> ACTIVE --> ADJ
+        ORIG --> FAIL
+        FAIL --> ACTIVE
+        ACTIVE --> ADJ
     end
     
     CALC_WEIGHTS --> T1
