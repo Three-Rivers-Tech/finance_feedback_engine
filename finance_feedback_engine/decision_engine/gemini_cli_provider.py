@@ -298,6 +298,8 @@ class GeminiCLIProvider:
             Conservative fallback decision
         """
         logger.warning("Using fallback decision")
+        fallback_confidence = self.config.get('fallback_confidence', 50)
         return build_fallback_decision(
-            'Gemini CLI unavailable or failed, using conservative fallback.'
+            'Gemini CLI unavailable or failed, using conservative fallback.',
+            fallback_confidence=fallback_confidence
         )
