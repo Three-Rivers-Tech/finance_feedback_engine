@@ -1022,17 +1022,32 @@ Format response as a structured technical analysis demonstration.
             # Get risk parameters from the agent config
             agent_config = self.config.get('agent', {})
             risk_percentage = agent_config.get('risk_percentage', 0.01)
-            # TODO: Replace this fixed percentage with a dynamic stop-loss calculation
-            # based on volatility (e.g., ATR) or market structure.
-            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
+
+            # Dynamic stop-loss calculation based on market volatility (ATR)
+            default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
+            use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
 
             # Compatibility: Convert legacy percentage values (>1) to decimals
             if risk_percentage > 1:
                 logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
                 risk_percentage /= 100
-            if sizing_stop_loss_percentage > 1:
-                logger.warning(f"Detected legacy sizing_stop_loss_percentage {sizing_stop_loss_percentage}%. Converting to decimal: {sizing_stop_loss_percentage/100:.3f}")
-                sizing_stop_loss_percentage /= 100
+            if default_stop_loss > 1:
+                logger.warning(f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. Converting to decimal: {default_stop_loss/100:.3f}")
+                default_stop_loss /= 100
+
+            # Calculate stop-loss percentage (dynamic or fixed)
+            if use_dynamic_stop_loss:
+                sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
+                    current_price=current_price,
+                    context=context,
+                    default_percentage=default_stop_loss,
+                    atr_multiplier=agent_config.get('atr_multiplier', 2.0),
+                    min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
+                    max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
+                )
+            else:
+                sizing_stop_loss_percentage = default_stop_loss
+                logger.info("Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)", default_stop_loss * 100)
 
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
@@ -1076,15 +1091,32 @@ Format response as a structured technical analysis demonstration.
             # Get risk parameters from the agent config
             agent_config = self.config.get('agent', {})
             risk_percentage = agent_config.get('risk_percentage', 0.01)
-            sizing_stop_loss_percentage = agent_config.get('sizing_stop_loss_percentage', 0.02)
+
+            # Dynamic stop-loss calculation based on market volatility (ATR)
+            default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
+            use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
 
             # Compatibility: Convert legacy percentage values (>1) to decimals
             if risk_percentage > 1:
                 logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
                 risk_percentage /= 100
-            if sizing_stop_loss_percentage > 1:
-                logger.warning(f"Detected legacy sizing_stop_loss_percentage {sizing_stop_loss_percentage}%. Converting to decimal: {sizing_stop_loss_percentage/100:.3f}")
-                sizing_stop_loss_percentage /= 100
+            if default_stop_loss > 1:
+                logger.warning(f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. Converting to decimal: {default_stop_loss/100:.3f}")
+                default_stop_loss /= 100
+
+            # Calculate stop-loss percentage (dynamic or fixed)
+            if use_dynamic_stop_loss:
+                sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
+                    current_price=current_price,
+                    context=context,
+                    default_percentage=default_stop_loss,
+                    atr_multiplier=agent_config.get('atr_multiplier', 2.0),
+                    min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
+                    max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
+                )
+            else:
+                sizing_stop_loss_percentage = default_stop_loss
+                logger.info("Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)", default_stop_loss * 100)
 
             if action == 'HOLD' and not has_existing_position:
                 # HOLD without position: no sizing needed
@@ -1225,6 +1257,88 @@ Format response as a structured technical analysis demonstration.
         )
 
         return decision
+
+    def calculate_dynamic_stop_loss(
+        self,
+        current_price: float,
+        context: Dict[str, Any],
+        default_percentage: float = 0.02,
+        atr_multiplier: float = 2.0,
+        min_percentage: float = 0.01,
+        max_percentage: float = 0.05
+    ) -> float:
+        """
+        Calculate dynamic stop-loss percentage based on market volatility (ATR).
+
+        Uses ATR (Average True Range) from multi-timeframe pulse data to set
+        stop-loss distance that adapts to current market volatility. Falls back
+        to default percentage if ATR is unavailable.
+
+        Args:
+            current_price: Current asset price
+            context: Decision context containing market_data and monitoring_context
+            default_percentage: Fallback stop-loss percentage if ATR unavailable (default: 0.02 = 2%)
+            atr_multiplier: Multiple of ATR to use for stop-loss (default: 2.0)
+            min_percentage: Minimum stop-loss percentage (default: 0.01 = 1%)
+            max_percentage: Maximum stop-loss percentage (default: 0.05 = 5%)
+
+        Returns:
+            Stop-loss percentage as decimal (e.g., 0.02 for 2%)
+        """
+        if current_price <= 0:
+            return default_percentage
+
+        atr_value = None
+
+        # Try to get ATR from monitoring context (multi-timeframe pulse)
+        monitoring_context = context.get('monitoring_context')
+        if monitoring_context:
+            pulse_data = monitoring_context.get('multi_timeframe_pulse')
+            if pulse_data and isinstance(pulse_data, dict):
+                # Check for ATR in daily timeframe (most reliable for position sizing)
+                daily_data = pulse_data.get('1d') or pulse_data.get('daily')
+                if daily_data and 'atr' in daily_data:
+                    atr_value = daily_data.get('atr')
+                # Fallback to 4h timeframe if daily not available
+                elif pulse_data.get('4h') and 'atr' in pulse_data.get('4h', {}):
+                    atr_value = pulse_data['4h'].get('atr')
+
+        # Try to get ATR from market_data if not found in monitoring context
+        if atr_value is None:
+            market_data = context.get('market_data', {})
+            if 'atr' in market_data:
+                atr_value = market_data.get('atr')
+            # Check for pulse data directly in market_data
+            elif 'pulse' in market_data and isinstance(market_data['pulse'], dict):
+                pulse = market_data['pulse']
+                daily_data = pulse.get('1d') or pulse.get('daily')
+                if daily_data and 'atr' in daily_data:
+                    atr_value = daily_data.get('atr')
+
+        # Calculate stop-loss based on ATR if available
+        if atr_value is not None and atr_value > 0:
+            # ATR-based stop-loss: use multiple of ATR as percentage of price
+            atr_based_percentage = (atr_value * atr_multiplier) / current_price
+
+            # Apply bounds
+            stop_loss_percentage = max(min_percentage, min(atr_based_percentage, max_percentage))
+
+            logger.info(
+                "Dynamic stop-loss: ATR=%.4f, ATR-based=%.2f%%, bounded=%.2f%% (min=%.2f%%, max=%.2f%%)",
+                atr_value,
+                atr_based_percentage * 100,
+                stop_loss_percentage * 100,
+                min_percentage * 100,
+                max_percentage * 100
+            )
+            return stop_loss_percentage
+        else:
+            # No ATR available, use default percentage
+            logger.info(
+                "ATR not available, using default stop-loss: %.2f%%",
+                default_percentage * 100
+            )
+            return default_percentage
 
     def calculate_position_size(
         self,
