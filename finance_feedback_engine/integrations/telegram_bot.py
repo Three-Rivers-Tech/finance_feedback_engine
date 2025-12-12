@@ -36,10 +36,17 @@ class TelegramApprovalBot:
         self.allowed_users = set(config.get('allowed_user_ids', []))
         self.use_redis = config.get('use_redis', False)
 
-        # TODO: Import python-telegram-bot
-        # from telegram import Bot
-        # self.bot = Bot(token=self.bot_token)
-        self.bot = None
+        # Import python-telegram-bot
+        try:
+            from telegram import Bot
+            self.bot = Bot(token=self.bot_token)
+            logger.info("✅ Telegram Bot instance created")
+        except ImportError:
+            logger.error("❌ python-telegram-bot library not installed. Run: pip install python-telegram-bot")
+            self.bot = None
+        except Exception as e:
+            logger.error(f"❌ Failed to create Telegram Bot: {e}")
+            self.bot = None
 
         # Approval queue (Redis or in-memory)
         self.approval_queue = {}
@@ -120,12 +127,16 @@ class TelegramApprovalBot:
         Args:
             public_url: Public HTTPS URL for webhook endpoint
         """
+        if not self.bot:
+            logger.error("❌ Cannot setup webhook: Telegram bot not initialized")
+            raise RuntimeError("Telegram bot not initialized")
+
         try:
             webhook_url = f"{public_url}/webhook/telegram"
             logger.info(f"🔗 Registering webhook: {webhook_url}")
 
-            # TODO: Implement with python-telegram-bot
-            # await self.bot.set_webhook(url=webhook_url)
+            # Set webhook with Telegram Bot API
+            await self.bot.set_webhook(url=webhook_url)
 
             logger.info("✅ Webhook registered successfully")
         except Exception as e:
@@ -170,23 +181,27 @@ class TelegramApprovalBot:
             decision_id: Decision ID for callback data
 
         Returns:
-            InlineKeyboardMarkup object
+            InlineKeyboardMarkup object or None if bot not initialized
         """
-        # TODO: Implement with python-telegram-bot
-        # from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        if not self.bot:
+            return None
 
-        # keyboard = [
-        #     [
-        #         InlineKeyboardButton("✅ Approve", callback_data=f"approve:{decision_id}"),
-        #         InlineKeyboardButton("❌ Reject", callback_data=f"reject:{decision_id}")
-        #     ],
-        #     [
-        #         InlineKeyboardButton("✏️ Modify", callback_data=f"modify:{decision_id}")
-        #     ]
-        # ]
-        # return InlineKeyboardMarkup(keyboard)
+        try:
+            from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        return None  # Stub for now
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Approve", callback_data=f"approve:{decision_id}"),
+                    InlineKeyboardButton("❌ Reject", callback_data=f"reject:{decision_id}")
+                ],
+                [
+                    InlineKeyboardButton("✏️ Modify", callback_data=f"modify:{decision_id}")
+                ]
+            ]
+            return InlineKeyboardMarkup(keyboard)
+        except ImportError:
+            logger.error("❌ python-telegram-bot not installed")
+            return None
 
     async def send_approval_request(self, decision: Dict[str, Any], user_id: int):
         """
@@ -196,6 +211,10 @@ class TelegramApprovalBot:
             decision: Decision dictionary
             user_id: Telegram user ID to send to
         """
+        if not self.bot:
+            logger.error("❌ Cannot send approval request: Telegram bot not initialized")
+            raise RuntimeError("Telegram bot not initialized")
+
         try:
             message_text = self.format_decision_message(decision)
             decision_id = decision.get('decision_id')
@@ -204,15 +223,26 @@ class TelegramApprovalBot:
                 raise ValueError("Decision must have a decision_id")
             keyboard = self.create_approval_keyboard(decision_id)
 
-            # TODO: Implement with python-telegram-bot
-            # await self.bot.send_message(
-            #     chat_id=user_id,
-            #     text=message_text,
-            #     reply_markup=keyboard,
-            #     parse_mode='Markdown'
-            # )
+            # Send message with inline keyboard
+            await self.bot.send_message(
+                chat_id=user_id,
+                text=message_text,
+                reply_markup=keyboard,
+                parse_mode='Markdown'
+            )
 
-            logger.info(f"📤 Approval request sent to user {user_id}")
+            # Store in approval queue
+            if self.use_redis and self.redis_client:
+                import json
+                self.redis_client.setex(
+                    f"approval:{decision_id}",
+                    3600,  # 1 hour TTL
+                    json.dumps(decision)
+                )
+            else:
+                self.approval_queue[decision_id] = decision
+
+            logger.info(f"📤 Approval request sent to user {user_id} for decision {decision_id}")
         except Exception as e:
             logger.error(f"❌ Failed to send approval request: {e}")
             raise
@@ -225,20 +255,23 @@ class TelegramApprovalBot:
             update_data: Raw update data from Telegram Bot API
             engine: FinanceFeedbackEngine instance for executing decisions
         """
+        if not self.bot:
+            logger.error("❌ Cannot process update: Telegram bot not initialized")
+            raise RuntimeError("Telegram bot not initialized")
+
         try:
-            # TODO: Implement with python-telegram-bot
-            # from telegram import Update
-            # update = Update.de_json(update_data, self.bot)
+            from telegram import Update
+            update = Update.de_json(update_data, self.bot)
 
             # Handle callback queries (button presses)
-            # if update.callback_query:
-            #     await self._handle_callback_query(update.callback_query, engine)
+            if update.callback_query:
+                await self._handle_callback_query(update.callback_query, engine)
 
             # Handle commands
-            # elif update.message and update.message.text:
-            #     await self._handle_message(update.message)
+            elif update.message and update.message.text:
+                await self._handle_message(update.message)
 
-            logger.debug(f"Received Telegram update_id: {update_data.get('update_id')}")
+            logger.debug(f"✅ Processed Telegram update_id: {update_data.get('update_id')}")
         except Exception as e:
             logger.error(f"❌ Error processing Telegram update: {e}")
             raise
@@ -258,25 +291,77 @@ class TelegramApprovalBot:
             logger.warning(f"⛔ Unauthorized Telegram user attempted action: user_id={user_id}")
             return
 
-        # TODO: Implement callback handling
-        # callback_data = query.data  # Format: "approve:decision_id" or "reject:decision_id"
-        # action, decision_id = callback_data.split(":")
+        # Parse callback data
+        callback_data = query.data  # Format: "approve:decision_id" or "reject:decision_id"
+        try:
+            action, decision_id = callback_data.split(":", 1)
+        except ValueError:
+            await query.answer("❌ Invalid callback data", show_alert=True)
+            logger.error(f"Invalid callback data: {callback_data}")
+            return
 
-        # if action == 'approve':
-        #     # Execute decision
-        #     await self._approve_decision(decision_id, engine)
-        #     await query.answer("✅ Decision approved and executed")
+        if action == 'approve':
+            # Execute decision
+            try:
+                await self._approve_decision(decision_id, engine)
+                await query.answer("✅ Decision approved and executed")
+                await query.edit_message_text(
+                    text=f"{query.message.text}\n\n✅ **APPROVED** by user {user_id}",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                await query.answer(f"❌ Execution failed: {str(e)}", show_alert=True)
+                logger.error(f"Failed to execute decision {decision_id}: {e}")
 
-        # elif action == 'reject':
-        #     # Save rejection
-        #     await self._reject_decision(decision_id)
-        #     await query.answer("❌ Decision rejected")
+        elif action == 'reject':
+            # Save rejection
+            try:
+                await self._reject_decision(decision_id)
+                await query.answer("❌ Decision rejected")
+                await query.edit_message_text(
+                    text=f"{query.message.text}\n\n❌ **REJECTED** by user {user_id}",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                await query.answer(f"❌ Rejection failed: {str(e)}", show_alert=True)
+                logger.error(f"Failed to reject decision {decision_id}: {e}")
 
-        # elif action == 'modify':
-        #     # Start modification flow
-        #     await query.answer("✏️ Modification not implemented yet. Use CLI for now.")
+        elif action == 'modify':
+            # Start modification flow (not implemented yet)
+            await query.answer("✏️ Modification not implemented yet. Use CLI for now.", show_alert=True)
 
-        pass
+        else:
+            await query.answer(f"❌ Unknown action: {action}", show_alert=True)
+            logger.error(f"Unknown callback action: {action}")
+
+    async def _handle_message(self, message):
+        """
+        Handle text messages (commands).
+
+        Args:
+            message: Message object from Telegram
+        """
+        # Authorization check
+        user_id = message.from_user.id
+        if user_id not in self.allowed_users:
+            await message.reply_text("⛔ Unauthorized")
+            logger.warning(f"⛔ Unauthorized Telegram user attempted command: user_id={user_id}")
+            return
+
+        text = message.text.strip()
+
+        # Handle basic commands
+        if text == '/start':
+            await message.reply_text(
+                "👋 Welcome to Finance Feedback Engine!\n\n"
+                "I'll send you trading decision approval requests.\n"
+                "Use the buttons to approve or reject each decision."
+            )
+        elif text == '/status':
+            pending_count = len(self.approval_queue)
+            await message.reply_text(f"📊 Pending approvals: {pending_count}")
+        else:
+            await message.reply_text("❓ Unknown command. Available: /start, /status")
 
     async def _approve_decision(self, decision_id: str, engine):
         """
