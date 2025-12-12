@@ -1,25 +1,50 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Union
+from pathlib import Path
+import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class TimeSeriesDataStore:
     """
     Manages the persistence of time-series data to a file-based store.
 
     This class provides methods to save and load time-series data, with each
-    entry timestamped and stored in a structured JSONL format. It is designed
-    to be simple and extensible, allowing for future integration with more
-    complex database solutions.
+    entry timestamped and stored in a structured format. Supports both JSONL
+    for individual entries and Parquet for DataFrame storage.
     """
 
     def __init__(self, storage_path: str = "data/time_series_data"):
-        self.storage_path = storage_path
-        os.makedirs(self.storage_path, exist_ok=True)
+        self.storage_path = Path(storage_path)
+        self.storage_path.mkdir(parents=True, exist_ok=True)
 
     def _get_filepath(self, symbol: str) -> str:
-        """Generates a file path for a given symbol."""
+        """Generates a file path for a given symbol (JSONL format)."""
         return os.path.join(self.storage_path, f"{symbol.lower()}_timeseries.jsonl")
+
+    def _get_dataframe_filepath(
+        self, asset_pair: str, start_date: datetime, end_date: datetime, timeframe: str
+    ) -> Path:
+        """
+        Generate file path for DataFrame storage (Parquet format).
+
+        Args:
+            asset_pair: Asset pair symbol
+            start_date: Start date for the data
+            end_date: End date for the data
+            timeframe: Timeframe (e.g., '1h', '1d')
+
+        Returns:
+            Path to parquet file
+        """
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+        filename = f"{asset_pair.lower()}_{timeframe}_{start_str}_{end_str}.parquet"
+        return self.storage_path / filename
 
     def save_data(self, symbol: str, data_entry: Dict[str, Any]):
         """
@@ -72,3 +97,76 @@ class TimeSeriesDataStore:
                         # Skip malformed lines but continue processing
                         continue
         return data
+
+    def save_dataframe(
+        self,
+        asset_pair: str,
+        df: pd.DataFrame,
+        start_date: datetime,
+        end_date: datetime,
+        timeframe: str
+    ) -> None:
+        """
+        Save a DataFrame of historical OHLCV data to Parquet format.
+
+        Args:
+            asset_pair: Asset pair symbol
+            df: DataFrame with OHLCV data
+            start_date: Start date of the data
+            end_date: End date of the data
+            timeframe: Timeframe (e.g., '1h', '1d')
+        """
+        if df.empty:
+            logger.warning(f"Not saving empty DataFrame for {asset_pair}")
+            return
+
+        try:
+            filepath = self._get_dataframe_filepath(asset_pair, start_date, end_date, timeframe)
+            df.to_parquet(filepath)
+            logger.info(
+                f"✅ Saved {len(df)} candles for {asset_pair} ({timeframe}) to {filepath.name}"
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to save DataFrame for {asset_pair}: {e}")
+            raise
+
+    def load_dataframe(
+        self,
+        asset_pair: str,
+        start_date: datetime,
+        end_date: datetime,
+        timeframe: str
+    ) -> Optional[pd.DataFrame]:
+        """
+        Load a DataFrame of historical OHLCV data from Parquet format.
+
+        Args:
+            asset_pair: Asset pair symbol
+            start_date: Start date of the data
+            end_date: End date of the data
+            timeframe: Timeframe (e.g., '1h', '1d')
+
+        Returns:
+            DataFrame if found, None otherwise
+        """
+        try:
+            filepath = self._get_dataframe_filepath(asset_pair, start_date, end_date, timeframe)
+
+            if not filepath.exists():
+                return None
+
+            df = pd.read_parquet(filepath)
+
+            # Ensure datetime index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                df.index = pd.to_datetime(df.index, utc=True)
+            df.index.name = "timestamp"
+
+            logger.info(
+                f"✅ Loaded {len(df)} candles for {asset_pair} ({timeframe}) from cache"
+            )
+            return df
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load DataFrame for {asset_pair}: {e}")
+            return None

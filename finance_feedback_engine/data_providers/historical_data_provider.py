@@ -7,11 +7,8 @@ import numpy as np
 from pathlib import Path
 
 from .alpha_vantage_provider import AlphaVantageProvider
-
-# TODO: Import FinancialDataValidator from utils
-# from finance_feedback_engine.utils.financial_data_validator import FinancialDataValidator
-# TODO: Import a TimeSeriesDataStore for persistence
-# from finance_feedback_engine.persistence.timeseries_data_store import TimeSeriesDataStore
+from ..utils.financial_data_validator import FinancialDataValidator
+from ..persistence.timeseries_data_store import TimeSeriesDataStore
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +63,13 @@ class HistoricalDataProvider:
                 "Could not create historical cache directory; proceeding without cache."
             )
             self.cache_dir = None
-        # TODO: Initialize FinancialDataValidator and TimeSeriesDataStore
-        # self.validator = FinancialDataValidator()
-        # self.data_store = TimeSeriesDataStore() # For caching/persistence
+
+        # Initialize FinancialDataValidator and TimeSeriesDataStore
+        self.validator = FinancialDataValidator()
+        self.data_store = TimeSeriesDataStore(
+            storage_path=str(self.cache_dir) if self.cache_dir else "data/historical_cache"
+        )
+        logger.info("✅ HistoricalDataProvider initialized with validator and data store")
 
     def _fetch_raw_data(
         self, asset_pair: str, start_date: datetime, end_date: datetime, timeframe: str = '1h'
@@ -190,12 +191,15 @@ class HistoricalDataProvider:
         if end_date.tzinfo is None:
             end_date = end_date.replace(tzinfo=timezone.utc)
 
-        # TODO: Check data_store for cached data first
-        # cached_data = self.data_store.load_data(asset_pair, start_date, end_date, timeframe)
-        # if cached_data is not None and not cached_data.empty:
-        #     logger.info(f"Loaded historical data for {asset_pair} (timeframe: {timeframe}) from cache.")
-        #     return cached_data
+        # Check data_store for cached data first
+        cached_data = self.data_store.load_dataframe(asset_pair, start_date, end_date, timeframe)
+        if cached_data is not None and not cached_data.empty:
+            logger.info(
+                f"✅ Loaded {len(cached_data)} candles for {asset_pair} ({timeframe}) from data store cache."
+            )
+            return cached_data
 
+        # Fetch from API if not cached
         raw_data = self._fetch_raw_data(asset_pair, start_date, end_date, timeframe)
 
         if raw_data.empty:
@@ -204,11 +208,22 @@ class HistoricalDataProvider:
             )
             return pd.DataFrame()
 
-        # TODO: Apply data validation here
-        # validation_errors = self.validator.validate_dataframe(raw_data)
-        # if validation_errors:
-        #     logger.error(f"Validation errors in historical data for {asset_pair}: {validation_errors}")
-        #     raise ValueError("Invalid historical data received.")
+        # Apply data validation
+        # Note: Validator checks for price columns; OHLC data has open/high/low/close
+        # We'll validate 'close' as the price column
+        validation_df = raw_data.copy()
+        if 'close' in validation_df.columns:
+            validation_df['price'] = validation_df['close']
+
+        validation_errors = self.validator.validate_dataframe(validation_df)
+        if validation_errors:
+            logger.warning(
+                f"⚠️ Validation warnings in historical data for {asset_pair}: "
+                f"{len(validation_errors)} column(s) with issues"
+            )
+            # Log first few errors for debugging
+            for col, errors in list(validation_errors.items())[:3]:
+                logger.debug(f"  {col}: {errors[:2]}")  # First 2 errors per column
 
         # Ensure correct index and column names
         if not isinstance(raw_data.index, pd.DatetimeIndex):
@@ -218,7 +233,6 @@ class HistoricalDataProvider:
         expected_cols = ["open", "high", "low", "close", "volume"]
         for col in expected_cols:
             if col not in raw_data.columns:
-                # TODO: Decide on strategy for missing columns (fill with NaN, error, default)
                 logger.warning(
                     f"Missing expected column '{col}' in historical data for {asset_pair}. Filling with NaN."
                 )
@@ -227,11 +241,14 @@ class HistoricalDataProvider:
         # Sort by timestamp to ensure chronological order
         raw_data = raw_data.sort_index()
 
-        # TODO: Persist fetched data to data_store
-        # self.data_store.save_data(asset_pair, raw_data, timeframe)
+        # Persist fetched data to data_store
+        try:
+            self.data_store.save_dataframe(asset_pair, raw_data, start_date, end_date, timeframe)
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to persist data to data store: {e}")
 
         logger.info(
-            f"Successfully fetched and processed {len(raw_data)} {timeframe} candles for {asset_pair}."
+            f"✅ Successfully fetched and processed {len(raw_data)} {timeframe} candles for {asset_pair}."
         )
         return raw_data
 
