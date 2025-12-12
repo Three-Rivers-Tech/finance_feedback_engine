@@ -551,7 +551,7 @@ class Backtester:
                     balance=balance,
                     portfolio={'holdings': []},
                     memory_context=None,
-                    monitoring_context={'active_positions': [], 'slots_available': 5}
+                    monitoring_context={'active_positions': {'futures': [], 'spot': []}, 'slots_available': 5}
                 )
 
                 # Store decision for later execution

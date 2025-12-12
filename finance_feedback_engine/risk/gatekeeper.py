@@ -120,11 +120,11 @@ class RiskGatekeeper:
             )
             needs_override = True
 
-        # Rule 2: Block trades when data is stale
+        # Rule 2: Block trades when data is stale (skip in backtest mode)
         is_fresh = data_freshness.get('is_fresh', True)
         freshness_msg = data_freshness.get('message', '')
 
-        if not is_fresh and action in ['BUY', 'SELL']:
+        if not self.is_backtest and not is_fresh and action in ['BUY', 'SELL']:
             age_str = data_freshness.get('age_minutes', 'Unknown age')
             logger.error(
                 f"[GATEKEEPER] Data is STALE ({age_str}). "
@@ -239,8 +239,9 @@ class RiskGatekeeper:
             logger.info(f"Market warning for {asset_pair}: {market_status['warning']}")
 
         # 1. Data Freshness Check (Prevents stale data decisions)
+        # Skip in backtest mode - all historical data is inherently "stale"
         market_data_timestamp = context.get("market_data_timestamp")
-        if market_data_timestamp:
+        if not self.is_backtest and market_data_timestamp:
             # Determine timeframe for stocks
             timeframe = "intraday"
             if asset_type == "stocks":
