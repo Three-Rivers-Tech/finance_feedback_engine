@@ -2502,13 +2502,29 @@ def retrain_meta_learner(ctx, force):
         raise click.Abort()
 
 
-def _initialize_agent(config, engine, take_profit, stop_loss, autonomous):
-    """Initializes the trading agent and its components."""
+def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_pairs_override=None):
+    """Initializes the trading agent and its components.
+
+    Args:
+        config: Configuration dictionary
+        engine: FinanceFeedbackEngine instance
+        take_profit: Portfolio take-profit percentage
+        stop_loss: Portfolio stop-loss percentage
+        autonomous: Whether to force autonomous execution
+        asset_pairs_override: Optional list of asset pairs to override config (applies to both asset_pairs and watchlist)
+    """
     from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
     from finance_feedback_engine.agent.config import TradingAgentConfig
     from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 
     agent_config_data = config.get('agent', {})
+
+    # Apply asset pairs override if provided
+    if asset_pairs_override:
+        agent_config_data['asset_pairs'] = asset_pairs_override
+        agent_config_data['watchlist'] = asset_pairs_override
+        console.print(f"[green]✓ Asset pairs and watchlist set to: {', '.join(asset_pairs_override)}[/green]")
+
     agent_config = TradingAgentConfig(**agent_config_data)
 
     if autonomous:
@@ -2661,8 +2677,13 @@ async def _run_live_market_view(engine, agent):
     is_flag=True,
     help='Override approval policy and force autonomous execution (no approvals).'
 )
+@click.option(
+    '--asset-pairs',
+    type=str,
+    help='Comma-separated list of asset pairs to trade (e.g., "BTCUSD,ETHUSD,EURUSD"). Overrides config file.'
+)
 @click.pass_context
-def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown):
+def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs):
     """Starts the autonomous trading agent."""
     import asyncio
 
@@ -2685,10 +2706,21 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown):
 
     console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
 
+    # Parse asset pairs if provided
+    parsed_asset_pairs = None
+    if asset_pairs:
+        from finance_feedback_engine.utils.validation import standardize_asset_pair
+        parsed_asset_pairs = [
+            standardize_asset_pair(pair.strip())
+            for pair in asset_pairs.split(',')
+            if pair.strip()
+        ]
+        console.print(f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}")
+
     try:
         config = ctx.obj['config']
         engine = FinanceFeedbackEngine(config)
-        agent = _initialize_agent(config, engine, take_profit, stop_loss, autonomous)
+        agent = _initialize_agent(config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs)
 
         if not agent:
             return
