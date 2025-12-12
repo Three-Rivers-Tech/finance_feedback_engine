@@ -482,7 +482,7 @@ def test_retrain_meta_learner_force():
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
         with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
-            with patch("train_meta_learner.run_training", fake_train):
+            with patch("finance_feedback_engine.cli.main.run_training", fake_train):
                 res = runner.invoke(cli, ["retrain-meta-learner", "--force"])
                 assert res.exit_code == 0, res.output
 
