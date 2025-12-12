@@ -2,7 +2,7 @@
 
 Complete guide to setting up Telegram approval workflow for Finance Feedback Engine 2.0.
 
-**Status:** ✅ **FULLY IMPLEMENTED** (Updated Dec 12, 2024)
+**Status:** ✅ **FULLY IMPLEMENTED** (Updated Dec 12, 2025)
 
 ---
 
@@ -67,15 +67,7 @@ userinfobot: Your user ID is: 987654321
 
 ### 3. Configure the Bot (2 minutes)
 
-```bash
-cd /home/cmp6510/finance_feedback_engine-2.0
 
-# Copy the example configuration
-cp config/telegram.yaml.example config/telegram.yaml
-
-# Edit the configuration (use your favorite editor)
-nano config/telegram.yaml
-```
 
 Update these values:
 
