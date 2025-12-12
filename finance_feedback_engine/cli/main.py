@@ -952,125 +952,165 @@ def install_deps(ctx, auto_install):
 )
 @click.pass_context
 def update_ai(ctx, auto_install):
-    """Update AI provider dependencies (copilot-cli, codex-cli, qwen-cli, google-generativeai)."""
+    """Update AI provider dependencies.
+
+    Notes:
+    - Only packages available on PyPI are installed via `pip` (e.g. `google-generativeai`).
+    - Node.js / npm based CLI tools (Copilot CLI, Qwen CLI, etc.) are installed via `npm`
+      and therefore are handled separately. Attempting to `pip install` Node CLIs will
+      fail — those names are not valid PyPI package names.
+    """
     try:
         console.print("[bold cyan]Checking AI provider dependencies...[/bold cyan]\n")
 
-        # List of AI-specific packages
-        ai_packages = [
-            'copilot-cli',
-            'codex-cli',
-            'qwen-cli',
-            'google-generativeai'
+        # === Python (PyPI) packages ===
+        # Verified PyPI packages only. Do not include Node.js CLI names here.
+        pip_ai_packages = [
+            # Keep only valid PyPI package names; verify before adding new names.
+            'google-generativeai',
         ]
+
+        # === Node / npm CLI tools ===
+        # These are not Python packages. They will be checked by invoking their
+        # CLI command (e.g. `copilot --version`) and installed via `npm` if missing.
+        # Mapping: display-name -> dict(check_cmd, install_cmd)
+        node_cli_tools = {
+            'copilot-cli': {
+                'check_cmd': ['copilot', '--version'],
+                'install_cmd': ['npm', 'i', '-g', '@githubnext/github-copilot-cli'],
+            },
+            'qwen-cli': {
+                'check_cmd': ['qwen', '--version'],
+                'install_cmd': ['npm', 'i', '-g', '@qwen/cli'],
+            },
+            # 'codex-cli' is ambiguous (not a known PyPI package). Keep as npm candidate
+            # but do not assume an exact package name on npm; user may need to adjust.
+            'codex-cli': {
+                'check_cmd': ['codex', '--version'],
+                'install_cmd': ['npm', 'i', '-g', 'codex-cli'],
+            },
+        }
 
         installed_dict = _get_installed_packages()
 
         from rich.table import Table
-        table = Table(title="AI Provider Dependencies")
+        table = Table(title="AI Provider Dependencies (pip)")
         table.add_column("Package", style="cyan")
         table.add_column("Status", style="white")
         table.add_column("Version", style="dim")
 
-        missing_packages = []
-        installed_packages = []
+        missing_pip = []
+        installed_pip = []
 
-        for pkg in ai_packages:
+        for pkg in pip_ai_packages:
             pkg_lower = pkg.lower()
             pkg_normalized = pkg_lower.replace('-', '_')
-
-            # Check both forms (hyphen and underscore)
-            if (pkg_lower in installed_dict or
-                    pkg_normalized in installed_dict or
-                    pkg_lower.replace('_', '-') in installed_dict):
-                version = (installed_dict.get(pkg_lower) or
-                          installed_dict.get(pkg_normalized) or
-                          installed_dict.get(pkg_lower.replace('_', '-')) or 'unknown')
+            if (pkg_lower in installed_dict or pkg_normalized in installed_dict or pkg_lower.replace('_', '-') in installed_dict):
+                version = (installed_dict.get(pkg_lower) or installed_dict.get(pkg_normalized) or installed_dict.get(pkg_lower.replace('_', '-')) or 'unknown')
                 table.add_row(pkg, "[green]✓ Installed[/green]", version)
-                installed_packages.append((pkg, version))
+                installed_pip.append((pkg, version))
             else:
                 table.add_row(pkg, "[red]✗ Missing[/red]", "N/A")
-                missing_packages.append(pkg)
+                missing_pip.append(pkg)
 
         console.print(table)
         console.print()
 
-        if not missing_packages:
-            console.print("[bold green]✓ All AI provider dependencies are installed![/bold green]\n")
-            if installed_packages:
-                # Offer to update installed packages
-                console.print("[yellow]You can update to the latest versions.[/yellow]")
-                if not auto_install:
-                    if ctx.obj.get('interactive'):
-                        response = console.input("[bold]Update installed AI dependencies to latest versions? [y/N]: [/bold]")
-                    else:
-                        response = input("Update installed AI dependencies to latest versions? [y/N]: ")
+        # Check Node CLI status
+        node_table = Table(title="AI Provider CLI Tools (npm)")
+        node_table.add_column("Tool", style="cyan")
+        node_table.add_column("Status", style="white")
+        node_table.add_column("Notes", style="dim")
 
-                    if response.strip().lower() != 'y':
-                        console.print("[yellow]Update cancelled.[/yellow]")
-                        return
+        missing_node = []
+        installed_node = []
 
-                # Upgrade installed packages
-                console.print("\n[bold cyan]Updating AI provider dependencies to latest versions...[/bold cyan]")
-                try:
-                    subprocess.run(
-                        [sys.executable, '-m', 'pip', 'install', '--upgrade'] + ai_packages,
-                        check=True,
-                        timeout=600
-                    )
-                    console.print(
-                        "\n[bold green]✓ AI provider dependencies updated successfully!"
-                        "[/bold green]"
-                    )
-                except subprocess.TimeoutExpired:
-                    console.print(
-                        "\n[bold red]✗ Update timed out after 10 minutes"
-                        "[/bold red]"
-                    )
-                except subprocess.CalledProcessError as e:
-                    console.print(f"\n[bold red]✗ Update failed: {e}[/bold red]")
-                except Exception as e:
-                    console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
-            return
+        for tool_name, info in node_cli_tools.items():
+            try:
+                res = subprocess.run(info['check_cmd'], capture_output=True, text=True, timeout=5)
+                if res.returncode == 0:
+                    installed_node.append(tool_name)
+                    node_table.add_row(tool_name, "[green]✓ Installed[/green]", res.stdout.strip().splitlines()[0] if res.stdout else '')
+                else:
+                    missing_node.append(tool_name)
+                    node_table.add_row(tool_name, "[red]✗ Missing or errored[/red]", '')
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                missing_node.append(tool_name)
+                node_table.add_row(tool_name, "[red]✗ Missing[/red]", '')
 
-        # Show missing packages
-        console.print("[yellow]Missing AI provider dependencies:[/yellow]")
-        for pkg in missing_packages:
-            console.print(f"  • {pkg}")
+        console.print(node_table)
         console.print()
 
-        # Prompt for installation (unless auto-install)
-        if not auto_install:
-            if ctx.obj.get('interactive'):
-                response = console.input("[bold]Install missing AI dependencies? [y/N]: [/bold]")
+        if not missing_pip and not missing_node:
+            console.print("[bold green]✓ All AI provider dependencies are installed![/bold green]\n")
+        else:
+            if missing_pip:
+                console.print("[yellow]Missing Python (PyPI) AI dependencies:[/yellow]")
+                for pkg in missing_pip:
+                    console.print(f"  • {pkg}")
+                console.print()
+
+            if missing_node:
+                console.print("[yellow]Missing Node.js / npm CLI tools:[/yellow]")
+                for t in missing_node:
+                    console.print(f"  • {t}  (will be installed via npm if possible)")
+                console.print()
+
+        # If nothing to install, offer upgrades for pip packages
+        if not missing_pip and installed_pip:
+            console.print("[yellow]Pip AI packages are present; you may upgrade them to latest versions.[/yellow]")
+            if auto_install or (ctx.obj.get('interactive') and console.input("[bold]Upgrade pip AI packages to latest? [y/N]: [/bold]").strip().lower() == 'y') or (not ctx.obj.get('interactive') and auto_install):
+                try:
+                    console.print("\n[bold cyan]Upgrading pip AI packages...[/bold cyan]")
+                    subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade'] + [p for p, _ in installed_pip], check=True, timeout=600)
+                    console.print("[bold green]✓ Pip AI packages upgraded[/bold green]")
+                except Exception as e:
+                    console.print(f"[yellow]Pip upgrade encountered an issue: {e}[/yellow]")
+
+        # Install missing pip packages (if any)
+        if missing_pip:
+            proceed = auto_install or (ctx.obj.get('interactive') and console.input("[bold]Install missing pip AI packages? [y/N]: [/bold]").strip().lower() == 'y')
+            if proceed:
+                console.print("\n[bold cyan]Installing missing pip AI packages...[/bold cyan]")
+                try:
+                    subprocess.run([sys.executable, '-m', 'pip', 'install'] + missing_pip, check=True, timeout=600)
+                    console.print("[bold green]✓ Pip AI packages installed[/bold green]")
+                except Exception as e:
+                    console.print(f"[red]Failed to install pip packages: {e}[/red]")
             else:
-                response = input("Install missing AI dependencies? [y/N]: ")
+                console.print("[yellow]Skipping pip package installation.[/yellow]")
 
-            if response.strip().lower() != 'y':
-                console.print("[yellow]Installation cancelled.[/yellow]")
-                return
+        # Install missing Node CLI tools via npm (if node/npm are available)
+        if missing_node:
+            try:
+                # Quick check for npm presence
+                npm_check = subprocess.run(['npm', '--version'], capture_output=True, text=True, timeout=5)
+                if npm_check.returncode != 0:
+                    raise FileNotFoundError('npm not available')
+                npm_available = True
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                npm_available = False
 
-        # Install missing packages
-        console.print("\n[bold cyan]Installing missing AI provider dependencies...[/bold cyan]")
-        try:
-            subprocess.run(
-                [sys.executable, '-m', 'pip', 'install'] + missing_packages,
-                check=True,
-                timeout=600
-            )
-            console.print(
-                "\n[bold green]✓ AI provider dependencies installed successfully!"
-                "[/bold green]"
-            )
-        except subprocess.TimeoutExpired:
-            console.print(
-                "\n[bold red]✗ Installation timed out after 10 minutes"
-                "[/bold red]"
-            )
-        except subprocess.CalledProcessError as e:
-            console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
-        except Exception as e:
-            console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+            if not npm_available:
+                console.print("[yellow]npm is not available on PATH. Install Node.js/npm before installing CLI tools.[/yellow]")
+                console.print("[yellow]Suggested for Copilot CLI: `npm i -g @githubnext/github-copilot-cli`[/yellow]")
+            else:
+                proceed_node = auto_install or (ctx.obj.get('interactive') and console.input("[bold]Install missing npm CLI tools now? [y/N]: [/bold]").strip().lower() == 'y')
+                if proceed_node:
+                    for t in missing_node:
+                        info = node_cli_tools.get(t)
+                        if not info:
+                            console.print(f"[yellow]No install mapping for {t}; please install manually.[/yellow]")
+                            continue
+                        install_cmd = info['install_cmd']
+                        console.print(f"Installing {t} via: {' '.join(install_cmd)}")
+                        try:
+                            subprocess.run(install_cmd, check=True, timeout=600)
+                            console.print(f"[green]✓ {t} installed via npm[/green]")
+                        except Exception as e:
+                            console.print(f"[red]Failed to install {t} via npm: {e}[/red]")
+                else:
+                    console.print("[yellow]Skipping npm CLI installation.[/yellow]")
 
     except Exception as e:
         console.print(f"[yellow]AI dependency check encountered an issue: {e}[/yellow]")
