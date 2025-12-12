@@ -1,5 +1,9 @@
 # Finance Feedback Engine
 
+[![Test Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
+[![Tests](https://img.shields.io/badge/tests-598%20passed-success)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
+
 The Finance Feedback Engine is a Python-based tool designed to provide validation and feedback for financial data processing, particularly for applications interacting with market data APIs like Alpha Vantage.
 
 This project currently offers a set of utility functions for standardizing inputs and validating data quality.
@@ -1140,3 +1144,56 @@ logging.basicConfig(level=logging.INFO)
 pair = validation.standardize_asset_pair(" my-asset_pair/123 ")
 print(f"Standardized Pair: {pair}")
 ```
+
+## 🧪 Testing
+
+The Finance Feedback Engine maintains comprehensive test coverage across all subsystems.
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=finance_feedback_engine --cov-report=html
+
+# Run specific test modules
+pytest tests/test_e2e_workflow.py
+pytest tests/test_ensemble_fallback.py
+pytest tests/test_backtester.py
+
+# Run with verbose output
+pytest -v
+
+# Run tests matching a pattern
+pytest -k "ensemble"
+```
+
+### Test Coverage Status
+
+**Current Coverage:** 70%+ (598 tests passing)
+
+**Tested Subsystems:**
+- ✅ **Core Engine**: Decision generation, analysis workflow, platform integration
+- ✅ **Ensemble Manager**: Multi-provider voting, fallback tiers, dynamic weight adjustment
+- ✅ **Data Providers**: Alpha Vantage, unified multi-timeframe pulse
+- ✅ **Trading Platforms**: Mock, Coinbase, Oanda, circuit breaker protection
+- ✅ **Risk Management**: VaR calculation, correlation analysis, position validation
+- ✅ **Memory & Learning**: Portfolio memory, feedback analyzer, performance tracking
+- ✅ **Backtesting**: Standard backtester, walk-forward analysis, Monte Carlo simulation
+- ✅ **Monitoring**: Trade detection, P&L tracking, position monitoring
+- ✅ **CLI**: All commands (analyze, execute, backtest, agent, dashboard)
+- ✅ **End-to-End Workflows**: Complete user flows from analysis to execution
+
+**Test Categories:**
+- **Unit Tests**: Individual component testing with mocked dependencies
+- **Integration Tests**: Multi-component workflows (e.g., `test_phase1_integration.py`)
+- **End-to-End Tests**: Full user scenarios with in-memory storage (`test_e2e_workflow.py`)
+- **Backtesting Tests**: Historical analysis validation with cache management
+
+### Continuous Integration
+
+Tests run automatically on every commit via GitHub Actions. See [`.github/workflows/`](.github/workflows/) for CI configuration.
+
+For deployment setup and environment configuration, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
