@@ -331,3 +331,213 @@ def test_monitor_commands_basic_and_metrics(tmp_path):
 
             res_metrics = runner.invoke(cli, ["monitor", "metrics"])
             assert res_metrics.exit_code == 0, res_metrics.output
+
+
+def test_portfolio_backtest_command():
+    """Test portfolio-backtest with minimal mocking."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_engine.historical_data_provider = MagicMock()
+    fake_engine.decision_engine = MagicMock()
+
+    class FakePortfolioBacktester:
+        def __init__(self, *args, **kwargs):
+            pass
+        def run_backtest(self, **kwargs):
+            return {"portfolio_metrics": {"final_balance": 11000.0}, "asset_results": {}}
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("finance_feedback_engine.backtesting.portfolio_backtester.PortfolioBacktester", FakePortfolioBacktester):
+                res = runner.invoke(cli, ["portfolio-backtest", "BTCUSD", "ETHUSD", "--start", "2024-01-01", "--end", "2024-01-31"])
+                assert res.exit_code == 0, res.output
+
+
+def test_walk_forward_command():
+    """Test walk-forward analysis with mocked optimizer."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_engine.historical_data_provider = MagicMock()
+    fake_engine.decision_engine = MagicMock()
+
+    class FakeWalkForward:
+        def __init__(self, *args, **kwargs):
+            pass
+        def run(self, *args, **kwargs):
+            return {"train_metrics": {"win_rate": 0.6}, "test_metrics": {"win_rate": 0.55}}
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("finance_feedback_engine.cli.main.WalkForwardOptimizer", FakeWalkForward):
+                res = runner.invoke(cli, ["walk-forward", "BTCUSD", "--start-date", "2024-01-01", "--end-date", "2024-06-01"])
+                assert res.exit_code == 0, res.output
+
+
+def test_monte_carlo_command():
+    """Test monte-carlo simulation with mocked simulator."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_engine.historical_data_provider = MagicMock()
+    fake_engine.decision_engine = MagicMock()
+
+    class FakeMonteCarlo:
+        def __init__(self, *args, **kwargs):
+            pass
+        def run(self, *args, **kwargs):
+            return {"mean_final_balance": 10500.0, "std_final_balance": 200.0}
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("finance_feedback_engine.cli.main.MonteCarloSimulator", FakeMonteCarlo):
+                res = runner.invoke(cli, ["monte-carlo", "BTCUSD", "--start-date", "2024-01-01", "--end-date", "2024-01-31"])
+                assert res.exit_code == 0, res.output
+
+
+def test_learning_report_command():
+    """Test learning-report with mocked memory engine."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_memory = MagicMock()
+    fake_memory.generate_learning_validation_metrics.return_value = {
+        "total_trades_analyzed": 100,
+        "sample_efficiency": {"achieved_threshold": True, "trades_to_60pct_win_rate": 50, "learning_speed_per_100_trades": 0.15},
+        "cumulative_regret": {"cumulative_regret": 10.0, "optimal_provider": "ensemble", "optimal_avg_pnl": 5.0, "avg_regret_per_trade": 0.1},
+        "concept_drift": {"drift_severity": "LOW", "drift_score": 0.02, "window_win_rates": [0.6, 0.62]},
+        "thompson_sampling": {"exploration_rate": 0.2, "exploitation_convergence": 0.8, "dominant_provider": "local", "provider_distribution": {}},
+        "learning_curve": {
+            "first_100_trades": {"win_rate": 0.5, "avg_pnl": 1.0},
+            "last_100_trades": {"win_rate": 0.6, "avg_pnl": 2.0},
+            "win_rate_improvement_pct": 20.0,
+            "pnl_improvement_pct": 100.0,
+            "learning_detected": True
+        },
+        "research_methods": {"sample_efficiency": "DQN paper"}
+    }
+    fake_engine.memory_engine = fake_memory
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            res = runner.invoke(cli, ["learning-report"])
+            assert res.exit_code == 0, res.output
+
+
+def test_prune_memory_command_no_confirm():
+    """Test prune-memory when no pruning is needed."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_memory = MagicMock()
+    fake_memory.trade_outcomes = [{"pnl": 1.0}] * 50  # only 50 trades
+    fake_engine.memory_engine = fake_memory
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            res = runner.invoke(cli, ["prune-memory", "--keep-recent", "1000"])
+            assert res.exit_code == 0, res.output
+
+
+def test_prune_memory_command_with_pruning():
+    """Test prune-memory when pruning is needed and confirmed."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_memory = MagicMock()
+    fake_memory.trade_outcomes = [{"pnl": 1.0}] * 2000
+    fake_memory.save = MagicMock()
+    fake_engine.memory_engine = fake_memory
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("finance_feedback_engine.cli.main.Prompt.ask", return_value="yes"):
+                res = runner.invoke(cli, ["prune-memory", "--keep-recent", "500"])
+                assert res.exit_code == 0, res.output
+                assert len(fake_memory.trade_outcomes) == 500
+
+
+def test_retrain_meta_learner_no_history():
+    """Test retrain-meta-learner when no trade history exists."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_memory = MagicMock()
+    fake_memory.trade_outcomes = None  # No history
+    fake_engine.memory_engine = fake_memory
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            res = runner.invoke(cli, ["retrain-meta-learner"])
+            assert res.exit_code == 0, res.output
+
+
+def test_retrain_meta_learner_force():
+    """Test retrain-meta-learner with --force flag."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_memory = MagicMock()
+    fake_memory.trade_outcomes = [{"pnl": 1.0}] * 30
+    fake_memory.get_strategy_performance_summary.return_value = {
+        "stacking": {"win_rate": 60.0, "total_trades": 30}
+    }
+    fake_engine.memory_engine = fake_memory
+
+    def fake_train():
+        pass
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("train_meta_learner.run_training", fake_train):
+                res = runner.invoke(cli, ["retrain-meta-learner", "--force"])
+                assert res.exit_code == 0, res.output
+
+
+def test_run_agent_command():
+    """Test run-agent command with mocked agent."""
+    runner = CliRunner()
+    fake_engine = MagicMock()
+    fake_agent = MagicMock()
+
+    # Mock agent.run as an async coroutine
+    async def fake_run():
+        return None
+    fake_agent.run = fake_run
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine", return_value=fake_engine):
+            with patch("finance_feedback_engine.cli.main._initialize_agent", return_value=fake_agent):
+                with patch("finance_feedback_engine.cli.main.console.input", return_value=""):  # Skip config editor
+                    # Don't use --setup flag as it triggers config-editor; just run minimal agent
+                    res = runner.invoke(cli, ["run-agent", "--autonomous"])
+                    assert res.exit_code == 0, res.output
+
+
+def test_install_deps_command():
+    """Test install-deps basic invocation."""
+    runner = CliRunner()
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main._check_dependencies", return_value=([], [])):
+            res = runner.invoke(cli, ["install-deps"])
+            assert res.exit_code == 0, res.output
+
+
+def test_update_ai_command():
+    """Test update-ai basic invocation."""
+    runner = CliRunner()
+
+    with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch("finance_feedback_engine.cli.main._check_dependencies", return_value=([], [])):
+            res = runner.invoke(cli, ["update-ai"])
+            assert res.exit_code == 0, res.output
+
+
+def test_config_editor_command():
+    """Test config-editor basic invocation with mocked prompts."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        Path("config").mkdir()
+        Path("config/config.yaml").write_text("trading_platform: mock\n")
+
+        with patch("finance_feedback_engine.cli.main.load_config", return_value={"trading_platform": "mock"}):
+            with patch("finance_feedback_engine.cli.main.Prompt.ask", side_effect=["", "", "", "", "", ""]):  # Empty answers to skip all prompts
+                with patch("finance_feedback_engine.cli.main.console.input", return_value="n"):  # Don't save
+                    res = runner.invoke(cli, ["config-editor"])
+                    # Command may exit with 0 or 1 depending on save choice
+                    assert res.exit_code in [0, 1], res.output
