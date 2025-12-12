@@ -18,5 +18,15 @@
     "installed": false,
     "download_complete": false,
     "size_gb": 5.4
+  },
+  "llama3.2:3b-instruct-fp16": {
+    "installed": false,
+    "download_complete": false,
+    "size_gb": 3.2
+  },
+  "deepseek-r1:8b": {
+    "installed": false,
+    "download_complete": false,
+    "size_gb": 4.9
   }
 }
