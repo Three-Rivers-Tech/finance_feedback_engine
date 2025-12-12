@@ -111,7 +111,16 @@ python main.py history --asset BTCUSD
 **Autonomous Agent:**
 ```bash
 # Run autonomous trading loop (OODA state machine)
-python main.py run-agent --take-profit 0.05 --stop-loss 0.02 --max-daily-trades 5
+python main.py run-agent --take-profit 0.05 --stop-loss 0.02
+
+# Override asset pairs at runtime (overrides config file)
+python main.py run-agent --asset-pairs "BTCUSD,ETHUSD,EURUSD"
+
+# Supports various formats (automatically standardized)
+python main.py run-agent --asset-pairs "btc-usd,eth-usd,eur_usd"
+
+# Combine with other options
+python main.py run-agent --asset-pairs "BTCUSD,GBPUSD" --autonomous --take-profit 0.03
 ```
 
 **Monitoring:**
