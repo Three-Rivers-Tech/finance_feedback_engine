@@ -358,7 +358,16 @@ class TelegramApprovalBot:
                 "Use the buttons to approve or reject each decision."
             )
         elif text == '/status':
-            pending_count = len(self.approval_queue)
+            # Query Redis for pending approvals if enabled
+            if self.use_redis and self.redis_client:
+                try:
+                    approval_keys = self.redis_client.keys("approval:*")
+                    pending_count = len(approval_keys)
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to query Redis for approvals: {e}")
+                    pending_count = len(self.approval_queue)
+            else:
+                pending_count = len(self.approval_queue)
             await message.reply_text(f"📊 Pending approvals: {pending_count}")
         else:
             await message.reply_text("❓ Unknown command. Available: /start, /status")
