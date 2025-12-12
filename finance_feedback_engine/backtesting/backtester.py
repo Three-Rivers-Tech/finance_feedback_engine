@@ -87,6 +87,7 @@ class Backtester:
                  force_local_providers: bool = True,  # Restrict ensemble to local providers only
                  max_concurrent_positions: int = 5,  # Max simultaneous open positions
                  timeframe: str = '1h',  # Candle timeframe ('1m', '5m', '15m', '30m', '1h', '1d')
+                 risk_free_rate: float = 0.02,  # Annual risk-free rate for Sharpe ratio (default 2%)
                  config: Optional[Dict[str, Any]] = None,  # Full config for memory engine
                  ):
         self.historical_data_provider = historical_data_provider
@@ -102,6 +103,7 @@ class Backtester:
         self.max_concurrent_positions = max_concurrent_positions
         self.force_local_providers = force_local_providers
         self.timeframe = timeframe  # Store timeframe for use in run_backtest
+        self.risk_free_rate = risk_free_rate  # Annual risk-free rate for Sharpe ratio
         self.config = config or {}
 
         # Initialize decision cache
@@ -386,10 +388,10 @@ class Backtester:
             annualized_volatility = returns.std() * np.sqrt(252) # Assuming daily data
             metrics["annualized_volatility"] = annualized_volatility
 
-            # Sharpe Ratio (assuming risk-free rate is 0 for simplicity)
-            # TODO: Allow configuration of risk-free rate
+            # Sharpe Ratio: (Return - Risk-Free Rate) / Volatility
             if annualized_volatility > 0:
-                metrics["sharpe_ratio"] = (metrics["annualized_return_pct"] / 100) / annualized_volatility
+                excess_return = (metrics["annualized_return_pct"] / 100) - self.risk_free_rate
+                metrics["sharpe_ratio"] = excess_return / annualized_volatility
             else:
                 metrics["sharpe_ratio"] = 0.0
         else:

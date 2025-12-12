@@ -601,11 +601,8 @@ def cli(ctx, config, verbose, interactive):
                 "outdated.[/yellow]"
             )
             if Confirm.ask("Would you like to update/install them now?"):
-                # TODO: implement update_ai command
-                console.print(
-                    "[yellow]Auto-update not implemented. "
-                    "Please install manually.[/yellow]"
-                )
+                # Invoke update-ai command with auto-install flag
+                ctx.invoke(update_ai, auto_install=True)
         start_interactive_session(cli)
         return
 
@@ -944,6 +941,139 @@ def install_deps(ctx, auto_install):
     except Exception as e:
         # Be permissive in tests; don't crash on environment quirks
         console.print(f"[yellow]Dependency check encountered an issue: {e}[/yellow]")
+        return
+
+
+@cli.command(name='update-ai')
+@click.option(
+    '--auto-install', '-y',
+    is_flag=True,
+    help='Automatically update dependencies without prompting'
+)
+@click.pass_context
+def update_ai(ctx, auto_install):
+    """Update AI provider dependencies (copilot-cli, codex-cli, qwen-cli, google-generativeai)."""
+    try:
+        console.print("[bold cyan]Checking AI provider dependencies...[/bold cyan]\n")
+
+        # List of AI-specific packages
+        ai_packages = [
+            'copilot-cli',
+            'codex-cli',
+            'qwen-cli',
+            'google-generativeai'
+        ]
+
+        installed_dict = _get_installed_packages()
+
+        from rich.table import Table
+        table = Table(title="AI Provider Dependencies")
+        table.add_column("Package", style="cyan")
+        table.add_column("Status", style="white")
+        table.add_column("Version", style="dim")
+
+        missing_packages = []
+        installed_packages = []
+
+        for pkg in ai_packages:
+            pkg_lower = pkg.lower()
+            pkg_normalized = pkg_lower.replace('-', '_')
+
+            # Check both forms (hyphen and underscore)
+            if (pkg_lower in installed_dict or
+                    pkg_normalized in installed_dict or
+                    pkg_lower.replace('_', '-') in installed_dict):
+                version = (installed_dict.get(pkg_lower) or
+                          installed_dict.get(pkg_normalized) or
+                          installed_dict.get(pkg_lower.replace('_', '-')) or 'unknown')
+                table.add_row(pkg, "[green]✓ Installed[/green]", version)
+                installed_packages.append((pkg, version))
+            else:
+                table.add_row(pkg, "[red]✗ Missing[/red]", "N/A")
+                missing_packages.append(pkg)
+
+        console.print(table)
+        console.print()
+
+        if not missing_packages:
+            console.print("[bold green]✓ All AI provider dependencies are installed![/bold green]\n")
+            if installed_packages:
+                # Offer to update installed packages
+                console.print("[yellow]You can update to the latest versions.[/yellow]")
+                if not auto_install:
+                    if ctx.obj.get('interactive'):
+                        response = console.input("[bold]Update installed AI dependencies to latest versions? [y/N]: [/bold]")
+                    else:
+                        response = input("Update installed AI dependencies to latest versions? [y/N]: ")
+
+                    if response.strip().lower() != 'y':
+                        console.print("[yellow]Update cancelled.[/yellow]")
+                        return
+
+                # Upgrade installed packages
+                console.print("\n[bold cyan]Updating AI provider dependencies to latest versions...[/bold cyan]")
+                try:
+                    subprocess.run(
+                        [sys.executable, '-m', 'pip', 'install', '--upgrade'] + ai_packages,
+                        check=True,
+                        timeout=600
+                    )
+                    console.print(
+                        "\n[bold green]✓ AI provider dependencies updated successfully!"
+                        "[/bold green]"
+                    )
+                except subprocess.TimeoutExpired:
+                    console.print(
+                        "\n[bold red]✗ Update timed out after 10 minutes"
+                        "[/bold red]"
+                    )
+                except subprocess.CalledProcessError as e:
+                    console.print(f"\n[bold red]✗ Update failed: {e}[/bold red]")
+                except Exception as e:
+                    console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+            return
+
+        # Show missing packages
+        console.print("[yellow]Missing AI provider dependencies:[/yellow]")
+        for pkg in missing_packages:
+            console.print(f"  • {pkg}")
+        console.print()
+
+        # Prompt for installation (unless auto-install)
+        if not auto_install:
+            if ctx.obj.get('interactive'):
+                response = console.input("[bold]Install missing AI dependencies? [y/N]: [/bold]")
+            else:
+                response = input("Install missing AI dependencies? [y/N]: ")
+
+            if response.strip().lower() != 'y':
+                console.print("[yellow]Installation cancelled.[/yellow]")
+                return
+
+        # Install missing packages
+        console.print("\n[bold cyan]Installing missing AI provider dependencies...[/bold cyan]")
+        try:
+            subprocess.run(
+                [sys.executable, '-m', 'pip', 'install'] + missing_packages,
+                check=True,
+                timeout=600
+            )
+            console.print(
+                "\n[bold green]✓ AI provider dependencies installed successfully!"
+                "[/bold green]"
+            )
+        except subprocess.TimeoutExpired:
+            console.print(
+                "\n[bold red]✗ Installation timed out after 10 minutes"
+                "[/bold red]"
+            )
+        except subprocess.CalledProcessError as e:
+            console.print(f"\n[bold red]✗ Installation failed: {e}[/bold red]")
+        except Exception as e:
+            console.print(f"\n[bold red]✗ Unexpected error: {e}[/bold red]")
+
+    except Exception as e:
+        console.print(f"[yellow]AI dependency check encountered an issue: {e}[/yellow]")
         return
 
 
