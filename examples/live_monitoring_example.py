@@ -64,7 +64,7 @@ try:
         summary = monitor.get_monitoring_summary()
         metrics = summary['trade_metrics']
         if metrics['total_trades'] > 0:
-            print(f"\n📈 Performance Summary:")
+            print("\n📈 Performance Summary:")
             print(f"  Total trades: {metrics['total_trades']}")
             print(f"  Win rate: {metrics['win_rate']:.1f}%")
             print(f"  Total P&L: ${metrics['total_pnl']:.2f}")

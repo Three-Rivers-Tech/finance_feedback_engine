@@ -9,7 +9,6 @@
 
 """Integration test for MockTradingPlatform with TradingLoopAgent."""
 
-import pytest
 from datetime import datetime, timezone
 
 from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform

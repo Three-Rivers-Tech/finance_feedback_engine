@@ -1,17 +1,15 @@
 """Decision engine for generating AI-powered trading decisions."""
 
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Dict, Any, Optional
 import logging
 import uuid
 from datetime import datetime, timedelta
-import subprocess
 import pandas as pd
 import pytz
 import asyncio
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
-from finance_feedback_engine.utils.failure_logger import send_telegram_notification
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
 
@@ -241,7 +239,6 @@ class DecisionEngine:
             start_date = end_date - timedelta(days=30)
 
             # Fetch historical data (handle both sync and async providers)
-            import asyncio
             historical_data_method = self.data_provider.get_historical_data(
                 asset_pair,
                 start_date.strftime("%Y-%m-%d"),
@@ -411,7 +408,7 @@ Sentiment Interpretation:
         # Add macroeconomic indicators if available
         if 'macro' in market_data and market_data['macro'].get('available'):
             macro = market_data['macro']
-            market_info += f"""
+            market_info += """
 MACROECONOMIC CONTEXT:
 ----------------------
 """

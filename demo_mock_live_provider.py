@@ -8,9 +8,7 @@ for backtesting and strategy development.
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 from finance_feedback_engine.data_providers import MockLiveProvider
-from finance_feedback_engine.trading_platforms import MockTradingPlatform
 
 
 def generate_sample_data(days: int = 100, start_price: float = 50000.0):
@@ -56,7 +54,7 @@ def demo_basic_streaming():
 
     provider = MockLiveProvider(data, asset_pair='BTCUSD')
 
-    print(f"\n📈 Streaming 5 candles for BTCUSD...")
+    print("\n📈 Streaming 5 candles for BTCUSD...")
     print(f"   Starting at index: {provider.current_index}")
 
     candle_num = 1
@@ -84,7 +82,7 @@ def demo_comprehensive_data():
     data = generate_sample_data(days=10)
     provider = MockLiveProvider(data, asset_pair='BTCUSD')
 
-    print(f"\n📊 Fetching comprehensive market data...")
+    print("\n📊 Fetching comprehensive market data...")
 
     # Advance a few candles
     for _ in range(3):
@@ -106,7 +104,7 @@ def demo_comprehensive_data():
     body_size = abs(candle['close'] - candle['open'])
     is_bullish = candle['close'] > candle['open']
 
-    print(f"\n   Enrichments:")
+    print("\n   Enrichments:")
     print(f"   ├─ Price Range: ${price_range:.2f} ({price_range/candle['close']*100:.2f}%)")
     print(f"   ├─ Body Size: ${body_size:.2f}")
     print(f"   ├─ Trend: {'Bullish ↑' if is_bullish else 'Bearish ↓'}")
@@ -137,7 +135,7 @@ def demo_historical_windows():
 
     current_price = provider.get_current_price()
     print(f"\n   Current Price: ${current_price:.2f}")
-    print(f"\n   Moving Averages:")
+    print("\n   Moving Averages:")
 
     for name, size in windows.items():
         window = provider.get_historical_window(
@@ -150,7 +148,7 @@ def demo_historical_windows():
         print(f"   ├─ {name}: ${ma:.2f} ({diff_pct:+.2f}%)")
 
     # Peek ahead (for demo purposes only!)
-    print(f"\n   🔮 Peek Ahead (testing only):")
+    print("\n   🔮 Peek Ahead (testing only):")
     for i in range(1, 4):
         future = provider.peek_ahead(i)
         if future:
@@ -166,8 +164,8 @@ def demo_simple_backtest():
     data = generate_sample_data(days=100, start_price=50000.0)
     provider = MockLiveProvider(data, asset_pair='BTCUSD')
 
-    print(f"\n💼 Simulating strategy...")
-    print(f"   Strategy: MA(20) Crossover (Signal-Only)")
+    print("\n💼 Simulating strategy...")
+    print("   Strategy: MA(20) Crossover (Signal-Only)")
 
     # Simplified tracking without actual platform trading
     cash = 10000.0
@@ -223,15 +221,15 @@ def demo_simple_backtest():
     final_value = cash + (btc_holdings * final_price)
     total_return = (final_value - 10000.0) / 10000.0 * 100
 
-    print(f"\n   📈 Strategy Results:")
+    print("\n   📈 Strategy Results:")
     print(f"   ├─ Total Signals: {len(signals)}")
     print(f"   ├─ Buy Signals: {sum(1 for s in signals if s['action'] == 'BUY')}")
     print(f"   ├─ Sell Signals: {sum(1 for s in signals if s['action'] == 'SELL')}")
-    print(f"   ├─ Initial Value: $10000.00")
+    print("   ├─ Initial Value: $10000.00")
     print(f"   ├─ Final Value: ${final_value:.2f}")
     print(f"   └─ Total Return: {total_return:+.2f}%")
-    print(f"\n   Note: This is a simplified simulation showing MockLiveProvider functionality.")
-    print(f"   For full backtesting, combine with MockTradingPlatform properly.")
+    print("\n   Note: This is a simplified simulation showing MockLiveProvider functionality.")
+    print("   For full backtesting, combine with MockTradingPlatform properly.")
 
 
 def demo_reset_replay():
@@ -249,7 +247,7 @@ def demo_reset_replay():
 
     provider = MockLiveProvider(data, asset_pair='BTCUSD')
 
-    print(f"\n🔄 First pass:")
+    print("\n🔄 First pass:")
     prices_1 = []
     while provider.has_more_data():
         prices_1.append(provider.get_current_price())
@@ -259,10 +257,10 @@ def demo_reset_replay():
     print(f"   Collected {len(prices_1)} prices: {prices_1}")
 
     # Reset to beginning
-    print(f"\n🔄 Reset to beginning...")
+    print("\n🔄 Reset to beginning...")
     provider.reset(0)
 
-    print(f"\n🔄 Second pass:")
+    print("\n🔄 Second pass:")
     prices_2 = []
     while provider.has_more_data():
         prices_2.append(provider.get_current_price())
@@ -273,13 +271,13 @@ def demo_reset_replay():
 
     # Verify identical
     if prices_1 == prices_2:
-        print(f"\n✅ Both passes produced identical results!")
+        print("\n✅ Both passes produced identical results!")
 
     # Reset to middle
-    print(f"\n🔄 Reset to index 2 (middle)...")
+    print("\n🔄 Reset to index 2 (middle)...")
     provider.reset(2)
 
-    print(f"\n🔄 Third pass (from middle):")
+    print("\n🔄 Third pass (from middle):")
     prices_3 = []
     while provider.has_more_data():
         prices_3.append(provider.get_current_price())
@@ -287,7 +285,7 @@ def demo_reset_replay():
     prices_3.append(provider.get_current_price())
 
     print(f"   Collected {len(prices_3)} prices: {prices_3}")
-    print(f"   (Started from index 2, got last 3 candles)")
+    print("   (Started from index 2, got last 3 candles)")
 
 
 def main():

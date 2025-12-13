@@ -4,7 +4,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch
 from pathlib import Path
 
 

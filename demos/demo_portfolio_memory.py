@@ -10,10 +10,8 @@ This script demonstrates the Portfolio Memory Engine capabilities:
 5. Market regime tracking
 """
 
-import json
 import logging
 from datetime import datetime, timedelta
-from pathlib import Path
 
 # Setup logging
 logging.basicConfig(
@@ -34,8 +32,7 @@ def print_section(title: str):
 def demo_memory_engine():
     """Demonstrate Portfolio Memory Engine features."""
     from finance_feedback_engine.memory.portfolio_memory import (
-        PortfolioMemoryEngine,
-        TradeOutcome
+        PortfolioMemoryEngine
     )
     
     print_section("PORTFOLIO MEMORY ENGINE DEMO")
@@ -56,7 +53,7 @@ def demo_memory_engine():
     # Initialize memory engine
     print("Initializing Portfolio Memory Engine...")
     memory_engine = PortfolioMemoryEngine(config)
-    print(f"✓ Memory engine initialized")
+    print("✓ Memory engine initialized")
     print(f"  Storage path: {memory_engine.storage_path}")
     print(f"  Max memory: {memory_engine.max_memory_size}")
     print(f"  Context window: {memory_engine.context_window}")

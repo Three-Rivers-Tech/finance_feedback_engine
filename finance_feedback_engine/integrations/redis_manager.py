@@ -4,7 +4,6 @@ import logging
 import platform
 import subprocess
 import time
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

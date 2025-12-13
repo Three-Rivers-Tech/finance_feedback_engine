@@ -3,8 +3,8 @@ Tests for UnifiedDataProvider, including multi-timeframe aggregation.
 """
 
 import pytest
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
+from datetime import datetime
+from unittest.mock import patch
 from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
 
 

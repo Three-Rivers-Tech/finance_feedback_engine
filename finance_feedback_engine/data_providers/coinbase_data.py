@@ -3,7 +3,6 @@
 from typing import Dict, Any, List, Optional
 import logging
 import time
-from datetime import datetime, timedelta
 
 from ..utils.rate_limiter import RateLimiter
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
@@ -173,7 +172,7 @@ class CoinbaseDataProvider:
             return candles
             
         except CircuitBreakerOpenError:
-            logger.error(f"Circuit breaker open for Coinbase data provider")
+            logger.error("Circuit breaker open for Coinbase data provider")
             raise
         except Exception as e:
             logger.error(f"Failed to fetch Coinbase candles: {e}")

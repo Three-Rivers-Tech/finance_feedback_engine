@@ -1,14 +1,12 @@
 import pandas as pd
-from datetime import datetime, timezone
-from typing import Dict, Any, List, Callable, Optional, Union, Tuple
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Union, Tuple
 import logging
 import numpy as np
 from dataclasses import dataclass
 import json
 
-from tqdm import tqdm
 
-from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider

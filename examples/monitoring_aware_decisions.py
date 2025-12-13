@@ -121,13 +121,13 @@ def main():
         total_value = portfolio.get('total_value_usd', 0)
         unrealized_pnl = portfolio.get('futures_summary', {}).get('unrealized_pnl', 0)
         
-        print(f"\nAccount Metrics:")
+        print("\nAccount Metrics:")
         print(f"  Total Value: ${total_value:,.2f}")
         print(f"  Unrealized P&L: ${unrealized_pnl:,.2f}")
     else:
         print("\nPlatform does not support detailed portfolio breakdown")
     
-    print(f"\nMonitoring Slots:")
+    print("\nMonitoring Slots:")
     print(f"  Active: {len(trade_monitor.active_trackers)}")
     print(f"  Max: {trade_monitor.MAX_CONCURRENT_TRADES}")
     print(f"  Available: {trade_monitor.MAX_CONCURRENT_TRADES - len(trade_monitor.active_trackers)}")

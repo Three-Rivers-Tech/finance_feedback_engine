@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 import json
 
@@ -543,7 +543,7 @@ class MonitoringContextProvider:
         # Risk metrics
         risk = context.get('risk_metrics', {})
         if risk:
-            lines.append(f"\nRisk Exposure:")
+            lines.append("\nRisk Exposure:")
             lines.append(
                 f"  • Total Exposure: ${risk.get('total_exposure_usd', 0):,.2f}"
             )
@@ -560,7 +560,7 @@ class MonitoringContextProvider:
         # Position concentration
         conc = context.get('position_concentration', {})
         if conc and conc.get('num_positions', 0) > 0:
-            lines.append(f"\nPosition Concentration:")
+            lines.append("\nPosition Concentration:")
             lines.append(
                 f"  • Largest Position: "
                 f"{conc.get('largest_position_pct', 0):.1f}% of portfolio"

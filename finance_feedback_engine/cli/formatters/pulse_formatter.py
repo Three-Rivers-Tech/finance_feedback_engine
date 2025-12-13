@@ -5,7 +5,7 @@ Refactored from cli/main.py::_display_pulse_data (149 lines)
 Now follows SOLID principles with proper value objects and single responsibilities.
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from rich.console import Console
 from rich.table import Table

@@ -1,7 +1,6 @@
 """Tests for finance_feedback_engine.monitoring.trade_tracker module."""
 import pytest
-from unittest.mock import Mock, MagicMock
-from datetime import datetime
+from unittest.mock import Mock
 
 from finance_feedback_engine.monitoring.trade_tracker import TradeTrackerThread
 

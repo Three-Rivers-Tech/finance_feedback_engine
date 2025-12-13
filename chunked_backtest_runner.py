@@ -23,7 +23,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -106,7 +106,7 @@ class ChunkedBacktestRunner:
         self.memory_dir = Path("data/memory")
         self.memory_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"ChunkedBacktestRunner initialized:")
+        logger.info("ChunkedBacktestRunner initialized:")
         logger.info(f"  Assets: {', '.join(assets)}")
         logger.info(f"  Initial Balance: ${initial_balance:,.2f}")
         logger.info(f"  Correlation Threshold: {correlation_threshold}")
@@ -124,7 +124,7 @@ class ChunkedBacktestRunner:
         logger.info("STARTING FULL YEAR 2025 CHUNKED BACKTEST")
         logger.info("=" * 80)
         logger.info(f"Assets: {', '.join(self.assets)}")
-        logger.info(f"Period: Q1 → Q4 2025 (4 quarterly chunks)")
+        logger.info("Period: Q1 → Q4 2025 (4 quarterly chunks)")
         logger.info(f"Memory persists across chunks: {self.memory_dir}")
         logger.info("")
 
@@ -189,7 +189,7 @@ class ChunkedBacktestRunner:
         ]
 
         logger.info(f"Command: {' '.join(cmd)}")
-        logger.info(f"Memory state: Persistent (vectors.pkl + outcome_*.json)")
+        logger.info("Memory state: Persistent (vectors.pkl + outcome_*.json)")
 
         try:
             # Run backtest - note that portfolio memory persists across runs
@@ -410,14 +410,14 @@ class ChunkedBacktestRunner:
         snapshot_files = list(self.memory_dir.glob("snapshot_*.json"))
         vectors_file = self.memory_dir / "vectors.pkl"
 
-        logger.info(f"Memory Status:")
+        logger.info("Memory Status:")
         logger.info(f"  Outcomes: {len(outcome_files)} files")
         logger.info(f"  Snapshots: {len(snapshot_files)} files")
         if vectors_file.exists():
             size_mb = vectors_file.stat().st_size / 1024 / 1024
             logger.info(f"  Vectors: ✓ ({size_mb:.2f} MB)")
         else:
-            logger.info(f"  Vectors: ✗ (not created yet)")
+            logger.info("  Vectors: ✗ (not created yet)")
 
         # Check provider/regime performance files
         provider_perf = self.memory_dir / "provider_performance.json"
@@ -519,21 +519,21 @@ class ChunkedBacktestRunner:
         print(f"Total Return: {summary.get('total_return_pct', 0):.2f}%")
         print(f"Annualized Sharpe: {summary.get('annualized_sharpe', 0):.2f}")
         print(f"Max Quarterly Drawdown: {summary.get('max_quarterly_drawdown', 0):.2f}%")
-        print(f"\nTrading Statistics:")
+        print("\nTrading Statistics:")
         print(f"  Total Trades: {summary.get('total_trades', 0)}")
         print(f"  Completed Trades: {summary.get('total_completed_trades', 0)}")
         print(f"  Winning Trades: {summary.get('total_winning_trades', 0)}")
         print(f"  Overall Win Rate: {summary.get('overall_win_rate', 0):.1f}%")
         print(f"  Total P&L: ${summary.get('total_pnl', 0):,.2f}")
 
-        print(f"\nMemory Persistence (Accumulated Learning):")
+        print("\nMemory Persistence (Accumulated Learning):")
         mem = summary.get('memory_persistence', {})
         print(f"  Outcomes stored: {mem.get('outcomes_stored', 0)}")
         print(f"  Snapshots stored: {mem.get('snapshots_stored', 0)}")
         print(f"  Vector memory: {mem.get('vectors_file', 'N/A')}")
         print(f"  Cross-quarter learning: {mem.get('learning_accumulated_across_quarters', False)}")
 
-        print(f"\nQuarterly Breakdown:")
+        print("\nQuarterly Breakdown:")
         for q in summary.get('quarterly_breakdown', []):
             print(f"\n  Q{q.get('quarter', '?')} {self.year}:")
             print(f"    Return: {q.get('return_pct', 0):.2f}%")

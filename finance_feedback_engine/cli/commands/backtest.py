@@ -239,15 +239,27 @@ def portfolio_backtest(
         asset_pairs = [standardize_asset_pair(ap) for ap in asset_pairs]
 
         # Validate date range
-        start_dt = datetime.strptime(start, '%Y-%m-%d')
-        end_dt = datetime.strptime(end, '%Y-%m-%d')
+        try:
+            start_dt = datetime.strptime(start, '%Y-%m-%d')
+        except ValueError:
+            raise click.BadParameter(
+                f"Invalid start date format: {start}. Expected: YYYY-MM-DD",
+                param_hint="--start"
+            )
+        try:
+            end_dt = datetime.strptime(end, '%Y-%m-%d')
+        except ValueError:
+            raise click.BadParameter(
+                f"Invalid end date format: {end}. Expected: YYYY-MM-DD",
+                param_hint="--end"
+            )
         if start_dt >= end_dt:
             raise click.BadParameter(f"start_date ({start}) must be before end_date ({end})")
 
         config = ctx.obj['config']
 
         # Show startup info
-        console.print(f"[bold blue]Portfolio Backtest[/bold blue]")
+        console.print("[bold blue]Portfolio Backtest[/bold blue]")
         console.print(f"Assets: [cyan]{', '.join(asset_pairs)}[/cyan]")
         console.print(f"Period: [cyan]{start}[/cyan] → [cyan]{end}[/cyan]")
         console.print(f"Initial Capital: [green]${initial_balance:,.2f}[/green]")
@@ -304,13 +316,14 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
 
         config = ctx.obj['config']
 
-        # Override AI provider from CLI option
+        # Avoid mutating shared config in ctx.obj: make a shallow copy
+        new_config = dict(config)
+        # Ensure nested dict exists and is a shallow copy to avoid mutating original
+        new_config['decision_engine'] = dict(new_config.get('decision_engine', {}))
         if provider:
-            if 'decision_engine' not in config:
-                config['decision_engine'] = {}
-            config['decision_engine']['ai_provider'] = provider.lower()
+            new_config['decision_engine']['ai_provider'] = provider.lower()
 
-        engine = FinanceFeedbackEngine(config)
+        engine = FinanceFeedbackEngine(new_config)
 
         # Calculate total date range
         start_dt = datetime.strptime(start_date, '%Y-%m-%d')
@@ -429,13 +442,14 @@ def monte_carlo(ctx, asset_pair, start_date, end_date, simulations, noise_std, p
 
         config = ctx.obj['config']
 
-        # Override AI provider from CLI option
+        # Avoid mutating shared config in ctx.obj: make a shallow copy
+        new_config = dict(config)
+        # Ensure nested dict exists and is a shallow copy to avoid mutating original
+        new_config['decision_engine'] = dict(new_config.get('decision_engine', {}))
         if provider:
-            if 'decision_engine' not in config:
-                config['decision_engine'] = {}
-            config['decision_engine']['ai_provider'] = provider.lower()
+            new_config['decision_engine']['ai_provider'] = provider.lower()
 
-        engine = FinanceFeedbackEngine(config)
+        engine = FinanceFeedbackEngine(new_config)
 
         # Initialize Backtester with proper parameters
         ab_config = config.get('advanced_backtesting', {})

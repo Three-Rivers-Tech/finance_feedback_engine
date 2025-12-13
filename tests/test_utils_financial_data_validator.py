@@ -1,6 +1,5 @@
 """Tests for utils.financial_data_validator module."""
 
-import pytest
 import pandas as pd
 from datetime import datetime
 from finance_feedback_engine.utils.financial_data_validator import (

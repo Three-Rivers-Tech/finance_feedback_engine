@@ -38,8 +38,8 @@ def test_gemini_provider():
     
     try:
         result = provider.query(prompt)
-        print(f"   ✅ Query successful")
-        print(f"\n   Response:")
+        print("   ✅ Query successful")
+        print("\n   Response:")
         print(f"   - Action: {result.get('action', 'N/A')}")
         print(f"   - Confidence: {result.get('confidence', 'N/A')}%")
         print(f"   - Reasoning: {result.get('reasoning', 'N/A')}")

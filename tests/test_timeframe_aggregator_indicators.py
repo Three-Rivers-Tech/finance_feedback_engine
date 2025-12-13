@@ -1,7 +1,7 @@
 """Tests for TimeframeAggregator indicator calculations."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from finance_feedback_engine.data_providers.timeframe_aggregator import TimeframeAggregator
 
 

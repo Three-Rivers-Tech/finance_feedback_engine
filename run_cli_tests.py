@@ -29,7 +29,7 @@ def run_test(name, args, expected_string, timeout_sec=30):
         match_found = re.search(expected_string, combined_output, re.IGNORECASE)
 
         if match_found:
-            print(f"  ✓ PASSED")
+            print("  ✓ PASSED")
             return (name, True)
         else:
             print(f"  ✗ FAILED (expected string not found: '{expected_string}')")
