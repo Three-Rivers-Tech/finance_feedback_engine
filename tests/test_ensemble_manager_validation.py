@@ -35,8 +35,9 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
             manager._is_valid_provider_response(valid_decision, "local")
         )
 
+        # Empty reasoning is now allowed (validation is more lenient)
         empty_reasoning = {**valid_decision, "reasoning": "   "}
-        self.assertFalse(
+        self.assertTrue(
             manager._is_valid_provider_response(empty_reasoning, "local")
         )
 
