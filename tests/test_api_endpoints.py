@@ -106,20 +106,22 @@ class TestMetricsEndpoint:
         response = client.get("/metrics")
         assert response.status_code == 200
 
-    def test_metrics_returns_dict(self, client):
-        """Test metrics endpoint returns dictionary."""
+    def test_metrics_returns_prometheus_format(self, client):
+        """Test metrics endpoint returns Prometheus text format."""
         response = client.get("/metrics")
-        data = response.json()
+        data = response.text
 
-        assert isinstance(data, dict)
+        assert isinstance(data, str)
+        # Should contain Prometheus metric definitions
+        assert "# TYPE" in data or "# HELP" in data
 
     def test_metrics_stubbed_structure(self, client):
         """Test metrics endpoint has expected stub structure."""
         response = client.get("/metrics")
-        data = response.json()
+        data = response.text
 
-        # Should have some basic metrics structure
-        assert "timestamp" in data or "metrics" in data or len(data) > 0
+        # Should have some basic metrics structure in Prometheus format
+        assert "# TYPE" in data or "# HELP" in data or len(data) > 0
 
 
 class TestRootEndpoint:

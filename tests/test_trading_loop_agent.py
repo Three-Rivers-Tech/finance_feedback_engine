@@ -36,8 +36,8 @@ def agent_config():
     """Provides a default TradingAgentConfig."""
     return TradingAgentConfig(
         asset_pairs=["BTCUSD"],
-        analysis_frequency_seconds=0.1,
-        main_loop_error_backoff_seconds=0.1,
+        analysis_frequency_seconds=1,  # Changed from 0.1 to 1 (integer)
+        main_loop_error_backoff_seconds=1,  # Changed from 0.1 to 1 (integer)
         autonomous_execution=True,
         min_confidence_threshold=0.6
     )
