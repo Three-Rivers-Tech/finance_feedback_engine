@@ -26,7 +26,7 @@ class TestTimeSeriesDataStore:
     def test_init(self, store, temp_dir):
         """Test store initialization."""
         assert hasattr(store, 'storage_path')
-        assert store.storage_path == temp_dir
+        assert str(store.storage_path) == temp_dir  # Convert Path to string for comparison
         assert os.path.exists(temp_dir)
 
     def test_save_data_basic(self, store):

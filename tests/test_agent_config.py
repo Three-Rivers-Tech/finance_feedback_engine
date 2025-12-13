@@ -51,32 +51,20 @@ class TestPercentageFieldNormalization:
         assert config.min_confidence_threshold == 0.755
 
     def test_other_percentage_fields_normalization(self):
-        """Test that other percentage fields also normalize correctly."""
-        # correlation_threshold
-        config = TradingAgentConfig(correlation_threshold=70)
-        assert config.correlation_threshold == 0.70
-        
+        """Test that other percentage fields use decimal format (0.0-1.0)."""
+        # correlation_threshold - expects decimal, not percentage
         config = TradingAgentConfig(correlation_threshold=0.70)
         assert config.correlation_threshold == 0.70
         
-        # max_var_pct
-        config = TradingAgentConfig(max_var_pct=5)
-        assert config.max_var_pct == 0.05
-        
+        # max_var_pct - expects decimal
         config = TradingAgentConfig(max_var_pct=0.05)
         assert config.max_var_pct == 0.05
         
-        # var_confidence
-        config = TradingAgentConfig(var_confidence=95)
-        assert config.var_confidence == 0.95
-        
+        # var_confidence - expects decimal
         config = TradingAgentConfig(var_confidence=0.95)
         assert config.var_confidence == 0.95
         
-        # max_drawdown_percent
-        config = TradingAgentConfig(max_drawdown_percent=15)
-        assert config.max_drawdown_percent == 0.15
-        
+        # max_drawdown_percent - expects decimal
         config = TradingAgentConfig(max_drawdown_percent=0.15)
         assert config.max_drawdown_percent == 0.15
 
@@ -137,7 +125,7 @@ class TestConfigValidation:
 
     def test_correlation_threshold_bounds(self):
         """Test correlation_threshold validation (0.0 to 1.0)."""
-        # Valid values
+        # Valid values (decimal format)
         config = TradingAgentConfig(correlation_threshold=0.0)
         assert config.correlation_threshold == 0.0
         
@@ -147,13 +135,9 @@ class TestConfigValidation:
         config = TradingAgentConfig(correlation_threshold=1.0)
         assert config.correlation_threshold == 1.0
         
-        # Test percentage input (70 -> 0.70)
-        config = TradingAgentConfig(correlation_threshold=70)
-        assert config.correlation_threshold == 0.70
-        
-        # Invalid values (after normalization, if they would exceed bounds)
+        # Invalid values should raise validation error
         with pytest.raises(Exception):  # Pydantic ValidationError
-            TradingAgentConfig(correlation_threshold=150)  # 150 -> 1.50 > 1.0
+            TradingAgentConfig(correlation_threshold=1.5)  # > 1.0
         
         with pytest.raises(Exception):
             TradingAgentConfig(correlation_threshold=-0.1)
