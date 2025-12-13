@@ -52,6 +52,7 @@ def test_mock_platform_executes(tmp_path):
         'action': 'BUY',
         'confidence': 80,
         'amount': 0.1,
+        'suggested_amount': 0.1,  # Added: required for execution
         'timestamp': '2025-01-01T00:00:00Z'
     }
 
