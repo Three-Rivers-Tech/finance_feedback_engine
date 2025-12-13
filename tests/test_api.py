@@ -30,6 +30,7 @@ def test_engine_initialization(mock_engine):
     assert mock_engine.trading_platform is not None
 
 
+@pytest.mark.asyncio
 async def test_analyze_asset(mock_engine):
     """Test the analyze_asset method (async)."""
     from unittest.mock import AsyncMock
