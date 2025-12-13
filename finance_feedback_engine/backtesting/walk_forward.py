@@ -6,8 +6,7 @@ strategy robustness. Uses portfolio memory snapshotting to prevent lookahead bia
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Tuple, Optional
-import pandas as pd
+from typing import Dict, Any, List, Tuple
 
 logger = logging.getLogger(__name__)
 

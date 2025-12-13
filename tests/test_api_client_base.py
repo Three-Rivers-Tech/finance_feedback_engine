@@ -1,10 +1,9 @@
 """Tests for utils.api_client_base module."""
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 from finance_feedback_engine.utils.api_client_base import APIClientBase
-import asyncio # Import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 
 # Define a concrete mock implementation of APIClientBase for testing

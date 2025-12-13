@@ -1,10 +1,8 @@
 """Tests for utils.config_loader module."""
 
 import pytest
-import tempfile
 import yaml
 import os
-from pathlib import Path
 from finance_feedback_engine.utils.config_loader import load_config
 
 

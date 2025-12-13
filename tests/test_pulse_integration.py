@@ -1,8 +1,7 @@
 """Tests for multi-timeframe pulse integration in DecisionEngine."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import Mock
 import time
 
 from finance_feedback_engine.monitoring.context_provider import MonitoringContextProvider

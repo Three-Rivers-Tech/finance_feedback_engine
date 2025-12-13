@@ -1,6 +1,5 @@
 # tests/test_trading_loop_agent.py
 
-import asyncio
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 

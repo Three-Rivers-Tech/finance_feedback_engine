@@ -1,7 +1,6 @@
 """Tunnel manager for exposing local webhooks (ngrok auto-setup with custom domain support)."""
 
 import logging
-from typing import Optional
 import os
 import threading
 

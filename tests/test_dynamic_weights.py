@@ -1,7 +1,6 @@
 """
 Test script for dynamic weight adjustment when providers fail.
 """
-import asyncio
 import pytest
 from finance_feedback_engine.decision_engine.ensemble_manager import (
     EnsembleDecisionManager

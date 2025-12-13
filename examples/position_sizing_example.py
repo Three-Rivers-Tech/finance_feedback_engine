@@ -85,7 +85,7 @@ def demonstrate_long_position():
     entry_price = 50000.00
     position_size = 0.1  # 0.1 BTC
     
-    print(f"\nAction: BUY (Going Long)")
+    print("\nAction: BUY (Going Long)")
     print(f"Entry Price: ${entry_price:,.2f}")
     print(f"Position Size: {position_size} BTC")
     print(f"Total Investment: ${entry_price * position_size:,.2f}")
@@ -126,7 +126,7 @@ def demonstrate_short_position():
     entry_price = 50000.00
     position_size = 0.1  # 0.1 BTC
     
-    print(f"\nAction: SELL (Going Short)")
+    print("\nAction: SELL (Going Short)")
     print(f"Entry Price: ${entry_price:,.2f}")
     print(f"Position Size: {position_size} BTC")
     print(f"Total Short Value: ${entry_price * position_size:,.2f}")

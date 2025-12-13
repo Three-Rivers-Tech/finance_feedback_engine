@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Union, List, Dict, Any
-import numpy as np
 
 # Define common financial data validation rules and error messages
 VALIDATION_RULES = {

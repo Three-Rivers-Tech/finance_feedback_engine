@@ -67,8 +67,8 @@ def main():
         print("   ✓ Circuit breaker active")
         print(f"     - Name: {stats['name']}")
         print(f"     - State: {stats['state']}")
-        print(f"     - Threshold: 5 failures")
-        print(f"     - Recovery timeout: 60s")
+        print("     - Threshold: 5 failures")
+        print("     - Recovery timeout: 60s")
     except Exception as e:
         print(f"   ✗ Circuit breaker check failed: {e}")
         return

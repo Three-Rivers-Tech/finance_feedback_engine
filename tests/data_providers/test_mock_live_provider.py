@@ -3,7 +3,6 @@
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
 
 from finance_feedback_engine.data_providers.mock_live_provider import MockLiveProvider
 

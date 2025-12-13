@@ -38,7 +38,8 @@ def analyze(ctx, asset_pair: str):
     pass
 
 # Export for main.py
-commands = [analyze, history]
+# Export for main.py
+commands = [analyze]
 ```
 
 **Update main.py:**

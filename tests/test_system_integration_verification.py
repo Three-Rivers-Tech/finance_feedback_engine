@@ -6,7 +6,7 @@ This module verifies that all major system loops are properly closed:
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import patch
 import pandas as pd
 from datetime import datetime, timezone
 
@@ -104,7 +104,6 @@ class TestSystemClosedLoops:
 
     def test_all_critical_todos_resolved(self):
         """Verify all critical TODOs have been implemented."""
-        import os
 
         # Check Telegram bot
         telegram_file = 'finance_feedback_engine/integrations/telegram_bot.py'

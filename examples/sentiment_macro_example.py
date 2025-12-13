@@ -64,10 +64,10 @@ def demonstrate_sentiment_analysis():
         sentiment = provider.get_news_sentiment(asset, limit=10)
         
         if sentiment.get('available'):
-            print(f"✓ Sentiment Data Available")
+            print("✓ Sentiment Data Available")
             print(f"  Overall Sentiment: {sentiment['overall_sentiment'].upper()}")
             print(f"  Sentiment Score: {sentiment['sentiment_score']:.3f}")
-            print(f"    (Range: -1.0 bearish → 0.0 neutral → +1.0 bullish)")
+            print("    (Range: -1.0 bearish → 0.0 neutral → +1.0 bullish)")
             print(f"  News Articles Analyzed: {sentiment['news_count']}")
             
             if sentiment.get('top_topics'):
@@ -155,23 +155,23 @@ def demonstrate_comprehensive_analysis():
     )
     
     # Display summary
-    print(f"\n📊 PRICE DATA:")
+    print("\n📊 PRICE DATA:")
     print(f"   Close: ${data.get('close', 0):,.2f}")
     print(f"   Trend: {data.get('trend', 'N/A').upper()}")
     print(f"   Volatility: {data.get('price_range_pct', 0):.2f}%")
     
     if 'rsi' in data:
-        print(f"\n📈 TECHNICAL:")
+        print("\n📈 TECHNICAL:")
         print(f"   RSI: {data.get('rsi', 0):.2f} ({data.get('rsi_signal', 'neutral')})")
     
     if 'sentiment' in data and data['sentiment'].get('available'):
         sent = data['sentiment']
-        print(f"\n📰 SENTIMENT:")
+        print("\n📰 SENTIMENT:")
         print(f"   {sent['overall_sentiment'].upper()} ({sent['sentiment_score']:+.3f})")
         print(f"   Based on {sent['news_count']} recent articles")
     
     if 'macro' in data and data['macro'].get('available'):
-        print(f"\n🌍 MACRO CONTEXT:")
+        print("\n🌍 MACRO CONTEXT:")
         for indicator, info in data['macro'].get('indicators', {}).items():
             name = indicator.replace('_', ' ').title()
             print(f"   {name}: {info.get('value')}")

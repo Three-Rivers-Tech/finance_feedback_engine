@@ -61,5 +61,5 @@ fixed_lines.extend(lines[end_idx:])
 with open('finance_feedback_engine/decision_engine/ensemble_manager.py', 'w') as f:
     f.writelines(fixed_lines)
 
-print(f"Fixed indentation for aggregate_decisions_two_phase method")
+print("Fixed indentation for aggregate_decisions_two_phase method")
 print(f"Processed {end_idx - start_idx - 1} lines")

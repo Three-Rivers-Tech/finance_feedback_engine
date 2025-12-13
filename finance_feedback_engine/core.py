@@ -53,7 +53,6 @@ class FinanceFeedbackEngine:
             # Continue anyway - system may work with fewer models
 
         # Initialize data provider
-        import os
         api_key = os.environ.get('ALPHA_VANTAGE_API_KEY') \
             or config.get('alpha_vantage_api_key')
         self.data_provider = AlphaVantageProvider(

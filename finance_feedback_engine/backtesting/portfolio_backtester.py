@@ -12,7 +12,7 @@ Preserves backward compatibility - does not modify AdvancedBacktester.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 import pandas as pd
 import numpy as np
@@ -482,7 +482,7 @@ class PortfolioBacktester:
                     "total_pnl": pnl
                 },
                 "holdings": {
-                    asset: "crypto" if not "_" in asset else "forex"
+                    asset: "crypto" if "_" not in asset else "forex"
                     for asset in self.portfolio_state.positions.keys()
                 }
             }

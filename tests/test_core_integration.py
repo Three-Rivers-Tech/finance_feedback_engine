@@ -4,10 +4,7 @@ Comprehensive integration tests for core Finance Feedback Engine workflows.
 Tests the full end-to-end flow from analysis to decision persistence.
 """
 import pytest
-import asyncio
-from pathlib import Path
-import yaml
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 from finance_feedback_engine import FinanceFeedbackEngine
 
 # Mark all tests in this module as needing async refactoring
@@ -202,7 +199,6 @@ class TestDecisionPersistence:
 
     def test_decision_store_save_and_load(self, engine_with_mock_config):
         """Test saving and loading decisions from disk."""
-        from finance_feedback_engine.persistence.decision_store import DecisionStore
         import uuid
         from datetime import datetime
         
@@ -232,7 +228,6 @@ class TestDecisionPersistence:
 
     def test_decision_store_list_recent(self, engine_with_mock_config):
         """Test listing recent decisions."""
-        from finance_feedback_engine.persistence.decision_store import DecisionStore
         import uuid
         from datetime import datetime
         

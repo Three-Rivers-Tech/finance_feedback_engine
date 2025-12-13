@@ -1,8 +1,6 @@
 """Tests for persistence.decision_store module."""
 
-import pytest
 import uuid
-from pathlib import Path
 from finance_feedback_engine.persistence.decision_store import DecisionStore
 
 

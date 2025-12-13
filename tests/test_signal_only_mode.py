@@ -7,7 +7,6 @@ the engine provides trading signals (action/confidence/reasoning)
 without position sizing recommendations.
 """
 import pytest
-import asyncio
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
 # Mark all tests in this module as needing async refactoring

@@ -13,7 +13,7 @@ import sys
 import re
 import argparse
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 
 class CodeQualityChecker:

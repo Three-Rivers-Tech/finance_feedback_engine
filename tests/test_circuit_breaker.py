@@ -2,7 +2,6 @@
 """Tests for utils.circuit_breaker module."""
 import pytest
 import time
-import asyncio
 from finance_feedback_engine.utils.circuit_breaker import (
     CircuitBreaker,
     CircuitState,

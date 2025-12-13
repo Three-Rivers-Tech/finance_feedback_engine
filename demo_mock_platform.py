@@ -41,7 +41,7 @@ def demo_basic_usage():
     )
 
     balance = platform.get_balance()
-    print(f"\nInitial Balance:")
+    print("\nInitial Balance:")
     for asset, amount in balance.items():
         print(f"  {asset}: ${amount:,.2f}")
 
@@ -69,7 +69,7 @@ def demo_trade_execution(platform):
     result = platform.execute_trade(buy_decision)
 
     if result['success']:
-        print(f"\n✅ Trade Successful!")
+        print("\n✅ Trade Successful!")
         print(f"  Order ID: {result['order_id']}")
         print(f"  Execution Price: ${result['execution_price']:,.2f}")
         print(f"  Filled Size: {result['filled_size']:.4f} contracts")
@@ -105,7 +105,7 @@ def demo_portfolio_breakdown(platform):
 
     portfolio = platform.get_portfolio_breakdown()
 
-    print(f"\nPortfolio Summary:")
+    print("\nPortfolio Summary:")
     print(f"  Total Value: ${portfolio['total_value_usd']:,.2f}")
     print(f"  Futures Value: ${portfolio['futures_value_usd']:,.2f}")
     print(f"  Spot Value: ${portfolio['spot_value_usd']:,.2f}")
@@ -120,7 +120,7 @@ def demo_portfolio_breakdown(platform):
         print(f"    Current Price: ${pos['current_price']:,.2f}")
         print(f"    Unrealized P&L: ${pos['unrealized_pnl']:,.2f}")
 
-    print(f"\nFutures Summary:")
+    print("\nFutures Summary:")
     fs = portfolio['futures_summary']
     print(f"  Balance: ${fs['total_balance_usd']:,.2f}")
     print(f"  Unrealized P&L: ${fs['unrealized_pnl']:,.2f}")
@@ -143,7 +143,7 @@ def demo_price_update(platform):
 
     portfolio = platform.get_portfolio_breakdown()
 
-    print(f"\nUpdated Portfolio:")
+    print("\nUpdated Portfolio:")
     print(f"  Total Value: ${portfolio['total_value_usd']:,.2f}")
     print(f"  Unrealized P&L: ${portfolio['unrealized_pnl']:,.2f}")
 
@@ -182,12 +182,12 @@ def demo_trade_history(platform):
         total_fees = sum(t['fee_amount'] for t in history)
         avg_slippage = sum(t['slippage_pct'] for t in history) / len(history)
 
-        print(f"\nSummary:")
+        print("\nSummary:")
         print(f"  Total Fees Paid: ${total_fees:.2f}")
         print(f"  Average Slippage: {avg_slippage:.3f}%")
     else:
-        print(f"\nSummary:")
-        print(f"  No trades executed yet.")
+        print("\nSummary:")
+        print("  No trades executed yet.")
 
 
 def demo_account_info(platform):
@@ -196,7 +196,7 @@ def demo_account_info(platform):
 
     account_info = platform.get_account_info()
 
-    print(f"\nAccount Details:")
+    print("\nAccount Details:")
     print(f"  Platform: {account_info['platform']}")
     print(f"  Account ID: {account_info['account_id']}")
     print(f"  Status: {account_info['status']}")
@@ -204,7 +204,7 @@ def demo_account_info(platform):
     print(f"  Execution Enabled: {account_info['execution_enabled']}")
     print(f"  Max Leverage: {account_info['max_leverage']}x")
 
-    print(f"\nBalances:")
+    print("\nBalances:")
     for asset, amount in account_info['balances'].items():
         print(f"  {asset}: ${amount:,.2f}")
 

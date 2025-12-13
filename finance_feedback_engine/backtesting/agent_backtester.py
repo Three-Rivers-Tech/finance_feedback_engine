@@ -10,11 +10,9 @@ Simulates the TradingAgentOrchestrator's autonomous behavior including:
 This validates that the agent behaves correctly under production conditions.
 """
 
-import time
 import random
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from collections import defaultdict
 
 from finance_feedback_engine.backtesting.backtester import Backtester

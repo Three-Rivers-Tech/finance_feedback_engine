@@ -147,7 +147,7 @@ def test_long_term_performance():
     # Check if long-term performance is included
     long_term = context.get('long_term_performance')
     if long_term and long_term.get('has_data'):
-        print(f"\n✓ Long-term performance included in context:")
+        print("\n✓ Long-term performance included in context:")
         print(f"  Period: {long_term['period_days']} days")
         print(f"  Total P&L: ${long_term['realized_pnl']:.2f}")
         print(f"  Win Rate: {long_term['win_rate']:.1f}%")

@@ -6,7 +6,6 @@ no-op stubs so runtime behavior is unaffected.
 
 from typing import Optional
 
-_PROM_AVAILABLE = False
 _metrics = {}
 
 
@@ -16,12 +15,11 @@ def init_metrics() -> None:
     This function is idempotent. If the `prometheus_client` package is not
     installed, metrics calls become no-ops.
     """
-    global _PROM_AVAILABLE, _metrics
+    global _metrics
     if _metrics:
         return
     try:
         from prometheus_client import Counter, Gauge, Histogram
-        _PROM_AVAILABLE = True
 
         _metrics = {
             # Decision lifecycle
@@ -61,7 +59,6 @@ def init_metrics() -> None:
             ),
         }
     except Exception:
-        _PROM_AVAILABLE = False
         _metrics = {}
 
 

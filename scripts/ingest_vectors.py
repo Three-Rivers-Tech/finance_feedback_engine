@@ -128,7 +128,7 @@ def main():
         logger.error("Failed to save vector index")
     
     # Print summary
-    print(f"\nIngestion complete!")
+    print("\nIngestion complete!")
     print(f"Processed: {processed_count} decisions")
     print(f"Skipped: {skipped_count} decisions")
     print(f"Total vectors in store: {len(vm.vectors)}")

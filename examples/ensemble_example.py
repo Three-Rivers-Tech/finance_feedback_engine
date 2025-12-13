@@ -77,7 +77,7 @@ def demonstrate_ensemble():
         decision = engine.analyze_asset(asset)
         
         # Display main decision
-        console.print(f"\n[bold green]Final Decision:[/bold green]")
+        console.print("\n[bold green]Final Decision:[/bold green]")
         console.print(f"  Action: {decision['action']}")
         console.print(f"  Confidence: {decision['confidence']}%")
         console.print(f"  Amount: {decision.get('amount', 0):.6f}")
@@ -86,7 +86,7 @@ def demonstrate_ensemble():
         if 'ensemble_metadata' in decision:
             meta = decision['ensemble_metadata']
             
-            console.print(f"\n[bold yellow]Ensemble Analysis:[/bold yellow]")
+            console.print("\n[bold yellow]Ensemble Analysis:[/bold yellow]")
             console.print(f"  Providers: {', '.join(meta['providers_used'])}")
             console.print(f"  Strategy: {meta['voting_strategy']}")
             console.print(f"  Agreement: {meta['agreement_score']:.1%}")
@@ -113,7 +113,7 @@ def demonstrate_ensemble():
             
             # Show voting results if available
             if 'action_votes' in decision:
-                console.print(f"\n[bold]Action Votes:[/bold]")
+                console.print("\n[bold]Action Votes:[/bold]")
                 for action, vote_power in decision['action_votes'].items():
                     bar_length = int(vote_power * 30)
                     bar = "█" * bar_length
@@ -158,7 +158,7 @@ def demonstrate_weighted_vs_majority():
     console.print(f"  Confidence: {decision_stacking['confidence']}%")
     
     if 'meta_features' in decision_stacking:
-        console.print(f"\n[bold]Meta-Features:[/bold]")
+        console.print("\n[bold]Meta-Features:[/bold]")
         for feature, value in decision_stacking['meta_features'].items():
             if isinstance(value, float):
                 console.print(f"  {feature}: {value:.3f}")

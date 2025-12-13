@@ -1,8 +1,6 @@
 import pytest
-from datetime import datetime
 from freezegun import freeze_time
 from finance_feedback_engine.core import FinanceFeedbackEngine
-from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory
 
 
 def make_config(storage_path: str = 'data/decisions_test'):

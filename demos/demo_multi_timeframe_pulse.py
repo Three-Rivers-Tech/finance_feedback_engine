@@ -14,13 +14,11 @@ Shows A/B comparison: trading with vs without multi-timeframe analysis.
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Any
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
 from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
 from finance_feedback_engine.data_providers.timeframe_aggregator import TimeframeAggregator
@@ -118,7 +116,7 @@ def demo_live_pulse_workflow():
     formatted_prompt = context_provider.format_for_ai_prompt(monitoring_context)
     print(f"✓ Prompt includes {len(formatted_prompt)} characters of context")
     print(f"  - Multi-timeframe analysis: {len(formatted_pulse)} characters")
-    print(f"  - Cross-timeframe alignment included")
+    print("  - Cross-timeframe alignment included")
 
     print("\n[Summary]")
     print("✅ Pulse computed from 6 timeframes")
@@ -174,7 +172,7 @@ def demo_backtest_pulse_workflow():
             inject_pulse=False  # Disable multi-timeframe
         )
 
-        print(f"  ✓ Baseline Results:")
+        print("  ✓ Baseline Results:")
         print(f"    Final Value: ${result_baseline['metrics']['final_value']:,.2f}")
         print(f"    Total Return: {result_baseline['metrics']['total_return_pct']:.2f}%")
         print(f"    Trades: {result_baseline['metrics']['total_trades']}")
@@ -195,7 +193,7 @@ def demo_backtest_pulse_workflow():
             inject_pulse=True  # Enable multi-timeframe
         )
 
-        print(f"  ✓ Enhanced Results:")
+        print("  ✓ Enhanced Results:")
         print(f"    Final Value: ${result_pulse['metrics']['final_value']:,.2f}")
         print(f"    Total Return: {result_pulse['metrics']['total_return_pct']:.2f}%")
         print(f"    Trades: {result_pulse['metrics']['total_trades']}")
@@ -241,7 +239,7 @@ def demo_backtest_pulse_workflow():
 
     print(f"\n  Target Timestamp: {target_timestamp}")
     print(f"  Available Historical Data: {len(historical_data[:151])} candles")
-    print(f"  (Using data BEFORE timestamp only - no look-ahead bias)")
+    print("  (Using data BEFORE timestamp only - no look-ahead bias)")
 
     # Simulate pulse computation
     try:
@@ -252,7 +250,7 @@ def demo_backtest_pulse_workflow():
         )
 
         if pulse:
-            print(f"\n  ✓ Historical pulse computed successfully")
+            print("\n  ✓ Historical pulse computed successfully")
             print(f"    Timeframes: {len(pulse['timeframes'])}")
             print(f"    Age: {pulse['age_seconds']} seconds")
 

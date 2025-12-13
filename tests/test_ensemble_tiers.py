@@ -8,16 +8,12 @@ Target Coverage: Increase ensemble_manager.py from 7% to >50%
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime
+from unittest.mock import patch
 from pathlib import Path
 import yaml
-import numpy as np
 
 from finance_feedback_engine.decision_engine.ensemble_manager import (
-    EnsembleDecisionManager,
-    InsufficientProvidersError
+    EnsembleDecisionManager
 )
 
 

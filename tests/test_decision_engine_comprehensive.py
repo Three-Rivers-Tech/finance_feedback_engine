@@ -10,9 +10,7 @@ This test suite aims to cover core decision generation logic:
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-import asyncio
-from datetime import datetime
+from unittest.mock import Mock, patch
 
 # Mark all tests in this module as needing async refactoring
 pytestmark = pytest.mark.skip(reason="Tests need async refactoring - DecisionEngine.generate_decision is now async")

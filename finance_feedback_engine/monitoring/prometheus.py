@@ -1,7 +1,6 @@
 """Prometheus metrics for Finance Feedback Engine (Phase 2 stubbed)."""
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
