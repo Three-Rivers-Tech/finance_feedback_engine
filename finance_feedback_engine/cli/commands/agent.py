@@ -344,9 +344,11 @@ def metrics(ctx):
                 return
 
             # Calculate aggregate stats
-            winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
-            losing = [m for m in all_metrics if m.get('realized_pnl', 0) < 0]
-            breakeven = [m for m in all_metrics if m.get('realized_pnl', 0) == 0]
+            console.print(f"Total Trades:     {len(all_metrics)}")
+            console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
+            console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
+            console.print(f"Breakeven Trades: [yellow]{len(breakeven)}[/yellow]")
+            console.print(f"Win Rate:         {win_rate:.1f}%")
 
             total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
             avg_pnl = total_pnl / len(all_metrics)
