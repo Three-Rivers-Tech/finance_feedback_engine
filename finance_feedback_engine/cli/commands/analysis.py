@@ -132,30 +132,14 @@ def analyze(ctx, asset_pair, provider, show_pulse):
                 except Exception:
                     fcntl = None
 
+                # Always use JSONL format (one JSON object per line) for consistency
                 if fcntl:
-                    # Open in a+ mode so file is created if missing and we
-                    # can both read and write. Acquire exclusive lock,
-                    # reload contents, append, truncate and write back.
+                    # Open in append mode with exclusive lock for safe concurrent writes
                     try:
-                        with open(log_path, "a+", encoding="utf-8") as f:
+                        with open(log_path, "a", encoding="utf-8") as f:
                             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                             try:
-                                f.seek(0)
-                                content = f.read()
-                                existing = []
-                                if content and content.strip():
-                                    try:
-                                        existing = json.loads(content) or []
-                                        if not isinstance(existing, list):
-                                            existing = [existing]
-                                    except Exception:
-                                        # Corrupted JSON — start fresh
-                                        existing = []
-
-                                existing.append(payload)
-                                f.seek(0)
-                                f.truncate()
-                                json.dump(existing, f, indent=2)
+                                f.write(json.dumps(payload) + "\n")
                                 f.flush()
                                 try:
                                     os.fsync(f.fileno())
@@ -168,16 +152,14 @@ def analyze(ctx, asset_pair, provider, show_pulse):
                                 except Exception:
                                     pass
                     except Exception as write_err:
-                        console.print(f"[yellow]Warning: Failed to write failure log with lock: {write_err}[/yellow]")
+                        console.print(f"[yellow]Warning: Failed to append JSONL entry with lock: {write_err}[/yellow]")
                 else:
-                    # Fallback: JSON Lines append (atomic append). This avoids
-                    # the read-then-write race but means the file will be
-                    # JSONL instead of a JSON array when fcntl isn't present.
+                    # Fallback: JSONL append without lock (still atomic at OS level for small writes)
                     try:
                         with open(log_path, "a", encoding="utf-8") as f:
                             f.write(json.dumps(payload) + "\n")
                     except Exception as append_err:
-                        console.print(f"[yellow]Warning: Failed to append failure log fallback: {append_err}[/yellow]")
+                        console.print(f"[yellow]Warning: Failed to append JSONL entry: {append_err}[/yellow]")
 
             except Exception as e:
                 console.print(
@@ -425,6 +407,15 @@ def _handle_engine_init_error(ctx, config, e):
     use_mock = console.input("Use mock platform for this session? [y/N]: ")
     if use_mock.strip().lower() == 'y':
         config['trading_platform'] = 'mock'
-        return FinanceFeedbackEngine(config)
+        try:
+            return FinanceFeedbackEngine(config)
+        except Exception as mock_error:
+            console.print(
+                f"[bold red]Error:[/bold red] Failed to initialize mock platform: {mock_error}"
+            )
+            console.print(
+                "[bold red]Unable to proceed. Please check your configuration.[/bold red]"
+            )
+            raise click.Abort()
     else:
         raise e

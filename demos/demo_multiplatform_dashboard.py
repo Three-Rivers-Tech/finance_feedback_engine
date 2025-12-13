@@ -124,10 +124,20 @@ def main():
     print()
     print("=" * 80)
     print("Summary:")
-    print("  Coinbase (Crypto):  $45,000.00 (2 assets)")
-    print("  Oanda (Forex):      $12,500.00 (3 assets)")
+
+    # Display per-platform summaries from aggregated data
+    for platform_info in aggregated_data.get('platforms', []):
+        platform_name = platform_info.get('name', 'Unknown').replace('Simulated', '').strip()
+        breakdown = platform_info.get('breakdown', {})
+        platform_value = breakdown.get('total_value_usd', 0.0)
+        platform_assets = breakdown.get('num_assets', 0)
+        print(f"  {platform_name:<20} ${platform_value:>10,.2f} ({platform_assets} assets)")
+
+    # Display totals from aggregated data
+    total_value = aggregated_data.get('total_value_usd', 0.0)
+    total_assets = aggregated_data.get('num_assets', 0)
     print(f"  {'─' * 76}")
-    print("  Total:              $57,500.00 (5 assets)")
+    print(f"  {'Total':<20} ${total_value:>10,.2f} ({total_assets} assets)")
     print()
     print("The dashboard automatically aggregates portfolio metrics from each")
     print("platform, giving you a complete view of your holdings across")

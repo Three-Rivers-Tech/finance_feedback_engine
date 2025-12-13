@@ -124,7 +124,7 @@ class ChunkedBacktestRunner:
         logger.info("STARTING FULL YEAR 2025 CHUNKED BACKTEST")
         logger.info("=" * 80)
         logger.info(f"Assets: {', '.join(self.assets)}")
-        logger.info("Period: Q1 → Q4 2025 (4 quarterly chunks)")
+        logger.info(f"Period: Q1 → Q4 {self.year} (4 quarterly chunks)")
         logger.info(f"Memory persists across chunks: {self.memory_dir}")
         logger.info("")
 
@@ -374,7 +374,7 @@ class ChunkedBacktestRunner:
 
         # Parse trade history
         metrics["trade_history"] = self._parse_trade_history(output)
-        
+
         # Calculate derived metrics
         metrics["total_pnl"] = metrics["final_value"] - metrics["initial_balance"]
 
