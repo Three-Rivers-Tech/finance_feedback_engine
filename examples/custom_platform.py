@@ -36,7 +36,7 @@ class BinancePlatform(BaseTradingPlatform):
         super().__init__(credentials)
         self.api_key = credentials.get('api_key')
         self.api_secret = credentials.get('api_secret')
-        print(f"✓ Binance platform initialized")
+        print("✓ Binance platform initialized")
 
     def get_balance(self) -> Dict[str, float]:
         """

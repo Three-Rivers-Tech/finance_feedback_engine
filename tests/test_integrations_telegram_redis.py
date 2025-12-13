@@ -1,10 +1,7 @@
 """Tests for Telegram bot and Redis manager integration modules."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock, call
-import json
-import os
-import platform
+from unittest.mock import Mock, patch
 
 
 class TestTelegramApprovalBot:

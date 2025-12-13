@@ -8,14 +8,11 @@ and memory layers with in-memory storage.
 import os
 import tempfile
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import Mock, patch
 
 import pytest
 
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 from finance_feedback_engine.persistence.decision_store import DecisionStore
-from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
 
 
 class TestEndToEndWorkflow:

@@ -1,7 +1,7 @@
 """Test UnifiedTradingPlatform routing logic."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from datetime import datetime, timezone
 
 from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform

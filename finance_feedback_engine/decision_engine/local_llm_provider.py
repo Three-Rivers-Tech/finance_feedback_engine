@@ -8,12 +8,8 @@ trading decisions if not already available.
 from typing import Dict, Any
 import logging
 import subprocess
-import json
 import re
-import sys
-import asyncio
 from .decision_validation import (
-    is_valid_decision,
     try_parse_decision_json,
     build_fallback_decision,
 )

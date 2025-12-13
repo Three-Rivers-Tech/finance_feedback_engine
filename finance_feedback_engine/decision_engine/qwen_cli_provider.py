@@ -10,7 +10,6 @@ import subprocess
 import json
 import re
 from .decision_validation import (
-    is_valid_decision,
     try_parse_decision_json,
     build_fallback_decision,
 )

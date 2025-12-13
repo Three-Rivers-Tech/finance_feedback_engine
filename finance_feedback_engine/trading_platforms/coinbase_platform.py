@@ -594,7 +594,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     'timestamp': decision.get('timestamp')
                 }
 
-        except (RequestException, ConnectionError, TimeoutError) as e:
+        except (RequestException, ConnectionError, TimeoutError):
             raise  # Allow retry decorator to handle retryable exceptions
         except Exception as e:
             latency = time.time() - start_time if 'start_time' in locals() else -1

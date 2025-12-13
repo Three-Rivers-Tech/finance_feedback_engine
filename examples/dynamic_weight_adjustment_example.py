@@ -97,16 +97,16 @@ try:
     # Show ensemble metadata
     if 'ensemble_metadata' in decision:
         meta = decision['ensemble_metadata']
-        print(f"\nEnsemble Metadata:")
+        print("\nEnsemble Metadata:")
         print(f"  Providers used: {meta.get('providers_used', [])}")
         print(f"  Providers failed: {meta.get('providers_failed', [])}")
         
         if meta.get('weight_adjustment_applied'):
-            print(f"\n  ⚠️  Weight adjustment was applied!")
-            print(f"  Original weights:")
+            print("\n  ⚠️  Weight adjustment was applied!")
+            print("  Original weights:")
             for p, w in meta.get('original_weights', {}).items():
                 print(f"    {p}: {w:.3f}")
-            print(f"  Adjusted weights (renormalized):")
+            print("  Adjusted weights (renormalized):")
             for p, w in meta.get('adjusted_weights', {}).items():
                 print(f"    {p}: {w:.3f}")
             
@@ -114,8 +114,8 @@ try:
             total = sum(meta.get('adjusted_weights', {}).values())
             print(f"  Sum of adjusted weights: {total:.6f} (should be 1.0)")
         else:
-            print(f"\n  ✓ All providers responded successfully")
-            print(f"  Weights used:")
+            print("\n  ✓ All providers responded successfully")
+            print("  Weights used:")
             for p, w in meta.get('adjusted_weights', {}).items():
                 print(f"    {p}: {w:.3f}")
         
@@ -123,7 +123,7 @@ try:
         print(f"  Confidence variance: {meta.get('confidence_variance', 0):.2f}")
         
         if meta.get('all_providers_failed'):
-            print(f"\n  ⚠️  ALL PROVIDERS FAILED - Using rule-based fallback")
+            print("\n  ⚠️  ALL PROVIDERS FAILED - Using rule-based fallback")
     
     print("\n" + "=" * 70)
     

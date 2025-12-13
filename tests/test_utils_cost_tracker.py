@@ -1,12 +1,8 @@
 """Tests for utils.cost_tracker module."""
 
-import pytest
-import tempfile
-from pathlib import Path
 from finance_feedback_engine.utils.cost_tracker import (
     CostTracker,
     log_premium_call,
-    check_budget,
     get_cost_tracker
 )
 

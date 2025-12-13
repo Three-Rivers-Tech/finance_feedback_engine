@@ -83,7 +83,7 @@ def test_risk_context_fields():
     if correlation_summary:
         print(f"   ✓ correlation_summary present ({len(correlation_summary)} chars)")
     else:
-        print(f"   ✓ correlation_summary present (empty)")
+        print("   ✓ correlation_summary present (empty)")
     
     # Test 4: Check for multi-timeframe fields
     print("\n6. Validating multi-timeframe fields...")
@@ -98,7 +98,7 @@ def test_risk_context_fields():
     for field in multi_tf_fields:
         assert field in decision, f"Decision missing {field} field"
     
-    print(f"   ✓ All multi-timeframe fields present")
+    print("   ✓ All multi-timeframe fields present")
     if decision.get('multi_timeframe_trend'):
         print(f"     - Trend alignment: {decision['multi_timeframe_trend']}")
     if decision.get('data_source_path'):
@@ -115,7 +115,7 @@ def test_risk_context_fields():
         assert 'correlation_summary' in retrieved, "Persisted decision missing correlation_summary"
         print(f"   ✓ Decision {decision_id[:8]}... persisted with all risk fields")
     else:
-        print(f"   ⚠️  Could not retrieve persisted decision")
+        print("   ⚠️  Could not retrieve persisted decision")
     
     print("\n" + "=" * 70)
     print("✅ ALL TESTS PASSED")

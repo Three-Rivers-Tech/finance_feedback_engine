@@ -1,8 +1,6 @@
 """Test that RiskGatekeeper blocks trades after drawdown is exceeded."""
 import datetime
 
-import pandas as pd
-import pytest
 
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 

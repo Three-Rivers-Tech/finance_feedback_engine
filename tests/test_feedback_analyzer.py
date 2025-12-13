@@ -1,6 +1,5 @@
 """Tests for learning.feedback_analyzer module."""
 
-import pytest
 from datetime import datetime
 from finance_feedback_engine.learning.feedback_analyzer import FeedbackAnalyzer
 

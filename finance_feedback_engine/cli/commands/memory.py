@@ -34,12 +34,15 @@ def learning_report(ctx, asset_pair):
     Example:
         python main.py learning-report --asset-pair BTCUSD
     """
-    console.print(f"\n[bold cyan]📈 Learning Validation Report[/bold cyan]")
+    console.print("\n[bold cyan]📈 Learning Validation Report[/bold cyan]")
     if asset_pair:
         console.print(f"[dim]Filtering by: {asset_pair}[/dim]")
 
     try:
-        config = ctx.obj['config']
+        config = ctx.obj.get('config')
+        if not config:
+            console.print("[bold red]Error: Configuration not found in context[/bold red]")
+            raise click.Abort()
         engine = FinanceFeedbackEngine(config)
 
         # Consistent memory engine usage and initialization check
@@ -56,37 +59,39 @@ def learning_report(ctx, asset_pair):
             return
 
         console.print(f"\n[bold]Total Trades Analyzed: {metrics['total_trades_analyzed']}[/bold]")
-
-        # Sample Efficiency
-        console.print("\n[bold cyan]1. Sample Efficiency (DQN/Rainbow)[/bold cyan]")
         se = metrics['sample_efficiency']
         if se.get('achieved_threshold'):
-            console.print(f"  ✓ Reached 60% win rate after {se['trades_to_60pct_win_rate']} trades")
+            console.print(f"  ✓ Reached 60% win rate after {se.get('trades_to_60pct_win_rate', 'N/A')} trades")
         else:
             console.print(f"  ✗ 60% win rate threshold not yet achieved")
+        console.print(f"  Learning speed: {se.get('learning_speed_per_100_trades', 0):.2%} improvement per 100 trades")
+        else:
+            console.print("  ✗ 60% win rate threshold not yet achieved")
         console.print(f"  Learning speed: {se['learning_speed_per_100_trades']:.2%} improvement per 100 trades")
 
         # Cumulative Regret
         console.print("\n[bold cyan]2. Cumulative Regret (Bandit Theory)[/bold cyan]")
         cr = metrics['cumulative_regret']
-        console.print(f"  Total regret: ${cr['cumulative_regret']:.2f}")
-        console.print(f"  Optimal provider: {cr['optimal_provider']} (avg P&L: ${cr['optimal_avg_pnl']:.2f})")
-        console.print(f"  Avg regret per trade: ${cr['avg_regret_per_trade']:.2f}")
+        console.print(f"  Total regret: ${cr.get('cumulative_regret', 0):.2f}")
+        console.print(f"  Optimal provider: {cr.get('optimal_provider', 'N/A')} (avg P&L: ${cr.get('optimal_avg_pnl', 0):.2f})")
+        console.print(f"  Avg regret per trade: ${cr.get('avg_regret_per_trade', 0):.2f}")
 
         # Concept Drift
         console.print("\n[bold cyan]3. Concept Drift Detection[/bold cyan]")
         cd = metrics['concept_drift']
         drift_colors = {'LOW': 'green', 'MEDIUM': 'yellow', 'HIGH': 'red'}
-        drift_color = drift_colors.get(cd['drift_severity'], 'white')
-        console.print(f"  Drift severity: [{drift_color}]{cd['drift_severity']}[/{drift_color}]")
-        console.print(f"  Drift score: {cd['drift_score']:.3f}")
-        console.print(f"  Window win rates: {[f'{wr:.1%}' for wr in cd['window_win_rates']]}")
+        drift_severity = cd.get('drift_severity', 'UNKNOWN')
+        drift_color = drift_colors.get(drift_severity, 'white')
+        console.print(f"  Drift severity: [{drift_color}]{drift_severity}[/{drift_color}]")
+        console.print(f"  Drift score: {cd.get('drift_score', 0):.3f}")
+        window_rates = cd.get('window_win_rates', [])
+        console.print(f"  Window win rates: {[f'{wr:.1%}' for wr in window_rates]}")
 
-        # Thompson Sampling
-        console.print("\n[bold cyan]4. Thompson Sampling Diagnostics[/bold cyan]")
         ts = metrics['thompson_sampling']
-        console.print(f"  Exploration rate: {ts['exploration_rate']:.1%}")
-        console.print(f"  Exploitation convergence: {ts['exploitation_convergence']:.1%}")
+        console.print(f"  Exploration rate: {ts.get('exploration_rate', 0):.1%}")
+        console.print(f"  Exploitation convergence: {ts.get('exploitation_convergence', 0):.1%}")
+        console.print(f"  Dominant provider: {ts.get('dominant_provider', 'N/A')}")
+        console.print(f"  Provider distribution: {ts.get('provider_distribution', {})}")
         console.print(f"  Dominant provider: {ts['dominant_provider']}")
         console.print(f"  Provider distribution: {ts['provider_distribution']}")
 
@@ -94,16 +99,16 @@ def learning_report(ctx, asset_pair):
         console.print("\n[bold cyan]5. Learning Curve Analysis[/bold cyan]")
         lc = metrics['learning_curve']
 
-        table = Table()
-        table.add_column("Period", style="cyan")
-        table.add_column("Win Rate", justify="right", style="green")
-        table.add_column("Avg P&L", justify="right", style="yellow")
+        first = lc.get('first_100_trades', {})
+        last = lc.get('last_100_trades', {})
 
-        first = lc['first_100_trades']
-        last = lc['last_100_trades']
+        table.add_row("First 100 trades", f"{first.get('win_rate', 0):.1%}", f"${first.get('avg_pnl', 0):.2f}")
+        table.add_row("Last 100 trades", f"{last.get('win_rate', 0):.1%}", f"${last.get('avg_pnl', 0):.2f}")
 
-        table.add_row("First 100 trades", f"{first['win_rate']:.1%}", f"${first['avg_pnl']:.2f}")
-        table.add_row("Last 100 trades", f"{last['win_rate']:.1%}", f"${last['avg_pnl']:.2f}")
+        console.print(table)
+
+        console.print(f"\n  Win rate improvement: {lc.get('win_rate_improvement_pct', 0):.1f}%")
+        console.print(f"  P&L improvement: {lc.get('pnl_improvement_pct', 0):.1f}%")
 
         console.print(table)
 
@@ -114,9 +119,9 @@ def learning_report(ctx, asset_pair):
             console.print("\n[bold green]✓ Learning detected: Strategy is improving over time[/bold green]")
         else:
             console.print("\n[bold yellow]⚠ No significant learning detected[/bold yellow]")
-
-        # Research attribution
         console.print("\n[dim]Research Methods:[/dim]")
+        for metric, paper in metrics.get('research_methods', {}).items():
+            console.print(f"  [dim]- {metric}: {paper}[/dim]")
         for metric, paper in metrics['research_methods'].items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
 
@@ -141,10 +146,13 @@ def prune_memory(ctx, keep_recent, confirm):
     Example:
         python main.py prune-memory --keep-recent 500
     """
-    console.print(f"\n[bold cyan]🗑️  Portfolio Memory Pruning[/bold cyan]")
+    console.print("\n[bold cyan]🗑️  Portfolio Memory Pruning[/bold cyan]")
 
     try:
-        config = ctx.obj['config']
+        config = ctx.obj.get('config')
+        if not config:
+            console.print("[bold red]Error: Configuration not found in context[/bold red]")
+            raise click.Abort()
         engine = FinanceFeedbackEngine(config)
 
         # Use the standard memory_engine attribute for portfolio memory operations

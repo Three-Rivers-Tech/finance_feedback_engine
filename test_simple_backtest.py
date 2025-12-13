@@ -31,9 +31,9 @@ results = backtester.run_backtest(
     decision_engine=decision_engine
 )
 
-print(f"\n=== BACKTEST RESULTS ===")
+print("\n=== BACKTEST RESULTS ===")
 print(f"Initial Balance: ${results['metrics']['initial_balance']:.2f}")
 print(f"Final Value: ${results['metrics']['final_value']:.2f}")
 print(f"Total Return: {results['metrics']['total_return_pct']:.2f}%")
 print(f"Total Trades: {results['metrics']['total_trades']}")
-print(f"✅ Backtest completed successfully!")
+print("✅ Backtest completed successfully!")

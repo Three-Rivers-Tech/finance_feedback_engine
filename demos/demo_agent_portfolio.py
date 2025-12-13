@@ -85,7 +85,7 @@ def example_2_check_concentration():
                 )
             console.print(f"\n[yellow]Consider rebalancing - positions exceed {THRESHOLD}% threshold[/yellow]")
         else:
-            console.print(f"✓ [green]Portfolio is well-diversified[/green]")
+            console.print("✓ [green]Portfolio is well-diversified[/green]")
             console.print(f"  All positions under {THRESHOLD}% allocation")
     except Exception as e:
         console.print(f"[yellow]{e}[/yellow]")

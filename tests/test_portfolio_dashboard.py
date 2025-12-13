@@ -1,6 +1,5 @@
 """Tests for dashboard.portfolio_dashboard module."""
 
-import pytest
 from unittest.mock import Mock, patch
 from finance_feedback_engine.dashboard.portfolio_dashboard import (
     PortfolioDashboardAggregator,

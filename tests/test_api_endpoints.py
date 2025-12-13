@@ -1,7 +1,7 @@
 """Tests for FastAPI endpoints (health, metrics, telegram, decisions, status)."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 from finance_feedback_engine.api.app import app, app_state
 

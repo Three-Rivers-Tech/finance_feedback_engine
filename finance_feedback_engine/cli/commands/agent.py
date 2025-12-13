@@ -345,7 +345,8 @@ def metrics(ctx):
 
             # Calculate aggregate stats
             winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
-            losing = [m for m in all_metrics if m.get('realized_pnl', 0) <= 0]
+            losing = [m for m in all_metrics if m.get('realized_pnl', 0) < 0]
+            breakeven = [m for m in all_metrics if m.get('realized_pnl', 0) == 0]
 
             total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
             avg_pnl = total_pnl / len(all_metrics)

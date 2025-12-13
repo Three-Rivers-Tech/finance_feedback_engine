@@ -3,8 +3,7 @@ Comprehensive tests for TradeMonitor functionality.
 Covers lifecycle management, P&L tracking, and monitoring context.
 """
 import pytest
-from unittest.mock import MagicMock, patch
-import threading
+from unittest.mock import MagicMock
 import time
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 

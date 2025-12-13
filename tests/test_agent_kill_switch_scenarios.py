@@ -4,7 +4,7 @@ Test autonomous agent kill-switch and risk management scenarios.
 Tests portfolio-level stop-loss, take-profit, max drawdown, and safety limits.
 """
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 from finance_feedback_engine.agent.config import TradingAgentConfig
 

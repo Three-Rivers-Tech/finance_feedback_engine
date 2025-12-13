@@ -1,6 +1,6 @@
 """Multi-timeframe data aggregator with trend alignment and confluence detection."""
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import logging
 from statistics import mean
 import pandas as pd

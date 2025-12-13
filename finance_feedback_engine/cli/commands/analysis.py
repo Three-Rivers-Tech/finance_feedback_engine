@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
+import os
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.utils.validation import standardize_asset_pair
@@ -60,7 +61,7 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         try:
             engine = FinanceFeedbackEngine(config)
         except ValueError as e:
-            # Provide a clear, actionable message when Alpha Vantage API key is missing
+            # Preserve the special Alpha Vantage API key message
             msg = str(e)
             if 'Alpha Vantage API key' in msg or 'api key is required' in msg.lower() or 'alpha_vantage' in msg.lower():
                 console.print(
@@ -71,33 +72,11 @@ def analyze(ctx, asset_pair, provider, show_pulse):
                 console.print("  - Export the environment variable `ALPHA_VANTAGE_API_KEY` before running the CLI")
                 console.print("  - Add `alpha_vantage_api_key: YOUR_KEY` to `config/config.local.yaml`")
                 return
-            # Fall back to existing platform-init interactive prompt for other ValueErrors
-            if ctx.obj.get('interactive'):
-                console.print(
-                    f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
-                )
-                use_mock = console.input("Use mock platform for this session? [y/N]: ")
-                if use_mock.strip().lower() == 'y':
-                    config['trading_platform'] = 'mock'
-                    engine = FinanceFeedbackEngine(config)
-                else:
-                    raise
-            else:
-                raise
+            # Delegate interactive fallback to helper
+            engine = _handle_engine_init_error(ctx, config, e)
         except Exception as e:
-            # Preserve existing behavior for non-ValueError exceptions
-            if ctx.obj.get('interactive'):
-                console.print(
-                    f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
-                )
-                use_mock = console.input("Use mock platform for this session? [y/N]: ")
-                if use_mock.strip().lower() == 'y':
-                    config['trading_platform'] = 'mock'
-                    engine = FinanceFeedbackEngine(config)
-                else:
-                    raise
-            else:
-                raise
+            # Delegate interactive fallback to helper for non-ValueError exceptions
+            engine = _handle_engine_init_error(ctx, config, e)
 
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
 
@@ -143,20 +122,62 @@ def analyze(ctx, asset_pair, provider, show_pulse):
 
                 # Append entry to the day's JSON file; create if it doesn't exist
                 log_path = Path(failure_log)
-                existing = []
-                if log_path.exists():
-                    try:
-                        with open(log_path, "r", encoding="utf-8") as rf:
-                            existing = json.load(rf) or []
-                            if not isinstance(existing, list):
-                                existing = [existing]
-                    except Exception:
-                        # If file is corrupted, start a new list and keep going
-                        existing = []
 
-                existing.append(payload)
-                with open(log_path, "w", encoding="utf-8") as wf:
-                    json.dump(existing, wf, indent=2)
+                # Use fcntl-based exclusive locking to avoid race conditions
+                # on Unix-like systems. If fcntl is not available (e.g., on
+                # some Windows setups), fall back to an append-only JSONL
+                # write which is atomic at the OS level for append operations.
+                try:
+                    import fcntl  # type: ignore
+                except Exception:
+                    fcntl = None
+
+                if fcntl:
+                    # Open in a+ mode so file is created if missing and we
+                    # can both read and write. Acquire exclusive lock,
+                    # reload contents, append, truncate and write back.
+                    try:
+                        with open(log_path, "a+", encoding="utf-8") as f:
+                            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                            try:
+                                f.seek(0)
+                                content = f.read()
+                                existing = []
+                                if content and content.strip():
+                                    try:
+                                        existing = json.loads(content) or []
+                                        if not isinstance(existing, list):
+                                            existing = [existing]
+                                    except Exception:
+                                        # Corrupted JSON — start fresh
+                                        existing = []
+
+                                existing.append(payload)
+                                f.seek(0)
+                                f.truncate()
+                                json.dump(existing, f, indent=2)
+                                f.flush()
+                                try:
+                                    os.fsync(f.fileno())
+                                except Exception:
+                                    # Best-effort fsync; continue even if it fails
+                                    pass
+                            finally:
+                                try:
+                                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+                                except Exception:
+                                    pass
+                    except Exception as write_err:
+                        console.print(f"[yellow]Warning: Failed to write failure log with lock: {write_err}[/yellow]")
+                else:
+                    # Fallback: JSON Lines append (atomic append). This avoids
+                    # the read-then-write race but means the file will be
+                    # JSONL instead of a JSON array when fcntl isn't present.
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(payload) + "\n")
+                    except Exception as append_err:
+                        console.print(f"[yellow]Warning: Failed to append failure log fallback: {append_err}[/yellow]")
 
             except Exception as e:
                 console.print(
@@ -384,3 +405,26 @@ def history(ctx, asset, limit):
 
 # Export commands for registration in main.py
 commands = [analyze, history]
+
+
+def _handle_engine_init_error(ctx, config, e):
+    """Handle engine initialization errors with interactive fallback to mock platform.
+
+    If `ctx.obj.get('interactive')` is truthy, prints failure message and prompts the user
+    to switch to the `mock` platform. If the user accepts, sets
+    `config['trading_platform'] = 'mock'` and returns a new FinanceFeedbackEngine(config).
+    Otherwise re-raises the original exception.
+    """
+    # If not interactive, re-raise original exception
+    if not ctx.obj.get('interactive'):
+        raise e
+
+    console.print(
+        f"[yellow]Platform init failed: {e}. You can retry using the 'mock' platform.[/yellow]"
+    )
+    use_mock = console.input("Use mock platform for this session? [y/N]: ")
+    if use_mock.strip().lower() == 'y':
+        config['trading_platform'] = 'mock'
+        return FinanceFeedbackEngine(config)
+    else:
+        raise e

@@ -1,8 +1,6 @@
 """Telegram bot for trading decision approvals."""
 
 import logging
-import asyncio
-import json
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -109,7 +107,6 @@ class TelegramApprovalBot:
             approval_data: Data to write
             status: 'approved' or 'rejected'
         """
-        from pathlib import Path
         import aiofiles
 
         safe_id = self._sanitize_decision_id(decision_id)

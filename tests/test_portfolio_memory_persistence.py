@@ -2,9 +2,7 @@
 
 import pytest
 import json
-import os
-from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from finance_feedback_engine.memory.portfolio_memory import (
     PortfolioMemoryEngine,
     TradeOutcome

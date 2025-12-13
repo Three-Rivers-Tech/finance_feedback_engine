@@ -3,12 +3,10 @@ Clean, professional formatting for backtest results.
 Provides Rich table output with proper styling and organization.
 """
 
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+from typing import Dict, Any, List
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
 from rich import box
 
 console = Console()
@@ -245,8 +243,8 @@ def format_completion_message(results: Dict[str, Any]) -> None:
 
     # Build summary text
     lines = [
-        f"✓ Backtest Complete",
-        f"",
+        "✓ Backtest Complete",
+        "",
         f"Final Balance: [bold cyan]${final_value:,.2f}[/bold cyan]",
         f"Net P&L: [bold {pnl_color}]${pnl:+,.2f}[/bold {pnl_color}]",
         f"Return: [bold {pnl_color}]{return_pct:+.2f}%[/bold {pnl_color}]",

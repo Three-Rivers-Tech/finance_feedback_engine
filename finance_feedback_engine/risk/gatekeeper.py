@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple
 import logging
 
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
@@ -187,7 +187,7 @@ class RiskGatekeeper:
             # Update the original decision dict in-place with the modified values
             decision.update(modified_decision)
             logger.info(
-                f"[GATEKEEPER] Decision was overridden to HOLD due to temporal constraints"
+                "[GATEKEEPER] Decision was overridden to HOLD due to temporal constraints"
             )
             # After override to HOLD, the trade is technically "allowed" but neutralized
             # Return True since we've handled it, but log the override
