@@ -67,7 +67,6 @@ class TestPercentageFieldNormalization:
         # max_drawdown_percent - expects decimal
         config = TradingAgentConfig(max_drawdown_percent=0.15)
         assert config.max_drawdown_percent == 0.15
-        assert config.max_drawdown_percent == 0.15
 
     def test_edge_case_exactly_one(self):
         """Test edge case where value is exactly 1.0."""
