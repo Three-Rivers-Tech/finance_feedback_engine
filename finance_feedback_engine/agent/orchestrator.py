@@ -1,12 +1,24 @@
 import time
 import threading
 import click
+import warnings
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 # Additional imports will be needed for data providers, persistence, etc.
+
+
+# DEPRECATION WARNING
+warnings.warn(
+    "TradingAgentOrchestrator is DEPRECATED and will be removed in v3.0. "
+    "Use TradingLoopAgent from finance_feedback_engine.agent.trading_loop_agent instead. "
+    "See docs/MIGRATION_ORCHESTRATOR.md for migration guide.",
+    DeprecationWarning,
+    stacklevel=2
+)
+
 
 class TradingAgentOrchestrator:
     """
