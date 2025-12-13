@@ -65,10 +65,6 @@ def learning_report(ctx, asset_pair):
         else:
             console.print(f"  ✗ 60% win rate threshold not yet achieved")
         console.print(f"  Learning speed: {se.get('learning_speed_per_100_trades', 0):.2%} improvement per 100 trades")
-        else:
-            console.print("  ✗ 60% win rate threshold not yet achieved")
-        console.print(f"  Learning speed: {se['learning_speed_per_100_trades']:.2%} improvement per 100 trades")
-
         # Cumulative Regret
         console.print("\n[bold cyan]2. Cumulative Regret (Bandit Theory)[/bold cyan]")
         cr = metrics['cumulative_regret']
@@ -123,11 +119,9 @@ def learning_report(ctx, asset_pair):
         for metric, paper in metrics.get('research_methods', {}).items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
         for metric, paper in metrics['research_methods'].items():
+        console.print("\n[dim]Research Methods:[/dim]")
+        for metric, paper in metrics.get('research_methods', {}).items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
-
-    except Exception as e:
-        console.print(f"[bold red]Error generating learning report:[/bold red] {str(e)}")
-        if ctx.obj.get('verbose'):
             import traceback
             console.print(traceback.format_exc())
         raise click.Abort()
