@@ -30,9 +30,9 @@ def test_engine_initialization(mock_engine):
     assert mock_engine.trading_platform is not None
 
 
-def test_analyze_asset(mock_engine):
-    """Test the analyze_asset method (synchronous)."""
-    import asyncio
+async def test_analyze_asset(mock_engine):
+    """Test the analyze_asset method (async)."""
+    from unittest.mock import AsyncMock
     
     # Mock the underlying async data provider call
     async def mock_market_data(*args, **kwargs):
@@ -44,10 +44,12 @@ def test_analyze_asset(mock_engine):
             'volume': 1000000
         }
     
-    # Mock the decision generation to avoid AI/network calls
+    # Mock the decision generation to avoid AI/network calls (must be AsyncMock)
+    mock_gen = AsyncMock(return_value={'action': 'HOLD', 'confidence': 50})
+    
     with patch.object(mock_engine.data_provider, 'get_comprehensive_market_data', side_effect=mock_market_data), \
-         patch.object(mock_engine.decision_engine, 'generate_decision', return_value={'action': 'HOLD', 'confidence': 50}) as mock_gen:
-        decision = mock_engine.analyze_asset('BTCUSD')
+         patch.object(mock_engine.decision_engine, 'generate_decision', mock_gen):
+        decision = await mock_engine.analyze_asset('BTCUSD')
         assert decision is not None
         assert 'action' in decision
         mock_gen.assert_called_once()
