@@ -10,14 +10,10 @@ import re
 import os
 import copy
 import asyncio
-import glob
-import shutil
 from pathlib import Path
 from datetime import datetime
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
-from rich.prompt import Prompt, FloatPrompt
 from packaging.requirements import Requirement
 # from rich import print as rprint  # unused
 
@@ -27,15 +23,8 @@ from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
     display_portfolio_dashboard
 )
-from finance_feedback_engine.backtesting.backtester import Backtester
-from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer as WalkForwardOptimizer
-from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.monitoring.metrics import init_metrics, inc
-from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
-from finance_feedback_engine.persistence.decision_store import DecisionStore
-from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator
-from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
 from finance_feedback_engine.cli.commands.analysis import (
     analyze as analyze_command,
     history as history_command
@@ -1741,7 +1730,7 @@ def retrain_meta_learner(ctx, force):
         elif win_rate >= win_rate_threshold:
             console.print(f"Skipping retraining: Win rate is acceptable ({win_rate:.2f}% >= {win_rate_threshold:.2f}%).")
         else:
-            console.print(f"[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]")
+            console.print("[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]")
             should_retrain = True
 
         if should_retrain:
@@ -1774,7 +1763,6 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
     """
     from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
     from finance_feedback_engine.agent.config import TradingAgentConfig
-    from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 
     agent_config_data = config.get('agent', {})
 
@@ -1860,7 +1848,6 @@ async def _run_live_market_view(engine, agent):
     from rich.live import Live
     from rich.table import Table
     import time
-    import asyncio
 
     tm = getattr(engine, 'trade_monitor', None)
     udp = getattr(tm, 'unified_data_provider', None) if tm else None
@@ -1952,7 +1939,6 @@ async def _run_live_market_view(engine, agent):
 @click.pass_context
 def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs):
     """Starts the autonomous trading agent."""
-    import asyncio
 
     if 1 <= take_profit <= 100:
         console.print(f"[yellow]Warning: Detected legacy take-profit percentage {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]")

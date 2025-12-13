@@ -4,10 +4,8 @@ Test ensemble error handling and fallback scenarios.
 Tests the 4-tier fallback system, provider failures, and quorum requirements.
 """
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from finance_feedback_engine.decision_engine.ensemble_manager import (
-    EnsembleDecisionManager,
-    InsufficientProvidersError
+    EnsembleDecisionManager
 )
 
 # Mark all tests in this module as needing async refactoring

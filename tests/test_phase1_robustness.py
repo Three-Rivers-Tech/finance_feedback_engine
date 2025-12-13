@@ -83,7 +83,7 @@ def test_circuit_breaker():
     
     # Show stats
     stats = breaker.get_stats()
-    print(f"\n  Circuit Breaker Stats:")
+    print("\n  Circuit Breaker Stats:")
     print(f"    State: {stats['state']}")
     print(f"    Failures: {stats['failure_count']}/{breaker.failure_threshold}")
     print(f"    Total calls: {stats['total_calls']}")
@@ -131,7 +131,7 @@ def test_circuit_breaker_decorator():
     
     # Access breaker stats through decorator
     breaker_stats = api_call.circuit_breaker.get_stats()
-    print(f"\n  Decorator Stats:")
+    print("\n  Decorator Stats:")
     print(f"    State: {breaker_stats['state']}")
     print(f"    Total failures: {breaker_stats['total_failures']}")
 
@@ -238,14 +238,14 @@ def test_timeout_configuration():
             api_key="demo",
             config=config
         )
-        print(f"  ✓ Provider initialized with custom timeouts")
+        print("  ✓ Provider initialized with custom timeouts")
         print(f"    Market data timeout: {provider.timeout_market_data}s")
         print(f"    Sentiment timeout: {provider.timeout_sentiment}s")
         print(f"    Macro timeout: {provider.timeout_macro}s")
         
         # Check circuit breaker
         stats = provider.get_circuit_breaker_stats()
-        print(f"\n  Circuit breaker initialized:")
+        print("\n  Circuit breaker initialized:")
         print(f"    Name: {stats['name']}")
         print(f"    State: {stats['state']}")
         

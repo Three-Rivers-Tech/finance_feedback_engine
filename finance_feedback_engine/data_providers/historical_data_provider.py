@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
 from datetime import timezone
-from typing import Dict, Any, Optional, Union
+from typing import Optional, Union
 import logging
 import numpy as np
 from pathlib import Path
@@ -269,7 +269,7 @@ if __name__ == "__main__":
         if not df.empty:
             print(f"Data for {asset} (first 5 rows):\n{df.head()}")
             print(f"\nData for {asset} (last 5 rows):\n{df.tail()}")
-            print(f"\nDataFrame Info:\n")
+            print("\nDataFrame Info:\n")
             df.info()
         else:
             print("No data received.")

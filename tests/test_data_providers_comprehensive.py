@@ -2,9 +2,7 @@
 
 import pytest
 import asyncio
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-import json
-from datetime import datetime
+from unittest.mock import Mock, patch, AsyncMock
 
 
 class TestAlphaVantageProvider:

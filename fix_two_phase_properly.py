@@ -2,7 +2,6 @@
 """
 Properly extract aggregate_decisions_two_phase from nested scope and make it a class method.
 """
-import re
 
 filepath = 'finance_feedback_engine/decision_engine/ensemble_manager.py'
 
@@ -83,5 +82,5 @@ new_content += '\n'.join(remaining_lines)
 with open(filepath, 'w') as f:
     f.write(new_content)
 
-print(f"Successfully extracted and dedented aggregate_decisions_two_phase")
+print("Successfully extracted and dedented aggregate_decisions_two_phase")
 print(f"Processed {len(fixed_lines)} lines in method body")

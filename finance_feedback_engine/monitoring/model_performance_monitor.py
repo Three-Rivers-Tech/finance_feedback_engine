@@ -1,9 +1,7 @@
 import pandas as pd
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Optional
 import logging
-import json
-import os
 import copy
 
 # TODO: Import a persistence layer for storing monitoring data

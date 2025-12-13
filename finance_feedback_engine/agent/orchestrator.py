@@ -14,7 +14,7 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 warnings.warn(
     "TradingAgentOrchestrator is DEPRECATED and will be removed in v3.0. "
     "Use TradingLoopAgent from finance_feedback_engine.agent.trading_loop_agent instead. "
-    "See docs/MIGRATION_ORCHESTRATOR.md for migration guide.",
+    "See docs/migration/ORCHESTRATOR_MIGRATION.md for migration guide.",
     DeprecationWarning,
     stacklevel=2
 )
@@ -214,7 +214,7 @@ class TradingAgentOrchestrator:
                     decision = self.engine.generate_decision(asset_pair_std)
 
                     if not decision or decision.decision == "HOLD":
-                        print(f"Decision: HOLD. No action taken.")
+                        print("Decision: HOLD. No action taken.")
                         continue
 
                     print(f"Decision: {decision.decision} {asset_pair_std} with {decision.confidence*100:.2f}% confidence.")
@@ -250,7 +250,7 @@ class TradingAgentOrchestrator:
             return 'forex'
         return 'stocks'
 
-    
+
     def _should_execute(self, decision) -> bool:
         """Determines if a trade should be executed based on the approval policy and daily limits."""
         if self.trades_today >= self.config.max_daily_trades:

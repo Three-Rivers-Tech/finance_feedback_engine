@@ -11,7 +11,6 @@ After the fix, it should pass all tests.
 import pytest
 from click.testing import CliRunner
 from finance_feedback_engine.cli.main import cli
-import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
 
@@ -227,7 +226,6 @@ class TestBacktestStaleDataHandling:
         from a live trading perspective. The gatekeeper must skip freshness checks.
         """
         from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-        from datetime import datetime, timedelta
 
         # Create gatekeeper in backtest mode
         gatekeeper = RiskGatekeeper(is_backtest=True)
@@ -266,7 +264,6 @@ class TestBacktestStaleDataHandling:
         This ensures we didn't break the safety feature for live trading.
         """
         from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-        from datetime import datetime, timedelta
 
         # Create gatekeeper in LIVE mode
         gatekeeper = RiskGatekeeper(is_backtest=False)

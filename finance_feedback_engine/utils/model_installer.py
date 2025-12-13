@@ -427,7 +427,7 @@ class ModelInstaller:
         # Show installation summary
         print(f"\n📦 Installing {len(models_to_install)} Ollama models...")
         print(f"Total download size: ~{sum(MODEL_DOWNLOAD_SIZES.get(m, 0) for m in models_to_install):.1f}GB")
-        print(f"Parallel downloads: 2 workers\n")
+        print("Parallel downloads: 2 workers\n")
         
         # Download models in parallel, with a simple retry on verification failure
         results = self._download_models_parallel(models_to_install, max_workers=2)
@@ -454,7 +454,7 @@ class ModelInstaller:
         all_success = all(results.values())
         
         if all_success:
-            print(f"\n✅ All models successfully installed!\n")
+            print("\n✅ All models successfully installed!\n")
             logger.info("Model installation complete")
         else:
             failed = [m for m, s in results.items() if not s]

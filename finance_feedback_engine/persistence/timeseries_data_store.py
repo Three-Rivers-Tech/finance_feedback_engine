@@ -1,7 +1,7 @@
 import json
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 import pandas as pd
 import logging

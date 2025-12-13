@@ -3,7 +3,6 @@ CLI command tests kept lightweight to avoid external API calls while
 still validating key behaviors.
 """
 
-import pytest
 from click.testing import CliRunner
 from finance_feedback_engine.cli import main as cli_main
 from finance_feedback_engine.cli.main import cli

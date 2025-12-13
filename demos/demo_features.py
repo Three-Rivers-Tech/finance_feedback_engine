@@ -11,12 +11,10 @@ This script demonstrates:
 
 import sys
 from pathlib import Path
-import time
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
 import yaml
 
@@ -65,7 +63,7 @@ def demo_sentiment_analysis():
     
     try:
         provider = AlphaVantageProvider(api_key)
-        print(f"📰 Fetching sentiment for BTCUSD...\n")
+        print("📰 Fetching sentiment for BTCUSD...\n")
         
         sentiment = provider.get_news_sentiment('BTCUSD', limit=5)
         
@@ -101,7 +99,7 @@ def demo_macro_indicators():
     
     try:
         provider = AlphaVantageProvider(api_key)
-        print(f"📊 Fetching macroeconomic indicators...\n")
+        print("📊 Fetching macroeconomic indicators...\n")
         
         macro = provider.get_macro_indicators()
         

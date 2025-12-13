@@ -1,9 +1,8 @@
 """Value at Risk (VaR) calculator with dual-portfolio support for isolated platforms."""
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 import logging
-from statistics import mean, stdev
-from datetime import datetime, timedelta
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

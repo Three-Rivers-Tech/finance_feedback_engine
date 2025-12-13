@@ -3,7 +3,7 @@
 from typing import Dict, Any, List, Optional
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from ..utils.rate_limiter import RateLimiter
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
@@ -180,7 +180,7 @@ class OandaDataProvider:
             return candles
             
         except CircuitBreakerOpenError:
-            logger.error(f"Circuit breaker open for Oanda data provider")
+            logger.error("Circuit breaker open for Oanda data provider")
             raise
         except Exception as e:
             logger.error(f"Failed to fetch Oanda candles: {e}")

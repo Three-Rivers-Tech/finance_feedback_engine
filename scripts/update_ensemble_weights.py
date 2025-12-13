@@ -9,7 +9,6 @@ import yaml
 import logging
 from pathlib import Path
 import tempfile
-import shutil
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))

@@ -8,9 +8,8 @@ Target Coverage: Increase engine.py from 6% to >50%
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timedelta
+from unittest.mock import Mock, AsyncMock, patch
+from datetime import datetime
 from pathlib import Path
 import yaml
 
@@ -570,7 +569,6 @@ class TestBacktestMode:
             }
 
             # Capture logging output
-            import logging
             with patch('finance_feedback_engine.decision_engine.engine.logger') as mock_logger:
                 decision = await engine.generate_decision(
                     asset_pair='BTCUSD',

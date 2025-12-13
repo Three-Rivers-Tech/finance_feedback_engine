@@ -5,8 +5,8 @@ Verifies the fix for the 'unknown' asset_type errors during premium escalation.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager, InsufficientProvidersError
+from unittest.mock import patch
+from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
 
 
 @pytest.fixture

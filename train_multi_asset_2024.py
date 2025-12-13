@@ -24,7 +24,6 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Any
 
 # Setup logging
 LOG_DIR = Path("data") / "training_logs"
@@ -66,10 +65,10 @@ def run_training() -> bool:
 
     logger.info("Configuration:")
     logger.info(f"  Assets: {', '.join(assets)}")
-    logger.info(f"  Period: 2024-01-01 → 2024-12-31")
+    logger.info("  Period: 2024-01-01 → 2024-12-31")
     logger.info(f"  Initial Balance: ${initial_balance:,.2f}")
-    logger.info(f"  Chunking: Quarterly (Q1, Q2, Q3, Q4)")
-    logger.info(f"  Learning: Cross-quarter persistent memory")
+    logger.info("  Chunking: Quarterly (Q1, Q2, Q3, Q4)")
+    logger.info("  Learning: Cross-quarter persistent memory")
     logger.info("")
 
     # Create memory directory if it doesn't exist
@@ -108,7 +107,7 @@ def run_training() -> bool:
             logger.info(f"Total Trades: {full_year_results['total_trades']}")
             logger.info(f"Win Rate: {full_year_results['overall_win_rate']:.1f}%")
             logger.info("")
-            logger.info(f"Memory Accumulated:")
+            logger.info("Memory Accumulated:")
             logger.info(f"  Outcomes: {full_year_results['memory_persistence']['outcomes_stored']}")
             logger.info(f"  Snapshots: {full_year_results['memory_persistence']['snapshots_stored']}")
             logger.info("")

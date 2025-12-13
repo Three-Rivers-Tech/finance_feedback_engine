@@ -74,11 +74,11 @@ def main():
     
     # Show monitoring info
     if engine.monitoring_provider:
-        print(f"\n📊 Monitoring Context Provider:")
+        print("\n📊 Monitoring Context Provider:")
         print(f"  • Platform: {type(engine.trading_platform).__name__}")
-        print(f"  • Position Awareness: Active")
-        print(f"  • Real-time P&L Tracking: Active")
-        print(f"  • Risk Metrics: Active")
+        print("  • Position Awareness: Active")
+        print("  • Real-time P&L Tracking: Active")
+        print("  • Risk Metrics: Active")
     # Demonstrate sentiment + technical data fetching
     print("\n🔍 Testing Market Data Fetch (with sentiment + technicals)...")
     print("   Fetching: BTCUSD")
@@ -92,14 +92,14 @@ def main():
         )
         
         print("\n✅ Market Data Retrieved:")
-        print(f"  • Asset: BTCUSD")
+        print("  • Asset: BTCUSD")
         print(f"  • Current Price: ${market_data.get('close', 'N/A')}")
         print(f"  • Price Change: {market_data.get('price_change', 0):.2f}%")
         
         # Show technical indicators
         if 'technical' in market_data:
             tech = market_data['technical']
-            print(f"\n📈 Technical Indicators:")
+            print("\n📈 Technical Indicators:")
             print(f"  • RSI: {tech.get('rsi', 'N/A')}")
             print(f"  • Trend: {tech.get('price_trend', 'N/A')}")
             print(f"  • Candlestick Pattern: {tech.get('candlestick_pattern', 'N/A')}")
@@ -107,7 +107,7 @@ def main():
         # Show sentiment data
         if 'sentiment' in market_data:
             sentiment = market_data['sentiment']
-            print(f"\n📰 News Sentiment:")
+            print("\n📰 News Sentiment:")
             print(f"  • Overall: {sentiment.get('overall_sentiment', 'N/A')}")
             print(f"  • Score: {sentiment.get('sentiment_score', 0):.3f}")
             print(f"  • Articles Analyzed: {sentiment.get('articles_analyzed', 0)}")
@@ -116,7 +116,7 @@ def main():
         # Show macro data if enabled
         if 'macro_indicators' in market_data:
             macro = market_data['macro_indicators']
-            print(f"\n🌍 Macro Indicators:")
+            print("\n🌍 Macro Indicators:")
             print(f"  • GDP: {macro.get('gdp', 'N/A')}")
             print(f"  • Inflation: {macro.get('inflation', 'N/A')}")
             print(f"  • Fed Funds Rate: {macro.get('fed_funds_rate', 'N/A')}")

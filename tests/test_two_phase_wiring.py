@@ -2,7 +2,7 @@
 Test two-phase ensemble escalation wiring.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
