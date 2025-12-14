@@ -3,9 +3,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 import logging
 import copy
-
-# TODO: Import a persistence layer for storing monitoring data
-# from finance_feedback_engine.persistence.monitoring_data_store import MonitoringDataStore
+import numpy as np
+from scipy import stats
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +61,12 @@ class ModelPerformanceMonitor:
         self.predictions: List[Dict[str, Any]] = []
         self.outcomes: Dict[str, Dict[str, Any]] = {}
 
-        # TODO: Initialize persistence layer
-        # self.data_store = MonitoringDataStore(model_id)
+        # Initialize basic in-memory persistence for metrics
+        self.metrics_store: List[Dict[str, Any]] = []
+        self.drift_store: List[Dict[str, Any]] = []
+        self.alert_callbacks: List[callable] = []
 
-        logger.info(f"Initialized ModelPerformanceMonitor for model: {model_id}")
+        logger.info(f"Initialized ModelPerformanceMonitor for model: {self.model_id}")
 
     def record_prediction(self, features: pd.DataFrame, prediction: Dict[str, Any], timestamp: datetime):
         """
@@ -173,15 +175,12 @@ class ModelPerformanceMonitor:
         Returns:
             Dict[str, Any]: A dictionary containing drift detection results.
 
-        TODO:
-        - Implement specific statistical tests or algorithms for data drift (e.g., Kolmogorov-Smirnov test, population stability index)
-          for each feature.
-        - Aggregate drift scores into an overall drift metric.
-        - Identify which features are drifting most significantly.
-        - Set a configurable threshold for triggering drift alerts.
+        Implements statistical tests for data drift detection:
+        - Kolmogorov-Smirnov test for continuous features
+        - Population Stability Index (PSI) for both continuous and categorical features
         """
         logger.info(f"Detecting data drift for model {self.model_id}...")
-        
+
         drift_results = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "model_id": self.model_id,
@@ -190,24 +189,126 @@ class ModelPerformanceMonitor:
             "drifting_features": []
         }
 
-        # Dummy drift detection
-        if not current_features.empty and not baseline_features.empty:
-            # Example: simple mean difference for a numerical feature
-            if 'price' in current_features.columns and 'price' in baseline_features.columns:
-                mean_diff = abs(current_features['price'].mean() - baseline_features['price'].mean())
-                if mean_diff > 10: # Arbitrary threshold
-                    drift_results["has_drift"] = True
-                    drift_results["drift_score"] = mean_diff / baseline_features['price'].mean()
-                    drift_results["drifting_features"].append({"feature": "price", "reason": f"Mean shift: {mean_diff:.2f}"})
+        if current_features.empty or baseline_features.empty:
+            logger.info(f"Empty dataframes provided for drift detection in model {self.model_id}.")
+            return drift_results
+
+        drift_scores = []
+
+        # Perform drift detection for each overlapping feature
+        common_features = set(current_features.columns) & set(baseline_features.columns)
+
+        for feature in common_features:
+            if feature in baseline_features.columns and feature in current_features.columns:
+                # Prepare data - drop NaN values
+                current_data = current_features[feature].dropna()
+                baseline_data = baseline_features[feature].dropna()
+
+                if len(current_data) == 0 or len(baseline_data) == 0:
+                    continue
+
+                # For numerical features, use KS test and PSI
+                if pd.api.types.is_numeric_dtype(current_data) and pd.api.types.is_numeric_dtype(baseline_data):
+                    # Kolmogorov-Smirnov test
+                    ks_statistic, p_value = stats.ks_2samp(baseline_data, current_data)
+
+                    # Population Stability Index (PSI)
+                    # Create bins for PSI calculation
+                    try:
+                        # Calculate PSI using quantile-based bins
+                        overall_min = min(baseline_data.min(), current_data.min())
+                        overall_max = max(baseline_data.max(), current_data.max())
+
+                        # Create 10 equal-width bins
+                        bins = np.linspace(overall_min, overall_max, 11)
+
+                        baseline_counts, _ = np.histogram(baseline_data, bins=bins)
+                        current_counts, _ = np.histogram(current_data, bins=bins)
+
+                        # Calculate percentages for each bin
+                        baseline_pct = (baseline_counts + 1) / len(baseline_data)  # Add 1 for smoothing
+                        current_pct = (current_counts + 1) / len(current_data)    # Add 1 for smoothing
+
+                        # Calculate PSI
+                        psi = np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+
+                        # Determine if drift is significant using PSI thresholds
+                        # PSI < 0.1: No significant change
+                        # PSI 0.1-0.25: Moderate change
+                        # PSI > 0.25: Significant change
+                        psi_drift = psi > 0.1
+
+                        if psi_drift or p_value < 0.05:  # Significant drift based on either test
+                            drift_results["has_drift"] = True
+                            drift_results["drifting_features"].append({
+                                "feature": feature,
+                                "psi_score": float(psi),
+                                "ks_statistic": float(ks_statistic),
+                                "p_value": float(p_value),
+                                "reason": f"PSI: {psi:.3f}, KS: {ks_statistic:.3f}, p-value: {p_value:.3f}"
+                            })
+                            drift_scores.append(psi)
+                    except Exception as e:
+                        logger.warning(f"Could not calculate drift for feature {feature}: {str(e)}")
+                        # Fallback to simple mean difference check
+                        mean_diff = abs(current_data.mean() - baseline_data.mean())
+                        std_baseline = baseline_data.std()
+                        if std_baseline != 0:
+                            z_score = mean_diff / std_baseline
+                            if z_score > 2:  # More than 2 std deviations
+                                drift_results["has_drift"] = True
+                                drift_results["drifting_features"].append({
+                                    "feature": feature,
+                                    "mean_diff": float(mean_diff),
+                                    "z_score": float(z_score),
+                                    "reason": f"Mean shift: {mean_diff:.3f}, Z-score: {z_score:.3f}"
+                                })
+                                drift_scores.append(z_score)
+                # For categorical features, use PSI on categories
+                else:
+                    try:
+                        # Calculate PSI for categorical features
+                        baseline_counts = baseline_data.value_counts()
+                        current_counts = current_data.value_counts()
+
+                        # Get all unique categories from both datasets
+                        all_categories = set(baseline_counts.index) | set(current_counts.index)
+
+                        # Calculate percentages
+                        baseline_total = len(baseline_data)
+                        current_total = len(current_data)
+
+                        psi = 0.0
+                        for cat in all_categories:
+                            baseline_pct = (baseline_counts.get(cat, 0) + 1) / baseline_total  # Smoothing
+                            current_pct = (current_counts.get(cat, 0) + 1) / current_total    # Smoothing
+                            psi += (current_pct - baseline_pct) * np.log(current_pct / baseline_pct)
+
+                        if psi > 0.1:  # Threshold for significant drift
+                            drift_results["has_drift"] = True
+                            drift_results["drifting_features"].append({
+                                "feature": feature,
+                                "psi_score": float(psi),
+                                "reason": f"Categorical PSI: {psi:.3f}"
+                            })
+                            drift_scores.append(psi)
+                    except Exception as e:
+                        logger.warning(f"Could not calculate drift for categorical feature {feature}: {str(e)}")
+
+        # Calculate overall drift score as average of individual scores
+        if drift_scores:
+            drift_results["drift_score"] = sum(drift_scores) / len(drift_scores)
+        else:
+            drift_results["drift_score"] = 0.0
 
         if drift_results["has_drift"]:
             logger.warning(f"Data drift detected for model {self.model_id}: {drift_results}")
-            # TODO: Trigger alert
+            self._trigger_alert("Data drift detected", drift_results)
         else:
             logger.info(f"No significant data drift detected for model {self.model_id}.")
 
         self.historical_drift_scores.append(drift_results)
-        # self.data_store.save_drift_metrics(drift_results)
+        self.drift_store.append(drift_results)
         return drift_results
 
     def detect_concept_drift(self, current_performance: Dict[str, Any], baseline_performance: Dict[str, Any]) -> Dict[str, Any]:
@@ -253,23 +354,105 @@ class ModelPerformanceMonitor:
 
         if drift_results["has_drift"]:
             logger.warning(f"Concept drift detected for model {self.model_id}: {drift_results}")
-            # TODO: Trigger alert
+            self._trigger_alert("Concept drift detected", drift_results)
         else:
             logger.info(f"No significant concept drift detected for model {self.model_id}.")
 
         self.historical_drift_scores.append(drift_results)
-        # self.data_store.save_concept_drift_metrics(drift_results)
+        self.drift_store.append(drift_results)
         return drift_results
 
-    # TODO: Add a method to run monitoring periodically, perhaps as an asyncio task
-    # async def start_monitoring_loop(self):
-    #     while True:
-    #         performance = self.evaluate_performance()
-    #         # current_features = self.data_store.load_recent_features()
-    #         # baseline_features = self.data_store.load_baseline_features()
-    #         # data_drift = self.detect_data_drift(current_features, baseline_features)
-    #         # concept_drift = self.detect_concept_drift(performance, self.data_store.load_baseline_performance())
-    #         await asyncio.sleep(self.evaluation_interval.total_seconds())
+    def add_alert_callback(self, callback: callable):
+        """
+        Add a callback function to be triggered when alerts are raised.
+
+        Args:
+            callback: A function to call when an alert is triggered
+        """
+        self.alert_callbacks.append(callback)
+        logger.info(f"Added alert callback to model {self.model_id}")
+
+    def _trigger_alert(self, alert_type: str, details: Dict[str, Any]):
+        """
+        Trigger alert callbacks when significant drift is detected.
+
+        Args:
+            alert_type: Type of alert (e.g., "Data drift detected", "Concept drift detected")
+            details: Details about the alert
+        """
+        alert_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "model_id": self.model_id,
+            "alert_type": alert_type,
+            "details": details
+        }
+
+        for callback in self.alert_callbacks:
+            try:
+                callback(alert_data)
+            except Exception as e:
+                logger.error(f"Error in alert callback for model {self.model_id}: {str(e)}")
+
+    async def start_monitoring_loop(self):
+        """
+        Asynchronously run monitoring loop to periodically evaluate performance and detect drift.
+
+        This method continuously evaluates model performance and checks for data and concept drift
+        at the configured evaluation interval.
+        """
+        logger.info(f"Starting monitoring loop for model {self.model_id}")
+        while True:
+            try:
+                # Evaluate current performance
+                current_metrics = self.evaluate_performance()
+
+                # Detect concept drift if we have baseline metrics
+                if self.historical_metrics and len(self.historical_metrics) > 1:
+                    # Use the first historical metric as baseline for comparison
+                    baseline_metrics = self.historical_metrics[0]
+                    self.detect_concept_drift(current_metrics, baseline_metrics)
+
+                # Sleep until next evaluation interval
+                await asyncio.sleep(self.evaluation_interval.total_seconds())
+
+            except asyncio.CancelledError:
+                logger.info(f"Monitoring loop cancelled for model {self.model_id}")
+                break
+            except Exception as e:
+                logger.error(f"Error in monitoring loop for model {self.model_id}: {str(e)}")
+                # Continue loop despite errors to maintain monitoring
+                await asyncio.sleep(self.evaluation_interval.total_seconds())
+
+    def save_metrics(self):
+        """
+        Persist metrics to the in-memory store. In a real implementation, this would
+        connect to a database or file system.
+        """
+        for metric in self.historical_metrics:
+            if metric not in self.metrics_store:
+                self.metrics_store.append(metric)
+
+        for drift in self.historical_drift_scores:
+            if drift not in self.drift_store:
+                self.drift_store.append(drift)
+
+    def get_historical_metrics(self) -> List[Dict[str, Any]]:
+        """
+        Retrieve historical performance metrics.
+
+        Returns:
+            List of historical metrics dictionaries
+        """
+        return self.historical_metrics
+
+    def get_drift_history(self) -> List[Dict[str, Any]]:
+        """
+        Retrieve historical drift detection results.
+
+        Returns:
+            List of historical drift results dictionaries
+        """
+        return self.historical_drift_scores
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":

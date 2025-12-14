@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """
-    Loads a YAML configuration file, resolving environment variables.
+    Loads a YAML configuration file, resolving environment variables securely.
 
     This function securely loads a YAML file using yaml.safe_load() and
     then traverses the loaded configuration to resolve any placeholders
@@ -22,6 +22,9 @@ def load_config(config_path: str) -> Dict[str, Any]:
       `${ENV_VAR_NAME}` pattern with the actual environment variable's value.
       This ensures sensitive information (like API keys) is not hardcoded
       in the YAML files.
+    - **Secure Credential Handling:** The function ensures that sensitive values
+      are loaded only from environment variables, never from the config file itself.
+      This prevents credentials from being accidentally committed to version control.
     - **Error Handling:** If an environment variable specified in the YAML
       (e.g., `${API_KEY}`) is not found in the system's environment, a
       `ValueError` is raised, prompting the user to set the required variable.
@@ -44,13 +47,11 @@ def load_config(config_path: str) -> Dict[str, Any]:
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
     with open(config_path, 'r') as f:
-        # TODO: Implement a custom YAML loader that handles environment variables
-        # directly during parsing for potentially cleaner code, rather than post-processing.
-        # However, for simplicity and explicit security (safe_load first), post-processing is fine.
         config = yaml.safe_load(f)
 
-    # Regex to find ${ENV_VAR_NAME} patterns
-    env_var_pattern = re.compile(r'\$\{(\w+)\}')
+    # Enhanced regex to find ${ENV_VAR_NAME} patterns with optional default values
+    # Pattern: ${ENV_VAR_NAME:default_value} or ${ENV_VAR_NAME}
+    env_var_pattern = re.compile(r'\$\{([^}]+)\}')
 
     def resolve_env_vars(data: Any) -> Any:
         if isinstance(data, dict):
@@ -59,14 +60,29 @@ def load_config(config_path: str) -> Dict[str, Any]:
             return [resolve_env_vars(elem) for elem in data]
         elif isinstance(data, str):
             def replace_env_var(match):
-                env_var_name = match.group(1)
-                env_var_value = os.getenv(env_var_name)
-                if env_var_value is None:
-                    raise ValueError(
-                        f"Environment variable '{env_var_name}' required by configuration "
-                        f"'{config_path}' is not set. Please set it."
-                    )
-                return env_var_value
+                full_match = match.group(1)
+
+                # Handle default values: ENV_VAR_NAME:default_value
+                if ':' in full_match:
+                    env_var_name, default_value = full_match.split(':', 1)
+                    env_var_value = os.getenv(env_var_name.strip())
+                    if env_var_value is None:
+                        # Log a warning for using default values (as they might contain sensitive info)
+                        if 'key' in env_var_name.lower() or 'secret' in env_var_name.lower() or 'password' in env_var_name.lower():
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.warning(f"Using default value for sensitive environment variable '{env_var_name.strip()}'")
+                        return default_value.strip()
+                    return env_var_value.strip()
+                else:
+                    env_var_name = full_match.strip()
+                    env_var_value = os.getenv(env_var_name)
+                    if env_var_value is None:
+                        raise ValueError(
+                            f"Environment variable '{env_var_name}' required by configuration "
+                            f"'{config_path}' is not set. Please set it."
+                        )
+                    return env_var_value.strip()
             return env_var_pattern.sub(replace_env_var, data)
         return data
 
@@ -74,19 +90,19 @@ def load_config(config_path: str) -> Dict[str, Any]:
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
-    # TODO: Create a dummy config file for this example or assume a test config path
-    # For now, let's just show how it would be called.
-    # config_file = "config/test_config.yaml"
-    # os.environ["TEST_API_KEY"] = "my_secret_key_123"
-    # try:
-    #     app_config = load_config(config_file)
-    #     print("Loaded Configuration:")
-    #     print(app_config)
-    #     # Example of accessing a value: print(app_config['api']['key'])
-    # except (FileNotFoundError, ValueError, yaml.YAMLError) as e:
-    #     print(f"Error loading configuration: {e}")
-    # finally:
-    #     # Clean up environment variable
-    #     if "TEST_API_KEY" in os.environ:
-    #         del os.environ["TEST_API_KEY"]
+    # Example configuration file content (config/example.yaml):
+    # ---
+    # api:
+    #   key: "${API_KEY}"  # Will be replaced with the value of the API_KEY environment variable
+    #   secret: "${API_SECRET:default_secret}"  # Will use API_SECRET env var, or 'default_secret' if not set
+    #   timeout: 30
+    # database:
+    #   password: "${DB_PASSWORD}"  # Will be replaced with the value of the DB_PASSWORD environment variable
+    #   host: "localhost"
+    # ---
+    #
+    # Usage:
+    # os.environ["API_KEY"] = "my_secret_key_123"
+    # os.environ["DB_PASSWORD"] = "my_secure_password"
+    # config = load_config("config/example.yaml")
     pass

@@ -86,6 +86,8 @@ class Backtester:
                  max_concurrent_positions: int = 5,  # Max simultaneous open positions
                  timeframe: str = '1h',  # Candle timeframe ('1m', '5m', '15m', '30m', '1h', '1d')
                  risk_free_rate: float = 0.02,  # Annual risk-free rate for Sharpe ratio (default 2%)
+                 position_sizing_strategy: str = 'fixed_fraction',  # Position sizing strategy
+                 risk_per_trade: float = 0.02,  # Risk per trade (2% of balance)
                  config: Optional[Dict[str, Any]] = None,  # Full config for memory engine
                  ):
         self.historical_data_provider = historical_data_provider
@@ -102,6 +104,8 @@ class Backtester:
         self.force_local_providers = force_local_providers
         self.timeframe = timeframe  # Store timeframe for use in run_backtest
         self.risk_free_rate = risk_free_rate  # Annual risk-free rate for Sharpe ratio
+        self.position_sizing_strategy = position_sizing_strategy
+        self.risk_per_trade = risk_per_trade  # For position sizing calculations
         self.config = config or {}
 
         # Initialize decision cache
@@ -351,6 +355,44 @@ class Backtester:
 
         return False
 
+    def _calculate_position_size(self,
+                                 current_balance: float,
+                                 current_price: float,
+                                 stop_loss_price: Optional[float] = None,
+                                 volatility: Optional[float] = None) -> float:
+        """
+        Calculate position size based on the selected position sizing strategy.
+
+        Args:
+            current_balance: Current account balance
+            current_price: Current asset price
+            stop_loss_price: Optional stop loss price for calculating risk
+            volatility: Optional volatility for Kelly Criterion
+
+        Returns:
+            float: Position size in quote currency (USD)
+        """
+        if self.position_sizing_strategy == 'fixed_fraction':
+            # Risk a fixed percentage of balance per trade
+            risk_amount = current_balance * self.risk_per_trade
+            return risk_amount
+        elif self.position_sizing_strategy == 'kelly_criterion':
+            # Simplified Kelly Criterion based on win rate and payoff ratio
+            # This would typically use historical performance data
+            # For now, use a simplified version with default assumptions
+            if volatility and volatility > 0:
+                # Inverse relationship: lower position size with higher volatility
+                position_fraction = min(0.1, 0.05 / volatility)  # Cap at 10% of balance
+                return current_balance * position_fraction
+            else:
+                # Default to fixed fraction if no volatility data
+                return current_balance * self.risk_per_trade
+        elif self.position_sizing_strategy == 'fixed_amount':
+            # Fixed dollar amount per trade
+            return min(current_balance * 0.1, 1000)  # 10% of balance or $1000, whichever is smaller
+        else:  # Default to fixed fraction
+            return current_balance * self.risk_per_trade
+
     def _calculate_performance_metrics(self,
                                        trades_history: List[Dict[str, Any]],
                                        equity_curve: List[float],
@@ -510,7 +552,9 @@ class Backtester:
             correlation_threshold=0.7,
             max_correlated_assets=5,
             max_var_pct=0.1,
-            var_confidence=0.95
+            var_confidence=0.95,
+            position_sizing_strategy=self.position_sizing_strategy,
+            risk_per_trade=self.risk_per_trade
         )
 
         # Create TradeMonitor (needed by TradingLoopAgent)
@@ -523,7 +567,8 @@ class Backtester:
         # Create FinanceFeedbackEngine wrapper to provide analyze_asset interface
         # We'll use the decision_engine directly but need to wrap it
         class BacktestEngine:
-            def __init__(self, decision_engine, mock_provider, mock_platform, asset_pair, memory_engine):
+            def __init__(self, backtester, decision_engine, mock_provider, mock_platform, asset_pair, memory_engine):
+                self.backtester = backtester
                 self.decision_engine = decision_engine
                 self.mock_provider = mock_provider
                 self.mock_platform = mock_platform
@@ -541,6 +586,21 @@ class Backtester:
 
                 # Get current balance from platform
                 balance = self.mock_platform.get_balance()
+                current_balance = balance.get('FUTURES_USD', self.backtester.initial_balance)
+
+                # Get current price for position sizing
+                current_price = None
+                if market_data and 'timeframes' in market_data:
+                    # Try to get the most recent price from the configured timeframe
+                    tf_data = market_data['timeframes'].get(self.timeframe)
+                    if tf_data and tf_data['candles']:
+                        current_price = tf_data['candles'][-1]['close']  # Most recent close price
+
+                # Calculate position size using position sizing strategy
+                position_size = self.backtester._calculate_position_size(
+                    current_balance=current_balance,
+                    current_price=current_price if current_price else market_data.get('current_price', 0)
+                )
 
                 # Generate decision
                 decision = await self.decision_engine.generate_decision(
@@ -552,9 +612,18 @@ class Backtester:
                     monitoring_context={'active_positions': {'futures': [], 'spot': []}, 'slots_available': 5}
                 )
 
-                # Store decision for later execution
-                if decision and 'id' in decision:
-                    self._decisions[decision['id']] = decision
+                # Update decision with calculated position size if decision is valid
+                if decision:
+                    # Modify the decision with position sizing if it contains position info
+                    if 'position_size' not in decision:
+                        decision['position_size'] = position_size
+                    else:
+                        # If there's already a position size, adjust it according to our strategy
+                        decision['position_size'] = min(decision['position_size'], position_size)
+
+                    # Store decision for later execution
+                    if 'id' in decision:
+                        self._decisions[decision['id']] = decision
 
                 return decision
 
@@ -581,7 +650,7 @@ class Backtester:
                     except Exception as e:
                         logger.debug(f"Error recording outcome to memory: {e}")
 
-        backtest_engine = BacktestEngine(decision_engine, mock_provider, mock_platform, asset_pair_std, self.memory_engine)        # Instantiate TradingLoopAgent
+        backtest_engine = BacktestEngine(self, decision_engine, mock_provider, mock_platform, asset_pair_std, self.memory_engine)        # Instantiate TradingLoopAgent
         agent = TradingLoopAgent(
             config=agent_config,
             engine=backtest_engine,

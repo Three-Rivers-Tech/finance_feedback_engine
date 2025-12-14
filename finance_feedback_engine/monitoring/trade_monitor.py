@@ -298,9 +298,51 @@ class TradeMonitor:
         else:
             logger.warning("No Orchestrator instance available to signal for pausing trading.")
 
-        # TODO: Implement more robust actions:
-        # - Close all open positions across platforms (this would be triggered by Orchestrator)
-        # - Send notification
+        # Additional robust actions:
+        # Close all open positions across platforms (this would be triggered by Orchestrator)
+        if hasattr(self.orchestrator, 'close_all_positions'):
+            logger.info("Closing all open positions due to portfolio limit hit.")
+            try:
+                self.orchestrator.close_all_positions()
+            except Exception as e:
+                logger.error(f"Failed to close all positions: {e}")
+
+        # Send notification
+        self._send_portfolio_limit_notification(limit_type, current_pnl_pct)
+
+    def _send_portfolio_limit_notification(self, limit_type: str, pnl_pct: float):
+        """
+        Send notification when portfolio limit is hit.
+
+        Args:
+            limit_type: Type of limit hit ('stop_loss' or 'take_profit')
+            pnl_pct: Current portfolio P&L percentage
+        """
+        import json
+        from datetime import datetime
+
+        notification = {
+            'timestamp': datetime.now().isoformat(),
+            'event': f'portfolio_{limit_type}_hit',
+            'type': limit_type,
+            'pnl_percentage': pnl_pct,
+            'message': f'Portfolio {limit_type.upper()} limit hit. Current P&L: {pnl_pct:.2%}',
+            'action_taken': 'Trading paused and positions may be closed'
+        }
+
+        # Log the notification
+        logger.warning(f"PORTFOLIO LIMIT HIT NOTIFICATION: {json.dumps(notification)}")
+
+        # If there's a notification service available, send the notification
+        # For now, we'll just log it - in a real implementation this would send to
+        # email, Slack, Telegram, etc.
+        if hasattr(self, 'notification_service') and self.notification_service:
+            try:
+                self.notification_service.send_alert(notification)
+            except Exception as e:
+                logger.error(f"Failed to send portfolio limit notification: {e}")
+        else:
+            logger.info("No notification service configured, logged event only.")
 
     def _detect_new_trades(self):
         """Query platform for open positions and detect new trades."""
