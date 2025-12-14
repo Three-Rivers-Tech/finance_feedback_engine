@@ -1,0 +1,33 @@
+# Recording rules for Finance Feedback Engine
+# Aggregates per-trade P&L gauge into per-asset pair series.
+# Requires emission of per-trade metric: ffe_trade_pnl_dollars{asset_pair,trade_id}
+
+# Place this under your Prometheus rule_files and reload Prometheus.
+# Example prometheus.yml:
+# rule_files:
+#   - /etc/prometheus/rules/finance_feedback_engine/prometheus_recording_rules.yaml
+
+groups:
+  - name: finance_feedback_engine_pnl
+    interval: 15s
+    rules:
+      - record: ffe_trade_pnl_dollars_sum_by_asset_pair
+        expr: sum by (asset_pair) (ffe_trade_pnl_dollars)
+        labels:
+          metric_version: v1_aggregated
+
+      # Optional: expose under the v2 metric name for dashboards expecting v2
+      - record: ffe_trade_pnl_dollars_v2
+        expr: sum by (asset_pair) (ffe_trade_pnl_dollars)
+        labels:
+          source: recording_rule
+
+      # Best and worst trade per asset
+      - record: ffe_best_trade_pnl_dollars
+        expr: max by (asset_pair) (ffe_trade_pnl_dollars)
+      - record: ffe_worst_trade_pnl_dollars
+        expr: min by (asset_pair) (ffe_trade_pnl_dollars)
+
+      # Portfolio-level aggregate across all assets (if desired)
+      - record: ffe_trade_pnl_dollars_total_portfolio
+        expr: sum(ffe_trade_pnl_dollars)
