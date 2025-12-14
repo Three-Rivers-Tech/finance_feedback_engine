@@ -111,6 +111,178 @@ class TimeframeAggregator:
             'histogram': round(float(last_row[f'MACDh_{fast_period}_{slow_period}_{signal_period}']), 4)
         }
 
+    def _calculate_stochastic_oscillator(
+        self,
+        candles: List[Dict[str, Any]],
+        k_period: int = 14,
+        d_period: int = 3
+    ) -> Optional[Dict[str, float]]:
+        """
+        Calculate Stochastic Oscillator (KD).
+
+        Args:
+            candles: List of candle dictionaries with high, low, close
+            k_period: Period for the %K line (default 14)
+            d_period: Period for the %D line (default 3)
+
+        Returns:
+            Dict with 'k', 'd' or None if insufficient data
+        """
+        if len(candles) < max(k_period, d_period) + 1:
+            return None
+
+        df = pd.DataFrame([
+            {'high': c['high'], 'low': c['low'], 'close': c['close']}
+            for c in candles
+        ])
+
+        stoch_result = ta.stoch(df['high'], df['low'], df['close'], k=k_period, d=d_period, smooth_k=1)
+
+        if stoch_result is None or stoch_result.empty:
+            return None
+
+        last_row = stoch_result.iloc[-1]
+        # pandas-ta column names: STOCHk_14_3_1, STOCHd_14_3_1
+        k_val = float(last_row[f'STOCHk_{k_period}_{d_period}_1'])
+        d_val = float(last_row[f'STOCHd_{k_period}_{d_period}_1'])
+
+        return {
+            'k': round(k_val, 2),
+            'd': round(d_val, 2)
+        }
+
+    def _calculate_cci(
+        self,
+        candles: List[Dict[str, Any]],
+        period: int = 20
+    ) -> Optional[float]:
+        """
+        Calculate Commodity Channel Index (CCI).
+
+        Args:
+            candles: List of candle dictionaries with high, low, close
+            period: CCI period (default 20)
+
+        Returns:
+            CCI value or None if insufficient data
+        """
+        if len(candles) < period + 1:
+            return None
+
+        df = pd.DataFrame([
+            {'high': c['high'], 'low': c['low'], 'close': c['close']}
+            for c in candles
+        ])
+
+        cci_result = ta.cci(df['high'], df['low'], df['close'], length=period)
+
+        if cci_result is None or cci_result.empty:
+            return None
+
+        return round(float(cci_result.iloc[-1]), 2)
+
+    def _calculate_williams_r(
+        self,
+        candles: List[Dict[str, Any]],
+        period: int = 14
+    ) -> Optional[float]:
+        """
+        Calculate Williams %R (Williams Percent Range).
+
+        Args:
+            candles: List of candle dictionaries with high, low, close
+            period: Lookback period (default 14)
+
+        Returns:
+            Williams %R value (range -100 to 0) or None if insufficient data
+        """
+        if len(candles) < period + 1:
+            return None
+
+        highs = pd.Series([c['high'] for c in candles])
+        lows = pd.Series([c['low'] for c in candles])
+        closes = pd.Series([c['close'] for c in candles])
+
+        # Calculate Williams %R
+        period_high = highs.rolling(window=period).max()
+        period_low = lows.rolling(window=period).min()
+
+        williams_r = -100 * ((period_high - closes) / (period_high - period_low))
+
+        # Handle division by zero when period_high == period_low
+        williams_r = williams_r.replace([np.inf, -np.inf], np.nan)
+
+        return round(float(williams_r.iloc[-1]), 2)
+
+    def _calculate_ichimoku_cloud(
+        self,
+        candles: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Calculate Ichimoku Cloud components.
+
+        Args:
+            candles: List of candle dictionaries with high, low, close
+
+        Returns:
+            Dict with Ichimoku components or None if insufficient data
+        """
+        if len(candles) < 52:  # Need at least 52 candles for standard Ichimoku
+            return None
+
+        df = pd.DataFrame([
+            {'high': c['high'], 'low': c['low'], 'close': c['close']}
+            for c in candles
+        ])
+
+        # Standard Ichimoku periods
+        tenkan_period = 9
+        kijun_period = 26
+        senkou_period = 52
+
+        # Tenkan-sen (conversion line)
+        high_9 = df['high'].rolling(window=tenkan_period).max()
+        low_9 = df['low'].rolling(window=tenkan_period).min()
+        tenkan_sen = (high_9 + low_9) / 2
+
+        # Kijun-sen (base line)
+        high_26 = df['high'].rolling(window=kijun_period).max()
+        low_26 = df['low'].rolling(window=kijun_period).min()
+        kijun_sen = (high_26 + low_26) / 2
+
+        # Senkou Span A (leading span A)
+        senkou_a = ((tenkan_sen + kijun_sen) / 2).shift(kijun_period)
+
+        # Senkou Span B (leading span B)
+        high_52 = df['high'].rolling(window=senkou_period).max()
+        low_52 = df['low'].rolling(window=senkou_period).min()
+        senkou_b = ((high_52 + low_52) / 2).shift(kijun_period)
+
+        # Chikou Span (lagging span)
+        chikou_span = df['close'].shift(-kijun_period)
+
+        # Get most recent values
+        current_price = df['close'].iloc[-1]
+        tenkan_current = tenkan_sen.iloc[-1]
+        kijun_current = kijun_sen.iloc[-1]
+        senkou_a_current = senkou_a.iloc[-1]
+        senkou_b_current = senkou_b.iloc[-1]
+        chikou_current = chikou_span.iloc[-1]
+
+        return {
+            'current_price': round(current_price, 2),
+            'tenkan_sen': round(tenkan_current, 2) if not pd.isna(tenkan_current) else None,
+            'kijun_sen': round(kijun_current, 2) if not pd.isna(kijun_current) else None,
+            'senkou_a': round(senkou_a_current, 2) if not pd.isna(senkou_a_current) else None,
+            'senkou_b': round(senkou_b_current, 2) if not pd.isna(senkou_b_current) else None,
+            'chikou_span': round(chikou_current, 2) if not pd.isna(chikou_current) else None,
+            'is_price_above_cloud': (
+                current_price > senkou_a_current and current_price > senkou_b_current
+                if not (pd.isna(senkou_a_current) or pd.isna(senkou_b_current))
+                else None
+            )
+        }
+
     def _calculate_bollinger_bands(
         self,
         candles: List[Dict[str, Any]],
@@ -358,6 +530,12 @@ class TimeframeAggregator:
         adx = self._calculate_adx(candles)
         atr = self._calculate_atr(candles)
 
+        # Additional advanced indicators
+        stochastic = self._calculate_stochastic_oscillator(candles)
+        cci = self._calculate_cci(candles)
+        williams_r = self._calculate_williams_r(candles)
+        ichimoku = self._calculate_ichimoku_cloud(candles)
+
         # Volatility classification
         volatility = self._classify_volatility(atr, current_price) if atr else 'unknown'
 
@@ -416,7 +594,11 @@ class TimeframeAggregator:
             'rsi': rsi,
             'macd': macd,
             'adx': adx,
-            'bbands': bbands
+            'bbands': bbands,
+            'stochastic': stochastic,
+            'cci': cci,
+            'williams_r': williams_r,
+            'ichimoku': ichimoku
         }
         signal_strength = self._calculate_signal_strength(indicators)
 
@@ -430,6 +612,10 @@ class TimeframeAggregator:
             'bbands': bbands,
             'adx': adx,
             'atr': round(atr, 4) if atr else None,
+            'stochastic': stochastic,
+            'cci': cci,
+            'williams_r': williams_r,
+            'ichimoku': ichimoku,
             'volatility': volatility,
             'signal_strength': signal_strength,
             'price': round(current_price, 2),

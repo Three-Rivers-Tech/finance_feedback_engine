@@ -10,6 +10,9 @@ import json
 
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
+from finance_feedback_engine.backtesting.enhanced_risk_analyzer import EnhancedRiskAnalyzer
+from finance_feedback_engine.backtesting.backtest_validator import BacktestValidator, ValidationResult
+from finance_feedback_engine.backtesting.performance_analyzer import BacktestPerformanceAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -733,7 +736,7 @@ class Backtester:
         if len(equity_curve) == 1:
             equity_curve.append(final_balance)
 
-        # Calculate performance metrics
+        # Calculate basic performance metrics
         num_trading_days = len(data) if not data.empty else 0
         calculated_metrics = self._calculate_performance_metrics(
             trades_history,
@@ -742,15 +745,68 @@ class Backtester:
             num_trading_days
         )
 
+        # Calculate enhanced risk metrics using the new risk analyzer
+        risk_analyzer = EnhancedRiskAnalyzer(risk_free_rate=self.risk_free_rate)
+        enhanced_risk_metrics = risk_analyzer.calculate_advanced_metrics(
+            equity_curve,
+            trades_history
+        )
+
         # Calculate total fees from trades
         total_fees = sum(trade.get('fee', 0) for trade in trades_history if trade.get('success', False))
 
+        # Combine basic and enhanced metrics
         metrics = {
             "initial_balance": self.initial_balance,
             "final_value": final_balance,
             "total_fees": total_fees,
-            **calculated_metrics
+            **calculated_metrics,
+            **enhanced_risk_metrics
         }
+
+        # Validate the backtest results
+        validator = BacktestValidator()
+        validation_result = validator.validate_backtest_results(
+            {
+                "metrics": metrics,
+                "trades": trades_history,
+                "backtest_config": {
+                    "equity_curve": equity_curve
+                }
+            },
+            start_date.isoformat() if isinstance(start_date, datetime) else start_date,
+            end_date.isoformat() if isinstance(end_date, datetime) else end_date
+        )
+
+        validation_report = validator.generate_validation_report(validation_result)
+
+        # Generate performance analysis
+        analyzer = BacktestPerformanceAnalyzer()
+        performance_analysis = analyzer.analyze_strategy_performance(
+            {
+                "metrics": metrics,
+                "trades": trades_history,
+                "backtest_config": {
+                    "equity_curve": equity_curve
+                }
+            }
+        )
+
+        performance_report = analyzer.generate_performance_report(
+            {
+                "metrics": metrics,
+                "trades": trades_history,
+                "backtest_config": {
+                    "equity_curve": equity_curve
+                }
+            }
+        )
+
+        # Add agent-specific metrics for comparison with live trading
+        agent_compatible_metrics = self._calculate_agent_compatible_metrics(
+            trades_history,
+            equity_curve
+        )
 
         logger.info(
             f"Backtest completed for {asset_pair}. "
@@ -761,6 +817,21 @@ class Backtester:
         return {
             "metrics": metrics,
             "trades": trades_history,
+            "validation": {
+                "result": {
+                    "is_valid": validation_result.is_valid,
+                    "score": validation_result.score,
+                    "issues": validation_result.issues,
+                    "recommendations": validation_result.recommendations
+                },
+                "report": validation_report,
+                "metrics": validation_result.metrics
+            },
+            "performance_analysis": {
+                "analysis": performance_analysis,
+                "report": performance_report
+            },
+            "agent_compatible_metrics": agent_compatible_metrics,
             "backtest_config": {
                 "asset_pair": asset_pair,
                 "start_date": start_date.isoformat() if isinstance(start_date, datetime) else start_date,
@@ -776,6 +847,102 @@ class Backtester:
             }
         }
 
+    def _calculate_agent_compatible_metrics(
+        self,
+        trades_history: List[Dict[str, Any]],
+        equity_curve: List[float]
+    ) -> Dict[str, Any]:
+        """
+        Calculate metrics compatible with the agent's performance tracking system.
+
+        Args:
+            trades_history: List of completed trades
+            equity_curve: Equity curve values over time
+
+        Returns:
+            Dictionary with agent-compatible metrics
+        """
+        # Initialize metrics similar to TradingLoopAgent's _performance_metrics
+        compatible_metrics = {
+            'total_pnl': 0.0,
+            'winning_trades': 0,
+            'losing_trades': 0,
+            'total_trades': 0,
+            'win_rate': 0.0,
+            'avg_win': 0.0,
+            'avg_loss': 0.0,
+            'current_streak': 0,
+            'best_streak': 0,
+            'worst_streak': 0,
+            'max_drawdown': 0.0,
+            'final_equity': equity_curve[-1] if equity_curve else 0.0,
+            'initial_equity': equity_curve[0] if equity_curve else 0.0
+        }
+
+        if not trades_history:
+            return compatible_metrics
+
+        # Calculate basic trade statistics
+        realized_pnls = []
+        wins = []
+        losses = []
+        current_streak = 0
+        best_streak = 0
+        worst_streak = 0
+
+        for trade in trades_history:
+            if trade.get('pnl_value') is not None:
+                pnl = trade['pnl_value']
+                realized_pnls.append(pnl)
+
+                if pnl > 0:
+                    wins.append(pnl)
+                    compatible_metrics['winning_trades'] += 1
+
+                    # Update streaks
+                    current_streak = max(1, current_streak + 1)
+                    best_streak = max(best_streak, current_streak)
+                elif pnl < 0:
+                    losses.append(abs(pnl))
+                    compatible_metrics['losing_trades'] += 1
+
+                    # Update streaks
+                    current_streak = min(-1, current_streak - 1)
+                    worst_streak = min(worst_streak, current_streak)
+                else:
+                    # Breakeven trade, reset streak but keep current sign
+                    if current_streak > 0:
+                        current_streak = max(0, current_streak - 1)
+                    else:
+                        current_streak = min(0, current_streak + 1)
+
+        # Update metrics
+        compatible_metrics['total_trades'] = len(realized_pnls)
+        compatible_metrics['total_pnl'] = sum(realized_pnls)
+        compatible_metrics['current_streak'] = current_streak
+        compatible_metrics['best_streak'] = best_streak
+        compatible_metrics['worst_streak'] = worst_streak
+
+        if compatible_metrics['total_trades'] > 0:
+            compatible_metrics['win_rate'] = (
+                compatible_metrics['winning_trades'] / compatible_metrics['total_trades']
+            ) * 100
+
+        if wins:
+            compatible_metrics['avg_win'] = sum(wins) / len(wins)
+
+        if losses:
+            compatible_metrics['avg_loss'] = sum(losses) / len(losses)
+
+        # Calculate max drawdown from equity curve
+        if len(equity_curve) > 1:
+            equity_series = pd.Series(equity_curve)
+            peak = equity_series.expanding(min_periods=1).max()
+            drawdown = (equity_series - peak) / peak
+            compatible_metrics['max_drawdown'] = float(drawdown.min() * 100)
+
+        return compatible_metrics
+
     def save_results(self, results: Dict[str, Any], output_file: str):
         """
         Saves the trade history from a backtest to a JSON file.
@@ -790,3 +957,96 @@ class Backtester:
             logger.info(f"Backtest trade history saved to {output_file}")
         except Exception as e:
             logger.error(f"Error saving backtest results to {output_file}: {e}")
+
+    async def run_agent_compatible_backtest(
+        self,
+        asset_pair: str,
+        start_date: Union[str, datetime],
+        end_date: Union[str, datetime],
+        decision_engine: DecisionEngine,
+        agent_config=None
+    ) -> Dict[str, Any]:
+        """
+        Run a backtest in a way that's compatible with the TradingLoopAgent's state system.
+
+        This method allows backtesting to be run in a similar way to the live agent,
+        using similar decision-making and risk management logic.
+
+        Args:
+            asset_pair: Asset to backtest
+            start_date: Start date for backtest
+            end_date: End date for backtest
+            decision_engine: Decision engine to use for generating signals
+            agent_config: Agent configuration to apply
+
+        Returns:
+            Dictionary with detailed backtest results
+        """
+        logger.info(f"Running agent-compatible backtest for {asset_pair}")
+
+        # Run the standard backtest
+        results = self.run_backtest(asset_pair, start_date, end_date, decision_engine)
+
+        # If agent config is provided, we can apply additional agent-specific validations
+        if agent_config:
+            # Apply agent-style risk validations to the backtest results
+            results = self._apply_agent_risk_validations(results, agent_config)
+
+        return results
+
+    def _apply_agent_risk_validations(
+        self,
+        backtest_results: Dict[str, Any],
+        agent_config
+    ) -> Dict[str, Any]:
+        """
+        Apply agent-style risk validations to backtest results.
+
+        Args:
+            backtest_results: Standard backtest results
+            agent_config: Agent configuration for validation parameters
+
+        Returns:
+            Updated backtest results with agent-style risk checks
+        """
+        # Add agent-compatible metrics if not already present
+        if 'agent_compatible_metrics' not in backtest_results:
+            trades = backtest_results.get('trades', [])
+            equity_curve = backtest_results.get('backtest_config', {}).get('equity_curve', [])
+            backtest_results['agent_compatible_metrics'] = self._calculate_agent_compatible_metrics(trades, equity_curve)
+
+        # Calculate whether the backtest would have triggered any agent-style kill switches
+        agent_metrics = backtest_results['agent_compatible_metrics']
+        kill_switch_triggers = []
+
+        # Check for consecutive losses (similar to agent's kill switch)
+        if agent_metrics['current_streak'] < -5:  # 6+ consecutive losses
+            kill_switch_triggers.append({
+                'type': 'consecutive_losses',
+                'value': abs(agent_metrics['current_streak']),
+                'threshold': 5,
+                'description': f"Would have triggered agent kill switch due to {abs(agent_metrics['current_streak'])} consecutive losses"
+            })
+
+        # Check for low win rate (similar to agent's kill switch)
+        if agent_metrics['total_trades'] >= 20 and agent_metrics['win_rate'] < 25:
+            kill_switch_triggers.append({
+                'type': 'low_win_rate',
+                'value': agent_metrics['win_rate'],
+                'threshold': 25,
+                'description': f"Would have triggered agent kill switch due to low win rate ({agent_metrics['win_rate']:.1f}%)"
+            })
+
+        # Add the kill switch triggers to the results
+        backtest_results['agent_risk_analysis'] = {
+            'kill_switch_triggers': kill_switch_triggers,
+            'agent_compatible_metrics': agent_metrics
+        }
+
+        # Add an assessment of how the strategy would perform with agent-style risk controls
+        if kill_switch_triggers:
+            backtest_results['agent_strategy_assessment'] = "Strategy would trigger agent kill switches, consider improvements"
+        else:
+            backtest_results['agent_strategy_assessment'] = "Strategy passes agent-style risk checks"
+
+        return backtest_results

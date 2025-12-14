@@ -65,6 +65,22 @@ class TradingLoopAgent:
         self.daily_trade_count = 0
         self.last_trade_date = datetime.date.today()
 
+        # Enhanced backtesting and risk metrics tracking
+        self._performance_metrics = {
+            'total_pnl': 0.0,
+            'winning_trades': 0,
+            'losing_trades': 0,
+            'total_trades': 0,
+            'win_rate': 0.0,
+            'avg_win': 0.0,
+            'avg_loss': 0.0,
+            'max_drawdown': 0.0,
+            'sharpe_ratio': 0.0,
+            'current_streak': 0,
+            'best_streak': 0,
+            'worst_streak': 0
+        }
+
         # Startup recovery tracking
         self._startup_complete = asyncio.Event()
         self._recovered_positions = []  # List of recovered position metadata
@@ -461,6 +477,45 @@ class TradingLoopAgent:
             except Exception as e:
                 logger.error(f"Could not check portfolio kill switch due to an error: {e}", exc_info=True)
 
+        # --- Additional Performance-based Kill Switches ---
+
+        # Check for excessive consecutive losses
+        current_streak = self._performance_metrics['current_streak']
+        if current_streak < -5:  # 6 or more consecutive losses
+            logger.critical(
+                f"PERFORMANCE KILL SWITCH TRIGGERED! "
+                f"{abs(current_streak)} consecutive losses. Stopping agent."
+            )
+            self.stop()
+            return
+
+        # Check for deteriorating win rate over time
+        if self._performance_metrics['total_trades'] >= 20:
+            win_rate = self._performance_metrics['win_rate']
+            if win_rate < 25:  # Less than 25% win rate with sufficient history
+                logger.critical(
+                    f"PERFORMANCE KILL SWITCH TRIGGERED! "
+                    f"Win rate ({win_rate:.1f}%) is critically low. Stopping agent."
+                )
+                self.stop()
+                return
+
+        # Check for negative trend in performance
+        if self._performance_metrics['total_trades'] >= 50:
+            # If total P&L is significantly negative relative to risk taken
+            total_pnl = self._performance_metrics['total_pnl']
+            # This is a simplified check - in practice, you might want to calculate
+            # risk-adjusted returns or compare to a benchmark
+            # We'll assume a default threshold if no initial balance is available
+            balance_threshold = getattr(self.config, 'initial_balance', 10000.0) * 0.15
+            if total_pnl < -balance_threshold:  # Lost more than 15% of reference balance
+                logger.critical(
+                    f"PERFORMANCE KILL SWITCH TRIGGERED! "
+                    f"Total loss of ${abs(total_pnl):.2f} exceeds 15% of reference balance. Stopping agent."
+                )
+                self.stop()
+                return
+
         # --- Daily Counter Reset ---
         today = datetime.date.today()
         if today > self.last_trade_date:
@@ -582,7 +637,16 @@ class TradingLoopAgent:
                 logger.warning(f"Failed to get monitoring context for risk validation: {e}")
                 monitoring_context = {}
 
+            # First run the standard RiskGatekeeper validation
             approved, reason = self.risk_gatekeeper.validate_trade(decision, monitoring_context)
+
+            # If standard validation passes, run additional performance-based risk checks
+            if approved:
+                performance_approved, performance_reason = self._check_performance_based_risks(decision)
+                if not performance_approved:
+                    approved = False
+                    reason = performance_reason
+
             if approved:
                 logger.info(f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue.")
                 approved_decisions.append(decision)
@@ -617,6 +681,64 @@ class TradingLoopAgent:
         else:
             logger.info("No decisions approved by RiskGatekeeper. Going back to IDLE.")
             await self._transition_to(AgentState.IDLE)
+
+    def _check_performance_based_risks(self, decision: dict[str, any]) -> tuple[bool, str]:
+        """
+        Check additional performance-based risk conditions.
+
+        Args:
+            decision: The trading decision to evaluate
+
+        Returns:
+            Tuple of (is_approved, reason) where is_approved indicates if the decision should proceed
+        """
+        # Check for excessive consecutive losses
+        current_streak = self._performance_metrics['current_streak']
+        worst_streak = self._performance_metrics['worst_streak']
+
+        if current_streak < -3:  # 4 or more consecutive losses
+            return False, f"Rejected due to poor performance streak: {abs(current_streak)} consecutive losses"
+
+        # Check win rate if we have sufficient history
+        if self._performance_metrics['total_trades'] >= 10:
+            win_rate = self._performance_metrics['win_rate']
+            if win_rate < 30:  # Less than 30% win rate
+                # Only block if confidence is also low
+                decision_confidence = decision.get('confidence', 0)
+                if decision_confidence < 70:
+                    return False, f"Rejected due to low win rate ({win_rate:.1f}%) and low confidence ({decision_confidence}%)"
+
+        # Check loss magnitude vs win magnitude ratio
+        avg_loss = abs(self._performance_metrics['avg_loss'])
+        avg_win = self._performance_metrics['avg_win']
+
+        if avg_loss > 0 and avg_win > 0:
+            loss_win_ratio = avg_loss / avg_win
+            if loss_win_ratio > 2.0:  # Average losses are more than 2x average wins
+                decision_confidence = decision.get('confidence', 0)
+                if decision_confidence < 75:
+                    return False, f"Rejected due to high loss/win ratio ({loss_win_ratio:.2f}) and low confidence ({decision_confidence}%)"
+
+        # If position sizing is used, check if the position would risk too much of recent profits
+        if decision.get('recommended_position_size'):
+            # Calculate risk as percentage of recent P&L
+            recent_pnl = self._performance_metrics['total_pnl']
+            if recent_pnl > 0:  # Only apply if we have positive P&L to protect
+                # Calculate potential loss from this position (roughly)
+                entry_price = decision.get('entry_price', 0)
+                position_size = decision.get('recommended_position_size', 0)
+                if entry_price > 0 and position_size > 0:
+                    # Rough calculation for max potential loss (stop loss distance)
+                    stop_loss_price = decision.get('stop_loss_price')
+                    if stop_loss_price and entry_price > stop_loss_price:
+                        potential_loss = abs(entry_price - stop_loss_price) * position_size
+                        risk_to_pnl_ratio = potential_loss / recent_pnl
+
+                        if risk_to_pnl_ratio > 0.5:  # Risking more than 50% of recent profits
+                            return False, f"Rejected due to high risk ({risk_to_pnl_ratio:.2%}) relative to recent profits"
+
+        # All checks passed
+        return True, "Performance-based risk checks passed"
 
     async def handle_execution_state(self):
         """
@@ -665,12 +787,90 @@ class TradingLoopAgent:
             for trade_outcome in closed_trades:
                 try:
                     self.engine.record_trade_outcome(trade_outcome)
+                    # Update performance metrics based on trade outcome
+                    self._update_performance_metrics(trade_outcome)
                     logger.info(f"Recorded outcome for trade {trade_outcome.get('id')}")
                 except Exception as e:
                     logger.error(f"Error recording trade outcome: {e}", exc_info=True)
 
         # After processing, transition to perception to gather fresh market data
         await self._transition_to(AgentState.PERCEPTION)
+
+    def _update_performance_metrics(self, trade_outcome: dict[str, any]) -> None:
+        """
+        Update performance metrics based on a completed trade.
+
+        Args:
+            trade_outcome: Dictionary containing trade results
+        """
+        try:
+            # Extract trade details
+            realized_pnl = trade_outcome.get('realized_pnl', 0)
+            is_profitable = trade_outcome.get('was_profitable', realized_pnl > 0)
+
+            # Update basic metrics
+            self._performance_metrics['total_trades'] += 1
+            self._performance_metrics['total_pnl'] += realized_pnl
+
+            if is_profitable:
+                self._performance_metrics['winning_trades'] += 1
+                self._performance_metrics['avg_win'] = (
+                    (self._performance_metrics['avg_win'] * (self._performance_metrics['winning_trades'] - 1) + realized_pnl) /
+                    self._performance_metrics['winning_trades']
+                )
+
+                # Update streaks
+                self._performance_metrics['current_streak'] = max(1, self._performance_metrics['current_streak'] + 1)
+                self._performance_metrics['best_streak'] = max(
+                    self._performance_metrics['best_streak'],
+                    self._performance_metrics['current_streak']
+                )
+            else:
+                self._performance_metrics['losing_trades'] += 1
+                self._performance_metrics['avg_loss'] = (
+                    (self._performance_metrics['avg_loss'] * (self._performance_metrics['losing_trades'] - 1) + abs(realized_pnl)) /
+                    self._performance_metrics['losing_trades']
+                )
+
+                # Update streaks
+                self._performance_metrics['current_streak'] = min(-1, self._performance_metrics['current_streak'] - 1)
+                self._performance_metrics['worst_streak'] = min(
+                    self._performance_metrics['worst_streak'],
+                    self._performance_metrics['current_streak']
+                )
+
+            # Update win rate
+            if self._performance_metrics['total_trades'] > 0:
+                self._performance_metrics['win_rate'] = (
+                    self._performance_metrics['winning_trades'] /
+                    self._performance_metrics['total_trades']
+                ) * 100
+
+            logger.debug(f"Updated performance metrics: P&L=${realized_pnl:.2f}, Total=${self._performance_metrics['total_pnl']:.2f}")
+
+        except Exception as e:
+            logger.error(f"Error updating performance metrics: {e}", exc_info=True)
+
+    def get_performance_summary(self) -> dict[str, any]:
+        """
+        Get a summary of the agent's performance.
+
+        Returns:
+            Dictionary with performance metrics
+        """
+        return {
+            'total_pnl': self._performance_metrics['total_pnl'],
+            'total_trades': self._performance_metrics['total_trades'],
+            'winning_trades': self._performance_metrics['winning_trades'],
+            'losing_trades': self._performance_metrics['losing_trades'],
+            'win_rate': self._performance_metrics['win_rate'],
+            'avg_win': self._performance_metrics['avg_win'],
+            'avg_loss': self._performance_metrics['avg_loss'],
+            'current_streak': self._performance_metrics['current_streak'],
+            'best_streak': self._performance_metrics['best_streak'],
+            'worst_streak': self._performance_metrics['worst_streak'],
+            'pnl_ratio': abs(self._performance_metrics['avg_win'] / self._performance_metrics['avg_loss']) if self._performance_metrics['avg_loss'] != 0 else float('inf')
+        }
 
     async def _should_execute(self, decision) -> bool:
         """Determine if a trade should be executed based on confidence and policy."""
