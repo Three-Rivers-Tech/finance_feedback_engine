@@ -664,6 +664,17 @@ class OandaPlatform(BaseTradingPlatform):
                 'timestamp': decision.get('timestamp')
             }
 
+    def get_active_positions(self) -> Dict[str, Any]:
+        """
+        Get all currently active positions from Oanda.
+
+        Returns:
+            A dictionary containing a list of active positions.
+        """
+        logger.info("Fetching active positions from Oanda")
+        portfolio = self.get_portfolio_breakdown()
+        return {'positions': portfolio.get('positions', [])}
+
     def get_account_info(self) -> Dict[str, Any]:
         """
         Get Oanda account information.

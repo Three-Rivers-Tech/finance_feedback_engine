@@ -79,3 +79,4 @@ developer_markers.json
 developer_markers.filtered.json
 docs/todo_report.md
 docs/todo_report_filtered.md
+config/ray_auth.sh

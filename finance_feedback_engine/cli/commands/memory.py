@@ -118,10 +118,10 @@ def learning_report(ctx, asset_pair):
         console.print("\n[dim]Research Methods:[/dim]")
         for metric, paper in metrics.get('research_methods', {}).items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
-        for metric, paper in metrics['research_methods'].items():
-        console.print("\n[dim]Research Methods:[/dim]")
-        for metric, paper in metrics.get('research_methods', {}).items():
-            console.print(f"  [dim]- {metric}: {paper}[/dim]")
+
+    except Exception as e:
+        console.print(f"[bold red]An unexpected error occurred:[/bold red] {str(e)}")
+        if ctx.obj.get('verbose'):
             import traceback
             console.print(traceback.format_exc())
         raise click.Abort()
