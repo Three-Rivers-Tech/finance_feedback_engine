@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 MAX_WORKERS = 4
 ENSEMBLE_TIMEOUT = 30
 
+# Minimum order sizes for different platforms (USD notional value)
+MIN_ORDER_SIZE_CRYPTO = 10.0  # Coinbase minimum order size
+MIN_ORDER_SIZE_FOREX = 1.0    # Oanda minimum micro lot
+MIN_ORDER_SIZE_DEFAULT = 10.0  # Default minimum for unknown platforms
+
 
 class DecisionEngine:
     """
@@ -958,7 +963,7 @@ Format response as a structured technical analysis demonstration.
         Select platform-specific balance based on asset type.
 
         Extracts the appropriate balance for the asset being traded:
-        - Crypto: Coinbase balances (coinbase_*)
+        - Crypto: Coinbase balances (FUTURES_USD, SPOT_USD, SPOT_USDC, or coinbase_*)
         - Forex: Oanda balances (oanda_*)
         - Unknown: All balances
 
@@ -984,12 +989,26 @@ Format response as a structured technical analysis demonstration.
 
         if balance and isinstance(balance, dict):
             if is_crypto:
-                # Filter for Coinbase balances
-                relevant_balance = {
-                    k: v for k, v in balance.items()
+                # Filter for Coinbase balances - check for both new format and legacy format
+                # New format: FUTURES_USD, SPOT_USD, SPOT_USDC (from coinbase_advanced)
+                # Legacy format: coinbase_* prefixed keys
+                coinbase_keys = [
+                    k for k in balance.keys()
                     if k.startswith('coinbase_')
-                }
-                balance_source = 'Coinbase'
+                    or k in ['FUTURES_USD', 'SPOT_USD', 'SPOT_USDC']
+                ]
+
+                if coinbase_keys:
+                    relevant_balance = {k: balance[k] for k in coinbase_keys}
+                    balance_source = 'Coinbase'
+
+                    # Log available balance sources for debugging
+                    logger.debug(
+                        "Coinbase balance keys found: %s (total: $%.2f)",
+                        ', '.join(coinbase_keys),
+                        sum(relevant_balance.values())
+                    )
+
             elif is_forex:
                 # Filter for Oanda balances
                 relevant_balance = {
@@ -1002,10 +1021,18 @@ Format response as a structured technical analysis demonstration.
                 relevant_balance = balance
                 balance_source = 'Combined'
 
-            # Fallback for unified cash balance when platform-specific keys are absent
-            if not relevant_balance and 'USD' in balance:
-                relevant_balance = {'USD': balance['USD']}
-                balance_source = 'USD'
+            # Fallback: Check for unified cash balance keys when platform-specific keys are absent
+            if not relevant_balance:
+                # Try USD, USDC, or other generic keys
+                fallback_keys = [k for k in ['USD', 'USDC', 'USDT'] if k in balance]
+                if fallback_keys:
+                    relevant_balance = {k: balance[k] for k in fallback_keys}
+                    balance_source = '/'.join(fallback_keys)
+                    logger.debug(
+                        "Using fallback balance keys: %s (total: $%.2f)",
+                        balance_source,
+                        sum(relevant_balance.values())
+                    )
 
         return relevant_balance, balance_source, is_crypto, is_forex
 
@@ -1207,7 +1234,7 @@ Format response as a structured technical analysis demonstration.
                     sizing_stop_loss_percentage * 100,
                 )
 
-        # CASE 2: Signal-only mode (no balance or signal_only_default enabled)
+        # CASE 2: Signal-only mode or zero balance - use minimum order size
         else:
             signal_only = True
 
@@ -1217,15 +1244,47 @@ Format response as a structured technical analysis demonstration.
                 result['signal_only'] = True
                 return result
 
-            # Calculate position sizing for human approval using default balance
-            default_balance = 10000.0  # Default $10k for sizing recommendations
+            # Determine minimum order size based on asset type
+            is_crypto = context.get('market_data', {}).get('type') == 'crypto' or 'BTC' in context['asset_pair'] or 'ETH' in context['asset_pair']
+            is_forex = '_' in context['asset_pair'] or context.get('market_data', {}).get('type') == 'forex'
 
-            recommended_position_size = self.calculate_position_size(
-                account_balance=default_balance,
-                risk_percentage=risk_percentage,
-                entry_price=current_price,
-                stop_loss_percentage=sizing_stop_loss_percentage
-            )
+            if is_crypto:
+                min_order_size = MIN_ORDER_SIZE_CRYPTO
+            elif is_forex:
+                min_order_size = MIN_ORDER_SIZE_FOREX
+            else:
+                min_order_size = MIN_ORDER_SIZE_DEFAULT
+
+            # Calculate minimum viable position size based on platform minimum
+            # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
+            # This ensures we can execute the smallest possible trade
+            if current_price > 0:
+                # Calculate minimum position size in units
+                min_position_size = min_order_size / current_price
+
+                # Use the minimum as the recommended size
+                # This allows dynamic position sizing to work even with zero balance
+                recommended_position_size = min_position_size
+
+                logger.info(
+                    "Zero/low balance detected - using minimum order size: $%.2f USD notional = %.6f units @ $%.2f",
+                    min_order_size,
+                    recommended_position_size,
+                    current_price
+                )
+            else:
+                # Fallback to signal-only with standard calculation if price is unavailable
+                default_balance = 10000.0
+                recommended_position_size = self.calculate_position_size(
+                    account_balance=default_balance,
+                    risk_percentage=risk_percentage,
+                    entry_price=current_price if current_price > 0 else 1,
+                    stop_loss_percentage=sizing_stop_loss_percentage
+                )
+                logger.warning(
+                    "Current price unavailable - using default balance $%.2f for sizing recommendation",
+                    default_balance
+                )
 
             # Calculate stop loss price
             if current_price > 0 and sizing_stop_loss_percentage > 0:
@@ -1248,25 +1307,22 @@ Format response as a structured technical analysis demonstration.
             # Log appropriate message
             if signal_only_default:
                 logger.info(
-                    "Signal-only mode: Position sizing calculated for human approval "
-                    "(%.4f units based on $%.2f default balance)",
+                    "Signal-only mode: Using minimum position size %.6f units ($%.2f USD notional)",
                     recommended_position_size,
-                    default_balance
+                    recommended_position_size * current_price if current_price > 0 else 0
                 )
             elif not has_valid_balance:
                 logger.warning(
-                    "No valid %s balance - using default $%.2f for sizing recommendation "
-                    "(%.4f units for human approval)",
+                    "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
                     balance_source,
-                    default_balance,
-                    recommended_position_size
+                    recommended_position_size,
+                    min_order_size
                 )
             else:
                 logger.warning(
-                    "Portfolio data unavailable - using default $%.2f for sizing recommendation "
-                    "(%.4f units for human approval)",
-                    default_balance,
-                    recommended_position_size
+                    "Portfolio data unavailable - using minimum order size: %.6f units ($%.2f USD notional)",
+                    recommended_position_size,
+                    min_order_size
                 )
 
         return result
