@@ -336,6 +336,9 @@ class HistoricalDataProvider:
             transformations: List of transformation functions to apply
                            (e.g., ['returns', 'indicators', 'resample_4H'])
 
+        Returns:
+            pd.DataFrame: Historical price data with optional transformations applied
+        """
         if transformations:
             # Apply resample first to avoid losing computed columns
             resample_transforms = [t for t in transformations if t.startswith('resample_')]

@@ -436,7 +436,7 @@ class LocalLLMProvider:
 
     def query(self, prompt: str) -> Dict[str, Any]:
         """
-        Query local LLM for trading decision.
+        Query local LLM for trading decision with enhanced error handling and retry logic.
 
         Args:
             prompt: Trading analysis prompt
@@ -444,84 +444,129 @@ class LocalLLMProvider:
         Returns:
             Dictionary with action, confidence, reasoning, amount
         """
-        try:
-            logger.info(f"Querying local LLM: {self.model_name}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Querying local LLM: {self.model_name} (attempt {attempt + 1}/{max_retries})")
 
-            # Create system prompt for trading
-            full_prompt = (
-                "You are a professional day trading advisor. "
-                "Analyze market data and provide trading recommendations. "
-                "Respond ONLY with valid JSON containing these exact keys: "
-                "action (BUY/SELL/HOLD), confidence (0-100 integer), "
-                "reasoning (brief explanation string), "
-                "amount (decimal number for position size).\n\n"
-                f"{prompt}"
-            )
-
-            # Call Ollama with proper format
-            result = subprocess.run(
-                [
-                    'ollama', 'run', self.model_name,
-                    '--format', 'json',
-                    full_prompt
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False
-            )
-
-            if result.returncode != 0:
-                logger.error(f"Ollama inference failed: {result.stderr}")
-                return build_fallback_decision(
-                    "Local LLM unavailable, using fallback decision."
+                # Create system prompt for trading
+                full_prompt = (
+                    "You are a professional day trading advisor. "
+                    "Analyze market data and provide trading recommendations. "
+                    "Respond ONLY with valid JSON containing these exact keys: "
+                    "action (BUY/SELL/HOLD), confidence (0-100 integer), "
+                    "reasoning (brief explanation string), "
+                    "amount (decimal number for position size).\n\n"
+                    f"{prompt}"
                 )
 
-            response_text = result.stdout.strip()
-            logger.debug(f"Raw LLM response: {response_text[:200]}")
-
-            decision = try_parse_decision_json(response_text)
-            if decision:
-                # Safely convert confidence to int (default 60 if missing/invalid)
-                try:
-                    confidence_val = decision.get('confidence', 60)
-                    decision['confidence'] = int(confidence_val) if confidence_val is not None else 60
-                except (ValueError, TypeError):
-                    decision['confidence'] = 60
-
-                # Safely convert amount to float (default 0.1 if missing/invalid)
-                try:
-                    amount_val = decision.get('amount', 0.1)
-                    decision['amount'] = float(amount_val) if amount_val is not None else 0.1
-                except (ValueError, TypeError):
-                    decision['amount'] = 0.1
-
-                logger.info(
-                    f"Local LLM decision: {decision['action']} "
-                    f"({decision['confidence']}%)"
+                # Call Ollama with proper format
+                result = subprocess.run(
+                    [
+                        'ollama', 'run', self.model_name,
+                        '--format', 'json',
+                        full_prompt
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=90,  # Increased timeout to 90 seconds
+                    check=False
                 )
 
-                # Unload model from memory to free GPU resources for next model
-                self._unload_model()
+                if result.returncode != 0:
+                    logger.error(f"Ollama inference failed on attempt {attempt + 1}: {result.stderr}")
 
-                return decision
+                    # If this is the last attempt, return fallback
+                    if attempt == max_retries - 1:
+                        return build_fallback_decision(
+                            "Local LLM unavailable after multiple attempts, using fallback decision."
+                        )
 
-            logger.warning(
-                "LLM response missing required fields or not JSON, "
-                "attempting text parsing"
-            )
-            return self._parse_text_response(response_text)
+                    # Retry with a brief delay
+                    import time
+                    time.sleep(2 * (attempt + 1))  # Increasing delay (2s, 4s, 6s)
+                    continue
 
-        except subprocess.TimeoutExpired:
-            logger.error("Local LLM inference timeout (>60s)")
-            return build_fallback_decision(
-                "Local LLM timeout, using fallback decision."
-            )
-        except Exception as e:
-            logger.error(f"Local LLM error: {e}")
-            return build_fallback_decision(
-                "Local LLM error, using fallback decision."
-            )
+                response_text = result.stdout.strip()
+
+                # Check if response is empty or indicates an error
+                if not response_text or "error" in response_text.lower():
+                    logger.warning(f"Empty or error response from LLM on attempt {attempt + 1}: {response_text}")
+
+                    # If this is the last attempt, return fallback
+                    if attempt == max_retries - 1:
+                        return build_fallback_decision(
+                            "Local LLM returned empty or error response, using fallback decision."
+                        )
+
+                    # Retry with a brief delay
+                    import time
+                    time.sleep(2 * (attempt + 1))
+                    continue
+
+                logger.debug(f"Raw LLM response: {response_text[:200]}")
+
+                decision = try_parse_decision_json(response_text)
+                if decision:
+                    # Safely convert confidence to int (default 60 if missing/invalid)
+                    try:
+                        confidence_val = decision.get('confidence', 60)
+                        decision['confidence'] = int(confidence_val) if confidence_val is not None else 60
+                    except (ValueError, TypeError):
+                        decision['confidence'] = 60
+
+                    # Safely convert amount to float (default 0.1 if missing/invalid)
+                    try:
+                        amount_val = decision.get('amount', 0.1)
+                        decision['amount'] = float(amount_val) if amount_val is not None else 0.1
+                    except (ValueError, TypeError):
+                        decision['amount'] = 0.1
+
+                    logger.info(
+                        f"Local LLM decision: {decision['action']} "
+                        f"({decision['confidence']}%)"
+                    )
+
+                    # Unload model from memory to free GPU resources for next model
+                    self._unload_model()
+
+                    return decision
+
+                logger.warning(
+                    f"LLM response missing required fields or not JSON on attempt {attempt + 1}, "
+                    f"attempting text parsing: {response_text[:100]}"
+                )
+                return self._parse_text_response(response_text)
+
+            except subprocess.TimeoutExpired:
+                logger.error(f"Local LLM inference timeout (>90s) on attempt {attempt + 1}")
+
+                # If this is the last attempt, return fallback
+                if attempt == max_retries - 1:
+                    return build_fallback_decision(
+                        "Local LLM timeout after multiple attempts, using fallback decision."
+                    )
+
+                # Retry with a brief delay
+                import time
+                time.sleep(2 * (attempt + 1))
+
+            except Exception as e:
+                logger.error(f"Local LLM error on attempt {attempt + 1}: {e}")
+
+                # If this is the last attempt, return fallback
+                if attempt == max_retries - 1:
+                    return build_fallback_decision(
+                        f"Local LLM error after multiple attempts: {str(e)}, using fallback decision."
+                    )
+
+                # Retry with a brief delay
+                import time
+                time.sleep(2 * (attempt + 1))
+
+        # This should never be reached due to the return statements in the loop,
+        # but included for completeness
+        return build_fallback_decision("Local LLM failed after all retries, using fallback decision.")
 
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """Parse text response for trading decision."""
