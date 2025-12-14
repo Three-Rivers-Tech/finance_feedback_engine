@@ -355,7 +355,7 @@ class DashboardDataAggregator:
                     try:
                         event = queue.get_nowait()
                         temp_events.append(event)
-                    except:
+                    except Exception:
                         break
 
                 # Filter for decision events
