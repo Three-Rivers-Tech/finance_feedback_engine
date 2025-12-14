@@ -9,7 +9,6 @@ async def send_test_message():
     """Send a plain English test message."""
 
     # Load config
-    # Load config
     try:
         with open('config/telegram.yaml') as f:
             config = yaml.safe_load(f)
