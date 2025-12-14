@@ -155,6 +155,7 @@ class LocalLLMProvider:
         system = platform.system()
         logger.info(f"Detected platform: {system}")
 
+        temp_script_path = None
         try:
             if system == "Linux" or system == "Darwin":  # Linux or macOS
                 logger.info(f"Installing Ollama on {system}...")
@@ -190,7 +191,11 @@ class LocalLLMProvider:
                     logger.info(f"Installation output: {result.stdout}")
                 finally:
                     # Clean up the temporary script file
-                    os.unlink(temp_script_path)
+                    if temp_script_path is not None and os.path.exists(temp_script_path):
+                        try:
+                            os.unlink(temp_script_path)
+                        except Exception as cleanup_error:
+                            logger.warning(f"Failed to clean up temporary script: {cleanup_error}")
 
             elif system == "Windows":
                 logger.error(
