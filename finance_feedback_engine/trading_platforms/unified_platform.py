@@ -6,6 +6,7 @@ import logging
 from .base_platform import BaseTradingPlatform
 from .coinbase_platform import CoinbaseAdvancedPlatform
 from .oanda_platform import OandaPlatform
+from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
 
 logger = logging.getLogger(__name__)
 
@@ -80,25 +81,13 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         """
         asset_pair = decision.get('asset_pair', '').upper()
 
-        # Determine target platform
-        target_platform = None
-        # Expanded check for forex pairs, which might be standardized without '_'
-        forex_currencies = {'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'USD'}
-        # Check if asset_pair is a valid forex pair (both parts are forex currencies)
-        is_forex_pair = False
-        if '_' in asset_pair:
-            parts = asset_pair.split('_')
-            if len(parts) == 2 and parts[0] in forex_currencies and parts[1] in forex_currencies:
-                is_forex_pair = True
-        else:
-            # Check for formats like EURUSD (6 chars) or EURJPY (6 chars)
-            if len(asset_pair) == 6:
-                if asset_pair[:3] in forex_currencies and asset_pair[3:] in forex_currencies:
-                    is_forex_pair = True
+        # Classify asset and route to appropriate platform
+        asset_class = classify_asset_pair(asset_pair)
 
-        if 'BTC' in asset_pair or 'ETH' in asset_pair:
+        target_platform = None
+        if asset_class == 'crypto':
             target_platform = self.platforms.get('coinbase')
-        elif is_forex_pair:
+        elif asset_class == 'forex':
             target_platform = self.platforms.get('oanda')
 
         if target_platform:
@@ -130,6 +119,31 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 logger.error("Failed to get account info from %s: %s", name, e)
                 combined_info[name] = {'error': str(e)}
         return combined_info
+
+    def get_active_positions(self) -> Dict[str, Any]:
+        """
+        Get combined active positions from all configured sub-platforms.
+
+        Returns:
+            A dictionary containing a list of active positions, each represented
+            by a dictionary with details like instrument, units, PnL, etc.
+            Each position will also include a 'platform' key indicating its source.
+        """
+        all_positions = []
+        for name, platform_instance in self.platforms.items():
+            try:
+                # Call get_active_positions on the sub-platform
+                platform_positions_data = platform_instance.get_active_positions()
+                for pos in platform_positions_data.get('positions', []):
+                    # Add platform name to each position for context in CLI display
+                    pos['platform'] = name
+                    all_positions.append(pos)
+            except Exception as e:
+                logger.warning(
+                    "Could not fetch active positions from %s platform: %s",
+                    name, e
+                )
+        return {'positions': all_positions}
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
