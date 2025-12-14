@@ -485,6 +485,58 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             logger.error("Error fetching portfolio breakdown: %s", e)
             raise
 
+    def get_account_info(self) -> Dict[str, Any]:
+        """
+        Get Coinbase account information.
+
+        Returns:
+            Account details including platform, balance, and leverage info
+        """
+        logger.info("Fetching Coinbase account info")
+
+        try:
+            client = self._get_client()
+
+            # Get futures balance summary for account details
+            futures_summary = {}
+            balance = 0.0
+            max_leverage = 20.0  # Default max leverage for Coinbase perpetuals
+
+            try:
+                futures_response = client.get_futures_balance_summary()
+                balance_summary = getattr(
+                    futures_response, 'balance_summary', None
+                )
+
+                if balance_summary:
+                    total_usd_balance = balance_summary['total_usd_balance']
+                    balance = float(total_usd_balance.get('value', 0))
+
+                    # Get buying power to calculate available leverage
+                    buying_power_dict = balance_summary.get('futures_buying_power', {})
+                    buying_power = float(buying_power_dict.get('value', 0))
+
+                    # Max leverage is typically 20x for Coinbase perpetuals
+                    # but we can estimate it from buying_power / balance ratio
+                    if balance > 0 and buying_power > balance:
+                        max_leverage = min(buying_power / balance, 20.0)
+
+            except Exception as e:
+                logger.warning("Could not fetch futures balance: %s", e)
+
+            return {
+                'platform': 'coinbase',
+                'account_type': 'futures',
+                'currency': 'USD',
+                'balance': balance,
+                'max_leverage': max_leverage,
+                'environment': 'sandbox' if self.use_sandbox else 'live'
+            }
+
+        except Exception as e:
+            logger.error("Error fetching Coinbase account info: %s", e)
+            raise
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(2),

@@ -103,7 +103,7 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
     agent = TradingLoopAgent(
         config=agent_config,
         engine=engine,
-        trade_monitor=engine.trade_monitor,
+        trade_monitor=trade_monitor,
         portfolio_memory=engine.memory_engine,
         trading_platform=engine.trading_platform,
     )

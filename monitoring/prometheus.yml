@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s  # Scrape metrics every 5 seconds
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'finance-feedback-engine'
+    static_configs:
+      - targets: ['host.docker.internal:8000']  # FastAPI server
+    metrics_path: '/metrics'
