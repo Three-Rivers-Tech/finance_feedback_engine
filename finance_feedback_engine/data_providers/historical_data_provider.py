@@ -284,6 +284,14 @@ class HistoricalDataProvider:
         # Only include columns that exist in the dataframe
         existing_cols = {k: v for k, v in agg_dict.items() if k in df.columns}
 
+        # Preserve other numeric columns with 'last' aggregation
+        for col in df.select_dtypes(include=[np.number]).columns:
+            if col not in existing_cols:
+                existing_cols[col] = 'last'
+
+        resampled = df.resample(new_frequency).agg(existing_cols)
+        return resampled
+
         resampled = df.resample(new_frequency).agg(existing_cols)
         return resampled
 
@@ -328,16 +336,21 @@ class HistoricalDataProvider:
             transformations: List of transformation functions to apply
                            (e.g., ['returns', 'indicators', 'resample_4H'])
 
-        Returns:
-            Transformed DataFrame
-        """
-        df = self.get_historical_data(asset_pair, start_date, end_date, timeframe)
-
-        if df.empty:
-            return df
-
         if transformations:
-            for transform in transformations:
+            # Apply resample first to avoid losing computed columns
+            resample_transforms = [t for t in transformations if t.startswith('resample_')]
+            other_transforms = [t for t in transformations if not t.startswith('resample_')]
+            ordered_transforms = resample_transforms + other_transforms
+
+            for transform in ordered_transforms:
+                if transform == 'returns':
+                    df = self.add_returns(df)
+                elif transform == 'indicators':
+                    df = self.calculate_technical_indicators(df)
+                elif transform.startswith('resample_'):
+                    # Extract frequency from transform name, e.g., 'resample_4H'
+                    freq = transform.replace('resample_', '')
+                    df = self.resample_data(df, freq)
                 if transform == 'returns':
                     df = self.add_returns(df)
                 elif transform == 'indicators':

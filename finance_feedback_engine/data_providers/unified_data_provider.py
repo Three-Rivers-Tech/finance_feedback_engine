@@ -365,22 +365,19 @@ class UnifiedDataProvider:
 
         cache_hits = 0
         for tf in timeframes:
-            # Check cache first manually to determine if data was cached
-            cached_data = self._get_cached_candles(asset_pair, tf)
-            if cached_data is not None:
-                # Data was cached, so increment counter
-                candles, provider = cached_data
-                is_cached = True
-                cache_hits += 1
-            else:
-                # Data wasn't cached, fetch it (which will cache it too)
-                try:
-                    candles, provider = self.get_candles(asset_pair, tf)
-                    is_cached = False  # This was just fetched and now cached
-                except Exception as e:
-                    logger.warning(f"Failed to fetch {tf} data: {e}")
-                    candles, provider = [], 'failed'
-                    is_cached = False
+            # Check if data is in cache before fetching
+            cache_key = (asset_pair.upper(), tf)
+            was_in_cache = cache_key in self._cache
+
+            try:
+                candles, provider = self.get_candles(asset_pair, tf)
+                is_cached = was_in_cache
+                if was_in_cache:
+                    cache_hits += 1
+            except Exception as e:
+                logger.warning(f"Failed to fetch {tf} data for {asset_pair}: {e}")
+                candles, provider = [], 'failed'
+                is_cached = False
 
             # Check if data available
             if candles and provider != 'failed':
