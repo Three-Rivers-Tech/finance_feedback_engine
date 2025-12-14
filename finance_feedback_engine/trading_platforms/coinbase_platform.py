@@ -608,7 +608,16 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'timestamp': decision.get('timestamp')
             }
 
-    def get_account_info(self) -> Dict[str, Any]:
+    def get_active_positions(self) -> Dict[str, Any]:
+        """
+        Get all currently active positions from Coinbase.
+
+        Returns:
+            A dictionary containing a list of active futures positions.
+        """
+        logger.info("Fetching active positions from Coinbase")
+        portfolio = self.get_portfolio_breakdown()
+        return {'positions': portfolio.get('futures_positions', [])}
         """
         Get Coinbase account information including portfolio breakdown.
 

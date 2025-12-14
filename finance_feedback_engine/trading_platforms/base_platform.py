@@ -64,6 +64,17 @@ class BaseTradingPlatform(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_active_positions(self) -> Dict[str, Any]:
+        """
+        Get all currently active positions.
+
+        Returns:
+            A dictionary containing a list of active positions, each represented
+            by a dictionary with details like instrument, units, PnL, etc.
+        """
+        pass
+
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
         Optional: Get detailed portfolio breakdown.
