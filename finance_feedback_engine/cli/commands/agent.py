@@ -109,56 +109,108 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
     )
     return agent
 
-async def _run_live_market_view(engine, agent):
-    """Runs the live market view in the console."""
+async def _run_live_dashboard(engine, agent):
+    """Runs the comprehensive live dashboard in the console."""
+    from finance_feedback_engine.cli.live_dashboard import LiveDashboard
+    from finance_feedback_engine.cli.dashboard_aggregator import DashboardDataAggregator
+
+    # Initialize components
     tm = getattr(engine, 'trade_monitor', None)
-    udp = getattr(tm, 'unified_data_provider', None) if tm else None
-    watchlist = agent.config.watchlist if hasattr(agent, 'config') and hasattr(agent.config, 'watchlist') else ['BTCUSD', 'ETHUSD', 'EURUSD']
+    if not tm:
+        logger.warning("TradeMonitor not available, dashboard may have limited data")
+        return
 
-    def build_table():
-        tbl = Table(title="Live Market Pulse", caption=f"Updated: {time.strftime('%H:%M:%S')}")
-        tbl.add_column("Asset", style="cyan", no_wrap=True)
-        tbl.add_column("Last Price", style="white", justify="right")
-        tbl.add_column("1m Δ%", style="yellow", justify="right")
-        tbl.add_column("Confluence", style="magenta")
-        tbl.add_column("Trend Align", style="green")
-        tbl.add_column("Source Path", style="dim")
+    memory_engine = getattr(engine, 'memory_engine', None)
+    if not memory_engine:
+        logger.warning("PortfolioMemoryEngine not available, performance stats will be limited")
 
-        for ap in watchlist:
-            last_price, change_1m, conf, align, src_path = "-", "-", "-", "-", "-"
-            try:
-                if udp:
-                    candles, provider = udp.get_candles(ap, granularity='1m', limit=2)
-                    if candles:
-                        last_close = candles[-1].get('close') or candles[-1].get('price')
-                        prev_close = candles[-2].get('close') if len(candles) > 1 else last_close
-                        last_price = f"{last_close:,.4f}" if isinstance(last_close, (int, float)) else str(last_close)
-                        if isinstance(last_close, (int, float)) and isinstance(prev_close, (int, float)) and prev_close:
-                            delta = (last_close - prev_close) / prev_close * 100
-                            change_1m = f"{delta:+.2f}%"
-                        src_path = provider
-            except Exception as e:
-                logger.debug(f"Error fetching market data for asset '{ap}' (provider/tm: {tm}, src_path: {src_path}): {e}\n{traceback.format_exc()}")
+    aggregator = DashboardDataAggregator(
+        agent=agent,
+        engine=engine,
+        trade_monitor=tm,
+        portfolio_memory=memory_engine
+    )
 
-            try:
-                if tm:
-                    mc = tm.get_latest_market_context(ap)
-                    if mc:
-                        conf_val = mc.get('confluence_strength')
-                        conf = f"{conf_val:.2f}" if isinstance(conf_val, (int, float)) else str(conf_val or '-')
-                        ta = mc.get('trend_alignment') or {}
-                        align = ",".join([k for k, v in ta.items() if v]) or '-'
-                        ds = mc.get('data_sources') or {}
-                        src_path = ",".join([str(v) for _, v in sorted(ds.items())]) or src_path
-            except Exception as e:
-                logger.debug(f"Error fetching confluence/trend for asset '{ap}' (provider/tm: {tm}, src_path: {src_path}): {e}\n{traceback.format_exc()}")
-            tbl.add_row(ap, last_price, change_1m, conf, align, src_path)
-        return tbl
+    # Get config for refresh rates
+    config = getattr(agent, 'config', None)
+    monitoring_cfg = config.monitoring if hasattr(config, 'monitoring') else {}
+    live_view_cfg = monitoring_cfg.get('live_view', {}) if isinstance(monitoring_cfg, dict) else {}
+    refresh_rates = live_view_cfg.get('refresh_rates', {
+        'fast': 10,
+        'medium': 30,
+        'slow': 60,
+        'lazy': 120
+    })
 
-    with Live(build_table(), refresh_per_second=0.5) as live:
+    dashboard = LiveDashboard(
+        agent=agent,
+        aggregator=aggregator,
+        config=config
+    )
+
+    # Track last update times for different refresh rates
+    # Initialize to current time to avoid all updates firing on first iteration
+    now = time.time()
+    last_updates = {
+        'fast': now,      # Active trades, agent state
+        'medium': now,    # Portfolio, risk
+        'slow': now,      # Market pulse
+        'lazy': now       # Performance
+    }
+
+    with Live(dashboard.render(), refresh_per_second=0.2) as live:
         while not getattr(agent, 'stop_requested', False):
-            await asyncio.sleep(2)
-            live.update(build_table())
+            now = time.time()
+            data_updated = False
+
+            # Fast updates (10s): active trades, agent state
+            if now - last_updates['fast'] >= refresh_rates.get('fast', 10):
+                try:
+                    dashboard.update_agent_status(aggregator.get_agent_status())
+                    dashboard.update_active_trades(aggregator.get_active_trades())
+                    last_updates['fast'] = now
+                    data_updated = True
+                except Exception as e:
+                    logger.debug(f"Error updating fast data: {e}")
+
+            # Medium updates (30s): portfolio metrics
+            if now - last_updates['medium'] >= refresh_rates.get('medium', 30):
+                try:
+                    dashboard.update_portfolio(aggregator.get_portfolio_snapshot())
+                    dashboard.update_recent_decisions(aggregator.get_recent_decisions())
+                    last_updates['medium'] = now
+                    data_updated = True
+                except Exception as e:
+                    logger.debug(f"Error updating medium data: {e}")
+
+            # Slow updates (60s): market pulse
+            if now - last_updates['slow'] >= refresh_rates.get('slow', 60):
+                try:
+                    dashboard.update_market_pulse(aggregator.get_market_pulse())
+                    last_updates['slow'] = now
+                    data_updated = True
+                except Exception as e:
+                    logger.debug(f"Error updating slow data: {e}")
+
+            # Lazy updates (120s): performance stats
+            if now - last_updates['lazy'] >= refresh_rates.get('lazy', 120):
+                try:
+                    if memory_engine:
+                        dashboard.update_performance(aggregator.get_performance_stats())
+                    last_updates['lazy'] = now
+                    data_updated = True
+                except Exception as e:
+                    logger.debug(f"Error updating performance data: {e}")
+
+            # Only re-render if data was actually updated
+            if data_updated:
+                try:
+                    live.update(dashboard.render())
+                except Exception as e:
+                    logger.error(f"Error rendering dashboard: {e}")
+
+            # Sleep 5s between update checks
+            await asyncio.sleep(5.0)
 
 @click.command(name="run-agent")
 @click.option(
@@ -244,19 +296,20 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asse
         monitoring_cfg = config.get('monitoring', {})
         enable_live_view = monitoring_cfg.get('enable_live_view', True)
 
-        loop = asyncio.get_event_loop()
-        try:
-            tasks = [loop.create_task(agent.run())]
+        # Use asyncio.run() for proper event loop management
+        async def run_agent_tasks():
+            tasks = [agent.run()]
             if enable_live_view:
-                tasks.append(loop.create_task(_run_live_market_view(engine, agent)))
+                tasks.append(_run_live_dashboard(engine, agent))
 
-            loop.run_until_complete(asyncio.gather(*tasks))
+            # Run tasks concurrently
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        try:
+            asyncio.run(run_agent_tasks())
         except KeyboardInterrupt:
             console.print("\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]")
             agent.stop()
-            loop.run_until_complete(asyncio.sleep(1))
-        finally:
-            loop.close()
             console.print("[bold green]✓ Agent stopped.[/bold green]")
 
     except Exception as e:
@@ -344,11 +397,9 @@ def metrics(ctx):
                 return
 
             # Calculate aggregate stats
-            console.print(f"Total Trades:     {len(all_metrics)}")
-            console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
-            console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
-            console.print(f"Breakeven Trades: [yellow]{len(breakeven)}[/yellow]")
-            console.print(f"Win Rate:         {win_rate:.1f}%")
+            winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
+            losing = [m for m in all_metrics if m.get('realized_pnl', 0) < 0]
+            breakeven = [m for m in all_metrics if m.get('realized_pnl', 0) == 0]
 
             total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
             avg_pnl = total_pnl / len(all_metrics)
@@ -358,6 +409,7 @@ def metrics(ctx):
             console.print(f"Total Trades:     {len(all_metrics)}")
             console.print(f"Winning Trades:   [green]{len(winning)}[/green]")
             console.print(f"Losing Trades:    [red]{len(losing)}[/red]")
+            console.print(f"Breakeven Trades: [yellow]{len(breakeven)}[/yellow]")
             console.print(f"Win Rate:         {win_rate:.1f}%")
 
             pnl_color = "green" if total_pnl >= 0 else "red"
