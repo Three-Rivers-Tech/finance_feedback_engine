@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import logging
+import time
 from enum import Enum, auto
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.agent.config import TradingAgentConfig
@@ -73,6 +74,15 @@ class TradingLoopAgent:
         # For preventing infinite loops on rejected trades
         self._rejected_decisions_cache = {} # {decision_id: (rejection_timestamp, asset_pair)}
         self._rejection_cooldown_seconds = 300 # 5 minutes cooldown
+
+        # Dashboard event queue for real-time updates
+        import queue
+        self._dashboard_event_queue = queue.Queue(maxsize=100)
+        self._cycle_count = 0
+        self._start_time = None  # Will be set in run()
+
+        # Property for dashboard to track if stop was requested
+        self.stop_requested = False
 
         # State machine handler map
         self.state_handlers = {
@@ -333,6 +343,7 @@ class TradingLoopAgent:
         """
         logger.info("Starting autonomous trading agent...")
         self.is_running = True
+        self._start_time = time.time()  # For uptime tracking
 
         # Block until position recovery completes
         try:
@@ -357,6 +368,8 @@ class TradingLoopAgent:
                     logger.warning("Cycle execution failed, backing off before retry")
                     await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
                 else:
+                    # Increment cycle counter for dashboard
+                    self._cycle_count += 1
                     # Normal sleep between analysis cycles
                     await asyncio.sleep(self.config.analysis_frequency_seconds)
 
@@ -372,6 +385,44 @@ class TradingLoopAgent:
         old_state = self.state
         self.state = new_state
         logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+
+        # Emit event for dashboard
+        self._emit_dashboard_event({
+            'type': 'state_transition',
+            'from': old_state.name,
+            'to': new_state.name,
+            'timestamp': time.time()
+        })
+
+    def _cleanup_rejected_cache(self):
+        """
+        Clean up expired entries from the rejection cache.
+        """
+        import datetime
+        current_time = datetime.datetime.now()
+        expired_keys = []
+
+        for decision_id, (rejection_time, asset_pair) in self._rejected_decisions_cache.items():
+            if (current_time - rejection_time).total_seconds() > self._rejection_cooldown_seconds:
+                expired_keys.append(decision_id)
+
+        for key in expired_keys:
+            del self._rejected_decisions_cache[key]
+            logger.debug(f"Removed expired rejection cache entry: {key}")
+
+    def _emit_dashboard_event(self, event: dict):
+        """
+        Emit event to dashboard queue (non-blocking).
+
+        Args:
+            event: Event dictionary with type, timestamp, and event-specific fields
+        """
+        if hasattr(self, '_dashboard_event_queue'):
+            try:
+                self._dashboard_event_queue.put_nowait(event)
+            except Exception:
+                # Queue full or other error - silently drop event
+                pass
 
     async def handle_idle_state(self):
         """
@@ -436,6 +487,9 @@ class TradingLoopAgent:
         logger.info("State: REASONING - Running DecisionEngine...")
 
         MAX_RETRIES = 3
+
+        # --- Cleanup expired entries from rejection cache ---
+        self._cleanup_rejected_cache()
 
         # --- Optional: Reset old failures at start of reasoning cycle (time-based decay) ---
         current_time = datetime.datetime.now()
@@ -532,9 +586,28 @@ class TradingLoopAgent:
             if approved:
                 logger.info(f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue.")
                 approved_decisions.append(decision)
+
+                # Emit approval event for dashboard
+                self._emit_dashboard_event({
+                    'type': 'decision_approved',
+                    'asset': asset_pair,
+                    'action': decision.get('action', 'UNKNOWN'),
+                    'confidence': decision.get('confidence', 0),
+                    'reasoning': decision.get('reasoning', '')[:200],  # First 200 chars
+                    'timestamp': time.time()
+                })
             else:
                 logger.info(f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}.")
                 self._rejected_decisions_cache[decision_id] = (datetime.datetime.now(), asset_pair)  # Add to cache
+
+                # Emit rejection event for dashboard
+                self._emit_dashboard_event({
+                    'type': 'decision_rejected',
+                    'asset': asset_pair,
+                    'action': decision.get('action', 'UNKNOWN'),
+                    'reason': reason,
+                    'timestamp': time.time()
+                })
 
         self._current_decisions = approved_decisions # Keep only approved decisions
 
@@ -677,3 +750,4 @@ class TradingLoopAgent:
         """Stops the trading loop."""
         logger.info("Stopping autonomous trading agent...")
         self.is_running = False
+        self.stop_requested = True

@@ -237,6 +237,37 @@ monitoring:
   # Include macro indicators in market analysis
   include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
 
+  # Enable live dashboard view for autonomous agent
+  enable_live_view: true
+
+  # Live dashboard configuration
+  live_view:
+    # Refresh rates (seconds) for different data types
+    refresh_rates:
+      fast: 2       # Active trades, agent state
+      medium: 5     # Portfolio metrics, risk checks, recent decisions
+      slow: 10      # Market pulse table
+      lazy: 30      # Performance statistics
+
+    # Panel visibility toggles
+    panels:
+      agent_status: true
+      portfolio: true
+      active_trades: true
+      market_pulse: true
+      recent_decisions: true
+      performance: true
+
+    # Decision log settings
+    decision_log:
+      max_entries: 10
+      show_reasoning: true
+      max_reasoning_length: 200
+
+    # Performance panel settings
+    performance:
+      lookback_hours: 24
+
 # Persistence Configuration
 persistence:
   # Path to store trading decisions
