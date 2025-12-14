@@ -39,8 +39,8 @@ class AssetClassifier:
             forex_currencies: Set of forex currency codes (default: common forex pairs)
             crypto_symbols: Set of cryptocurrency symbols (default: common crypto)
         """
-        self.forex_currencies = forex_currencies or self.DEFAULT_FOREX_CURRENCIES
-        self.crypto_symbols = crypto_symbols or self.DEFAULT_CRYPTO_SYMBOLS
+        self.forex_currencies = forex_currencies if forex_currencies is not None else self.DEFAULT_FOREX_CURRENCIES
+        self.crypto_symbols = crypto_symbols if crypto_symbols is not None else self.DEFAULT_CRYPTO_SYMBOLS
 
     def classify(self, asset_pair: str) -> AssetClass:
         """
@@ -115,10 +115,17 @@ class AssetClassifier:
         # Remove common separators
         normalized = asset_pair.replace('-', '').replace('_', '')
 
-        # Check if any crypto symbol is in the pair
+        # Check if any crypto symbol appears at the start of the pair
         for symbol in self.crypto_symbols:
-            if symbol in normalized:
-                return True
+            if normalized.startswith(symbol):
+                # Optionally verify the remaining part is a known currency
+                remaining = normalized[len(symbol):]
+                # Check if remaining is a forex currency or another crypto
+                if remaining in self.forex_currencies or remaining in self.crypto_symbols:
+                    return True
+                # Also handle common stablecoins not in the default lists
+                if remaining in {'USDT', 'USDC', 'DAI', 'BUSD'}:
+                    return True
 
         return False
 

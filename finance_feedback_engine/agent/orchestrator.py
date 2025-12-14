@@ -10,40 +10,13 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 # Additional imports will be needed for data providers, persistence, etc.
 
 
-# DEPRECATION: Class is no longer supported
-# Raise error immediately to prevent usage
-raise RuntimeError(
-    "\n"
-    "=" * 80 + "\n"
-    "ERROR: TradingAgentOrchestrator is DEPRECATED and has been removed.\n"
-    "\n"
-    "This class has been replaced by TradingLoopAgent, which provides:\n"
-    "  - Improved OODA loop state machine\n"
-    "  - Better position tracking and recovery\n"
-    "  - Enhanced risk management\n"
-    "  - Cleaner architecture\n"
-    "\n"
-    "MIGRATION REQUIRED:\n"
-    "  1. Use TradingLoopAgent from finance_feedback_engine.agent.trading_loop_agent\n"
-    "  2. See docs/migration/ORCHESTRATOR_MIGRATION.md for complete migration guide\n"
-    "  3. Update all imports and instantiations\n"
-    "\n"
-    "Example:\n"
-    "  # Old (deprecated):\n"
-    "  from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator\n"
-    "  agent = TradingAgentOrchestrator(config, engine, platform)\n"
-    "\n"
-    "  # New (correct):\n"
-    "  from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent\n"
-    "  agent = TradingLoopAgent(\n"
-    "      config=agent_config,\n"
-    "      engine=engine,\n"
-    "      trade_monitor=trade_monitor,\n"
-    "      portfolio_memory=memory,\n"
-    "      trading_platform=platform\n"
-    "  )\n"
-    "\n"
-    "=" * 80
+# DEPRECATION WARNING: Module-level notification
+warnings.warn(
+    "TradingAgentOrchestrator is DEPRECATED. "
+    "Use TradingLoopAgent from finance_feedback_engine.agent.trading_loop_agent instead. "
+    "See docs/migration/ORCHESTRATOR_MIGRATION.md for migration guide.",
+    DeprecationWarning,
+    stacklevel=2
 )
 
 
@@ -58,6 +31,41 @@ class TradingAgentOrchestrator:
     4. Act: Execute trades based on the agent's configuration (e.g., requiring approval).
     """
     def __init__(self, config: TradingAgentConfig, engine: DecisionEngine, platform: UnifiedTradingPlatform):
+        # DEPRECATION: Class is no longer supported - raise error on instantiation
+        raise RuntimeError(
+            "\n"
+            "=" * 80 + "\n"
+            "ERROR: TradingAgentOrchestrator is DEPRECATED and has been removed.\n"
+            "\n"
+            "This class has been replaced by TradingLoopAgent, which provides:\n"
+            "  - Improved OODA loop state machine\n"
+            "  - Better position tracking and recovery\n"
+            "  - Enhanced risk management\n"
+            "  - Cleaner architecture\n"
+            "\n"
+            "MIGRATION REQUIRED:\n"
+            "  1. Use TradingLoopAgent from finance_feedback_engine.agent.trading_loop_agent\n"
+            "  2. See docs/migration/ORCHESTRATOR_MIGRATION.md for complete migration guide\n"
+            "  3. Update all imports and instantiations\n"
+            "\n"
+            "Example:\n"
+            "  # Old (deprecated):\n"
+            "  from finance_feedback_engine.agent.orchestrator import TradingAgentOrchestrator\n"
+            "  agent = TradingAgentOrchestrator(config, engine, platform)\n"
+            "\n"
+            "  # New (correct):\n"
+            "  from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent\n"
+            "  agent = TradingLoopAgent(\n"
+            "      config=agent_config,\n"
+            "      engine=engine,\n"
+            "      trade_monitor=trade_monitor,\n"
+            "      portfolio_memory=memory,\n"
+            "      trading_platform=platform\n"
+            "  )\n"
+            "\n"
+            "=" * 80
+        )
+
         self.config = config
         self.engine = engine
         self.platform = platform

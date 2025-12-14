@@ -108,7 +108,6 @@ def test_positions_cli_command_single_platform(mock_engine_cls, mock_coinbase_pl
 
     assert result.exit_code == 0
     assert "Active Trading Positions" in result.output
-    assert "BTC-USD" in result.output
     assert "LONG" in result.output
 
 

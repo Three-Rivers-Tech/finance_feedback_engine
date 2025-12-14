@@ -8,6 +8,7 @@
 # Then source it before starting Ray:
 #   source config/ray_auth.sh
 #   ray start --head
+#   (add --port=6379 only if you need a stable/custom Redis port for clients)
 #
 # WARNING: Do NOT commit ray_auth.sh to git (already in .gitignore)
 
@@ -16,7 +17,7 @@ export RAY_AUTH_MODE=token
 
 # Generate a secure random token (or set your own)
 # Option 1: Auto-generate (recommended)
-export RAY_TOKEN=$(openssl rand -hex 32)
+export RAY_TOKEN="${RAY_TOKEN:-$(openssl rand -hex 32)}"
 
 # Option 2: Set custom token (must be at least 32 characters)
 # export RAY_TOKEN="your-secure-token-here-min-32-chars"
@@ -31,5 +32,6 @@ echo "  - ADDRESS: $RAY_ADDRESS"
 echo ""
 echo "Usage:"
 echo "  1. Source this file: source config/ray_auth.sh"
-echo "  2. Start Ray: ray start --head --port=6379"
+echo "  2. Start Ray: ray start --head"
+echo "     (add --port=6379 only if you need a stable/custom Redis port for clients)"
 echo "  3. Access dashboard: http://localhost:8265 (token required)"

@@ -127,7 +127,7 @@ class TestCoinbaseResponseErrors:
         # Should return empty dict when both futures and spot fail
         assert isinstance(result, dict)
 
-    def test_get_balance_futures_error_but_spot_succeeds(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_balance_futures_error_but_spot_succeeds(self, coinbase_platform, mock_coinbase_client):
         """Should continue with spot balances even if futures fails."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -150,7 +150,7 @@ class TestCoinbaseResponseErrors:
         assert result['SPOT_USD'] == 1000.0
         assert 'FUTURES_USD' not in result  # Futures failed
 
-    def test_get_balance_spot_error_but_futures_succeeds(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_balance_spot_error_but_futures_succeeds(self, coinbase_platform, mock_coinbase_client):
         """Should continue with futures balance even if spot fails."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -170,7 +170,7 @@ class TestCoinbaseResponseErrors:
         assert result['FUTURES_USD'] == 5000.0
         assert 'SPOT_USD' not in result  # Spot failed
 
-    def test_get_balance_zero_balances(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_balance_zero_balances(self, coinbase_platform, mock_coinbase_client):
         """Should handle zero balances correctly."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -247,14 +247,14 @@ class TestCoinbaseProductIdFormatting:
         assert coinbase_platform._format_product_id("BTC-USD-PERP") == "BTC-USD"
 
         # Single part with hyphen - return as is
-        result = platform._format_product_id("BTCUSD-")
+        result = coinbase_platform._format_product_id("BTCUSD-")
         assert isinstance(result, str)
 
     def test_format_product_id_unknown_quote(self, coinbase_platform):
         """Should return normalized string for unknown quote currency."""
 
         # Unknown quote currency - return as-is uppercase
-        result = platform._format_product_id("BTCABC")
+        result = coinbase_platform._format_product_id("BTCABC")
         assert result == "BTCABC"
 
 
@@ -263,13 +263,13 @@ class TestCoinbasePortfolioBreakdown:
 
     def test_get_portfolio_breakdown_import_error(self, coinbase_platform):
         """Should raise ValueError when library not installed."""
-        platform._client = None
+        coinbase_platform._client = None
 
-        with patch.object(platform, '_get_client', side_effect=ImportError("No module")):
+        with patch.object(coinbase_platform, '_get_client', side_effect=ImportError("No module")):
             with pytest.raises(ValueError, match="Coinbase Advanced library required"):
-                platform.get_portfolio_breakdown()
+                coinbase_platform.get_portfolio_breakdown()
 
-    def test_get_portfolio_breakdown_network_error(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_portfolio_breakdown_network_error(self, coinbase_platform, mock_coinbase_client):
         """Should raise exception on network error."""
         coinbase_platform._client = mock_coinbase_client
         mock_coinbase_client.get_futures_balance_summary.side_effect = RequestException("Network error")
@@ -277,7 +277,7 @@ class TestCoinbasePortfolioBreakdown:
         with pytest.raises(Exception):
             platform.get_portfolio_breakdown()
 
-    def test_get_portfolio_breakdown_futures_error_continues_with_spot(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_portfolio_breakdown_futures_error_continues_with_spot(self, coinbase_platform, mock_coinbase_client):
         """Should continue with spot data if futures fails."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -301,7 +301,7 @@ class TestCoinbasePortfolioBreakdown:
         assert result['futures_value_usd'] == 0.0  # Futures failed
         assert len(result['holdings']) == 1  # Only spot USD
 
-    def test_get_portfolio_breakdown_empty_positions_list(self, coinbase_credentials, mock_coinbase_client):
+    def test_get_portfolio_breakdown_empty_positions_list(self, coinbase_platform, mock_coinbase_client):
         """Should handle empty positions list."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -422,7 +422,7 @@ class TestMockPlatformErrorSimulation:
         """MockTradingPlatform with zero error rate should not raise."""
         platform = MockTradingPlatform({'error_rate': 0.0})  # 0% error rate
 
-        result = coinbase_platform.get_balance()
+        result = platform.get_balance()
         assert isinstance(result, dict)
         assert 'USD' in result
 
@@ -479,7 +479,7 @@ class TestPlatformFactoryErrors:
 class TestErrorRecovery:
     """Tests for error recovery and resilience."""
 
-    def test_partial_balance_fetch_success(self, coinbase_credentials, mock_coinbase_client):
+    def test_partial_balance_fetch_success(self, coinbase_platform, mock_coinbase_client):
         """Should succeed with partial data when some API calls fail."""
         coinbase_platform._client = mock_coinbase_client
 
@@ -497,7 +497,7 @@ class TestErrorRecovery:
         assert 'FUTURES_USD' in result
         assert result['FUTURES_USD'] == 3000.0
 
-    def test_retry_on_transient_error(self, coinbase_credentials, mock_coinbase_client):
+    def test_retry_on_transient_error(self, coinbase_platform, mock_coinbase_client):
         """Should retry on transient errors (if retry decorator is used)."""
         coinbase_platform._client = mock_coinbase_client
 
