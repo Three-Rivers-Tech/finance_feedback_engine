@@ -16,16 +16,19 @@ class RedisManager:
     """
 
     @staticmethod
-    def is_redis_running() -> bool:
+    def is_redis_running(password: str = None) -> bool:
         """
         Check if Redis is currently running and accessible.
+
+        Args:
+            password: Redis password if authentication is enabled
 
         Returns:
             True if Redis is accessible, False otherwise
         """
         try:
             import redis
-            client = redis.Redis(host='localhost', port=6379, socket_connect_timeout=2)
+            client = redis.Redis(host='localhost', port=6379, socket_connect_timeout=2, password=password)
             client.ping()
             return True
         except Exception as e:

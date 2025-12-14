@@ -149,6 +149,8 @@ class LocalLLMProvider:
             bool: True if installation successful
         """
         import platform
+        import tempfile
+        import os
 
         system = platform.system()
         logger.info(f"Detected platform: {system}")
@@ -156,28 +158,39 @@ class LocalLLMProvider:
         try:
             if system == "Linux" or system == "Darwin":  # Linux or macOS
                 logger.info(f"Installing Ollama on {system}...")
-                logger.info(
-                    "Running: curl -fsSL https://ollama.ai/install.sh | sh"
-                )
 
-                # Download and execute install script
-                install_cmd = "curl -fsSL https://ollama.ai/install.sh | sh"
-                result = subprocess.run(
-                    install_cmd,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minutes
-                )
+                # Download script first to avoid shell injection
+                with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.sh') as temp_script:
+                    # Download the install script to a temporary file
+                    import requests
+                    response = requests.get("https://ollama.ai/install.sh", timeout=60)
+                    response.raise_for_status()
+                    temp_script.write(response.text)
+                    temp_script_path = temp_script.name
 
-                if result.returncode != 0:
-                    logger.error("Installation failed: %s", result.stderr)
-                    raise RuntimeError(
-                        "Ollama installation failed: %s" % result.stderr
+                try:
+                    # Make script executable
+                    os.chmod(temp_script_path, 0o755)
+
+                    # Run the downloaded script safely
+                    result = subprocess.run(
+                        [temp_script_path],
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minutes
                     )
 
-                logger.info(f"Ollama installed successfully on {system}")
-                logger.info(f"Installation output: {result.stdout}")
+                    if result.returncode != 0:
+                        logger.error("Installation failed: %s", result.stderr)
+                        raise RuntimeError(
+                            "Ollama installation failed: %s" % result.stderr
+                        )
+
+                    logger.info(f"Ollama installed successfully on {system}")
+                    logger.info(f"Installation output: {result.stdout}")
+                finally:
+                    # Clean up the temporary script file
+                    os.unlink(temp_script_path)
 
             elif system == "Windows":
                 logger.error(
