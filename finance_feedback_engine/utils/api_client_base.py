@@ -7,6 +7,7 @@ from requests.exceptions import RequestException, HTTPError, Timeout
 
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from .rate_limiter import RateLimiter
 
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,16 @@ class APIClientBase(ABC):
     DEFAULT_TOKENS_PER_SECOND = 5 # Default for rate limiting
     DEFAULT_MAX_TOKENS = 5 # Default max tokens for burst
 
-    def __init__(self, base_url: str, api_key: Optional[str] = None, api_secret: Optional[str] = None):
+    def __init__(self, base_url: str, api_key: Optional[str] = None, api_secret: Optional[str] = None,
+                 tokens_per_second: float = 5.0, max_tokens: int = 5):
         self.base_url = base_url
         self.api_key = api_key
         self.api_secret = api_secret # For HMAC or other two-part auth
-        # TODO: Initialize rate limiter here
-        # self.rate_limiter = RateLimiter(calls=10, period=1) # Example: 10 calls per second
+        # Initialize rate limiter with configurable parameters
+        self.rate_limiter = RateLimiter(
+            tokens_per_second=tokens_per_second,
+            max_tokens=max_tokens
+        )
 
     @abstractmethod
     def _get_auth_headers(self) -> Dict[str, str]:
@@ -121,8 +126,11 @@ class APIClientBase(ABC):
         )
         def _send():
             try:
-                # TODO: Integrate with a rate limiter before sending request
-                # self.rate_limiter.wait()
+                # Integrate with rate limiter before sending request
+                try:
+                    self.rate_limiter.wait_for_token()
+                except Exception as e:
+                    logger.warning(f"Rate limiter error (continuing anyway): {e}")
 
                 logger.debug(f"Sending {method} request to {url} with params={params}, data={data}, json={json_data}")
                 

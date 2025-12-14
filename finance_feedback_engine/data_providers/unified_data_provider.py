@@ -349,10 +349,7 @@ class UnifiedDataProvider:
         if timeframes is None:
             timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
 
-        # Get raw multi-timeframe data
-        raw_data = self.get_multi_timeframe_data(asset_pair, timeframes)
-
-        # Build enriched response
+        # Track cache hits separately when fetching individual timeframes
         timestamp_utc = datetime.now(timezone.utc).isoformat()
         result = {
             "asset_pair": asset_pair,
@@ -368,7 +365,22 @@ class UnifiedDataProvider:
 
         cache_hits = 0
         for tf in timeframes:
-            candles, provider = raw_data.get(tf, ([], 'unavailable'))
+            # Check cache first manually to determine if data was cached
+            cached_data = self._get_cached_candles(asset_pair, tf)
+            if cached_data is not None:
+                # Data was cached, so increment counter
+                candles, provider = cached_data
+                is_cached = True
+                cache_hits += 1
+            else:
+                # Data wasn't cached, fetch it (which will cache it too)
+                try:
+                    candles, provider = self.get_candles(asset_pair, tf)
+                    is_cached = False  # This was just fetched and now cached
+                except Exception as e:
+                    logger.warning(f"Failed to fetch {tf} data: {e}")
+                    candles, provider = [], 'failed'
+                    is_cached = False
 
             # Check if data available
             if candles and provider != 'failed':
@@ -376,12 +388,6 @@ class UnifiedDataProvider:
             else:
                 result["metadata"]["missing_timeframes"].append(tf)
                 logger.warning(f"Missing {tf} data for {asset_pair}")
-
-            # Check cache status - would need actual cache tracking from get_candles()
-            # For now, mark as False since we can't reliably determine cache hits here
-            is_cached = False  # TODO: Implement proper cache tracking
-            if is_cached and candles:
-                cache_hits += 1
 
             result["timeframes"][tf] = {
                 "candles": candles,
