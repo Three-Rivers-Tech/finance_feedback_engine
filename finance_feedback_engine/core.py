@@ -14,7 +14,7 @@ from .persistence.decision_store import DecisionStore
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .utils.model_installer import ensure_models_installed
 from .utils.failure_logger import log_quorum_failure
-from .decision_engine.ensemble_manager import InsufficientProvidersError
+from .exceptions import InsufficientProvidersError
 
 logger = logging.getLogger(__name__)
 
@@ -396,12 +396,19 @@ class FinanceFeedbackEngine:
 
             asset_type = market_data.get('type', 'unknown')
 
+            # Extract provider information from the exception object
+            providers_succeeded = getattr(e, 'providers_succeeded', [])
+            providers_failed = getattr(e, 'providers_failed', [])
+
+            # Combine succeeded and failed to get all attempted providers
+            providers_attempted = providers_succeeded + providers_failed
+
             # Log failure for monitoring
             log_path = log_quorum_failure(
                 asset=asset_pair,
                 asset_type=asset_type,
-                providers_attempted=[],  # TODO: Extract from exception if available
-                providers_succeeded=[],
+                providers_attempted=providers_attempted,
+                providers_succeeded=providers_succeeded,
                 quorum_required=3,
                 config=self.config
             )

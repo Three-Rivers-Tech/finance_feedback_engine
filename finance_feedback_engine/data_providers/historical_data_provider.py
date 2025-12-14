@@ -39,17 +39,9 @@ class HistoricalDataProvider:
       API call constraints and transient network issues.
 
     TODO:
-    - **Implement Specific API Integrations:** Create subclasses (e.g., `AlphaVantageHistoricalProvider`)
-      that implement the `_fetch_raw_data` method for specific services.
-    - **Rate Limiting:** Implement a robust rate-limiting decorator or mechanism
-      for API calls (e.g., using `tenacity` or `ratelimit` libraries).
     - **Data Transformations:** Add options for common financial data transformations
       (e.g., calculating returns, resampling to different frequencies).
     - **Error Handling:** More granular error handling for API-specific error codes.
-    - **Data Aggregation:** Support for aggregating data from lower to higher
-      granularities (e.g., tick to 1-minute bars).
-    - **Metadata Handling:** Store and retrieve metadata about data sources (e.g.,
-      source, last updated, adjustments made).
     """
 
     def __init__(self, api_key: str, cache_dir: Optional[Union[str, Path]] = None):
@@ -251,6 +243,111 @@ class HistoricalDataProvider:
             f"✅ Successfully fetched and processed {len(raw_data)} {timeframe} candles for {asset_pair}."
         )
         return raw_data
+
+    def add_returns(self, df: pd.DataFrame, column: str = 'close') -> pd.DataFrame:
+        """
+        Add return calculations to the DataFrame.
+
+        Args:
+            df: Input DataFrame with OHLC data
+            column: Column to calculate returns for (default 'close')
+
+        Returns:
+            DataFrame with added 'returns' column
+        """
+        df_copy = df.copy()
+        df_copy['returns'] = df_copy[column].pct_change()
+        return df_copy
+
+    def resample_data(self, df: pd.DataFrame, new_frequency: str) -> pd.DataFrame:
+        """
+        Resample the DataFrame to a different frequency.
+
+        Args:
+            df: Input DataFrame with OHLC data and datetime index
+            new_frequency: New frequency string (e.g., '1H', '4H', '1D')
+
+        Returns:
+            Resampled DataFrame
+        """
+        if df.empty or df.index.empty:
+            return df
+
+        # Use OHLCV aggregation rules for resampling
+        agg_dict = {
+            'open': 'first',
+            'high': 'max',
+            'low': 'min',
+            'close': 'last',
+            'volume': 'sum'
+        }
+        # Only include columns that exist in the dataframe
+        existing_cols = {k: v for k, v in agg_dict.items() if k in df.columns}
+
+        resampled = df.resample(new_frequency).agg(existing_cols)
+        return resampled
+
+    def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculate common technical indicators.
+
+        Args:
+            df: Input DataFrame with OHLC data
+
+        Returns:
+            DataFrame with added technical indicator columns
+        """
+        df_copy = df.copy()
+
+        # Simple moving averages
+        df_copy['sma_10'] = df_copy['close'].rolling(window=10).mean()
+        df_copy['sma_20'] = df_copy['close'].rolling(window=20).mean()
+
+        # Price-based indicators
+        df_copy['high_low_pct'] = (df_copy['high'] - df_copy['low']) / df_copy['close']
+        df_copy['price_change'] = df_copy['close'] - df_copy['open']
+
+        return df_copy
+
+    def get_data_with_transformations(
+        self,
+        asset_pair: str,
+        start_date: Union[str, datetime],
+        end_date: Union[str, datetime],
+        timeframe: str = '1h',
+        transformations: list = None
+    ) -> pd.DataFrame:
+        """
+        Retrieves historical data with optional transformations applied.
+
+        Args:
+            asset_pair: The asset pair (e.g., "BTCUSD")
+            start_date: Start date for the data
+            end_date: End date for the data
+            timeframe: Timeframe for candles
+            transformations: List of transformation functions to apply
+                           (e.g., ['returns', 'indicators', 'resample_4H'])
+
+        Returns:
+            Transformed DataFrame
+        """
+        df = self.get_historical_data(asset_pair, start_date, end_date, timeframe)
+
+        if df.empty:
+            return df
+
+        if transformations:
+            for transform in transformations:
+                if transform == 'returns':
+                    df = self.add_returns(df)
+                elif transform == 'indicators':
+                    df = self.calculate_technical_indicators(df)
+                elif transform.startswith('resample_'):
+                    # Extract frequency from transform name, e.g., 'resample_4H'
+                    freq = transform.replace('resample_', '')
+                    df = self.resample_data(df, freq)
+
+        return df
 
 
 # Example Usage (for demonstration within this stub)
