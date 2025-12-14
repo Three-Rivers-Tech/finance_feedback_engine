@@ -591,10 +591,21 @@ class Backtester:
                 # Get current price for position sizing
                 current_price = None
                 if market_data and 'timeframes' in market_data:
-                    # Try to get the most recent price from the configured timeframe
-                    tf_data = market_data['timeframes'].get(self.timeframe)
-                    if tf_data and tf_data['candles']:
-                        current_price = tf_data['candles'][-1]['close']  # Most recent close price
+                    # Determine timeframe from config or input with safe fallbacks
+                    cfg = getattr(self, 'config', None)
+                    timeframe = None
+                    if isinstance(cfg, dict):
+                        timeframe = cfg.get('timeframe')
+                    # If not set, fall back to a sensible default or first available key
+                    if not timeframe:
+                        tf_keys = list(market_data.get('timeframes', {}).keys())
+                        timeframe = tf_keys[0] if tf_keys else None
+
+                    # Use local timeframe variable for indexing; guard for None
+                    if timeframe:
+                        tf_data = market_data['timeframes'].get(timeframe)
+                        if tf_data and tf_data.get('candles'):
+                            current_price = tf_data['candles'][-1].get('close')
 
                 # Calculate position size using position sizing strategy
                 effective_price = current_price if current_price else market_data.get('current_price')
