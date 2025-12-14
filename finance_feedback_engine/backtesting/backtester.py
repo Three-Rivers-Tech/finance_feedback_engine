@@ -597,10 +597,15 @@ class Backtester:
                         current_price = tf_data['candles'][-1]['close']  # Most recent close price
 
                 # Calculate position size using position sizing strategy
-                position_size = self.backtester._calculate_position_size(
-                    current_balance=current_balance,
-                    current_price=current_price if current_price else market_data.get('current_price', 0)
-                )
+                effective_price = current_price if current_price else market_data.get('current_price')
+                if not effective_price or effective_price <= 0:
+                    logger.warning(f"No valid price data for position sizing, skipping position size calculation.")
+                    position_size = 0
+                else:
+                    position_size = self.backtester._calculate_position_size(
+                        current_balance=current_balance,
+                        current_price=effective_price
+                    )
 
                 # Generate decision
                 decision = await self.decision_engine.generate_decision(

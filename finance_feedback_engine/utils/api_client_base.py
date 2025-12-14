@@ -24,7 +24,7 @@ class APIClientBase(ABC):
     This class serves as a foundation for building robust and resilient API
     integrations, particularly important for interacting with external financial
     data providers or trading platforms.
-    
+
 
     Implementation Notes:
     - **Abstracted HTTP Operations:** Defines abstract methods for HTTP verbs
@@ -44,14 +44,14 @@ class APIClientBase(ABC):
       handle their specific authentication flows (e.g., OAuth, HMAC, JWT).
     - **Advanced Rate Limiting:** Implement token bucket or leaky bucket algorithms
       for more sophisticated rate limiting, potentially across multiple clients.
-    - **Circuit Breaker Pattern:** Integrate a circuit breaker (e.g., `pybreaker` library) 
+    - **Circuit Breaker Pattern:** Integrate a circuit breaker (e.g., `pybreaker` library)
       to prevent cascading failures when an external API is experiencing issues.
     - **Structured Logging:** Ensure detailed logging of requests, responses, and errors
       for debugging and auditing purposes.
     - **Configuration Injection:** Allow API endpoint, keys, and other parameters
       to be injected via configuration (e.g., using the `config_loader`).
     """
-    
+
     DEFAULT_RETRIES = 3
     DEFAULT_BACKOFF_FACTOR = 0.5
     DEFAULT_TIMEOUT = 10 # seconds
@@ -59,7 +59,7 @@ class APIClientBase(ABC):
     DEFAULT_MAX_TOKENS = 5 # Default max tokens for burst
 
     def __init__(self, base_url: str, api_key: Optional[str] = None, api_secret: Optional[str] = None,
-                 tokens_per_second: float = 5.0, max_tokens: int = 5):
+                 tokens_per_second: float = DEFAULT_TOKENS_PER_SECOND, max_tokens: int = DEFAULT_MAX_TOKENS):
         self.base_url = base_url
         self.api_key = api_key
         self.api_secret = api_secret # For HMAC or other two-part auth
@@ -111,8 +111,8 @@ class APIClientBase(ABC):
         """
         Sends an HTTP request to the API with retry logic and error handling.
         """
-        url = f"{self.base_url}{endpoint}" 
-        
+        url = f"{self.base_url}{endpoint}"
+
         # Merge provided headers with auth headers
         request_headers = self._get_auth_headers()
         if headers:
@@ -127,13 +127,10 @@ class APIClientBase(ABC):
         def _send():
             try:
                 # Integrate with rate limiter before sending request
-                try:
-                    self.rate_limiter.wait_for_token()
-                except Exception as e:
-                    logger.warning(f"Rate limiter error (continuing anyway): {e}")
+                self.rate_limiter.wait_for_token()
 
                 logger.debug(f"Sending {method} request to {url} with params={params}, data={data}, json={json_data}")
-                
+
                 response = requests.request(
                     method,
                     url,
@@ -143,9 +140,9 @@ class APIClientBase(ABC):
                     headers=request_headers,
                     timeout=timeout
                 )
-                response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx) 
+                response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
                 return response.json()
-            
+
             except HTTPError as e:
                 # Distinguish between client errors (4xx) and server errors (5xx)
                 if 400 <= e.response.status_code < 500:
@@ -160,7 +157,7 @@ class APIClientBase(ABC):
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to decode JSON response from {url}. Response: {e.doc}")
                 raise
-        
+
         return _send()
 
     # Concrete API clients will implement methods like get_market_data, place_order, etc.

@@ -74,12 +74,12 @@ class ModelPerformanceMonitor:
         """
         if 'prediction_id' not in prediction:
             raise ValueError("prediction must contain 'prediction_id'")
-        
+
         if isinstance(features, pd.DataFrame):
             features_copy = features.copy(deep=True)
         else:
             features_copy = copy.deepcopy(features)
-        
+
         self.predictions.append({
             'prediction_id': prediction['prediction_id'],
             'features': features_copy,
@@ -95,7 +95,7 @@ class ModelPerformanceMonitor:
     def record_actual_outcome(self, prediction_id: str, actual_outcome: Any, timestamp: datetime):
         """
         Records the actual outcome corresponding to a previous prediction.
-        
+
         Args:
             prediction_id: The ID of the prediction this outcome corresponds to.
             actual_outcome: A dictionary containing 'success' (bool) and 'profit' (float) keys.
@@ -105,7 +105,7 @@ class ModelPerformanceMonitor:
             raise TypeError("actual_outcome must be a dictionary with 'success' and 'profit' keys")
         if 'success' not in actual_outcome or 'profit' not in actual_outcome:
             raise ValueError("actual_outcome must contain 'success' and 'profit' keys")
-        
+
         self.outcomes[prediction_id] = {
             'actual_outcome': actual_outcome,
             'timestamp': timestamp
@@ -126,7 +126,7 @@ class ModelPerformanceMonitor:
         - Store the computed metrics in `self.historical_metrics` and persist them.
         """
         logger.info(f"Evaluating performance for model {self.model_id}...")
-        
+
         # Get matched predictions and outcomes
         matched = []
         for pred in self.predictions:
@@ -225,9 +225,16 @@ class ModelPerformanceMonitor:
                         baseline_counts, _ = np.histogram(baseline_data, bins=bins)
                         current_counts, _ = np.histogram(current_data, bins=bins)
 
-                        # Calculate percentages for each bin
-                        baseline_pct = (baseline_counts + 1) / len(baseline_data)  # Add 1 for smoothing
-                        current_pct = (current_counts + 1) / len(current_data)    # Add 1 for smoothing
+                        smoothing_constant = 1
+                        num_bins = len(baseline_counts)
+
+                        # Calculate percentages for each bin with matching smoothing mass
+                        baseline_pct = (baseline_counts + smoothing_constant) / (
+                            len(baseline_data) + smoothing_constant * num_bins
+                        )
+                        current_pct = (current_counts + smoothing_constant) / (
+                            len(current_data) + smoothing_constant * num_bins
+                        )
 
                         # Calculate PSI
                         psi = np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
@@ -407,10 +414,12 @@ class ModelPerformanceMonitor:
                 current_metrics = self.evaluate_performance()
 
                 # Detect concept drift if we have baseline metrics
-                if self.historical_metrics and len(self.historical_metrics) > 1:
-                    # Use the first historical metric as baseline for comparison
-                    baseline_metrics = self.historical_metrics[0]
-                    self.detect_concept_drift(current_metrics, baseline_metrics)
+                if len(self.historical_metrics) >= 10:
+                    # Use average of first 10 metrics as stable baseline
+                    baseline_metrics = {
+                        "win_rate": sum(m['win_rate'] for m in self.historical_metrics[:10]) / 10,
+                        'accuracy': sum(m['accuracy'] for m in self.historical_metrics[:10]) / 10,
+                    }
 
                 # Sleep until next evaluation interval
                 await asyncio.sleep(self.evaluation_interval.total_seconds())
