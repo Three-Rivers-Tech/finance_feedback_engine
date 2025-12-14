@@ -887,32 +887,46 @@ Format response as a structured technical analysis demonstration.
             return False
         return True
 
-    def _create_decision(
-        self,
-        asset_pair: str,
-        context: Dict[str, Any],
-        ai_response: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    @staticmethod
+    def _determine_position_type(action: str) -> Optional[str]:
         """
-        Create structured decision object.
+        Determine position type from action.
 
         Args:
-            asset_pair: Asset pair
-            context: Decision context
-            ai_response: AI recommendation
+            action: Trading action (BUY, SELL, or HOLD)
 
         Returns:
-            Structured decision
+            Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
         """
-        decision_id = str(uuid.uuid4())
+        if action == 'BUY':
+            return 'LONG'
+        elif action == 'SELL':
+            return 'SHORT'
+        return None
 
-        # Logic gate: only calculate position sizing when balance data exists
-        current_price = context['market_data'].get('close', 0)
-        balance = context.get('balance', {})
-        action = ai_response.get('action', 'HOLD')
+    def _select_relevant_balance(
+        self,
+        balance: Dict[str, float],
+        asset_pair: str,
+        asset_type: str
+    ) -> tuple:
+        """
+        Select platform-specific balance based on asset type.
 
-        # Determine asset type (crypto vs forex) for balance selection
-        asset_type = context['market_data'].get('type', 'unknown')
+        Extracts the appropriate balance for the asset being traded:
+        - Crypto: Coinbase balances (coinbase_*)
+        - Forex: Oanda balances (oanda_*)
+        - Unknown: All balances
+
+        Args:
+            balance: Full balance dictionary (may contain multiple platforms)
+            asset_pair: Asset pair being traded
+            asset_type: Asset type ('crypto', 'forex', 'unknown')
+
+        Returns:
+            Tuple of (relevant_balance, balance_source, is_crypto, is_forex)
+        """
+        # Determine asset classification
         is_crypto = (
             'BTC' in asset_pair
             or 'ETH' in asset_pair
@@ -921,9 +935,9 @@ Format response as a structured technical analysis demonstration.
         is_forex = '_' in asset_pair or asset_type == 'forex'
 
         # Extract the appropriate balance based on asset type
-        # Crypto: Use Coinbase balances (coinbase_*)
-        # Forex: Use Oanda balances (oanda_*)
         relevant_balance = {}
+        balance_source = 'Unknown'
+
         if balance and isinstance(balance, dict):
             if is_crypto:
                 # Filter for Coinbase balances
@@ -931,48 +945,69 @@ Format response as a structured technical analysis demonstration.
                     k: v for k, v in balance.items()
                     if k.startswith('coinbase_')
                 }
+                balance_source = 'Coinbase'
             elif is_forex:
                 # Filter for Oanda balances
                 relevant_balance = {
                     k: v for k, v in balance.items()
                     if k.startswith('oanda_')
                 }
+                balance_source = 'Oanda'
             else:
                 # Unknown type, use all balances as fallback
                 relevant_balance = balance
+                balance_source = 'Combined'
 
             # Fallback for unified cash balance when platform-specific keys are absent
             if not relevant_balance and 'USD' in balance:
                 relevant_balance = {'USD': balance['USD']}
+                balance_source = 'USD'
 
-        # Check if relevant balance data is available and valid
-        has_valid_balance = (
-            relevant_balance
-            and len(relevant_balance) > 0
-            and sum(relevant_balance.values()) > 0
-        )
+        return relevant_balance, balance_source, is_crypto, is_forex
 
-        # Check for existing position in this asset
-        portfolio = context.get('portfolio')
+    def _has_existing_position(
+        self,
+        asset_pair: str,
+        portfolio: Optional[Dict],
+        monitoring_context: Optional[Dict]
+    ) -> bool:
+        """
+        Check if there's an existing position in portfolio or active trades.
+
+        Checks both:
+        1. Spot holdings in portfolio
+        2. Futures/margin positions in monitoring context
+
+        Args:
+            asset_pair: Asset pair to check
+            portfolio: Portfolio breakdown with holdings
+            monitoring_context: Monitoring context with active positions
+
+        Returns:
+            True if existing position found, False otherwise
+        """
+        # Extract base currency from asset pair
+        # IMPORTANT: Replace USDT before USD to avoid "BTCUSDT" -> "BTCT"
         asset_base = (
-            asset_pair.replace('USD', '')
-            .replace('USDT', '')
+            asset_pair.replace('USDT', '')
+            .replace('USD', '')
             .replace('_', '')
         )
-        has_existing_position = False
 
+        has_position = False
+
+        # Check portfolio holdings
         if portfolio and portfolio.get('holdings'):
             for holding in portfolio.get('holdings', []):
                 if (
                     holding.get('currency') == asset_base
                     and holding.get('amount', 0) > 0
                 ):
-                    has_existing_position = True
+                    has_position = True
                     break
 
         # Check monitoring context for active positions (futures/margin)
-        monitoring_context = context.get('monitoring_context')
-        if monitoring_context and not has_existing_position:
+        if monitoring_context and not has_position:
             active_positions = monitoring_context.get('active_positions', [])
             # Handle both dict format (live) and list format (backtest)
             if isinstance(active_positions, dict):
@@ -984,24 +1019,53 @@ Format response as a structured technical analysis demonstration.
 
             for position in futures_positions:
                 if isinstance(position, dict) and asset_pair in position.get('product_id', ''):
-                    has_existing_position = True
+                    has_position = True
                     break
 
-        # Determine position type based on action
-        position_type = (
-            'LONG'
-            if action == 'BUY'
-            else 'SHORT'
-            if action == 'SELL'
-            else None
+        return has_position
+
+    def _calculate_position_sizing_params(
+        self,
+        context: Dict[str, Any],
+        current_price: float,
+        action: str,
+        has_existing_position: bool,
+        relevant_balance: Dict[str, float],
+        balance_source: str,
+        signal_only_default: bool
+    ) -> Dict[str, Any]:
+        """
+        Calculate all position sizing parameters.
+
+        Consolidates position sizing logic that was duplicated between normal
+        and signal-only modes. Handles dynamic stop-loss calculation based on ATR.
+
+        Args:
+            context: Decision context with market data and config
+            current_price: Current asset price
+            action: Trading action (BUY, SELL, HOLD)
+            has_existing_position: Whether an existing position exists
+            relevant_balance: Platform-specific balance
+            balance_source: Name of balance source (for logging)
+            signal_only_default: Whether signal-only mode is enabled
+
+        Returns:
+            Dict with keys:
+            - recommended_position_size: Position size in units
+            - stop_loss_price: Stop loss price level
+            - sizing_stop_loss_percentage: Stop loss percentage used
+            - risk_percentage: Risk percentage used
+            - signal_only: Whether this is signal-only mode
+        """
+        # Check if we have valid balance
+        has_valid_balance = (
+            relevant_balance
+            and len(relevant_balance) > 0
+            and sum(relevant_balance.values()) > 0
         )
 
-        # Calculate position sizing based on action and existing position
-        # HOLD: Only show position sizing if there's an existing position
-        # BUY/SELL: Always calculate position sizing if balance is available
-        # But skip if signal_only_default is enabled
-        signal_only_default = self.config.get('signal_only_default', False)
-        should_calculate_position = (
+        # Determine if we should calculate position sizing
+        should_calculate = (
             has_valid_balance
             and not signal_only_default
             and (
@@ -1010,41 +1074,55 @@ Format response as a structured technical analysis demonstration.
             )
         )
 
-        if should_calculate_position:
-            total_balance = sum(relevant_balance.values())
-            balance_source = (
-                'Coinbase' if is_crypto else 'Oanda' if is_forex else 'Combined'
+        # Get risk parameters from agent config
+        agent_config = self.config.get('agent', {})
+        risk_percentage = agent_config.get('risk_percentage', 0.01)
+        default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
+        use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
+
+        # Compatibility: Convert legacy percentage values (>1) to decimals
+        if risk_percentage > 1:
+            logger.warning(
+                f"Detected legacy risk_percentage {risk_percentage}%. "
+                f"Converting to decimal: {risk_percentage/100:.3f}"
+            )
+            risk_percentage /= 100
+        if default_stop_loss > 1:
+            logger.warning(
+                f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. "
+                f"Converting to decimal: {default_stop_loss/100:.3f}"
+            )
+            default_stop_loss /= 100
+
+        # Calculate stop-loss percentage (dynamic or fixed)
+        if use_dynamic_stop_loss:
+            sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
+                current_price=current_price,
+                context=context,
+                default_percentage=default_stop_loss,
+                atr_multiplier=agent_config.get('atr_multiplier', 2.0),
+                min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
+                max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
+            )
+        else:
+            sizing_stop_loss_percentage = default_stop_loss
+            logger.info(
+                "Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)",
+                default_stop_loss * 100
             )
 
-            # Get risk parameters from the agent config
-            agent_config = self.config.get('agent', {})
-            risk_percentage = agent_config.get('risk_percentage', 0.01)
+        # Initialize return values
+        result = {
+            'recommended_position_size': None,
+            'stop_loss_price': None,
+            'sizing_stop_loss_percentage': None,
+            'risk_percentage': None,
+            'signal_only': False
+        }
 
-            # Dynamic stop-loss calculation based on market volatility (ATR)
-            default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
-            use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
-
-            # Compatibility: Convert legacy percentage values (>1) to decimals
-            if risk_percentage > 1:
-                logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
-                risk_percentage /= 100
-            if default_stop_loss > 1:
-                logger.warning(f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. Converting to decimal: {default_stop_loss/100:.3f}")
-                default_stop_loss /= 100
-
-            # Calculate stop-loss percentage (dynamic or fixed)
-            if use_dynamic_stop_loss:
-                sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
-                    current_price=current_price,
-                    context=context,
-                    default_percentage=default_stop_loss,
-                    atr_multiplier=agent_config.get('atr_multiplier', 2.0),
-                    min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
-                    max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
-                )
-            else:
-                sizing_stop_loss_percentage = default_stop_loss
-                logger.info("Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)", default_stop_loss * 100)
+        # CASE 1: Normal mode with valid balance
+        if should_calculate:
+            total_balance = sum(relevant_balance.values())
 
             recommended_position_size = self.calculate_position_size(
                 account_balance=total_balance,
@@ -1052,14 +1130,22 @@ Format response as a structured technical analysis demonstration.
                 entry_price=current_price,
                 stop_loss_percentage=sizing_stop_loss_percentage
             )
-            signal_only = False
 
-            # Calculate the stop loss price
+            # Calculate stop loss price
+            position_type = self._determine_position_type(action)
             stop_loss_price = 0
             if position_type == 'LONG' and current_price > 0:
                 stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
             elif position_type == 'SHORT' and current_price > 0:
                 stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
+
+            result.update({
+                'recommended_position_size': recommended_position_size,
+                'stop_loss_price': stop_loss_price,
+                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
+                'risk_percentage': risk_percentage,
+                'signal_only': False
+            })
 
             if action == 'HOLD' and has_existing_position:
                 logger.info(
@@ -1069,114 +1155,147 @@ Format response as a structured technical analysis demonstration.
                 )
             else:
                 logger.info(
-                    "Position sizing: %.4f units (balance: $%.2f from %s, risk: %s%%, sl: %s%%)",
+                    "Position sizing: %.4f units (balance: $%.2f from %s, risk: %.2f%%, sl: %.2f%%)",
                     recommended_position_size,
                     total_balance,
                     balance_source,
-                    risk_percentage,
-                    sizing_stop_loss_percentage,
+                    risk_percentage * 100,
+                    sizing_stop_loss_percentage * 100,
                 )
+
+        # CASE 2: Signal-only mode (no balance or signal_only_default enabled)
         else:
-            # Signal-only mode: Calculate position sizing for human approval
-            # Even without balance, provide suggested sizing for Telegram human-in-the-loop
             signal_only = True
 
-            # Use default balance for position sizing calculation
-            # This provides a recommendation that humans can approve/adjust
+            # HOLD without position: no sizing needed
+            if action == 'HOLD' and not has_existing_position:
+                logger.info("HOLD without existing position - no position sizing shown")
+                result['signal_only'] = True
+                return result
+
+            # Calculate position sizing for human approval using default balance
             default_balance = 10000.0  # Default $10k for sizing recommendations
 
-            # Get risk parameters from the agent config
-            agent_config = self.config.get('agent', {})
-            risk_percentage = agent_config.get('risk_percentage', 0.01)
+            recommended_position_size = self.calculate_position_size(
+                account_balance=default_balance,
+                risk_percentage=risk_percentage,
+                entry_price=current_price,
+                stop_loss_percentage=sizing_stop_loss_percentage
+            )
 
-            # Dynamic stop-loss calculation based on market volatility (ATR)
-            default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
-            use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
-
-            # Compatibility: Convert legacy percentage values (>1) to decimals
-            if risk_percentage > 1:
-                logger.warning(f"Detected legacy risk_percentage {risk_percentage}%. Converting to decimal: {risk_percentage/100:.3f}")
-                risk_percentage /= 100
-            if default_stop_loss > 1:
-                logger.warning(f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. Converting to decimal: {default_stop_loss/100:.3f}")
-                default_stop_loss /= 100
-
-            # Calculate stop-loss percentage (dynamic or fixed)
-            if use_dynamic_stop_loss:
-                sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
-                    current_price=current_price,
-                    context=context,
-                    default_percentage=default_stop_loss,
-                    atr_multiplier=agent_config.get('atr_multiplier', 2.0),
-                    min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
-                    max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
+            # Calculate stop loss price
+            if current_price > 0 and sizing_stop_loss_percentage > 0:
+                stop_loss_price = (
+                    current_price * (1 - sizing_stop_loss_percentage)
+                    if action == 'BUY'
+                    else current_price * (1 + sizing_stop_loss_percentage)
                 )
             else:
-                sizing_stop_loss_percentage = default_stop_loss
-                logger.info("Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)", default_stop_loss * 100)
-
-            if action == 'HOLD' and not has_existing_position:
-                # HOLD without position: no sizing needed
-                recommended_position_size = None
-                sizing_stop_loss_percentage = None
-                risk_percentage = None
                 stop_loss_price = None
+
+            result.update({
+                'recommended_position_size': recommended_position_size,
+                'stop_loss_price': stop_loss_price,
+                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
+                'risk_percentage': risk_percentage,
+                'signal_only': True
+            })
+
+            # Log appropriate message
+            if signal_only_default:
                 logger.info(
-                    "HOLD without existing position - no position sizing shown"
+                    "Signal-only mode: Position sizing calculated for human approval "
+                    "(%.4f units based on $%.2f default balance)",
+                    recommended_position_size,
+                    default_balance
+                )
+            elif not has_valid_balance:
+                logger.warning(
+                    "No valid %s balance - using default $%.2f for sizing recommendation "
+                    "(%.4f units for human approval)",
+                    balance_source,
+                    default_balance,
+                    recommended_position_size
                 )
             else:
-                # Calculate position sizing for human approval
-                recommended_position_size = self.calculate_position_size(
-                    account_balance=default_balance,
-                    risk_percentage=risk_percentage,
-                    entry_price=current_price,
-                    stop_loss_percentage=sizing_stop_loss_percentage
+                logger.warning(
+                    "Portfolio data unavailable - using default $%.2f for sizing recommendation "
+                    "(%.4f units for human approval)",
+                    default_balance,
+                    recommended_position_size
                 )
 
-                if current_price > 0 and sizing_stop_loss_percentage > 0:
-                    stop_loss_price = (
-                        current_price * (1 - sizing_stop_loss_percentage)
-                        if action == 'BUY'
-                        else current_price * (1 + sizing_stop_loss_percentage)
-                    )
-                else:
-                    stop_loss_price = None
+        return result
 
-                if signal_only_default:
-                    logger.info(
-                        "Signal-only mode: Position sizing calculated for human approval (%.4f units based on $%.2f default balance)",
-                        recommended_position_size,
-                        default_balance
-                    )
-                elif not has_valid_balance:
-                    balance_type = (
-                        'Coinbase'
-                        if is_crypto
-                        else 'Oanda'
-                        if is_forex
-                        else 'platform'
-                    )
-                    logger.warning(
-                        "No valid %s balance for %s - using default $%.2f for sizing recommendation (%.4f units for human approval)",
-                        balance_type,
-                        asset_pair,
-                        default_balance,
-                        recommended_position_size
-                    )
-                else:
-                    logger.warning(
-                        "Portfolio data unavailable - using default $%.2f for sizing recommendation (%.4f units for human approval)",
-                        default_balance,
-                        recommended_position_size
-                    )
+    def _create_decision(
+        self,
+        asset_pair: str,
+        context: Dict[str, Any],
+        ai_response: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create structured decision object.
+
+        Refactored to use helper functions for better maintainability and testability.
+        Reduced from 367 lines (CC=60) to ~80 lines (CC=8).
+
+        Args:
+            asset_pair: Asset pair
+            context: Decision context
+            ai_response: AI recommendation
+
+        Returns:
+            Structured decision
+        """
+        decision_id = str(uuid.uuid4())
+
+        # Extract basic decision parameters
+        current_price = context['market_data'].get('close', 0)
+        balance = context.get('balance', {})
+        action = ai_response.get('action', 'HOLD')
+        asset_type = context['market_data'].get('type', 'unknown')
+
+        # Helper 1: Select relevant balance based on asset type
+        relevant_balance, balance_source, is_crypto, is_forex = self._select_relevant_balance(
+            balance, asset_pair, asset_type
+        )
+
+        # Helper 2: Check for existing position
+        has_existing_position = self._has_existing_position(
+            asset_pair,
+            context.get('portfolio'),
+            context.get('monitoring_context')
+        )
+
+        # Helper 3: Determine position type
+        position_type = self._determine_position_type(action)
+
+        # Helper 4: Calculate position sizing parameters
+        signal_only_default = self.config.get('signal_only_default', False)
+        sizing_params = self._calculate_position_sizing_params(
+            context=context,
+            current_price=current_price,
+            action=action,
+            has_existing_position=has_existing_position,
+            relevant_balance=relevant_balance,
+            balance_source=balance_source,
+            signal_only_default=signal_only_default
+        )
+
+        # Extract position sizing results
+        recommended_position_size = sizing_params['recommended_position_size']
+        stop_loss_price = sizing_params['stop_loss_price']
+        sizing_stop_loss_percentage = sizing_params['sizing_stop_loss_percentage']
+        risk_percentage = sizing_params['risk_percentage']
+        signal_only = sizing_params['signal_only']
+
+        # Calculate suggested_amount based on action and position sizing
+        suggested_amount = ai_response.get('amount', 0)
 
         # Override suggested_amount to 0 for HOLD with no position
-        suggested_amount = ai_response.get('amount', 0)
         if action == 'HOLD' and not has_existing_position:
             suggested_amount = 0
-            logger.debug(
-                "Overriding suggested_amount to 0 (HOLD with no position)"
-            )
+            logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
 
         # For non-signal-only BUY/SELL, use calculated position size converted to USD notional
         if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
@@ -1193,6 +1312,7 @@ Format response as a structured technical analysis demonstration.
                 # For forex or other, use unit amount
                 suggested_amount = recommended_position_size
 
+        # Assemble decision object
         decision = {
             'id': decision_id,
             'asset_pair': asset_pair,
@@ -1206,7 +1326,7 @@ Format response as a structured technical analysis demonstration.
             'entry_price': current_price,
             'stop_loss_price': stop_loss_price,
             'stop_loss_fraction': sizing_stop_loss_percentage,
-            'take_profit_percentage': None, # Individual trade TP is not explicitly set by the DecisionEngine
+            'take_profit_percentage': None,  # Individual trade TP is not explicitly set by the DecisionEngine
             'risk_percentage': risk_percentage,
             'signal_only': signal_only,
             'portfolio_stop_loss_percentage': self.portfolio_stop_loss_percentage,
@@ -1222,7 +1342,7 @@ Format response as a structured technical analysis demonstration.
             'executed': False,
             'ai_provider': self.ai_provider,
             'model_name': self.model_name,
-            'backtest_mode': self.backtest_mode,  # Track if decision was generated in backtest context
+            'backtest_mode': self.backtest_mode,
             # --- Multi-timeframe and risk context fields ---
             'multi_timeframe_trend': context.get('multi_timeframe_trend'),
             'multi_timeframe_entry_signals': context.get('multi_timeframe_entry_signals'),
