@@ -19,10 +19,17 @@ provider_requests_total = Counter(
     ['provider', 'status']  # status: success, failure, timeout
 )
 
-# Trade P&L tracking (aggregated per asset_pair)
+# Trade P&L tracking (per trade, original metric with asset_pair + trade_id)
 trade_pnl_dollars = Gauge(
     'ffe_trade_pnl_dollars',
-    'Aggregated trade profit/loss in dollars per asset pair',
+    'Per-trade profit/loss in dollars (original metric)',
+    ['asset_pair', 'trade_id']
+)
+
+# Aggregated Trade P&L tracking (per asset_pair, v2 metric without trade_id)
+trade_pnl_dollars_v2 = Gauge(
+    'ffe_trade_pnl_dollars_v2',
+    'Aggregated trade profit/loss in dollars per asset pair (v2)',
     ['asset_pair']
 )
 
@@ -89,17 +96,36 @@ def increment_provider_request(provider: str, status: str):
         logger.error(f"Error incrementing provider request: {e}")
 
 
+def update_trade_pnl_trade(asset_pair: str, trade_id: str, pnl_dollars: float):
+    """Update per-trade P&L gauge (original metric with trade_id).
+
+    Args:
+        asset_pair: The trading pair (e.g., 'BTCUSD', 'EURUSD')
+        trade_id: Unique trade identifier
+        pnl_dollars: The P&L for the specific trade
+    """
+    try:
+        trade_pnl_dollars.labels(asset_pair=asset_pair, trade_id=trade_id).set(pnl_dollars)
+    except Exception as e:
+        logger.error(f"Error updating per-trade P&L: {e}")
+
+
 def update_trade_pnl(asset_pair: str, pnl_dollars: float):
-    """Update aggregated trade P&L gauge per asset pair.
+    """Update aggregated trade P&L gauge per asset pair (v2).
+
+    This function maintains backward compatibility for callers but now emits
+    the aggregated v2 metric. Dashboards/alerts should migrate to
+    'ffe_trade_pnl_dollars_v2'. During the migration period, emit both
+    per-trade and aggregated metrics where possible via dedicated functions.
 
     Args:
         asset_pair: The trading pair (e.g., 'BTCUSD', 'EURUSD')
         pnl_dollars: The aggregated P&L for all trades of this asset pair
     """
     try:
-        trade_pnl_dollars.labels(asset_pair=asset_pair).set(pnl_dollars)
+        trade_pnl_dollars_v2.labels(asset_pair=asset_pair).set(pnl_dollars)
     except Exception as e:
-        logger.error(f"Error updating trade P&L: {e}")
+        logger.error(f"Error updating aggregated P&L (v2): {e}")
 
 
 def update_circuit_breaker_state(service: str, state: int):
