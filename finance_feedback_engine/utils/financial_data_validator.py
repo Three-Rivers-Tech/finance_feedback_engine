@@ -64,8 +64,8 @@ class FinancialDataValidator:
     """
     A utility class for validating financial market data.
 
-    This class provides methods to validate various aspects of financial data, 
-    such as prices, volumes, timestamps, and currency pairs, ensuring data 
+    This class provides methods to validate various aspects of financial data,
+    such as prices, volumes, timestamps, and currency pairs, ensuring data
     quality before processing or storage.
 
     Implementation Notes:
@@ -131,6 +131,7 @@ class FinancialDataValidator:
         elif rule_name == "currency_pair":
             if not (isinstance(value, str) and value.isupper() and value.isalnum() and len(value) == rule.get("length", 6)):
                 errors.append(rule["error_msg"] + f" (Invalid currency pair format: {value})")
+            return errors
 
         elif rule_name == "order_type":
             allowed_values = rule.get("allowed_values", [])

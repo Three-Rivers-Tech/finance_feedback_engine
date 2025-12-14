@@ -1,7 +1,10 @@
 import yaml
 import os
 import re
+import logging
 from typing import Any, Dict
+
+logger = logging.getLogger(__name__)
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """
@@ -69,8 +72,6 @@ def load_config(config_path: str) -> Dict[str, Any]:
                     if env_var_value is None:
                         # Log a warning for using default values (as they might contain sensitive info)
                         if 'key' in env_var_name.lower() or 'secret' in env_var_name.lower() or 'password' in env_var_name.lower():
-                            import logging
-                            logger = logging.getLogger(__name__)
                             logger.warning(f"Using default value for sensitive environment variable '{env_var_name.strip()}'")
                         return default_value.strip()
                     return env_var_value.strip()
