@@ -489,9 +489,9 @@ class LocalLLMProvider:
 
                 response_text = result.stdout.strip()
 
-                # Check if response is empty or indicates an error
+                # Check if response is empty
                 if not response_text:
-                    logger.warning(f"Empty or error response from LLM on attempt {attempt + 1}: {response_text}")
+                    logger.warning(f"Empty response from LLM on attempt {attempt + 1}: {response_text}")
 
                     # If this is the last attempt, return fallback
                     if attempt == max_retries - 1:
