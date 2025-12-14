@@ -346,21 +346,24 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         or f"coinbase_position_{len(futures_positions)}"
                     )
 
-                    futures_positions.append({
-                        'id': str(position_id),
-                        'instrument': instrument,
-                        'units': signed_contracts,
-                        'entry_price': entry_price,
-                        'current_price': current_price,
-                        'pnl': unrealized_pnl,
-                        'opened_at': opened_at,
-                        'product_id': product_id,
-                        'side': side,  # LONG or SHORT
-                        'contracts': contracts,
-                        'unrealized_pnl': unrealized_pnl,
-                        'daily_pnl': float(safe_get(pos, 'daily_realized_pnl', 0)),
-                        'leverage': leverage_value
-                    })
+                    # Create PositionInfo instance for type safety
+                    position_info = PositionInfo(
+                        id=str(position_id),
+                        instrument=instrument,
+                        units=signed_contracts,
+                        entry_price=entry_price,
+                        current_price=current_price,
+                        pnl=unrealized_pnl,
+                        opened_at=opened_at,
+                        product_id=product_id,
+                        side=side,
+                        contracts=contracts,
+                        unrealized_pnl=unrealized_pnl,
+                        daily_pnl=float(safe_get(pos, 'daily_realized_pnl', 0)),
+                        leverage=leverage_value
+                    )
+
+                    futures_positions.append(position_info)
 
                 logger.info(
                     "Retrieved %d active futures positions (long/short)",
@@ -632,17 +635,17 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'timestamp': decision.get('timestamp')
             }
 
-    def get_active_positions(self) -> PositionsResponse:
+    def get_active_positions(self) -> Dict[str, Any]:
         """
         Get all currently active positions from Coinbase.
 
         Returns:
             A dictionary with ``"positions"`` containing Coinbase futures
-            positions as :class:`PositionInfo` objects.
+            positions as dictionaries.
         """
         logger.info("Fetching active positions from Coinbase")
         portfolio = self.get_portfolio_breakdown()
-        positions: List[PositionInfo] = portfolio.get('futures_positions', [])
+        positions: List[Dict[str, Any]] = portfolio.get('futures_positions', [])
         return {'positions': positions}
         """
         Get Coinbase account information including portfolio breakdown.
