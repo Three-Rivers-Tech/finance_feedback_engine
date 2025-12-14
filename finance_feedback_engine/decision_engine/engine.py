@@ -824,6 +824,8 @@ Format response as a structured technical analysis demonstration.
         model_info = f" (model: {model_name})" if model_name else ""
         logger.info(f"Using local LLM AI inference (Ollama){model_info}")
 
+        from .decision_validation import build_fallback_decision
+
         try:
             from .local_llm_provider import LocalLLMProvider
 
@@ -832,9 +834,15 @@ Format response as a structured technical analysis demonstration.
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
             return await asyncio.to_thread(provider.query, prompt)
-        except (ImportError, RuntimeError) as e:
-            logger.error(f"Local LLM failed: {e}")
-            raise
+        except ImportError as e:
+            logger.error(f"Local LLM failed due to missing import: {e}")
+            return build_fallback_decision("Local LLM import error, using fallback decision.")
+        except RuntimeError as e:
+            logger.error(f"Local LLM failed due to runtime error: {e}")
+            return build_fallback_decision(f"Local LLM runtime error: {str(e)}, using fallback decision.")
+        except Exception as e:
+            logger.error(f"Local LLM failed due to unexpected error: {e}")
+            return build_fallback_decision(f"Local LLM unexpected error: {str(e)}, using fallback decision.")
 
     async def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("CLI AI inference (placeholder)")

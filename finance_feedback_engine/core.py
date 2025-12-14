@@ -155,18 +155,18 @@ class FinanceFeedbackEngine:
         memory_enabled = config.get('portfolio_memory', {}).get('enabled', False)
         self.memory_engine: Optional[PortfolioMemoryEngine] = None
         if memory_enabled:
-            self.memory_engine = PortfolioMemoryEngine(config)
-
             # Auto-load persisted memory if exists
             memory_path = "data/memory/portfolio_memory.json"
-            try:
-                if os.path.exists(memory_path):
-                    self.memory_engine.portfolio_memory = PortfolioMemoryEngine.load_from_disk(memory_path)
+            if os.path.exists(memory_path):
+                try:
+                    self.memory_engine = PortfolioMemoryEngine.load_from_disk(memory_path)
                     logger.info(f"Loaded portfolio memory from {memory_path}")
-                else:
-                    logger.info("No persisted memory found, starting fresh")
-            except Exception as e:
-                logger.warning(f"Failed to load portfolio memory: {e}, starting fresh")
+                except Exception as e:
+                    logger.warning(f"Failed to load portfolio memory: {e}, starting fresh")
+                    self.memory_engine = PortfolioMemoryEngine(config)
+            else:
+                self.memory_engine = PortfolioMemoryEngine(config)
+                logger.info("No persisted memory found, starting fresh")
 
             logger.info("Portfolio Memory Engine enabled")
 
@@ -383,7 +383,7 @@ class FinanceFeedbackEngine:
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         try:
-            decision = self.decision_engine.generate_decision(
+            decision = await self.decision_engine.generate_decision(
                 asset_pair=asset_pair,
                 market_data=market_data,
                 balance=balance,
