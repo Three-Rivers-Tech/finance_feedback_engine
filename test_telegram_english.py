@@ -9,11 +9,27 @@ async def send_test_message():
     """Send a plain English test message."""
 
     # Load config
-    with open('config/telegram.yaml') as f:
-        config = yaml.safe_load(f)
+    # Load config
+    try:
+        with open('config/telegram.yaml') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print("❌ config/telegram.yaml not found")
+        return
+    except yaml.YAMLError as e:
+        print(f"❌ Error parsing config: {e}")
+        return
 
-    bot_token = config['bot_token']
-    user_id = config['allowed_user_ids'][0]
+    bot_token = config.get('bot_token')
+    if not bot_token:
+        print("❌ No bot_token configured")
+        return
+
+    user_ids = config.get('allowed_user_ids', [])
+    if not user_ids:
+        print("❌ No allowed_user_ids configured")
+        return
+    user_id = user_ids[0]
 
     bot = Bot(token=bot_token)
 

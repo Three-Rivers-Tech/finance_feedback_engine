@@ -2,6 +2,8 @@
 
 import logging
 import yaml
+
+# Ensure library stubs are installed for type checking
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 from pathlib import Path
@@ -26,24 +28,38 @@ def load_tiered_config() -> dict:
     local_config_path = config_dir / "config.local.yaml"
     base_config_path = config_dir / "config.yaml"
 
-    config = {}
+    config: Dict[str, Any] = {}
 
     # 1. Load local config first (preferred)
     if local_config_path.exists():
-        with open(local_config_path, 'r', encoding='utf-8') as f:
-            local_config = yaml.safe_load(f)
-            if local_config:
-                config.update(local_config)
+        try:
+            with open(local_config_path, 'r', encoding='utf-8') as f:
+                local_config = yaml.safe_load(f)
+                if local_config:
+                    config.update(local_config)
+        except (OSError, IOError) as e:
+            raise RuntimeError(f"Error loading local config from {local_config_path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"YAML error in local config {local_config_path}: {e}") from e
 
     # 2. Load base config and fill missing keys
     if base_config_path.exists():
-        with open(base_config_path, 'r', encoding='utf-8') as f:
-            base_config = yaml.safe_load(f)
-            if base_config:
-                # Fill missing keys from base config
-                for key, value in base_config.items():
-                    if key not in config:
-                        config[key] = value
+        try:
+            with open(base_config_path, 'r', encoding='utf-8') as f:
+                base_config = yaml.safe_load(f)
+                if base_config:
+                    # Fill missing keys from base config
+                    for key, value in base_config.items():
+                        if key not in config:
+                            config[key] = value
+        except (OSError, IOError) as e:
+            raise RuntimeError(f"Error loading base config from {base_config_path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise RuntimeError(f"YAML error in base config {base_config_path}: {e}") from e
+
+    # Validate that at least one config is loaded
+    if not config:
+        raise ValueError("No valid configuration loaded from local or base config files.")
 
     return config
 
@@ -73,6 +89,7 @@ async def lifespan(app: FastAPI):
             from ..integrations.telegram_bot import init_telegram_bot
             bot = init_telegram_bot(telegram_config)
             if bot:
+                app_state["telegram_bot"] = bot
                 logger.info("✅ Telegram bot initialized and ready for webhooks")
             else:
                 logger.warning("⚠️  Telegram bot initialization failed")

@@ -835,13 +835,49 @@ Format response as a structured technical analysis demonstration.
             # Run synchronous query in a separate thread
             return await asyncio.to_thread(provider.query, prompt)
         except ImportError as e:
-            logger.error(f"Local LLM failed due to missing import: {e}")
+            logger.error(
+                f"Local LLM failed due to missing import: {e}",
+                extra={
+                    'provider': 'local',
+                    'model': model_name or self.config.get('model_name', 'default'),
+                    'failure_type': 'dependency',
+                    'error_class': type(e).__name__,
+                    'ensemble_mode': self.ai_provider == 'ensemble'
+                }
+            )
+            # Re-raise in ensemble mode for proper provider failure tracking
+            if self.ai_provider == 'ensemble':
+                raise
             return build_fallback_decision("Local LLM import error, using fallback decision.")
         except RuntimeError as e:
-            logger.error(f"Local LLM failed due to runtime error: {e}")
+            logger.error(
+                f"Local LLM failed due to runtime error: {e}",
+                extra={
+                    'provider': 'local',
+                    'model': model_name or self.config.get('model_name', 'default'),
+                    'failure_type': 'infrastructure',
+                    'error_class': type(e).__name__,
+                    'ensemble_mode': self.ai_provider == 'ensemble'
+                }
+            )
+            # Re-raise in ensemble mode for proper provider failure tracking
+            if self.ai_provider == 'ensemble':
+                raise
             return build_fallback_decision(f"Local LLM runtime error: {str(e)}, using fallback decision.")
         except Exception as e:
-            logger.error(f"Local LLM failed due to unexpected error: {e}")
+            logger.error(
+                f"Local LLM failed due to unexpected error: {e}",
+                extra={
+                    'provider': 'local',
+                    'model': model_name or self.config.get('model_name', 'default'),
+                    'failure_type': 'unknown',
+                    'error_class': type(e).__name__,
+                    'ensemble_mode': self.ai_provider == 'ensemble'
+                }
+            )
+            # Re-raise in ensemble mode for proper provider failure tracking
+            if self.ai_provider == 'ensemble':
+                raise
             return build_fallback_decision(f"Local LLM unexpected error: {str(e)}, using fallback decision.")
 
     async def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
