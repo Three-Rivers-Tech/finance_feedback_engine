@@ -1,13 +1,13 @@
 """Coinbase Advanced trading platform integration."""
 
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 import logging
 import uuid
 import time
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 from requests.exceptions import RequestException
 
-from .base_platform import BaseTradingPlatform
+from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -327,13 +327,37 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                     leverage_value = parsed_leverage if parsed_leverage and parsed_leverage > 0 else default_leverage
 
+                    product_id = safe_get(pos, 'product_id', None)
+                    instrument = product_id or 'UNKNOWN'
+                    side = (safe_get(pos, 'side', '') or '').upper()
+                    contracts = float(safe_get(pos, 'number_of_contracts', 0))
+                    signed_contracts = contracts if side == 'LONG' else -contracts
+                    entry_price = float(safe_get(pos, 'avg_entry_price', 0))
+                    current_price = float(safe_get(pos, 'current_price', 0))
+                    unrealized_pnl = float(safe_get(pos, 'unrealized_pnl', 0))
+                    opened_at: Optional[str] = (
+                        safe_get(pos, 'created_at', None) or
+                        safe_get(pos, 'open_time', None)
+                    )
+
+                    position_id = (
+                        safe_get(pos, 'id', None)
+                        or instrument
+                        or f"coinbase_position_{len(futures_positions)}"
+                    )
+
                     futures_positions.append({
-                        'product_id': safe_get(pos, 'product_id', None),
-                        'side': safe_get(pos, 'side', None),  # LONG or SHORT
-                        'contracts': float(safe_get(pos, 'number_of_contracts', 0)),
-                        'entry_price': float(safe_get(pos, 'avg_entry_price', 0)),
-                        'current_price': float(safe_get(pos, 'current_price', 0)),
-                        'unrealized_pnl': float(safe_get(pos, 'unrealized_pnl', 0)),
+                        'id': str(position_id),
+                        'instrument': instrument,
+                        'units': signed_contracts,
+                        'entry_price': entry_price,
+                        'current_price': current_price,
+                        'pnl': unrealized_pnl,
+                        'opened_at': opened_at,
+                        'product_id': product_id,
+                        'side': side,  # LONG or SHORT
+                        'contracts': contracts,
+                        'unrealized_pnl': unrealized_pnl,
                         'daily_pnl': float(safe_get(pos, 'daily_realized_pnl', 0)),
                         'leverage': leverage_value
                     })
@@ -608,16 +632,18 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 'timestamp': decision.get('timestamp')
             }
 
-    def get_active_positions(self) -> Dict[str, Any]:
+    def get_active_positions(self) -> PositionsResponse:
         """
         Get all currently active positions from Coinbase.
 
         Returns:
-            A dictionary containing a list of active futures positions.
+            A dictionary with ``"positions"`` containing Coinbase futures
+            positions as :class:`PositionInfo` objects.
         """
         logger.info("Fetching active positions from Coinbase")
         portfolio = self.get_portfolio_breakdown()
-        return {'positions': portfolio.get('futures_positions', [])}
+        positions: List[PositionInfo] = portfolio.get('futures_positions', [])
+        return {'positions': positions}
         """
         Get Coinbase account information including portfolio breakdown.
 
