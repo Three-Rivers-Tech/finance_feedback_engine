@@ -490,7 +490,7 @@ class LocalLLMProvider:
                 response_text = result.stdout.strip()
 
                 # Check if response is empty or indicates an error
-                if not response_text or "error" in response_text.lower():
+                if not response_text:
                     logger.warning(f"Empty or error response from LLM on attempt {attempt + 1}: {response_text}")
 
                     # If this is the last attempt, return fallback
@@ -536,6 +536,7 @@ class LocalLLMProvider:
                     f"LLM response missing required fields or not JSON on attempt {attempt + 1}, "
                     f"attempting text parsing: {response_text[:100]}"
                 )
+                self._unload_model()
                 return self._parse_text_response(response_text)
 
             except subprocess.TimeoutExpired:

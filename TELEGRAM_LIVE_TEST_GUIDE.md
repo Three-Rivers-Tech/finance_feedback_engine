@@ -2,11 +2,11 @@
 **Created:** 2025-12-13
 **Status:** Ready for Testing with Network Access
 
-## What We've Verified ✅
+## What We've Verified 
 
 ### Configuration Check
-- **Bot Token:** Valid (1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890)
-- **User ID:** Configured (1864198449)
+- **Bot Token:** Valid (<YOUR_BOT_TOKEN>)
+- **User ID:** Configured (<YOUR_USER_ID>)
 - **Enabled:** Yes
 - **Redis:** Disabled (using in-memory queue for testing)
 - **Bot Initialization:** Successful
@@ -83,7 +83,7 @@ ngrok http 8000
 Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`) and register webhook:
 
 ```bash
-export BOT_TOKEN="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
+export BOT_TOKEN="<YOUR_BOT_TOKEN>"
 export NGROK_URL="https://abc123.ngrok.io"  # Replace with your ngrok URL
 
 curl -X POST "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${NGROK_URL}/webhook/telegram"
@@ -160,8 +160,8 @@ analysis_frequency_seconds: 300  # ← Check market every 5 min
 Current settings:
 ```yaml
 enabled: true
-bot_token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890
-allowed_user_ids: [1864198449]
+bot_token: <YOUR_BOT_TOKEN>
+allowed_user_ids: [<YOUR_USER_ID>]
 use_redis: false              # ← In-memory queue for testing
 approval_timeout: 300         # ← 5-minute timeout
 ```
@@ -189,7 +189,7 @@ approval_policy: never
 **Check:**
 ```bash
 # Verify bot token
-curl "https://api.telegram.org/bot1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890/getMe"
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getMe"
 
 # Should return bot info
 ```
@@ -216,8 +216,8 @@ curl "https://api.telegram.org/bot1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789
 2. Add to config/telegram.yaml:
    ```yaml
    allowed_user_ids:
-     - 1864198449  # Your ID
-     - XXXXXXXXX   # Add others if needed
+     - <YOUR_USER_ID>  # Your ID
+     - <ANOTHER_USER_ID>   # Add others if needed
    ```
 
 ### Issue: "Redis connection refused"

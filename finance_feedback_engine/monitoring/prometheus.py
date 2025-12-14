@@ -19,11 +19,11 @@ provider_requests_total = Counter(
     ['provider', 'status']  # status: success, failure, timeout
 )
 
-# Trade P&L tracking
+# Trade P&L tracking (aggregated per asset_pair)
 trade_pnl_dollars = Gauge(
     'ffe_trade_pnl_dollars',
-    'Current trade profit/loss in dollars',
-    ['asset_pair', 'trade_id']
+    'Aggregated trade profit/loss in dollars per asset pair',
+    ['asset_pair']
 )
 
 # Circuit breaker state
@@ -89,10 +89,15 @@ def increment_provider_request(provider: str, status: str):
         logger.error(f"Error incrementing provider request: {e}")
 
 
-def update_trade_pnl(asset_pair: str, trade_id: str, pnl_dollars: float):
-    """Update trade P&L gauge."""
+def update_trade_pnl(asset_pair: str, pnl_dollars: float):
+    """Update aggregated trade P&L gauge per asset pair.
+
+    Args:
+        asset_pair: The trading pair (e.g., 'BTCUSD', 'EURUSD')
+        pnl_dollars: The aggregated P&L for all trades of this asset pair
+    """
     try:
-        trade_pnl_dollars.labels(asset_pair=asset_pair, trade_id=trade_id).set(pnl_dollars)
+        trade_pnl_dollars.labels(asset_pair=asset_pair).set(pnl_dollars)
     except Exception as e:
         logger.error(f"Error updating trade P&L: {e}")
 
