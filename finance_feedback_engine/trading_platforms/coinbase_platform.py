@@ -517,9 +517,38 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     buying_power = float(buying_power_dict.get('value', 0))
 
                     # Max leverage is typically 20x for Coinbase perpetuals
-                    # but we can estimate it from buying_power / balance ratio
-                    if balance > 0 and buying_power > balance:
-                        max_leverage = min(buying_power / balance, 20.0)
+                    # Calculate leverage from buying_power / balance ratio
+                    # with defensive checks and proper clamping
+                    if balance <= 0:
+                        logger.warning(
+                            "Account balance is <= 0 (%.2f); cannot calculate leverage",
+                            balance
+                        )
+                        max_leverage = 1.0
+                    elif buying_power <= 0:
+                        logger.warning(
+                            "Buying power is <= 0 (%.2f); setting leverage to 1.0",
+                            buying_power
+                        )
+                        max_leverage = 1.0
+                    else:
+                        # Normal case: compute leverage and clamp between 1.0 and 20.0
+                        calculated_leverage = buying_power / balance
+                        max_leverage = max(1.0, min(calculated_leverage, 20.0))
+
+                        # Log anomalous leverage values
+                        if buying_power < balance:
+                            logger.info(
+                                "Buying power (%.2f) < balance (%.2f); "
+                                "effective leverage %.2f",
+                                buying_power, balance, max_leverage
+                            )
+                        elif calculated_leverage > 20.0:
+                            logger.warning(
+                                "Buying power ratio (%.2f) exceeds 20.0x cap; "
+                                "clamping to 20.0",
+                                calculated_leverage
+                            )
 
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
