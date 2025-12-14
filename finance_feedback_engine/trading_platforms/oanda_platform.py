@@ -1,9 +1,9 @@
 """Oanda trading platform integration."""
 
-from typing import Dict, Any
+from typing import Any, Dict, List, Optional
 import logging
 
-from .base_platform import BaseTradingPlatform
+from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -224,11 +224,23 @@ class OandaPlatform(BaseTradingPlatform):
 
                 if net_units != 0:
                     position_type = 'LONG' if net_units > 0 else 'SHORT'
+                    average_price = float(pos.get('averagePrice', 0) or 0)
+                    current_price = float(pos.get('currentPrice', 0) or 0)
+                    opened_at: Optional[str] = pos.get('openTime')
+                    position_id = (
+                        pos.get('id')
+                        or f"{instrument}_{position_type.lower()}"
+                    )
 
                     positions.append({
+                        'id': str(position_id),
                         'instrument': instrument,
+                        'units': net_units,
+                        'entry_price': average_price,
+                        'current_price': current_price,
+                        'pnl': net_pl,
+                        'opened_at': opened_at,
                         'position_type': position_type,
-                        'units': abs(net_units),
                         'unrealized_pl': net_pl,
                         'long_units': long_units,
                         'short_units': abs(short_units),
@@ -664,16 +676,18 @@ class OandaPlatform(BaseTradingPlatform):
                 'timestamp': decision.get('timestamp')
             }
 
-    def get_active_positions(self) -> Dict[str, Any]:
+    def get_active_positions(self) -> PositionsResponse:
         """
         Get all currently active positions from Oanda.
 
         Returns:
-            A dictionary containing a list of active positions.
+            A dictionary with ``"positions"`` containing Oanda positions as
+            :class:`PositionInfo` objects.
         """
         logger.info("Fetching active positions from Oanda")
         portfolio = self.get_portfolio_breakdown()
-        return {'positions': portfolio.get('positions', [])}
+        positions: List[PositionInfo] = portfolio.get('positions', [])
+        return {'positions': positions}
 
     def get_account_info(self) -> Dict[str, Any]:
         """

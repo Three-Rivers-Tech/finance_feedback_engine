@@ -1,14 +1,36 @@
 """Base trading platform interface."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
-from typing import Optional
+from typing import Any, Dict, List, Optional, TypedDict
+
+
+class PositionInfoRequired(TypedDict):
+    """Core fields describing an open position."""
+
+    id: str
+    instrument: str
+    units: float
+    entry_price: float
+    current_price: float
+    pnl: float
+    opened_at: Optional[str]
+
+
+class PositionInfo(PositionInfoRequired, total=False):
+    """Position payload with optional metadata (platform, leverage, etc.)."""
+
+    platform: str
+    leverage: float
+    position_type: str
+
+
+PositionsResponse = Dict[str, List[PositionInfo]]
 
 
 class BaseTradingPlatform(ABC):
     """
     Abstract base class for trading platform integrations.
-    
+
     All platform implementations must inherit from this class.
     """
 
@@ -65,13 +87,14 @@ class BaseTradingPlatform(ABC):
         pass
 
     @abstractmethod
-    def get_active_positions(self) -> Dict[str, Any]:
+    def get_active_positions(self) -> PositionsResponse:
         """
         Get all currently active positions.
 
         Returns:
-            A dictionary containing a list of active positions, each represented
-            by a dictionary with details like instrument, units, PnL, etc.
+            A dictionary with a single key ``"positions"`` whose value is a
+            list of :class:`PositionInfo` objects, e.g.,
+            ``{"positions": [PositionInfo, ...]}``.
         """
         pass
 

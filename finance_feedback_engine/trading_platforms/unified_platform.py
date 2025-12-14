@@ -1,9 +1,13 @@
 """Unified trading platform to manage multiple accounts."""
 
-from typing import Dict, Any
+from typing import Any, Dict, List
 import logging
 
-from .base_platform import BaseTradingPlatform
+from .base_platform import (
+    BaseTradingPlatform,
+    PositionInfo,
+    PositionsResponse,
+)
 from .coinbase_platform import CoinbaseAdvancedPlatform
 from .oanda_platform import OandaPlatform
 from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
@@ -120,7 +124,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 combined_info[name] = {'error': str(e)}
         return combined_info
 
-    def get_active_positions(self) -> Dict[str, Any]:
+    def get_active_positions(self) -> PositionsResponse:
         """
         Get combined active positions from all configured sub-platforms.
 
@@ -129,7 +133,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             by a dictionary with details like instrument, units, PnL, etc.
             Each position will also include a 'platform' key indicating its source.
         """
-        all_positions = []
+        all_positions: List[PositionInfo] = []
         for name, platform_instance in self.platforms.items():
             try:
                 # Call get_active_positions on the sub-platform
