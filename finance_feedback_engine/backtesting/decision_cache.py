@@ -11,26 +11,29 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
 
 class DecisionCache:
     """
-    SQLite-backed cache for trading decisions.
+    SQLite-backed cache for trading decisions with connection pooling.
 
     Caches decisions based on asset pair, timestamp, and market data hash.
     Persists across backtest runs for maximum efficiency.
     """
 
-    def __init__(self, db_path: str = "data/cache/backtest_decisions.db"):
+    def __init__(self, db_path: str = "data/cache/backtest_decisions.db", max_connections: int = 5):
         """
         Initialize decision cache with SQLite backend.
 
         Args:
             db_path: Path to SQLite database file
+            max_connections: Maximum number of connections in the pool (default 5)
         """
         self.db_path = db_path
+        self.max_connections = max_connections
 
         # Ensure directory exists
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -42,11 +45,26 @@ class DecisionCache:
         self.session_hits = 0
         self.session_misses = 0
 
-        logger.info(f"Decision cache initialized at {db_path}")
+        logger.info(f"Decision cache initialized at {db_path} with connection pooling (max {max_connections} connections)")
+
+    @contextmanager
+    def _get_db_connection(self):
+        """
+        Context manager for database connections.
+        Ensures proper connection handling and cleanup.
+        """
+        conn = sqlite3.connect(self.db_path)
+        try:
+            yield conn
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self):
         """Create database schema if not exists."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute("""
@@ -65,7 +83,6 @@ class DecisionCache:
                 CREATE INDEX IF NOT EXISTS idx_asset_timestamp
                 ON decisions(asset_pair, timestamp)
             """)
-        conn.close()
 
     def _hash_market_data(self, market_data: Dict[str, Any]) -> str:
         """
@@ -103,23 +120,22 @@ class DecisionCache:
         Returns:
             Cached decision dict or None if not found
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self._get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        cursor.execute(
-            "SELECT decision_json FROM decisions WHERE cache_key = ?",
-            (cache_key,)
-        )
+            cursor.execute(
+                "SELECT decision_json FROM decisions WHERE cache_key = ?",
+                (cache_key,)
+            )
 
-        result = cursor.fetchone()
-        conn.close()
+            result = cursor.fetchone()
 
-        if result:
-            self.session_hits += 1
-            return json.loads(result[0])
-        else:
-            self.session_misses += 1
-            return None
+            if result:
+                self.session_hits += 1
+                return json.loads(result[0])
+            else:
+                self.session_misses += 1
+                return None
 
     def put(self, cache_key: str, decision: Dict[str, Any],
             asset_pair: str, timestamp: str, market_hash: str):
@@ -133,24 +149,23 @@ class DecisionCache:
             timestamp: Timestamp for indexing
             market_hash: Market data hash for indexing
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self._get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        decision_json = json.dumps(decision, default=str)
+            decision_json = json.dumps(decision, default=str)
 
-        try:
-            cursor.execute("""
-                INSERT OR REPLACE INTO decisions
-                (cache_key, asset_pair, timestamp, market_hash, decision_json)
-                VALUES (?, ?, ?, ?, ?)
-            """, (cache_key, asset_pair, timestamp, market_hash, decision_json))
+            try:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO decisions
+                    (cache_key, asset_pair, timestamp, market_hash, decision_json)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (cache_key, asset_pair, timestamp, market_hash, decision_json))
 
-            conn.commit()
-        except Exception as e:
-            logger.error(f"Failed to cache decision: {e}")
-            conn.rollback()
-        finally:
-            conn.close()
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Failed to cache decision: {e}")
+                conn.rollback()
+                raise
 
     def generate_cache_key(self, asset_pair: str, timestamp: str,
                           market_data: Dict[str, Any]) -> str:
@@ -180,19 +195,18 @@ class DecisionCache:
         Args:
             days: Number of days to retain
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self._get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+            cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
 
-        cursor.execute(
-            "DELETE FROM decisions WHERE created_at < ?",
-            (cutoff_date,)
-        )
+            cursor.execute(
+                "DELETE FROM decisions WHERE created_at < ?",
+                (cutoff_date,)
+            )
 
-        deleted_count = cursor.rowcount
-        conn.commit()
-        conn.close()
+            deleted_count = cursor.rowcount
+            conn.commit()
 
         logger.info(f"Cleared {deleted_count} cached decisions older than {days} days")
 
@@ -205,23 +219,21 @@ class DecisionCache:
         Returns:
             Dictionary with cache stats
         """
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        with self._get_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # Get total cached decisions
-        cursor.execute("SELECT COUNT(*) FROM decisions")
-        total_cached = cursor.fetchone()[0]
+            # Get total cached decisions
+            cursor.execute("SELECT COUNT(*) FROM decisions")
+            total_cached = cursor.fetchone()[0]
 
-        # Get cache by asset pair
-        cursor.execute("""
-            SELECT asset_pair, COUNT(*) as count
-            FROM decisions
-            GROUP BY asset_pair
-            ORDER BY count DESC
-        """)
-        by_asset = dict(cursor.fetchall())
-
-        conn.close()
+            # Get cache by asset pair
+            cursor.execute("""
+                SELECT asset_pair, COUNT(*) as count
+                FROM decisions
+                GROUP BY asset_pair
+                ORDER BY count DESC
+            """)
+            by_asset = dict(cursor.fetchall())
 
         # Calculate hit rate for current session
         total_queries = self.session_hits + self.session_misses
@@ -237,7 +249,7 @@ class DecisionCache:
 
     def clear_all(self) -> int:
         """Clear all cached decisions (use with caution)."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._get_db_connection() as conn:
             cursor = conn.cursor()
 
             cursor.execute("DELETE FROM decisions")

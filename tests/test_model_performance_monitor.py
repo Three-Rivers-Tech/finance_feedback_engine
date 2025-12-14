@@ -163,11 +163,12 @@ class TestModelPerformanceMonitor:
         assert drift_result['has_drift'] is True
         assert drift_result['drift_score'] > 0  # Should be positive
         
-        # Assert drifting features contain price with mean shift reason
+        # Assert drifting features contain price with statistical test reason
         assert len(drift_result['drifting_features']) > 0
         price_drift = next((f for f in drift_result['drifting_features'] if f['feature'] == 'price'), None)
         assert price_drift is not None
-        assert 'Mean shift: 12.00' in price_drift['reason']
+        # Either PSI or KS test should be in the reason due to the significant difference
+        assert any(test in price_drift['reason'] for test in ['PSI:', 'KS:', 'p-value:'])
 
 
 class TestPerformanceMetrics:

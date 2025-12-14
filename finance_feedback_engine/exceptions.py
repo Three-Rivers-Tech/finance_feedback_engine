@@ -60,7 +60,10 @@ class DecisionValidationError(DecisionEngineError):
 
 class InsufficientProvidersError(DecisionEngineError):
     """Raised when ensemble doesn't have minimum providers (Phase 1 quorum)."""
-    pass
+    def __init__(self, message: str, providers_failed=None, providers_succeeded=None):
+        super().__init__(message)
+        self.providers_failed = providers_failed or []
+        self.providers_succeeded = providers_succeeded or []
 
 
 # Trading Platform Errors

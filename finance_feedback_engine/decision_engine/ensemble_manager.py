@@ -19,10 +19,8 @@ from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
-
-class InsufficientProvidersError(Exception):
-    """Raised when Phase 1 quorum is not met."""
-    pass
+# Import InsufficientProvidersError from the main exceptions module to maintain consistency
+from ..exceptions import InsufficientProvidersError
 
 
 class EnsembleDecisionManager:
@@ -612,9 +610,15 @@ class EnsembleDecisionManager:
                 f"Phase 1 quorum failure: {phase1_success_count}/{len(free_tier)} "
                 f"succeeded (need ≥{phase1_quorum})"
             )
+            # Get the providers that actually succeeded
+            providers_succeeded = list(phase1_decisions.keys())
+            providers_failed = phase1_failed
+
             raise InsufficientProvidersError(
                 f"Phase 1 quorum not met: {phase1_success_count}/{len(free_tier)} "
-                f"providers succeeded (required: {phase1_quorum})"
+                f"providers succeeded (required: {phase1_quorum})",
+                providers_failed=providers_failed,
+                providers_succeeded=providers_succeeded
             )
 
         # Aggregate Phase 1 decisions
