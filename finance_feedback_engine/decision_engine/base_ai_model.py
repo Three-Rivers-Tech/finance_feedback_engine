@@ -10,7 +10,7 @@ class BaseAIModel(ABC):
     """
     Abstract Base Class (ABC) for AI models used in the Finance Feedback Engine.
 
-    This ABC defines a standard interface that all AI models must implement, 
+    This ABC defines a standard interface that all AI models must implement,
     promoting modularity, interchangeability, and adherence to best practices
     in financial AI, especially regarding explainability (XAI) and metadata.
 
@@ -49,25 +49,41 @@ class BaseAIModel(ABC):
         self.version = self._load_version_from_config(config)
 
     def _load_version_from_config(self, config: Dict[str, Any]) -> str:
-        """Load version from config, with fallback to auto-detection."""
+        """Load version from config, with fallback to auto-detection.
+
+        Validates the model path and reads a VERSION file with explicit
+        encoding, using targeted exception handling.
+        """
         version = config.get("version")
         if version:
             return version
 
-        # Auto-detect version if not provided in config
+        import os
         model_path = config.get("model_path")
         if model_path:
             try:
-                # Extract version from path or model file if available
-                import os
-                model_dir = os.path.dirname(model_path)
-                # Look for a version file in the model directory
-                version_file = os.path.join(model_dir, "VERSION")
-                if os.path.exists(version_file):
-                    with open(version_file, 'r') as f:
-                        return f.read().strip()
-            except Exception:
-                pass  # Fall back to default version
+                # Normalize path: if a file is provided, use its directory; if a directory, use it directly
+                model_dir = model_path
+                if os.path.isfile(model_path):
+                    model_dir = os.path.dirname(model_path)
+                elif os.path.isdir(model_path):
+                    model_dir = model_path
+                else:
+                    model_dir = None
+
+                if model_dir and os.path.exists(model_dir):
+                    version_file = os.path.join(model_dir, "VERSION")
+                    if os.path.isfile(version_file):
+                        try:
+                            with open(version_file, "r", encoding="utf-8", errors="replace") as f:
+                                return f.read().strip()
+                        except (OSError, UnicodeDecodeError) as e:
+                            logger.warning(f"Failed to read VERSION file at {version_file}: {e}")
+            except OSError as e:
+                # Log OS-related path errors and fall back to default
+                logger.warning(f"Model path validation failed: {e}")
+                # Fall through to default version
+        # Default fallback
         return "1.0.0"
 
     @abstractmethod
@@ -171,7 +187,8 @@ class BaseAIModel(ABC):
         if "training_date" in self.config:
             metadata["training_date"] = self.config["training_date"]
         if "parameters" in self.config:
-            metadata["parameters"] = self.config["parameters"].copy()
+            params = self.config["parameters"]
+            metadata["parameters"] = params.copy() if isinstance(params, dict) else params
         if "expected_features" in self.config:
             metadata["expected_features"] = self.config["expected_features"]
 
@@ -195,60 +212,55 @@ class DummyAIModel(BaseAIModel):
         # Use the last row of features for decision making (most recent data)
         latest_features = features.iloc[-1] if len(features) > 0 else features
 
-        # Implement basic trading logic based on features
-        action = "HOLD"
-        confidence = 0.5
-        reasoning_parts = []
+        # Implement aggregated signal logic to avoid order dependence
+        base_confidence = 0.5
+        signals: list[tuple[str, float, str]] = []  # (action, weight, reason)
 
-        # Example logic based on common technical indicators
+        # Collect signals without mutating action
         if "RSI" in latest_features:
             rsi = latest_features["RSI"]
             if rsi > 70:
-                action = "SELL"  # Overbought
-                confidence = min(confidence + 0.2, 0.9)
-                reasoning_parts.append(f"RSI at {rsi:.2f} indicates overbought conditions")
+                signals.append(("SELL", 0.2, f"RSI at {rsi:.2f} indicates overbought conditions"))
             elif rsi < 30:
-                action = "BUY"  # Oversold
-                confidence = min(confidence + 0.2, 0.9)
-                reasoning_parts.append(f"RSI at {rsi:.2f} indicates oversold conditions")
+                signals.append(("BUY", 0.2, f"RSI at {rsi:.2f} indicates oversold conditions"))
 
         if "MACD" in latest_features:
             macd = latest_features["MACD"]
             if macd > 0.1:
-                if action == "HOLD":
-                    action = "BUY"
-                confidence = min(confidence + 0.15, 0.9)
-                reasoning_parts.append(f"Positive MACD at {macd:.3f} supports upward momentum")
+                signals.append(("BUY", 0.15, f"Positive MACD at {macd:.3f} supports upward momentum"))
             elif macd < -0.1:
-                if action == "HOLD":
-                    action = "SELL"
-                confidence = min(confidence + 0.15, 0.9)
-                reasoning_parts.append(f"Negative MACD at {macd:.3f} supports downward momentum")
+                signals.append(("SELL", 0.15, f"Negative MACD at {macd:.3f} supports downward momentum"))
 
         if "LastClose" in latest_features and "SMA_20" in latest_features:
             price = latest_features["LastClose"]
             sma = latest_features["SMA_20"]
             if price > sma * 1.02:  # Price 2% above SMA
-                if action in ["HOLD", "SELL"]:
-                    action = "BUY"
-                confidence = min(confidence + 0.1, 0.9)
-                reasoning_parts.append(f"Price {price:.2f} is above 20-period SMA {sma:.2f}")
+                signals.append(("BUY", 0.1, f"Price {price:.2f} is above 20-period SMA {sma:.2f}"))
             elif price < sma * 0.98:  # Price 2% below SMA
-                if action in ["HOLD", "BUY"]:
-                    action = "SELL"
-                confidence = min(confidence + 0.1, 0.9)
-                reasoning_parts.append(f"Price {price:.2f} is below 20-period SMA {sma:.2f}")
+                signals.append(("SELL", 0.1, f"Price {price:.2f} is below 20-period SMA {sma:.2f}"))
 
-        # If no specific signal, default to HOLD
-        if action == "HOLD" and not reasoning_parts:
-            confidence = 0.4  # Lower confidence for HOLD
+        # Aggregate scores per action
+        score = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
+        reasoning_parts = []
+        for act, wt, rsn in signals:
+            score[act] = score.get(act, 0.0) + wt
+            reasoning_parts.append(rsn)
+
+        # Choose final action by highest aggregated score
+        if max(score.values()) == 0.0:
+            final_action = "HOLD"
+            aggregated_score = 0.0
             reasoning_parts.append("No strong technical signals detected")
+        else:
+            final_action = max(score.items(), key=lambda kv: kv[1])[0]
+            aggregated_score = score[final_action]
 
+        confidence = min(base_confidence + aggregated_score, 0.9)
         confidence = round(confidence, 2)
-        reasoning = f"Dummy model recommends {action} with {confidence*100}% confidence. " + "; ".join(reasoning_parts)
+        reasoning = f"Dummy model recommends {final_action} with {confidence*100}% confidence. " + "; ".join(reasoning_parts)
 
-        logger.info(f"DummyAIModel predicted: {action} with {confidence*100}% confidence.")
-        return {"action": action, "confidence": confidence, "reasoning": reasoning}
+        logger.info(f"DummyAIModel predicted: {final_action} with {confidence*100}% confidence.")
+        return {"action": final_action, "confidence": confidence, "reasoning": reasoning}
 
     def explain(self, features: pd.DataFrame, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -270,8 +282,26 @@ class DummyAIModel(BaseAIModel):
         # Analyze features that influenced the decision
         for col in features.columns:
             val = latest_features[col]
-            # Capture the value for explanation
-            feature_contributions[col] = round(float(val), 3)
+            # Capture the value for explanation with safe coercion
+            coerced_value = None
+            try:
+                # Attempt direct float conversion
+                coerced_value = float(val)
+            except (TypeError, ValueError):
+                # Handle numeric-like strings (e.g., '123', '45.6', '1e-3')
+                try:
+                    if isinstance(val, str):
+                        stripped = val.strip()
+                        coerced_value = float(stripped)
+                    else:
+                        # Non-numeric and non-string values get a sentinel
+                        coerced_value = None
+                except (TypeError, ValueError):
+                    coerced_value = None
+
+            feature_contributions[col] = (
+                round(coerced_value, 3) if isinstance(coerced_value, (int, float)) else "non-numeric"
+            )
 
             # Identify significant factors based on common thresholds
             if col == "RSI":
@@ -335,9 +365,16 @@ class DummyAIModel(BaseAIModel):
         # In a real implementation, this would save model weights
         # For dummy model, just create a dummy file
         import os
-        os.makedirs(os.path.dirname(model_path), exist_ok=True) if os.path.dirname(model_path) else None
-        with open(model_path, 'w') as f:
-            f.write(f"Dummy model: {self.model_name}, version: {self.version}")
+        dirpath = os.path.dirname(model_path)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
+        try:
+            with open(model_path, 'w', encoding='utf-8') as f:
+                f.write(f"Dummy model: {self.model_name}, version: {self.version}")
+        except (OSError, IOError) as e:
+            # Prefer using module logger; re-raise if critical
+            logger.error(f"Failed to save model to {model_path}: {e}")
+            raise
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
