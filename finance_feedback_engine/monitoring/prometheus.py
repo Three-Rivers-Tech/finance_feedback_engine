@@ -1,7 +1,13 @@
-"""Prometheus metrics for Finance Feedback Engine."""
+"""Prometheus metrics for Finance Feedback Engine.
+
+Updates:
+- Replace high-cardinality per-trade P&L Gauge (label `trade_id`) with a
+    Summary metric that only labels by `asset_pair` to capture the distribution
+    of P&L values without creating unbounded series.
+"""
 
 import logging
-from prometheus_client import Counter, Histogram, Gauge, generate_latest
+from prometheus_client import Counter, Histogram, Gauge, Summary, generate_latest
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +25,11 @@ provider_requests_total = Counter(
     ['provider', 'status']  # status: success, failure, timeout
 )
 
-# Trade P&L tracking (per trade, original metric with asset_pair + trade_id)
-trade_pnl_dollars = Gauge(
-    'ffe_trade_pnl_dollars',
-    'Per-trade profit/loss in dollars (original metric)',
-    ['asset_pair', 'trade_id']
-)
-
-# Aggregated Trade P&L tracking (per asset_pair, v2 metric without trade_id)
-trade_pnl_dollars_v2 = Gauge(
-    'ffe_trade_pnl_dollars_v2',
-    'Aggregated trade profit/loss in dollars per asset pair (v2)',
+# Trade P&L distribution (per asset_pair, Summary without trade_id)
+# Summary supports observations of negative and positive values, suitable for P&L.
+trade_pnl_dollars_summary = Summary(
+    'ffe_trade_pnl_dollars_summary',
+    'Observed per-trade profit/loss in dollars (distribution) per asset pair',
     ['asset_pair']
 )
 
@@ -97,35 +97,36 @@ def increment_provider_request(provider: str, status: str):
 
 
 def update_trade_pnl_trade(asset_pair: str, trade_id: str, pnl_dollars: float):
-    """Update per-trade P&L gauge (original metric with trade_id).
+    """Record a per-trade P&L observation using Summary (trade_id not labeled).
+
+    Note: `trade_id` is accepted for backward compatibility but is intentionally
+    not emitted as a label to avoid high-cardinality time series.
 
     Args:
         asset_pair: The trading pair (e.g., 'BTCUSD', 'EURUSD')
-        trade_id: Unique trade identifier
+        trade_id: Unique trade identifier (ignored for labeling)
         pnl_dollars: The P&L for the specific trade
     """
     try:
-        trade_pnl_dollars.labels(asset_pair=asset_pair, trade_id=trade_id).set(pnl_dollars)
+        trade_pnl_dollars_summary.labels(asset_pair=asset_pair).observe(pnl_dollars)
     except Exception as e:
-        logger.error(f"Error updating per-trade P&L: {e}")
+        logger.error(f"Error recording per-trade P&L observation: {e}")
 
 
 def update_trade_pnl(asset_pair: str, pnl_dollars: float):
-    """Update aggregated trade P&L gauge per asset pair (v2).
+    """Record an aggregated trade P&L observation per asset pair.
 
-    This function maintains backward compatibility for callers but now emits
-    the aggregated v2 metric. Dashboards/alerts should migrate to
-    'ffe_trade_pnl_dollars_v2'. During the migration period, emit both
-    per-trade and aggregated metrics where possible via dedicated functions.
+    For distribution tracking over time, this writes to the Summary metric
+    without using trade_id, preventing high-cardinality series.
 
     Args:
         asset_pair: The trading pair (e.g., 'BTCUSD', 'EURUSD')
-        pnl_dollars: The aggregated P&L for all trades of this asset pair
+        pnl_dollars: The aggregated or representative P&L value to observe
     """
     try:
-        trade_pnl_dollars_v2.labels(asset_pair=asset_pair).set(pnl_dollars)
+        trade_pnl_dollars_summary.labels(asset_pair=asset_pair).observe(pnl_dollars)
     except Exception as e:
-        logger.error(f"Error updating aggregated P&L (v2): {e}")
+        logger.error(f"Error recording aggregated P&L observation: {e}")
 
 
 def update_circuit_breaker_state(service: str, state: int):
