@@ -224,8 +224,13 @@ class OandaPlatform(BaseTradingPlatform):
 
                 if net_units != 0:
                     position_type = 'LONG' if net_units > 0 else 'SHORT'
-                    average_price = float(pos.get('averagePrice', 0) or 0)
-                    current_price = float(pos.get('currentPrice', 0) or 0)
+                    # Use averagePrice from the dominant side
+                    if abs(long_units) >= abs(short_units):
+                        average_price = float(long_pos.get('averagePrice', 0) or 0)
+                    else:
+                        average_price = float(short_pos.get('averagePrice', 0) or 0)
+                    # current_price must come from pricing endpoint (already fetched below)
+                    current_price = 0.0  # Will be populated from price_map if needed
                     opened_at: Optional[str] = pos.get('openTime')
                     position_id = (
                         pos.get('id')
