@@ -238,7 +238,7 @@ monitoring:
   include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
 
   # Enable live dashboard view for autonomous agent
-  enable_live_view: true
+  enable_live_view: false
 
   # Live dashboard configuration
   live_view:
@@ -262,7 +262,7 @@ monitoring:
     decision_log:
       max_entries: 10
       show_reasoning: true
-      max_reasoning_length: 200
+      max_reasoning_length: 200  # in characters
 
     # Performance panel settings
     performance:

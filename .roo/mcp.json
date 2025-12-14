@@ -7,6 +7,31 @@
         "@modelcontextprotocol/server-filesystem",
         "${HOME}/finance_feedback_engine-2.0"
       ]
+    },
+    "redis": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-redis",
+        "--host",
+        "localhost",
+        "--port",
+        "6379"
+      ]
+    },
+    "http": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-http"
+      ]
+    },
+    "1mcpserver": {
+      "url": "https://mcp.1mcpserver.com/mcp/",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache"
+      }
     }
   }
 }

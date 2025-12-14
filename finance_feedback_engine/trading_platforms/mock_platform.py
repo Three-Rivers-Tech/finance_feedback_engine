@@ -518,6 +518,38 @@ class MockTradingPlatform(BaseTradingPlatform):
         """
         return self._positions.copy()
 
+    def get_active_positions(self) -> Dict[str, Any]:
+        """
+        Get all currently active positions.
+
+        Returns:
+            A dictionary with a single key "positions" whose value is a
+            list of PositionInfo objects, e.g., {"positions": [...]}.
+        """
+        positions = []
+
+        for asset_pair, pos in self._positions.items():
+            # Use current_price from position if available, otherwise use entry_price
+            current_price = pos.get('current_price', pos['entry_price'])
+
+            # Calculate P&L
+            pnl = (current_price - pos['entry_price']) * pos['contracts'] * self._contract_multiplier
+
+            positions.append({
+                'id': f"mock-{asset_pair}",
+                'instrument': asset_pair,
+                'units': pos['contracts'],
+                'entry_price': pos['entry_price'],
+                'current_price': current_price,
+                'pnl': pnl,
+                'opened_at': None,  # Mock doesn't track this
+                'platform': 'mock',
+                'leverage': 10.0,
+                'position_type': pos.get('side', 'LONG')
+            })
+
+        return {'positions': positions}
+
     def update_position_prices(self, price_updates: Dict[str, float]):
         """
         Update current prices for positions (useful for backtesting).
