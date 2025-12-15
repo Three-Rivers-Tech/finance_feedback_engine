@@ -63,12 +63,13 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 from coinbase.rest import RESTClient
 
                 # Initialize client with API credentials
-                # Note: coinbase-advanced-py handles base_url internally
+                # For CDP API keys (organizations/.../apiKeys/...), pass directly
                 self._client = RESTClient(
                     api_key=self.api_key,
-                    api_secret=self.api_secret
+                    api_secret=self.api_secret,
+                    verbose=True  # Enable verbose logging for debugging
                 )
-                logger.info("Coinbase REST client initialized")
+                logger.info("Coinbase REST client initialized with CDP API format")
             except ImportError:
                 logger.warning(
                     "coinbase-advanced-py not installed. "
@@ -79,7 +80,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "Install coinbase-advanced-py"
                 )
             except Exception as e:
-                logger.error("Failed to initialize Coinbase client: %s", e)
+                logger.error("Failed to initialize Coinbase client: %s", e, exc_info=True)
                 raise
 
         return self._client
@@ -88,17 +89,14 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         """
         Normalize various asset pair formats to Coinbase's product ID style.
 
-        Accepts formats like:
-        - "BTCUSD"
-        - "BTC-USD"
-        - "BTC/USD"
+        Args:
+            asset_pair: Asset pair in various formats (e.g., "BTCUSD", "BTC/USD", "BTC-USD")
 
         Returns:
-        - "BTC-USD" (Coinbase Advanced expected format)
+            Normalized product ID in Coinbase format (e.g., "BTC-USD")
         """
         try:
             if not asset_pair:
-                logger.warning("Empty asset_pair provided to _format_product_id")
                 raise ValueError("asset_pair cannot be empty")
 
             # Remove whitespace and standardize separators
@@ -728,6 +726,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         portfolio = self.get_portfolio_breakdown()
         positions: List[Dict[str, Any]] = portfolio.get('futures_positions', [])
         return {'positions': positions}
+
+    def get_account_info(self) -> Dict[str, Any]:
         """
         Get Coinbase account information including portfolio breakdown.
 
