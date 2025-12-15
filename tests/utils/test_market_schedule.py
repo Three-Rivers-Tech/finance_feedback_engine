@@ -14,25 +14,34 @@ def _to_unix(utc_dt: dt.datetime) -> int:
     return int(utc_dt.timestamp())
 
 
-def test_forex_friday_boundary_open_and_close():
+def test_forex_friday_boundary_stays_open():
     open_dt = _to_utc(dt.datetime(2024, 5, 10, 16, 59), MarketSchedule.NY_TZ)
     status_open = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=open_dt)
     assert status_open["is_open"] is True
+    assert status_open["session"] == "New York"
+    assert status_open["time_to_close"] > 0
 
     close_dt = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
-    status_closed = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=close_dt)
-    assert status_closed["is_open"] is False
-    assert status_closed["session"] == "Closed"
+    status_weekend = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=close_dt)
+    assert status_weekend["is_open"] is True
+    assert status_weekend["session"] == "Weekend"
+    assert status_weekend["warning"] == "Forex weekend hours - liquidity may be thin"
+    assert status_weekend["time_to_close"] == 0
+    assert status_weekend["time_to_open"] == 0
 
 
 def test_forex_sunday_reopen_window():
     pre_reopen = _to_utc(dt.datetime(2024, 5, 12, 16, 0), MarketSchedule.NY_TZ)
-    status_closed = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=pre_reopen)
-    assert status_closed["is_open"] is False
+    status_pre = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=pre_reopen)
+    assert status_pre["is_open"] is True
+    assert status_pre["session"] == "Weekend"
+    assert status_pre["warning"] == "Forex weekend hours - liquidity may be thin"
 
     post_reopen = _to_utc(dt.datetime(2024, 5, 12, 17, 0), MarketSchedule.NY_TZ)
     status_open = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=post_reopen)
     assert status_open["is_open"] is True
+    assert status_open["session"] != "Closed"
+    assert status_open["warning"] == ""
 
 
 def test_stock_open_and_close_edges():
@@ -119,12 +128,13 @@ def test_forex_overlap_session():
     assert status["session"] == "Overlap"
 
 
-def test_forex_saturday_closed():
-    """Test Saturday closure."""
+def test_forex_saturday_open_with_warning():
+    """Forex should stay open on weekends but emit liquidity warning."""
     dt_saturday = _to_utc(dt.datetime(2024, 5, 11, 12, 0), MarketSchedule.NY_TZ)
     status = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=dt_saturday)
-    assert status["is_open"] is False
-    assert status["session"] == "Closed"
+    assert status["is_open"] is True
+    assert status["session"] == "Weekend"
+    assert status["warning"] == "Forex weekend hours - liquidity may be thin"
 
 
 def test_forex_time_to_close_friday():
@@ -192,11 +202,13 @@ def test_backtesting_forex_timestamp():
     status = MarketSchedule.get_market_status_at_timestamp("EURUSD", "forex", timestamp)
     assert status["is_open"] is True
 
-    # Friday 5 PM NY (market close)
+    # Friday 5 PM NY (previously closed window)
     dt_close = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
     timestamp_close = _to_unix(dt_close)
     status_close = MarketSchedule.get_market_status_at_timestamp("EURUSD", "forex", timestamp_close)
-    assert status_close["is_open"] is False
+    assert status_close["is_open"] is True
+    assert status_close["session"] == "Weekend"
+    assert status_close["warning"] == "Forex weekend hours - liquidity may be thin"
 
 
 def test_backtesting_stock_timestamp():
