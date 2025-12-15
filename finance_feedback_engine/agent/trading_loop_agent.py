@@ -451,6 +451,7 @@ class TradingLoopAgent:
         logger.info("State: IDLE - Cycle complete, waiting for next interval...")
         # Note: Sleep is handled externally in run() or by backtester
         # This state just marks the end of the cycle
+        await self._transition_to(AgentState.LEARNING)
 
     async def handle_perception_state(self):
         """
@@ -573,38 +574,42 @@ class TradingLoopAgent:
                 logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset).")
                 continue
 
-            for attempt in range(MAX_RETRIES):
-                try:
-                    logger.debug(f"Analyzing {asset_pair} (Attempt {attempt + 1}/{MAX_RETRIES})...")
-                    decision = await self.engine.analyze_asset(asset_pair)
+            # Use asyncio.wait_for to prevent long-running operations from blocking the loop
+            try:
+                logger.debug(f"Analyzing {asset_pair} (with timeout)...")
 
-                    # Reset failure count and timestamp on success
-                    self.analysis_failures[failure_key] = 0
-                    self.analysis_failure_timestamps[failure_key] = current_time
+                # Wrap the analysis with a timeout to prevent blocking
+                decision = await asyncio.wait_for(
+                    self.engine.analyze_asset(asset_pair),
+                    timeout=60  # Timeout after 60 seconds
+                )
 
-                    if decision and decision.get('action') in ["BUY", "SELL"]:
-                        if await self._should_execute(decision):
-                            self._current_decisions.append(decision) # Collect decision
-                            logger.info(f"Actionable decision collected for {asset_pair}: {decision['action']}")
-                        else:
-                            logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
+                # Reset failure count and timestamp on success
+                self.analysis_failures[failure_key] = 0
+                self.analysis_failure_timestamps[failure_key] = current_time
+
+                if decision and decision.get('action') in ["BUY", "SELL"]:
+                    if await self._should_execute(decision):
+                        self._current_decisions.append(decision) # Collect decision
+                        logger.info(f"Actionable decision collected for {asset_pair}: {decision['action']}")
                     else:
-                        logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
+                        logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
+                else:
+                    logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
 
-                    break  # Analysis successful, break retry loop
-
-                except Exception as e:
-                    logger.warning(f"Analysis attempt {attempt + 1} for {asset_pair} failed: {e}")
-                    self.analysis_failure_timestamps[failure_key] = current_time
-                    if attempt < MAX_RETRIES - 1:
-                        await asyncio.sleep(self.config.reasoning_retry_delay_seconds * (attempt + 1))
-                    else:
-                        self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
-                        logger.error(
-                            f"Persistent failure analyzing {asset_pair} after {MAX_RETRIES} attempts. "
-                            f"It will be skipped for a while.",
-                            exc_info=True
-                        )
+            except asyncio.TimeoutError:
+                logger.warning(f"Analysis for {asset_pair} timed out, skipping this cycle.")
+                self.analysis_failure_timestamps[failure_key] = current_time
+                self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
+            except Exception as e:
+                logger.warning(f"Analysis for {asset_pair} failed: {e}")
+                self.analysis_failure_timestamps[failure_key] = current_time
+                self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
+                logger.error(
+                    f"Persistent failure analyzing {asset_pair}. "
+                    f"It will be skipped for a while.",
+                    exc_info=True
+                )
 
         # After analyzing all assets, transition based on collected decisions
         if self._current_decisions:

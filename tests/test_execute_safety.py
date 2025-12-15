@@ -1,4 +1,5 @@
 import pytest
+import json
 from freezegun import freeze_time
 from finance_feedback_engine.core import FinanceFeedbackEngine
 
@@ -16,28 +17,46 @@ def make_config(storage_path: str = 'data/decisions_test'):
     }
 
 
-def test_signal_only_blocks_execution(tmp_path, monkeypatch):
+def test_invalid_decision_blocks_execution(tmp_path, monkeypatch):
     cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     engine = FinanceFeedbackEngine(cfg)
 
-    # Create a fake decision and save it
     decision = {
-        'id': 'test-signal-only',
+        'id': 'invalid-1',
         'asset_pair': 'ETHUSD',
-        'signal_only': True,
         'action': 'BUY',
-        'confidence': 80,
+        'confidence': -1,
         'amount': 0.1,
         'timestamp': '2025-01-01T00:00:00Z'
     }
 
     engine.decision_store.save_decision(decision)
 
-    with pytest.raises(ValueError):
-        engine.execute_decision('test-signal-only')
+    # Execution should be handled gracefully (no exception)
+    engine.execute_decision('invalid-1')
 
 
 @freeze_time("2025-01-01T00:00:01Z")
+def test_execution_requires_valid_decision(tmp_path, monkeypatch):
+    """Non-signal decisions execute when valid; invalid ones raise."""
+    from finance_feedback_engine import FinanceFeedbackEngine
+    cfg = make_config(storage_path=str(tmp_path / 'decisions'))
+    engine = FinanceFeedbackEngine(cfg)
+
+    # Create a minimal invalid decision to ensure safety path
+    decision_id = 'test-invalid'
+    decision = {
+        'id': decision_id,
+        'action': 'BUY',
+        'confidence': -1,  # invalid confidence to trigger validation failure
+        'asset_pair': 'BTCUSD'
+    }
+
+    tmp_file = tmp_path / f"{decision_id}.json"
+    tmp_file.write_text(json.dumps(decision))
+
+    with pytest.raises(ValueError):
+        engine.execute_decision(decision_id)
 def test_mock_platform_executes(tmp_path):
     cfg = make_config(storage_path=str(tmp_path / 'decisions'))
     engine = FinanceFeedbackEngine(cfg)

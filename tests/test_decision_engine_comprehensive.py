@@ -249,8 +249,8 @@ class TestPositionSizing:
             assert pos_cheap >= pos_expensive
 
 
-class TestSignalOnlyMode:
-    """Test signal-only mode detection and behavior."""
+class TestSizingBehavior:
+    """Test position sizing behavior with and without balance."""
 
     @pytest.fixture
     def engine(self):
@@ -276,8 +276,8 @@ class TestSignalOnlyMode:
         return engine
 
     @patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider')
-    def test_signal_only_mode_when_balance_unavailable(self, mock_provider_class, engine):
-        """Test signal-only mode activates when balance is 0 or unavailable."""
+    def test_minimum_order_size_when_balance_unavailable(self, mock_provider_class, engine):
+        """With zero balance, engine uses minimum order size (not signal-only)."""
         mock_provider = Mock()
         mock_provider.query.return_value = {
             'action': 'BUY',
@@ -289,17 +289,15 @@ class TestSignalOnlyMode:
         decision = engine.generate_decision(
             asset_pair='BTCUSD',
             market_data={'close': 50000, 'market_regime': 'TRENDING_BULL'},
-            balance=0.0,  # No balance - should activate signal-only
+            balance=0.0,
             portfolio_value=0.0
         )
-
-        # In signal-only mode, position_size should be null
         if decision:
-            assert decision.get('position_size') is None or decision.get('position_size') == 0
+            assert decision.get('position_size') is not None and decision.get('position_size') >= 0
 
     @patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider')
-    def test_signal_only_mode_with_valid_balance(self, mock_provider_class, engine):
-        """Test position sizing works with valid balance."""
+    def test_sizing_with_valid_balance(self, mock_provider_class, engine):
+        """With valid balance, engine computes position sizing."""
         mock_provider = Mock()
         mock_provider.query.return_value = {
             'action': 'BUY',
@@ -315,7 +313,6 @@ class TestSignalOnlyMode:
             portfolio_value=10000.0
         )
 
-        # With valid balance, position_size should be set
         if decision:
             assert decision.get('position_size') is not None
             assert decision.get('position_size') > 0

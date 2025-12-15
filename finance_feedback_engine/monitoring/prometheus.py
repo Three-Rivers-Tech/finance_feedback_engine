@@ -7,9 +7,31 @@ Updates:
 """
 
 import logging
-from prometheus_client import Counter, Histogram, Gauge, Summary, generate_latest
 
 logger = logging.getLogger(__name__)
+
+try:
+    from prometheus_client import Counter, Histogram, Gauge, Summary, generate_latest
+    _PROM_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised in tests without dependency
+    _PROM_AVAILABLE = False
+
+    class _NullMetric:
+        def labels(self, **kwargs):  # type: ignore[override]
+            return self
+
+        def observe(self, *_args, **_kwargs):
+            return None
+
+        def inc(self, *_args, **_kwargs):
+            return None
+
+        def set(self, *_args, **_kwargs):
+            return None
+
+    Counter = Histogram = Gauge = Summary = _NullMetric  # type: ignore
+
+logger.debug("Prometheus available: %s", _PROM_AVAILABLE)
 
 # Decision latency by provider
 decision_latency_seconds = Histogram(
@@ -74,9 +96,12 @@ def generate_metrics() -> str:
     Generate Prometheus metrics exposition format.
 
     Returns:
-        Metrics in Prometheus text format
+        Metrics in Prometheus text format (stubbed when client unavailable).
     """
     logger.debug("Metrics endpoint called")
+    if not _PROM_AVAILABLE:
+        # Minimal stub keeps endpoint alive for environments without prometheus_client
+        return "# metrics_unavailable\nffe_metrics_available 0\n"
     return generate_latest().decode('utf-8')
 
 

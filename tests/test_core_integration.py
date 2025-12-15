@@ -7,8 +7,7 @@ import pytest
 from unittest.mock import patch, AsyncMock
 from finance_feedback_engine import FinanceFeedbackEngine
 
-# Mark all tests in this module as needing async refactoring
-pytestmark = pytest.mark.skip(reason="Tests need async refactoring - core methods are now async")
+
 
 
 @pytest.fixture

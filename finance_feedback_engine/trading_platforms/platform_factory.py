@@ -103,14 +103,21 @@ class PlatformFactory:
         Raises:
             ValueError: If platform is not supported
         """
+        if not platform_name:
+            raise ValueError("Unknown platform type")
+
         platform_name = platform_name.lower()
 
         if platform_name not in cls._platforms:
             available = ', '.join(cls._platforms.keys())
             raise ValueError(
-                f"Platform '{platform_name}' not supported. "
+                "Unknown platform type. "
                 f"Available platforms: {available}"
             )
+
+        # Basic credential presence check for real platforms
+        if platform_name not in {"mock", "mock_simple"} and not credentials:
+            raise ValueError("Missing credentials for platform")
 
         platform_class = cls._platforms[platform_name]
         logger.info("Creating platform instance: %s", platform_name)

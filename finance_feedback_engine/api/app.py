@@ -127,12 +127,14 @@ app.add_middleware(
 
 # Import and include routers
 from .routes import health_router, metrics_router, telegram_router, decisions_router, status_router
+from .bot_control import bot_control_router
 
 app.include_router(health_router, tags=["health"])
 app.include_router(metrics_router, tags=["metrics"])
 app.include_router(telegram_router, prefix="/webhook", tags=["telegram"])
 app.include_router(decisions_router, prefix="/api/v1", tags=["decisions"])
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
+app.include_router(bot_control_router, tags=["bot-control"])
 
 
 @app.get("/")
