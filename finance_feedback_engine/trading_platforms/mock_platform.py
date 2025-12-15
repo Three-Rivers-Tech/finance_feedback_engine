@@ -275,14 +275,24 @@ class MockTradingPlatform(BaseTradingPlatform):
                             * contracts
                             * self._contract_multiplier
                         )
+<<<<<<< HEAD
                         self._balance["FUTURES_USD"] += suggested_amount - fee_amount
+=======
+                        realized_pnl = pnl
+                        # Update balance with proceeds and realized P&L
+                        self._balance["FUTURES_USD"] += (
+                            suggested_amount - fee_amount + realized_pnl
+                        )
+>>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
 
                         # Update position
                         pos["contracts"] -= contracts
                         if pos["contracts"] < 0.01:  # Close position if nearly zero
                             del self._positions[asset_pair_normalized]
 
-                        logger.info("Closed/reduced position, realized P&L: $%.2f", pnl)
+                        logger.info(
+                            "Closed/reduced position, realized P&L: $%.2f", realized_pnl
+                        )
                     else:
                         # Not enough contracts to sell
                         logger.warning(
