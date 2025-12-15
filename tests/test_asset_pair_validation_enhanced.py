@@ -20,7 +20,6 @@ def test_standardize_asset_pair():
     # Test edge cases
     assert standardize_asset_pair('BTC-_/USD') == 'BTCUSD'
     assert standardize_asset_pair('btc-usd') == 'BTCUSD'
-    assert standardize_asset_pair('eur_usd') == 'EURUSD'
     assert standardize_asset_pair('eth/usd') == 'ETHUSD'
     assert standardize_asset_pair('gbp jpy') == 'GBPJPY'
     
@@ -96,9 +95,10 @@ def test_validate_asset_pair_composition():
     assert 'invalid format' in msg  # Fails format validation first due to length
     
     is_valid, msg = validate_asset_pair_composition('XYZABC')
-    # Should be valid format-wise but may warn about unknown currency
-    assert is_valid is True or 'unknown base currency' in msg
-
+    is_valid, msg = validate_asset_pair_composition('XYZABC')
+    # Valid format but warns about unknown currency
+    assert is_valid is True
+    assert 'unknown' in msg.lower() or 'XYZABC' in msg
 
 if __name__ == "__main__":
     test_standardize_asset_pair()

@@ -2,6 +2,7 @@
 
 import logging
 import yaml
+import os
 
 # Ensure library stubs are installed for type checking
 from contextlib import asynccontextmanager
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..core import FinanceFeedbackEngine
+from ..auth import AuthManager
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +71,7 @@ async def lifespan(app: FastAPI):
     """
     Manage application lifespan (startup and shutdown).
 
-    Startup: Initialize FinanceFeedbackEngine and Telegram bot
+    Startup: Initialize FinanceFeedbackEngine, AuthManager, and Telegram bot
     Shutdown: Cleanup resources
     """
     logger.info("🚀 Starting Finance Feedback Engine API...")
@@ -82,6 +84,40 @@ async def lifespan(app: FastAPI):
         engine = FinanceFeedbackEngine(config)
         app_state["engine"] = engine
         logger.info("✅ Engine initialized successfully")
+
+        # Initialize Authentication Manager with secure API key validation
+        logger.info("🔐 Initializing secure authentication manager...")
+        
+        # Collect API keys from config (for fallback validation)
+        config_keys = {}
+        if "api_keys" in config:
+            # Support explicit API key configuration
+            api_keys_config = config.get("api_keys", {})
+            if isinstance(api_keys_config, dict):
+                config_keys = {
+                    name: api_key for name, api_key in api_keys_config.items()
+                    if isinstance(api_key, str) and api_key
+                }
+        
+        # Also check environment variable (production best practice)
+        env_api_key = os.getenv("FINANCE_FEEDBACK_API_KEY")
+        if env_api_key:
+            config_keys["default"] = env_api_key
+        
+        # Initialize auth manager with rate limiting from config
+        rate_limit_config = config.get("api_auth", {})
+        auth_manager = AuthManager(
+            config_keys=config_keys,
+            rate_limit_max=rate_limit_config.get("rate_limit_max", 100),
+            rate_limit_window=rate_limit_config.get("rate_limit_window", 60),
+            enable_fallback_to_config=rate_limit_config.get("enable_fallback_to_config", True)
+        )
+        app_state["auth_manager"] = auth_manager
+        logger.info("✅ Authentication manager initialized with secure validation")
+        
+        # Log initial setup statistics
+        stats = auth_manager.get_key_stats()
+        logger.debug(f"📊 Authentication stats: {stats}")
 
         # Initialize Telegram bot if enabled in config
         telegram_config = config.get('telegram', {})

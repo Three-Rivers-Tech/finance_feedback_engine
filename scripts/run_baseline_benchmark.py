@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # NOTE: Experimental module - see experiments/benchmarking/
 # To use this feature, temporarily modify Python path to include experiments
 try:
-    from benchmarking import quick_benchmark
+    from experiments.benchmarking import quick_benchmark
 except ImportError:
     print("⚠️  Experimental module not available. See experiments/benchmarking/")
     print("   To enable: Add experiments directory to your Python path")

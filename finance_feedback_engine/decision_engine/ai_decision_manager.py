@@ -23,7 +23,7 @@ class AIDecisionManager:
         self.backtest_mode = backtest_mode
         self.ai_provider = config.get('decision_engine', {}).get('ai_provider', 'local')
         self.model_name = config.get('decision_engine', {}).get('model_name', 'default')
-        
+
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None
         if self.ai_provider == 'ensemble':
@@ -109,6 +109,12 @@ class AIDecisionManager:
         bull_provider = self.ensemble_manager.debate_providers.get('bull')
         bear_provider = self.ensemble_manager.debate_providers.get('bear')
         judge_provider = self.ensemble_manager.debate_providers.get('judge')
+        # Validate debate providers are configured
+        if not all([bull_provider, bear_provider, judge_provider]):
+            missing = [role for role, p in [('bull', bull_provider), ('bear', bear_provider), ('judge', judge_provider)] if not p]
+            raise ValueError(f"Debate mode requires bull, bear, and judge providers. Missing: {missing}")
+
+        failed_debate_providers = []
 
         failed_debate_providers = []
         bull_case = None
@@ -238,14 +244,28 @@ class AIDecisionManager:
         provider_decisions = {}
         failed_providers = []
 
+        semaphore = asyncio.BoundedSemaphore(MAX_WORKERS)
+
+        async def run_provider(provider_name: str):
+            async with semaphore:
+                return await self._query_single_provider(provider_name, prompt)
+
         tasks = [
-            self._query_single_provider(provider, prompt)
+            asyncio.create_task(run_provider(provider))
             for provider in self.ensemble_manager.enabled_providers
         ]
 
-        # Use asyncio.gather to run tasks concurrently with a timeout
-        # Note: ENSEMBLE_TIMEOUT is a global constant at the top of the file
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=ENSEMBLE_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"Parallel ensemble timed out after {ENSEMBLE_TIMEOUT}s; cancelling provider tasks")
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
 
         for provider, result in zip(self.ensemble_manager.enabled_providers, results):
             if isinstance(result, Exception):
@@ -388,7 +408,9 @@ class AIDecisionManager:
             logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
             return False
 
-        if 'reasoning' in decision and not decision['reasoning'].strip():
-            logger.warning(f"Provider {provider}: reasoning is empty")
-            return False
+        if 'reasoning' in decision:
+            reasoning = decision['reasoning']
+            if not isinstance(reasoning, str) or not reasoning.strip():
+                logger.warning(f"Provider {provider}: reasoning is empty or not a string")
+                return False
         return True
