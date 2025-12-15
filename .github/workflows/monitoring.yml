@@ -1,0 +1,436 @@
+name: Monitoring & Alerting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'config/monitoring/**'
+      - 'config/alerting/**'
+      - '.github/workflows/monitoring.yml'
+  pull_request:
+    paths:
+      - 'config/monitoring/**'
+      - 'config/alerting/**'
+  schedule:
+    # Health check every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # =============================================================================
+  # System Health Check
+  # =============================================================================
+  health-check:
+    name: System Health Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Check CLI health
+        run: |
+          python main.py --version || echo "::error::CLI version check failed"
+          python main.py --help || echo "::error::CLI help command failed"
+
+      - name: Validate monitoring configuration
+        run: |
+          if [ -f "config/monitoring.yaml" ]; then
+            python -c "import yaml; yaml.safe_load(open('config/monitoring.yaml'))"
+            echo "✓ Monitoring config validated"
+          fi
+
+      - name: Check monitoring endpoints
+        run: |
+          # Create a script to check if monitoring CLI works
+          python -c "
+          from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+          print('✓ TradeMonitor can be imported')
+          "
+
+      - name: Test Redis connectivity (if configured)
+        run: |
+          if command -v redis-cli &> /dev/null; then
+            redis-cli ping || echo "::warning::Redis not available"
+          else
+            echo "::notice::Redis CLI not installed, skipping connectivity check"
+          fi
+        continue-on-error: true
+
+  # =============================================================================
+  # Performance Monitoring
+  # =============================================================================
+  performance-check:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install psutil memory-profiler py-spy
+
+      - name: Run performance profiling
+        run: |
+          # Profile import time
+          echo "## Import Performance" > performance-report.md
+          python -X importtime main.py --version 2>&1 | head -20 >> performance-report.md
+
+          # Memory usage baseline
+          echo "" >> performance-report.md
+          echo "## Memory Usage" >> performance-report.md
+          python -c "
+          import psutil
+          import os
+          process = psutil.Process(os.getpid())
+          print(f'Memory: {process.memory_info().rss / 1024 / 1024:.2f} MB')
+          " >> performance-report.md
+
+      - name: Benchmark key operations
+        run: |
+          # Create a simple benchmark script
+          cat > benchmark.py << 'EOF'
+          import time
+          import statistics
+          from finance_feedback_engine.utils.validation import standardize_asset_pair
+          from finance_feedback_engine.data_providers.timeframe_aggregator import TimeframeAggregator
+
+          def benchmark_function(func, *args, iterations=100):
+              times = []
+              for _ in range(iterations):
+                  start = time.perf_counter()
+                  func(*args)
+                  end = time.perf_counter()
+                  times.append(end - start)
+              return {
+                  'mean': statistics.mean(times) * 1000,
+                  'median': statistics.median(times) * 1000,
+                  'stdev': statistics.stdev(times) * 1000 if len(times) > 1 else 0
+              }
+
+          # Benchmark asset pair standardization
+          result = benchmark_function(standardize_asset_pair, 'BTC-USD')
+          print(f"Asset pair standardization: {result['mean']:.4f}ms (±{result['stdev']:.4f}ms)")
+          EOF
+
+          python benchmark.py >> performance-report.md
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-report
+          path: performance-report.md
+          retention-days: 30
+
+      - name: Add to summary
+        run: cat performance-report.md >> $GITHUB_STEP_SUMMARY
+
+  # =============================================================================
+  # Test Coverage Monitoring
+  # =============================================================================
+  coverage-trend:
+    name: Coverage Trend Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Run coverage
+        run: |
+          pytest --cov=finance_feedback_engine --cov-report=json -m "not slow"
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          COVERAGE=$(python -c "import json; print(json.load(open('coverage.json'))['totals']['percent_covered'])")
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          echo "Coverage: $COVERAGE%"
+
+      - name: Store coverage trend
+        run: |
+          mkdir -p .coverage-history
+          DATE=$(date +%Y-%m-%d)
+          echo "$DATE,${{ steps.coverage.outputs.coverage }}" >> .coverage-history/trend.csv
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=${{ steps.coverage.outputs.coverage }}
+          THRESHOLD=70
+
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "::error::Coverage $COVERAGE% is below threshold $THRESHOLD%"
+            exit 1
+          else
+            echo "::notice::Coverage $COVERAGE% meets threshold $THRESHOLD%"
+          fi
+
+  # =============================================================================
+  # Alert Configuration Validation
+  # =============================================================================
+  alert-validation:
+    name: Validate Alert Rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Validate monitoring configs
+        run: |
+          # Check if monitoring configs exist and are valid
+          for config in config/monitoring*.yaml config/alerting*.yaml; do
+            if [ -f "$config" ]; then
+              echo "Validating $config..."
+              python -c "import yaml; yaml.safe_load(open('$config'))" && echo "✓ Valid" || echo "✗ Invalid"
+            fi
+          done
+
+      - name: Test alert threshold logic
+        run: |
+          cat > test_alerts.py << 'EOF'
+          """Test alert threshold configurations"""
+
+          def validate_alert_thresholds(config):
+              """Validate that alert thresholds are sensible"""
+              issues = []
+
+              # Example: Check drawdown thresholds
+              if 'risk' in config:
+                  max_drawdown = config['risk'].get('max_drawdown_pct', 0)
+                  if max_drawdown <= 0 or max_drawdown > 50:
+                      issues.append(f"Invalid max_drawdown: {max_drawdown}%")
+
+              # Example: Check position limits
+              if 'trading' in config:
+                  max_positions = config['trading'].get('max_concurrent_trades', 0)
+                  if max_positions <= 0 or max_positions > 10:
+                      issues.append(f"Invalid max_positions: {max_positions}")
+
+              return issues
+
+          import yaml
+          import sys
+
+          errors = []
+          for config_file in ['config/config.yaml', 'config/config.test.mock.yaml']:
+              try:
+                  with open(config_file) as f:
+                      config = yaml.safe_load(f)
+                      issues = validate_alert_thresholds(config)
+                      if issues:
+                          errors.extend([f"{config_file}: {issue}" for issue in issues])
+              except FileNotFoundError:
+                  print(f"Skipping {config_file} (not found)")
+
+          if errors:
+              for error in errors:
+                  print(f"::error::{error}")
+              sys.exit(1)
+          else:
+              print("✓ All alert thresholds validated")
+          EOF
+
+          python test_alerts.py
+
+  # =============================================================================
+  # System Metrics Collection
+  # =============================================================================
+  collect-metrics:
+    name: Collect System Metrics
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Collect repository metrics
+        run: |
+          cat > metrics.json << EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "commit": "${{ github.sha }}",
+            "branch": "${{ github.ref_name }}",
+            "metrics": {
+              "files": $(find finance_feedback_engine -name "*.py" | wc -l),
+              "lines_of_code": $(find finance_feedback_engine -name "*.py" -exec wc -l {} + | tail -1 | awk '{print $1}'),
+              "test_files": $(find tests -name "test_*.py" | wc -l)
+            }
+          }
+          EOF
+
+          cat metrics.json
+
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-metrics
+          path: metrics.json
+          retention-days: 90
+
+  # =============================================================================
+  # Dependency Freshness Check
+  # =============================================================================
+  dependency-freshness:
+    name: Dependency Freshness
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check for outdated packages
+        run: |
+          pip install -r requirements.txt
+          pip list --outdated --format=json > outdated.json
+          pip list --outdated
+
+      - name: Create issue for outdated dependencies
+        if: hashFiles('outdated.json') != ''
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const outdated = JSON.parse(fs.readFileSync('outdated.json', 'utf8'));
+
+            if (outdated.length === 0) {
+              console.log('All dependencies are up to date');
+              return;
+            }
+
+            let body = '## Outdated Dependencies\n\n';
+            body += `Found ${outdated.length} outdated dependencies:\n\n`;
+            body += '| Package | Current | Latest | Type |\n';
+            body += '|---------|---------|--------|------|\n';
+
+            outdated.forEach(pkg => {
+              body += `| ${pkg.name} | ${pkg.version} | ${pkg.latest_version} | ${pkg.latest_filetype} |\n`;
+            });
+
+            body += '\n\n**Note:** Consider updating these dependencies or enabling Renovate bot for automated updates.';
+            body += '\n\n**Scan Date:** ' + new Date().toISOString();
+
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'dependencies'
+            });
+
+            const existingIssue = issues.data.find(issue =>
+              issue.title.includes('Outdated Dependencies Report')
+            );
+
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: body
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '📦 Outdated Dependencies Report',
+                body: body,
+                labels: ['dependencies', 'maintenance']
+              });
+            }
+
+  # =============================================================================
+  # Monitoring Summary
+  # =============================================================================
+  monitoring-summary:
+    name: Generate Monitoring Summary
+    needs: [health-check, alert-validation]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Create summary
+        run: |
+          echo "# Monitoring & Health Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Health Check | ${{ needs.health-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Alert Validation | ${{ needs.alert-validation.result }} |" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.health-check.result }}" == "success" ]] && \
+             [[ "${{ needs.alert-validation.result }}" == "success" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ All monitoring checks passed!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Some monitoring checks failed. Please review." >> $GITHUB_STEP_SUMMARY
+          fi
