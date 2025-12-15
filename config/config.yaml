@@ -442,3 +442,86 @@ agent:
 # - docs/OANDA_INTEGRATION.md (forex)
 # - docs/PORTFOLIO_TRACKING.md (crypto)
 # - docs/ENSEMBLE_SYSTEM.md (multi-provider AI)
+
+# ============================================
+# BENCHMARKING CONFIGURATION
+# ============================================
+# Configuration for performance benchmarking and optimization
+benchmark:
+  # Asset pairs to use for benchmarking
+  asset_pairs:
+    - BTCUSD
+    - ETHUSD
+
+  # Date range for backtesting
+  start_date: "2024-01-01"
+  end_date: "2024-12-01"
+
+  # Benchmark frequency (run full benchmark every N refactorings)
+  benchmark_frequency: 5
+
+  # Save benchmark reports
+  save_reports: true
+  reports_directory: "data/benchmarks"
+
+# ============================================
+# AUTOMATED REFACTORING CONFIGURATION
+# ============================================
+# Settings for automated refactoring pipeline
+refactoring:
+  # Maximum concurrent refactorings
+  max_concurrent: 1
+
+  # Performance degradation threshold
+  # If improvement score drops below this, rollback the change
+  degradation_threshold: -0.05
+
+  # Run full benchmark every N refactorings
+  # Set higher to speed up pipeline, lower for more precision
+  benchmark_frequency: 5
+
+  # Use git for version control during refactoring
+  use_git: true
+
+  # Automatically rollback on test failures
+  auto_rollback: true
+
+  # Output directory for reports
+  output_directory: "data/refactoring"
+
+# ============================================
+# OPTUNA OPTIMIZATION CONFIGURATION
+# ============================================
+# Configuration for Bayesian hyperparameter optimization
+optimization:
+  # Default number of trials
+  n_trials: 50
+
+  # Default optimization metric
+  # Options: sharpe_ratio, total_return, profit_factor, win_rate
+  optimize_for: "sharpe_ratio"
+
+  # Timeout in seconds (null = no timeout)
+  timeout: null
+
+  # Save optimization results
+  save_results: true
+  results_directory: "data/optimization"
+
+  # Parameter search spaces (min, max)
+  search_spaces:
+    stop_loss_pct:
+      min: 0.01
+      max: 0.05
+    position_size_pct:
+      min: 0.005
+      max: 0.02
+    confidence_threshold:
+      min: 0.65
+      max: 0.85
+    rsi_period:
+      min: 10
+      max: 20
+    atr_multiplier:
+      min: 1.5
+      max: 3.0

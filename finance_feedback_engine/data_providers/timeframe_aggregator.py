@@ -3,6 +3,7 @@
 from typing import Dict, Any, List, Optional
 import logging
 from statistics import mean
+import numpy as np
 import pandas as pd
 import pandas_ta as ta
 

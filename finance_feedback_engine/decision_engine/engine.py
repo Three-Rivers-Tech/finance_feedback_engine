@@ -497,7 +497,7 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
 
         # Add historical similarity analysis if available
         semantic_memory = context.get('semantic_memory')
-        if semantic_memory:
+        if semantic_memory and self._should_include_semantic_memory():
             similarity_text = self._format_semantic_memory(semantic_memory)
             market_info += f"\n{similarity_text}\n"
 
@@ -589,6 +589,87 @@ Demonstrate a technical analysis for {asset_pair} showing:
 Format response as a structured technical analysis demonstration.
 """
         return prompt
+
+    def _format_memory_context(self, context: Dict[str, Any]) -> str:
+        """Format portfolio memory context for AI prompts."""
+        if not context or not context.get('has_history'):
+            return "No historical trading data available."
+
+        lines = [
+            "=== PORTFOLIO MEMORY CONTEXT ===",
+            f"Historical trades: {context.get('total_historical_trades', 0)}",
+            f"Recent trades analyzed: {context.get('recent_trades_analyzed', 0)}",
+            "",
+            "Recent Performance:",
+            f"  Win Rate: {context.get('recent_performance', {}).get('win_rate', 0):.1f}%",
+            f"  Total P&L: ${context.get('recent_performance', {}).get('total_pnl', 0):.2f}",
+            f"  Wins: {context.get('recent_performance', {}).get('winning_trades', 0)}, "
+            f"Losses: {context.get('recent_performance', {}).get('losing_trades', 0)}",
+        ]
+
+        streak = context.get('current_streak', {})
+        if streak.get('type'):
+            lines.append(
+                f"  Current Streak: {streak.get('count', 0)} {streak.get('type')} trades"
+            )
+
+        lines.append("\nAction Performance:")
+        for action, stats in context.get('action_performance', {}).items():
+            lines.append(
+                f"  {action}: {stats.get('win_rate', 0):.1f}% win rate, "
+                f"${stats.get('total_pnl', 0):.2f} P&L ({stats.get('count', 0)} trades)"
+            )
+
+        provider_perf = context.get('provider_performance', {})
+        if provider_perf:
+            lines.append("\nProvider Performance:")
+            for provider, stats in provider_perf.items():
+                lines.append(
+                    f"  {provider}: {stats.get('win_rate', 0):.1f}% win rate "
+                    f"({stats.get('count', 0)} trades)"
+                )
+
+        if context.get('asset_specific'):
+            asset_stats = context['asset_specific']
+            lines.append(
+                f"\n{context.get('asset_pair', 'This Asset')} Specific:"
+            )
+            lines.append(
+                f"  {asset_stats.get('total_trades', 0)} trades, "
+                f"{asset_stats.get('win_rate', 0):.1f}% win rate, "
+                f"${asset_stats.get('total_pnl', 0):.2f} total P&L"
+            )
+
+        long_term = context.get('long_term_performance')
+        if long_term and long_term.get('has_data'):
+            lines.append("\nLong-Term Performance:")
+            lines.append(
+                f"  Period: last {long_term.get('period_days', 0)} days"
+            )
+            lines.append(
+                f"  Trades: {long_term.get('total_trades', 0)} | Win Rate: {long_term.get('win_rate', 0):.1f}%"
+            )
+            lines.append(
+                f"  Profit Factor: {long_term.get('profit_factor', 0):.2f} | ROI: {long_term.get('roi_percentage', 0):.2f}%"
+            )
+            lines.append(
+                f"  Realized P&L: ${long_term.get('realized_pnl', 0):.2f}"
+            )
+            avg_win = long_term.get('avg_win')
+            avg_loss = long_term.get('avg_loss')
+            if avg_win is not None and avg_loss is not None:
+                lines.append(
+                    f"  Avg Win: ${avg_win:.2f} | Avg Loss: ${avg_loss:.2f}"
+                )
+            best = long_term.get('best_trade')
+            worst = long_term.get('worst_trade')
+            if best is not None and worst is not None:
+                lines.append(
+                    f"  Best Trade: ${best:.2f} | Worst Trade: ${worst:.2f}"
+                )
+
+        lines.append("=" * 35)
+        return "\n".join(lines)
 
     async def _query_ai(
         self,
@@ -1234,14 +1315,14 @@ Format response as a structured technical analysis demonstration.
                     sizing_stop_loss_percentage * 100,
                 )
 
-        # CASE 2: Signal-only mode or zero balance - use minimum order size
+        # CASE 2: Zero balance - use minimum order size without signal-only flag
         else:
-            signal_only = True
+            signal_only = False
 
             # HOLD without position: no sizing needed
             if action == 'HOLD' and not has_existing_position:
                 logger.info("HOLD without existing position - no position sizing shown")
-                result['signal_only'] = True
+                result['signal_only'] = False
                 return result
 
             # Determine minimum order size based on asset type
@@ -1301,17 +1382,11 @@ Format response as a structured technical analysis demonstration.
                 'stop_loss_price': stop_loss_price,
                 'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
                 'risk_percentage': risk_percentage,
-                'signal_only': True
+                'signal_only': False
             })
 
             # Log appropriate message
-            if signal_only_default:
-                logger.info(
-                    "Signal-only mode: Using minimum position size %.6f units ($%.2f USD notional)",
-                    recommended_position_size,
-                    recommended_position_size * current_price if current_price > 0 else 0
-                )
-            elif not has_valid_balance:
+            if not has_valid_balance:
                 logger.warning(
                     "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
                     balance_source,
@@ -1371,7 +1446,8 @@ Format response as a structured technical analysis demonstration.
         position_type = self._determine_position_type(action)
 
         # Helper 4: Calculate position sizing parameters
-        signal_only_default = self.config.get('signal_only_default', False)
+        # Deprecated: signal-only mode removed; always compute sizing when possible
+        signal_only_default = False
         sizing_params = self._calculate_position_sizing_params(
             context=context,
             current_price=current_price,
@@ -1685,6 +1761,9 @@ Format response as a structured technical analysis demonstration.
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
 
+        # Compress context window to reduce token usage
+        prompt = self._compress_context_window(prompt, max_tokens=3000)
+
         # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
         ai_response = await self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
 
@@ -1827,3 +1906,154 @@ Format response as a structured technical analysis demonstration.
             context['correlation_summary'] = ''
 
         return context
+
+    def _should_include_semantic_memory(self) -> bool:
+        """
+        Determine whether to include semantic memory in the prompt.
+        This helps control prompt length to avoid context window overflow.
+        """
+        # For now, include semantic memory but we'll implement smart truncation later
+        return True
+
+    def _format_semantic_memory(self, semantic_memory: list) -> str:
+        """
+        Format semantic memory for inclusion in AI prompts with intelligent truncation.
+
+        Args:
+            semantic_memory: List of similar historical decisions/trades
+
+        Returns:
+            Formatted string with truncated semantic memory
+        """
+        if not semantic_memory:
+            return "No similar historical patterns found."
+
+        # Format the most relevant similar memories with truncation
+        formatted_memories = []
+        for i, memory in enumerate(semantic_memory):
+            if i >= 3:  # Only include top 3 most similar memories
+                break
+
+            # Extract key fields from memory with truncation
+            asset = memory.get('asset_pair', 'N/A')
+            action = memory.get('action', 'N/A')
+            outcome = memory.get('outcome', 'N/A')
+            confidence = memory.get('confidence', 0)
+            reasoning = str(memory.get('reasoning', ''))[:200]  # Truncate reasoning to 200 chars
+
+            formatted_memory = (
+                f"Pattern #{i+1}: {asset} | Action: {action} | "
+                f"Outcome: {outcome} | Confidence: {confidence}% | "
+                f"Reasoning: {reasoning}..."
+            )
+            formatted_memories.append(formatted_memory)
+
+        return "HISTORICAL SIMILAR PATTERNS:\n" + "\n".join(formatted_memories)
+
+    def _compress_context_window(self, prompt: str, max_tokens: int = 3000) -> str:
+        """
+        Compress the context window to fit within maximum token limits.
+
+        Args:
+            prompt: Original prompt string
+            max_tokens: Maximum token count allowed (default 3000 to stay under 4k limit)
+
+        Returns:
+            Compressed prompt string
+        """
+        import tiktoken
+
+        # Get encoding for the model (using gpt-3.5-turbo as a proxy for tokenization)
+        try:
+            encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            tokens = encoding.encode(prompt)
+        except Exception:
+            # If tiktoken is not available, estimate using word-based tokenization
+            # Rough estimate: 1 token ≈ 4 characters or 0.75 words
+            estimated_tokens = len(prompt) // 4
+            if estimated_tokens <= max_tokens:
+                return prompt
+            else:
+                # Truncate to approximately max_tokens
+                truncate_at = max_tokens * 4
+                return prompt[:truncate_at] + "... [TRUNCATED FOR LENGTH]"
+
+        if len(tokens) <= max_tokens:
+            return prompt
+
+        # If we have too many tokens, we'll intelligently compress
+        # by truncating less critical sections first
+        lines = prompt.split('\n')
+
+        # Identify sections to compress
+        compressed_lines = []
+        current_token_count = 0
+
+        # Keep essential sections like the main instruction and asset info
+        essential_parts = [
+            "Asset Pair:",
+            "TASK:",
+            "ANALYSIS OUTPUT REQUIRED:",
+            "ACCOUNT BALANCE:"
+        ]
+
+        for line in lines:
+            # Check if this is an essential part
+            is_essential = any(essential in line for essential in essential_parts)
+
+            # Temporary tokenization to estimate this line's tokens
+            line_tokens = len(encoding.encode(line))
+
+            # If adding this line would exceed the limit
+            if current_token_count + line_tokens > max_tokens and not is_essential:
+                # Skip less critical information
+                continue
+            elif current_token_count + line_tokens > max_tokens * 0.95:  # 95% of max
+                # If we're near the limit, stop adding unless it's essential
+                if is_essential:
+                    compressed_lines.append(line)
+                    current_token_count += line_tokens
+                else:
+                    break
+            else:
+                compressed_lines.append(line)
+                current_token_count += line_tokens
+
+        compressed_prompt = '\n'.join(compressed_lines)
+
+        # If still too long, perform more aggressive compression
+        if current_token_count > max_tokens:
+            # Additional strategy: truncate long data sections
+            sections = compressed_prompt.split("===")
+            main_sections = []
+            temp_prompt = ""
+
+            for section in sections:
+                temp_prompt += section + "==="  # Add back separator
+                temp_tokens = len(encoding.encode(temp_prompt))
+
+                if temp_tokens > max_tokens:
+                    # Try to compress this section by removing some content
+                    lines_in_section = section.split('\n')
+                    compressed_section = []
+                    section_token_count = 0
+
+                    for line in lines_in_section:
+                        line_tokens = len(encoding.encode(line))
+
+                        if section_token_count + line_tokens <= max_tokens - current_token_count:
+                            compressed_section.append(line)
+                            section_token_count += line_tokens
+                        else:
+                            # Add a truncation note if needed
+                            compressed_section.append("... [SECTION TRUNCATED FOR LENGTH]")
+                            break
+                    main_sections.append('\n'.join(compressed_section))
+                    break
+                else:
+                    main_sections.append(section)
+                    current_token_count = temp_tokens
+
+            compressed_prompt = "===".join(main_sections)
+
+        return compressed_prompt

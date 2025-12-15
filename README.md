@@ -925,11 +925,6 @@ Notes:
 - Walk-forward windows auto-derive from the date range; ensure the span is long enough for both train and test windows (≥7-day train recommended).
 - Monte Carlo perturbs prices; inspect VaR/percentiles to understand tail risk.
 
-### Signal-Only Mode & Position Sizing
-
-- Default sizing targets ~1% portfolio risk with a ~2% stop loss; overrides available via config.
-- If balance is unavailable or `signal_only_default: true`, decisions return signals without position sizes (`signal_only: true`).
-- View suggested amounts, stop loss, and take profit in `analyze` output; size is skipped in signal-only scenarios.
 
 ### Live Trade Monitoring 🆕
 

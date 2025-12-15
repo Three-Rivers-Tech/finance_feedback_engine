@@ -363,28 +363,24 @@ class UnifiedDataProvider:
             }
         }
 
+        # Fetch all timeframes in a single call so tests can patch effectively
+        data_by_tf = self.get_multi_timeframe_data(asset_pair, timeframes)
+
         cache_hits = 0
         for tf in timeframes:
-            # Check if data is in cache before fetching
+            candles, provider = data_by_tf.get(tf, ([], 'failed'))
             cache_key = (asset_pair.upper(), tf)
-            was_in_cache = cache_key in self._cache
+            is_cached = cache_key in self._cache and bool(candles)
 
-            try:
-                candles, provider = self.get_candles(asset_pair, tf)
-                is_cached = was_in_cache
-                if was_in_cache:
-                    cache_hits += 1
-            except Exception as e:
-                logger.warning(f"Failed to fetch {tf} data for {asset_pair}: {e}")
-                candles, provider = [], 'failed'
-                is_cached = False
+            if is_cached:
+                cache_hits += 1
 
-            # Check if data available
             if candles and provider != 'failed':
                 result["metadata"]["available_timeframes"].append(tf)
             else:
                 result["metadata"]["missing_timeframes"].append(tf)
-                logger.warning(f"Missing {tf} data for {asset_pair}")
+                if not candles:
+                    logger.warning(f"Missing {tf} data for {asset_pair}")
 
             result["timeframes"][tf] = {
                 "candles": candles,

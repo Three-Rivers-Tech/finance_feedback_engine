@@ -1,0 +1,103 @@
+# Alertmanager Configuration for Finance Feedback Engine
+
+global:
+  resolve_timeout: 5m
+  # Slack webhook (optional - configure if using Slack)
+  # slack_api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+
+# Email configuration (optional)
+# smtp_smarthost: 'smtp.gmail.com:587'
+# smtp_from: 'alerts@yourdomain.com'
+# smtp_auth_username: 'alerts@yourdomain.com'
+# smtp_auth_password: 'your-password'
+# smtp_require_tls: true
+
+# Route configuration
+route:
+  # Default route
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'severity']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  # Child routes for specific alert types
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      repeat_interval: 5m
+
+    # Warning alerts - less frequent
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 1h
+
+    # Info alerts - aggregated
+    - match:
+        severity: info
+      receiver: 'info-alerts'
+      group_wait: 5m
+      repeat_interval: 24h
+
+# Receivers configuration
+receivers:
+  - name: 'default'
+    # Default receiver logs to console
+    webhook_configs:
+      - url: 'http://localhost:5001/webhook'  # Optional webhook endpoint
+
+  - name: 'critical-alerts'
+    # Example: Send critical alerts to Slack
+    # slack_configs:
+    #   - channel: '#trading-alerts'
+    #     title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+    # Example: Send critical alerts via email
+    # email_configs:
+    #   - to: 'admin@yourdomain.com'
+    #     headers:
+    #       subject: '🚨 CRITICAL ALERT: {{ .GroupLabels.alertname }}'
+
+    # Webhook notification
+    webhook_configs:
+      - url: 'http://app:8000/api/v1/alerts/critical'
+        send_resolved: true
+
+  - name: 'warning-alerts'
+    # Example: Send warnings to different Slack channel
+    # slack_configs:
+    #   - channel: '#trading-warnings'
+    #     title: '⚠️  WARNING: {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+    webhook_configs:
+      - url: 'http://app:8000/api/v1/alerts/warning'
+        send_resolved: true
+
+  - name: 'info-alerts'
+    # Info alerts - just log
+    webhook_configs:
+      - url: 'http://app:8000/api/v1/alerts/info'
+        send_resolved: true
+
+# Inhibition rules
+inhibit_rules:
+  # Inhibit warning if critical is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # Inhibit info if warning is firing
+  - source_match:
+      severity: 'warning'
+    target_match:
+      severity: 'info'
+    equal: ['alertname', 'instance']

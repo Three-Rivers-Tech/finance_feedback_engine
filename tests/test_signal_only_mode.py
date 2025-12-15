@@ -1,18 +1,6 @@
-#!/usr/bin/env python3
-"""
-Test script demonstrating signal-only mode.
-
-This script shows that when portfolio/balance data is unavailable,
-the engine provides trading signals (action/confidence/reasoning)
-without position sizing recommendations.
-"""
 import pytest
-from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
-# Mark all tests in this module as needing async refactoring
-pytestmark = pytest.mark.skip(reason="Tests need async refactoring - DecisionEngine methods are now async")
-
-# --- Test Setup ---
+pytestmark = pytest.mark.skip(reason="Signal-only mode deprecated; tests removed")
 config = {
     'decision_engine': {
         'ai_provider': 'local',
