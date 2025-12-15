@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+# Type checker cache
 .mypy_cache/
 # Coverage artifacts
 .coverage
