@@ -77,10 +77,6 @@ class AgentControlRequest(BaseModel):
         le=10,
         description="Maximum concurrent trades"
     )
-    dry_run: bool = Field(
-        False,
-        description="Run in simulation mode without executing trades"
-    )
 
 
 class AgentStatusResponse(BaseModel):
@@ -162,7 +158,7 @@ async def start_agent(
                 )
 
             # Create config from request
-            config = engine.config.copy()
+            config = copy.deepcopy(engine.config)
 
             config['agent'] = config.get('agent', {})
 
@@ -198,8 +194,7 @@ async def start_agent(
                 uptime_seconds=0.0,
                 config={
                     "asset_pairs": request.asset_pairs,
-                    "autonomous": request.autonomous,
-                    "dry_run": request.dry_run
+                    "autonomous": request.autonomous
                 }
             )
 
@@ -306,13 +301,13 @@ async def emergency_stop(
                                 'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
                                 'size': position.get('size', 0),
                                 'order_type': 'MARKET'
+                            result = await engine.platform.execute_trade({
+                                'asset_pair': position['asset_pair'],
+                                'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
+                                'size': position.get('size', 0),
+                                'order_type': 'MARKET'
                             })
                             closed_positions.append(result)
-                        except Exception as e:
-                            logger.error(f"Failed to close position {position}: {e}")
-
-            return {
-                "status": "emergency_stopped",
                 "message": "Emergency stop executed",
                 "closed_positions": len(closed_positions),
                 "timestamp": datetime.utcnow().isoformat()
@@ -584,8 +579,15 @@ async def close_position(
                 detail=f"Position {position_id} has invalid size: {size}"
             )
 
+        # Check platform availability
+        if not hasattr(engine, 'platform'):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Trading platform is not available"
+            )
+
         # Execute closing trade
-        result = engine.platform.execute_trade({
+        result = await engine.platform.execute_trade({
             'asset_pair': position['asset_pair'],
             'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
             'size': size,

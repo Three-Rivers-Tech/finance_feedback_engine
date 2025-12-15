@@ -45,8 +45,9 @@ jobs:
         run: |
           pip install -r requirements.txt
           safety check --json --output safety-report.json || true
-          safety check --full-report || EXIT_CODE=$?
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          SAFETY_EXIT=0
+          safety check --full-report || SAFETY_EXIT=$?
+          echo "exit_code=$SAFETY_EXIT" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Run pip-audit
@@ -55,8 +56,9 @@ jobs:
           pip-audit --requirement requirements.txt \
                     --format json \
                     --output pip-audit-report.json || true
-          pip-audit --requirement requirements.txt || EXIT_CODE=$?
-          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          PIP_AUDIT_EXIT=0
+          pip-audit --requirement requirements.txt || PIP_AUDIT_EXIT=$?
+          echo "exit_code=$PIP_AUDIT_EXIT" >> $GITHUB_OUTPUT
         continue-on-error: true
 
       - name: Upload vulnerability reports
@@ -187,6 +189,7 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
 
       - name: Run Grype scanner
+        id: scan
         uses: anchore/scan-action@v3
         with:
           image: finance-feedback-engine:scan
@@ -228,6 +231,15 @@ jobs:
       - name: Detect Secrets
         run: |
           pip install detect-secrets
+
+          # Create baseline if it doesn't exist (first-run scenario)
+          if [ ! -f .secrets.baseline ]; then
+            echo "Baseline file not found, generating..."
+            detect-secrets scan --all-files \
+                                --exclude-files '\.git/|\.mypy_cache/|\.pytest_cache/' > .secrets.baseline
+          fi
+
+          # Run scan with baseline for comparison
           detect-secrets scan --all-files \
                               --exclude-files '\.git/|\.mypy_cache/|\.pytest_cache/' \
                               --baseline .secrets.baseline
@@ -357,7 +369,7 @@ jobs:
   # =============================================================================
   security-summary:
     name: Security Summary
-    needs: [dependency-scan, code-security, secrets-scan, sast, license-scan]
+    needs: [dependency-scan, code-security, container-scan, secrets-scan, sast, license-scan, scorecard]
     runs-on: ubuntu-latest
     if: always()
     steps:

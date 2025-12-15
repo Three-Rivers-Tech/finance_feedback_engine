@@ -274,7 +274,7 @@ class BatchDataIngester:
         df = df[(df['open'] >= df['low']) & (df['open'] <= df['high'])]
 
         # Remove duplicates
-        df = df.drop_duplicates(subset=['date', 'asset_pair'])
+        df = df.drop_duplicates(subset=['date', 'asset_pair', 'timestamp'])
 
         # Type conversions
         df['date'] = pd.to_datetime(df['date'])
@@ -376,9 +376,9 @@ class StreamingDataIngester:
             .format("delta")
             .outputMode("append")
             .option("checkpointLocation", f"{self.checkpoint_dir}/{timeframe}")
-            .partitionBy("timestamp", "asset_pair")
+            .partitionBy(date_format(col("timestamp"), "yyyy-MM-dd"), "asset_pair")
             .trigger(processingTime="5 seconds")
-            .start(f"s3://finance-lake/bronze/raw_market_data_{timeframe}")
+            .start(f"s3://finance-lake/bronze/raw_market_data_5s")
         )
 
         return query
@@ -475,7 +475,7 @@ WITH source_data AS (
 ),
 
 deduplicated AS (
-    SELECT * EXCEPT(row_num)
+    SELECT asset_pair, timestamp, open, high, low, close, volume, source_provider, is_mock, _extracted_at
     FROM source_data
     WHERE row_num = 1  -- Keep best quality record per (asset_pair, timestamp)
 )
@@ -634,10 +634,13 @@ class DataQualityFramework:
         )
 
         # Freshness check (data < 5 minutes old)
+        from datetime import datetime, timedelta
+        five_min_ago = datetime.utcnow() - timedelta(minutes=5)
+        now = datetime.utcnow()
         validator.expect_column_max_to_be_between(
             column="timestamp",
-            min_value={"$PARAMETER": "NOW() - INTERVAL '5 minutes'"},
-            max_value={"$PARAMETER": "NOW()"}
+            min_value=five_min_ago,
+            max_value=now
         )
 
         validator.save_expectation_suite()
@@ -693,13 +696,15 @@ class DataQualityFramework:
 
 ### 5. Orchestration (Airflow DAGs)
 
+**Note on Async Task Implementation:**
+This DAG uses Airflow 2.8+ native async support via the `@task.async_python` decorator for I/O-bound operations like API calls. This approach properly integrates with Airflow's event loop and avoids conflicts that arise from calling `asyncio.run()` inside a `PythonOperator`. The async task decorator allows direct `await` statements without needing to manage asyncio event loops manually.
+
 **DAG Structure** (finance_feedback_engine/pipelines/airflow/dags/daily_market_data_pipeline.py):
 
 ```python
 from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
-from airflow.providers.dbt.cloud.operators.dbt import DbtCloudRunJobOperator
+from airflow.decorators import task
+from airflow.operators.bash import BashOperator
 from datetime import datetime, timedelta
 
 default_args = {
@@ -724,96 +729,16 @@ dag = DAG(
     tags=['market_data', 'daily']
 )
 
-# Task 1: Ingest historical data from Alpha Vantage
-ingest_alpha_vantage = PythonOperator(
-    task_id='ingest_alpha_vantage_daily',
-    python_callable=ingest_historical_data_task,
-    op_kwargs={
-        'asset_pairs': ['BTCUSD', 'ETHUSD', 'EURUSD', 'GBPUSD'],
-        'timeframe': '1d',
-        'lookback_days': 7  # Last 7 days for incremental
-    },
-    dag=dag
-)
-
-# Task 2: Data quality validation
-validate_raw_data = PythonOperator(
-    task_id='validate_raw_market_data',
-    python_callable=run_data_quality_checks,
-    op_kwargs={
-        'suite_name': 'market_data_quality',
-        'table_name': 'bronze.raw_market_data_1d'
-    },
-    dag=dag
-)
-
-# Task 3: dbt transformation (staging layer)
-dbt_staging = SparkSubmitOperator(
-    task_id='dbt_run_staging',
-    application='/opt/airflow/dbt/run_dbt.py',
-    application_args=['run', '--select', 'staging.*'],
-    conf={
-        'spark.executor.memory': '4g',
-        'spark.executor.cores': '2'
-    },
-    dag=dag
-)
-
-# Task 4: dbt transformation (marts layer)
-dbt_marts = SparkSubmitOperator(
-    task_id='dbt_run_marts',
-    application='/opt/airflow/dbt/run_dbt.py',
-    application_args=['run', '--select', 'marts.*'],
-    conf={
-        'spark.executor.memory': '8g',
-        'spark.executor.cores': '4'
-    },
-    dag=dag
-)
-
-# Task 5: dbt tests
-dbt_tests = SparkSubmitOperator(
-    task_id='dbt_test',
-    application='/opt/airflow/dbt/run_dbt.py',
-    application_args=['test'],
-    dag=dag
-)
-
-# Task 6: Optimize Delta Lake tables
-optimize_delta_tables = PythonOperator(
-    task_id='optimize_delta_tables',
-    python_callable=optimize_delta_task,
-    op_kwargs={
-        'tables': [
-            'silver.market_data_enriched',
-            'silver.decision_history',
-            'gold.mart_trading_performance'
-        ],
-        'zorder_columns': ['asset_pair', 'timestamp']
-    },
-    dag=dag
-)
-
-# Task 7: Update metrics dashboards
-update_dashboards = PythonOperator(
-    task_id='refresh_grafana_dashboards',
-    python_callable=refresh_dashboard_cache,
-    dag=dag
-)
-
-# Task dependencies
-ingest_alpha_vantage >> validate_raw_data >> dbt_staging >> dbt_marts >> dbt_tests
-dbt_tests >> optimize_delta_tables >> update_dashboards
-```
-
-**Helper Functions** (finance_feedback_engine/pipelines/airflow/tasks.py):
-
-```python
-def ingest_historical_data_task(asset_pairs: list, timeframe: str, lookback_days: int):
-    """Airflow task: Ingest historical OHLC data."""
+# Task 1: Ingest historical data from Alpha Vantage (using async task)
+# Using @task.async_python decorator (Airflow 2.8+) to properly handle async I/O
+@task.async_python(task_id='ingest_alpha_vantage_daily', dag=dag)
+async def ingest_alpha_vantage(asset_pairs: list, timeframe: str, lookback_days: int):
+    """Airflow async task: Ingest historical OHLC data using native async support."""
     from finance_feedback_engine.pipelines.batch_ingestion import BatchDataIngester
     from finance_feedback_engine.storage.delta_lake_manager import DeltaLakeManager
-
+    import logging
+    
+    logger = logging.getLogger(__name__)
     config = load_config()
     delta_mgr = DeltaLakeManager(storage_path=config['delta_lake_path'])
     ingester = BatchDataIngester(delta_mgr, config)
@@ -823,34 +748,153 @@ def ingest_historical_data_task(asset_pairs: list, timeframe: str, lookback_days
 
     for asset_pair in asset_pairs:
         try:
-            asyncio.run(ingester.ingest_historical_data(
+            # Await directly - no asyncio.run() needed inside async task
+            await ingester.ingest_historical_data(
                 asset_pair=asset_pair,
                 timeframe=timeframe,
                 start_date=str(start_date),
                 end_date=str(end_date)
-            ))
+            )
         except Exception as e:
             logger.error(f"Ingestion failed for {asset_pair}: {e}")
             raise
 
+# Invoke the async task with parameters
+ingest_task = ingest_alpha_vantage(
+    asset_pairs=['BTCUSD', 'ETHUSD', 'EURUSD', 'GBPUSD'],
+    timeframe='1d',
+    lookback_days=7  # Last 7 days for incremental
+)
+
+# Task 2: Data quality validation
+@task.python(task_id='validate_raw_market_data', dag=dag)
+def validate_raw_data(suite_name: str, table_name: str):
+    return run_data_quality_checks(suite_name, table_name)
+
+validate_task = validate_raw_data(
+    suite_name='market_data_quality',
+    table_name='bronze.raw_market_data_1d'
+)
+
+# Task 3: dbt transformation (staging layer)
+# Using BashOperator with dbt CLI - standard approach for dbt in Airflow
+# dbt connects directly to Databricks SQL warehouse via profiles.yml
+dbt_staging = BashOperator(
+    task_id='dbt_run_staging',
+    bash_command='cd /opt/airflow/dbt/finance_dw && dbt run --select staging.* --target prod',
+    env={
+        'DBT_PROFILES_DIR': '/opt/airflow/dbt',
+        'DATABRICKS_TOKEN': '{{ var.value.databricks_token }}',
+        'DATABRICKS_HOST': '{{ var.value.databricks_host }}'
+    },
+    dag=dag
+)
+
+# Task 4: dbt transformation (marts layer)
+dbt_marts = BashOperator(
+    task_id='dbt_run_marts',
+    bash_command='cd /opt/airflow/dbt/finance_dw && dbt run --select marts.* --target prod',
+    env={
+        'DBT_PROFILES_DIR': '/opt/airflow/dbt',
+        'DATABRICKS_TOKEN': '{{ var.value.databricks_token }}',
+        'DATABRICKS_HOST': '{{ var.value.databricks_host }}'
+    },
+    dag=dag
+)
+
+# Task 5: dbt tests
+dbt_tests = BashOperator(
+    task_id='dbt_test',
+    bash_command='cd /opt/airflow/dbt/finance_dw && dbt test --target prod',
+    env={
+        'DBT_PROFILES_DIR': '/opt/airflow/dbt',
+        'DATABRICKS_TOKEN': '{{ var.value.databricks_token }}',
+        'DATABRICKS_HOST': '{{ var.value.databricks_host }}'
+    },
+    dag=dag
+)
+
+# Task 6: Optimize Delta Lake tables
+@task.python(task_id='optimize_delta_tables', dag=dag)
+def optimize_tables(tables: list, zorder_columns: list):
+    return optimize_delta_task(tables, zorder_columns)
+
+optimize_task = optimize_tables(
+    tables=[
+        'silver.market_data_enriched',
+        'silver.decision_history',
+        'gold.mart_trading_performance'
+    ],
+    zorder_columns=['asset_pair', 'timestamp']
+)
+
+# Task 7: Update metrics dashboards
+@task.python(task_id='refresh_grafana_dashboards', dag=dag)
+def update_dashboards():
+    return refresh_dashboard_cache()
+
+refresh_task = update_dashboards()
+
+# Task dependencies (using the task objects created by @task decorators)
+ingest_task >> validate_task >> dbt_staging >> dbt_marts >> dbt_tests
+dbt_tests >> optimize_task >> refresh_task
+```
+
+**Helper Functions** (finance_feedback_engine/pipelines/airflow/tasks.py):
+
 def run_data_quality_checks(suite_name: str, table_name: str):
-    """Airflow task: Run Great Expectations validation."""
-    from finance_feedback_engine.pipelines.data_quality.expectations_suite import DataQualityFramework
-
-    dq = DataQualityFramework()
-
+    """
+    Run Great Expectations validation on Spark DataFrame.
+    
+    Uses GE's SparkDFDataset to validate directly against Spark without OOM risk.
+    For Bronze tables, restricts validation to recent data (last 7 days) to ensure
+    scalability while maintaining data quality assurance.
+    
+    Note: This is a synchronous function called from Airflow @task.python decorated tasks.
+    """
+    from great_expectations.dataset import SparkDFDataset
+    from datetime import datetime, timedelta
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     # Read table from Delta Lake
     spark = SparkSession.builder.appName("DataQuality").getOrCreate()
     df = spark.read.format("delta").load(f"s3://finance-lake/{table_name}")
-
-    # Convert to Pandas for GE validation
-    pdf = df.toPandas()
-
-    # Run validation
-    is_valid = dq.validate_dataframe(pdf, suite_name)
-
+    
+    # For Bronze tables, validate only recent data to avoid OOM on large historical tables
+    if 'bronze' in table_name.lower():
+        cutoff_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        if 'timestamp' in df.columns:
+            df = df.filter(f"timestamp >= '{cutoff_date}'")
+            logger.info(f"Validating {table_name} from {cutoff_date} onwards")
+    
+    # Use GE's SparkDFDataset for native Spark validation (no toPandas() needed)
+    ge_df = SparkDFDataset(df)
+    
+    # Run expectations directly on Spark DataFrame
+    # Example: Validate schema, nulls, ranges, uniqueness
+    validation_results = []
+    
+    # Common market data validations
+    if suite_name == 'market_data_quality':
+        validation_results.append(ge_df.expect_column_values_to_not_be_null('timestamp'))
+        validation_results.append(ge_df.expect_column_values_to_not_be_null('close'))
+        validation_results.append(ge_df.expect_column_values_to_be_between('close', min_value=0))
+        validation_results.append(ge_df.expect_column_values_to_be_between('volume', min_value=0))
+        
+        # High > Low validation (using Spark SQL)
+        validation_results.append(
+            ge_df.expect_column_pair_values_A_to_be_greater_than_B('high', 'low')
+        )
+    
+    # Check if all validations passed
+    is_valid = all(result['success'] for result in validation_results)
+    
     if not is_valid:
-        raise ValueError(f"Data quality check failed for {table_name}")
+        failed_expectations = [r for r in validation_results if not r['success']]
+        logger.error(f"Data quality check failed for {table_name}: {failed_expectations}")
+        raise ValueError(f"Data quality check failed for {table_name}: {len(failed_expectations)} expectations failed")
 
 def optimize_delta_task(tables: list, zorder_columns: list):
     """Airflow task: Optimize Delta Lake tables."""
@@ -1065,11 +1109,16 @@ See: `finance_feedback_engine/pipelines/k8s/` for Helm charts.
 6. **Incremental dbt Models**: Only transform new data
 
 **Expected Cost** (AWS us-east-1, 10 asset pairs, 6 timeframes):
-- S3 Storage: ~$50/month (1TB)
-- EMR Spark: ~$200/month (spot instances)
-- MWAA Airflow: ~$300/month (small env)
-- MSK Kafka: ~$150/month (2 brokers)
-- **Total**: ~$700/month
+- S3 Storage: ~$50/month (1TB, Standard + Lifecycle policies)
+- EMR Spark: ~$200/month (spot instances, 60-80% discount assumed)
+- MWAA Airflow: ~$300/month (small env, ~50 DAG runs/day)
+- MSK Kafka: ~$150/month (2 brokers, m5.large)
+- RDS (Postgres): ~$100/month (db.t3.small, metadata only)
+- CloudWatch: ~$30/month (logs + metrics)
+- Data Transfer: ~$50/month (10GB egress)
+- **Total**: ~$880/month (conservative estimate)
+
+**Risk**: Spot instance interruptions during peak market hours may require on-demand fallback (+$300-500/month).
 
 ---
 

@@ -36,17 +36,17 @@ class APIRateLimitError(APIError):
 
 
 class ValidationError(FFEError):
-    """Raised when validation fails."""
+    """Base class for validation errors."""
+    pass
+
+
+class RiskValidationError(ValidationError):
+    """Raised when risk validation fails."""
     pass
 
 
 class AssetPairValidationError(ValidationError):
     """Raised when asset pair validation fails."""
-    pass
-
-
-class RiskValidationError(FFEError):
-    """Raised when risk validation fails."""
     pass
 
 
@@ -105,12 +105,12 @@ class BacktestValidationError(BacktestingError):
     pass
 
 
-class MemoryError(FFEError):
-    """Base class for memory related errors."""
+class FFEMemoryError(FFEError):
+    """Base class for memory-related errors (e.g., vector store, caching)."""
     pass
 
 
-class VectorStoreError(MemoryError):
+class VectorStoreError(FFEMemoryError):
     """Raised when vector store operations fail."""
     pass
 
@@ -130,7 +130,7 @@ class CircuitBreakerError(FFEError):
     pass
 
 
-class SystemError(FFEError):
+class FFESystemError(FFEError):
     """Raised when system-level issues occur."""
     pass
 

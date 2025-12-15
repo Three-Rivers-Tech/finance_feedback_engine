@@ -50,7 +50,7 @@ jobs:
       - name: Validate monitoring configuration
         run: |
           if [ -f "config/monitoring.yaml" ]; then
-            python -c "import yaml; yaml.safe_load(open('config/monitoring.yaml'))"
+            python -c "import yaml; exec(\"with open('config/monitoring.yaml') as f: yaml.safe_load(f)\")"
             echo "✓ Monitoring config validated"
           fi
 
@@ -198,11 +198,11 @@ jobs:
           COVERAGE=${{ steps.coverage.outputs.coverage }}
           THRESHOLD=70
 
-          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          if python3 -c "import sys; sys.exit(0 if $COVERAGE >= $THRESHOLD else 1)"; then
+            echo "::notice::Coverage $COVERAGE% meets threshold $THRESHOLD%"
+          else
             echo "::error::Coverage $COVERAGE% is below threshold $THRESHOLD%"
             exit 1
-          else
-            echo "::notice::Coverage $COVERAGE% meets threshold $THRESHOLD%"
           fi
 
   # =============================================================================
@@ -223,12 +223,14 @@ jobs:
       - name: Validate monitoring configs
         run: |
           # Check if monitoring configs exist and are valid
+          errors=0
           for config in config/monitoring*.yaml config/alerting*.yaml; do
             if [ -f "$config" ]; then
               echo "Validating $config..."
-              python -c "import yaml; yaml.safe_load(open('$config'))" && echo "✓ Valid" || echo "✗ Invalid"
+              python -c "import yaml; exec(\"with open('$config') as f: yaml.safe_load(f)\")" && echo "✓ Valid" || { echo "✗ Invalid"; errors=$((errors+1)); }
             fi
           done
+          [ $errors -eq 0 ] || exit 1
 
       - name: Test alert threshold logic
         run: |
@@ -255,21 +257,64 @@ jobs:
 
           import yaml
           import sys
+          import glob
+          import os
+
+          # Define critical and optional config files
+          critical_configs = ['config/config.yaml']
+          optional_config_patterns = ['config/config.*.yaml']
+
+          # Discover all config files
+          discovered_configs = set(critical_configs)
+          for pattern in optional_config_patterns:
+              discovered_configs.update(glob.glob(pattern))
+
+          # Check for missing critical configs
+          missing_critical = [f for f in critical_configs if not os.path.exists(f)]
+          if missing_critical:
+              for config_file in missing_critical:
+                  print(f"::error::Critical config file missing: {config_file}")
+              sys.exit(1)
+
+          print(f"::notice::Discovered {len(discovered_configs)} config file(s) for validation:")
+          for config_file in sorted(discovered_configs):
+              print(f"  - {config_file}")
 
           errors = []
-          for config_file in ['config/config.yaml', 'config/config.test.mock.yaml']:
-              try:
-                  with open(config_file) as f:
-                      config = yaml.safe_load(f)
-                      issues = validate_alert_thresholds(config)
-                      if issues:
-                          errors.extend([f"{config_file}: {issue}" for issue in issues])
-              except FileNotFoundError:
-                  print(f"Skipping {config_file} (not found)")
+          found_count = 0
+          skipped_count = 0
+
+          for config_file in sorted(discovered_configs):
+              if os.path.exists(config_file):
+                  try:
+                      with open(config_file) as f:
+                          config = yaml.safe_load(f)
+                          issues = validate_alert_thresholds(config)
+                          if issues:
+                              errors.extend([f"{config_file}: {issue}" for issue in issues])
+                          found_count += 1
+                          print(f"  ✓ {config_file} validated")
+                  except yaml.YAMLError as e:
+                      errors.append(f"{config_file}: YAML parse error: {e}")
+                      print(f"  ✗ {config_file} - YAML parse error")
+                  except Exception as e:
+                      errors.append(f"{config_file}: {type(e).__name__}: {e}")
+                      print(f"  ✗ {config_file} - {type(e).__name__}")
+              else:
+                  if config_file in critical_configs:
+                      errors.append(f"Critical config missing: {config_file}")
+                      print(f"  ✗ {config_file} - CRITICAL (not found)")
+                  else:
+                      print(f"  ⊘ {config_file} - skipped (not found)")
+                      skipped_count += 1
+
+          print(f"\nValidation summary: {found_count} validated, {skipped_count} skipped, {len(errors)} error(s)")
 
           if errors:
+              print("\n::group::Validation Errors")
               for error in errors:
                   print(f"::error::{error}")
+              print("::endgroup::")
               sys.exit(1)
           else:
               print("✓ All alert thresholds validated")

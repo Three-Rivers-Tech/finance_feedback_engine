@@ -23,7 +23,7 @@ class MarketAnalysisContext:
         self.config = config
         self.data_provider = data_provider
         self.monitoring_provider = monitoring_provider
-        
+
         # Initialize market schedule for session awareness
         self.market_schedule = MarketSchedule()
 
@@ -74,8 +74,12 @@ class MarketAnalysisContext:
                 end_date.strftime("%Y-%m-%d")
             )
 
-            # Await the historical data method directly
-            historical_data = await historical_data_method
+            # Handle both sync and async providers
+            import asyncio
+            if asyncio.iscoroutine(historical_data_method):
+                historical_data = await historical_data_method
+            else:
+                historical_data = historical_data_method
 
             if not historical_data or len(historical_data) < 14:
                 logger.warning("Insufficient historical data for regime detection")

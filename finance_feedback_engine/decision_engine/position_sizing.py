@@ -165,7 +165,7 @@ class PositionSizingCalculator:
                 result['signal_only'] = False
                 return result
 
-            # Determine minimum order size based on asset type
+            # Determine minimum order size based on asset type (must be set unconditionally)
             is_crypto = context.get('market_data', {}).get('type') == 'crypto' or 'BTC' in context['asset_pair'] or 'ETH' in context['asset_pair']
             is_forex = '_' in context['asset_pair'] or context.get('market_data', {}).get('type') == 'forex'
 

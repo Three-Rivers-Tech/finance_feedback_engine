@@ -48,14 +48,12 @@
     {
       "description": "Critical security updates - auto-merge",
       "matchUpdateTypes": ["patch"],
-      "matchPackagePatterns": ["*"],
       "matchCurrentVersion": "!/^0/",
       "automerge": true,
       "automergeType": "pr",
       "automergeStrategy": "squash",
       "labels": ["dependencies", "security", "automerge"],
-      "prPriority": 10,
-      "vulnerabilitySeverity": ["critical", "high"]
+      "prPriority": 10
     },
     {
       "description": "Testing dependencies - auto-merge patches",

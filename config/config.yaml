@@ -525,3 +525,43 @@ optimization:
     atr_multiplier:
       min: 1.5
       max: 3.0
+# ============================================================
+# SECURE API AUTHENTICATION CONFIGURATION
+# ============================================================
+# Validates API keys against a secure database with rate limiting
+# 
+# Production Deployment Checklist:
+# - [ ] Set api_keys explicitly in config/config.local.yaml (never in base config)
+# - [ ] Use environment variable FINANCE_FEEDBACK_API_KEY for runtime override
+# - [ ] Enable rate limiting and set appropriate thresholds
+# - [ ] Review audit logs regularly: data/auth.db
+# - [ ] Remove placeholder keys before deploying
+#
+api_auth:
+  # Rate limiting configuration
+  # Maximum requests per API key within the time window
+  rate_limit_max: 100
+  
+  # Time window in seconds for rate limiting
+  rate_limit_window: 60
+  
+  # If true, fall back to config_keys when database lookup fails
+  # Useful for gradual migration to DB-based auth
+  enable_fallback_to_config: true
+
+# ============================================================
+# API KEYS (PLACEHOLDER - SET IN config.local.yaml)
+# ============================================================
+# NEVER commit real API keys to this file!
+# 
+# Instead, add to config/config.local.yaml (git-ignored):
+#   api_keys:
+#     my-service: "your-secret-key-here"
+#     
+# Or use environment variable:
+#   export FINANCE_FEEDBACK_API_KEY="your-secret-key-here"
+#
+api_keys:
+  # Placeholder - override in config.local.yaml or environment
+  # Example: "service-key": "sk_live_xxxxxxxxxxxxxxxx"
+  {}

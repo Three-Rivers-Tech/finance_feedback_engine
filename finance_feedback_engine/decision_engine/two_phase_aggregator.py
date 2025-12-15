@@ -162,26 +162,20 @@ class TwoPhaseAggregator:
             logger.info("Two-phase mode not enabled, using standard aggregation")
             return None
 
-        # ===== PARALLEL PHASE 1 & PHASE 2 EXECUTION =====
-        logger.info(f"=== TWO-PHASE: Querying all providers in parallel for {asset_pair} ===")
+        # ===== PHASE 1 EXECUTION =====
+        logger.info(f"=== TWO-PHASE: Running Phase 1 providers for {asset_pair} ===")
 
         free_tier = get_free_providers()
         phase1_quorum = self.two_phase_config.get('phase1_min_quorum', 3)
 
-        # Get premium provider for asset type
-        primary_provider = get_premium_provider_for_asset(normalized_asset_type)
-        fallback_provider = get_fallback_provider()
-        codex_as_tiebreaker = self.two_phase_config.get('codex_as_tiebreaker', True)
-
-        # Create tasks for all providers (Phase 1 + Phase 2)
-        all_providers = free_tier + [primary_provider]  # Phase 1 + Phase 2 providers
-        tasks = [
+        # Create tasks for Phase 1 providers only
+        phase1_tasks = [
             query_function(provider, prompt)
-            for provider in all_providers
+            for provider in free_tier
         ]
 
-        # Execute all queries in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Execute Phase 1 queries in parallel
+        results = await asyncio.gather(*phase1_tasks, return_exceptions=True)
 
         # Process Phase 1 results (free tier)
         phase1_decisions = {}
@@ -220,14 +214,16 @@ class TwoPhaseAggregator:
                 providers_succeeded=providers_succeeded
             )
 
-        # Aggregate Phase 1 decisions
-        # This would need to be called with the ensemble manager's aggregate_decisions method
-        # For now, we'll return the decisions and let the main manager handle aggregation
+        # Aggregate Phase 1 decisions (metrics only; final aggregation handled upstream)
+        phase1_metrics = self._calculate_phase1_metrics(phase1_decisions)
+        phase1_confidence_ratio = phase1_metrics['avg_confidence'] / 100.0 if phase1_metrics['avg_confidence'] else 0.0
+
         phase1_result = {
             'provider_decisions': phase1_decisions,
             'failed_providers': phase1_failed,
             'num_success': phase1_success_count,
-            'quorum_met': True
+            'quorum_met': True,
+            'phase1_metrics': phase1_metrics
         }
 
         # Process Phase 2 results
@@ -237,6 +233,64 @@ class TwoPhaseAggregator:
         high_stakes_threshold = self.two_phase_config.get('high_stakes_position_threshold', 1000)
         max_premium_calls = self.two_phase_config.get('max_premium_calls_per_day', 50)
 
+        # Determine if Phase 2 escalation is required
+        position_value = self._extract_position_value(market_data)
+
+        escalation_triggers = []
+        if phase1_confidence_ratio < confidence_threshold:
+            escalation_triggers.append('low_confidence')
+        if phase1_metrics['agreement'] < agreement_threshold:
+            escalation_triggers.append('low_agreement')
+        if require_premium_for_high_stakes and position_value >= high_stakes_threshold:
+            escalation_triggers.append('high_stakes')
+
+        should_escalate = len(escalation_triggers) > 0
+
+        # Budget gate for premium calls
+        if should_escalate and not check_budget(max_premium_calls):
+            logger.warning(
+                "Premium call budget exceeded; skipping Phase 2 escalation"
+            )
+            return {
+                'phase1_result': phase1_result,
+                'phase2_decisions': {},
+                'phase2_failed': [],
+                'phase2_primary_used': None,
+                'phase2_fallback_used': False,
+                'codex_tiebreaker_used': False,
+                'normalized_asset_type': normalized_asset_type,
+                'two_phase_config': self.two_phase_config,
+                'phase2_triggered': False,
+                'phase2_skip_reason': 'budget_exceeded',
+                'phase2_escalation_reason': None,
+                'escalation_triggers': escalation_triggers,
+                'position_value': position_value
+            }
+
+        # Skip Phase 2 when thresholds are satisfied
+        if not should_escalate:
+            logger.info("Phase 1 met thresholds; skipping Phase 2 escalation")
+            return {
+                'phase1_result': phase1_result,
+                'phase2_decisions': {},
+                'phase2_failed': [],
+                'phase2_primary_used': None,
+                'phase2_fallback_used': False,
+                'codex_tiebreaker_used': False,
+                'normalized_asset_type': normalized_asset_type,
+                'two_phase_config': self.two_phase_config,
+                'phase2_triggered': False,
+                'phase2_skip_reason': 'thresholds_met',
+                'phase2_escalation_reason': None,
+                'escalation_triggers': escalation_triggers,
+                'position_value': position_value
+            }
+
+        # Premium provider selection happens only when escalation is required
+        primary_provider = get_premium_provider_for_asset(normalized_asset_type)
+        fallback_provider = get_fallback_provider()
+        codex_as_tiebreaker = self.two_phase_config.get('codex_as_tiebreaker', True)
+
         # Process the premium provider result (from parallel execution)
         phase2_decisions = {}
         phase2_primary_used = None
@@ -244,9 +298,13 @@ class TwoPhaseAggregator:
         codex_tiebreaker_used = False
         phase2_failed = []
 
-        # Get the result for the primary premium provider (was executed in parallel)
-        primary_provider_result_idx = len(free_tier)  # Index of primary provider in all_providers list
-        primary_provider_result = results[primary_provider_result_idx]
+        phase2_escalation_reason = '|'.join(escalation_triggers)
+
+        # Execute premium provider now that escalation is confirmed
+        try:
+            primary_provider_result = await query_function(primary_provider, prompt)
+        except Exception as exc:
+            primary_provider_result = exc
 
         if isinstance(primary_provider_result, Exception):
             logger.error(f"Phase 2: {primary_provider} failed: {primary_provider_result}")
@@ -281,7 +339,7 @@ class TwoPhaseAggregator:
                 )
 
                 # Check if Codex tiebreaker needed (primary disagrees with Phase 1)
-                if codex_as_tiebreaker and primary_decision.get('action') != phase1_result.get('action', ''):
+                if codex_as_tiebreaker and primary_decision.get('action') != phase1_metrics.get('majority_action', ''):
                     logger.info(f"Phase 2: {primary_provider} disagrees with Phase 1 -> calling Codex tiebreaker")
                     try:
                         codex_decision = await query_function(fallback_provider, prompt)
@@ -298,15 +356,27 @@ class TwoPhaseAggregator:
                 logger.warning(f"Phase 2: {primary_provider} returned invalid response")
                 phase2_failed.append(primary_provider)
 
-        # Log premium API calls
-        log_premium_call(
-            asset=asset_pair,
-            asset_type=normalized_asset_type,
-            phase='phase2',
-            primary_provider=phase2_primary_used,
-            codex_called=codex_tiebreaker_used or phase2_fallback_used,
-            escalation_reason=None  # This will be determined later based on Phase 1 results
-        )
+        # Log premium API calls only when escalation actually occurred
+        if should_escalate:
+            # Include which premium path was exercised
+            premium_reason_parts = []
+            if phase2_escalation_reason:
+                premium_reason_parts.append(phase2_escalation_reason)
+            if phase2_primary_used:
+                premium_reason_parts.append('primary_used')
+            if phase2_fallback_used:
+                premium_reason_parts.append('fallback_used')
+            if codex_tiebreaker_used:
+                premium_reason_parts.append('codex_tiebreaker')
+
+            log_premium_call(
+                asset=asset_pair,
+                asset_type=normalized_asset_type,
+                phase='phase2',
+                primary_provider=phase2_primary_used,
+                codex_called=codex_tiebreaker_used or phase2_fallback_used,
+                escalation_reason='|'.join(premium_reason_parts) if premium_reason_parts else None
+            )
 
         return {
             'phase1_result': phase1_result,
@@ -316,7 +386,12 @@ class TwoPhaseAggregator:
             'phase2_fallback_used': phase2_fallback_used,
             'codex_tiebreaker_used': codex_tiebreaker_used,
             'normalized_asset_type': normalized_asset_type,
-            'two_phase_config': self.two_phase_config
+            'two_phase_config': self.two_phase_config,
+            'phase2_triggered': True,
+            'phase2_skip_reason': None,
+            'phase2_escalation_reason': phase2_escalation_reason,
+            'escalation_triggers': escalation_triggers,
+            'position_value': position_value
         }
 
     def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
@@ -351,3 +426,52 @@ class TwoPhaseAggregator:
             return False
 
         return True
+
+    def _calculate_phase1_metrics(self, decisions: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """Calculate agreement, majority action, and average confidence for Phase 1."""
+        from collections import Counter
+
+        actions: List[str] = []
+        confidences: List[float] = []
+
+        for decision in decisions.values():
+            action = decision.get('action')
+            confidence = decision.get('confidence')
+            if action is not None:
+                actions.append(action)
+            if isinstance(confidence, (int, float)):
+                confidences.append(float(confidence))
+
+        if actions:
+            counts = Counter(actions)
+            majority_action, majority_count = counts.most_common(1)[0]
+            agreement = majority_count / len(actions)
+        else:
+            majority_action = None
+            agreement = 0.0
+
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+        return {
+            'majority_action': majority_action,
+            'agreement': agreement,
+            'avg_confidence': avg_confidence
+        }
+
+    def _extract_position_value(self, market_data: Dict[str, Any]) -> float:
+        """Best-effort extraction of position value for high-stakes gating."""
+        if not isinstance(market_data, dict):
+            return 0.0
+
+        # Direct field if provided
+        position_value = market_data.get('position_value')
+        if isinstance(position_value, (int, float)):
+            return float(position_value)
+
+        # Derive from position size * price if available
+        position_size = market_data.get('position_size')
+        price = market_data.get('close') or market_data.get('price')
+        if isinstance(position_size, (int, float)) and isinstance(price, (int, float)):
+            return abs(float(position_size) * float(price))
+
+        return 0.0
