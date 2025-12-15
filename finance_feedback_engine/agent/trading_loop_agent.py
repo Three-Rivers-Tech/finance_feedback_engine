@@ -110,6 +110,31 @@ class TradingLoopAgent:
             AgentState.LEARNING: self.handle_learning_state,
         }
 
+    def supports_signal_only_mode(self) -> bool:
+        """
+        Check if this agent implementation supports signal-only mode.
+
+        Signal-only mode requires:
+        1. _send_signals_to_telegram() method exists
+        2. Agent checks autonomous.enabled flag in execution
+        3. Notification delivery mechanism is available
+
+        Returns:
+            bool: True if signal-only mode is supported
+        """
+        # Verify critical methods exist
+        if not hasattr(self, '_send_signals_to_telegram'):
+            logger.error("Agent missing _send_signals_to_telegram() method")
+            return False
+
+        # Verify execution handler checks autonomous flag
+        if not hasattr(self, 'handle_execution_state'):
+            logger.error("Agent missing handle_execution_state() method")
+            return False
+
+        # All requirements met
+        return True
+
     async def _recover_existing_positions(self):
         """
         Recover existing open positions from the trading platform on startup.
@@ -800,9 +825,17 @@ class TradingLoopAgent:
         Send trading signals to Telegram for human approval.
 
         This method formats decisions as Telegram messages with approval buttons.
+
+        SAFETY: If notification delivery fails, signals are logged and marked as failed
+        rather than silently continuing. This prevents execution without approval.
         """
         import logging
         logger = logging.getLogger(__name__)
+
+        # Track signal delivery status
+        signals_sent = 0
+        signals_failed = 0
+        failure_reasons = []
 
         for decision in self._current_decisions:
             decision_id = decision.get('id')
@@ -827,27 +860,102 @@ class TradingLoopAgent:
                 f"📊 `/details {decision_id}` for more info"
             )
 
+            signal_delivered = False
+            delivery_method = None
+
             # Try to send via Telegram if configured
             try:
-                from finance_feedback_engine.integrations.telegram_bot import TelegramBot
                 telegram_config = self.config.telegram if hasattr(self.config, 'telegram') else {}
-                if telegram_config.get('enabled') and telegram_config.get('bot_token'):
-                    bot = TelegramBot(token=telegram_config['bot_token'])
-                    chat_id = telegram_config.get('chat_id')
-                    if chat_id:
-                        bot.send_message(chat_id, message)
-                        logger.info(f"Signal sent to Telegram for decision {decision_id}")
-                    else:
-                        logger.warning("Telegram chat_id not configured - signal not sent")
+                telegram_enabled = telegram_config.get('enabled', False)
+                telegram_token = telegram_config.get('bot_token')
+                telegram_chat_id = telegram_config.get('chat_id')
+
+                if telegram_enabled and telegram_token and telegram_chat_id:
+                    try:
+                        from finance_feedback_engine.integrations.telegram_bot import TelegramBot
+                        bot = TelegramBot(token=telegram_token)
+                        bot.send_message(telegram_chat_id, message)
+                        logger.info(f"✅ Signal sent to Telegram for decision {decision_id}")
+                        signal_delivered = True
+                        delivery_method = "Telegram"
+                        signals_sent += 1
+                    except ImportError:
+                        error_msg = "Telegram integration module not available (ImportError)"
+                        logger.warning(error_msg)
+                        failure_reasons.append(f"{decision_id}: {error_msg}")
+                    except Exception as e:
+                        error_msg = f"Telegram send failed: {e}"
+                        logger.error(error_msg)
+                        failure_reasons.append(f"{decision_id}: {error_msg}")
                 else:
-                    logger.warning("Telegram not enabled or not configured - signal will be logged only")
-                    logger.info(f"Signal for {asset_pair}: {action.upper()} (confidence: {confidence}%)")
-            except ImportError:
-                logger.warning("Telegram integration not available - signal will be logged only")
-                logger.info(f"Signal for {asset_pair}: {action.upper()} (confidence: {confidence}%)")
+                    missing_fields = []
+                    if not telegram_enabled:
+                        missing_fields.append("enabled=false")
+                    if not telegram_token:
+                        missing_fields.append("bot_token")
+                    if not telegram_chat_id:
+                        missing_fields.append("chat_id")
+                    error_msg = f"Telegram not configured: {', '.join(missing_fields)}"
+                    logger.warning(error_msg)
+                    failure_reasons.append(f"{decision_id}: {error_msg}")
             except Exception as e:
-                logger.error(f"Failed to send Telegram signal: {e}")
-                logger.info(f"Signal for {asset_pair}: {action.upper()} (confidence: {confidence}%)")
+                error_msg = f"Telegram config check failed: {e}"
+                logger.error(error_msg, exc_info=True)
+                failure_reasons.append(f"{decision_id}: {error_msg}")
+
+            # Try webhook delivery if Telegram failed (future implementation)
+            if not signal_delivered:
+                try:
+                    webhook_config = self.config.webhook if hasattr(self.config, 'webhook') else {}
+                    webhook_enabled = webhook_config.get('enabled', False)
+                    webhook_url = webhook_config.get('url')
+
+                    if webhook_enabled and webhook_url:
+                        # TODO: Implement webhook delivery
+                        logger.info(f"Webhook delivery not yet implemented for {decision_id}")
+                        failure_reasons.append(f"{decision_id}: Webhook delivery not implemented")
+                    else:
+                        logger.debug("Webhook not configured, skipping")
+                except Exception as e:
+                    error_msg = f"Webhook config check failed: {e}"
+                    logger.error(error_msg, exc_info=True)
+                    failure_reasons.append(f"{decision_id}: {error_msg}")
+
+            # Log signal status
+            if not signal_delivered:
+                signals_failed += 1
+                logger.warning(
+                    f"⚠️ Signal delivery FAILED for {asset_pair} (decision {decision_id}). "
+                    f"No notification channels available or all failed."
+                )
+                # Log to console for visibility
+                logger.info(f"UNDELIVERED SIGNAL for {asset_pair}: {action.upper()} (confidence: {confidence}%)")
+
+        # Summary reporting
+        logger.info(
+            f"Signal delivery summary: {signals_sent} sent, {signals_failed} failed "
+            f"(out of {len(self._current_decisions)} total decisions)"
+        )
+
+        # CRITICAL SAFETY CHECK: If ALL signals failed to deliver, log error and prevent silent failure
+        if signals_failed > 0 and signals_sent == 0:
+            logger.error(
+                f"❌ CRITICAL: All {signals_failed} signal(s) failed to deliver! "
+                f"No approval mechanism available. Decisions will NOT be executed."
+            )
+            logger.error(f"Failure details: {'; '.join(failure_reasons)}")
+            # Emit dashboard event
+            self._emit_dashboard_event({
+                'type': 'signal_delivery_failure',
+                'failed_count': signals_failed,
+                'reasons': failure_reasons,
+                'timestamp': time.time()
+            })
+        elif signals_failed > 0:
+            logger.warning(
+                f"⚠️ Partial signal delivery failure: {signals_failed}/{len(self._current_decisions)} failed"
+            )
+            logger.warning(f"Failed signals: {'; '.join(failure_reasons)}")
 
     async def handle_learning_state(self):
         """

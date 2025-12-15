@@ -3,73 +3,7 @@
 # Run manually: pre-commit run --all-files
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
-
-  - repo: https://github.com/prettier/prettier
-    rev: 3.3.3
-    hooks:
-      - id: prettier
-        files: \.(md|json|yml|yaml)$
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: mixed-line-ending
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
-      - id: check-merge-conflict
-
-default_language_version:
-  python: python3
-
-fail_fast: false
-repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff
-        args: ["--fix"]
-      - id: ruff-format
-
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-        language_version: python3
-
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: mixed-line-ending
-
-  - repo: https://github.com/prettier/prettier
-    rev: 3.3.3
-    hooks:
-      - id: prettier
-        files: \.(md|json|yml|yaml)$
-# Pre-commit hooks configuration
-# Install with: pip install pre-commit && pre-commit install
-# Run manually: pre-commit run --all-files
-
-repos:
+  # General File Checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -89,6 +23,7 @@ repos:
       - id: mixed-line-ending
         name: Fix mixed line endings
 
+  # Python Code Formatting
   - repo: https://github.com/psf/black
     rev: 23.12.1
     hooks:
@@ -97,13 +32,6 @@ repos:
         language_version: python3
         args: ['--line-length=88']
 
-  - repo: https://github.com/PyCQA/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-        name: Lint with Flake8
-        args: ['--max-line-length=88', '--extend-ignore=E203,W503']
-
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
@@ -111,6 +39,15 @@ repos:
         name: Sort imports with isort
         args: ['--profile=black', '--line-length=88']
 
+  # Python Linting
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: Lint with Flake8
+        args: ['--max-line-length=88', '--extend-ignore=E203,W503']
+
+  # Security Checks
   - repo: https://github.com/PyCQA/bandit
     rev: 1.7.5
     hooks:
@@ -119,6 +56,16 @@ repos:
         args: ['-c', 'pyproject.toml']
         additional_dependencies: ['bandit[toml]']
         exclude: ^tests/
+
+  # Test execution before commit
+  - repo: local
+    hooks:
+      - id: run-tests
+        name: Run all tests
+        entry: bash -c 'python -m pytest -m "not slow"'
+        language: system
+        pass_filenames: false
+        verbose: true
 
 # Configuration
 default_language_version:
