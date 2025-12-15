@@ -24,9 +24,9 @@ class TestGatekeeperMarketSchedule:
         """Initialize gatekeeper for each test."""
         self.gatekeeper = RiskGatekeeper()
 
-    def test_rejects_forex_when_market_closed_friday_evening(self):
-        """Gatekeeper should reject trades when forex market is closed (Friday 5 PM NY)."""
-        # Friday 5 PM NY
+    def test_allows_forex_even_on_weekend_window(self):
+        """Gatekeeper should not block forex trades during the Friday close/Sunday reopen window."""
+        # Friday 5 PM NY (previously treated as closed)
         now_utc = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
         timestamp = _to_unix(now_utc)
 
@@ -45,9 +45,8 @@ class TestGatekeeperMarketSchedule:
         }
 
         is_valid, msg = self.gatekeeper.validate_trade(decision, context)
-        assert is_valid is False
-        assert "Market closed" in msg
-        assert "Closed" in msg
+        assert is_valid is True
+        assert "Market closed" not in msg
 
     def test_rejects_stock_when_market_closed_outside_hours(self):
         """Gatekeeper should reject stock trades outside 9:30-16:00 NY hours."""
