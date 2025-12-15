@@ -44,12 +44,9 @@ for i, platform_config in enumerate(platforms):
             print(f"    api_key present: {'api_key' in creds}")
             print(f"    api_secret present: {'api_secret' in creds}")
             print(f"    use_sandbox: {creds.get('use_sandbox')}")
-            if 'api_key' in creds:
-                key = str(creds['api_key'])[:50]
-                print(f"    api_key preview: {key}...")
         elif name == 'oanda':
             print(f"    api_key present: {'api_key' in creds}")
-            print(f"    account_id: {creds.get('account_id')}")
+            print(f"    account_id present: {'account_id' in creds}")
             print(f"    environment: {creds.get('environment')}")
     else:
         print(f"  Invalid type: {type(platform_config)}")
@@ -62,12 +59,13 @@ for platform_config in platforms:
         print(f"Skipping non-dict: {platform_config}")
         continue
 
-    platform_key = platform_config.get('name', '').lower()
-    platform_creds = platform_config.get('credentials', {})
-
-    if not platform_key or not isinstance(platform_key, str):
+    name = platform_config.get('name', '')
+    if not isinstance(name, str) or not name:
         print(f"Skipping invalid name: {platform_config}")
         continue
+
+    platform_key = name.lower()
+    platform_creds = platform_config.get('credentials', {})
 
     if not isinstance(platform_creds, dict):
         print(f"Skipping non-dict credentials for {platform_key}")
