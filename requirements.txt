@@ -46,6 +46,9 @@ scikit-learn>=1.0.0
 tenacity
 ollama
 
+# Optimization & Hyperparameter Tuning
+optuna>=3.0.0
+
 # Telegram integration (Approval workflow - see docs/TELEGRAM_APPROVAL_WORKFLOW.md)
 python-telegram-bot>=20.0
 

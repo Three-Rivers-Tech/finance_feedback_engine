@@ -1,0 +1,146 @@
+# Prometheus Alert Rules for Finance Feedback Engine
+
+groups:
+  - name: trading_agent_alerts
+    interval: 30s
+    rules:
+      # Agent is down
+      - alert: TradingAgentDown
+        expr: up{job="ffe-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: agent
+        annotations:
+          summary: "Trading agent is down"
+          description: "The Finance Feedback Engine app has been down for more than 2 minutes."
+
+      # High decision latency
+      - alert: HighDecisionLatency
+        expr: histogram_quantile(0.95, rate(ffe_decision_latency_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: decision_engine
+        annotations:
+          summary: "High decision latency detected"
+          description: "95th percentile decision latency is {{ $value }}s (threshold: 10s)"
+
+      # Provider failures
+      - alert: HighProviderFailureRate
+        expr: rate(ffe_provider_requests_total{status="failure"}[5m]) / rate(ffe_provider_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: ai_provider
+        annotations:
+          summary: "High provider failure rate"
+          description: "Provider {{ $labels.provider }} has {{ $value | humanizePercentage }} failure rate"
+
+      # Circuit breaker open
+      - alert: CircuitBreakerOpen
+        expr: ffe_circuit_breaker_state{service!=""} == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.service }}"
+          description: "Circuit breaker for {{ $labels.service }} has been open for 1+ minutes"
+
+  - name: portfolio_alerts
+    interval: 30s
+    rules:
+      # Large drawdown
+      - alert: LargeDrawdown
+        expr: (ffe_portfolio_value_dollars - ffe_portfolio_value_dollars offset 1h) / ffe_portfolio_value_dollars offset 1h < -0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: risk_management
+        annotations:
+          summary: "Large portfolio drawdown detected"
+          description: "Portfolio value dropped by {{ $value | humanizePercentage }} in the last hour"
+
+      # High number of active trades
+      - alert: TooManyActiveTrades
+        expr: ffe_active_trades_total > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "High number of active trades"
+          description: "{{ $value }} active trades (threshold: 5). Possible runaway trading?"
+
+      # No trades for extended period
+      - alert: NoTradingActivity
+        expr: rate(ffe_provider_requests_total[1h]) == 0
+        for: 4h
+        labels:
+          severity: info
+          component: monitoring
+        annotations:
+          summary: "No trading activity detected"
+          description: "No AI provider requests in the last 4 hours. Agent may be stuck or disabled."
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90% ({{ $value | humanizePercentage }})"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% ({{ $value }}%)"
+
+      # Disk space running low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Disk space running low"
+          description: "Less than 10% disk space remaining ({{ $value | humanizePercentage }} free)"
+
+  - name: performance_alerts
+    interval: 30s
+    rules:
+      # Low confidence decisions
+      - alert: LowConfidenceDecisions
+        expr: avg_over_time(ffe_decision_confidence[10m]) < 60
+        for: 30m
+        labels:
+          severity: info
+          component: decision_quality
+        annotations:
+          summary: "Low average decision confidence"
+          description: "Average decision confidence is {{ $value }}% (threshold: 60%)"
+
+      # Negative P&L trend
+      - alert: NegativePnLTrend
+        expr: sum(rate(ffe_trade_pnl_dollars_summary_sum[1h])) < 0
+        for: 4h
+        labels:
+          severity: warning
+          component: trading_performance
+        annotations:
+          summary: "Negative P&L trend detected"
+          description: "Cumulative P&L has been negative for 4+ hours"

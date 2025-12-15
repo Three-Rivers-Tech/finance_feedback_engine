@@ -77,6 +77,27 @@ class RedisManager:
                 return False
 
     @staticmethod
+    def get_connection_url(password: str = None) -> str:
+        """Get Redis connection URL (test stub)."""
+        if password:
+            return f"redis://:{password}@localhost:6379"
+        return "redis://localhost:6379"
+
+    @staticmethod
+    def start_redis_service() -> bool:
+        """Start Redis service (test stub)."""
+        try:
+            os_type = RedisManager.detect_os()
+            if os_type == 'linux':
+                subprocess.run(["sudo", "systemctl", "start", "redis"], check=True, timeout=10)
+            elif os_type == 'darwin':
+                subprocess.run(["brew", "services", "start", "redis"], check=True, timeout=10)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to start Redis: {e}")
+            return False
+
+    @staticmethod
     def install_redis_linux() -> bool:
         """
         Install Redis on Linux using apt-get.

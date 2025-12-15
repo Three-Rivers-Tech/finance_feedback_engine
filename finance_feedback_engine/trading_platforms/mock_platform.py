@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 import logging
 import uuid
 import time
+import random
 from datetime import datetime
 
 from .base_platform import BaseTradingPlatform
@@ -43,6 +44,12 @@ class MockTradingPlatform(BaseTradingPlatform):
                 - 'spread': bid-ask spread (default 0.0005 = 0.05%)
         """
         super().__init__(credentials or {})
+
+        # Simulated error rate for tests (0.0 - 1.0)
+        self._error_rate = float((credentials or {}).get('error_rate', 0.0))
+        if self._error_rate >= 1.0:
+            # Deterministic failure mode for tests
+            raise RuntimeError("Simulated platform error (error_rate >= 1.0)")
 
         # Initialize balances
         self._balance = initial_balance or {

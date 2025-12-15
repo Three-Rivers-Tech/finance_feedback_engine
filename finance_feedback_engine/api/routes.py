@@ -17,8 +17,11 @@ telegram_router = APIRouter()
 decisions_router = APIRouter()
 status_router = APIRouter()
 
+# Shared Telegram bot reference for patching in tests
+telegram_bot = None
 
-# Health endpoint
+
+# Health endpoints
 @health_router.get("/health")
 async def health_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
     """
@@ -27,7 +30,38 @@ async def health_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
     Returns application health status including uptime, circuit breaker states,
     and portfolio information.
     """
-    return get_health_status(engine)
+    from .health_checks import get_enhanced_health_status
+    return get_enhanced_health_status(engine)
+
+
+@health_router.get("/ready")
+async def readiness_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
+    """
+    Readiness probe for Kubernetes.
+
+    Checks if the application is ready to serve requests.
+    """
+    from .health_checks import get_readiness_status
+    status = get_readiness_status(engine)
+
+    if not status["ready"]:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=status
+        )
+
+    return status
+
+
+@health_router.get("/live")
+async def liveness_check():
+    """
+    Liveness probe for Kubernetes.
+
+    Checks if the application is alive.
+    """
+    from .health_checks import get_liveness_status
+    return get_liveness_status()
 
 
 # Metrics endpoint (stubbed for Phase 2)
@@ -51,8 +85,11 @@ async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Dep
     Receives updates from Telegram Bot API and processes approval requests.
     """
     try:
-        # Import here to avoid circular dependency
-        from ..integrations.telegram_bot import telegram_bot
+        # Import here to avoid circular dependency but keep test patchability
+        from ..integrations import telegram_bot as integrations_bot
+        global telegram_bot
+        if telegram_bot is None:
+            telegram_bot = getattr(integrations_bot, 'telegram_bot', None)
 
         if telegram_bot is None:
             raise HTTPException(
@@ -187,6 +224,11 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         # Get balance from platform
         if hasattr(engine, 'platform'):
             balance_info = engine.platform.get_balance()
+            try:
+                from .health_checks import _safe_json
+                balance_info = _safe_json(balance_info)
+            except Exception:
+                balance_info = balance_info
             status_data["balance"] = balance_info
             status_data["platform"] = engine.config.get("trading_platform", "unknown")
 
