@@ -1,177 +1,172 @@
 """
-Custom exception hierarchy for Finance Feedback Engine.
+Custom exception hierarchy for Finance Feedback Engine 2.0.
 
-Replaces bare 'except Exception' handlers with specific, meaningful exceptions.
-Improves debugging by providing context and allowing targeted error handling.
+This module defines a comprehensive exception hierarchy that allows for more specific
+error handling instead of broad try/except Exception blocks.
 """
 
-
-class FinanceFeedbackEngineError(Exception):
+class FFEError(Exception):
     """Base exception for all Finance Feedback Engine errors."""
     pass
 
 
-# Data Provider Errors
-class DataProviderError(FinanceFeedbackEngineError):
-    """Base exception for data provider errors."""
+class ConfigurationError(FFEError):
+    """Raised when there are configuration issues."""
     pass
 
 
-class DataFetchError(DataProviderError):
-    """Raised when data cannot be fetched from provider."""
+class APIError(FFEError):
+    """Base class for API-related errors."""
     pass
 
 
-class DataValidationError(DataProviderError):
-    """Raised when fetched data fails validation."""
+class APIConnectionError(APIError):
+    """Raised when there are connection issues with APIs."""
     pass
 
 
-class RateLimitExceededError(DataProviderError):
-    """Raised when API rate limit is exceeded."""
+class APIResponseError(APIError):
+    """Raised when API returns unexpected response."""
     pass
 
 
-class InvalidAssetPairError(DataProviderError):
-    """Raised when asset pair format is invalid."""
+class APIRateLimitError(APIError):
+    """Raised when rate limits are exceeded."""
     pass
 
 
-# Decision Engine Errors
-class DecisionEngineError(FinanceFeedbackEngineError):
-    """Base exception for decision engine errors."""
+class ValidationError(FFEError):
+    """Raised when validation fails."""
     pass
 
 
-class AIProviderError(DecisionEngineError):
-    """Raised when AI provider fails to respond."""
+class AssetPairValidationError(ValidationError):
+    """Raised when asset pair validation fails."""
     pass
 
 
-class PromptGenerationError(DecisionEngineError):
-    """Raised when prompt cannot be generated."""
+class RiskValidationError(FFEError):
+    """Raised when risk validation fails."""
     pass
 
 
-class DecisionValidationError(DecisionEngineError):
-    """Raised when AI decision fails validation."""
+class DecisionEngineError(FFEError):
+    """Base class for decision engine related errors."""
     pass
 
 
-class InsufficientProvidersError(DecisionEngineError):
-    """Raised when ensemble doesn't have minimum providers (Phase 1 quorum)."""
-    def __init__(self, message: str, providers_failed=None, providers_succeeded=None):
-        super().__init__(message)
-        self.providers_failed = providers_failed or []
-        self.providers_succeeded = providers_succeeded or []
-
-
-# Trading Platform Errors
-class TradingPlatformError(FinanceFeedbackEngineError):
-    """Base exception for trading platform errors."""
+class ModelInstallationError(DecisionEngineError):
+    """Raised when model installation fails."""
     pass
 
 
-class PlatformConnectionError(TradingPlatformError):
-    """Raised when cannot connect to trading platform."""
+class AIClientError(DecisionEngineError):
+    """Raised when AI client operations fail."""
     pass
 
 
-class BalanceRetrievalError(TradingPlatformError):
-    """Raised when cannot retrieve account balance."""
+class TradingError(FFEError):
+    """Base class for trading related errors."""
     pass
 
 
-class OrderExecutionError(TradingPlatformError):
+class BalanceRetrievalError(TradingError):
+    """Raised when balance retrieval fails."""
+    pass
+
+
+class OrderExecutionError(TradingError):
     """Raised when order execution fails."""
     pass
 
 
-class InsufficientBalanceError(TradingPlatformError):
-    """Raised when account has insufficient balance for trade."""
+class PositionError(TradingError):
+    """Raised when position operations fail."""
     pass
 
 
-# Risk Management Errors
-class RiskManagementError(FinanceFeedbackEngineError):
-    """Base exception for risk management errors."""
+class DataProviderError(FFEError):
+    """Base class for data provider related errors."""
     pass
 
 
-class RiskLimitExceededError(RiskManagementError):
-    """Raised when trade exceeds risk limits."""
+class DataRetrievalError(DataProviderError):
+    """Raised when data retrieval fails."""
     pass
 
 
-class DrawdownLimitExceededError(RiskManagementError):
-    """Raised when drawdown exceeds configured limit."""
+class BacktestingError(FFEError):
+    """Base class for backtesting related errors."""
     pass
 
 
-class ConcentrationLimitExceededError(RiskManagementError):
-    """Raised when position concentration exceeds limit."""
+class BacktestValidationError(BacktestingError):
+    """Raised when backtesting validation fails."""
     pass
 
 
-# Configuration Errors
-class ConfigurationError(FinanceFeedbackEngineError):
-    """Base exception for configuration errors."""
+class MemoryError(FFEError):
+    """Base class for memory related errors."""
     pass
 
 
-class InvalidConfigError(ConfigurationError):
-    """Raised when configuration is invalid or incomplete."""
+class VectorStoreError(MemoryError):
+    """Raised when vector store operations fail."""
     pass
 
 
-class MissingCredentialsError(ConfigurationError):
-    """Raised when required credentials are missing."""
+class PersistenceError(FFEError):
+    """Base class for persistence related errors."""
     pass
 
 
-# Agent Errors
-class AgentError(FinanceFeedbackEngineError):
-    """Base exception for trading agent errors."""
+class StorageError(PersistenceError):
+    """Raised when storage operations fail."""
     pass
 
 
-class AgentStateError(AgentError):
-    """Raised when agent is in invalid state for requested operation."""
+class CircuitBreakerError(FFEError):
+    """Raised when circuit breaker is open."""
     pass
 
 
-class KillSwitchTriggeredError(AgentError):
-    """Raised when agent kill-switch is triggered (P&L limits exceeded)."""
+class SystemError(FFEError):
+    """Raised when system-level issues occur."""
     pass
 
 
-# Memory/Persistence Errors
-class PersistenceError(FinanceFeedbackEngineError):
-    """Base exception for persistence/storage errors."""
+class InsufficientProvidersError(FFEError):
+    """Raised when insufficient providers are available for ensemble decisions."""
     pass
 
 
-class DecisionStoreError(PersistenceError):
-    """Raised when decision cannot be stored or retrieved."""
-    pass
-
-
-class MemoryCorruptionError(PersistenceError):
-    """Raised when portfolio memory data is corrupted."""
-    pass
-
-
-# Monitoring Errors
-class MonitoringError(FinanceFeedbackEngineError):
-    """Base exception for monitoring/tracking errors."""
-    pass
-
-
-class TradeTrackingError(MonitoringError):
-    """Raised when trade cannot be tracked."""
-    pass
-
-
-class MetricsCollectionError(MonitoringError):
-    """Raised when metrics collection fails."""
-    pass
+# Import all exceptions to make them available from the module
+__all__ = [
+    'FFEError',
+    'ConfigurationError',
+    'APIError',
+    'APIConnectionError',
+    'APIResponseError',
+    'APIRateLimitError',
+    'ValidationError',
+    'AssetPairValidationError',
+    'RiskValidationError',
+    'DecisionEngineError',
+    'ModelInstallationError',
+    'AIClientError',
+    'TradingError',
+    'BalanceRetrievalError',
+    'OrderExecutionError',
+    'PositionError',
+    'DataProviderError',
+    'DataRetrievalError',
+    'BacktestingError',
+    'BacktestValidationError',
+    'MemoryError',
+    'VectorStoreError',
+    'PersistenceError',
+    'StorageError',
+    'CircuitBreakerError',
+    'SystemError',
+    'InsufficientProvidersError',
+]

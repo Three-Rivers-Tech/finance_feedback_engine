@@ -9,7 +9,14 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from finance_feedback_engine.benchmarking import quick_benchmark
+# NOTE: Experimental module - see experiments/benchmarking/
+# To use this feature, temporarily modify Python path to include experiments
+try:
+    from benchmarking import quick_benchmark
+except ImportError:
+    print("⚠️  Experimental module not available. See experiments/benchmarking/")
+    print("   To enable: Add experiments directory to your Python path")
+    raise
 from finance_feedback_engine.utils.config_loader import load_config
 
 

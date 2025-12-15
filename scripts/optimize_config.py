@@ -9,7 +9,14 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from finance_feedback_engine.refactoring import AgentConfigOptimizer
+# NOTE: Experimental module - see experiments/refactoring/
+# To use this feature, temporarily modify Python path to include experiments
+try:
+    from refactoring import AgentConfigOptimizer
+except ImportError:
+    print("⚠️  Experimental module not available. See experiments/refactoring/")
+    print("   To enable: Add experiments directory to your Python path")
+    raise
 from finance_feedback_engine.utils.config_loader import load_config
 
 
