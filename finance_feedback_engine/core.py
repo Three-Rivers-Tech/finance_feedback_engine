@@ -14,7 +14,16 @@ from .persistence.decision_store import DecisionStore
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .utils.model_installer import ensure_models_installed
 from .utils.failure_logger import log_quorum_failure
-from .exceptions import InsufficientProvidersError
+from .exceptions import (
+    InsufficientProvidersError,
+    ModelInstallationError,
+    ConfigurationError,
+    APIError,
+    DataProviderError,
+    PersistenceError,
+    TradingError,
+    MemoryError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +57,11 @@ class FinanceFeedbackEngine:
         try:
             logger.info("Checking Ollama model installation...")
             ensure_models_installed()
-        except Exception as e:
+        except ModelInstallationError as e:
             logger.warning(f"Model installation check failed: {e}")
+            # Continue anyway - system may work with fewer models
+        except Exception as e:
+            logger.warning(f"Unexpected error during model installation check: {e}", exc_info=True)
             # Continue anyway - system may work with fewer models
 
         # Initialize data provider
@@ -140,9 +152,13 @@ class FinanceFeedbackEngine:
             # Single platform mode (legacy)
             platform_credentials = config.get('platform_credentials', {})
 
-        self.trading_platform = PlatformFactory.create_platform(
-            platform_name, platform_credentials
-        )
+        try:
+            self.trading_platform = PlatformFactory.create_platform(
+                platform_name, platform_credentials
+            )
+        except Exception as e:
+            logger.error(f"Failed to create trading platform {platform_name}: {e}", exc_info=True)
+            raise ConfigurationError(f"Platform configuration error: {e}") from e
 
         # Initialize decision engine
         self.decision_engine = DecisionEngine(config, self.data_provider)
@@ -161,8 +177,14 @@ class FinanceFeedbackEngine:
                 try:
                     self.memory_engine = PortfolioMemoryEngine.load_from_disk(memory_path)
                     logger.info(f"Loaded portfolio memory from {memory_path}")
-                except Exception as e:
+                except (FileNotFoundError, PermissionError) as e:
                     logger.warning(f"Failed to load portfolio memory: {e}, starting fresh")
+                    self.memory_engine = PortfolioMemoryEngine(config)
+                except MemoryError as e:
+                    logger.warning(f"Failed to load portfolio memory due to memory error: {e}, starting fresh")
+                    self.memory_engine = PortfolioMemoryEngine(config)
+                except Exception as e:
+                    logger.warning(f"Unexpected error loading portfolio memory: {e}, starting fresh", exc_info=True)
                     self.memory_engine = PortfolioMemoryEngine(config)
             else:
                 self.memory_engine = PortfolioMemoryEngine(config)
@@ -225,9 +247,13 @@ class FinanceFeedbackEngine:
                 "Monitoring context auto-enabled - "
                 "AI has position awareness by default"
             )
+        except ImportError as e:
+            logger.warning(
+                "Could not auto-enable monitoring context due to import error: %s", e
+            )
         except Exception as e:
             logger.warning(
-                "Could not auto-enable monitoring context: %s", e
+                "Could not auto-enable monitoring context: %s", e, exc_info=True
             )
 
     def _auto_start_trade_monitor(self):
@@ -253,15 +279,15 @@ class FinanceFeedbackEngine:
                 oanda_creds = None
                 try:
                     av_key = providers_cfg.get('alpha_vantage', {}).get('api_key')
-                except Exception:
+                except (AttributeError, TypeError):
                     av_key = None
                 try:
                     coinbase_creds = providers_cfg.get('coinbase', {}).get('credentials')
-                except Exception:
+                except (AttributeError, TypeError):
                     coinbase_creds = None
                 try:
                     oanda_creds = providers_cfg.get('oanda', {}).get('credentials')
-                except Exception:
+                except (AttributeError, TypeError):
                     oanda_creds = None
 
                 unified_dp = UnifiedDataProvider(
@@ -271,7 +297,7 @@ class FinanceFeedbackEngine:
                     config=self.config
                 )
                 timeframe_agg = TimeframeAggregator(unified_dp)
-            except Exception as e:
+            except ImportError as e:
                 logger.warning(f"Unified/timeframe providers unavailable for monitor: {e}")
 
             self.trade_monitor = TradeMonitor(
@@ -289,7 +315,7 @@ class FinanceFeedbackEngine:
                 self._monitor_manual_cli
             )
         except Exception as e:
-            logger.warning(f"Failed to auto-start TradeMonitor: {e}")
+            logger.warning(f"Failed to auto-start TradeMonitor: {e}", exc_info=True)
 
     def enable_monitoring_integration(
         self,
@@ -367,8 +393,10 @@ class FinanceFeedbackEngine:
                     portfolio.get('total_value_usd', 0),
                     portfolio.get('num_assets', 0)
                 )
+            except (AttributeError, TypeError) as e:
+                logger.warning("Could not fetch portfolio breakdown due to data format error: %s", e)
             except Exception as e:
-                logger.warning("Could not fetch portfolio breakdown: %s", e)
+                logger.warning("Could not fetch portfolio breakdown: %s", e, exc_info=True)
 
         # Get memory context if enabled
         memory_context = None
@@ -496,9 +524,17 @@ class FinanceFeedbackEngine:
 
             # Execute trade under circuit breaker protection
             result = breaker.call_sync(self.trading_platform.execute_trade, decision)
-        except Exception as e:
+        except TradingError as e:
             # Log and update decision with failure
             logger.error(f"Trade execution failed: {e}")
+            decision['executed'] = False
+            decision['execution_time'] = datetime.utcnow().isoformat()
+            decision['execution_result'] = {'success': False, 'error': str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+        except Exception as e:
+            # Log and update decision with failure
+            logger.error(f"Trade execution failed: {e}", exc_info=True)
             decision['executed'] = False
             decision['execution_time'] = datetime.utcnow().isoformat()
             decision['execution_result'] = {'success': False, 'error': str(e)}
@@ -704,7 +740,7 @@ class FinanceFeedbackEngine:
                         account_value = float(balances) if balances else 0.0
                     risk_frac = (entry_val / account_value) if account_value > 0 else 0.0
                     risk_penalty = max(0.1, 1.0 - risk_frac)
-                except Exception:
+                except (ZeroDivisionError, TypeError, ValueError):
                     risk_penalty = 1.0
 
                 # Final normalized performance metric
@@ -717,10 +753,14 @@ class FinanceFeedbackEngine:
                         perf_metric
                     )
                     logger.info("Ensemble weights updated from trade outcome")
+                except (AttributeError, TypeError) as e:
+                    logger.warning(f"Failed to update ensemble weights due to data format error: {e}")
                 except Exception as e:
-                    logger.warning(f"Failed to update ensemble weights: {e}")
-        except Exception as e:
+                    logger.warning(f"Failed to update ensemble weights: {e}", exc_info=True)
+        except (AttributeError, TypeError) as e:
             logger.debug(f"No ensemble manager available or learning update skipped: {e}")
+        except Exception as e:
+            logger.debug(f"No ensemble manager available or learning update skipped: {e}", exc_info=True)
 
         return outcome.to_dict()
 
@@ -814,7 +854,7 @@ class FinanceFeedbackEngine:
                     await close_result
                 logger.info("Data provider resources closed successfully")
         except Exception as e:
-            logger.error(f"Error during engine cleanup: {e}")
+            logger.error(f"Error during engine cleanup: {e}", exc_info=True)
 
     async def __aenter__(self):
         """Async context manager entry."""

@@ -22,12 +22,16 @@ from pydantic import BaseModel, Field, validator
 
 from ..core import FinanceFeedbackEngine
 from ..agent.trading_loop_agent import TradingLoopAgent, AgentState
-from .dependencies import get_engine
+from .dependencies import get_engine, verify_api_key
 
 logger = logging.getLogger(__name__)
 
 # Router for bot control endpoints
-bot_control_router = APIRouter(prefix="/api/v1/bot", tags=["bot-control"])
+bot_control_router = APIRouter(
+    prefix="/api/v1/bot",
+    tags=["bot-control"],
+    dependencies=[Depends(verify_api_key)],
+)
 
 # Global agent instance management
 _agent_instance: Optional[TradingLoopAgent] = None
@@ -160,8 +164,9 @@ async def start_agent(
             # Create config from request
             config = engine.config.copy()
 
+            config['agent'] = config.get('agent', {})
+
             if request.asset_pairs:
-                config['agent'] = config.get('agent', {})
                 config['agent']['asset_pairs'] = request.asset_pairs
 
             if request.take_profit:
@@ -276,39 +281,42 @@ async def emergency_stop(
             # Force stop agent
             if _agent_task is not None:
                 _agent_task.cancel()
+                try:
+                    await _agent_task
+                except asyncio.CancelledError:
+                    pass
                 _agent_instance = None
                 _agent_task = None
 
-        # Close positions if requested
-        closed_positions = []
-        if close_positions and hasattr(engine, 'platform'):
-            logger.warning("Closing all open positions...")
+            # Close positions if requested
+            closed_positions = []
+            if close_positions and hasattr(engine, 'platform'):
+                logger.warning("Closing all open positions...")
 
-            # Get open positions
-            if hasattr(engine.platform, 'get_portfolio_breakdown'):
-                breakdown = engine.platform.get_portfolio_breakdown()
-                positions = breakdown.get('positions', [])
+                # Get open positions
+                if hasattr(engine.platform, 'get_portfolio_breakdown'):
+                    breakdown = engine.platform.get_portfolio_breakdown()
+                    positions = breakdown.get('positions', [])
 
-                for position in positions:
-                    try:
-                        # Execute close trade
-                        result = engine.platform.execute_trade({
-                            'asset_pair': position['asset_pair'],
-                            'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
-                            'size': position.get('size', 0),
-                            'order_type': 'MARKET'
-                        })
-                        closed_positions.append(result)
-                    except Exception as e:
-                        logger.error(f"Failed to close position {position}: {e}")
+                    for position in positions:
+                        try:
+                            # Execute close trade
+                            result = engine.platform.execute_trade({
+                                'asset_pair': position['asset_pair'],
+                                'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
+                                'size': position.get('size', 0),
+                                'order_type': 'MARKET'
+                            })
+                            closed_positions.append(result)
+                        except Exception as e:
+                            logger.error(f"Failed to close position {position}: {e}")
 
-        return {
-            "status": "emergency_stopped",
-            "message": "Emergency stop executed",
-            "closed_positions": len(closed_positions),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
+            return {
+                "status": "emergency_stopped",
+                "message": "Emergency stop executed",
+                "closed_positions": len(closed_positions),
+                "timestamp": datetime.utcnow().isoformat()
+            }
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
         raise HTTPException(
@@ -496,8 +504,14 @@ async def execute_manual_trade(
         if request.take_profit:
             trade_params['take_profit'] = request.take_profit
 
+        if not hasattr(engine, 'platform'):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Trading platform is not available"
+            )
+
         # Execute trade
-        result = engine.platform.execute_trade(trade_params)
+        result = await engine.platform.execute_trade(trade_params)
 
         logger.info(f"✅ Manual trade executed: {result}")
 
@@ -563,11 +577,18 @@ async def close_position(
                 detail=f"Position {position_id} not found"
             )
 
+        size = position.get('size')
+        if not size or size <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Position {position_id} has invalid size: {size}"
+            )
+
         # Execute closing trade
         result = engine.platform.execute_trade({
             'asset_pair': position['asset_pair'],
             'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
-            'size': position.get('size', 0),
+            'size': size,
             'order_type': 'MARKET'
         })
 

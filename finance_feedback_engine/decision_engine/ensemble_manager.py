@@ -1,5 +1,5 @@
 """
-Ensemble decision manager with weighted voting and adaptive learning.
+Simplified Ensemble decision manager with weighted voting and adaptive learning.
 
 Implements state-of-the-art ensemble techniques inspired by:
 - Adaptive Ensemble Learning (Mungoli, 2023)
@@ -11,16 +11,16 @@ from typing import Dict, List, Any, Tuple, Optional
 import logging
 import numpy as np
 from datetime import datetime
-import json
-from pathlib import Path
 from copy import deepcopy
-from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
 from ..exceptions import InsufficientProvidersError
+from .voting_strategies import VotingStrategies
+from .performance_tracker import PerformanceTracker
+from .two_phase_aggregator import TwoPhaseAggregator
+from .debate_manager import DebateManager
 
 
 class EnsembleDecisionManager:
@@ -140,64 +140,15 @@ class EnsembleDecisionManager:
         self.local_dominance_target = ensemble_config.get('local_dominance_target', 0.6)
         self.min_local_providers = ensemble_config.get('min_local_providers', 1)
 
-        # Performance tracking
-        self.performance_history = self._load_performance_history()
-
-        # Initialize meta-learner for stacking ensemble
-        self.meta_learner = None
-        self.meta_feature_scaler = None
-        if self.voting_strategy == 'stacking':
-            self._initialize_meta_learner()
+        # Initialize specialized components
+        self.voting_strategies = VotingStrategies(self.voting_strategy)
+        self.performance_tracker = PerformanceTracker(config, self.learning_rate)
+        self.two_phase_aggregator = TwoPhaseAggregator(config)
+        self.debate_manager = DebateManager(self.debate_providers, self.debate_mode)
 
         logger.info(
             f"Local-First Ensemble initialized. Target Local Dominance: {self.local_dominance_target:.0%}"
         )
-
-    def _initialize_meta_learner(self):
-        """
-        Initializes the meta-learner model for the stacking ensemble.
-
-        It tries to load a trained model from 'meta_learner_model.json'.
-        If the file doesn't exist, it falls back to hardcoded mock parameters.
-        """
-        logger.info("Initializing meta-learner for stacking ensemble.")
-        self.meta_learner = LogisticRegression()
-        self.meta_feature_scaler = StandardScaler()
-
-        model_path = Path(__file__).parent / 'meta_learner_model.json'
-
-        if model_path.exists():
-            try:
-                with open(model_path, 'r') as f:
-                    model_data = json.load(f)
-
-                self.meta_learner.classes_ = np.array(model_data['classes'])
-                self.meta_learner.coef_ = np.array(model_data['coef'])
-                self.meta_learner.intercept_ = np.array(model_data['intercept'])
-
-                self.meta_feature_scaler.mean_ = np.array(model_data['scaler_mean'])
-                self.meta_feature_scaler.scale_ = np.array(model_data['scaler_scale'])
-
-                logger.info(f"Meta-learner loaded from {model_path}")
-                return
-            except (json.JSONDecodeError, KeyError, IOError) as e:
-                logger.warning(
-                    f"Failed to load trained meta-learner model from {model_path}: {e}. "
-                    "Falling back to mock parameters."
-                )
-
-        # Fallback to mock-trained parameters if file doesn't exist or is invalid
-        logger.info("Using mock-trained parameters for meta-learner.")
-        self.meta_learner.classes_ = np.array(['BUY', 'HOLD', 'SELL'])
-        self.meta_learner.coef_ = np.array([
-            [2.0, -1.0, -1.0, 0.8, -0.5],
-            [-1.0, -1.0, 2.0, -0.2, 0.8],
-            [-1.0, 2.0, -1.0, 0.8, -0.5],
-        ])
-        self.meta_learner.intercept_ = np.array([0.0, 0.0, 0.0])
-        self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
-        self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
-        logger.info("Meta-learner initialized with mock-trained parameters for updated features.")
 
     @property
     def provider_weights(self) -> Dict[str, float]:
@@ -445,24 +396,6 @@ class EnsembleDecisionManager:
         """
         Two-phase ensemble aggregation with smart premium API escalation.
 
-        OPTIMIZED: Phase 1 and Phase 2 now run in parallel for improved latency.
-        Premium provider is queried simultaneously with free providers.
-
-        Phase 1: Query free-tier providers (5 Ollama + Qwen)
-          - Require minimum 3 successful responses (quorum)
-          - Calculate weighted consensus and agreement rate
-
-        Phase 2: Escalate to premium providers if:
-          - Phase 1 confidence < threshold (default 75%)
-          - Phase 1 agreement < threshold (default 60%)
-          - High-stakes position (size > threshold)
-
-        Premium provider selection by asset type:
-          - Crypto -> Copilot CLI
-          - Forex/Stock -> Gemini
-          - Fallback -> Codex (if primary fails)
-          - Tiebreaker -> Codex (if primary disagrees with Phase 1)
-
         Args:
             prompt: Decision prompt for AI providers
             asset_pair: Asset pair being analyzed
@@ -475,96 +408,13 @@ class EnsembleDecisionManager:
         Raises:
             InsufficientProvidersError: If Phase 1 quorum not met
         """
-        from ..decision_engine.provider_tiers import (
-            get_free_providers,
-            get_premium_provider_for_asset,
-            get_fallback_provider
+        # Use the TwoPhaseAggregator component
+        result = await self.two_phase_aggregator.aggregate_two_phase(
+            prompt, asset_pair, market_data, query_function
         )
-        from ..utils.cost_tracker import log_premium_call, check_budget
 
-        # ===== EARLY ASSET_TYPE VALIDATION AND NORMALIZATION =====
-        # Define canonical asset types (must match provider_tiers.py expectations)
-        CANONICAL_ASSET_TYPES = {'crypto', 'forex', 'stock'}
-
-        # Normalization mapping: common variations -> canonical type
-        ASSET_TYPE_NORMALIZATION = {
-            'cryptocurrency': 'crypto',
-            'cryptocurrencies': 'crypto',
-            'digital_currency': 'crypto',
-            'digital': 'crypto',
-            'btc': 'crypto',
-            'eth': 'crypto',
-            'foreign_exchange': 'forex',
-            'fx': 'forex',
-            'currency': 'forex',
-            'currency_pair': 'forex',
-            'equities': 'stock',
-            'equity': 'stock',
-            'shares': 'stock',
-            'stocks': 'stock',
-        }
-
-        # Extract raw asset_type from market_data
-        raw_asset_type = market_data.get('type', None)
-
-        # Normalize asset_type
-        if raw_asset_type is None:
-            logger.warning(
-                f"Asset type missing in market_data for {asset_pair}. "
-                "Defaulting to 'crypto' for safe escalation."
-            )
-            normalized_asset_type = 'crypto'  # Safe default
-        elif isinstance(raw_asset_type, str):
-            raw_lower = raw_asset_type.lower().strip()
-
-            # Check if already canonical
-            if raw_lower in CANONICAL_ASSET_TYPES:
-                normalized_asset_type = raw_lower
-            # Check if it's a known variation
-            elif raw_lower in ASSET_TYPE_NORMALIZATION:
-                normalized_asset_type = ASSET_TYPE_NORMALIZATION[raw_lower]
-                logger.info(
-                    f"Asset type normalized: '{raw_asset_type}' -> '{normalized_asset_type}' "
-                    f"for {asset_pair}"
-                )
-            # Handle unknown/invalid asset types
-            else:
-                logger.error(
-                    f"Invalid asset_type '{raw_asset_type}' for {asset_pair}. "
-                    f"Expected one of {CANONICAL_ASSET_TYPES} or variations. "
-                    "Defaulting to 'crypto' for safe escalation."
-                )
-                normalized_asset_type = 'crypto'  # Safe default
-        else:
-            logger.error(
-                f"Asset type is not a string (type: {type(raw_asset_type)}) for {asset_pair}. "
-                "Defaulting to 'crypto' for safe escalation."
-            )
-            normalized_asset_type = 'crypto'  # Safe default
-
-        # Final validation: ensure normalized type is in canonical set
-        if normalized_asset_type not in CANONICAL_ASSET_TYPES:
-            logger.error(
-                f"CRITICAL: Normalized asset_type '{normalized_asset_type}' is not canonical! "
-                f"This should never happen. Aborting escalation for {asset_pair}."
-            )
-            raise ValueError(
-                f"Asset type validation failed: '{normalized_asset_type}' is not in {CANONICAL_ASSET_TYPES}. "
-                "Cannot proceed with premium escalation."
-            )
-
-        logger.info(f"Asset type validated for {asset_pair}: '{normalized_asset_type}'")
-
-        # Update market_data with normalized type for downstream use
-        market_data = market_data.copy()  # Avoid mutating caller's dict
-        market_data['type'] = normalized_asset_type
-
-        # Get two-phase configuration
-        two_phase_config = self.config.get('ensemble', {}).get('two_phase', {})
-        enabled = two_phase_config.get('enabled', False)
-
-        # If two-phase not enabled, use regular aggregation
-        if not enabled:
+        # If two-phase mode is not enabled, return None to indicate standard aggregation should be used
+        if result is None:
             logger.info("Two-phase mode not enabled, using standard aggregation")
             # Query all enabled providers and aggregate
             provider_decisions = {}
@@ -583,203 +433,48 @@ class EnsembleDecisionManager:
 
             return await self.aggregate_decisions(provider_decisions, failed_providers)
 
-        # ===== PARALLEL PHASE 1 & PHASE 2 EXECUTION =====
-        logger.info(f"=== TWO-PHASE: Querying all providers in parallel for {asset_pair} ===")
+        # Extract the results from the two-phase aggregator
+        phase1_result = result['phase1_result']
+        phase2_decisions = result['phase2_decisions']
+        phase2_failed = result['phase2_failed']
+        phase2_primary_used = result['phase2_primary_used']
+        phase2_fallback_used = result['phase2_fallback_used']
+        codex_tiebreaker_used = result['codex_tiebreaker_used']
+        normalized_asset_type = result['normalized_asset_type']
 
-        free_tier = get_free_providers()
-        phase1_quorum = two_phase_config.get('phase1_min_quorum', 3)
-
-        # Get premium provider for asset type
-        primary_provider = get_premium_provider_for_asset(normalized_asset_type)
-        fallback_provider = get_fallback_provider()
-        codex_as_tiebreaker = two_phase_config.get('codex_as_tiebreaker', True)
-
-        # Create tasks for all providers (Phase 1 + Phase 2)
-        all_providers = free_tier + [primary_provider]  # Phase 1 + Phase 2 providers
-        tasks = [
-            query_function(provider, prompt)
-            for provider in all_providers
-        ]
-
-        # Execute all queries in parallel
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Process Phase 1 results (free tier)
-        phase1_decisions = {}
-        phase1_failed = []
-
-        for i, provider in enumerate(free_tier):
-            result = results[i]
-            if isinstance(result, Exception):
-                logger.error(f"Phase 1: {provider} failed: {result}")
-                phase1_failed.append(provider)
-            else:
-                decision = result
-                if self._is_valid_provider_response(decision, provider):
-                    phase1_decisions[provider] = decision
-                    logger.info(f"Phase 1: {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
-                else:
-                    logger.warning(f"Phase 1: {provider} returned invalid response")
-                    phase1_failed.append(provider)
-
-        # Check Phase 1 quorum
-        phase1_success_count = len(phase1_decisions)
-
-        if phase1_success_count < phase1_quorum:
-            logger.error(
-                f"Phase 1 quorum failure: {phase1_success_count}/{len(free_tier)} "
-                f"succeeded (need ≥{phase1_quorum})"
-            )
-            # Get the providers that actually succeeded
-            providers_succeeded = list(phase1_decisions.keys())
-            providers_failed = phase1_failed
-
-            raise InsufficientProvidersError(
-                f"Phase 1 quorum not met: {phase1_success_count}/{len(free_tier)} "
-                f"providers succeeded (required: {phase1_quorum})",
-                providers_failed=providers_failed,
-                providers_succeeded=providers_succeeded
-            )
+        # Get Phase 1 decision from provider decisions
+        phase1_decisions = phase1_result['provider_decisions']
+        phase1_failed = phase1_result['failed_providers']
 
         # Aggregate Phase 1 decisions
-        phase1_result = await self.aggregate_decisions(
+        phase1_decision = await self.aggregate_decisions(
             provider_decisions=phase1_decisions,
             failed_providers=phase1_failed
         )
 
-        phase1_action = phase1_result['action']
-        phase1_confidence = phase1_result['confidence']
-        phase1_agreement = phase1_result['ensemble_metadata']['agreement_score']
+        phase1_action = phase1_decision['action']
+        phase1_confidence = phase1_decision['confidence']
+        phase1_agreement = phase1_decision['ensemble_metadata']['agreement_score']
 
         logger.info(
             f"Phase 1 result: {phase1_action} "
             f"(confidence={phase1_confidence}%, agreement={phase1_agreement:.2f})"
         )
 
-        # ===== PROCESS PHASE 2 RESULTS (ALREADY COMPLETED FROM PARALLEL EXECUTION) =====
-        confidence_threshold = two_phase_config.get('phase1_confidence_threshold', 0.75)
-        agreement_threshold = two_phase_config.get('phase1_agreement_threshold', 0.6)
-        require_premium_for_high_stakes = two_phase_config.get('require_premium_for_high_stakes', True)
-        high_stakes_threshold = two_phase_config.get('high_stakes_position_threshold', 1000)
-        max_premium_calls = two_phase_config.get('max_premium_calls_per_day', 50)
-
-        # Determine if escalation needed (for metadata)
-        low_confidence = (phase1_confidence / 100.0) < confidence_threshold
-        low_agreement = phase1_agreement < agreement_threshold
-        high_stakes = (
-            require_premium_for_high_stakes and
-            phase1_result.get('amount', 0) > high_stakes_threshold
-        )
-
-        escalate = low_confidence or low_agreement or high_stakes
-
-        # Determine escalation reason
-        escalation_reasons = []
-        if low_confidence:
-            escalation_reasons.append(f"low_confidence({phase1_confidence}%<{confidence_threshold*100}%)")
-        if low_agreement:
-            escalation_reasons.append(f"low_agreement({phase1_agreement:.2f}<{agreement_threshold})")
-        if high_stakes:
-            escalation_reasons.append(f"high_stakes(${phase1_result.get('amount', 0)}>${high_stakes_threshold})")
-
-        escalation_reason = ", ".join(escalation_reasons) if escalation_reasons else None
-
-        # Check budget before escalating
-        if escalate and not check_budget(max_premium_calls):
-            logger.warning("Phase 2 escalation blocked: daily premium call budget exceeded")
-            escalate = False
-            escalation_reason = "budget_exceeded"
-
-        # Process the premium provider result (from parallel execution)
-        phase2_decisions = {}
-        phase2_primary_used = None
-        phase2_fallback_used = False
-        codex_tiebreaker_used = False
-        phase2_failed = []
-
-        # Get the result for the primary premium provider (was executed in parallel)
-        primary_provider_result_idx = len(free_tier)  # Index of primary provider in all_providers list
-        primary_provider_result = results[primary_provider_result_idx]
-
-        if isinstance(primary_provider_result, Exception):
-            logger.error(f"Phase 2: {primary_provider} failed: {primary_provider_result}")
-            phase2_failed.append(primary_provider)
-
-            # Fallback to Codex - check if it was also in parallel execution (depends on config)
-            # For now, execute fallback synchronously since it's only used in specific scenarios
-            if codex_as_tiebreaker:  # Only use if tiebreaker is needed and primary fails
-                try:
-                    fallback_decision = await query_function(fallback_provider, prompt)
-                    if self._is_valid_provider_response(fallback_decision, fallback_provider):
-                        phase2_decisions[fallback_provider] = fallback_decision
-                        phase2_fallback_used = True
-                        logger.info(
-                            f"Phase 2: {fallback_provider} (fallback) -> {fallback_decision.get('action')} "
-                            f"({fallback_decision.get('confidence')}%)"
-                        )
-                    else:
-                        logger.warning(f"Phase 2: {fallback_provider} (fallback) returned invalid response")
-                        phase2_failed.append(fallback_provider)
-                except Exception as e2:
-                    logger.error(f"Phase 2: {fallback_provider} (fallback) also failed: {e2}")
-                    phase2_failed.append(fallback_provider)
-        else:
-            primary_decision = primary_provider_result
-            if self._is_valid_provider_response(primary_decision, primary_provider):
-                phase2_decisions[primary_provider] = primary_decision
-                phase2_primary_used = primary_provider
-                logger.info(
-                    f"Phase 2: {primary_provider} -> {primary_decision.get('action')} "
-                    f"({primary_decision.get('confidence')}%)"
-                )
-
-                # Check if Codex tiebreaker needed (primary disagrees with Phase 1)
-                if codex_as_tiebreaker and primary_decision.get('action') != phase1_action:
-                    logger.info(f"Phase 2: {primary_provider} disagrees with Phase 1 -> calling Codex tiebreaker")
-                    try:
-                        codex_decision = await query_function(fallback_provider, prompt)
-                        if self._is_valid_provider_response(codex_decision, fallback_provider):
-                            phase2_decisions[fallback_provider] = codex_decision
-                            codex_tiebreaker_used = True
-                            logger.info(
-                                f"Phase 2: {fallback_provider} (tiebreaker) -> {codex_decision.get('action')} "
-                                f"({codex_decision.get('confidence')}%)"
-                            )
-                    except Exception as e:
-                        logger.warning(f"Phase 2: Codex tiebreaker failed: {e}")
-            else:
-                logger.warning(f"Phase 2: {primary_provider} returned invalid response")
-                phase2_failed.append(primary_provider)
-
-        # Log premium API calls
-        log_premium_call(
-            asset=asset_pair,
-            asset_type=normalized_asset_type,
-            phase='phase2',
-            primary_provider=phase2_primary_used,
-            codex_called=codex_tiebreaker_used or phase2_fallback_used,
-            escalation_reason=escalation_reason
-        )
-
         # If Phase 2 completely failed, use Phase 1 result
         if not phase2_decisions:
             logger.warning("Phase 2 complete failure - using Phase 1 result")
-            phase1_result['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
-            phase1_result['ensemble_metadata']['phase1_action'] = phase1_action
-            phase1_result['ensemble_metadata']['phase1_confidence'] = phase1_confidence
-            phase1_result['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
-            phase1_result['ensemble_metadata']['phase2_triggered'] = True
-            phase1_result['ensemble_metadata']['phase2_primary_provider'] = primary_provider
-            phase1_result['ensemble_metadata']['phase2_fallback_used'] = True
-            phase1_result['ensemble_metadata']['phase2_failed'] = True
-            phase1_result['ensemble_metadata']['escalation_reason'] = escalation_reason
-            return phase1_result
+            phase1_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
+            phase1_decision['ensemble_metadata']['phase1_action'] = phase1_action
+            phase1_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
+            phase1_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
+            phase1_decision['ensemble_metadata']['phase2_triggered'] = True
+            phase1_decision['ensemble_metadata']['phase2_primary_provider'] = result.get('phase2_primary_used')
+            phase1_decision['ensemble_metadata']['phase2_fallback_used'] = True
+            phase1_decision['ensemble_metadata']['phase2_failed'] = True
+            return phase1_decision
 
-        # Merge Phase 1 + Phase 2 decisions using the configured voting/weighting strategy
-        # If true equal weighting is required, override aggregate_decisions by computing
-        # equal weights for each provider (e.g., adjusted_weights dict mapping each provider
-        # to 1/num_providers) and passing them when calling aggregate_decisions;
-        # ensure failed provider list is still passed through unchanged
+        # Merge Phase 1 + Phase 2 decisions
         all_decisions = {**phase1_decisions, **phase2_decisions}
         all_failed = phase1_failed + phase2_failed
 
@@ -802,7 +497,6 @@ class EnsembleDecisionManager:
         final_decision['ensemble_metadata']['phase2_primary_provider'] = phase2_primary_used
         final_decision['ensemble_metadata']['phase2_fallback_used'] = phase2_fallback_used
         final_decision['ensemble_metadata']['codex_tiebreaker'] = codex_tiebreaker_used
-        final_decision['ensemble_metadata']['escalation_reason'] = escalation_reason
         final_decision['ensemble_metadata']['decision_changed_by_premium'] = decision_changed
 
         logger.info(
@@ -831,62 +525,10 @@ class EnsembleDecisionManager:
         Returns:
             Synthesized decision with debate metadata
         """
-        # Validate all inputs
-        failed_debate_providers = failed_debate_providers or []
-        final_decision = deepcopy(judge_decision)
-
-        # Add debate-specific metadata
-        final_decision['debate_metadata'] = {
-            'bull_case': bull_case,
-            'bear_case': bear_case,
-            'judge_reasoning': judge_decision.get('reasoning', ''),
-            'debate_providers': self.debate_providers,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-
-        # Add ensemble metadata for consistency
-        failed_roles = [role for role, provider in self.debate_providers.items() if provider in failed_debate_providers]
-        providers_used = [p for p in self.debate_providers.values() if p not in failed_debate_providers]
-        num_total = len(self.debate_providers)
-        num_active = len(providers_used)
-        failure_rate = len(failed_debate_providers) / num_total if num_total > 0 else 0.0
-
-        provider_decisions = {}
-        if 'bull' not in failed_roles:
-            provider_decisions[self.debate_providers['bull']] = bull_case
-        if 'bear' not in failed_roles:
-            provider_decisions[self.debate_providers['bear']] = bear_case
-        if 'judge' not in failed_roles:
-            provider_decisions[self.debate_providers['judge']] = judge_decision
-
-        final_decision['ensemble_metadata'] = {
-            'providers_used': providers_used,
-            'providers_failed': failed_debate_providers,
-            'num_active': num_active,
-            'num_total': num_total,
-            'failure_rate': failure_rate,
-            'original_weights': {},
-            'adjusted_weights': {},
-            'weight_adjustment_applied': False,
-            'voting_strategy': 'debate',
-            'fallback_tier': 'none',
-            'provider_decisions': provider_decisions,
-            'agreement_score': 1.0,  # Judge makes final decision
-            'confidence_variance': 0.0,
-            'confidence_adjusted': False,
-            'local_priority_applied': False,
-            'local_models_used': [],
-            'debate_mode': True,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-
-        logger.info(
-            f"Debate decision: {final_decision['action']} "
-            f"({final_decision['confidence']}%) - "
-            f"Judge: {self.debate_providers['judge']}"
+        # Use the DebateManager component
+        return self.debate_manager.synthesize_debate_decision(
+            bull_case, bear_case, judge_decision, failed_debate_providers
         )
-
-        return final_decision
 
     def _adjust_weights_for_active_providers(
         self,
@@ -937,25 +579,12 @@ class EnsembleDecisionManager:
         """
         fallback_tier = self.voting_strategy
 
+        # Try primary voting strategy using the VotingStrategies component
         try:
-            # Tier 1: Primary voting strategy
-            if self.voting_strategy == 'weighted':
-                decision = self._weighted_voting(
-                    providers, actions, confidences, reasonings, amounts,
-                    adjusted_weights
-                )
-            elif self.voting_strategy == 'majority':
-                decision = self._majority_voting(
-                    providers, actions, confidences, reasonings, amounts
-                )
-            elif self.voting_strategy == 'stacking':
-                decision = self._stacking_ensemble(
-                    providers, actions, confidences, reasonings, amounts
-                )
-            else:
-                raise ValueError(
-                    f"Unknown voting strategy: {self.voting_strategy}"
-                )
+            decision = self.voting_strategies.apply_voting_strategy(
+                providers, actions, confidences, reasonings, amounts,
+                self.base_weights, adjusted_weights
+            )
 
             # Validate primary result
             if self._validate_decision(decision):
@@ -975,20 +604,31 @@ class EnsembleDecisionManager:
                 f"Primary strategy failed: {e}, attempting fallback"
             )
 
-        # Tier 2: Majority voting fallback
+        # Tier 2: Majority voting fallback using the VotingStrategies component
         if len(providers) >= 2:
             try:
                 fallback_tier = 'majority_fallback'
                 logger.info("Using majority voting fallback")
-                decision = self._majority_voting(
-                    providers, actions, confidences, reasonings, amounts
+                # Temporarily set voting strategy to majority
+                original_strategy = self.voting_strategy
+                self.voting_strategy = 'majority'
+                self.voting_strategies.voting_strategy = 'majority'
+
+                decision = self.voting_strategies.apply_voting_strategy(
+                    providers, actions, confidences, reasonings, amounts,
+                    self.base_weights, adjusted_weights
                 )
+
+                # Restore original strategy
+                self.voting_strategy = original_strategy
+                self.voting_strategies.voting_strategy = original_strategy
+
                 if self._validate_decision(decision):
                     return decision, fallback_tier
             except Exception as e:
                 logger.warning(f"Majority fallback failed: {e}")
 
-        # Tier 3: Simple averaging fallback
+        # Tier 3: Simple averaging fallback (using the existing method for now since it's not in the new class)
         if len(providers) >= 2:
             try:
                 fallback_tier = 'average_fallback'
@@ -1500,87 +1140,34 @@ class EnsembleDecisionManager:
         if not self.adaptive_learning:
             return
 
-        # Update performance history
-        for provider, decision in provider_decisions.items():
-            was_correct = decision.get('action') == actual_outcome
+        # Use the PerformanceTracker component
+        self.performance_tracker.update_provider_performance(
+            provider_decisions, actual_outcome, performance_metric, self.enabled_providers
+        )
 
-            if provider not in self.performance_history:
-                self.performance_history[provider] = {
-                    'correct': 0,
-                    'total': 0,
-                    'avg_performance': 0.0
-                }
-
-            history = self.performance_history[provider]
-            history['total'] += 1
-            if was_correct:
-                history['correct'] += 1
-
-            # Update average performance
-            alpha = self.learning_rate
-            history['avg_performance'] = (
-                (1 - alpha) * history['avg_performance'] +
-                alpha * performance_metric
-            )
-
-        # Recalculate weights based on accuracy
-        self._recalculate_weights()
-
-        # Save updated history
-        self._save_performance_history()
+        # Update the base weights with the newly calculated values
+        new_weights = self.performance_tracker.calculate_adaptive_weights(
+            self.enabled_providers, self.base_weights
+        )
+        self.base_weights = new_weights
 
     def _recalculate_weights(self) -> None:
         """Recalculate provider weights based on historical accuracy."""
-        accuracies = {}
-
-        for provider in self.enabled_providers:
-            if provider in self.performance_history:
-                history = self.performance_history[provider]
-                if history['total'] > 0:
-                    accuracy = history['correct'] / history['total']
-                    accuracies[provider] = accuracy
-                else:
-                    accuracies[provider] = 0.5  # Default
-            else:
-                accuracies[provider] = 0.5  # Default for new providers
-
-        # Normalize to weights
-        total_accuracy = sum(accuracies.values())
-        if total_accuracy > 0:
-            self.base_weights = {
-                p: acc / total_accuracy
-                for p, acc in accuracies.items()
-            }
-
-        logger.info(f"Updated base weights: {self.base_weights}")
+        # Use the PerformanceTracker component
+        new_weights = self.performance_tracker.calculate_adaptive_weights(
+            self.enabled_providers, self.base_weights
+        )
+        self.base_weights = new_weights
 
     def _load_performance_history(self) -> Dict[str, Any]:
         """Load provider performance history from disk."""
-        history_path = Path(
-            self.config.get('persistence', {}).get('storage_path', 'data')
-        ) / 'ensemble_history.json'
-
-        if history_path.exists():
-            try:
-                with open(history_path, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load performance history: {e}")
-
-        return {}
+        # Use the PerformanceTracker component
+        return self.performance_tracker._load_performance_history()
 
     def _save_performance_history(self) -> None:
         """Save provider performance history to disk."""
-        history_path = Path(
-            self.config.get('persistence', {}).get('storage_path', 'data')
-        ) / 'ensemble_history.json'
-
-        try:
-            history_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(history_path, 'w') as f:
-                json.dump(self.performance_history, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save performance history: {e}")
+        # Use the PerformanceTracker component
+        self.performance_tracker._save_performance_history()
 
     def get_provider_stats(self) -> Dict[str, Any]:
         """Get current provider statistics and weights."""
@@ -1588,17 +1175,10 @@ class EnsembleDecisionManager:
             'current_weights': self.base_weights,
             'enabled_providers': self.enabled_providers,
             'voting_strategy': self.voting_strategy,
-            'provider_performance': {}
         }
 
-        for provider, history in self.performance_history.items():
-            if history['total'] > 0:
-                accuracy = history['correct'] / history['total']
-                stats['provider_performance'][provider] = {
-                    'accuracy': f"{accuracy:.2%}",
-                    'total_decisions': history['total'],
-                    'correct_decisions': history['correct'],
-                    'avg_performance': f"{history['avg_performance']:.2f}%"
-                }
+        # Use the PerformanceTracker component
+        performance_stats = self.performance_tracker.get_provider_performance_stats()
+        stats.update(performance_stats)
 
         return stats
