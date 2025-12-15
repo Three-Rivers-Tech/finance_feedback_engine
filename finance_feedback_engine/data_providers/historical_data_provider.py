@@ -5,6 +5,7 @@ from typing import Optional, Union
 import logging
 import numpy as np
 from pathlib import Path
+import asyncio
 
 from .alpha_vantage_provider import AlphaVantageProvider
 from ..utils.financial_data_validator import FinancialDataValidator

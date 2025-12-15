@@ -1486,6 +1486,50 @@ def status(ctx):
 
 
 @cli.command()
+@click.pass_context
+def positions(ctx):
+    """Display active trading positions from the configured platform."""
+    try:
+        config = ctx.obj['config']
+        engine = FinanceFeedbackEngine(config)
+
+        platform = getattr(engine, 'trading_platform', None)
+        if platform is None:
+            console.print("[yellow]No trading platform configured.[/yellow]")
+            return
+
+        platform_name = platform.__class__.__name__
+        try:
+            positions_data = platform.get_active_positions()
+        except Exception as e:  # Surface platform errors cleanly
+            raise click.ClickException(f"Error fetching active positions: {e}")
+
+        positions_list = (positions_data or {}).get('positions', [])
+        if not positions_list:
+            console.print("No active positions found.")
+            return
+
+        console.print(f"[bold cyan]Active Trading Positions ({platform_name})[/bold cyan]")
+        for pos in positions_list:
+            product = pos.get('product_id') or pos.get('instrument') or pos.get('symbol') or 'UNKNOWN'
+            side = pos.get('side') or pos.get('position_type') or pos.get('direction') or 'UNKNOWN'
+            size = pos.get('contracts') or pos.get('units') or pos.get('size') or pos.get('quantity')
+            entry = pos.get('entry_price') or pos.get('average_price') or pos.get('price')
+            current = pos.get('current_price') or pos.get('mark_price') or pos.get('price')
+            unrealized = pos.get('unrealized_pnl') or pos.get('unrealized_pl') or pos.get('pnl')
+
+            console.print(
+                f"- {product}: {side} size={size} entry={entry} current={current} PnL={unrealized}"
+            )
+
+    except click.ClickException:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
+@cli.command()
 @click.option(
     '--confirm',
     is_flag=True,

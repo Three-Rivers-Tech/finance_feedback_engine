@@ -445,6 +445,9 @@ class EnsembleDecisionManager:
         """
         Two-phase ensemble aggregation with smart premium API escalation.
 
+        OPTIMIZED: Phase 1 and Phase 2 now run in parallel for improved latency.
+        Premium provider is queried simultaneously with free providers.
+
         Phase 1: Query free-tier providers (5 Ollama + Qwen)
           - Require minimum 3 successful responses (quorum)
           - Calculate weighted consensus and agreement rate
@@ -580,27 +583,44 @@ class EnsembleDecisionManager:
 
             return await self.aggregate_decisions(provider_decisions, failed_providers)
 
-        # ===== PHASE 1: Free Tier Providers =====
-        logger.info(f"=== PHASE 1: Querying free-tier providers for {asset_pair} ===")
+        # ===== PARALLEL PHASE 1 & PHASE 2 EXECUTION =====
+        logger.info(f"=== TWO-PHASE: Querying all providers in parallel for {asset_pair} ===")
 
         free_tier = get_free_providers()
         phase1_quorum = two_phase_config.get('phase1_min_quorum', 3)
 
+        # Get premium provider for asset type
+        primary_provider = get_premium_provider_for_asset(normalized_asset_type)
+        fallback_provider = get_fallback_provider()
+        codex_as_tiebreaker = two_phase_config.get('codex_as_tiebreaker', True)
+
+        # Create tasks for all providers (Phase 1 + Phase 2)
+        all_providers = free_tier + [primary_provider]  # Phase 1 + Phase 2 providers
+        tasks = [
+            query_function(provider, prompt)
+            for provider in all_providers
+        ]
+
+        # Execute all queries in parallel
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process Phase 1 results (free tier)
         phase1_decisions = {}
         phase1_failed = []
 
-        for provider in free_tier:
-            try:
-                decision = await query_function(provider, prompt)
+        for i, provider in enumerate(free_tier):
+            result = results[i]
+            if isinstance(result, Exception):
+                logger.error(f"Phase 1: {provider} failed: {result}")
+                phase1_failed.append(provider)
+            else:
+                decision = result
                 if self._is_valid_provider_response(decision, provider):
                     phase1_decisions[provider] = decision
                     logger.info(f"Phase 1: {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
                 else:
-                    phase1_failed.append(provider)
                     logger.warning(f"Phase 1: {provider} returned invalid response")
-            except Exception as e:
-                logger.error(f"Phase 1: {provider} failed: {e}")
-                phase1_failed.append(provider)
+                    phase1_failed.append(provider)
 
         # Check Phase 1 quorum
         phase1_success_count = len(phase1_decisions)
@@ -636,14 +656,14 @@ class EnsembleDecisionManager:
             f"(confidence={phase1_confidence}%, agreement={phase1_agreement:.2f})"
         )
 
-        # ===== PHASE 2 ESCALATION DECISION =====
+        # ===== PROCESS PHASE 2 RESULTS (ALREADY COMPLETED FROM PARALLEL EXECUTION) =====
         confidence_threshold = two_phase_config.get('phase1_confidence_threshold', 0.75)
         agreement_threshold = two_phase_config.get('phase1_agreement_threshold', 0.6)
         require_premium_for_high_stakes = two_phase_config.get('require_premium_for_high_stakes', True)
         high_stakes_threshold = two_phase_config.get('high_stakes_position_threshold', 1000)
         max_premium_calls = two_phase_config.get('max_premium_calls_per_day', 50)
 
-        # Determine if escalation needed
+        # Determine if escalation needed (for metadata)
         low_confidence = (phase1_confidence / 100.0) < confidence_threshold
         low_agreement = phase1_agreement < agreement_threshold
         high_stakes = (
@@ -670,35 +690,41 @@ class EnsembleDecisionManager:
             escalate = False
             escalation_reason = "budget_exceeded"
 
-        if not escalate:
-            logger.info("Phase 2 NOT triggered - using Phase 1 result")
-            phase1_result['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
-            phase1_result['ensemble_metadata']['phase1_action'] = phase1_action
-            phase1_result['ensemble_metadata']['phase1_confidence'] = phase1_confidence
-            phase1_result['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
-            phase1_result['ensemble_metadata']['phase2_triggered'] = False
-            phase1_result['ensemble_metadata']['escalation_reason'] = None
-            return phase1_result
-
-        # ===== PHASE 2: Premium Provider Escalation =====
-        logger.info(f"=== PHASE 2: Escalating to premium provider (reason: {escalation_reason}) ===")
-
-        # Use the normalized asset_type (already validated above)
-        asset_type = normalized_asset_type
-        primary_provider = get_premium_provider_for_asset(asset_type)
-        fallback_provider = get_fallback_provider()
-        codex_as_tiebreaker = two_phase_config.get('codex_as_tiebreaker', True)
-
-        logger.info(f"Asset type: {asset_type} -> Primary provider: {primary_provider}")
-
+        # Process the premium provider result (from parallel execution)
         phase2_decisions = {}
         phase2_primary_used = None
         phase2_fallback_used = False
         codex_tiebreaker_used = False
+        phase2_failed = []
 
-        # Try primary provider
-        try:
-            primary_decision = await query_function(primary_provider, prompt)
+        # Get the result for the primary premium provider (was executed in parallel)
+        primary_provider_result_idx = len(free_tier)  # Index of primary provider in all_providers list
+        primary_provider_result = results[primary_provider_result_idx]
+
+        if isinstance(primary_provider_result, Exception):
+            logger.error(f"Phase 2: {primary_provider} failed: {primary_provider_result}")
+            phase2_failed.append(primary_provider)
+
+            # Fallback to Codex - check if it was also in parallel execution (depends on config)
+            # For now, execute fallback synchronously since it's only used in specific scenarios
+            if codex_as_tiebreaker:  # Only use if tiebreaker is needed and primary fails
+                try:
+                    fallback_decision = await query_function(fallback_provider, prompt)
+                    if self._is_valid_provider_response(fallback_decision, fallback_provider):
+                        phase2_decisions[fallback_provider] = fallback_decision
+                        phase2_fallback_used = True
+                        logger.info(
+                            f"Phase 2: {fallback_provider} (fallback) -> {fallback_decision.get('action')} "
+                            f"({fallback_decision.get('confidence')}%)"
+                        )
+                    else:
+                        logger.warning(f"Phase 2: {fallback_provider} (fallback) returned invalid response")
+                        phase2_failed.append(fallback_provider)
+                except Exception as e2:
+                    logger.error(f"Phase 2: {fallback_provider} (fallback) also failed: {e2}")
+                    phase2_failed.append(fallback_provider)
+        else:
+            primary_decision = primary_provider_result
             if self._is_valid_provider_response(primary_decision, primary_provider):
                 phase2_decisions[primary_provider] = primary_decision
                 phase2_primary_used = primary_provider
@@ -723,29 +749,12 @@ class EnsembleDecisionManager:
                         logger.warning(f"Phase 2: Codex tiebreaker failed: {e}")
             else:
                 logger.warning(f"Phase 2: {primary_provider} returned invalid response")
-                raise ValueError(f"{primary_provider} invalid response")
-
-        except Exception as e:
-            logger.error(f"Phase 2: {primary_provider} failed: {e}")
-
-            # Fallback to Codex
-            logger.info(f"Phase 2: Falling back to {fallback_provider}")
-            try:
-                fallback_decision = await query_function(fallback_provider, prompt)
-                if self._is_valid_provider_response(fallback_decision, fallback_provider):
-                    phase2_decisions[fallback_provider] = fallback_decision
-                    phase2_fallback_used = True
-                    logger.info(
-                        f"Phase 2: {fallback_provider} (fallback) -> {fallback_decision.get('action')} "
-                        f"({fallback_decision.get('confidence')}%)"
-                    )
-            except Exception as e2:
-                logger.error(f"Phase 2: {fallback_provider} also failed: {e2}")
+                phase2_failed.append(primary_provider)
 
         # Log premium API calls
         log_premium_call(
             asset=asset_pair,
-            asset_type=asset_type,
+            asset_type=normalized_asset_type,
             phase='phase2',
             primary_provider=phase2_primary_used,
             codex_called=codex_tiebreaker_used or phase2_fallback_used,
@@ -772,7 +781,7 @@ class EnsembleDecisionManager:
         # to 1/num_providers) and passing them when calling aggregate_decisions;
         # ensure failed provider list is still passed through unchanged
         all_decisions = {**phase1_decisions, **phase2_decisions}
-        all_failed = phase1_failed
+        all_failed = phase1_failed + phase2_failed
 
         logger.info(f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions")
 

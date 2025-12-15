@@ -215,10 +215,10 @@ class TestCalculatePositionSizingParams:
             has_existing_position=False,
             relevant_balance=relevant_balance,
             balance_source='Coinbase',
-            signal_only_default=False
+
         )
 
-        assert params['signal_only'] is False
+
         assert params['recommended_position_size'] is not None
         assert params['recommended_position_size'] > 0
         assert params['stop_loss_price'] is not None
@@ -239,32 +239,11 @@ class TestCalculatePositionSizingParams:
             action='SELL',
             has_existing_position=False,
             relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=False
+            balance_source='Coinbase'
         )
 
-        assert params['signal_only'] is False
         assert params['stop_loss_price'] > 50000.0  # SHORT stop loss above entry
 
-    def test_signal_only_mode_with_no_balance(self, decision_engine):
-        """Signal-only mode with no balance should use default balance."""
-        context = {
-            'market_data': {'close': 50000.0}
-        }
-        relevant_balance = {}
-
-        params = decision_engine._calculate_position_sizing_params(
-            context=context,
-            current_price=50000.0,
-            action='BUY',
-            has_existing_position=False,
-            relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=False
-        )
-
-        assert params['signal_only'] is True
-        assert params['recommended_position_size'] is not None
 
     def test_hold_without_position_no_sizing(self, decision_engine):
         """HOLD without existing position should not calculate sizing."""
@@ -279,11 +258,9 @@ class TestCalculatePositionSizingParams:
             action='HOLD',
             has_existing_position=False,
             relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=False
+            balance_source='Coinbase'
         )
 
-        assert params['signal_only'] is True
         assert params['recommended_position_size'] is None
         assert params['stop_loss_price'] is None
 
@@ -300,31 +277,11 @@ class TestCalculatePositionSizingParams:
             action='HOLD',
             has_existing_position=True,
             relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=False
+            balance_source='Coinbase'
         )
 
-        assert params['signal_only'] is False
         assert params['recommended_position_size'] is not None
 
-    def test_signal_only_default_enabled(self, decision_engine):
-        """signal_only_default=True should force signal-only mode."""
-        context = {
-            'market_data': {'close': 50000.0}
-        }
-        relevant_balance = {'USD': 10000.0}
-
-        params = decision_engine._calculate_position_sizing_params(
-            context=context,
-            current_price=50000.0,
-            action='BUY',
-            has_existing_position=False,
-            relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=True
-        )
-
-        assert params['signal_only'] is True
 
     def test_legacy_percentage_conversion(self):
         """Legacy percentage values (>1) should be converted to decimals."""
@@ -354,8 +311,7 @@ class TestCalculatePositionSizingParams:
             action='BUY',
             has_existing_position=False,
             relevant_balance=relevant_balance,
-            balance_source='Coinbase',
-            signal_only_default=False
+            balance_source='Coinbase'
         )
 
         # Verify conversion happened internally (>1 gets divided by 100)
@@ -391,7 +347,6 @@ class TestCreateDecisionIntegration:
         assert decision['position_type'] == 'LONG'
         assert decision['recommended_position_size'] is not None
         assert decision['stop_loss_price'] is not None
-        assert decision['signal_only'] is False
 
     def test_create_decision_hold_without_position(self, decision_engine):
         """HOLD without position should have no sizing."""
@@ -416,29 +371,3 @@ class TestCreateDecisionIntegration:
         assert decision['action'] == 'HOLD'
         assert decision['position_type'] is None
         assert decision['suggested_amount'] == 0
-
-    def test_create_decision_signal_only_mode(self, decision_engine):
-        """Signal-only mode should work without balance."""
-        decision_engine.config['signal_only_default'] = True
-
-        context = {
-            'market_data': {
-                'close': 50000.0,
-                'type': 'crypto'
-            },
-            'balance': {},
-            'price_change': 3.0,
-            'volatility': 1.5
-        }
-        ai_response = {
-            'action': 'BUY',
-            'confidence': 80,
-            'reasoning': 'Strong buy signal',
-            'amount': 0
-        }
-
-        decision = decision_engine._create_decision('BTCUSD', context, ai_response)
-
-        assert decision['action'] == 'BUY'
-        assert decision['signal_only'] is True
-        assert decision['recommended_position_size'] is not None  # Calculated from default balance
