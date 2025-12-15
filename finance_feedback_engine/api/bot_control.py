@@ -300,7 +300,7 @@ async def emergency_stop(
                                 'asset_pair': position['asset_pair'],
                                 'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
                                 'size': position.get('size', 0),
-                                'order_type': 'MARKET'
+                                'order_type': 'MARKET'})
                             result = await engine.platform.execute_trade({
                                 'asset_pair': position['asset_pair'],
                                 'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
@@ -311,7 +311,6 @@ async def emergency_stop(
                 "message": "Emergency stop executed",
                 "closed_positions": len(closed_positions),
                 "timestamp": datetime.utcnow().isoformat()
-            }
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
         raise HTTPException(
