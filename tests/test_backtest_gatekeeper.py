@@ -14,7 +14,7 @@ def test_risk_gatekeeper_blocks_after_drawdown():
     Expected: validate_trade returns False with drawdown message.
     """
     # Create a gatekeeper with 5% drawdown limit
-    gatekeeper = RiskGatekeeper(max_drawdown_pct=0.05)
+    gatekeeper = RiskGatekeeper(max_drawdown_pct=0.05, is_backtest=True)
 
     # Create a trade decision (BUY action)
     decision = {
@@ -58,7 +58,7 @@ def test_risk_gatekeeper_allows_within_limit():
     Setup: Portfolio down 3%, gatekeeper limit 5%.
     Expected: Trade approved.
     """
-    gatekeeper = RiskGatekeeper(max_drawdown_pct=0.05)
+    gatekeeper = RiskGatekeeper(max_drawdown_pct=0.05, is_backtest=True)
 
     decision = {
         "id": "test-2",
