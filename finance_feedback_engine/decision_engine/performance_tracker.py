@@ -124,7 +124,13 @@ class PerformanceTracker:
         return adaptive_weights
 
     def get_provider_performance_stats(self) -> Dict[str, Any]:
-        """Get current provider performance statistics."""
+        """
+        Get current provider performance statistics.
+
+        Returns:
+            Dictionary with provider stats. avg_performance is formatted as a percentage
+            string (xx.xx%), automatically converting from decimal (0-1) or percent (0-100) range.
+        """
         stats = {
             'provider_performance': {}
         }
@@ -132,11 +138,17 @@ class PerformanceTracker:
         for provider, history in self.performance_history.items():
             if history['total'] > 0:
                 accuracy = history['correct'] / history['total']
+                # Convert avg_performance to percentage format
+                # If value <= 1.0, it's in decimal form; multiply by 100
+                avg_perf_value = history['avg_performance']
+                if avg_perf_value <= 1.0:
+                    avg_perf_value *= 100
+                
                 stats['provider_performance'][provider] = {
                     'accuracy': f"{accuracy:.2%}",
                     'total_decisions': history['total'],
                     'correct_decisions': history['correct'],
-                    'avg_performance': f"{history['avg_performance']:.2f}%"
+                    'avg_performance': f"{avg_perf_value:.2f}%"
                 }
 
         return stats

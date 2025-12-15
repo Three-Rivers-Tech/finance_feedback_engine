@@ -16,8 +16,26 @@ class DecisionValidator:
     def __init__(self, config: Dict[str, Any], backtest_mode: bool = False):
         self.config = config
         self.backtest_mode = backtest_mode
-        self.portfolio_stop_loss_percentage = config.get('decision_engine', {}).get('portfolio_stop_loss_percentage', 0.02)
-        self.portfolio_take_profit_percentage = config.get('decision_engine', {}).get('portfolio_take_profit_percentage', 0.05)
+
+        # Safely extract decision_engine config section
+        decision_engine = config.get('decision_engine')
+        if not isinstance(decision_engine, dict):
+            decision_engine = {}
+
+        # Extract portfolio parameters with validation
+        stop_loss_raw = decision_engine.get('portfolio_stop_loss_percentage', 0.02)
+        take_profit_raw = decision_engine.get('portfolio_take_profit_percentage', 0.05)
+
+        # Validate numeric types, fall back to defaults if invalid
+        if not isinstance(stop_loss_raw, (int, float)):
+            logger.warning(f"Invalid portfolio_stop_loss_percentage type: {type(stop_loss_raw).__name__}. Using default: 0.02")
+            stop_loss_raw = 0.02
+        if not isinstance(take_profit_raw, (int, float)):
+            logger.warning(f"Invalid portfolio_take_profit_percentage type: {type(take_profit_raw).__name__}. Using default: 0.05")
+            take_profit_raw = 0.05
+
+        self.portfolio_stop_loss_percentage = stop_loss_raw
+        self.portfolio_take_profit_percentage = take_profit_raw
 
         # Compatibility: Convert legacy percentage values (>1) to decimals
         if self.portfolio_stop_loss_percentage > 1:
@@ -59,15 +77,15 @@ class DecisionValidator:
         decision_id = str(uuid.uuid4())
 
         # Extract basic decision parameters
-        current_price = context['market_data'].get('close', 0)
+        current_price = context.get('market_data', {}).get('close', 0)
         action = ai_response.get('action', 'HOLD')
 
         # Extract position sizing results
-        recommended_position_size = position_sizing_result['recommended_position_size']
-        stop_loss_price = position_sizing_result['stop_loss_price']
-        sizing_stop_loss_percentage = position_sizing_result['sizing_stop_loss_percentage']
-        risk_percentage = position_sizing_result['risk_percentage']
-        signal_only = position_sizing_result['signal_only']
+        recommended_position_size = position_sizing_result.get('recommended_position_size', 0)
+        stop_loss_price = position_sizing_result.get('stop_loss_price')
+        sizing_stop_loss_percentage = position_sizing_result.get('sizing_stop_loss_percentage', 0)
+        risk_percentage = position_sizing_result.get('risk_percentage', 0)
+        signal_only = position_sizing_result.get('signal_only', False)
 
         # Calculate suggested_amount based on action and position sizing
         suggested_amount = ai_response.get('amount', 0)
@@ -77,9 +95,10 @@ class DecisionValidator:
             suggested_amount = 0
             logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
 
-        # For non-signal-only BUY/SELL, use calculated position size converted to USD notional
+        # For non-signal-only BUY/SELL: recommended_position_size is in asset units (e.g., BTC);
+        # convert to USD notional by multiplying by current_price when the quote is USD/USDT
         if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
-            # For crypto futures, position size is USD notional value when USD or USDT is quote
+            # Crypto futures expect USD notional; we derive notional from unit size * price
             if is_crypto and (asset_pair.endswith('USD') or asset_pair.endswith('USDT')):
                 suggested_amount = recommended_position_size * current_price
                 logger.info(

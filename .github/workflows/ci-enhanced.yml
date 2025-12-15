@@ -313,7 +313,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64
           build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at || github.event.pull_request.updated_at }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
 
@@ -337,7 +337,7 @@ jobs:
         with:
           use-quiet-mode: 'yes'
           config-file: '.github/markdown-link-check-config.json'
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Check for broken documentation references
         run: |
@@ -405,7 +405,7 @@ jobs:
       - name: Check for sensitive data in configs
         run: |
           # Check for potential secrets in config files
-          if grep -r "password\|secret\|token\|key" config/*.yaml --include="*.yaml" | grep -v "example" | grep -v "#"; then
+          if grep -r "password\|secret\|token\|key" config/ --include="*.yaml" --include="*.yml" | grep -v "example" | grep -v "^\s*#"; then
             echo "::error::Potential sensitive data found in config files"
             exit 1
           fi
@@ -459,10 +459,15 @@ jobs:
       - name: Check all jobs
         run: |
           if [[ "${{ needs.quality.result }}" != "success" ]] || \
+             [[ "${{ needs.security.result }}" != "success" ]] || \
              [[ "${{ needs.test.result }}" != "success" ]] || \
              [[ "${{ needs.coverage.result }}" != "success" ]] || \
-             [[ "${{ needs.build.result }}" != "success" ]]; then
+             [[ "${{ needs.build.result }}" != "success" ]] || \
+             [[ "${{ needs.docker.result }}" != "success" ]] || \
+             [[ "${{ needs.docs.result }}" != "success" ]] || \
+             [[ "${{ needs.config-validation.result }}" != "success" ]]; then
             echo "::error::One or more required jobs failed"
             exit 1
           fi
+          echo "All CI checks passed! ✅"
           echo "All CI checks passed! ✅"

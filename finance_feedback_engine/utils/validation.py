@@ -86,7 +86,6 @@ def validate_asset_pair_format(asset_pair: str, min_length: int = 6) -> bool:
 
     return True
 
-
 def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
     """
     Validates that an asset pair has a valid composition (base/quote).
@@ -123,9 +122,14 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
             break
 
     if not found_base:
-        logger.warning(f"Asset pair '{asset_pair}' starts with an unknown base currency: {base_part}")
+        logger.warning("Asset pair '%s' starts with an unknown base currency: %s", asset_pair, base_part)
+        return False, f"Asset pair '{asset_pair}' has unknown base currency"
 
-    return True, f"Asset pair '{asset_pair}' has valid composition"
+    # TODO: Add quote currency validation here
+    return True, f"Asset pair '{asset_pair}' has valid base currency"
+
+    # TODO: Add quote currency validation here
+    return True, f"Asset pair '{asset_pair}' has valid base currency"
 
 
 def validate_data_freshness(

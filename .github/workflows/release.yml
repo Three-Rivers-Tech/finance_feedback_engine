@@ -120,14 +120,27 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           echo "Updating version to: $VERSION"
 
-          # Update version in relevant files
-          if [ -f "setup.py" ]; then
-            sed -i "s/version=.*/version='$VERSION',/" setup.py
-          fi
+          python - <<'PY'
+import os
+import re
+from pathlib import Path
 
-          if [ -f "finance_feedback_engine/__init__.py" ]; then
-            sed -i "s/__version__ = .*/__version__ = '$VERSION'/" finance_feedback_engine/__init__.py
-          fi
+
+def replace_version(path: Path, pattern: str, label: str) -> None:
+    text = path.read_text()
+    new_text, count = re.subn(pattern, lambda m: f"{m.group(1)}{os.environ['VERSION']}{m.group(3)}", text)
+    if count == 0:
+        raise SystemExit(f"Did not find {label} assignment in {path}")
+    path.write_text(new_text)
+
+
+if Path("setup.py").exists():
+    replace_version(Path("setup.py"), r"(version\s*=\s*['\"])([^'\"]+)(['\"])", "version")
+
+init_path = Path("finance_feedback_engine/__init__.py")
+if init_path.exists():
+    replace_version(init_path, r"(__version__\s*=\s*['\"])([^'\"]+)(['\"])", "__version__")
+PY
 
       - name: Build distributions
         run: |
@@ -191,7 +204,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
             VCS_REF=${{ github.sha }}
 
   # =============================================================================
