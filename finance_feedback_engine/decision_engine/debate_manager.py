@@ -85,6 +85,8 @@ class DebateManager:
             'judge_reasoning': judge_decision.get('reasoning', ''),
             'debate_providers': self.debate_providers,
             'timestamp': datetime.now(timezone.utc).isoformat()
+        }
+
         providers_used = list(set(p for p in self.debate_providers.values() if p not in failed_debate_providers))
 
         # Add ensemble metadata for consistency

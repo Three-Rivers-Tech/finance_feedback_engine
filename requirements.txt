@@ -40,6 +40,7 @@ pytest-mock>=3.14.0
 # Persistence
 python-dateutil>=2.9.0
 
+pyarrow>=14.0.0
 # Caching
 cachetools>=6.2.3
 
@@ -55,7 +56,7 @@ ollama>=0.5.10
 optuna>=4.2.0
 
 # Telegram integration (Approval workflow - see docs/TELEGRAM_APPROVAL_WORKFLOW.md)
-python-telegram-bot>=23.0
+python-telegram-bot>=22.5
 
 # ============================================================================
 # WEB SERVICE ARCHITECTURE (New in v2.0)

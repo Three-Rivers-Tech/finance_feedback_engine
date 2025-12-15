@@ -5,6 +5,7 @@ import logging
 import uuid
 from datetime import datetime
 import asyncio
+import pytz
 
 from finance_feedback_engine.memory.vector_store import VectorMemory
 from finance_feedback_engine.utils.validation import validate_data_freshness
@@ -108,6 +109,10 @@ class DecisionEngine:
         decision_config = config.get('decision_engine', {})
         self.local_models = decision_config.get('local_models', [])
         self.local_priority = decision_config.get('local_priority', False)
+
+        # Extract portfolio risk parameters from decision_engine config
+        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
+        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 0.05)
 
         # Validate local_models
         if not isinstance(self.local_models, list):
@@ -1019,7 +1024,8 @@ Format response as a structured technical analysis demonstration.
         )
 
         # Calculate position sizing parameters
-        signal_only_default = False
+        # Check configuration for signal_only_default setting - it's in the main config, not nested
+        signal_only_default = self.config.get('signal_only_default', False)
         sizing_params = self._calculate_position_sizing_params(
             context=context,
             current_price=context['market_data'].get('close', 0),
@@ -1304,13 +1310,94 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Compressed prompt string
         """
-        import tiktoken
-
-        # Get encoding for the model (using gpt-3.5-turbo as a proxy for tokenization)
         try:
+            import tiktoken
+
+            # Get encoding for the model (using gpt-3.5-turbo as a proxy for tokenization)
             encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
             tokens = encoding.encode(prompt)
-        except Exception:
+
+            if len(tokens) <= max_tokens:
+                return prompt
+
+            # If we have too many tokens, we'll intelligently compress
+            # by truncating less critical sections first
+            lines = prompt.split('\n')
+
+            # Identify sections to compress
+            compressed_lines = []
+            current_token_count = 0
+
+            # Keep essential sections like the main instruction and asset info
+            essential_parts = [
+                "Asset Pair:",
+                "TASK:",
+                "ANALYSIS OUTPUT REQUIRED:",
+                "ACCOUNT BALANCE:"
+            ]
+
+            for line in lines:
+                # Check if this is an essential part
+                is_essential = any(essential in line for essential in essential_parts)
+
+                # Temporary tokenization to estimate this line's tokens
+                line_tokens = len(encoding.encode(line))
+
+                # If adding this line would exceed the limit
+                if current_token_count + line_tokens > max_tokens and not is_essential:
+                    # Skip less critical information
+                    continue
+                elif current_token_count + line_tokens > max_tokens * 0.95:  # 95% of max
+                    # If we're near the limit, stop adding unless it's essential
+                    if is_essential:
+                        compressed_lines.append(line)
+                        current_token_count += line_tokens
+                    else:
+                        break
+                else:
+                    compressed_lines.append(line)
+                    current_token_count += line_tokens
+
+            compressed_prompt = '\n'.join(compressed_lines)
+
+            # If still too long, perform more aggressive compression
+            if current_token_count > max_tokens:
+                # Additional strategy: truncate long data sections
+                sections = compressed_prompt.split("===")
+                main_sections = []
+                temp_prompt = ""
+
+                for section in sections:
+                    temp_prompt += section + "==="  # Add back separator
+                    temp_tokens = len(encoding.encode(temp_prompt))
+
+                    if temp_tokens > max_tokens:
+                        # Try to compress this section by removing some content
+                        lines_in_section = section.split('\n')
+                        compressed_section = []
+                        section_token_count = 0
+
+                        for line in lines_in_section:
+                            line_tokens = len(encoding.encode(line))
+
+                            if section_token_count + line_tokens <= max_tokens - current_token_count:
+                                compressed_section.append(line)
+                                section_token_count += line_tokens
+                            else:
+                                # Add a truncation note if needed
+                                compressed_section.append("... [SECTION TRUNCATED FOR LENGTH]")
+                                break
+                        main_sections.append('\n'.join(compressed_section))
+                        break
+                    else:
+                        main_sections.append(section)
+                        current_token_count = temp_tokens
+
+                compressed_prompt = "===".join(main_sections)
+
+            return compressed_prompt
+
+        except ImportError:
             # If tiktoken is not available, estimate using word-based tokenization
             # Rough estimate: 1 token ≈ 4 characters or 0.75 words
             estimated_tokens = len(prompt) // 4
@@ -1320,83 +1407,3 @@ Format response as a structured technical analysis demonstration.
                 # Truncate to approximately max_tokens
                 truncate_at = max_tokens * 4
                 return prompt[:truncate_at] + "... [TRUNCATED FOR LENGTH]"
-
-        if len(tokens) <= max_tokens:
-            return prompt
-
-        # If we have too many tokens, we'll intelligently compress
-        # by truncating less critical sections first
-        lines = prompt.split('\n')
-
-        # Identify sections to compress
-        compressed_lines = []
-        current_token_count = 0
-
-        # Keep essential sections like the main instruction and asset info
-        essential_parts = [
-            "Asset Pair:",
-            "TASK:",
-            "ANALYSIS OUTPUT REQUIRED:",
-            "ACCOUNT BALANCE:"
-        ]
-
-        for line in lines:
-            # Check if this is an essential part
-            is_essential = any(essential in line for essential in essential_parts)
-
-            # Temporary tokenization to estimate this line's tokens
-            line_tokens = len(encoding.encode(line))
-
-            # If adding this line would exceed the limit
-            if current_token_count + line_tokens > max_tokens and not is_essential:
-                # Skip less critical information
-                continue
-            elif current_token_count + line_tokens > max_tokens * 0.95:  # 95% of max
-                # If we're near the limit, stop adding unless it's essential
-                if is_essential:
-                    compressed_lines.append(line)
-                    current_token_count += line_tokens
-                else:
-                    break
-            else:
-                compressed_lines.append(line)
-                current_token_count += line_tokens
-
-        compressed_prompt = '\n'.join(compressed_lines)
-
-        # If still too long, perform more aggressive compression
-        if current_token_count > max_tokens:
-            # Additional strategy: truncate long data sections
-            sections = compressed_prompt.split("===")
-            main_sections = []
-            temp_prompt = ""
-
-            for section in sections:
-                temp_prompt += section + "==="  # Add back separator
-                temp_tokens = len(encoding.encode(temp_prompt))
-
-                if temp_tokens > max_tokens:
-                    # Try to compress this section by removing some content
-                    lines_in_section = section.split('\n')
-                    compressed_section = []
-                    section_token_count = 0
-
-                    for line in lines_in_section:
-                        line_tokens = len(encoding.encode(line))
-
-                        if section_token_count + line_tokens <= max_tokens - current_token_count:
-                            compressed_section.append(line)
-                            section_token_count += line_tokens
-                        else:
-                            # Add a truncation note if needed
-                            compressed_section.append("... [SECTION TRUNCATED FOR LENGTH]")
-                            break
-                    main_sections.append('\n'.join(compressed_section))
-                    break
-                else:
-                    main_sections.append(section)
-                    current_token_count = temp_tokens
-
-            compressed_prompt = "===".join(main_sections)
-
-        return compressed_prompt
