@@ -144,7 +144,7 @@ class EnsembleDecisionManager:
         self.voting_strategies = VotingStrategies(self.voting_strategy)
         self.performance_tracker = PerformanceTracker(config, self.learning_rate)
         self.two_phase_aggregator = TwoPhaseAggregator(config)
-        self.debate_manager = DebateManager(self.debate_providers, self.debate_mode)
+        self.debate_manager = DebateManager(self.debate_providers)
 
         logger.info(
             f"Local-First Ensemble initialized. Target Local Dominance: {self.local_dominance_target:.0%}"
@@ -441,6 +441,10 @@ class EnsembleDecisionManager:
         phase2_fallback_used = result['phase2_fallback_used']
         codex_tiebreaker_used = result['codex_tiebreaker_used']
         normalized_asset_type = result['normalized_asset_type']
+        phase2_triggered = result.get('phase2_triggered', True)
+        phase2_skip_reason = result.get('phase2_skip_reason')
+        phase2_escalation_reason = result.get('phase2_escalation_reason')
+        phase1_metrics = phase1_result.get('phase1_metrics', result.get('phase1_metrics', {}))
 
         # Get Phase 1 decision from provider decisions
         phase1_decisions = phase1_result['provider_decisions']
@@ -461,6 +465,24 @@ class EnsembleDecisionManager:
             f"(confidence={phase1_confidence}%, agreement={phase1_agreement:.2f})"
         )
 
+        # If Phase 2 was not triggered, return Phase 1 result with metadata
+        if not phase2_triggered:
+            logger.info(
+                f"Phase 2 not triggered (reason={phase2_skip_reason}); "
+                "using Phase 1 decision"
+            )
+            phase1_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
+            phase1_decision['ensemble_metadata']['phase1_action'] = phase1_action
+            phase1_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
+            phase1_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
+            phase1_decision['ensemble_metadata']['phase2_triggered'] = False
+            phase1_decision['ensemble_metadata']['phase2_skip_reason'] = phase2_skip_reason
+            phase1_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
+            phase1_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
+            phase1_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
+            phase1_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
+            return phase1_decision
+
         # If Phase 2 completely failed, use Phase 1 result
         if not phase2_decisions:
             logger.warning("Phase 2 complete failure - using Phase 1 result")
@@ -472,6 +494,10 @@ class EnsembleDecisionManager:
             phase1_decision['ensemble_metadata']['phase2_primary_provider'] = result.get('phase2_primary_used')
             phase1_decision['ensemble_metadata']['phase2_fallback_used'] = True
             phase1_decision['ensemble_metadata']['phase2_failed'] = True
+            phase1_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
+            phase1_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
+            phase1_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
+            phase1_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
             return phase1_decision
 
         # Merge Phase 1 + Phase 2 decisions
@@ -498,6 +524,10 @@ class EnsembleDecisionManager:
         final_decision['ensemble_metadata']['phase2_fallback_used'] = phase2_fallback_used
         final_decision['ensemble_metadata']['codex_tiebreaker'] = codex_tiebreaker_used
         final_decision['ensemble_metadata']['decision_changed_by_premium'] = decision_changed
+        final_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
+        final_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
+        final_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
+        final_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
 
         logger.info(
             f"Two-phase decision: {final_decision['action']} "
@@ -943,6 +973,9 @@ class EnsembleDecisionManager:
         amounts: List[float]
     ) -> Dict[str, Any]:
         """Simple majority voting (each provider gets one vote)."""
+        if not actions:
+            raise ValueError("Cannot perform majority voting with empty actions list")
+
         from collections import Counter
 
         action_counts = Counter(actions)
@@ -953,6 +986,9 @@ class EnsembleDecisionManager:
             conf for act, conf in zip(actions, confidences)
             if act == final_action
         ]
+        if not supporter_confidences:
+            raise ValueError(f"No supporters found for action {final_action}")
+
         final_confidence = int(np.mean(supporter_confidences))
 
         final_reasoning = self._aggregate_reasoning(
@@ -964,6 +1000,9 @@ class EnsembleDecisionManager:
             amt for act, amt in zip(actions, amounts)
             if act == final_action
         ]
+        if not supporter_amounts:
+            raise ValueError(f"No supporters found for amounts with action {final_action}")
+
         final_amount = float(np.mean(supporter_amounts))
 
         return {

@@ -5,8 +5,12 @@ aiohttp-retry>=2.8.3
 python-dotenv>=1.0.0
 
 # Data processing
+# NumPy 2.2.x-2.3.x series: Validated compatible with pandas 2.2.3+ and scikit-learn 1.8.0
+# Note: numpy>=2.0 required for Python 3.12+ support
+# Note: captum (optional ML interpretability library) requires numpy<2.0 - exclude if using captum
+# Compatibility verified 2025-12-15: pandas-ta 0.4.71b0 works with numpy 2.x
 pandas>=2.2.3
-numpy>=2.3.5
+numpy>=2.2.0,<2.4.0
 pandas-ta>=0.3.14b0; python_version < '3.12'  # Technical analysis (Python <3.12)
 pandas-ta>=0.4.71b0; python_version >= '3.12'  # Technical analysis (Python 3.12+, pure Python, no system dependencies)
 matplotlib>=3.10.8
@@ -42,7 +46,8 @@ cachetools>=6.2.3
 # AI/LLM integration (optional - for future expansion)
 # openai>=1.55.0
 # anthropic>=0.39.0
-scikit-learn>=1.8.0
+# Machine Learning: scikit-learn 1.7.0+ has full numpy 2.x support (verified compatible with numpy 2.2.0-2.3.x)
+scikit-learn>=1.7.0
 tenacity>=9.0.0
 ollama>=0.5.10
 
