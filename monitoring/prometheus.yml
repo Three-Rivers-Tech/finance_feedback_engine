@@ -14,9 +14,11 @@ alerting:
         - targets:
             - alertmanager:9093
 
-# Load rules once and periodically evaluate them
+# Load rules once and periodically evaluate them. Using a relative path keeps
+# promtool checks working locally while still resolving to /etc/prometheus
+# inside the container.
 rule_files:
-  - /etc/prometheus/alert_rules.yml
+  - alert_rules.yml
 
 # Scrape configurations
 scrape_configs:
@@ -38,10 +40,3 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
-# Storage configuration
-storage:
-  tsdb:
-    path: /prometheus
-    retention:
-      time: 30d  # Keep 30 days of data
-      size: 10GB  # Or 10GB, whichever comes first
