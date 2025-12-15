@@ -66,25 +66,14 @@ class MarketSchedule:
         )
 
         if weekend_window:
-            # Calculate time until Sunday 5 PM NY reopening
-            if weekday == 6 and ny_hour < 17:
-                # Already Sunday before 5 PM
-                reopen_dt = now_ny.replace(hour=17, minute=0, second=0, microsecond=0)
-            else:
-                # Friday evening or Saturday - calculate days until Sunday
-                days_until_sunday = (6 - weekday) % 7
-                reopen_date = now_ny.date() + _dt.timedelta(days=days_until_sunday)
-                reopen_dt = cls.NY_TZ.localize(
-                    _dt.datetime.combine(reopen_date, _dt.time(hour=17, minute=0))
-                )
-            time_to_open = int(max(0, (reopen_dt - now_ny).total_seconds() // 60))
-
+            # Forex markets technically stay open 24/7, but weekend liquidity is low
+            # Return "open" status with warning instead of blocking trades
             return {
-                "is_open": False,
-                "session": "Closed",
+                "is_open": True,
+                "session": "Weekend",
                 "time_to_close": 0,
-                "time_to_open": time_to_open,
-                "warning": "Forex market closed for weekend",
+                "time_to_open": 0,
+                "warning": "Weekend forex trading has reduced liquidity and wider spreads",
             }
 
         # Determine session based on major center hours.
