@@ -17,7 +17,7 @@ groups:
 
       # High decision latency
       - alert: HighDecisionLatency
-        expr: histogram_quantile(0.95, rate(ffe_decision_latency_seconds_bucket[5m])) > 10
+        expr: histogram_quantile(0.95, sum by (le) (rate(ffe_decision_latency_seconds_bucket[5m]))) > 10
         for: 5m
         labels:
           severity: warning
@@ -28,7 +28,11 @@ groups:
 
       # Provider failures
       - alert: HighProviderFailureRate
-        expr: rate(ffe_provider_requests_total{status="failure"}[5m]) / rate(ffe_provider_requests_total[5m]) > 0.1
+        expr: |
+          sum(rate(ffe_provider_requests_total{status="failure"}[5m])) by (provider)
+            /
+          sum(rate(ffe_provider_requests_total[5m])) by (provider)
+            > 0.1
         for: 5m
         labels:
           severity: warning
@@ -53,7 +57,14 @@ groups:
     rules:
       # Large drawdown
       - alert: LargeDrawdown
-        expr: (ffe_portfolio_value_dollars - ffe_portfolio_value_dollars offset 1h) / ffe_portfolio_value_dollars offset 1h < -0.05
+        expr: |
+          (
+            ffe_portfolio_value_dollars
+              - (ffe_portfolio_value_dollars offset 1h)
+          )
+            /
+          (ffe_portfolio_value_dollars offset 1h)
+            < -0.05
         for: 5m
         labels:
           severity: critical
