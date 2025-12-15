@@ -187,9 +187,15 @@ async def start_agent(
 
             return AgentStatusResponse(
                 state=BotState.RUNNING,
+<<<<<<< HEAD
                 agent_ooda_state=(
                     _agent_instance.state.value if _agent_instance else None
                 ),
+=======
+                agent_ooda_state=_agent_instance.state.value
+                if _agent_instance
+                else None,
+>>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
                 uptime_seconds=0.0,
                 config={
                     "asset_pairs": request.asset_pairs,
@@ -292,6 +298,7 @@ async def emergency_stop(
 
                     for position in positions:
                         try:
+<<<<<<< HEAD
                             # Execute close trade (async)
                             result = await engine.platform.execute_trade(
                                 {
@@ -301,11 +308,22 @@ async def emergency_stop(
                                         if position.get("side") == "LONG"
                                         else "BUY"
                                     ),
+=======
+                            # Execute close trade - Note: sync version might be needed depending on platform
+                            # Using await version here as it's in an async function
+                            result = await engine.platform.execute_trade(
+                                {
+                                    "asset_pair": position["asset_pair"],
+                                    "action": "SELL"
+                                    if position.get("side") == "LONG"
+                                    else "BUY",
+>>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
                                     "size": position.get("size", 0),
                                     "order_type": "MARKET",
                                 }
                             )
                             closed_positions.append(result)
+<<<<<<< HEAD
                         except Exception:
                             # Continue closing other positions even if one fails
                             continue
@@ -315,6 +333,21 @@ async def emergency_stop(
                     "closed_positions": len(closed_positions),
                     "timestamp": datetime.utcnow().isoformat(),
                 }
+=======
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to close position {position.get('id', 'unknown')}: {e}"
+                            )
+
+            logger.critical("Emergency stop executed")
+
+        return {
+            "status": "emergency_stopped",
+            "message": "Emergency stop executed",
+            "closed_positions": len(closed_positions),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+>>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
         raise HTTPException(
