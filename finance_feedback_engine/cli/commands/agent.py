@@ -77,8 +77,10 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
                 agent_config.autonomous.require_approval = False
             console.print("[yellow]Session-only autonomy enabled: approvals disabled.[/yellow]")
         else:
-            console.print("[dim]Tip: pass `--autonomous` or set `agent.autonomous.enabled: true` in config to proceed without prompts.[/dim]")
-            return None
+            # Signal-only mode: generate signals and send to Telegram/webhooks for approval
+            console.print("[cyan]Running in signal-only mode: generating trading signals for Telegram approval.[/cyan]")
+            # Keep agent_config.autonomous.enabled = False, which will trigger signal-only mode
+            # in the agent's execution logic
 
     console.print("[green]✓ Agent configuration loaded.[/green]")
     console.print(f"  Portfolio Take Profit: {take_profit:.2%}")

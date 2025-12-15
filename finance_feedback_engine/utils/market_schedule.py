@@ -59,35 +59,20 @@ class MarketSchedule:
 
         weekday = now_ny.weekday()  # Monday=0, Sunday=6
         ny_hour = now_ny.hour
+        weekend_window = (
+            (weekday == 4 and ny_hour >= 17)  # Friday after 5 PM NY
+            or weekday == 5  # Saturday
+            or (weekday == 6 and ny_hour < 17)  # Sunday before 5 PM NY
+        )
 
-        closed = False
-        if weekday == 4 and ny_hour >= 17:
-            closed = True  # Friday after 5 PM NY
-        elif weekday == 5:
-            closed = True  # Saturday
-        elif weekday == 6 and ny_hour < 17:
-            closed = True  # Sunday before 5 PM NY
-
-        if closed:
-            # Forex reopens Sunday 5 PM New York time
-            days_until_sunday = (6 - weekday) % 7
-            open_date = now_ny.date() + _dt.timedelta(days=days_until_sunday)
-            open_dt = cls.NY_TZ.localize(
-                _dt.datetime.combine(open_date, _dt.time(hour=17, minute=0))
-            )
-
-            # If already past this week's Sunday open, roll forward a week
-            if open_dt < now_ny:
-                open_dt += _dt.timedelta(days=7)
-
-            time_to_open = int(max(0, (open_dt - now_ny).total_seconds() // 60))
-
+        if weekend_window:
+            # Treat weekend forex as open but flag reduced liquidity instead of blocking
             return {
-                "is_open": False,
-                "session": "Closed",
+                "is_open": True,
+                "session": "Weekend",
                 "time_to_close": 0,
-                "time_to_open": time_to_open,
-                "warning": "",
+                "time_to_open": 0,
+                "warning": "Forex weekend hours - liquidity may be thin",
             }
 
         # Determine session based on major center hours.
