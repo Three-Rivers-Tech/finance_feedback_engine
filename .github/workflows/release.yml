@@ -1,0 +1,399 @@
+name: Release Automation
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 2.1.0)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # =============================================================================
+  # Prepare Release
+  # =============================================================================
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+            IS_PRERELEASE="${{ github.event.inputs.prerelease }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            if [[ "$VERSION" =~ (alpha|beta|rc) ]]; then
+              IS_PRERELEASE="true"
+            else
+              IS_PRERELEASE="false"
+            fi
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION (prerelease: $IS_PRERELEASE)"
+
+  # =============================================================================
+  # Run Full Test Suite
+  # =============================================================================
+  test:
+    name: Full Test Suite
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Run all tests (including slow)
+        run: pytest --cov=finance_feedback_engine --cov-report=xml -v
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: release
+
+  # =============================================================================
+  # Build Distribution
+  # =============================================================================
+  build:
+    name: Build Release Artifacts
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine wheel setuptools
+
+      - name: Update version in setup files
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          echo "Updating version to: $VERSION"
+
+          # Update version in relevant files
+          if [ -f "setup.py" ]; then
+            sed -i "s/version=.*/version='$VERSION',/" setup.py
+          fi
+
+          if [ -f "finance_feedback_engine/__init__.py" ]; then
+            sed -i "s/__version__ = .*/__version__ = '$VERSION'/" finance_feedback_engine/__init__.py
+          fi
+
+      - name: Build distributions
+        run: |
+          python -m build
+          ls -lh dist/
+
+      - name: Verify distributions
+        run: |
+          twine check dist/*
+          python -m pip install dist/*.whl
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+          retention-days: 90
+
+  # =============================================================================
+  # Build Docker Image
+  # =============================================================================
+  docker:
+    name: Build Release Docker Image
+    needs: [prepare, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=v${{ needs.prepare.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.prepare.outputs.version }}
+            type=semver,pattern={{major}},value=v${{ needs.prepare.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.ci
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+  # =============================================================================
+  # Generate Release Notes
+  # =============================================================================
+  release-notes:
+    name: Generate Release Notes
+    needs: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          # Get previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "First release - including all commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --reverse)
+          else
+            echo "Changes since $PREVIOUS_TAG"
+            COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --reverse)
+          fi
+
+          # Categorize commits
+          FEATURES=$(echo "$COMMITS" | grep -i "feat\|feature" || true)
+          FIXES=$(echo "$COMMITS" | grep -i "fix\|bug" || true)
+          IMPROVEMENTS=$(echo "$COMMITS" | grep -i "improve\|enhance\|refactor" || true)
+          DOCS=$(echo "$COMMITS" | grep -i "doc\|docs" || true)
+          TESTS=$(echo "$COMMITS" | grep -i "test" || true)
+          OTHERS=$(echo "$COMMITS" | grep -v -i "feat\|feature\|fix\|bug\|improve\|enhance\|refactor\|doc\|docs\|test" || true)
+
+          # Build changelog
+          CHANGELOG="## Finance Feedback Engine v${VERSION}
+
+          ### What's New
+
+          "
+
+          if [ -n "$FEATURES" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### ✨ New Features
+          $FEATURES
+          "
+          fi
+
+          if [ -n "$IMPROVEMENTS" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### 🚀 Improvements
+          $IMPROVEMENTS
+          "
+          fi
+
+          if [ -n "$FIXES" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### 🐛 Bug Fixes
+          $FIXES
+          "
+          fi
+
+          if [ -n "$DOCS" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### 📚 Documentation
+          $DOCS
+          "
+          fi
+
+          if [ -n "$TESTS" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### 🧪 Testing
+          $TESTS
+          "
+          fi
+
+          if [ -n "$OTHERS" ]; then
+            CHANGELOG="${CHANGELOG}
+          ### 🔧 Other Changes
+          $OTHERS
+          "
+          fi
+
+          CHANGELOG="${CHANGELOG}
+
+          ### Installation
+
+          \`\`\`bash
+          # Using pip
+          pip install git+https://github.com/${{ github.repository }}@v${VERSION}
+
+          # Using Docker
+          docker pull ghcr.io/${{ github.repository }}:${VERSION}
+          \`\`\`
+
+          ### Documentation
+          - [CLAUDE.md](https://github.com/${{ github.repository }}/blob/v${VERSION}/CLAUDE.md)
+          - [Full Documentation](https://github.com/${{ github.repository }}/tree/v${VERSION}/docs)
+          "
+
+          # Save to file and output
+          echo "$CHANGELOG" > release_notes.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release_notes.md
+
+  # =============================================================================
+  # Create GitHub Release
+  # =============================================================================
+  release:
+    name: Create GitHub Release
+    needs: [prepare, test, build, docker, release-notes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-distributions
+          path: dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: Finance Feedback Engine v${{ needs.prepare.outputs.version }}
+          body: ${{ needs.release-notes.outputs.changelog }}
+          draft: false
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          files: |
+            dist/*
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify release
+        run: |
+          echo "::notice::Release v${{ needs.prepare.outputs.version }} created successfully!"
+          echo "View at: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.prepare.outputs.version }}"
+
+  # =============================================================================
+  # Post-Release Tasks
+  # =============================================================================
+  post-release:
+    name: Post-Release Tasks
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG.md
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          DATE=$(date +%Y-%m-%d)
+
+          # Create or update CHANGELOG.md
+          if [ ! -f "CHANGELOG.md" ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          # Add new version entry
+          TEMP_FILE=$(mktemp)
+          echo "# Changelog" > "$TEMP_FILE"
+          echo "" >> "$TEMP_FILE"
+          echo "## [${VERSION}] - ${DATE}" >> "$TEMP_FILE"
+          echo "" >> "$TEMP_FILE"
+          echo "See [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/v${VERSION}) for details." >> "$TEMP_FILE"
+          echo "" >> "$TEMP_FILE"
+          tail -n +2 CHANGELOG.md >> "$TEMP_FILE"
+          mv "$TEMP_FILE" CHANGELOG.md
+
+      - name: Create post-release PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: Update CHANGELOG for v${{ needs.prepare.outputs.version }}"
+          title: "chore: Post-release updates for v${{ needs.prepare.outputs.version }}"
+          body: |
+            ## Post-Release Updates
+
+            This PR contains automated updates following the v${{ needs.prepare.outputs.version }} release:
+
+            - Updated CHANGELOG.md
+            - Bumped version numbers
+
+            **Auto-generated by release workflow**
+          branch: post-release-v${{ needs.prepare.outputs.version }}
+          delete-branch: true

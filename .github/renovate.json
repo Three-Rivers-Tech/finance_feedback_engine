@@ -1,0 +1,249 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":separateMajorReleases",
+    ":combinePatchMinorReleases",
+    ":ignoreUnstable",
+    ":prImmediately",
+    ":updateNotScheduled",
+    ":automergeDisabled",
+    ":maintainLockFilesWeekly",
+    ":autoDetectPinVersions"
+  ],
+  "schedule": [
+    "after 10pm every weekday",
+    "before 5am every weekday",
+    "every weekend"
+  ],
+  "timezone": "America/New_York",
+  "labels": ["dependencies"],
+  "assignees": ["@three-rivers-tech"],
+  "reviewers": ["@three-rivers-tech"],
+  "prConcurrentLimit": 5,
+  "prCreation": "not-pending",
+  "prPriority": 0,
+  "rebaseWhen": "behind-base-branch",
+  "semanticCommitScope": "deps",
+  "semanticCommitType": "chore",
+  "separateMinorPatch": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "dependencies"],
+    "prPriority": 10,
+    "automerge": false,
+    "assignees": ["@three-rivers-tech"],
+    "reviewers": ["@three-rivers-tech"],
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "description": "Python dependencies",
+      "matchManagers": ["pip_requirements", "pip_setup"],
+      "enabled": true,
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Critical security updates - auto-merge",
+      "matchUpdateTypes": ["patch"],
+      "matchPackagePatterns": ["*"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "labels": ["dependencies", "security", "automerge"],
+      "prPriority": 10,
+      "vulnerabilitySeverity": ["critical", "high"]
+    },
+    {
+      "description": "Testing dependencies - auto-merge patches",
+      "matchPackageNames": [
+        "pytest",
+        "pytest-cov",
+        "pytest-asyncio",
+        "pytest-mock",
+        "pytest-xdist",
+        "freezegun"
+      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "groupName": "testing dependencies"
+    },
+    {
+      "description": "Development tools - auto-merge",
+      "matchPackageNames": [
+        "black",
+        "flake8",
+        "isort",
+        "mypy",
+        "bandit",
+        "pre-commit",
+        "ruff"
+      ],
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "groupName": "development tools"
+    },
+    {
+      "description": "Core data processing libraries",
+      "matchPackageNames": [
+        "pandas",
+        "numpy",
+        "pandas-ta",
+        "matplotlib",
+        "seaborn"
+      ],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "data processing libraries",
+      "labels": ["dependencies", "data-processing"],
+      "schedule": ["before 3am on Monday"]
+    },
+    {
+      "description": "API client libraries",
+      "matchPackageNames": [
+        "alpha-vantage",
+        "coinbase-advanced-py",
+        "oandapyV20",
+        "requests",
+        "aiohttp",
+        "aiohttp-retry",
+        "httpx"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "groupName": "API clients"
+    },
+    {
+      "description": "Web service dependencies",
+      "matchPackageNames": [
+        "fastapi",
+        "uvicorn",
+        "redis",
+        "python-telegram-bot"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "web services",
+      "labels": ["dependencies", "web-service"]
+    },
+    {
+      "description": "AI/ML dependencies - require review",
+      "matchPackageNames": [
+        "scikit-learn",
+        "optuna",
+        "ollama"
+      ],
+      "automerge": false,
+      "groupName": "AI/ML dependencies",
+      "labels": ["dependencies", "ai-ml"],
+      "reviewers": ["@three-rivers-tech"],
+      "prPriority": 5
+    },
+    {
+      "description": "Pin Python version updates",
+      "matchPackageNames": ["python"],
+      "enabled": true,
+      "automerge": false,
+      "labels": ["dependencies", "python-version"],
+      "prPriority": 8
+    },
+    {
+      "description": "GitHub Actions updates",
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "automergeType": "pr",
+      "groupName": "GitHub Actions",
+      "pinDigests": true
+    },
+    {
+      "description": "Docker base images - pin digests",
+      "matchManagers": ["dockerfile"],
+      "automerge": false,
+      "groupName": "Docker images",
+      "pinDigests": true,
+      "labels": ["dependencies", "docker"]
+    },
+    {
+      "description": "Major version updates - create separate PRs",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "separateMajorMinor": true,
+      "labels": ["dependencies", "major-update"],
+      "prPriority": 1,
+      "schedule": ["before 3am on the first day of the month"]
+    },
+    {
+      "description": "Deprecated packages - disable",
+      "matchPackagePatterns": [
+        "^pkg_resources$"
+      ],
+      "enabled": false
+    }
+  ],
+  "python": {
+    "minimumReleaseAge": "3 days"
+  },
+  "pip_requirements": {
+    "fileMatch": ["^requirements.*\\.txt$"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 3am on Monday"],
+    "automerge": true,
+    "automergeType": "pr",
+    "commitMessageAction": "Lock file maintenance"
+  },
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "🤖 Dependency Updates Dashboard",
+  "dependencyDashboardHeader": "This dashboard shows all pending dependency updates. Review and approve updates below.",
+  "dependencyDashboardFooter": "Automated by Renovate Bot",
+  "dependencyDashboardLabels": ["dependencies", "renovate"],
+  "suppressNotifications": ["prIgnoreNotification"],
+  "postUpdateOptions": [
+    "gomodTidy",
+    "npmDedupe",
+    "yarnDedupeHighest"
+  ],
+  "regexManagers": [
+    {
+      "description": "Update Python version in Dockerfile",
+      "fileMatch": ["^Dockerfile.*$"],
+      "matchStrings": [
+        "ARG PYTHON_VERSION=(?<currentValue>.*?)\\n"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "python"
+    },
+    {
+      "description": "Update Python version in GitHub Actions",
+      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "matchStrings": [
+        "PYTHON_VERSION: ['\"](?<currentValue>.*?)['\"]"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "python"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update version in __init__.py",
+      "fileMatch": ["^finance_feedback_engine/__init__\\.py$"],
+      "matchStrings": [
+        "__version__\\s*=\\s*['\"](?<currentValue>.*?)['\"]"
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "finance-feedback-engine"
+    }
+  ],
+  "ignoreDeps": [],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/.venv/**",
+    "**/venv/**",
+    "**/tests/**"
+  ]
+}
