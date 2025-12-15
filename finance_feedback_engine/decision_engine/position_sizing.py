@@ -155,14 +155,15 @@ class PositionSizingCalculator:
                     sizing_stop_loss_percentage * 100,
                 )
 
-        # CASE 2: Zero balance - use minimum order size without signal-only flag
+        # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
         else:
-            signal_only = False
+            # Determine if this should be signal-only mode based on balance or config
+            signal_only = signal_only_default or not has_valid_balance
 
             # HOLD without position: no sizing needed
             if action == 'HOLD' and not has_existing_position:
                 logger.info("HOLD without existing position - no position sizing shown")
-                result['signal_only'] = False
+                result['signal_only'] = signal_only
                 return result
 
             # Determine minimum order size based on asset type (must be set unconditionally)
@@ -179,12 +180,11 @@ class PositionSizingCalculator:
             # Calculate minimum viable position size based on platform minimum
             # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
             # This ensures we can execute the smallest possible trade
-            if current_price > 0:
+            if current_price > 0 and not signal_only:
                 # Calculate minimum position size in units
                 min_position_size = min_order_size / current_price
 
-                # Use the minimum as the recommended size
-                # This allows dynamic position sizing to work even with zero balance
+                # Use the minimum as the recommended size (when not in signal-only mode)
                 recommended_position_size = min_position_size
 
                 logger.info(
@@ -194,21 +194,17 @@ class PositionSizingCalculator:
                     current_price
                 )
             else:
-                # Fallback to signal-only with standard calculation if price is unavailable
-                default_balance = 10000.0
-                recommended_position_size = self.calculate_position_size(
-                    account_balance=default_balance,
-                    risk_percentage=risk_percentage,
-                    entry_price=current_price if current_price > 0 else 1,
-                    stop_loss_percentage=sizing_stop_loss_percentage
-                )
-                logger.warning(
-                    "Current price unavailable - using default balance $%.2f for sizing recommendation",
-                    default_balance
-                )
+                # In signal-only mode or if price not available, set position size to None
+                recommended_position_size = None
 
-            # Calculate stop loss price
-            if current_price > 0 and sizing_stop_loss_percentage > 0:
+                if signal_only:
+                    logger.info(
+                        "Signal-only mode enabled - no position sizing calculated (balance_valid: %s, signal_only_default: %s)",
+                        has_valid_balance, signal_only_default
+                    )
+
+            # Calculate stop loss price (only if position size exists and not signal-only)
+            if current_price > 0 and sizing_stop_loss_percentage > 0 and not signal_only:
                 stop_loss_price = (
                     current_price * (1 - sizing_stop_loss_percentage)
                     if action == 'BUY'
@@ -222,11 +218,16 @@ class PositionSizingCalculator:
                 'stop_loss_price': stop_loss_price,
                 'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
                 'risk_percentage': risk_percentage,
-                'signal_only': False
+                'signal_only': signal_only
             })
 
             # Log appropriate message
-            if not has_valid_balance:
+            if signal_only:
+                if not has_valid_balance:
+                    logger.info("Signal-only mode: No valid balance - no position sizing")
+                elif signal_only_default:
+                    logger.info("Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing")
+            elif not has_valid_balance:
                 logger.warning(
                     "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
                     balance_source,

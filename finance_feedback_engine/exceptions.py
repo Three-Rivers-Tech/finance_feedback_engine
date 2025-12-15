@@ -162,11 +162,11 @@ __all__ = [
     'DataRetrievalError',
     'BacktestingError',
     'BacktestValidationError',
-    'MemoryError',
+    'FFEMemoryError',
     'VectorStoreError',
     'PersistenceError',
     'StorageError',
     'CircuitBreakerError',
-    'SystemError',
+    'FFESystemError',
     'InsufficientProvidersError',
 ]

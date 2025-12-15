@@ -1,6 +1,6 @@
 import pytest
+from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
-pytestmark = pytest.mark.skip(reason="Signal-only mode deprecated; tests removed")
 config = {
     'decision_engine': {
         'ai_provider': 'local',

@@ -22,7 +22,7 @@ from .exceptions import (
     DataProviderError,
     PersistenceError,
     TradingError,
-    MemoryError
+    FFEMemoryError,
 )
 
 logger = logging.getLogger(__name__)
@@ -180,7 +180,7 @@ class FinanceFeedbackEngine:
                 except (FileNotFoundError, PermissionError) as e:
                     logger.warning(f"Failed to load portfolio memory: {e}, starting fresh")
                     self.memory_engine = PortfolioMemoryEngine(config)
-                except MemoryError as e:
+                except FFEMemoryError as e:
                     logger.warning(f"Failed to load portfolio memory due to memory error: {e}, starting fresh")
                     self.memory_engine = PortfolioMemoryEngine(config)
                 except Exception as e:
