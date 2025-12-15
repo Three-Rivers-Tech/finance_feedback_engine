@@ -3,25 +3,13 @@
 from typing import Dict, Any, Optional
 import logging
 import uuid
-from datetime import datetime, timedelta
-import pandas as pd
-import pytz
+from datetime import datetime
 import asyncio
 
-from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.memory.vector_store import VectorMemory
-from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
 
 logger = logging.getLogger(__name__)
-
-MAX_WORKERS = 4
-ENSEMBLE_TIMEOUT = 30
-
-# Minimum order sizes for different platforms (USD notional value)
-MIN_ORDER_SIZE_CRYPTO = 10.0  # Coinbase minimum order size
-MIN_ORDER_SIZE_FOREX = 1.0    # Oanda minimum micro lot
-MIN_ORDER_SIZE_DEFAULT = 10.0  # Default minimum for unknown platforms
 
 
 class DecisionEngine:
@@ -101,36 +89,23 @@ class DecisionEngine:
             - local_priority: Local model priority setting
             - ensemble: Ensemble configuration (if provider='ensemble')
         """
+        self.config = config
         self.data_provider = data_provider
         self.backtest_mode = backtest_mode
-        # Store original config for backward compatibility lookups
-        self._original_config = config
-        # Handle both full config and sub-dict formats
-        if 'decision_engine' in config:
-            # Full config passed
-            self.config = config
-            decision_config = config['decision_engine']
-        else:
-            # Sub-dict passed (backward compatibility)
-            self.config = {'decision_engine': config}
-            decision_config = config
 
-        # Extract decision engine configuration
-        self.ai_provider = decision_config.get('ai_provider', 'local')
-        self.model_name = decision_config.get('model_name', 'default')
-        self.decision_threshold = decision_config.get('decision_threshold', 0.7)
-        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
-        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 0.05)
+        # Initialize specialized managers
+        from .ai_decision_manager import AIDecisionManager
+        from .market_analysis import MarketAnalysisContext
+        from .decision_validator import DecisionValidator
+        from .position_sizing import PositionSizingCalculator
 
-        # Compatibility: Convert legacy percentage values (>1) to decimals
-        if self.portfolio_stop_loss_percentage > 1:
-            logger.warning(f"Detected legacy portfolio_stop_loss_percentage {self.portfolio_stop_loss_percentage}%. Converting to decimal: {self.portfolio_stop_loss_percentage/100:.3f}")
-            self.portfolio_stop_loss_percentage /= 100
-        if self.portfolio_take_profit_percentage > 1:
-            logger.warning(f"Detected legacy portfolio_take_profit_percentage {self.portfolio_take_profit_percentage}%. Converting to decimal: {self.portfolio_take_profit_percentage/100:.3f}")
-            self.portfolio_take_profit_percentage /= 100
+        self.ai_manager = AIDecisionManager(config, backtest_mode)
+        self.market_analyzer = MarketAnalysisContext(config, data_provider)
+        self.validator = DecisionValidator(config, backtest_mode)
+        self.position_sizing_calc = PositionSizingCalculator(config)
 
         # Local models and priority configuration
+        decision_config = config.get('decision_engine', {})
         self.local_models = decision_config.get('local_models', [])
         self.local_priority = decision_config.get('local_priority', False)
 
@@ -152,21 +127,12 @@ class DecisionEngine:
         # Monitoring context provider (optional, set via set_monitoring_context)
         self.monitoring_provider = None
 
-        # Initialize market schedule for session awareness
-        self.market_schedule = MarketSchedule()
-
-        # Initialize ensemble manager if using ensemble mode
-        self.ensemble_manager = None
-        if self.ai_provider == 'ensemble':
-            self._get_ensemble_manager()
-            logger.info("Ensemble mode enabled")
-
         # Initialize vector memory for semantic search (optional)
         self.vector_memory = None
         try:
             # Accept either direct path or nested config keys
             # Check top-level 'memory' key first (full config), then fall back to original config (backward compatibility)
-            vm_cfg = self.config.get('memory') or self._original_config.get('memory', {})
+            vm_cfg = config.get('memory', {})
             if not isinstance(vm_cfg, dict):
                 vm_cfg = {}
             storage_path = (
@@ -180,49 +146,15 @@ class DecisionEngine:
         except Exception as e:
             logger.warning(f"Failed to initialize vector memory: {e}. Proceeding without semantic search.")
 
-        logger.info(f"Decision engine initialized with provider: {self.ai_provider}")
-
-    def _get_ensemble_manager(self):
-        """Lazily create and cache the ensemble manager."""
-        if self.ensemble_manager is None:
-            from .ensemble_manager import EnsembleDecisionManager
-            self.ensemble_manager = EnsembleDecisionManager(self.config)
-        return self.ensemble_manager
-
-    def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
-        """Calculate price change percentage."""
-        open_price = market_data.get('open', 0)
-        close_price = market_data.get('close', 0)
-
-        if open_price == 0:
-            return 0.0
-
-        return ((close_price - open_price) / open_price) * 100
-
-    def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
-        """Calculate simple volatility indicator."""
-        high = market_data.get('high', 0)
-        low = market_data.get('low', 0)
-        close = market_data.get('close', 0)
-
-        if close == 0:
-            return 0.0
-
-        return ((high - low) / close) * 100
+        logger.info(f"Decision engine initialized with provider: {self.ai_manager.ai_provider}")
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
         Simulate AI inference for backtesting.
         """
         logger.info("Mock AI inference")
-        # Simulate some asynchronous work
-        await asyncio.sleep(0.01) # Small delay to simulate async operation
-        return {
-            "action": "HOLD",
-            "confidence": 50,
-            "reasoning": "Mock decision for backtesting",
-            "amount": 0.0
-        }
+        # Delegating to the AI manager for consistent behavior
+        return await self.ai_manager._mock_ai_inference(prompt)
 
     async def _detect_market_regime(self, asset_pair: str) -> str:
         """
@@ -234,44 +166,8 @@ class DecisionEngine:
         Returns:
             Market regime string
         """
-        if not self.data_provider:
-            logger.warning("No data provider available for regime detection")
-            return "UNKNOWN"
-
-        try:
-            # Get last 30 days of historical data
-            end_date = datetime.utcnow().date()
-            start_date = end_date - timedelta(days=30)
-
-            # Fetch historical data (handle both sync and async providers)
-            historical_data_method = self.data_provider.get_historical_data(
-                asset_pair,
-                start_date.strftime("%Y-%m-%d"),
-                end_date.strftime("%Y-%m-%d")
-            )
-
-            # Await the historical data method directly
-            historical_data = await historical_data_method
-
-            if not historical_data or len(historical_data) < 14:
-                logger.warning("Insufficient historical data for regime detection")
-                return "UNKNOWN"
-
-            # Create detector and detect regime
-            detector = MarketRegimeDetector()
-            # Convert list of dicts to DataFrame
-            if isinstance(historical_data, list):
-                df = pd.DataFrame(historical_data)
-            else:
-                df = historical_data
-            regime = detector.detect_regime(df)
-
-            logger.info("Detected market regime: %s", regime)
-            return regime
-
-        except Exception as e:
-            logger.error("Error detecting market regime: %s", e)
-            return "UNKNOWN"
+        # Delegating to the market analyzer
+        return await self.market_analyzer._detect_market_regime(asset_pair)
 
     def _create_ai_prompt(self, context: Dict[str, Any]) -> str:
         """
@@ -688,30 +584,8 @@ Format response as a structured technical analysis demonstration.
         Returns:
             AI response
         """
-        logger.info(f"Querying AI provider: {self.ai_provider}")
-
-        # Mock mode: fast random decisions for backtesting
-        if self.ai_provider == 'mock':
-            return await self._mock_ai_inference(prompt)
-
-        # Ensemble mode: query multiple providers and aggregate
-        if self.ai_provider == 'ensemble':
-            return await self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
-
-        # Route to appropriate single provider
-        if self.ai_provider == 'local':
-            return await self._local_ai_inference(prompt)
-        elif self.ai_provider == 'cli':
-            return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == 'codex':
-            return await self._codex_ai_inference(prompt)
-        elif self.ai_provider == 'qwen':
-            # Qwen CLI provider
-            return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == 'gemini':
-            return await self._gemini_ai_inference(prompt)
-        else:
-            raise ValueError(f"Unknown AI provider: {self.ai_provider}")
+        # Delegating to the AI manager
+        return await self.ai_manager.query_ai(prompt, asset_pair, market_data)
 
     async def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -1043,11 +917,6 @@ Format response as a structured technical analysis demonstration.
         """
         Select platform-specific balance based on asset type.
 
-        Extracts the appropriate balance for the asset being traded:
-        - Crypto: Coinbase balances (FUTURES_USD, SPOT_USD, SPOT_USDC, or coinbase_*)
-        - Forex: Oanda balances (oanda_*)
-        - Unknown: All balances
-
         Args:
             balance: Full balance dictionary (may contain multiple platforms)
             asset_pair: Asset pair being traded
@@ -1056,66 +925,8 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Tuple of (relevant_balance, balance_source, is_crypto, is_forex)
         """
-        # Determine asset classification
-        is_crypto = (
-            'BTC' in asset_pair
-            or 'ETH' in asset_pair
-            or asset_type == 'crypto'
-        )
-        is_forex = '_' in asset_pair or asset_type == 'forex'
-
-        # Extract the appropriate balance based on asset type
-        relevant_balance = {}
-        balance_source = 'Unknown'
-
-        if balance and isinstance(balance, dict):
-            if is_crypto:
-                # Filter for Coinbase balances - check for both new format and legacy format
-                # New format: FUTURES_USD, SPOT_USD, SPOT_USDC (from coinbase_advanced)
-                # Legacy format: coinbase_* prefixed keys
-                coinbase_keys = [
-                    k for k in balance.keys()
-                    if k.startswith('coinbase_')
-                    or k in ['FUTURES_USD', 'SPOT_USD', 'SPOT_USDC']
-                ]
-
-                if coinbase_keys:
-                    relevant_balance = {k: balance[k] for k in coinbase_keys}
-                    balance_source = 'Coinbase'
-
-                    # Log available balance sources for debugging
-                    logger.debug(
-                        "Coinbase balance keys found: %s (total: $%.2f)",
-                        ', '.join(coinbase_keys),
-                        sum(relevant_balance.values())
-                    )
-
-            elif is_forex:
-                # Filter for Oanda balances
-                relevant_balance = {
-                    k: v for k, v in balance.items()
-                    if k.startswith('oanda_')
-                }
-                balance_source = 'Oanda'
-            else:
-                # Unknown type, use all balances as fallback
-                relevant_balance = balance
-                balance_source = 'Combined'
-
-            # Fallback: Check for unified cash balance keys when platform-specific keys are absent
-            if not relevant_balance:
-                # Try USD, USDC, or other generic keys
-                fallback_keys = [k for k in ['USD', 'USDC', 'USDT'] if k in balance]
-                if fallback_keys:
-                    relevant_balance = {k: balance[k] for k in fallback_keys}
-                    balance_source = '/'.join(fallback_keys)
-                    logger.debug(
-                        "Using fallback balance keys: %s (total: $%.2f)",
-                        balance_source,
-                        sum(relevant_balance.values())
-                    )
-
-        return relevant_balance, balance_source, is_crypto, is_forex
+        # Delegating to the market analyzer
+        return self.market_analyzer._select_relevant_balance(balance, asset_pair, asset_type)
 
     def _has_existing_position(
         self,
@@ -1126,10 +937,6 @@ Format response as a structured technical analysis demonstration.
         """
         Check if there's an existing position in portfolio or active trades.
 
-        Checks both:
-        1. Spot holdings in portfolio
-        2. Futures/margin positions in monitoring context
-
         Args:
             asset_pair: Asset pair to check
             portfolio: Portfolio breakdown with holdings
@@ -1138,43 +945,8 @@ Format response as a structured technical analysis demonstration.
         Returns:
             True if existing position found, False otherwise
         """
-        # Extract base currency from asset pair
-        # IMPORTANT: Replace USDT before USD to avoid "BTCUSDT" -> "BTCT"
-        asset_base = (
-            asset_pair.replace('USDT', '')
-            .replace('USD', '')
-            .replace('_', '')
-        )
-
-        has_position = False
-
-        # Check portfolio holdings
-        if portfolio and portfolio.get('holdings'):
-            for holding in portfolio.get('holdings', []):
-                if (
-                    holding.get('currency') == asset_base
-                    and holding.get('amount', 0) > 0
-                ):
-                    has_position = True
-                    break
-
-        # Check monitoring context for active positions (futures/margin)
-        if monitoring_context and not has_position:
-            active_positions = monitoring_context.get('active_positions', [])
-            # Handle both dict format (live) and list format (backtest)
-            if isinstance(active_positions, dict):
-                futures_positions = active_positions.get('futures', [])
-            elif isinstance(active_positions, list):
-                futures_positions = active_positions
-            else:
-                futures_positions = []
-
-            for position in futures_positions:
-                if isinstance(position, dict) and asset_pair in position.get('product_id', ''):
-                    has_position = True
-                    break
-
-        return has_position
+        # Delegating to the market analyzer
+        return self.market_analyzer._has_existing_position(asset_pair, portfolio, monitoring_context)
 
     def _calculate_position_sizing_params(
         self,
@@ -1188,9 +960,6 @@ Format response as a structured technical analysis demonstration.
     ) -> Dict[str, Any]:
         """
         Calculate all position sizing parameters.
-
-        Consolidates position sizing logic that was duplicated between normal
-        and signal-only modes. Handles dynamic stop-loss calculation based on ATR.
 
         Args:
             context: Decision context with market data and config
@@ -1209,198 +978,11 @@ Format response as a structured technical analysis demonstration.
             - risk_percentage: Risk percentage used
             - signal_only: Whether this is signal-only mode
         """
-        # Check if we have valid balance
-        has_valid_balance = (
-            relevant_balance
-            and len(relevant_balance) > 0
-            and sum(relevant_balance.values()) > 0
+        # Delegating to the position sizing calculator
+        return self.position_sizing_calc.calculate_position_sizing_params(
+            context, current_price, action, has_existing_position,
+            relevant_balance, balance_source, signal_only_default
         )
-
-        # Determine if we should calculate position sizing
-        should_calculate = (
-            has_valid_balance
-            and not signal_only_default
-            and (
-                action in ['BUY', 'SELL']
-                or (action == 'HOLD' and has_existing_position)
-            )
-        )
-
-        # Get risk parameters from agent config
-        agent_config = self.config.get('agent', {})
-        risk_percentage = agent_config.get('risk_percentage', 0.01)
-        default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
-        use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
-
-        # Compatibility: Convert legacy percentage values (>1) to decimals
-        if risk_percentage > 1:
-            logger.warning(
-                f"Detected legacy risk_percentage {risk_percentage}%. "
-                f"Converting to decimal: {risk_percentage/100:.3f}"
-            )
-            risk_percentage /= 100
-        if default_stop_loss > 1:
-            logger.warning(
-                f"Detected legacy sizing_stop_loss_percentage {default_stop_loss}%. "
-                f"Converting to decimal: {default_stop_loss/100:.3f}"
-            )
-            default_stop_loss /= 100
-
-        # Calculate stop-loss percentage (dynamic or fixed)
-        if use_dynamic_stop_loss:
-            sizing_stop_loss_percentage = self.calculate_dynamic_stop_loss(
-                current_price=current_price,
-                context=context,
-                default_percentage=default_stop_loss,
-                atr_multiplier=agent_config.get('atr_multiplier', 2.0),
-                min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
-                max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
-            )
-        else:
-            sizing_stop_loss_percentage = default_stop_loss
-            logger.info(
-                "Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)",
-                default_stop_loss * 100
-            )
-
-        # Initialize return values
-        result = {
-            'recommended_position_size': None,
-            'stop_loss_price': None,
-            'sizing_stop_loss_percentage': None,
-            'risk_percentage': None,
-            'signal_only': False
-        }
-
-        # CASE 1: Normal mode with valid balance
-        if should_calculate:
-            total_balance = sum(relevant_balance.values())
-
-            recommended_position_size = self.calculate_position_size(
-                account_balance=total_balance,
-                risk_percentage=risk_percentage,
-                entry_price=current_price,
-                stop_loss_percentage=sizing_stop_loss_percentage
-            )
-
-            # Calculate stop loss price
-            position_type = self._determine_position_type(action)
-            stop_loss_price = 0
-            if position_type == 'LONG' and current_price > 0:
-                stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
-            elif position_type == 'SHORT' and current_price > 0:
-                stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
-
-            result.update({
-                'recommended_position_size': recommended_position_size,
-                'stop_loss_price': stop_loss_price,
-                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
-                'risk_percentage': risk_percentage,
-                'signal_only': False
-            })
-
-            if action == 'HOLD' and has_existing_position:
-                logger.info(
-                    "HOLD with existing position: sizing (%.4f units) from %s",
-                    recommended_position_size,
-                    balance_source,
-                )
-            else:
-                logger.info(
-                    "Position sizing: %.4f units (balance: $%.2f from %s, risk: %.2f%%, sl: %.2f%%)",
-                    recommended_position_size,
-                    total_balance,
-                    balance_source,
-                    risk_percentage * 100,
-                    sizing_stop_loss_percentage * 100,
-                )
-
-        # CASE 2: Zero balance - use minimum order size without signal-only flag
-        else:
-            signal_only = False
-
-            # HOLD without position: no sizing needed
-            if action == 'HOLD' and not has_existing_position:
-                logger.info("HOLD without existing position - no position sizing shown")
-                result['signal_only'] = False
-                return result
-
-            # Determine minimum order size based on asset type
-            is_crypto = context.get('market_data', {}).get('type') == 'crypto' or 'BTC' in context['asset_pair'] or 'ETH' in context['asset_pair']
-            is_forex = '_' in context['asset_pair'] or context.get('market_data', {}).get('type') == 'forex'
-
-            if is_crypto:
-                min_order_size = MIN_ORDER_SIZE_CRYPTO
-            elif is_forex:
-                min_order_size = MIN_ORDER_SIZE_FOREX
-            else:
-                min_order_size = MIN_ORDER_SIZE_DEFAULT
-
-            # Calculate minimum viable position size based on platform minimum
-            # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
-            # This ensures we can execute the smallest possible trade
-            if current_price > 0:
-                # Calculate minimum position size in units
-                min_position_size = min_order_size / current_price
-
-                # Use the minimum as the recommended size
-                # This allows dynamic position sizing to work even with zero balance
-                recommended_position_size = min_position_size
-
-                logger.info(
-                    "Zero/low balance detected - using minimum order size: $%.2f USD notional = %.6f units @ $%.2f",
-                    min_order_size,
-                    recommended_position_size,
-                    current_price
-                )
-            else:
-                # Fallback to signal-only with standard calculation if price is unavailable
-                default_balance = 10000.0
-                recommended_position_size = self.calculate_position_size(
-                    account_balance=default_balance,
-                    risk_percentage=risk_percentage,
-                    entry_price=current_price if current_price > 0 else 1,
-                    stop_loss_percentage=sizing_stop_loss_percentage
-                )
-                logger.warning(
-                    "Current price unavailable - using default balance $%.2f for sizing recommendation",
-                    default_balance
-                )
-
-            # Calculate stop loss price
-            if current_price > 0 and sizing_stop_loss_percentage > 0:
-                stop_loss_price = (
-                    current_price * (1 - sizing_stop_loss_percentage)
-                    if action == 'BUY'
-                    else current_price * (1 + sizing_stop_loss_percentage)
-                )
-            else:
-                stop_loss_price = None
-
-            result.update({
-                'recommended_position_size': recommended_position_size,
-                'stop_loss_price': stop_loss_price,
-                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
-                'risk_percentage': risk_percentage,
-                'signal_only': False
-            })
-
-            # Log appropriate message
-            if not has_valid_balance:
-                logger.warning(
-                    "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
-                    balance_source,
-                    recommended_position_size,
-                    min_order_size
-                )
-            else:
-                logger.warning(
-                    "Portfolio data unavailable - using minimum order size: %.6f units ($%.2f USD notional)",
-                    recommended_position_size,
-                    min_order_size
-                )
-
-        return result
 
     def _create_decision(
         self,
@@ -1411,9 +993,6 @@ Format response as a structured technical analysis demonstration.
         """
         Create structured decision object.
 
-        Refactored to use helper functions for better maintainability and testability.
-        Reduced from 367 lines (CC=60) to ~80 lines (CC=8).
-
         Args:
             asset_pair: Asset pair
             context: Decision context
@@ -1422,35 +1001,28 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Structured decision
         """
-        decision_id = str(uuid.uuid4())
-
         # Extract basic decision parameters
-        current_price = context['market_data'].get('close', 0)
         balance = context.get('balance', {})
         action = ai_response.get('action', 'HOLD')
         asset_type = context['market_data'].get('type', 'unknown')
 
-        # Helper 1: Select relevant balance based on asset type
+        # Select relevant balance based on asset type
         relevant_balance, balance_source, is_crypto, is_forex = self._select_relevant_balance(
             balance, asset_pair, asset_type
         )
 
-        # Helper 2: Check for existing position
+        # Check for existing position
         has_existing_position = self._has_existing_position(
             asset_pair,
             context.get('portfolio'),
             context.get('monitoring_context')
         )
 
-        # Helper 3: Determine position type
-        position_type = self._determine_position_type(action)
-
-        # Helper 4: Calculate position sizing parameters
-        # Deprecated: signal-only mode removed; always compute sizing when possible
+        # Calculate position sizing parameters
         signal_only_default = False
         sizing_params = self._calculate_position_sizing_params(
             context=context,
-            current_price=current_price,
+            current_price=context['market_data'].get('close', 0),
             action=action,
             has_existing_position=has_existing_position,
             relevant_balance=relevant_balance,
@@ -1458,96 +1030,22 @@ Format response as a structured technical analysis demonstration.
             signal_only_default=signal_only_default
         )
 
-        # Extract position sizing results
-        recommended_position_size = sizing_params['recommended_position_size']
-        stop_loss_price = sizing_params['stop_loss_price']
-        sizing_stop_loss_percentage = sizing_params['sizing_stop_loss_percentage']
-        risk_percentage = sizing_params['risk_percentage']
-        signal_only = sizing_params['signal_only']
-
-        # Calculate suggested_amount based on action and position sizing
-        suggested_amount = ai_response.get('amount', 0)
-
-        # Override suggested_amount to 0 for HOLD with no position
-        if action == 'HOLD' and not has_existing_position:
-            suggested_amount = 0
-            logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
-
-        # For non-signal-only BUY/SELL, use calculated position size converted to USD notional
-        if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
-            # For crypto futures, position size is USD notional value when USD or USDT is quote
-            if is_crypto and (asset_pair.endswith('USD') or asset_pair.endswith('USDT')):
-                suggested_amount = recommended_position_size * current_price
-                logger.info(
-                    "Position sizing: $%.2f USD notional for crypto futures (%.6f units @ $%.2f)",
-                    suggested_amount,
-                    recommended_position_size,
-                    current_price
-                )
-            else:
-                # For forex or other, use unit amount
-                suggested_amount = recommended_position_size
-
-        # Assemble decision object
-        decision = {
-            'id': decision_id,
-            'asset_pair': asset_pair,
-            'timestamp': datetime.utcnow().isoformat(),
-            'action': action,
-            'confidence': ai_response.get('confidence', 50),
-            'reasoning': ai_response.get('reasoning', 'No reasoning provided'),
-            'suggested_amount': suggested_amount,
-            'recommended_position_size': recommended_position_size,
-            'position_type': position_type,
-            'entry_price': current_price,
-            'stop_loss_price': stop_loss_price,
-            'stop_loss_fraction': sizing_stop_loss_percentage,
-            'take_profit_percentage': None,  # Individual trade TP is not explicitly set by the DecisionEngine
-            'risk_percentage': risk_percentage,
-            'signal_only': signal_only,
-            'portfolio_stop_loss_percentage': self.portfolio_stop_loss_percentage,
-            'portfolio_take_profit_percentage': self.portfolio_take_profit_percentage,
-            'market_data': context['market_data'],
-            'balance_snapshot': context['balance'],
-            'price_change': context['price_change'],
-            'volatility': context['volatility'],
-            # Surface portfolio unrealized P&L if available from platform data
-            'portfolio_unrealized_pnl': (
-                context.get('portfolio', {}) or {}
-            ).get('unrealized_pnl'),
-            'executed': False,
-            'ai_provider': self.ai_provider,
-            'model_name': self.model_name,
-            'backtest_mode': self.backtest_mode,
-            # --- Multi-timeframe and risk context fields ---
-            'multi_timeframe_trend': context.get('multi_timeframe_trend'),
-            'multi_timeframe_entry_signals': context.get('multi_timeframe_entry_signals'),
-            'multi_timeframe_sources': context.get('multi_timeframe_sources'),
-            'data_source_path': context.get('data_source_path'),
-            'monitor_pulse_age_seconds': context.get('monitor_pulse_age_seconds'),
-            'var_snapshot': context.get('var_snapshot'),
-            'correlation_alerts': context.get('correlation_alerts'),
-            'correlation_summary': context.get('correlation_summary')
-        }
-
-        # Add ensemble metadata if available
-        if 'ensemble_metadata' in ai_response:
-            decision['ensemble_metadata'] = ai_response['ensemble_metadata']
-
-        # Add action_votes if available (from weighted voting)
-        if 'action_votes' in ai_response:
-            decision['action_votes'] = ai_response['action_votes']
-
-        # Add meta_features if available (from stacking)
-        if 'meta_features' in ai_response:
-            decision['meta_features'] = ai_response['meta_features']
-
-        logger.info(
-            "Decision created: %s %s (confidence: %s%%)",
-            decision['action'],
-            asset_pair,
-            decision['confidence'],
+        # Delegating to the decision validator
+        decision = self.validator.create_decision(
+            asset_pair=asset_pair,
+            context=context,
+            ai_response=ai_response,
+            position_sizing_result=sizing_params,
+            relevant_balance=relevant_balance,
+            balance_source=balance_source,
+            has_existing_position=has_existing_position,
+            is_crypto=is_crypto,
+            is_forex=is_forex,
         )
+
+        # Update the AI provider and model name from the AI manager
+        decision['ai_provider'] = self.ai_manager.ai_provider
+        decision['model_name'] = self.ai_manager.model_name
 
         return decision
 
@@ -1563,10 +1061,6 @@ Format response as a structured technical analysis demonstration.
         """
         Calculate dynamic stop-loss percentage based on market volatility (ATR).
 
-        Uses ATR (Average True Range) from multi-timeframe pulse data to set
-        stop-loss distance that adapts to current market volatility. Falls back
-        to default percentage if ATR is unavailable.
-
         Args:
             current_price: Current asset price
             context: Decision context containing market_data and monitoring_context
@@ -1578,60 +1072,11 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Stop-loss percentage as decimal (e.g., 0.02 for 2%)
         """
-        if current_price <= 0:
-            return default_percentage
-
-        atr_value = None
-
-        # Try to get ATR from monitoring context (multi-timeframe pulse)
-        monitoring_context = context.get('monitoring_context')
-        if monitoring_context:
-            pulse_data = monitoring_context.get('multi_timeframe_pulse')
-            if pulse_data and isinstance(pulse_data, dict):
-                # Check for ATR in daily timeframe (most reliable for position sizing)
-                daily_data = pulse_data.get('1d') or pulse_data.get('daily')
-                if daily_data and 'atr' in daily_data:
-                    atr_value = daily_data.get('atr')
-                # Fallback to 4h timeframe if daily not available
-                elif pulse_data.get('4h') and 'atr' in pulse_data.get('4h', {}):
-                    atr_value = pulse_data['4h'].get('atr')
-
-        # Try to get ATR from market_data if not found in monitoring context
-        if atr_value is None:
-            market_data = context.get('market_data', {})
-            if 'atr' in market_data:
-                atr_value = market_data.get('atr')
-            # Check for pulse data directly in market_data
-            elif 'pulse' in market_data and isinstance(market_data['pulse'], dict):
-                pulse = market_data['pulse']
-                daily_data = pulse.get('1d') or pulse.get('daily')
-                if daily_data and 'atr' in daily_data:
-                    atr_value = daily_data.get('atr')
-
-        # Calculate stop-loss based on ATR if available
-        if atr_value is not None and atr_value > 0:
-            # ATR-based stop-loss: use multiple of ATR as percentage of price
-            atr_based_percentage = (atr_value * atr_multiplier) / current_price
-
-            # Apply bounds
-            stop_loss_percentage = max(min_percentage, min(atr_based_percentage, max_percentage))
-
-            logger.info(
-                "Dynamic stop-loss: ATR=%.4f, ATR-based=%.2f%%, bounded=%.2f%% (min=%.2f%%, max=%.2f%%)",
-                atr_value,
-                atr_based_percentage * 100,
-                stop_loss_percentage * 100,
-                min_percentage * 100,
-                max_percentage * 100
-            )
-            return stop_loss_percentage
-        else:
-            # No ATR available, use default percentage
-            logger.info(
-                "ATR not available, using default stop-loss: %.2f%%",
-                default_percentage * 100
-            )
-            return default_percentage
+        # Delegating to the position sizing calculator
+        return self.position_sizing_calc.calculate_dynamic_stop_loss(
+            current_price, context, default_percentage,
+            atr_multiplier, min_percentage, max_percentage
+        )
 
     def calculate_position_size(
         self,
@@ -1652,19 +1097,10 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Suggested position size in units of asset
         """
-        if entry_price == 0 or stop_loss_percentage == 0:
-            return 0.0
-
-        # Amount willing to risk in dollar terms
-        risk_amount = account_balance * risk_percentage
-
-        # Price distance of stop loss
-        stop_loss_distance = entry_price * stop_loss_percentage
-
-        # Position size = Risk Amount / Stop Loss Distance
-        position_size = risk_amount / stop_loss_distance
-
-        return position_size
+        # Delegating to the position sizing calculator
+        return self.position_sizing_calc.calculate_position_size(
+            account_balance, risk_percentage, entry_price, stop_loss_percentage
+        )
 
     def set_monitoring_context(self, monitoring_provider):
         """
@@ -1674,6 +1110,7 @@ Format response as a structured technical analysis demonstration.
             monitoring_provider: MonitoringContextProvider instance
         """
         self.monitoring_provider = monitoring_provider
+        self.market_analyzer.monitoring_provider = monitoring_provider  # Also update the analyzer
         logger.info("Monitoring context provider attached to decision engine")
 
     async def generate_decision(
@@ -1803,109 +1240,15 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Decision context
         """
-        context = {
-            'asset_pair': asset_pair,
-            'market_data': market_data,
-            'balance': balance,
-            'portfolio': portfolio,
-            'memory_context': memory_context,
-            'monitoring_context': monitoring_context,
-            'timestamp': datetime.utcnow().isoformat(),
-            'price_change': self._calculate_price_change(market_data),
-            'volatility': self._calculate_volatility(market_data)
-        }
-
-        # Detect market regime using historical data
-        regime = await self._detect_market_regime(asset_pair)
-        context['regime'] = regime
-
-        # Add market schedule status
-        asset_type = market_data.get('asset_type', 'crypto')
-        try:
-            market_status = self.market_schedule.get_market_status(asset_pair, asset_type)
-            context['market_status'] = market_status if market_status else {}
-        except Exception as e:
-            logger.warning(f"Failed to get market status: {e}")
-            context['market_status'] = {}
-
-        # Validate data freshness
-        data_timestamp = market_data.get('date')
-        if data_timestamp is None:
-            data_timestamp = market_data.get('timestamp')
-
-        if data_timestamp is not None:
-            try:
-                is_fresh, age_minutes, freshness_message = validate_data_freshness(
-                    data_timestamp, asset_type
-                )
-                context['data_freshness'] = {
-                    'is_fresh': is_fresh,
-                    'age_minutes': age_minutes,
-                    'message': freshness_message
-                }
-            except Exception as e:
-                logger.warning(f"Failed to validate data freshness: {e}")
-                context['data_freshness'] = {
-                    'is_fresh': False,
-                    'age_minutes': None,
-                    'message': f'Validation error: {str(e)}'
-                }
-        else:
-            context['data_freshness'] = {
-                'is_fresh': False,
-                'age_minutes': None,
-                'message': 'No timestamp available in market data'
-            }
-
-        # Note: Multi-timeframe pulse now injected via monitoring_context
-        # (see MonitoringContextProvider.get_monitoring_context and format_for_ai_prompt)
-
-        # --- Inject real VaR & correlation analysis ---
-        try:
-            from finance_feedback_engine.risk.var_calculator import VaRCalculator
-            from finance_feedback_engine.risk.correlation_analyzer import CorrelationAnalyzer
-            var_calc = VaRCalculator()
-            corr_analyzer = CorrelationAnalyzer()
-            # Portfolio breakdowns for dual-platform risk (if available)
-            coinbase_holdings = portfolio.get('coinbase_holdings', {}) if portfolio else {}
-            coinbase_history = portfolio.get('coinbase_price_history', {}) if portfolio else {}
-            oanda_holdings = portfolio.get('oanda_holdings', {}) if portfolio else {}
-            oanda_history = portfolio.get('oanda_price_history', {}) if portfolio else {}
-            # Compute VaR (95% and 99%)
-            var_95 = var_calc.calculate_dual_portfolio_var(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.95
-            )
-            var_99 = var_calc.calculate_dual_portfolio_var(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history, confidence_level=0.99
-            )
-            context['var_snapshot'] = {
-                'portfolio_value': var_95.get('total_portfolio_value', 0.0),
-                'var_95': var_95['combined_var']['var_usd'] if 'combined_var' in var_95 else 0.0,
-                'var_99': var_99['combined_var']['var_usd'] if 'combined_var' in var_99 else 0.0,
-                'data_quality': var_95.get('coinbase_var', {}).get('data_quality', 'unknown')
-            }
-            # Correlation analysis
-            correlation_result = corr_analyzer.analyze_dual_platform_correlations(
-                coinbase_holdings, coinbase_history, oanda_holdings, oanda_history
-            )
-            context['correlation_alerts'] = correlation_result.get('overall_warnings', [])
-            context['correlation_summary'] = corr_analyzer.format_correlation_summary(correlation_result)
-        except Exception as e:
-            logger.debug(f"Risk context injection failed: {e}")
-            # Fallback to placeholder if error
-            port_val = 0.0
-            if portfolio:
-                port_val = portfolio.get('total_value_usd', 0.0)
-            context['var_snapshot'] = {
-                'portfolio_value': port_val,
-                'var_95': 0.0,
-                'var_99': 0.0,
-                'data_quality': 'placeholder'
-            }
-            context['correlation_alerts'] = []
-            context['correlation_summary'] = ''
-
-        return context
+        # Delegating to the market analyzer
+        return await self.market_analyzer.create_decision_context(
+            asset_pair,
+            market_data,
+            balance,
+            portfolio,
+            memory_context,
+            monitoring_context
+        )
 
     def _should_include_semantic_memory(self) -> bool:
         """
