@@ -62,6 +62,72 @@ def standardize_asset_pair(asset_pair: str) -> str:
     return standardized
 
 
+def validate_asset_pair_format(asset_pair: str, min_length: int = 6) -> bool:
+    """
+    Validates the format of an asset pair string.
+
+    Args:
+        asset_pair: The asset pair to validate (should be standardized: 'BTCUSD')
+        min_length: Minimum required length (default: 6 for typical pairs)
+
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not asset_pair or not isinstance(asset_pair, str):
+        return False
+
+    # Should be uppercase with only alphanumeric characters
+    if not re.match(r'^[A-Z0-9]+$', asset_pair):
+        return False
+
+    # Check minimum length
+    if len(asset_pair) < min_length:
+        return False
+
+    return True
+
+
+def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
+    """
+    Validates that an asset pair has a valid composition (base/quote).
+
+    Args:
+        asset_pair: The asset pair to validate (should be standardized: 'BTCUSD')
+
+    Returns:
+        Tuple of (is_valid, message)
+    """
+    if not validate_asset_pair_format(asset_pair):
+        return False, f"Asset pair '{asset_pair}' has invalid format"
+
+    # Should have a reasonable base/quote split (at least 2-3 chars each)
+    if len(asset_pair) < 4:  # Too short for any meaningful base/quote
+        return False, f"Asset pair '{asset_pair}' is too short to be valid"
+
+    # Check for common base currency prefixes
+    known_base_currencies = {
+        'BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'ADA', 'DOT', 'LINK', 'SOL',
+        'DOGE', 'AVAX', 'MATIC', 'UNI', 'SAND', 'MANA', 'AAVE', 'SUSHI',
+        'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'SGD', 'HKD',
+        'USD', 'USDT', 'USDC', 'DAI'
+    }
+
+    # Check the first few characters for known base currencies
+    base_length = min(4, len(asset_pair))  # Check up to first 4 chars
+    base_part = asset_pair[:base_length]
+
+    found_base = False
+    for currency in known_base_currencies:
+        if base_part.startswith(currency):
+            found_base = True
+            break
+
+    if not found_base:
+        logger.warning(f"Asset pair '{asset_pair}' starts with an unknown base currency: {base_part}")
+
+    return True, f"Asset pair '{asset_pair}' has valid composition"
+
+
 def validate_data_freshness(
     data_timestamp: str,
     asset_type: str = "crypto",
