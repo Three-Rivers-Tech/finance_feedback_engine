@@ -295,9 +295,10 @@ async with httpx.AsyncClient() as client:
 const response = await fetch(
   'http://localhost:8000/api/v1/analyze?asset=BTCUSD',
   {
-    headers: {
-      'Authorization': 'Bearer sk_live_xxx'
-    }
+    headers:
+      {
+        'Authorization': 'Bearer sk_live_xxx'
+      }
   }
 );
 const data = await response.json();
@@ -455,7 +456,7 @@ class CustomAuthManager(AuthManager):
         result = external_service.validate(api_key)
         if result.valid:
             self._log_auth_attempt(result.key_hash, True, ip_address, user_agent)
-            return True, result.name, {}
+            return True, result.name, {{}}
         
         # Fall back to local database
         return super().validate_api_key(api_key, ip_address, user_agent)

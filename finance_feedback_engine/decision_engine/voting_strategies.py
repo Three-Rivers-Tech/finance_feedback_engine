@@ -327,31 +327,18 @@ class VotingStrategies:
             conf for act, conf in zip(actions, confidences)
             if act == final_action
         ]
-        """Generate meta-features from base model predictions."""
-        num_providers = len(actions)
-        if num_providers == 0 or not amounts or not confidences:
-            return {
-                'buy_ratio': 0.0, 'sell_ratio': 0.0, 'hold_ratio': 0.0,
-                'avg_confidence': 0.0, 'confidence_std': 0.0,
-                'min_confidence': 0, 'max_confidence': 0,
-                'avg_amount': 0.0, 'amount_std': 0.0,
-                'num_providers': 0, 'action_diversity': 0
-            }
-        action_counts = Counter(actions)
 
         return {
-            'buy_ratio': action_counts.get('BUY', 0) / num_providers,
-            'sell_ratio': action_counts.get('SELL', 0) / num_providers,
-            'hold_ratio': action_counts.get('HOLD', 0) / num_providers,
-            'avg_confidence': float(np.mean(confidences)),
-            'confidence_std': float(np.std(confidences)),
-            'min_confidence': min(confidences) if confidences else 0,
-            'max_confidence': max(confidences) if confidences else 0,
-            'avg_amount': float(np.mean(amounts)),
-            'amount_std': float(np.std(amounts)),
-            'num_providers': num_providers,
-            'action_diversity': len(action_counts)
+            'action': final_action,
+            'confidence': int(np.mean(supporter_confidences)) if supporter_confidences else 50,
+            'reasoning': self._aggregate_reasoning(providers, actions, reasonings, final_action),
+            'amount': float(np.mean(amounts)) if amounts else 0.0
         }
+
+    def _stacking_ensemble(
+        self,
+        providers: List[str],
+        actions: List[str],
         confidences: List[int],
         reasonings: List[str],
         amounts: List[float]
