@@ -93,7 +93,7 @@ def validate_all_configs() -> Tuple[bool, List[str]]:
             if issue_count > 0:
                 print(f"⚠️  PASSED with {issue_count} warnings")
             else:
-                print(f"✅ PASSED - No issues")
+                print("✅ PASSED - No issues")
 
         print()
 

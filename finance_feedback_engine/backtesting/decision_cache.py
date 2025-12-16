@@ -7,7 +7,9 @@ Particularly useful for backtesting where identical market states may occur.
 import hashlib
 import json
 import logging
+import queue
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -38,11 +40,28 @@ class DecisionCache:
         """
         self.db_path = db_path
         self.max_connections = max_connections
+        self._connection_pool = queue.Queue(maxsize=max_connections)
+
+        # Lock to protect access to the pool - must be initialized before _init_db
+        self._pool_lock = threading.RLock()
 
         # Ensure directory exists
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
-        # Initialize database
+        # Pre-create connections for the pool
+        for _ in range(max_connections):
+            conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,  # Allow thread sharing
+                timeout=30.0,  # 30-second timeout for database locks
+            )
+            # Enable WAL mode for concurrent reads
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")  # Better performance
+            conn.execute("PRAGMA busy_timeout=30000")  # 30 seconds timeout
+            self._connection_pool.put(conn)
+
+        # Initialize database if needed
         self._init_db()
 
         # Track stats for current session
@@ -53,20 +72,89 @@ class DecisionCache:
             f"Decision cache initialized at {db_path} with connection pooling (max {max_connections} connections)"
         )
 
+    def _create_connection(self):
+        """Create a new SQLite connection with proper settings."""
+        conn = sqlite3.connect(
+            self.db_path,
+            check_same_thread=False,  # Allow thread sharing
+            timeout=30.0,  # 30-second timeout for database locks
+        )
+        # Enable WAL mode for concurrent reads
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")  # Better performance
+        conn.execute("PRAGMA busy_timeout=30000")  # 30 seconds timeout
+        return conn
+
+    def _validate_connection(self, conn):
+        """Validate that a connection is healthy."""
+        try:
+            # Test the connection with a simple query
+            conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
     @contextmanager
-    def _get_db_connection(self):
+    def _get_db_connection(self, timeout: float = 30.0):
         """
-        Context manager for database connections.
+        Context manager for database connections with connection pooling.
         Ensures proper connection handling and cleanup.
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = None
+        conn_from_pool = True  # Flag to track if connection came from pool
+
         try:
+            # Get connection from pool with timeout
+            with self._pool_lock:
+                try:
+                    conn = self._connection_pool.get(timeout=timeout)
+                    conn_from_pool = True
+                except queue.Empty:
+                    # Pool is empty, create a temporary connection
+                    logger.warning(
+                        "Connection pool exhausted, creating temporary connection"
+                    )
+                    conn = self._create_connection()
+                    conn_from_pool = False
+
             yield conn
+            conn.commit()  # Auto-commit successful transactions
+
         except Exception:
-            conn.rollback()
+            if conn:
+                conn.rollback()  # Rollback on error
             raise
         finally:
-            conn.close()
+            # Return connection to pool if it came from there and is still healthy
+            if conn and conn_from_pool:
+                try:
+                    # Validate connection health before putting back in pool
+                    if self._validate_connection(conn):
+                        with self._pool_lock:
+                            self._connection_pool.put_nowait(conn)
+                    else:
+                        # Connection is broken, close it and create a new one for the pool
+                        conn.close()
+                        with self._pool_lock:
+                            # Replace with a fresh connection
+                            fresh_conn = self._create_connection()
+                            self._connection_pool.put_nowait(fresh_conn)
+                except queue.Full:
+                    # Pool is full, close connection
+                    conn.close()
+            elif conn and not conn_from_pool:
+                # This was a temporary connection, close it
+                conn.close()
+
+    def _cleanup_connections(self):
+        """Close all connections in the pool and clean up resources."""
+        with self._pool_lock:
+            while not self._connection_pool.empty():
+                try:
+                    conn = self._connection_pool.get_nowait()
+                    conn.close()
+                except queue.Empty:
+                    break
 
     def _init_db(self):
         """Create database schema if not exists."""

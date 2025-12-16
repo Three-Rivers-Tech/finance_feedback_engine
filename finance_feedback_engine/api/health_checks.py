@@ -5,7 +5,7 @@ Provides detailed health information about all components.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict
 
 from ..core import FinanceFeedbackEngine
@@ -24,10 +24,8 @@ def _safe_json(value: Any) -> Any:
         return [_safe_json(v) for v in value]
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
-    try:
-        return value.__dict__
-    except Exception:
-        return str(value)
+    # Fall back to string to avoid recursive structures (e.g., Mock objects)
+    return str(value)
 
 
 def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
@@ -37,85 +35,153 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     Returns:
         Detailed health report
     """
-    health = {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "uptime_seconds": (datetime.utcnow() - _startup_time).total_seconds(),
-        "components": {},
-    }
+    uptime_seconds = (datetime.utcnow() - _startup_time).total_seconds()
+    health_status = "healthy"
 
-    # Check platform connectivity
+    # Extract a simple, JSON-safe portfolio balance
+    portfolio_balance = None
+    try:
+        if hasattr(engine, "platform") and hasattr(engine.platform, "get_balance"):
+            balance_info = engine.platform.get_balance()
+            # Prefer a numeric total if present, otherwise keep raw value
+            if isinstance(balance_info, dict) and "total" in balance_info:
+                portfolio_balance = balance_info["total"]
+            elif isinstance(balance_info, (int, float)):
+                portfolio_balance = balance_info
+            else:
+                portfolio_balance = _safe_json(balance_info)
+        else:
+            portfolio_balance = None
+    except Exception as e:
+        logger.error(f"Platform balance check failed: {e}")
+        portfolio_balance = None
+        health_status = "degraded"
+
+    # Capture circuit breaker state (data provider and platform, if available)
+    circuit_breakers: Dict[str, Any] = {}
+
+    def _circuit_state(source: Any) -> Dict[str, Any]:
+        try:
+            breaker = getattr(source, "circuit_breaker", None)
+            if breaker is None:
+                return {"state": "unavailable"}
+
+            state = getattr(breaker, "state", None)
+            # Prefer named state, otherwise raw value
+            state_value = getattr(state, "name", state)
+            return {
+                "state": state_value,
+                "failure_count": getattr(breaker, "failure_count", None),
+            }
+        except Exception as err:
+            logger.warning(f"Circuit breaker inspection failed: {err}")
+            return {"state": "unknown", "error": str(err)}
+
+    # Data provider circuit breaker (Alpha Vantage)
+    try:
+        data_provider = getattr(engine, "data_provider", None)
+        alpha = getattr(data_provider, "alpha_vantage", None) if data_provider else None
+        if alpha is not None:
+            circuit_breakers["alpha_vantage"] = _circuit_state(alpha)
+    except Exception as e:
+        logger.warning(f"Alpha Vantage circuit breaker check failed: {e}")
+        circuit_breakers["alpha_vantage"] = {"state": "unknown", "error": str(e)}
+        health_status = "degraded"
+
+    # Platform circuit breaker (if present)
+    try:
+        platform = getattr(engine, "platform", None)
+        if platform is not None and hasattr(platform, "_execute_breaker"):
+            breaker = platform._execute_breaker
+            state_value = getattr(breaker, "state", None)
+            circuit_breakers["platform_execute"] = {
+                "state": getattr(state_value, "name", state_value),
+                "failure_count": getattr(breaker, "failure_count", None),
+            }
+    except Exception as e:
+        logger.warning(f"Platform circuit breaker check failed: {e}")
+        circuit_breakers["platform_execute"] = {"state": "unknown", "error": str(e)}
+        health_status = "degraded"
+
+    # Legacy component details for observability (still JSON-safe)
+    components: Dict[str, Any] = {}
+
+    # Check platform connectivity (retained for observability endpoints)
     try:
         if hasattr(engine, "platform"):
             balance = _safe_json(engine.platform.get_balance())
-            health["components"]["platform"] = {
+            platform_name = None
+            try:
+                platform_name = engine.config.get("trading_platform", "unknown")
+            except Exception:
+                platform_name = "unknown"
+            components["platform"] = {
                 "status": "healthy",
-                "name": engine.config.get("trading_platform", "unknown"),
+                "name": platform_name,
                 "balance": balance,
             }
         else:
-            health["components"]["platform"] = {
+            components["platform"] = {
                 "status": "unavailable",
                 "message": "No platform configured",
             }
     except Exception as e:
         logger.error(f"Platform health check failed: {e}")
-        health["components"]["platform"] = {"status": "unhealthy", "error": str(e)}
-        health["status"] = "degraded"
+        components["platform"] = {"status": "unhealthy", "error": str(e)}
+        health_status = "degraded"
 
     # Check data provider
     try:
         if hasattr(engine, "data_provider"):
-            # Simple check - see if we can get config
-            provider_config = engine.config.get("alpha_vantage_api_key")
-            health["components"]["data_provider"] = {
+            # Simple check - see if we can get config without assuming attribute
+            engine_config = getattr(engine, "config", {})
+            provider_config = (
+                engine_config.get("alpha_vantage_api_key")
+                if isinstance(engine_config, dict)
+                else None
+            )
+            components["data_provider"] = {
                 "status": "healthy" if provider_config else "degraded",
                 "message": (
                     "Alpha Vantage configured" if provider_config else "No API key"
                 ),
             }
         else:
-            health["components"]["data_provider"] = {
+            components["data_provider"] = {
                 "status": "unavailable",
                 "message": "Data provider not initialized",
             }
     except Exception as e:
         logger.error(f"Data provider health check failed: {e}")
-        health["components"]["data_provider"] = {"status": "unhealthy", "error": str(e)}
-        health["status"] = "degraded"
+        components["data_provider"] = {"status": "unhealthy", "error": str(e)}
+        health_status = "degraded"
 
     # Check decision store
     try:
         if hasattr(engine, "decision_store"):
             recent = engine.decision_store.get_recent_decisions(limit=1)
-            health["components"]["decision_store"] = {
+            components["decision_store"] = {
                 "status": "healthy",
                 "recent_decisions": len(recent),
             }
         else:
-            health["components"]["decision_store"] = {"status": "unavailable"}
+            components["decision_store"] = {"status": "unavailable"}
     except Exception as e:
         logger.error(f"Decision store health check failed: {e}")
-        health["components"]["decision_store"] = {
+        components["decision_store"] = {
             "status": "unhealthy",
             "error": str(e),
         }
-        health["status"] = "degraded"
+        health_status = "degraded"
 
-    # Check circuit breakers
-    try:
-        if hasattr(engine, "platform") and hasattr(engine.platform, "_execute_breaker"):
-            breaker = engine.platform._execute_breaker
-            health["components"]["circuit_breaker"] = {
-                "status": "healthy" if breaker.state == 0 else "open",
-                "state": breaker.state,
-                "failure_count": breaker.failure_count,
-            }
-        else:
-            health["components"]["circuit_breaker"] = {"status": "not_applicable"}
-    except Exception as e:
-        logger.warning(f"Circuit breaker health check failed: {e}")
-        health["components"]["circuit_breaker"] = {"status": "unknown", "error": str(e)}
+    health = {
+        "status": health_status,
+        "timestamp": datetime.utcnow().isoformat(),
+        "uptime_seconds": uptime_seconds,
+        "portfolio_balance": portfolio_balance,
+        "circuit_breakers": circuit_breakers,
+        "components": components,
+    }
 
     return _safe_json(health)
 
@@ -141,7 +207,7 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     try:
         # Platform must be accessible
         if hasattr(engine, "platform"):
-            balance = _safe_json(engine.platform.get_balance())
+            _safe_json(engine.platform.get_balance())
 
         # If we got here, we're ready
         return {

@@ -20,7 +20,9 @@ class OandaPlatform(BaseTradingPlatform):
     - Trade execution capabilities
     """
 
-    def __init__(self, credentials: Dict[str, Any]):
+    def __init__(
+        self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize Oanda platform.
 
@@ -30,6 +32,7 @@ class OandaPlatform(BaseTradingPlatform):
                 - account_id: Oanda account ID
                 - environment: 'practice' or 'live'
                 - base_url: Optional custom base URL
+            config: Configuration dictionary containing timeout settings
         """
         super().__init__(credentials)
         # Support both 'access_token' and 'api_key' for flexibility
@@ -46,6 +49,15 @@ class OandaPlatform(BaseTradingPlatform):
                 if self.environment == "practice"
                 else "https://api-fxtrade.oanda.com"
             )
+
+        # Initialize timeout configuration
+        api_timeouts = (config or {}).get("api_timeouts", {})
+        self.timeout_config = {
+            "platform_balance": api_timeouts.get("platform_balance", 5),
+            "platform_portfolio": api_timeouts.get("platform_portfolio", 10),
+            "platform_execute": api_timeouts.get("platform_execute", 30),
+            "platform_connection": api_timeouts.get("platform_connection", 3),
+        }
 
         # Initialize Oanda client (lazy loading)
         self._client = None

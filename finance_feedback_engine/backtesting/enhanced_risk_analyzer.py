@@ -1,8 +1,7 @@
 """Enhanced risk analysis for backtesting with advanced metrics and validation."""
 
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd

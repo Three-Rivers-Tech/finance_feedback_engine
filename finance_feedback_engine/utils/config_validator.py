@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import yaml
 
@@ -217,6 +217,7 @@ class ConfigValidator:
         self._check_schema(config, config_path, result)
         self._check_environment_rules(config, config_path, result)
         self._check_best_practices(config, config_path, result)
+        self._check_logging_configuration(config, config_path, result)
 
         return result
 
@@ -239,7 +240,7 @@ class ConfigValidator:
                             if len(match.groups()) >= 2
                             else match.group(0)
                         )
-                    except:
+                    except Exception:
                         value = match.group(0)
 
                     # Check if it's a safe placeholder
@@ -455,6 +456,55 @@ class ConfigValidator:
                             suggestion=f'Valid providers: {", ".join(sorted(valid_providers))}',
                         )
 
+    def _check_logging_configuration(
+        self, config: Dict, config_path: str, result: ValidationResult
+    ):
+        """Check logging configuration for production environments"""
+        # Check if logging is configured for production
+        if self.environment == "production":
+            logging_config = config.get("logging", {})
+
+            # Check if console handler is disabled in production
+            handlers = logging_config.get("handlers", {})
+            if "console" in handlers:
+                # Check if the console handler is for debugging only
+                console_config = handlers["console"]
+                if console_config.get("enabled", True) is True:
+                    result.add_issue(
+                        Severity.HIGH,
+                        "console_logging_in_production",
+                        "Console logging should be disabled in production environment",
+                        config_path,
+                        suggestion="Disable console logging in production to prevent sensitive data from being written to stdout",
+                    )
+
+            # Check for file-based logging in production
+            has_file_handler = any(
+                handler_type in handlers
+                and "file" in str(handlers[handler_type]).lower()
+                for handler_type in handlers
+            )
+            if not has_file_handler:
+                result.add_issue(
+                    Severity.MEDIUM,
+                    "no_file_logging_in_production",
+                    "Production environment should have file-based logging",
+                    config_path,
+                    suggestion="Configure file-based logging for persistent logs in production",
+                )
+
+            # Check log level is appropriate for production
+            root_config = logging_config.get("root", {})
+            log_level = root_config.get("level", "INFO")
+            if log_level.upper() == "DEBUG":
+                result.add_issue(
+                    Severity.HIGH,
+                    "debug_logging_in_production",
+                    "DEBUG log level should not be used in production environment",
+                    config_path,
+                    suggestion="Set log level to INFO, WARNING, or ERROR for production",
+                )
+
 
 def validate_config_file(
     config_path: str, environment: str = "development"
@@ -498,7 +548,7 @@ def print_validation_results(result: ValidationResult, verbose: bool = True):
     high_count = len(result.get_high_issues())
 
     print(f"\n{'='*70}")
-    print(f"Configuration Validation Results")
+    print("Configuration Validation Results")
     print(f"{'='*70}")
     print(f"Status: {'✗ FAILED' if not result.valid else '⚠ PASSED WITH WARNINGS'}")
     print(f"Total Issues: {total_issues}")

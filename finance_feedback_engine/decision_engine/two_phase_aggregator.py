@@ -8,9 +8,7 @@ Implements a two-phase decision making process:
 
 import asyncio
 import logging
-from copy import deepcopy
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from ..exceptions import InsufficientProvidersError
 

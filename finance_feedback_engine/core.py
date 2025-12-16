@@ -4,19 +4,18 @@ import logging
 import os
 import socket
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+import pandas as pd
 
 from .data_providers.alpha_vantage_provider import AlphaVantageProvider
 from .data_providers.historical_data_provider import HistoricalDataProvider
 from .decision_engine.engine import DecisionEngine
 from .exceptions import (
-    APIError,
     ConfigurationError,
-    DataProviderError,
     FFEMemoryError,
     InsufficientProvidersError,
     ModelInstallationError,
-    PersistenceError,
     TradingError,
 )
 from .memory.portfolio_memory import PortfolioMemoryEngine
@@ -26,6 +25,9 @@ from .utils.failure_logger import log_quorum_failure
 from .utils.model_installer import ensure_models_installed
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from .backtesting.backtester import Backtester
 
 
 class FinanceFeedbackEngine:
@@ -60,6 +62,9 @@ class FinanceFeedbackEngine:
         except ModelInstallationError as e:
             logger.warning(f"Model installation check failed: {e}")
             # Continue anyway - system may work with fewer models
+        except (ImportError, RuntimeError, OSError) as e:
+            logger.warning(f"Error during model installation check: {e}", exc_info=True)
+            # Continue anyway - system may work with fewer models
         except Exception as e:
             logger.warning(
                 f"Unexpected error during model installation check: {e}", exc_info=True
@@ -77,6 +82,26 @@ class FinanceFeedbackEngine:
 
         # Initialize trading platform
         platform_name = config.get("trading_platform", "coinbase")
+
+        # Initialize Delta Lake integration (if enabled)
+        delta_lake_config = config.get("delta_lake", {})
+        if delta_lake_config.get("enabled", False):
+            try:
+                from finance_feedback_engine.pipelines.storage.delta_lake_manager import (
+                    DeltaLakeManager,
+                )
+
+                self.delta_lake = DeltaLakeManager(
+                    storage_path=delta_lake_config.get("storage_path", "./delta_lake"),
+                    table_prefix=delta_lake_config.get("table_prefix", "ffe"),
+                )
+                logger.info("Delta Lake integration enabled")
+            except ImportError:
+                logger.warning("Delta Lake not available, skipping integration")
+                self.delta_lake = None
+        else:
+            self.delta_lake = None
+            logger.debug("Delta Lake integration disabled")
 
         # Handle unified/multi-platform mode
         if platform_name.lower() == "unified":
@@ -154,8 +179,13 @@ class FinanceFeedbackEngine:
 
         try:
             self.trading_platform = PlatformFactory.create_platform(
-                platform_name, platform_credentials
+                platform_name, platform_credentials, config
             )
+        except (ValueError, KeyError, TypeError) as e:
+            logger.error(
+                f"Failed to create trading platform {platform_name}: {e}", exc_info=True
+            )
+            raise ConfigurationError(f"Platform configuration error: {e}") from e
         except Exception as e:
             logger.error(
                 f"Failed to create trading platform {platform_name}: {e}", exc_info=True
@@ -189,6 +219,12 @@ class FinanceFeedbackEngine:
                 except FFEMemoryError as e:
                     logger.warning(
                         f"Failed to load portfolio memory due to memory error: {e}, starting fresh"
+                    )
+                    self.memory_engine = PortfolioMemoryEngine(config)
+                except (OSError, IOError) as e:
+                    logger.warning(
+                        f"IO error loading portfolio memory: {e}, starting fresh",
+                        exc_info=True,
                     )
                     self.memory_engine = PortfolioMemoryEngine(config)
                 except Exception as e:
@@ -225,7 +261,7 @@ class FinanceFeedbackEngine:
             self._auto_start_trade_monitor()
 
         # Backtester (lazy init holder)
-        self._backtester: Optional[Backtester] = None
+        self._backtester: Optional["Backtester"] = None
 
         logger.info("Finance Feedback Engine initialized successfully")
 
@@ -254,6 +290,12 @@ class FinanceFeedbackEngine:
         except ImportError as e:
             logger.warning(
                 "Could not auto-enable monitoring context due to import error: %s", e
+            )
+        except (AttributeError, ValueError, TypeError) as e:
+            logger.warning(
+                "Could not auto-enable monitoring context due to configuration error: %s",
+                e,
+                exc_info=True,
             )
         except Exception as e:
             logger.warning(
@@ -323,6 +365,11 @@ class FinanceFeedbackEngine:
                 "Internal TradeMonitor started (pulse=%ss, manual_cli=%s)",
                 self._monitor_pulse_interval,
                 self._monitor_manual_cli,
+            )
+        except (ImportError, ValueError, AttributeError) as e:
+            logger.warning(
+                f"Failed to auto-start TradeMonitor due to configuration error: {e}",
+                exc_info=True,
             )
         except Exception as e:
             logger.warning(f"Failed to auto-start TradeMonitor: {e}", exc_info=True)
@@ -400,6 +447,12 @@ class FinanceFeedbackEngine:
                     "Could not fetch portfolio breakdown due to data format error: %s",
                     e,
                 )
+            except (ConnectionError, TimeoutError, ValueError) as e:
+                logger.warning(
+                    "Could not fetch portfolio breakdown due to connection issue: %s",
+                    e,
+                    exc_info=True,
+                )
             except Exception as e:
                 logger.warning(
                     "Could not fetch portfolio breakdown: %s", e, exc_info=True
@@ -469,6 +522,48 @@ class FinanceFeedbackEngine:
 
         return decision
 
+    def get_historical_data_from_lake(
+        self, asset_pair: str, timeframe: str, lookback_days: int = 30
+    ) -> Optional[pd.DataFrame]:
+        """
+        Query historical data from Delta Lake (if enabled).
+
+        Args:
+            asset_pair: The asset pair to query (e.g., "BTCUSD")
+            timeframe: The timeframe to query (e.g., "1d", "1h", "15m")
+            lookback_days: Number of days to look back (default 30)
+
+        Returns:
+            pandas DataFrame with historical data or None if Delta Lake not available
+        """
+        if not self.delta_lake:
+            logger.warning("Delta Lake not enabled")
+            return None
+
+        try:
+            from datetime import datetime, timedelta
+
+            # Calculate date range
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=lookback_days)
+
+            # Query Delta Lake
+            df = self.delta_lake.read_table(
+                table_name=f"raw_market_data_{timeframe}",
+                filters=[
+                    f"asset_pair = '{asset_pair}'",
+                    f"timestamp >= '{start_date.isoformat()}'",
+                ],
+            )
+
+            logger.info(
+                f"Retrieved {len(df)} records from Delta Lake for {asset_pair} ({timeframe})"
+            )
+            return df
+        except Exception as e:
+            logger.error(f"Error querying Delta Lake: {e}")
+            return None
+
     def get_balance(self) -> Dict[str, float]:
         """
         Get current balance from trading platform.
@@ -530,6 +625,17 @@ class FinanceFeedbackEngine:
         except TradingError as e:
             # Log and update decision with failure
             logger.error(f"Trade execution failed: {e}")
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {"success": False, "error": str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+        except (ConnectionError, socket.timeout, TimeoutError) as e:
+            # Log and update decision with failure
+            logger.error(
+                f"Trade execution failed due to connection/network issue: {e}",
+                exc_info=True,
+            )
             decision["executed"] = False
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
@@ -641,6 +747,8 @@ class FinanceFeedbackEngine:
             stacklevel=2,
         )
         if self._backtester is None:
+            from .backtesting.backtester import Backtester
+
             bt_conf = self.config.get("backtesting", {})
             self._backtester = Backtester(self.data_provider, bt_conf)
         return await self._backtester.run(
@@ -730,7 +838,7 @@ class FinanceFeedbackEngine:
                 base_pct = None
                 try:
                     base_pct = getattr(outcome, "pnl_percentage", None)
-                except Exception:
+                except AttributeError:
                     base_pct = None
 
                 if base_pct is None:
@@ -746,7 +854,7 @@ class FinanceFeedbackEngine:
                             if denom
                             else (outcome.realized_pnl or 0.0)
                         )
-                    except Exception:
+                    except (ZeroDivisionError, TypeError, AttributeError):
                         base_pct = outcome.realized_pnl or 0.0
 
                 # Time adjustment: reward quicker profitable trades (cap amplification)

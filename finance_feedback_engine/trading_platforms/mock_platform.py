@@ -1,7 +1,6 @@
 """Mock trading platform for backtesting and testing without real APIs."""
 
 import logging
-import random
 import time
 import uuid
 from datetime import datetime
@@ -275,15 +274,11 @@ class MockTradingPlatform(BaseTradingPlatform):
                             * contracts
                             * self._contract_multiplier
                         )
-<<<<<<< HEAD
-                        self._balance["FUTURES_USD"] += suggested_amount - fee_amount
-=======
                         realized_pnl = pnl
                         # Update balance with proceeds and realized P&L
                         self._balance["FUTURES_USD"] += (
                             suggested_amount - fee_amount + realized_pnl
                         )
->>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
 
                         # Update position
                         pos["contracts"] -= contracts

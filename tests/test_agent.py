@@ -83,34 +83,39 @@ async def test_run_agent_command():
         "monitoring": {"enable_live_view": False},
     }
 
-    with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine") as mock_ffe:
+    # The run-agent command implementation lives in cli.commands.agent
+    with patch(
+        "finance_feedback_engine.cli.commands.agent.FinanceFeedbackEngine"
+    ) as mock_ffe:
         mock_ffe.return_value = MagicMock()
 
-    with patch("finance_feedback_engine.cli.main._initialize_agent") as mock_init_agent:
-        mock_agent = MagicMock()
-        mock_agent.run = AsyncMock()
-        mock_init_agent.return_value = mock_agent
-
         with patch(
-            "finance_feedback_engine.cli.main._run_live_market_view",
-            new_callable=AsyncMock,
-        ) as mock_live_view:
-            result = runner.invoke(
-                run_agent, ["--autonomous"], obj={"config": test_config}
-            )
+            "finance_feedback_engine.cli.commands.agent._initialize_agent"
+        ) as mock_init_agent:
+            mock_agent = MagicMock()
+            mock_agent.run = AsyncMock()
+            mock_init_agent.return_value = mock_agent
 
-            # Conditional assertions based on exit code
-            if result.exit_code == 0:
-                # Success: agent should have been initialized
-                assert (
-                    mock_init_agent.called
-                ), "Agent initialization should be called on successful execution"
-            else:
-                # Failure: validate expected error exit codes and output
-                assert result.exit_code in [
-                    1,
-                    2,
-                ], f"Unexpected exit code: {result.exit_code}"
-                assert (
-                    result.output or result.exception
-                ), "Error exit should produce output or exception"
+            with patch(
+                "finance_feedback_engine.cli.commands.agent._run_live_dashboard",
+                new_callable=AsyncMock,
+            ):
+                result = runner.invoke(
+                    run_agent, ["--autonomous"], obj={"config": test_config}
+                )
+
+                # Conditional assertions based on exit code
+                if result.exit_code == 0:
+                    # Success: agent should have been initialized
+                    assert (
+                        mock_init_agent.called
+                    ), "Agent initialization should be called on successful execution"
+                else:
+                    # Failure: validate expected error exit codes and output
+                    assert result.exit_code in [
+                        1,
+                        2,
+                    ], f"Unexpected exit code: {result.exit_code}"
+                    assert (
+                        result.output or result.exception
+                    ), "Error exit should produce output or exception"

@@ -20,8 +20,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field, validator
 
-from ..agent.trading_loop_agent import AgentState, TradingLoopAgent
+from ..agent.config import TradingAgentConfig
+from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
+from ..memory.portfolio_memory import PortfolioMemoryEngine
+from ..monitoring.trade_monitor import TradeMonitor
 from .dependencies import get_engine, verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -80,7 +83,7 @@ class AgentStatusResponse(BaseModel):
     current_asset_pair: Optional[str] = None
     last_decision_time: Optional[datetime] = None
     error_message: Optional[str] = None
-    config: Dict[str, Any] = {}
+    config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ManualTradeRequest(BaseModel):
@@ -98,7 +101,8 @@ class ManualTradeRequest(BaseModel):
     take_profit: Optional[float] = Field(None, description="Take profit price")
 
     @validator("action")
-    def validate_action(cls, v):
+    @classmethod
+    def validate_action(cls, v: str) -> str:
         if v.upper() not in ["BUY", "SELL", "LONG", "SHORT"]:
             raise ValueError("Action must be BUY, SELL, LONG, or SHORT")
         return v.upper()
@@ -114,7 +118,10 @@ class ConfigUpdateRequest(BaseModel):
     provider_weights: Optional[Dict[str, float]] = None
 
     @validator("provider_weights")
-    def validate_weights(cls, v):
+    @classmethod
+    def validate_weights(
+        cls, v: Optional[Dict[str, float]]
+    ) -> Optional[Dict[str, float]]:
         if v is not None:
             total = sum(v.values())
             if not (0.99 <= total <= 1.01):
@@ -132,7 +139,7 @@ async def start_agent(
     request: AgentControlRequest,
     background_tasks: BackgroundTasks,
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> AgentStatusResponse:
     """
     Start the trading agent.
 
@@ -155,30 +162,54 @@ async def start_agent(
                 )
 
             # Create config from request
-            config = copy.deepcopy(engine.config)
-
-            config["agent"] = config.get("agent", {})
+            config_snapshot = copy.deepcopy(engine.config)
+            agent_cfg_data = config_snapshot.get("agent", {})
+            agent_config = TradingAgentConfig(**agent_cfg_data)
 
             if request.asset_pairs:
-                config["agent"]["asset_pairs"] = request.asset_pairs
-
-            if request.take_profit:
-                config["agent"]["take_profit_percentage"] = request.take_profit
-
-            if request.stop_loss:
-                config["agent"]["sizing_stop_loss_percentage"] = request.stop_loss
+                agent_config.asset_pairs = request.asset_pairs
+                agent_config.watchlist = request.asset_pairs
 
             if request.max_concurrent_trades:
-                config["agent"]["max_concurrent_trades"] = request.max_concurrent_trades
+                agent_config.max_concurrent_trades = request.max_concurrent_trades
+
+            if request.autonomous:
+                agent_config.autonomous.enabled = True
+
+            take_profit = float(request.take_profit or 0.0)
+            stop_loss = float(request.stop_loss or 0.0)
+
+            portfolio_memory = engine.memory_engine or PortfolioMemoryEngine(
+                config_snapshot
+            )
+            engine.memory_engine = portfolio_memory
+
+            trade_monitor = engine.trade_monitor
+            if trade_monitor is None:
+                trade_monitor = TradeMonitor(
+                    platform=engine.trading_platform,
+                    portfolio_memory=portfolio_memory,
+                    portfolio_take_profit_percentage=take_profit,
+                    portfolio_stop_loss_percentage=stop_loss,
+                )
+                if hasattr(engine, "enable_monitoring_integration"):
+                    engine.enable_monitoring_integration(trade_monitor=trade_monitor)
+                trade_monitor.start()
 
             # Initialize agent
-            _agent_instance = TradingLoopAgent(config, engine)
+            _agent_instance = TradingLoopAgent(
+                config=agent_config,
+                engine=engine,
+                trade_monitor=trade_monitor,
+                portfolio_memory=portfolio_memory,
+                trading_platform=engine.trading_platform,
+            )
 
             # Start agent in background
-            async def run_agent():
+            async def run_agent() -> None:
                 try:
                     await _agent_instance.run()
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(f"Agent crashed: {e}", exc_info=True)
 
             _agent_task = asyncio.create_task(run_agent())
@@ -187,15 +218,9 @@ async def start_agent(
 
             return AgentStatusResponse(
                 state=BotState.RUNNING,
-<<<<<<< HEAD
                 agent_ooda_state=(
-                    _agent_instance.state.value if _agent_instance else None
+                    _agent_instance.state.name if _agent_instance else None
                 ),
-=======
-                agent_ooda_state=_agent_instance.state.value
-                if _agent_instance
-                else None,
->>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
                 uptime_seconds=0.0,
                 config={
                     "asset_pairs": request.asset_pairs,
@@ -212,7 +237,7 @@ async def start_agent(
 
 
 @bot_control_router.post("/stop")
-async def stop_agent():
+async def stop_agent() -> Dict[str, str]:
     """
     Stop the trading agent.
 
@@ -261,7 +286,7 @@ async def stop_agent():
 @bot_control_router.post("/emergency-stop")
 async def emergency_stop(
     close_positions: bool = True, engine: FinanceFeedbackEngine = Depends(get_engine)
-):
+) -> Dict[str, Any]:
     """
     EMERGENCY STOP - Immediately halt all trading.
 
@@ -288,19 +313,20 @@ async def emergency_stop(
 
             # Close positions if requested
             closed_positions = []
-            if close_positions and hasattr(engine, "platform"):
+            platform = getattr(engine, "trading_platform", None)
+            if close_positions and platform:
                 logger.warning("Closing all open positions...")
 
                 # Get open positions
-                if hasattr(engine.platform, "get_portfolio_breakdown"):
-                    breakdown = engine.platform.get_portfolio_breakdown()
+                if hasattr(platform, "get_portfolio_breakdown"):
+                    breakdown = platform.get_portfolio_breakdown()
                     positions = breakdown.get("positions", [])
 
                     for position in positions:
                         try:
-<<<<<<< HEAD
-                            # Execute close trade (async)
-                            result = await engine.platform.execute_trade(
+                            # Execute close trade - Note: sync version might be needed depending on platform
+                            # Using await version here as it's in an async function
+                            result = await platform.execute_trade(
                                 {
                                     "asset_pair": position["asset_pair"],
                                     "action": (
@@ -308,32 +334,11 @@ async def emergency_stop(
                                         if position.get("side") == "LONG"
                                         else "BUY"
                                     ),
-=======
-                            # Execute close trade - Note: sync version might be needed depending on platform
-                            # Using await version here as it's in an async function
-                            result = await engine.platform.execute_trade(
-                                {
-                                    "asset_pair": position["asset_pair"],
-                                    "action": "SELL"
-                                    if position.get("side") == "LONG"
-                                    else "BUY",
->>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
                                     "size": position.get("size", 0),
                                     "order_type": "MARKET",
                                 }
                             )
                             closed_positions.append(result)
-<<<<<<< HEAD
-                        except Exception:
-                            # Continue closing other positions even if one fails
-                            continue
-
-                return {
-                    "message": "Emergency stop executed",
-                    "closed_positions": len(closed_positions),
-                    "timestamp": datetime.utcnow().isoformat(),
-                }
-=======
                         except Exception as e:
                             logger.error(
                                 f"Failed to close position {position.get('id', 'unknown')}: {e}"
@@ -347,7 +352,6 @@ async def emergency_stop(
             "closed_positions": len(closed_positions),
             "timestamp": datetime.utcnow().isoformat(),
         }
->>>>>>> 446aab5 (Refactor MockTradingPlatform for improved readability and consistency)
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
         raise HTTPException(
@@ -357,7 +361,9 @@ async def emergency_stop(
 
 
 @bot_control_router.get("/status", response_model=AgentStatusResponse)
-async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
+async def get_agent_status(
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> AgentStatusResponse:
     """
     Get current agent status and performance metrics.
     """
@@ -377,13 +383,15 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
         portfolio_value = None
         active_positions = 0
 
-        if hasattr(engine, "platform"):
+        platform = getattr(engine, "trading_platform", None)
+
+        if platform:
             try:
-                balance = engine.platform.get_balance()
+                balance = platform.get_balance()
                 portfolio_value = balance.get("total", balance.get("balance"))
 
-                if hasattr(engine.platform, "get_portfolio_breakdown"):
-                    breakdown = engine.platform.get_portfolio_breakdown()
+                if hasattr(platform, "get_portfolio_breakdown"):
+                    breakdown = platform.get_portfolio_breakdown()
                     active_positions = len(breakdown.get("positions", []))
             except Exception as e:
                 logger.warning(f"Could not fetch portfolio info: {e}")
@@ -395,7 +403,7 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
 
         return AgentStatusResponse(
             state=BotState.RUNNING,
-            agent_ooda_state=agent_state.value if agent_state else None,
+            agent_ooda_state=agent_state.name if agent_state else None,
             uptime_seconds=uptime,
             active_positions=active_positions,
             portfolio_value=portfolio_value,
@@ -414,7 +422,7 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
 @bot_control_router.patch("/config")
 async def update_config(
     request: ConfigUpdateRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
-):
+) -> Dict[str, Any]:
     """
     Update agent configuration in real-time.
 
@@ -519,7 +527,7 @@ async def update_config(
 @bot_control_router.post("/manual-trade")
 async def execute_manual_trade(
     request: ManualTradeRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
-):
+) -> Dict[str, Any]:
     """
     Execute a manual trade, bypassing the autonomous agent.
 
@@ -529,7 +537,7 @@ async def execute_manual_trade(
         logger.info(f"Manual trade request: {request.action} {request.asset_pair}")
 
         # Build trade parameters
-        trade_params = {
+        trade_params: Dict[str, Any] = {
             "asset_pair": request.asset_pair,
             "action": request.action,
             "order_type": "LIMIT" if request.price else "MARKET",
@@ -547,14 +555,16 @@ async def execute_manual_trade(
         if request.take_profit:
             trade_params["take_profit"] = request.take_profit
 
-        if not hasattr(engine, "platform"):
+        platform = getattr(engine, "trading_platform", None)
+
+        if platform is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Trading platform is not available",
             )
 
         # Execute trade
-        result = await engine.platform.execute_trade(trade_params)
+        result = await platform.execute_trade(trade_params)
 
         logger.info(f"✅ Manual trade executed: {result}")
 
@@ -573,18 +583,22 @@ async def execute_manual_trade(
 
 
 @bot_control_router.get("/positions")
-async def get_open_positions(engine: FinanceFeedbackEngine = Depends(get_engine)):
+async def get_open_positions(
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> Dict[str, Any]:
     """
     Get all open positions.
     """
     try:
-        if not hasattr(engine.platform, "get_portfolio_breakdown"):
+        platform = getattr(engine, "trading_platform", None)
+
+        if platform is None or not hasattr(platform, "get_portfolio_breakdown"):
             return {
                 "positions": [],
                 "message": "Platform does not support position tracking",
             }
 
-        breakdown = engine.platform.get_portfolio_breakdown()
+        breakdown = platform.get_portfolio_breakdown()
         positions = breakdown.get("positions", [])
 
         return {

@@ -141,7 +141,9 @@ class CircuitBreaker:
                     )
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker '{self.name}' is OPEN. "
-                        "Service unavailable, please try again later."
+                        "Service unavailable, please try again later.",
+                        failure_count=self.failure_count,
+                        last_failure_time=self.last_failure_time,
                     )
             elif self.state == CircuitState.HALF_OPEN:
                 # Reject concurrent calls during HALF_OPEN probe
@@ -152,7 +154,9 @@ class CircuitBreaker:
                     )
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker '{self.name}' is testing recovery. "
-                        "Please try again shortly."
+                        "Please try again shortly.",
+                        failure_count=self.failure_count,
+                        last_failure_time=self.last_failure_time,
                     )
                 self._half_open_in_progress = True
 
@@ -170,7 +174,7 @@ class CircuitBreaker:
             # Re-acquire lock for failure handling
             with self._sync_lock:
                 if isinstance(exc, self.expected_exception):
-                    self._on_failure()
+                    self._on_failure(exc)
                 if self.state == CircuitState.HALF_OPEN:
                     self._half_open_in_progress = False
             raise
@@ -202,7 +206,9 @@ class CircuitBreaker:
                     )
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker '{self.name}' is OPEN. "
-                        "Service unavailable, please try again later."
+                        "Service unavailable, please try again later.",
+                        failure_count=self.failure_count,
+                        last_failure_time=self.last_failure_time,
                     )
             elif self.state == CircuitState.HALF_OPEN:
                 # Reject concurrent calls during HALF_OPEN probe
@@ -213,7 +219,9 @@ class CircuitBreaker:
                     )
                     raise CircuitBreakerOpenError(
                         f"Circuit breaker '{self.name}' is testing recovery. "
-                        "Please try again shortly."
+                        "Please try again shortly.",
+                        failure_count=self.failure_count,
+                        last_failure_time=self.last_failure_time,
                     )
                 self._half_open_in_progress = True
 
@@ -234,7 +242,7 @@ class CircuitBreaker:
             # Re-acquire lock for failure handling
             async with self._async_lock:
                 if isinstance(exc, self.expected_exception):
-                    self._on_failure()
+                    self._on_failure(exc)
                 if self.state == CircuitState.HALF_OPEN:
                     self._half_open_in_progress = False
             raise
@@ -260,12 +268,13 @@ class CircuitBreaker:
         if self.state == CircuitState.CLOSED:
             self.failure_count = 0
 
-    def _on_failure(self):
+    def _on_failure(self, last_error: Optional[Exception] = None):
         """Handle failed call."""
         self.total_failures += 1
         self.failure_count += 1
         self.success_count = 0
         self.last_failure_time = time.time()
+        self.last_error = last_error
 
         if self.failure_count >= self.failure_threshold:
             self._open_circuit()
@@ -319,6 +328,18 @@ class CircuitBreaker:
 
 class CircuitBreakerOpenError(Exception):
     """Exception raised when circuit breaker is open."""
+
+    def __init__(
+        self,
+        message: str,
+        last_error: Optional[Exception] = None,
+        failure_count: int = 0,
+        last_failure_time: Optional[float] = None,
+    ):
+        super().__init__(message)
+        self.last_error = last_error
+        self.failure_count = failure_count
+        self.last_failure_time = last_failure_time
 
 
 def circuit_breaker(

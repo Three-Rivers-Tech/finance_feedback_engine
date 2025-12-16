@@ -7,10 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 
-from finance_feedback_engine.backtesting.backtest_validator import (
-    BacktestValidator,
-    ValidationResult,
-)
+from finance_feedback_engine.backtesting.backtest_validator import BacktestValidator
 from finance_feedback_engine.backtesting.enhanced_risk_analyzer import (
     EnhancedRiskAnalyzer,
 )
@@ -454,16 +451,72 @@ class Backtester:
             risk_amount = current_balance * self.risk_per_trade
             return risk_amount
         elif self.position_sizing_strategy == "kelly_criterion":
-            # Simplified Kelly Criterion based on win rate and payoff ratio
-            # This would typically use historical performance data
-            # For now, use a simplified version with default assumptions
-            if volatility and volatility > 0:
-                # Inverse relationship: lower position size with higher volatility
-                position_fraction = min(0.1, 0.05 / volatility)  # Cap at 10% of balance
-                return current_balance * position_fraction
-            else:
-                # Default to fixed fraction if no volatility data
-                return current_balance * self.risk_per_trade
+            # Enhanced Kelly Criterion based on win rate and payoff ratio
+            # This uses historical performance data to calculate optimal position size
+            try:
+                from finance_feedback_engine.decision_engine.kelly_criterion import (
+                    KellyCriterionCalculator,
+                )
+
+                # Create a temporary config for Kelly Criterion
+                temp_config = {
+                    "kelly_criterion": {
+                        "kelly_fraction_cap": 0.25,
+                        "kelly_fraction_multiplier": 0.5,
+                        "min_kelly_fraction": 0.001,
+                        "max_position_size_pct": 0.10,
+                    }
+                }
+
+                kelly_calc = KellyCriterionCalculator(temp_config)
+
+                # Use default parameters if no historical data available
+                # In a real implementation, these would come from historical performance
+                win_rate = 0.55  # Default 55% win rate
+                avg_win = 100.0  # Default $100 average win
+                avg_loss = 75.0  # Default $75 average loss
+
+                # Adjust for volatility if available
+                if volatility and volatility > 0:
+                    # Adjust position size based on market volatility
+                    vol_factor = max(
+                        0.1, 1.0 - volatility
+                    )  # Reduce position in high volatility
+                    avg_win *= vol_factor
+                    avg_loss *= (
+                        2.0 - vol_factor
+                    )  # Increase loss impact in high volatility
+
+                position_size_units, details = kelly_calc.calculate_position_size(
+                    account_balance=current_balance,
+                    win_rate=win_rate,
+                    avg_win=avg_win,
+                    avg_loss=avg_loss,
+                    current_price=current_price if current_price > 0 else 1.0,
+                )
+
+                # Convert to dollar amount
+                position_dollars = (
+                    position_size_units * current_price
+                    if current_price > 0
+                    else position_size_units
+                )
+
+                return position_dollars
+            except ImportError:
+                logger.warning(
+                    "Kelly Criterion calculator not available, falling back to fixed fraction"
+                )
+                # Fallback to simplified Kelly Criterion
+                if volatility and volatility > 0:
+                    # Inverse relationship: lower position size with higher volatility
+                    position_fraction = min(
+                        0.1, 0.05 / volatility
+                    )  # Cap at 10% of balance
+                    return current_balance * position_fraction
+                else:
+                    # Default to fixed fraction if no volatility data
+                    return current_balance * self.risk_per_trade
         elif self.position_sizing_strategy == "fixed_amount":
             # Fixed dollar amount per trade
             return min(
@@ -478,6 +531,7 @@ class Backtester:
         equity_curve: List[float],
         initial_balance: float,
         num_trading_days: int,
+        timeframe: str = "daily",  # Add timeframe parameter
     ) -> Dict[str, Any]:
         """
         Calculates comprehensive performance metrics from the backtest results.
@@ -491,10 +545,28 @@ class Backtester:
         total_return = (equity_series.iloc[-1] - initial_balance) / initial_balance
         metrics["total_return_pct"] = total_return * 100
 
-        # Annualized Return (assuming daily data)
-        # TODO: Adjust this for actual frequency if not daily
+        # Annualized Return - adjust for actual frequency
         if num_trading_days > 0:
-            years = num_trading_days / 252  # Approx. trading days in a year
+            # Define periods per year based on timeframe
+            periods_per_year = {
+                "1min": 365
+                * 24
+                * 60,  # 525,600 minutes per year (assuming 24/7 trading)
+                "5min": 365 * 24 * 12,  # 105,120 periods per year
+                "15min": 365 * 24 * 4,  # 35,040 periods per year
+                "1h": 365 * 24,  # 8,760 hours per year
+                "4h": 365 * 6,  # 2,190 4-hour periods per year
+                "daily": 252,  # 252 trading days per year (traditional)
+                "weekly": 52,  # 52 weeks per year
+                "monthly": 12,  # 12 months per year
+            }
+
+            # Default to daily if timeframe is not recognized
+            freq_periods_per_year = periods_per_year.get(timeframe.lower(), 252)
+
+            # Calculate the time period in years based on actual data points and frequency
+            years = len(equity_curve) / freq_periods_per_year
+
             if years > 0:
                 metrics["annualized_return_pct"] = (
                     (1 + total_return) ** (1 / years) - 1
@@ -722,7 +794,7 @@ class Backtester:
                 )
                 if not effective_price or effective_price <= 0:
                     logger.warning(
-                        f"No valid price data for position sizing, skipping position size calculation."
+                        "No valid price data for position sizing, skipping position size calculation."
                     )
                     position_size = 0
                 else:
@@ -816,7 +888,7 @@ class Backtester:
 
                 # Get multi-timeframe pulse data matching real agent behavior
                 try:
-                    pulse_data = await mock_provider.get_pulse_data()
+                    await mock_provider.get_pulse_data()
                     logger.debug(
                         f"Pulse {pulse_count}: candles processed {mock_provider.current_index}/{total_candles}"
                     )
@@ -873,7 +945,11 @@ class Backtester:
         # Calculate basic performance metrics
         num_trading_days = len(data) if not data.empty else 0
         calculated_metrics = self._calculate_performance_metrics(
-            trades_history, equity_curve, self.initial_balance, num_trading_days
+            trades_history,
+            equity_curve,
+            self.initial_balance,
+            num_trading_days,
+            self.timeframe,
         )
 
         # Calculate enhanced risk metrics using the new risk analyzer

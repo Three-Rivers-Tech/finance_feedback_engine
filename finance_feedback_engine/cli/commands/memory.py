@@ -40,7 +40,7 @@ def learning_report(ctx, asset_pair):
 
     try:
         config = ctx.obj.get("config")
-        if not config:
+        if config is None:
             console.print(
                 "[bold red]Error: Configuration not found in context[/bold red]"
             )
@@ -69,7 +69,7 @@ def learning_report(ctx, asset_pair):
                 f"  ✓ Reached 60% win rate after {se.get('trades_to_60pct_win_rate', 'N/A')} trades"
             )
         else:
-            console.print(f"  ✗ 60% win rate threshold not yet achieved")
+            console.print("  ✗ 60% win rate threshold not yet achieved")
         console.print(
             f"  Learning speed: {se.get('learning_speed_per_100_trades', 0):.2%} improvement per 100 trades"
         )
@@ -104,8 +104,6 @@ def learning_report(ctx, asset_pair):
         )
         console.print(f"  Dominant provider: {ts.get('dominant_provider', 'N/A')}")
         console.print(f"  Provider distribution: {ts.get('provider_distribution', {})}")
-        console.print(f"  Dominant provider: {ts['dominant_provider']}")
-        console.print(f"  Provider distribution: {ts['provider_distribution']}")
 
         # Learning Curve
         console.print("\n[bold cyan]5. Learning Curve Analysis[/bold cyan]")
@@ -113,6 +111,11 @@ def learning_report(ctx, asset_pair):
 
         first = lc.get("first_100_trades", {})
         last = lc.get("last_100_trades", {})
+
+        table = Table(title="Learning Curve Summary")
+        table.add_column("Window")
+        table.add_column("Win Rate", justify="right")
+        table.add_column("Avg P&L", justify="right")
 
         table.add_row(
             "First 100 trades",
@@ -132,14 +135,7 @@ def learning_report(ctx, asset_pair):
         )
         console.print(f"  P&L improvement: {lc.get('pnl_improvement_pct', 0):.1f}%")
 
-        console.print(table)
-
-        console.print(
-            f"\n  Win rate improvement: {lc['win_rate_improvement_pct']:.1f}%"
-        )
-        console.print(f"  P&L improvement: {lc['pnl_improvement_pct']:.1f}%")
-
-        if lc["learning_detected"]:
+        if lc.get("learning_detected"):
             console.print(
                 "\n[bold green]✓ Learning detected: Strategy is improving over time[/bold green]"
             )
@@ -147,6 +143,7 @@ def learning_report(ctx, asset_pair):
             console.print(
                 "\n[bold yellow]⚠ No significant learning detected[/bold yellow]"
             )
+
         console.print("\n[dim]Research Methods:[/dim]")
         for metric, paper in metrics.get("research_methods", {}).items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
@@ -179,7 +176,7 @@ def prune_memory(ctx, keep_recent, confirm):
 
     try:
         config = ctx.obj.get("config")
-        if not config:
+        if config is None:
             console.print(
                 "[bold red]Error: Configuration not found in context[/bold red]"
             )

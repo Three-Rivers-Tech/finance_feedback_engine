@@ -6,13 +6,12 @@ active trades, risk status, and decision reasoning.
 
 import logging
 from datetime import timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from rich.console import Group, RenderableType
+from rich.console import RenderableType
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +332,7 @@ class ActiveTradesPanel:
             entry_price = trade.get("entry_price", 0.0)
             current_price = trade.get("current_price", 0.0)
             pnl = trade.get("pnl", 0.0)
-            pnl_pct = trade.get("pnl_pct", 0.0)
+            trade.get("pnl_pct", 0.0)
             peak_pnl = trade.get("peak_pnl", 0.0)
             max_drawdown = trade.get("max_drawdown", 0.0)
             duration_hours = trade.get("duration_hours", 0.0)

@@ -5,8 +5,6 @@ This demonstrates the integration between key modules as outlined in
 the technical debt document.
 """
 
-import pytest
-
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory

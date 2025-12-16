@@ -132,12 +132,12 @@ class TradingLoopAgent:
             bool: True if signal-only mode is supported
         """
         # Verify critical methods exist
-        if not hasattr(self, '_send_signals_to_telegram'):
+        if not hasattr(self, "_send_signals_to_telegram"):
             logger.error("Agent missing _send_signals_to_telegram() method")
             return False
 
         # Verify execution handler checks autonomous flag
-        if not hasattr(self, 'handle_execution_state'):
+        if not hasattr(self, "handle_execution_state"):
             logger.error("Agent missing handle_execution_state() method")
             return False
 
@@ -846,7 +846,6 @@ class TradingLoopAgent:
         """
         # Check for excessive consecutive losses
         current_streak = self._performance_metrics["current_streak"]
-        worst_streak = self._performance_metrics["worst_streak"]
 
         if current_streak < -3:  # 4 or more consecutive losses
             return (
@@ -924,10 +923,12 @@ class TradingLoopAgent:
             return
 
         # Check if autonomous execution is enabled (prioritize autonomous.enabled over legacy autonomous_execution)
-        if hasattr(self.config, 'autonomous') and hasattr(self.config.autonomous, 'enabled'):
+        if hasattr(self.config, "autonomous") and hasattr(
+            self.config.autonomous, "enabled"
+        ):
             autonomous_enabled = self.config.autonomous.enabled
         else:
-            autonomous_enabled = getattr(self.config, 'autonomous_execution', False)
+            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
 
         logger.info(f"Autonomous execution mode: {autonomous_enabled}")
 
@@ -935,23 +936,33 @@ class TradingLoopAgent:
             # Full autonomous mode: execute trades directly
             logger.info("Autonomous execution enabled - executing trades directly")
             for decision in self._current_decisions:
-                decision_id = decision.get('id')
-                action = decision.get('action')
-                asset_pair = decision.get('asset_pair')
+                decision_id = decision.get("id")
+                action = decision.get("action")
+                asset_pair = decision.get("asset_pair")
 
                 try:
                     execution_result = self.engine.execute_decision(decision_id)
-                    if execution_result.get('success'):
-                        logger.info(f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor.")
+                    if execution_result.get("success"):
+                        logger.info(
+                            f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor."
+                        )
                         self.daily_trade_count += 1
-                        self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+                        self.trade_monitor.associate_decision_to_trade(
+                            decision_id, asset_pair
+                        )
                     else:
-                        logger.error(f"Trade execution failed for {asset_pair}: {execution_result.get('message')}.")
+                        logger.error(
+                            f"Trade execution failed for {asset_pair}: {execution_result.get('message')}."
+                        )
                 except Exception as e:
-                    logger.error(f"Exception during trade execution for decision {decision_id}: {e}")
+                    logger.error(
+                        f"Exception during trade execution for decision {decision_id}: {e}"
+                    )
         else:
             # Signal-only mode: send to Telegram for approval
-            logger.info("Autonomous execution disabled - sending signals to Telegram for approval")
+            logger.info(
+                "Autonomous execution disabled - sending signals to Telegram for approval"
+            )
             self._send_signals_to_telegram()
 
         # Clear all decisions after processing
@@ -970,6 +981,7 @@ class TradingLoopAgent:
         rather than silently continuing. This prevents execution without approval.
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Track signal delivery status
@@ -1001,26 +1013,33 @@ class TradingLoopAgent:
             )
 
             signal_delivered = False
-            delivery_method = None
 
             # Try to send via Telegram if configured
             try:
-                telegram_config = self.config.telegram if hasattr(self.config, 'telegram') else {}
-                telegram_enabled = telegram_config.get('enabled', False)
-                telegram_token = telegram_config.get('bot_token')
-                telegram_chat_id = telegram_config.get('chat_id')
+                telegram_config = (
+                    self.config.telegram if hasattr(self.config, "telegram") else {}
+                )
+                telegram_enabled = telegram_config.get("enabled", False)
+                telegram_token = telegram_config.get("bot_token")
+                telegram_chat_id = telegram_config.get("chat_id")
 
                 if telegram_enabled and telegram_token and telegram_chat_id:
                     try:
-                        from finance_feedback_engine.integrations.telegram_bot import TelegramBot
+                        from finance_feedback_engine.integrations.telegram_bot import (
+                            TelegramBot,
+                        )
+
                         bot = TelegramBot(token=telegram_token)
                         bot.send_message(telegram_chat_id, message)
-                        logger.info(f"✅ Signal sent to Telegram for decision {decision_id}")
+                        logger.info(
+                            f"✅ Signal sent to Telegram for decision {decision_id}"
+                        )
                         signal_delivered = True
-                        delivery_method = "Telegram"
                         signals_sent += 1
                     except ImportError:
-                        error_msg = "Telegram integration module not available (ImportError)"
+                        error_msg = (
+                            "Telegram integration module not available (ImportError)"
+                        )
                         logger.warning(error_msg)
                         failure_reasons.append(f"{decision_id}: {error_msg}")
                     except Exception as e:
@@ -1046,14 +1065,20 @@ class TradingLoopAgent:
             # Try webhook delivery if Telegram failed (future implementation)
             if not signal_delivered:
                 try:
-                    webhook_config = self.config.webhook if hasattr(self.config, 'webhook') else {}
-                    webhook_enabled = webhook_config.get('enabled', False)
-                    webhook_url = webhook_config.get('url')
+                    webhook_config = (
+                        self.config.webhook if hasattr(self.config, "webhook") else {}
+                    )
+                    webhook_enabled = webhook_config.get("enabled", False)
+                    webhook_url = webhook_config.get("url")
 
                     if webhook_enabled and webhook_url:
                         # TODO: Implement webhook delivery
-                        logger.info(f"Webhook delivery not yet implemented for {decision_id}")
-                        failure_reasons.append(f"{decision_id}: Webhook delivery not implemented")
+                        logger.info(
+                            f"Webhook delivery not yet implemented for {decision_id}"
+                        )
+                        failure_reasons.append(
+                            f"{decision_id}: Webhook delivery not implemented"
+                        )
                     else:
                         logger.debug("Webhook not configured, skipping")
                 except Exception as e:
@@ -1069,7 +1094,9 @@ class TradingLoopAgent:
                     f"No notification channels available or all failed."
                 )
                 # Log to console for visibility
-                logger.info(f"UNDELIVERED SIGNAL for {asset_pair}: {action.upper()} (confidence: {confidence}%)")
+                logger.info(
+                    f"UNDELIVERED SIGNAL for {asset_pair}: {action.upper()} (confidence: {confidence}%)"
+                )
 
         # Summary reporting
         logger.info(
@@ -1085,12 +1112,14 @@ class TradingLoopAgent:
             )
             logger.error(f"Failure details: {'; '.join(failure_reasons)}")
             # Emit dashboard event
-            self._emit_dashboard_event({
-                'type': 'signal_delivery_failure',
-                'failed_count': signals_failed,
-                'reasons': failure_reasons,
-                'timestamp': time.time()
-            })
+            self._emit_dashboard_event(
+                {
+                    "type": "signal_delivery_failure",
+                    "failed_count": signals_failed,
+                    "reasons": failure_reasons,
+                    "timestamp": time.time(),
+                }
+            )
         elif signals_failed > 0:
             logger.warning(
                 f"⚠️ Partial signal delivery failure: {signals_failed}/{len(self._current_decisions)} failed"
@@ -1218,7 +1247,9 @@ class TradingLoopAgent:
         Returns True if the decision should proceed to execution state, where it will
         be either executed (autonomous mode) or sent to Telegram (signal-only mode).
         """
-        confidence = decision.get("confidence", 0)  # 0-100 scale from decision validation
+        confidence = decision.get(
+            "confidence", 0
+        )  # 0-100 scale from decision validation
         # Normalize confidence to 0-1 for comparison with config threshold (which is auto-normalized)
         confidence_normalized = confidence / 100.0
         if confidence_normalized < self.config.min_confidence_threshold:
@@ -1239,23 +1270,29 @@ class TradingLoopAgent:
             return False
 
         # Check autonomous execution setting
-        if hasattr(self.config, 'autonomous') and hasattr(self.config.autonomous, 'enabled'):
+        if hasattr(self.config, "autonomous") and hasattr(
+            self.config.autonomous, "enabled"
+        ):
             autonomous_enabled = self.config.autonomous.enabled
         else:
-            autonomous_enabled = getattr(self.config, 'autonomous_execution', False)
+            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
 
         # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
             return True
 
         # If autonomous is disabled, check if we have Telegram configured for signal-only mode
-        telegram_config = self.config.telegram if hasattr(self.config, 'telegram') else {}
-        telegram_enabled = telegram_config.get('enabled', False)
+        telegram_config = (
+            self.config.telegram if hasattr(self.config, "telegram") else {}
+        )
+        telegram_enabled = telegram_config.get("enabled", False)
 
         if telegram_enabled:
             # Telegram is enabled - allow decision to proceed to execution state
             # where it will be sent as a signal for approval
-            logger.info(f"Decision will be sent to Telegram for approval (signal-only mode)")
+            logger.info(
+                "Decision will be sent to Telegram for approval (signal-only mode)"
+            )
             return True
 
         # No execution path available (neither autonomous nor Telegram)

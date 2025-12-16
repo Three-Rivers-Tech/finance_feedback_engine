@@ -83,7 +83,10 @@ class PlatformFactory:
 
     @classmethod
     def create_platform(
-        cls, platform_name: str, credentials: Dict[str, Any]
+        cls,
+        platform_name: str,
+        credentials: Dict[str, Any],
+        config: Dict[str, Any] = None,
     ) -> BaseTradingPlatform:
         """
         Create a trading platform instance.
@@ -92,6 +95,7 @@ class PlatformFactory:
             platform_name: Name of the platform (e.g., 'coinbase', 'oanda')
             credentials: Platform-specific credentials OR full config dict
                         for unified platform
+            config: Configuration dictionary containing timeout settings and other options
 
         Returns:
             Trading platform instance
@@ -117,10 +121,16 @@ class PlatformFactory:
         platform_class = cls._platforms[platform_name]
         logger.info("Creating platform instance: %s", platform_name)
 
-        # Instantiate the platform class directly. If an external SDK is
-        # missing and this raises, propagate the error so callers are
-        # explicitly aware and can choose the explicit 'mock' platform.
-        instance = platform_class(credentials)
+        # Check if platform class accepts config parameter (new-style constructors)
+        import inspect
+
+        sig = inspect.signature(platform_class.__init__)
+        if "config" in sig.parameters:
+            # New-style constructor that accepts config
+            instance = platform_class(credentials, config)
+        else:
+            # Legacy constructor that only accepts credentials
+            instance = platform_class(credentials)
 
         # Attach a persistent circuit breaker on the instance if possible
         try:
@@ -142,7 +152,7 @@ class PlatformFactory:
                 else:
                     # Fallback to setting attribute directly
                     setattr(instance, "_execute_breaker", breaker)
-        except Exception:
+        except ImportError:
             # If circuit breaker module not available, continue without it
             logger.debug("CircuitBreaker not attached (unavailable)")
 
