@@ -13,6 +13,8 @@ from rich.console import Console
 from rich.table import Table
 
 from finance_feedback_engine.backtesting.backtester import Backtester
+from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
+from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 
@@ -339,8 +341,6 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
     console.print(f"\n[bold cyan]📊 Walk-Forward Analysis: {asset_pair}[/bold cyan]")
 
     try:
-        from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
-
         config = ctx.obj["config"]
 
         # Avoid mutating shared config in ctx.obj: make a shallow copy
@@ -490,8 +490,6 @@ def monte_carlo(
     console.print(f"\n[bold cyan]🎲 Monte Carlo Simulation: {asset_pair}[/bold cyan]")
 
     try:
-        from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
-
         config = ctx.obj["config"]
 
         # Avoid mutating shared config in ctx.obj: make a shallow copy

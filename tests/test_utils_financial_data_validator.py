@@ -75,7 +75,7 @@ class TestFinancialDataValidator:
         valid_ts = datetime.utcnow().isoformat()
         result = validator.is_valid_timestamp(valid_ts)
         # Just check it doesn't raise an exception
-        assert True
+        assert result is True
 
     def test_validate_currency_pair(self):
         """Test currency pair validation."""

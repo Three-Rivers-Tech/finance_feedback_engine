@@ -8,15 +8,11 @@ Verifies that:
 4. Provider weights adjust based on actual failures
 """
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
-from finance_feedback_engine.decision_engine.ensemble_manager import (
-    EnsembleDecisionManager,
-)
 
 
 class TestEnsembleProviderFailureTracking:

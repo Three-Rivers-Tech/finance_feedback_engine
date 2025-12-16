@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from ..core import FinanceFeedbackEngine
 from .dependencies import get_engine
-from .health import get_health_status
 
 logger = logging.getLogger(__name__)
 
@@ -222,9 +221,9 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
     Returns:
         Portfolio balance, active positions, recent performance
     """
-    try:
-        status_data = {"balance": None, "active_positions": 0, "platform": None}
+    status_data = {"balance": None, "active_positions": 0, "platform": None}
 
+    try:
         # Get balance from platform
         if hasattr(engine, "platform"):
             balance_info = engine.platform.get_balance()
@@ -235,17 +234,20 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             except Exception:
                 balance_info = balance_info
             status_data["balance"] = balance_info
-            status_data["platform"] = engine.config.get("trading_platform", "unknown")
+            engine_config = getattr(engine, "config", {})
+            status_data["platform"] = (
+                engine_config.get("trading_platform", "unknown")
+                if isinstance(engine_config, dict)
+                else "unknown"
+            )
 
             # Get portfolio breakdown if available
             if hasattr(engine.platform, "get_portfolio_breakdown"):
-                breakdown = engine.platform.get_portfolio_breakdown()
-                status_data["active_positions"] = len(breakdown.get("positions", []))
-
-        return status_data
+                breakdown = engine.platform.get_portfolio_breakdown() or {}
+                positions = breakdown.get("positions", [])
+                status_data["active_positions"] = len(positions)
     except Exception as e:
         logger.error(f"Failed to get portfolio status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Status retrieval failed",
-        )
+        status_data["error"] = str(e)
+
+    return status_data

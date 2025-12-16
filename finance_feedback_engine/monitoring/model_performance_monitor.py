@@ -104,13 +104,6 @@ class ModelPerformanceMonitor:
     ):
         """
         Records the actual outcome corresponding to a previous prediction.
-        """
-
-    def record_actual_outcome(
-        self, prediction_id: str, actual_outcome: Any, timestamp: datetime
-    ):
-        """
-        Records the actual outcome corresponding to a previous prediction.
 
         Args:
             prediction_id: The ID of the prediction this outcome corresponds to.
@@ -510,6 +503,7 @@ class ModelPerformanceMonitor:
                         )
                         / 10,
                     }
+                    self.detect_concept_drift(current_metrics, baseline_metrics)
 
                 # Sleep until next evaluation interval
                 await asyncio.sleep(self.evaluation_interval.total_seconds())

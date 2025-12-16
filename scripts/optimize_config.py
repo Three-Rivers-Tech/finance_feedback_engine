@@ -126,8 +126,8 @@ async def main():
 
         print("\n  📚 Next Steps:")
         print(f"    1. Review optimized config: {config_file}")
-        print(f"    2. Test optimized config: python scripts/run_baseline_benchmark.py")
-        print(f"    3. If satisfied, copy to config/config.yaml")
+        print("    2. Test optimized config: python scripts/run_baseline_benchmark.py")
+        print("    3. If satisfied, copy to config/config.yaml")
         print()
 
         return 0

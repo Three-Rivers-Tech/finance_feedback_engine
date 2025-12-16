@@ -2,7 +2,6 @@
 """Run baseline performance benchmark for the trading agent."""
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -41,7 +40,7 @@ async def main():
     start_date = "2024-01-01"
     end_date = "2024-12-01"
 
-    print(f"\n🎯 Benchmark Configuration:")
+    print("\n🎯 Benchmark Configuration:")
     print(f"   Assets:      {', '.join(asset_pairs)}")
     print(f"   Start Date:  {start_date}")
     print(f"   End Date:    {end_date}")
@@ -66,7 +65,7 @@ async def main():
         print("  📊 BENCHMARK RESULTS")
         print("=" * 70)
 
-        print(f"\n  Overall Performance:")
+        print("\n  Overall Performance:")
         print(f"    Sharpe Ratio:      {report.sharpe_ratio:>8.2f}")
         print(f"    Win Rate:          {report.win_rate:>8.1%}")
         print(f"    Total Return:      {report.total_return:>8.2f}%")
@@ -75,7 +74,7 @@ async def main():
         print(f"    Total Trades:      {report.total_trades:>8}")
 
         # Performance rating
-        print(f"\n  Performance Rating:")
+        print("\n  Performance Rating:")
         if report.sharpe_ratio >= 1.5:
             rating = "⭐⭐⭐ EXCELLENT"
         elif report.sharpe_ratio >= 1.2:
@@ -89,7 +88,7 @@ async def main():
 
         # Baseline comparisons
         if report.vs_buy_hold:
-            print(f"\n  vs Buy & Hold Strategy:")
+            print("\n  vs Buy & Hold Strategy:")
             sharpe_imp = report.vs_buy_hold["sharpe_improvement"]
             return_imp = report.vs_buy_hold["return_improvement"]
 
@@ -97,23 +96,23 @@ async def main():
             print(f"    Return Improvement:  {return_imp:+.2f}%")
 
             if sharpe_imp > 0 and return_imp > 0:
-                print(f"    ✓ Outperforming buy & hold")
+                print("    ✓ Outperforming buy & hold")
             else:
-                print(f"    ✗ Underperforming buy & hold")
+                print("    ✗ Underperforming buy & hold")
 
         if report.vs_ma_crossover:
-            print(f"\n  vs Moving Average Crossover:")
+            print("\n  vs Moving Average Crossover:")
             sharpe_imp = report.vs_ma_crossover["sharpe_improvement"]
             print(f"    Sharpe Improvement:  {sharpe_imp:+.2f}")
 
             if sharpe_imp > 0:
-                print(f"    ✓ Outperforming MA crossover")
+                print("    ✓ Outperforming MA crossover")
             else:
-                print(f"    ✗ Underperforming MA crossover")
+                print("    ✗ Underperforming MA crossover")
 
         # Scenario breakdown
         if report.backtest_scenarios:
-            print(f"\n  Scenario Breakdown:")
+            print("\n  Scenario Breakdown:")
             for scenario_name, metrics in report.backtest_scenarios.items():
                 print(
                     f"    {scenario_name:20s}  Sharpe: {metrics.sharpe_ratio:>6.2f}  "
@@ -122,26 +121,26 @@ async def main():
                 )
 
         # Recommendations
-        print(f"\n  💡 Recommendations:")
+        print("\n  💡 Recommendations:")
 
         if report.sharpe_ratio < 1.0:
-            print(f"    • Low Sharpe ratio - consider optimizing provider weights")
-            print(f"    • Review entry criteria and confidence thresholds")
+            print("    • Low Sharpe ratio - consider optimizing provider weights")
+            print("    • Review entry criteria and confidence thresholds")
 
         if report.win_rate < 0.50:
-            print(f"    • Win rate below 50% - improve entry timing")
-            print(f"    • Add confirmation signals or tighten filters")
+            print("    • Win rate below 50% - improve entry timing")
+            print("    • Add confirmation signals or tighten filters")
 
         if report.max_drawdown > 15.0:
-            print(f"    • High drawdown detected - review risk management")
-            print(f"    • Consider reducing position sizes or widening stops")
+            print("    • High drawdown detected - review risk management")
+            print("    • Consider reducing position sizes or widening stops")
 
         if report.sharpe_ratio >= 1.2 and report.win_rate >= 0.55:
-            print(f"    • ✓ Strong performance - maintain current strategy")
-            print(f"    • Consider slight optimizations for further gains")
+            print("    • ✓ Strong performance - maintain current strategy")
+            print("    • Consider slight optimizations for further gains")
 
         # Save location
-        print(f"\n  💾 Report saved to:")
+        print("\n  💾 Report saved to:")
         print(
             f"    data/benchmarks/{report.name}_{report.timestamp.strftime('%Y%m%d_%H%M%S')}.json"
         )
@@ -151,13 +150,13 @@ async def main():
         print("=" * 70)
 
         # Next steps
-        print(f"\n  📚 Next Steps:")
-        print(f"    1. Review detailed report in data/benchmarks/")
-        print(f"    2. Run improvement tests: python scripts/test_improvement.py")
+        print("\n  📚 Next Steps:")
+        print("    1. Review detailed report in data/benchmarks/")
+        print("    2. Run improvement tests: python scripts/test_improvement.py")
         print(
-            f"    3. Monitor live performance: python scripts/monitor_live_performance.py"
+            "    3. Monitor live performance: python scripts/monitor_live_performance.py"
         )
-        print(f"    4. See full guide: docs/QUICK_START_PERFORMANCE_IMPROVEMENT.md")
+        print("    4. See full guide: docs/QUICK_START_PERFORMANCE_IMPROVEMENT.md")
 
         print()  # Final newline
 

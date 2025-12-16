@@ -18,6 +18,16 @@ class PositionSizingCalculator:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        # Import Kelly Criterion calculator if available
+        try:
+            from .kelly_criterion import KellyCriterionCalculator
+
+            self.kelly_calculator = KellyCriterionCalculator(config)
+        except ImportError:
+            logger.warning(
+                "Kelly Criterion calculator not available, falling back to risk-based sizing"
+            )
+            self.kelly_calculator = None
 
     def calculate_position_sizing_params(
         self,
@@ -72,6 +82,10 @@ class PositionSizingCalculator:
         default_stop_loss = agent_config.get("sizing_stop_loss_percentage", 0.02)
         use_dynamic_stop_loss = agent_config.get("use_dynamic_stop_loss", True)
 
+        # Check if Kelly Criterion should be used
+        use_kelly_criterion = agent_config.get("use_kelly_criterion", False)
+        kelly_config = agent_config.get("kelly_criterion", {})
+
         # Compatibility: Convert legacy percentage values (>1) to decimals
         if risk_percentage > 1:
             logger.warning(
@@ -110,18 +124,37 @@ class PositionSizingCalculator:
             "sizing_stop_loss_percentage": None,
             "risk_percentage": None,
             "signal_only": False,
+            "position_sizing_method": "risk_based",  # Default method
         }
 
         # CASE 1: Normal mode with valid balance
         if should_calculate:
             total_balance = sum(relevant_balance.values())
 
-            recommended_position_size = self.calculate_position_size(
-                account_balance=total_balance,
-                risk_percentage=risk_percentage,
-                entry_price=current_price,
-                stop_loss_percentage=sizing_stop_loss_percentage,
-            )
+            # Calculate position size using either Kelly Criterion or risk-based method
+            if use_kelly_criterion and self.kelly_calculator:
+                # Use Kelly Criterion for position sizing
+                kelly_params = self._get_kelly_parameters(context, kelly_config)
+                recommended_position_size, kelly_details = (
+                    self.kelly_calculator.calculate_position_size(
+                        account_balance=total_balance,
+                        win_rate=kelly_params["win_rate"],
+                        avg_win=kelly_params["avg_win"],
+                        avg_loss=kelly_params["avg_loss"],
+                        current_price=current_price,
+                        payoff_ratio=kelly_params["payoff_ratio"],
+                    )
+                )
+                result["position_sizing_method"] = "kelly_criterion"
+                result["kelly_details"] = kelly_details
+            else:
+                # Use traditional risk-based position sizing
+                recommended_position_size = self.calculate_position_size(
+                    account_balance=total_balance,
+                    risk_percentage=risk_percentage,
+                    entry_price=current_price,
+                    stop_loss_percentage=sizing_stop_loss_percentage,
+                )
 
             # Calculate stop loss price
             position_type = self._determine_position_type(action)
@@ -157,7 +190,7 @@ class PositionSizingCalculator:
                     sizing_stop_loss_percentage * 100,
                 )
 
-        # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
+            # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
             # Determine if this should be signal-only mode based on balance or config
             signal_only = signal_only_default or not has_valid_balance
 
@@ -204,12 +237,27 @@ class PositionSizingCalculator:
             else:
                 # Fallback to signal-only with standard calculation if price is unavailable
                 default_balance = 10000.0
-                recommended_position_size = self.calculate_position_size(
-                    account_balance=default_balance,
-                    risk_percentage=risk_percentage,
-                    entry_price=current_price if current_price > 0 else 1,
-                    stop_loss_percentage=sizing_stop_loss_percentage,
-                )
+                if use_kelly_criterion and self.kelly_calculator:
+                    # Use Kelly with default parameters
+                    kelly_params = self._get_default_kelly_parameters()
+                    recommended_position_size, kelly_details = (
+                        self.kelly_calculator.calculate_position_size(
+                            account_balance=default_balance,
+                            win_rate=kelly_params["win_rate"],
+                            avg_win=kelly_params["avg_win"],
+                            avg_loss=kelly_params["avg_loss"],
+                            current_price=current_price if current_price > 0 else 1,
+                            payoff_ratio=kelly_params["payoff_ratio"],
+                        )
+                    )
+                    result["kelly_details"] = kelly_details
+                else:
+                    recommended_position_size = self.calculate_position_size(
+                        account_balance=default_balance,
+                        risk_percentage=risk_percentage,
+                        entry_price=current_price if current_price > 0 else 1,
+                        stop_loss_percentage=sizing_stop_loss_percentage,
+                    )
                 logger.warning(
                     "Current price unavailable - using default balance $%.2f for sizing recommendation",
                     default_balance,
@@ -218,11 +266,16 @@ class PositionSizingCalculator:
                 if signal_only:
                     logger.info(
                         "Signal-only mode enabled - no position sizing calculated (balance_valid: %s, signal_only_default: %s)",
-                        has_valid_balance, signal_only_default
+                        has_valid_balance,
+                        signal_only_default,
                     )
 
             # Calculate stop loss price (only if position size exists and not signal-only)
-            if current_price > 0 and sizing_stop_loss_percentage > 0 and not signal_only:
+            if (
+                current_price > 0
+                and sizing_stop_loss_percentage > 0
+                and not signal_only
+            ):
                 stop_loss_price = (
                     current_price * (1 - sizing_stop_loss_percentage)
                     if action == "BUY"
@@ -237,16 +290,20 @@ class PositionSizingCalculator:
                     "stop_loss_price": stop_loss_price,
                     "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                     "risk_percentage": risk_percentage,
-                    "signal_only": signal_only
+                    "signal_only": signal_only,
                 }
             )
 
             # Log appropriate message
             if signal_only:
                 if not has_valid_balance:
-                    logger.info("Signal-only mode: No valid balance - no position sizing")
+                    logger.info(
+                        "Signal-only mode: No valid balance - no position sizing"
+                    )
                 elif signal_only_default:
-                    logger.info("Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing")
+                    logger.info(
+                        "Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing"
+                    )
             elif not has_valid_balance:
                 logger.warning(
                     "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
@@ -262,6 +319,66 @@ class PositionSizingCalculator:
                 )
 
         return result
+
+    def _get_kelly_parameters(
+        self, context: Dict[str, Any], kelly_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Extract Kelly Criterion parameters from context and config.
+
+        Args:
+            context: Decision context containing market data and performance metrics
+            kelly_config: Kelly-specific configuration
+
+        Returns:
+            Dictionary with Kelly parameters (win_rate, avg_win, avg_loss, payoff_ratio)
+        """
+        # Try to get historical performance metrics from context
+        performance_metrics = context.get("performance_metrics", {})
+
+        win_rate = performance_metrics.get(
+            "win_rate", kelly_config.get("default_win_rate", 0.55)
+        )
+        avg_win = performance_metrics.get(
+            "avg_win", kelly_config.get("default_avg_win", 100.0)
+        )
+        avg_loss = performance_metrics.get(
+            "avg_loss", kelly_config.get("default_avg_loss", 75.0)
+        )
+
+        # Calculate payoff ratio if not provided
+        payoff_ratio = performance_metrics.get(
+            "payoff_ratio", kelly_config.get("default_payoff_ratio")
+        )
+        if payoff_ratio is None:
+            payoff_ratio = avg_win / avg_loss if avg_loss > 0 else 1.0
+
+        # Apply bounds checking
+        win_rate = max(0.0, min(1.0, win_rate))
+        avg_win = max(0.0, avg_win)
+        avg_loss = max(0.0, avg_loss)
+        payoff_ratio = max(0.0, payoff_ratio)
+
+        return {
+            "win_rate": win_rate,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "payoff_ratio": payoff_ratio,
+        }
+
+    def _get_default_kelly_parameters(self) -> Dict[str, Any]:
+        """
+        Get default Kelly parameters when historical data is unavailable.
+
+        Returns:
+            Dictionary with default Kelly parameters
+        """
+        return {
+            "win_rate": 0.55,  # 55% win rate
+            "avg_win": 100.0,  # $100 average win
+            "avg_loss": 75.0,  # $75 average loss
+            "payoff_ratio": 1.33,  # 1.33:1 payoff ratio
+        }
 
     def calculate_dynamic_stop_loss(
         self,

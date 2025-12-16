@@ -128,9 +128,12 @@ async def lifespan(app: FastAPI):
         app_state["auth_manager"] = auth_manager
         logger.info("✅ Authentication manager initialized with secure validation")
 
-        # Log initial setup statistics
-        stats = auth_manager.get_key_stats()
-        logger.debug(f"📊 Authentication stats: {stats}")
+        # Log initial setup statistics (best-effort only; skip if storage not ready)
+        try:
+            stats = auth_manager.get_key_stats()
+            logger.debug(f"📊 Authentication stats: {stats}")
+        except Exception as e:
+            logger.debug(f"Authentication stats unavailable at startup: {e}")
 
         # Initialize Telegram bot if enabled in config
         telegram_config = config.get("telegram", {})
@@ -166,13 +169,46 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add CORS middleware for localhost development
+# Add CORS middleware with secure configuration
+# Determine allowed origins based on environment
+env = os.getenv("ENVIRONMENT", "development").lower()
+if env == "production":
+    # Production: Strict whitelist from environment variable
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+    allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
+
+    # Ensure production environments have explicit origins defined
+    if not allowed_origins or allowed_origins == [""]:
+        logger.warning(
+            "⚠️  WARNING: No ALLOWED_ORIGINS defined for production. "
+            "Set ALLOWED_ORIGINS environment variable for security."
+        )
+        # Default to no origins allowed in production if not configured
+        allowed_origins = []
+else:
+    # Development: Explicit ports only (no wildcards)
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:*", "http://127.0.0.1:*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit, not wildcard
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "X-User-Agent",
+    ],  # Explicit, not wildcard
+    max_age=600,  # Add CORS preflight cache
+    # Additional security: Only allow same-site cookies in production
+    allow_origin_regex=None,  # Don't allow regex patterns (security)
 )
 
 from .bot_control import bot_control_router

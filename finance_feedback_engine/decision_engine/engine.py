@@ -1,14 +1,13 @@
 """Decision engine for generating AI-powered trading decisions."""
 
+import asyncio
 import logging
-import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
-import asyncio
+
 import pytz
 
 from finance_feedback_engine.memory.vector_store import VectorMemory
-from finance_feedback_engine.utils.validation import validate_data_freshness
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +112,12 @@ class DecisionEngine:
         self.local_priority = decision_config.get("local_priority", False)
 
         # Extract portfolio risk parameters from decision_engine config
-        self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
-        self.portfolio_take_profit_percentage = decision_config.get('portfolio_take_profit_percentage', 0.05)
+        self.portfolio_stop_loss_percentage = decision_config.get(
+            "portfolio_stop_loss_percentage", 0.02
+        )
+        self.portfolio_take_profit_percentage = decision_config.get(
+            "portfolio_take_profit_percentage", 0.05
+        )
 
         # Validate local_models
         if not isinstance(self.local_models, list):
@@ -1102,7 +1105,7 @@ Format response as a structured technical analysis demonstration.
 
         # Calculate position sizing parameters
         # Check configuration for signal_only_default setting - it's in the main config, not nested
-        signal_only_default = self.config.get('signal_only_default', False)
+        signal_only_default = self.config.get("signal_only_default", False)
         sizing_params = self._calculate_position_sizing_params(
             context=context,
             current_price=context["market_data"].get("close", 0),
@@ -1409,7 +1412,7 @@ Format response as a structured technical analysis demonstration.
 
             # If we have too many tokens, we'll intelligently compress
             # by truncating less critical sections first
-            lines = prompt.split('\n')
+            lines = prompt.split("\n")
 
             # Identify sections to compress
             compressed_lines = []
@@ -1420,7 +1423,7 @@ Format response as a structured technical analysis demonstration.
                 "Asset Pair:",
                 "TASK:",
                 "ANALYSIS OUTPUT REQUIRED:",
-                "ACCOUNT BALANCE:"
+                "ACCOUNT BALANCE:",
             ]
 
             for line in lines:
@@ -1434,7 +1437,9 @@ Format response as a structured technical analysis demonstration.
                 if current_token_count + line_tokens > max_tokens and not is_essential:
                     # Skip less critical information
                     continue
-                elif current_token_count + line_tokens > max_tokens * 0.95:  # 95% of max
+                elif (
+                    current_token_count + line_tokens > max_tokens * 0.95
+                ):  # 95% of max
                     # If we're near the limit, stop adding unless it's essential
                     if is_essential:
                         compressed_lines.append(line)
@@ -1445,7 +1450,7 @@ Format response as a structured technical analysis demonstration.
                     compressed_lines.append(line)
                     current_token_count += line_tokens
 
-            compressed_prompt = '\n'.join(compressed_lines)
+            compressed_prompt = "\n".join(compressed_lines)
 
             # If still too long, perform more aggressive compression
             if current_token_count > max_tokens:
@@ -1460,21 +1465,26 @@ Format response as a structured technical analysis demonstration.
 
                     if temp_tokens > max_tokens:
                         # Try to compress this section by removing some content
-                        lines_in_section = section.split('\n')
+                        lines_in_section = section.split("\n")
                         compressed_section = []
                         section_token_count = 0
 
                         for line in lines_in_section:
                             line_tokens = len(encoding.encode(line))
 
-                            if section_token_count + line_tokens <= max_tokens - current_token_count:
+                            if (
+                                section_token_count + line_tokens
+                                <= max_tokens - current_token_count
+                            ):
                                 compressed_section.append(line)
                                 section_token_count += line_tokens
                             else:
                                 # Add a truncation note if needed
-                                compressed_section.append("... [SECTION TRUNCATED FOR LENGTH]")
+                                compressed_section.append(
+                                    "... [SECTION TRUNCATED FOR LENGTH]"
+                                )
                                 break
-                        main_sections.append('\n'.join(compressed_section))
+                        main_sections.append("\n".join(compressed_section))
                         break
                     else:
                         main_sections.append(section)

@@ -9,8 +9,6 @@ Shows:
 - Portfolio value progression
 """
 
-import json
-import subprocess
 import tempfile
 import time
 from datetime import datetime

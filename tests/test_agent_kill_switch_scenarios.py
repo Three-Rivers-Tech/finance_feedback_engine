@@ -31,10 +31,12 @@ def mock_dependencies():
 @pytest.fixture
 def agent_config():
     """Provides a default TradingAgentConfig for kill switch tests."""
+    from finance_feedback_engine.agent.config import AutonomousAgentConfig
+
     return TradingAgentConfig(
         asset_pairs=["BTCUSD"],
         kill_switch_loss_pct=2.0,  # 2%
-        autonomous_execution=True,
+        autonomous=AutonomousAgentConfig(enabled=True),
         max_daily_trades=5,
     )
 

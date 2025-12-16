@@ -1,6 +1,5 @@
 """Command-line interface for Finance Feedback Engine."""
 
-import asyncio
 import copy
 import json
 import logging
@@ -17,8 +16,15 @@ from packaging.requirements import Requirement
 from rich.console import Console
 from rich.table import Table
 
+from finance_feedback_engine.cli.commands.agent import _run_live_dashboard
 from finance_feedback_engine.cli.commands.agent import monitor as monitor_command
 from finance_feedback_engine.cli.commands.agent import run_agent as run_agent_command
+
+# Export run_agent for backward compatibility with tests
+run_agent = run_agent_command
+
+# Export _run_live_market_view as alias for backward compatibility with tests
+_run_live_market_view = _run_live_dashboard
 from finance_feedback_engine.cli.commands.analysis import analyze as analyze_command
 from finance_feedback_engine.cli.commands.analysis import history as history_command
 from finance_feedback_engine.cli.commands.backtest import backtest as backtest_command
@@ -46,7 +52,6 @@ from finance_feedback_engine.dashboard import (
     display_portfolio_dashboard,
 )
 from finance_feedback_engine.monitoring.metrics import inc, init_metrics
-from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 
 # from rich import print as rprint  # unused
 
@@ -852,9 +857,9 @@ def install_deps(ctx, auto_install):
         additional_installed = []
 
         # Check coinbase-advanced-py (Python package)
+        # Use __import__ to avoid flake8 F401 on an import used only for presence-checking.
         try:
-            import coinbase_advanced_py
-
+            __import__("coinbase_advanced_py")
             additional_installed.append("coinbase-advanced-py")
         except ImportError:
             additional_missing.append("coinbase-advanced-py")
@@ -1277,7 +1282,7 @@ def dashboard(ctx):
         # Display unified dashboard; if aggregator returns simple dict, print summary
         try:
             display_portfolio_dashboard(aggregated_data)
-        except Exception:
+        except (Exception, AttributeError, TypeError):
             if isinstance(aggregated_data, dict):
                 console.print("[bold cyan]Portfolio Dashboard[/bold cyan]")
                 total = aggregated_data.get("total_value")
@@ -1314,12 +1319,11 @@ def approve(ctx, decision_id):
     """
     try:
         config = ctx.obj["config"]
-        engine = FinanceFeedbackEngine(config)
 
         # Load decision from storage
         from finance_feedback_engine.persistence.decision_store import DecisionStore
 
-        store = DecisionStore(config={"storage_path": "data/decisions"})
+        DecisionStore(config={"storage_path": "data/decisions"})
 
         # Find decision by ID (glob match on filename)
         import glob
@@ -1341,6 +1345,9 @@ def approve(ctx, decision_id):
         decision_file = decision_files[0]
         with open(decision_file, "r") as f:
             decision = json.load(f)
+
+        # Initialize engine after confirming decision exists
+        engine = FinanceFeedbackEngine(config)
 
         # Display decision details in Rich Panel with Table
         from rich.panel import Panel

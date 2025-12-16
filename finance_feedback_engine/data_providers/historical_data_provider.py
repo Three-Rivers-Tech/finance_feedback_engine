@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -113,7 +112,7 @@ class HistoricalDataProvider:
             import asyncio
 
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 # If already in an event loop, we cannot run; log and return empty
                 logger.warning(
                     "Async historical fetch in running loop is unsupported in this context"
@@ -308,9 +307,6 @@ class HistoricalDataProvider:
         resampled = df.resample(new_frequency).agg(existing_cols)
         return resampled
 
-        resampled = df.resample(new_frequency).agg(existing_cols)
-        return resampled
-
     def calculate_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Calculate common technical indicators.
@@ -355,6 +351,8 @@ class HistoricalDataProvider:
         Returns:
             pd.DataFrame: Historical price data with optional transformations applied
         """
+        df = self.get_historical_data(asset_pair, start_date, end_date, timeframe)
+
         if transformations:
             # Apply resample first to avoid losing computed columns
             resample_transforms = [
@@ -366,14 +364,6 @@ class HistoricalDataProvider:
             ordered_transforms = resample_transforms + other_transforms
 
             for transform in ordered_transforms:
-                if transform == "returns":
-                    df = self.add_returns(df)
-                elif transform == "indicators":
-                    df = self.calculate_technical_indicators(df)
-                elif transform.startswith("resample_"):
-                    # Extract frequency from transform name, e.g., 'resample_4H'
-                    freq = transform.replace("resample_", "")
-                    df = self.resample_data(df, freq)
                 if transform == "returns":
                     df = self.add_returns(df)
                 elif transform == "indicators":
