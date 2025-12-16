@@ -255,7 +255,7 @@ class PortfolioMemoryEngine:
             entry_dt = datetime.fromisoformat(entry_timestamp.replace("Z", "+00:00"))
             exit_dt = datetime.fromisoformat(exit_ts.replace("Z", "+00:00"))
             holding_hours = (exit_dt - entry_dt).total_seconds() / 3600
-        except Exception:
+        except (ValueError, TypeError):
             holding_hours = None
 
         # Create outcome record
@@ -303,13 +303,18 @@ class PortfolioMemoryEngine:
 
     def save_to_disk(self, filepath: str = "data/memory/portfolio_memory.json") -> None:
         """
-        Save portfolio memory to disk with atomic writes.
+        Save portfolio memory to disk with atomic writes and file locking.
 
         Args:
             filepath: Path to save the memory file
         """
         import os
         import tempfile
+
+        try:
+            import fcntl  # Unix file locking (optional - not available on Windows)
+        except ImportError:
+            fcntl = None
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -319,7 +324,7 @@ class PortfolioMemoryEngine:
             "version": "1.0",
             "saved_at": datetime.now().isoformat(),
             "trade_history": [outcome.to_dict() for outcome in self.trade_outcomes],
-            "provider_performance": self.provider_performance,
+            "provider_performance": dict(self.provider_performance),
             "experience_buffer": [
                 outcome.to_dict() for outcome in self.experience_buffer
             ],
@@ -331,9 +336,15 @@ class PortfolioMemoryEngine:
         )
         try:
             with os.fdopen(temp_fd, "w") as f:
-                json.dump(data, f, indent=2)
+                if fcntl:
+                    # Acquire exclusive lock before writing
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
 
-            # Atomic rename
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+
+            # Atomic rename - this is the critical atomic operation
             os.replace(temp_path, filepath)
             logger.info(f"Portfolio memory saved to {filepath}")
         except Exception as e:
@@ -349,7 +360,7 @@ class PortfolioMemoryEngine:
     @classmethod
     def load_from_disk(
         cls, filepath: str = "data/memory/portfolio_memory.json"
-    ) -> "PortfolioMemory":
+    ) -> "PortfolioMemoryEngine":
         """
         Load portfolio memory from disk.
 
@@ -401,54 +412,6 @@ class PortfolioMemoryEngine:
             logger.error(f"Failed to load portfolio memory from {filepath}: {e}")
             logger.info("Creating new portfolio memory instance")
             return cls(config={})
-
-        # Create outcome record (old continuation)
-        outcome = TradeOutcome(
-            decision_id=decision_id,
-            asset_pair=asset_pair,
-            action=action,
-            entry_timestamp=entry_timestamp,
-            exit_timestamp=exit_ts,
-            entry_price=entry_price,
-            exit_price=exit_price,
-            position_size=position_size,
-            realized_pnl=pnl,
-            pnl_percentage=pnl_pct,
-            holding_period_hours=holding_hours,
-            ai_provider=ai_provider,
-            ensemble_providers=ensemble_providers,
-            decision_confidence=confidence,
-            market_sentiment=market_sentiment,
-            volatility=volatility,
-            price_trend=price_trend,
-            was_profitable=(pnl > 0),
-            hit_stop_loss=hit_stop_loss,
-            hit_take_profit=hit_take_profit,
-        )
-
-        # Store outcome
-        self.trade_outcomes.append(outcome)
-
-        # Add to experience buffer
-        self.experience_buffer.append(
-            {"decision": decision, "outcome": outcome.to_dict(), "timestamp": exit_ts}
-        )
-
-        # Update provider performance
-        self._update_provider_performance(outcome, decision)
-
-        # Update regime performance
-        self._update_regime_performance(outcome)
-
-        # Save to disk
-        self._save_outcome(outcome)
-
-        logger.info(
-            f"Recorded trade outcome: {asset_pair} {action} "
-            f"P&L: ${pnl:.2f} ({pnl_pct:.2f}%)"
-        )
-
-        return outcome
 
     def _update_provider_performance(
         self, outcome: TradeOutcome, decision: Dict[str, Any]
@@ -1206,8 +1169,7 @@ class PortfolioMemoryEngine:
         filepath = self.storage_path / filename
 
         try:
-            with open(filepath, "w") as f:
-                json.dump(outcome.to_dict(), f, indent=2)
+            self._atomic_write_file(filepath, outcome.to_dict())
         except Exception as e:
             logger.error(f"Failed to save outcome: {e}")
 
@@ -1218,8 +1180,7 @@ class PortfolioMemoryEngine:
         filepath = self.storage_path / filename
 
         try:
-            with open(filepath, "w") as f:
-                json.dump(snapshot.to_dict(), f, indent=2)
+            self._atomic_write_file(filepath, snapshot.to_dict())
         except Exception as e:
             logger.error(f"Failed to save snapshot: {e}")
 
@@ -1276,20 +1237,61 @@ class PortfolioMemoryEngine:
         # Save provider performance summary
         summary_path = self.storage_path / "provider_performance.json"
         try:
-            with open(summary_path, "w") as f:
-                json.dump(dict(self.provider_performance), f, indent=2)
+            self._atomic_write_file(summary_path, dict(self.provider_performance))
         except Exception as e:
             logger.error(f"Failed to save provider performance: {e}")
 
         # Save regime performance
         regime_path = self.storage_path / "regime_performance.json"
         try:
-            with open(regime_path, "w") as f:
-                json.dump(dict(self.regime_performance), f, indent=2)
+            self._atomic_write_file(regime_path, dict(self.regime_performance))
         except Exception as e:
             logger.error(f"Failed to save regime performance: {e}")
 
         logger.info("Memory saved to disk")
+
+    def _atomic_write_file(self, filepath: Path, data: Any) -> None:
+        """
+        Write data to file atomically with file locking.
+
+        Args:
+            filepath: Path to write the file
+            data: Data to write (will be JSON serialized)
+        """
+        import os
+        import tempfile
+
+        try:
+            import fcntl  # Unix file locking (optional - not available on Windows)
+        except ImportError:
+            fcntl = None
+
+        # Ensure directory exists
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        # Atomic write: write to temp file, then rename
+        temp_fd, temp_path = tempfile.mkstemp(dir=str(filepath.parent), suffix=".tmp")
+        try:
+            with os.fdopen(temp_fd, "w") as f:
+                if fcntl:
+                    # Acquire exclusive lock before writing
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+
+            # Atomic rename - this is the critical atomic operation
+            os.replace(temp_path, str(filepath))
+        except Exception as e:
+            # Clean up temp file on error
+            try:
+                os.unlink(temp_path)
+            except OSError as cleanup_error:
+                logger.warning(
+                    f"Failed to clean up temporary file {temp_path}: {cleanup_error}"
+                )
+            raise RuntimeError(f"Failed to save file {filepath}: {e}")
 
     def get_summary(self) -> Dict[str, Any]:
         """Get summary of memory engine state."""

@@ -18,6 +18,10 @@ except ImportError:  # pragma: no cover - exercised in tests without dependency
     _PROM_AVAILABLE = False
 
     class _NullMetric:
+        def __init__(self, *_args, **_kwargs):
+            # Accept arbitrary constructor args to mirror prometheus classes
+            return None
+
         def labels(self, **kwargs):  # type: ignore[override]
             return self
 
@@ -98,7 +102,7 @@ def generate_metrics() -> str:
     logger.debug("Metrics endpoint called")
     if not _PROM_AVAILABLE:
         # Minimal stub keeps endpoint alive for environments without prometheus_client
-        return "# metrics_unavailable\nffe_metrics_available 0\n"
+        return "# HELP ffe_metrics_available Indicates if prometheus_client is installed (1=yes,0=no)\n# TYPE ffe_metrics_available gauge\nffe_metrics_available 0\n"
     return generate_latest().decode("utf-8")
 
 

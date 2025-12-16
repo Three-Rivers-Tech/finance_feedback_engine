@@ -437,7 +437,7 @@ class AuthManager:
                 conn.commit()
                 affected = cursor.rowcount
                 if affected > 0:
-                    logger.info(f"✅ API key disabled")
+                    logger.info("✅ API key disabled")
                     return True
                 return False
 

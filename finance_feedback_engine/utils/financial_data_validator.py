@@ -367,7 +367,7 @@ class FinancialDataValidator:
 
         # Basic ordering check (should be sorted)
         if not timestamps.is_monotonic_increasing:
-            errors.append(f"Timestamps are not in ascending order")
+            errors.append("Timestamps are not in ascending order")
 
         return errors
 

@@ -137,7 +137,6 @@ class FeedbackAnalyzer:
 
         for decision in decisions:
             decision_id = decision.get("id", "")
-            ai_provider = decision.get("ai_provider", "unknown")
 
             # Check if this decision has a corresponding outcome
             if decision_id in outcome_map:

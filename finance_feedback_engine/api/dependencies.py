@@ -1,7 +1,6 @@
 """FastAPI dependency injection for shared resources."""
 
 import logging
-from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer

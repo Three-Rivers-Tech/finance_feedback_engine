@@ -456,9 +456,7 @@ class CustomAuthManager(AuthManager):
         result = external_service.validate(api_key)
         if result.valid:
             self._log_auth_attempt(result.key_hash, True, ip_address, user_agent)
-<<<<<<< HEAD:docs/api/README.md
             return True, result.name, {}
-
 
         # Fall back to local database
         return super().validate_api_key(api_key, ip_address, user_agent)

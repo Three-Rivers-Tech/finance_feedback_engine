@@ -5,10 +5,8 @@ FFE Control - Command-line management tool for Finance Feedback Engine.
 Provides comprehensive control over the trading bot through an intuitive CLI.
 """
 
-import json
 import sys
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import click
 import requests
@@ -41,7 +39,7 @@ class FFEClient:
         except requests.exceptions.ConnectionError:
             console.print(f"[red]✗ Failed to connect to API at {self.base_url}[/red]")
             console.print(
-                f"  Make sure the API server is running: uvicorn finance_feedback_engine.api.app:app"
+                "  Make sure the API server is running: uvicorn finance_feedback_engine.api.app:app"
             )
             sys.exit(1)
         except requests.exceptions.HTTPError as e:
@@ -115,7 +113,7 @@ def start(ctx, assets, take_profit, stop_loss, dry_run):
 
     result = client.post("/api/v1/bot/start", json=payload)
 
-    console.print(f"[green]✓ Agent started successfully[/green]")
+    console.print("[green]✓ Agent started successfully[/green]")
     console.print(f"  State: {result.get('state')}")
     console.print(f"  OODA State: {result.get('agent_ooda_state', 'N/A')}")
 
@@ -279,7 +277,7 @@ def close(ctx, position_id):
 
     result = client.post(f"/api/v1/bot/positions/{position_id}/close")
 
-    console.print(f"[green]✓ Position closed[/green]")
+    console.print("[green]✓ Position closed[/green]")
     console.print(f"  Status: {result.get('status')}")
     console.print()
 
@@ -326,7 +324,7 @@ def update(ctx, stop_loss, position_size, confidence, max_trades):
 
     result = client.patch("/api/v1/bot/config", json=payload)
 
-    console.print(f"[green]✓ Configuration updated[/green]")
+    console.print("[green]✓ Configuration updated[/green]")
 
     for key, value in result.get("updates", {}).items():
         console.print(f"  {key}: {value}")

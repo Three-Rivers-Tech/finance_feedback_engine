@@ -8,7 +8,7 @@ import json
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -33,13 +33,13 @@ class VotingStrategies:
             voting_strategy: Default strategy ('weighted', 'majority', 'stacking')
         """
         self.voting_strategy = voting_strategy
-        self.meta_learner = None
-        self.meta_feature_scaler = None
+        self.meta_learner: LogisticRegression | None = None
+        self.meta_feature_scaler: StandardScaler | None = None
 
         if self.voting_strategy == "stacking":
             self._initialize_meta_learner()
 
-    def _initialize_meta_learner(self):
+    def _initialize_meta_learner(self) -> None:  # noqa: C901
         """
         Initializes the meta-learner model for the stacking ensemble.
 
@@ -47,8 +47,10 @@ class VotingStrategies:
         If the file doesn't exist, it falls back to hardcoded mock parameters.
         """
         logger.info("Initializing meta-learner for stacking ensemble.")
-        self.meta_learner = LogisticRegression()
-        self.meta_feature_scaler = StandardScaler()
+        meta_learner: LogisticRegression = LogisticRegression()
+        meta_feature_scaler: StandardScaler = StandardScaler()
+        self.meta_learner = meta_learner
+        self.meta_feature_scaler = meta_feature_scaler
 
         model_path = Path(__file__).parent / "meta_learner_model.json"
 
@@ -69,32 +71,58 @@ class VotingStrategies:
                 if missing_keys:
                     raise KeyError(f"Missing required keys: {missing_keys}")
 
-                self.meta_learner.classes_ = np.array(model_data["classes"])
-                self.meta_learner.coef_ = np.array(model_data["coef"])
-                self.meta_learner.intercept_ = np.array(model_data["intercept"])
+                meta_learner.classes_ = np.array(model_data["classes"])
+                meta_learner.coef_ = np.array(model_data["coef"])
+                meta_learner.intercept_ = np.array(model_data["intercept"])
 
                 # Validate shapes
-                expected_n_features = 5
-                n_classes = len(self.meta_learner.classes_)
-                if self.meta_learner.coef_.shape != (n_classes, expected_n_features):
-                    raise ValueError(
-                        f"Invalid coef shape: expected ({n_classes}, {expected_n_features}), got {self.meta_learner.coef_.shape}"
-                    )
-                if self.meta_learner.intercept_.shape != (n_classes,):
-                    raise ValueError(
-                        f"Invalid intercept shape: expected ({n_classes},), got {self.meta_learner.intercept_.shape}"
-                    )
+                expected_n_features = len(model_data["scaler_mean"])
+                n_classes = len(meta_learner.classes_)
 
-                self.meta_feature_scaler.mean_ = np.array(model_data["scaler_mean"])
-                self.meta_feature_scaler.scale_ = np.array(model_data["scaler_scale"])
+                # scikit-learn binary LogisticRegression uses:
+                #   coef_.shape == (1, n_features) and intercept_.shape == (1,)
+                # while multiclass uses:
+                #   coef_.shape == (n_classes, n_features) and intercept_.shape == (n_classes,)
+                coef_shape = meta_learner.coef_.shape
+                intercept_shape = meta_learner.intercept_.shape
 
-                if self.meta_feature_scaler.mean_.shape != (expected_n_features,):
+                if n_classes == 2:
+                    allowed_coef_shapes = {
+                        (1, expected_n_features),
+                        (2, expected_n_features),
+                    }
+                    if coef_shape not in allowed_coef_shapes:
+                        raise ValueError(
+                            "Invalid coef shape for binary classifier: expected one of "
+                            f"{sorted(allowed_coef_shapes)}, got {coef_shape}"
+                        )
+
+                    allowed_intercept_shapes = {(1,), (2,)}
+                    if intercept_shape not in allowed_intercept_shapes:
+                        raise ValueError(
+                            "Invalid intercept shape for binary classifier: expected one of "
+                            f"{sorted(allowed_intercept_shapes)}, got {intercept_shape}"
+                        )
+                else:
+                    if coef_shape != (n_classes, expected_n_features):
+                        raise ValueError(
+                            f"Invalid coef shape: expected ({n_classes}, {expected_n_features}), got {coef_shape}"
+                        )
+                    if intercept_shape != (n_classes,):
+                        raise ValueError(
+                            f"Invalid intercept shape: expected ({n_classes},), got {intercept_shape}"
+                        )
+
+                meta_feature_scaler.mean_ = np.array(model_data["scaler_mean"])
+                meta_feature_scaler.scale_ = np.array(model_data["scaler_scale"])
+
+                if meta_feature_scaler.mean_.shape != (expected_n_features,):
                     raise ValueError(
-                        f"Invalid scaler_mean shape: expected ({expected_n_features},), got {self.meta_feature_scaler.mean_.shape}"
+                        f"Invalid scaler_mean shape: expected ({expected_n_features},), got {meta_feature_scaler.mean_.shape}"
                     )
-                if self.meta_feature_scaler.scale_.shape != (expected_n_features,):
+                if meta_feature_scaler.scale_.shape != (expected_n_features,):
                     raise ValueError(
-                        f"Invalid scaler_scale shape: expected ({expected_n_features},), got {self.meta_feature_scaler.scale_.shape}"
+                        f"Invalid scaler_scale shape: expected ({expected_n_features},), got {meta_feature_scaler.scale_.shape}"
                     )
 
                 logger.info(f"Meta-learner loaded from {model_path}")
@@ -107,19 +135,26 @@ class VotingStrategies:
 
         # Fallback to mock-trained parameters if file doesn't exist or is invalid
         logger.info("Using mock-trained parameters for meta-learner.")
-        self.meta_learner.classes_ = np.array(["BUY", "HOLD", "SELL"])
-        self.meta_learner.coef_ = np.array(
+        meta_learner.classes_ = np.array(["BUY", "HOLD", "SELL"])
+        # For enhanced stacking, we have 9 features instead of 5
+        # Features: buy_ratio, sell_ratio, hold_ratio, avg_confidence, confidence_std, action_diversity_ratio, confidence_range, avg_amount, amount_std
+        meta_learner.coef_ = np.array(
             [
-                [2.0, -1.0, -1.0, 0.8, -0.5],
-                [-1.0, -1.0, 2.0, -0.2, 0.8],
-                [-1.0, 2.0, -1.0, 0.8, -0.5],
+                [2.0, -1.0, -1.0, 0.8, -0.5, 0.3, -0.2, 0.1, -0.1],  # BUY coefficients
+                [-1.0, -1.0, 2.0, -0.2, 0.8, -0.1, 0.4, -0.1, 0.1],  # HOLD coefficients
+                [-1.0, 2.0, -1.0, 0.8, -0.5, -0.2, -0.2, 0.1, 0.1],  # SELL coefficients
             ]
         )
-        self.meta_learner.intercept_ = np.array([0.0, 0.0, 0.0])
-        self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
-        self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
+        meta_learner.intercept_ = np.array([0.0, 0.0, 0.0])
+        # For 9 features instead of 5
+        meta_feature_scaler.mean_ = np.array(
+            [0.33, 0.33, 0.33, 75.0, 10.0, 0.67, 20.0, 800.0, 250.0]
+        )
+        meta_feature_scaler.scale_ = np.array(
+            [0.17, 0.17, 0.17, 10.0, 5.0, 0.23, 10.0, 200.0, 100.0]
+        )
         logger.info(
-            "Meta-learner initialized with mock-trained parameters for updated features."
+            "Meta-learner initialized with mock-trained parameters for enhanced features."
         )
 
     def apply_voting_strategy(
@@ -164,13 +199,13 @@ class VotingStrategies:
                 providers, actions, confidences, reasonings, amounts
             )
         elif self.voting_strategy == "stacking":
-            return self._stacking_ensemble(
+            return self._enhanced_stacking_voting(
                 providers, actions, confidences, reasonings, amounts
             )
         else:
             raise ValueError(f"Unknown voting strategy: {self.voting_strategy}")
 
-    def _weighted_voting(
+    def _weighted_voting(  # noqa: C901
         self,
         providers: List[str],
         actions: List[str],
@@ -197,7 +232,7 @@ class VotingStrategies:
 
         # Validate confidences is iterable
         try:
-            confidences_iter = iter(confidences)
+            iter(confidences)
         except TypeError:
             raise ValueError(
                 f"confidences must be a list or iterable, got {type(confidences).__name__}"
@@ -289,7 +324,7 @@ class VotingStrategies:
             action_votes[action] += power
 
         # Select winning action
-        final_action = max(action_votes, key=action_votes.get)
+        final_action = max(action_votes.items(), key=lambda kv: kv[1])[0]
 
         # Calculate ensemble confidence
         # Winner's vote share * average confidence of supporters
@@ -369,10 +404,10 @@ class VotingStrategies:
             "action": final_action,
             "confidence": final_confidence,
             "reasoning": f"Majority vote ({action_counts[final_action]}/{len(actions)} providers). {combined_reasoning}",
-            "recommended_position_size": final_amount,
+            "amount": final_amount,
         }
 
-    def _stacking_voting(
+    def _stacking_voting(  # noqa: C901
         self,
         providers: List[str],
         actions: List[str],
@@ -381,7 +416,7 @@ class VotingStrategies:
         amounts: List[float],
     ) -> Dict[str, Any]:
         """
-        Stacking ensemble with a trained meta-learner model.
+        Standard stacking ensemble with 5 meta-features.
 
         Generates meta-features from base predictions, scales them, and
         feeds them to a logistic regression model to get the final decision.
@@ -396,11 +431,14 @@ class VotingStrategies:
                 providers, actions, confidences, reasonings, amounts
             )
 
-        # Generate meta-features
+        meta_learner = self.meta_learner
+        meta_feature_scaler = self.meta_feature_scaler
+
+        # Generate standard meta-features
         meta_features = self._generate_meta_features(actions, confidences, amounts)
 
-        # Create feature vector in the correct order
-        feature_vector = np.array(
+        # Create feature vector in the correct order (5 features)
+        standard_features = np.array(
             [
                 meta_features["buy_ratio"],
                 meta_features["sell_ratio"],
@@ -408,7 +446,141 @@ class VotingStrategies:
                 meta_features["avg_confidence"],
                 meta_features["confidence_std"],
             ]
-        ).reshape(1, -1)
+        )
+
+        # Check if our model expects 9 features (enhanced) or 5 features (standard)
+        expected_features = meta_feature_scaler.mean_.shape[0]
+
+        if expected_features == 9:
+            # Model expects 9 features, pad with default values for enhanced features
+            feature_vector = np.array(
+                [
+                    meta_features["buy_ratio"],
+                    meta_features["sell_ratio"],
+                    meta_features["hold_ratio"],
+                    meta_features["avg_confidence"],
+                    meta_features["confidence_std"],
+                    meta_features.get(
+                        "action_diversity_ratio", 0.67
+                    ),  # Default action diversity
+                    meta_features.get(
+                        "confidence_range", 20.0
+                    ),  # Default confidence range
+                    meta_features.get("avg_amount", 800.0),  # Default avg amount
+                    meta_features.get("amount_std", 250.0),  # Default amount std
+                ]
+            ).reshape(1, -1)
+        elif expected_features == 5:
+            # Model expects 5 features, use standard features
+            feature_vector = standard_features.reshape(1, -1)
+        else:
+            logger.error(
+                f"Unexpected number of features in model: {expected_features}, expected 5 or 9"
+            )
+            # Fallback to standard features
+            feature_vector = standard_features.reshape(1, -1)
+
+        # Scale the features
+        scaled_features = meta_feature_scaler.transform(feature_vector)
+
+        # Predict action and probabilities
+        final_action = meta_learner.predict(scaled_features)[0]
+        probabilities = meta_learner.predict_proba(scaled_features)[0]
+
+        # Get confidence for the winning action
+        class_index = list(meta_learner.classes_).index(final_action)
+        final_confidence = int(probabilities[class_index] * 100)
+
+        final_reasoning = self._aggregate_reasoning(
+            providers, actions, reasonings, final_action
+        )
+
+        final_amount = meta_features["avg_amount"]
+
+        return {
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "meta_features": meta_features,
+            "stacking_probabilities": dict(zip(meta_learner.classes_, probabilities)),
+        }
+
+    def _enhanced_stacking_voting(
+        self,
+        providers: List[str],
+        actions: List[str],
+        confidences: List[int],
+        reasonings: List[str],
+        amounts: List[float],
+    ) -> Dict[str, Any]:
+        """
+        Enhanced stacking ensemble with additional meta-features and improved decision logic.
+
+        This implementation includes additional meta-features like action diversity,
+        confidence range, and prediction agreement to improve the meta-learner's performance.
+        """
+        if not self.meta_learner or not self.meta_feature_scaler:
+            logger.warning(
+                "Meta-learner not initialized for enhanced stacking strategy. "
+                "Falling back to weighted voting."
+            )
+            # For fallback, we need base weights which we don't have in this method
+            return self._majority_voting(
+                providers, actions, confidences, reasonings, amounts
+            )
+
+        # Generate enhanced meta-features
+        meta_features = self._generate_enhanced_meta_features(
+            actions, confidences, amounts
+        )
+
+        # Check if our model expects 9 features (enhanced) or 5 features (standard)
+        expected_features = self.meta_feature_scaler.mean_.shape[0]
+
+        if expected_features == 9:
+            # Model expects 9 features, use all enhanced features
+            feature_vector = np.array(
+                [
+                    meta_features["buy_ratio"],
+                    meta_features["sell_ratio"],
+                    meta_features["hold_ratio"],
+                    meta_features["avg_confidence"],
+                    meta_features["confidence_std"],
+                    meta_features["action_diversity_ratio"],
+                    meta_features["confidence_range"],
+                    meta_features["avg_amount"],
+                    meta_features["amount_std"],
+                ]
+            ).reshape(1, -1)
+        elif expected_features == 5:
+            # Model expects 5 features, use only the standard features
+            logger.warning(
+                "Model has 5 features but enhanced stacking was requested. Using standard features only."
+            )
+            feature_vector = np.array(
+                [
+                    meta_features["buy_ratio"],
+                    meta_features["sell_ratio"],
+                    meta_features["hold_ratio"],
+                    meta_features["avg_confidence"],
+                    meta_features["confidence_std"],
+                ]
+            ).reshape(1, -1)
+        else:
+            logger.error(
+                f"Unexpected number of features in model: {expected_features}, expected 5 or 9"
+            )
+            # Fallback to standard 5 features
+            feature_vector = np.array(
+                [
+                    meta_features["buy_ratio"],
+                    meta_features["sell_ratio"],
+                    meta_features["hold_ratio"],
+                    meta_features["avg_confidence"],
+                    meta_features["confidence_std"],
+                ]
+            ).reshape(1, -1)
 
         # Scale the features
         scaled_features = self.meta_feature_scaler.transform(feature_vector)
@@ -436,6 +608,63 @@ class VotingStrategies:
             "stacking_probabilities": dict(
                 zip(self.meta_learner.classes_, probabilities)
             ),
+            "enhanced_meta_features": expected_features
+            == 9,  # Only True if using 9 features
+        }
+
+    def _generate_enhanced_meta_features(
+        self, actions: List[str], confidences: List[int], amounts: List[float]
+    ) -> Dict[str, Any]:
+        """Generate enhanced meta-features from base model predictions."""
+        num_providers = len(actions)
+        if num_providers == 0:
+            return {
+                "buy_ratio": 0.0,
+                "sell_ratio": 0.0,
+                "hold_ratio": 0.0,
+                "avg_confidence": 0.0,
+                "confidence_std": 0.0,
+                "min_confidence": 0,
+                "max_confidence": 0,
+                "avg_amount": 0.0,
+                "amount_std": 0.0,
+                "num_providers": 0,
+                "action_diversity": 0,
+                "action_diversity_ratio": 0.0,
+                "confidence_range": 0.0,
+            }
+
+        from collections import Counter
+
+        action_counts = Counter(actions)
+
+        # Basic features
+        buy_ratio = action_counts.get("BUY", 0) / num_providers
+        sell_ratio = action_counts.get("SELL", 0) / num_providers
+        hold_ratio = action_counts.get("HOLD", 0) / num_providers
+        avg_confidence = float(np.mean(confidences))
+        confidence_std = float(np.std(confidences))
+        min_confidence = min(confidences) if confidences else 0
+        max_confidence = max(confidences) if confidences else 0
+        avg_amount = float(np.mean(amounts))
+        amount_std = float(np.std(amounts))
+        num_unique_actions = len(action_counts)
+
+        return {
+            "buy_ratio": buy_ratio,
+            "sell_ratio": sell_ratio,
+            "hold_ratio": hold_ratio,
+            "avg_confidence": avg_confidence,
+            "confidence_std": confidence_std,
+            "min_confidence": min_confidence,
+            "max_confidence": max_confidence,
+            "avg_amount": avg_amount,
+            "amount_std": amount_std,
+            "num_providers": num_providers,
+            "action_diversity": num_unique_actions,
+            "action_diversity_ratio": num_unique_actions
+            / 3.0,  # Normalize by max possible actions
+            "confidence_range": max_confidence - min_confidence,
         }
 
     def _generate_meta_features(

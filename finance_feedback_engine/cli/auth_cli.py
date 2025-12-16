@@ -1,9 +1,6 @@
 """API key management CLI commands."""
 
-import os
 import sys
-from pathlib import Path
-from typing import Optional
 
 import click
 from tabulate import tabulate
@@ -58,7 +55,7 @@ def add_api_key(name: str, key: str, description: str):
             click.secho(
                 "💡 Add to config/config.local.yaml for fallback (optional):", fg="blue"
             )
-            click.echo(f"  api_keys:")
+            click.echo("  api_keys:")
             click.echo(f"    {name}: '{key}'")
         else:
             click.secho(f"⚠️  API key '{name}' already exists in database", fg="yellow")

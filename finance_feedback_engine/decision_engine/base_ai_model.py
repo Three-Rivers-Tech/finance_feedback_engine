@@ -1,5 +1,4 @@
 import logging
-import random
 from abc import ABC, abstractmethod
 from typing import Any, Dict
 
@@ -386,7 +385,7 @@ class DummyAIModel(BaseAIModel):
         # If no key factors identified, mention the decision and confidence
         if not key_factors:
             key_factors = [
-                f"Decision based on general market conditions",
+                "Decision based on general market conditions",
                 f"Confidence level: {decision.get('confidence', 0.5):.2f}",
             ]
 

@@ -96,11 +96,11 @@ def test_asset_pairs_override_empty_entries():
     assert parsed_asset_pairs == ["BTCUSD", "ETHUSD", "EURUSD"]
 
 
-@patch("finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent")
-@patch("finance_feedback_engine.monitoring.trade_monitor.TradeMonitor")
+@patch("finance_feedback_engine.cli.commands.agent.TradingLoopAgent")
+@patch("finance_feedback_engine.cli.commands.agent.TradeMonitor")
 def test_initialize_agent_with_override(mock_monitor, mock_agent_class):
     """Test that _initialize_agent correctly applies asset pairs override."""
-    from finance_feedback_engine.cli.main import _initialize_agent
+    from finance_feedback_engine.cli.commands.agent import _initialize_agent
 
     # Mock config
     config = {
@@ -152,11 +152,11 @@ def test_initialize_agent_with_override(mock_monitor, mock_agent_class):
     assert agent_config.watchlist == override
 
 
-@patch("finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent")
-@patch("finance_feedback_engine.monitoring.trade_monitor.TradeMonitor")
+@patch("finance_feedback_engine.cli.commands.agent.TradingLoopAgent")
+@patch("finance_feedback_engine.cli.commands.agent.TradeMonitor")
 def test_initialize_agent_without_override(mock_monitor, mock_agent_class):
     """Test that _initialize_agent uses config values when no override is provided."""
-    from finance_feedback_engine.cli.main import _initialize_agent
+    from finance_feedback_engine.cli.commands.agent import _initialize_agent
 
     # Mock config
     config = {

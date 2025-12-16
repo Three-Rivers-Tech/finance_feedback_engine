@@ -8,6 +8,7 @@ import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
+from ..utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +51,9 @@ class AlphaVantageProvider:
         # Defer aiohttp.ClientSession creation to async request time to avoid
         # requiring a running event loop during synchronous initialization.
         self.session = session
-        # Optional shared rate limiter injected by UnifiedDataProvider
-        self.rate_limiter = rate_limiter
+
+        # Ensure rate limiter is always active - create default if not provided
+        self.rate_limiter = rate_limiter or self._create_default_rate_limiter()
         self._owned_session = False
         import asyncio
 
@@ -118,37 +120,36 @@ class AlphaVantageProvider:
         Returns:
             JSON response
         """
-        # Apply rate limiting if limiter is provided
+        # Apply rate limiting - always active since rate_limiter is always created
         rate_limiter_acquired = False
         rate_limiter_release = None
-        if self.rate_limiter is not None:
-            try:
-                # Prefer async context manager if available
-                if hasattr(self.rate_limiter, "__aenter__") and hasattr(
-                    self.rate_limiter, "__aexit__"
-                ):
-                    # Use as async context manager for the whole request
-                    async with self.rate_limiter:
-                        return await self._do_async_request(params, timeout)
-                elif hasattr(self.rate_limiter, "acquire") and hasattr(
-                    self.rate_limiter, "release"
-                ):
-                    # Semaphore-like interface: acquire before, release in finally
-                    await self.rate_limiter.acquire()
-                    rate_limiter_acquired = True
-                    rate_limiter_release = self.rate_limiter.release
-                elif hasattr(self.rate_limiter, "wait"):
-                    # Wait-based interface
-                    await self.rate_limiter.wait()
-                elif callable(self.rate_limiter):
-                    # Direct callable - check if it returns awaitable
-                    result = self.rate_limiter()
-                    if hasattr(result, "__await__"):
-                        await result
-            except Exception as e:
-                logger.warning(f"Rate limiter error: {e}")
-                # Propagate limiter exceptions to allow upstream handling
-                raise
+        try:
+            # Prefer async context manager if available
+            if hasattr(self.rate_limiter, "__aenter__") and hasattr(
+                self.rate_limiter, "__aexit__"
+            ):
+                # Use as async context manager for the whole request
+                async with self.rate_limiter:
+                    return await self._do_async_request(params, timeout)
+            elif hasattr(self.rate_limiter, "acquire") and hasattr(
+                self.rate_limiter, "release"
+            ):
+                # Semaphore-like interface: acquire before, release in finally
+                await self.rate_limiter.acquire()
+                rate_limiter_acquired = True
+                rate_limiter_release = self.rate_limiter.release
+            elif hasattr(self.rate_limiter, "wait"):
+                # Wait-based interface
+                await self.rate_limiter.wait()
+            elif callable(self.rate_limiter):
+                # Direct callable - check if it returns awaitable
+                result = self.rate_limiter()
+                if hasattr(result, "__await__"):
+                    await result
+        except Exception as e:
+            logger.warning(f"Rate limiter error: {e}")
+            # Propagate limiter exceptions to allow upstream handling
+            raise
 
         # Lazily create a session and retry client within an event loop context
         if self.session is None:
@@ -466,7 +467,7 @@ class AlphaVantageProvider:
                 start_dt = datetime.strptime(start, "%Y-%m-%d").date()
                 end_dt = datetime.strptime(end, "%Y-%m-%d").date()
                 return self._generate_mock_series(start_dt, end_dt, timeframe)
-            except Exception:
+            except (ValueError, TypeError):
                 return []
 
     def _generate_mock_series(self, start_dt, end_dt, timeframe: str = "1d") -> list:
@@ -1092,6 +1093,29 @@ class AlphaVantageProvider:
             logger.warning(f"Market data validation failed for {asset_pair}: {issues}")
 
         return is_valid, issues
+
+    def _create_default_rate_limiter(self) -> RateLimiter:
+        """
+        Create a default rate limiter with conservative settings for Alpha Vantage API.
+        The default rate is set to 5 requests per minute (0.0833 requests per second)
+        with a burst capacity of 5 tokens to handle short bursts of API calls.
+        This is well below the free tier limit of 5 requests per minute.
+        """
+        # Get rate limiter configuration from config or use defaults
+        rate_limiter_config = self.config.get("rate_limiter", {})
+
+        # Conservative defaults for Alpha Vantage (5 requests per minute)
+        tokens_per_second = rate_limiter_config.get(
+            "tokens_per_second", 0.0833
+        )  # ~5 per minute
+        max_tokens = rate_limiter_config.get("max_tokens", 5)  # Burst capacity
+
+        logger.info(
+            f"Creating default rate limiter for AlphaVantage: "
+            f"{tokens_per_second:.4f} tokens/sec, max {max_tokens} tokens"
+        )
+
+        return RateLimiter(tokens_per_second=tokens_per_second, max_tokens=max_tokens)
 
     def get_circuit_breaker_stats(self) -> Dict[str, Any]:
         """Get circuit breaker statistics for monitoring."""

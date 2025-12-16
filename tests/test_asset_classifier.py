@@ -1,7 +1,5 @@
 """Tests for asset classifier utility."""
 
-import pytest
-
 from finance_feedback_engine.utils.asset_classifier import (
     AssetClassifier,
     classify_asset_pair,

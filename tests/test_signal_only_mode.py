@@ -1,4 +1,5 @@
 import pytest
+
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
 pytestmark = pytest.mark.skip(reason="Signal-only mode deprecated; tests removed")
@@ -151,6 +152,5 @@ async def test_signal_only_default_overrides_balance(engine_signal_only):
         portfolio=safe_dict(context.get("portfolio")),
         memory_context=safe_dict(context.get("memory_context")),
     )
-<<<<<<< HEAD
     assert decision["signal_only"] is True
     assert decision["recommended_position_size"] is None

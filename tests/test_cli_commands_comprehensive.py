@@ -26,8 +26,9 @@ def test_analyze_command_default_and_with_provider():
     runner = CliRunner()
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `analyze` is implemented in cli.commands.analysis and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine"
+            "finance_feedback_engine.cli.commands.analysis.FinanceFeedbackEngine"
         ) as MockEngine:
             # First run: no provider specified
             MockEngine.return_value = _mock_engine_for_analyze()
@@ -79,11 +80,15 @@ def test_backtest_command_valid_and_invalid_dates():
         pass
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `backtest` is implemented in cli.commands.backtest and imports FinanceFeedbackEngine/Backtester there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.backtest.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
-            with patch("finance_feedback_engine.cli.main.Backtester", FakeBacktester):
+            with patch(
+                "finance_feedback_engine.cli.commands.backtest.Backtester",
+                FakeBacktester,
+            ):
                 with patch(
                     "finance_feedback_engine.cli.backtest_formatter.format_single_asset_backtest",
                     noop_formatter,
@@ -215,9 +220,9 @@ def test_approve_command_yes_and_no():
                 "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
                 return_value=fake_engine,
             ):
-                with patch(
-                    "finance_feedback_engine.cli.main.Prompt.ask", return_value="no"
-                ):
+                # Prompt is imported locally inside approve() in [`finance_feedback_engine/cli/main.py`](finance_feedback_engine/cli/main.py:1394)
+                # so we patch the source classmethod instead of a module attribute.
+                with patch("rich.prompt.Prompt.ask", return_value="no"):
                     res_no = runner.invoke(cli, ["approve", decision_id])
                     assert res_no.exit_code == 0, res_no.output
                     approvals_dir = Path("data/approvals")
@@ -256,9 +261,7 @@ def test_approve_command_yes_and_no():
                 "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
                 return_value=fake_engine,
             ):
-                with patch(
-                    "finance_feedback_engine.cli.main.Prompt.ask", return_value="yes"
-                ):
+                with patch("rich.prompt.Prompt.ask", return_value="yes"):
                     res_yes = runner.invoke(cli, ["approve", decision_id])
                     assert res_yes.exit_code == 0, res_yes.output
                     approvals_dir = Path("data/approvals")
@@ -272,8 +275,9 @@ def test_balance_command():
     fake_engine = MagicMock()
     fake_engine.get_balance.return_value = {"USD": 10000.0, "BTC": 0.5}
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `balance` is implemented in cli.commands.trading and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.trading.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             res = runner.invoke(cli, ["balance"])
@@ -302,8 +306,9 @@ def test_history_command_basic():
         },
     ]
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `history` is implemented in cli.commands.analysis and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.analysis.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             res = runner.invoke(cli, ["history", "--limit", "2"])
@@ -319,8 +324,9 @@ def test_execute_with_id_calls_engine():
         "message": "ok",
     }
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `execute` is implemented in cli.commands.trading and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.trading.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             res = runner.invoke(cli, ["execute", "dec123"])
@@ -352,11 +358,12 @@ def test_execute_interactive_selection():
             "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
         ):
             with patch(
-                "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+                "finance_feedback_engine.cli.commands.trading.FinanceFeedbackEngine",
                 return_value=fake_engine,
             ):
                 with patch(
-                    "finance_feedback_engine.cli.main.console.input", return_value="1"
+                    "finance_feedback_engine.cli.commands.trading.console.input",
+                    return_value="1",
                 ):
                     res = runner.invoke(cli, ["execute"])  # no id triggers selection
                     assert res.exit_code == 0, res.output
@@ -486,29 +493,38 @@ def test_portfolio_backtest_command():
 
 
 def test_walk_forward_command():
-    """Test walk-forward analysis with mocked optimizer."""
+    """Test walk-forward analysis with mocked analyzer."""
     runner = CliRunner()
     fake_engine = MagicMock()
     fake_engine.historical_data_provider = MagicMock()
     fake_engine.decision_engine = MagicMock()
 
-    class FakeWalkForward:
+    class FakeWalkForwardAnalyzer:
         def __init__(self, *args, **kwargs):
             pass
 
-        def run(self, *args, **kwargs):
+        def run_walk_forward(self, *args, **kwargs):
             return {
-                "train_metrics": {"win_rate": 0.6},
-                "test_metrics": {"win_rate": 0.55},
+                "aggregate_test_performance": {
+                    "avg_sharpe_ratio": 1.2,
+                    "avg_return_pct": 10.0,
+                    "avg_win_rate_pct": 55.0,
+                },
+                "num_windows": 3,
+                "overfitting_analysis": {
+                    "overfitting_severity": "LOW",
+                    "recommendation": "OK",
+                },
             }
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.backtest.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             with patch(
-                "finance_feedback_engine.cli.main.WalkForwardOptimizer", FakeWalkForward
+                "finance_feedback_engine.cli.commands.backtest.WalkForwardAnalyzer",
+                FakeWalkForwardAnalyzer,
             ):
                 res = runner.invoke(
                     cli,
@@ -535,16 +551,33 @@ def test_monte_carlo_command():
         def __init__(self, *args, **kwargs):
             pass
 
-        def run(self, *args, **kwargs):
-            return {"mean_final_balance": 10500.0, "std_final_balance": 200.0}
+        def run_monte_carlo(self, *args, **kwargs):
+            return {
+                "base_final_balance": 10000.0,
+                "statistics": {
+                    "expected_return": 500.0,
+                    "var_95": -250.0,
+                    "worst_case": 9000.0,
+                    "best_case": 12000.0,
+                    "std_dev": 200.0,
+                },
+                "percentiles": {
+                    "p5": 9200.0,
+                    "p25": 9800.0,
+                    "p50": 10300.0,
+                    "p75": 10800.0,
+                    "p95": 11800.0,
+                },
+            }
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.backtest.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             with patch(
-                "finance_feedback_engine.cli.main.MonteCarloSimulator", FakeMonteCarlo
+                "finance_feedback_engine.cli.commands.backtest.MonteCarloSimulator",
+                FakeMonteCarlo,
             ):
                 res = runner.invoke(
                     cli,
@@ -601,8 +634,9 @@ def test_learning_report_command():
     fake_engine.memory_engine = fake_memory
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `learning-report` is implemented in cli.commands.memory and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.memory.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             res = runner.invoke(cli, ["learning-report"])
@@ -619,7 +653,7 @@ def test_prune_memory_command_no_confirm():
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.memory.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             res = runner.invoke(cli, ["prune-memory", "--keep-recent", "1000"])
@@ -637,12 +671,10 @@ def test_prune_memory_command_with_pruning():
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.memory.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
-            with patch(
-                "finance_feedback_engine.cli.main.Prompt.ask", return_value="yes"
-            ):
+            with patch("rich.prompt.Prompt.ask", return_value="yes"):
                 res = runner.invoke(cli, ["prune-memory", "--keep-recent", "500"])
                 assert res.exit_code == 0, res.output
                 assert len(fake_memory.trade_outcomes) == 500
@@ -684,7 +716,9 @@ def test_retrain_meta_learner_force():
             "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
-            with patch("finance_feedback_engine.cli.main.run_training", fake_train):
+            # run_training is imported inside [`retrain_meta_learner()`](finance_feedback_engine/cli/main.py:1760)
+            # so patch the original module symbol, not a cli.main attribute.
+            with patch("train_meta_learner.run_training", fake_train):
                 res = runner.invoke(cli, ["retrain-meta-learner", "--force"])
                 assert res.exit_code == 0, res.output
 
@@ -702,12 +736,13 @@ def test_run_agent_command():
     fake_agent.run = fake_run
 
     with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        # `run-agent` is implemented in cli.commands.agent and imports FinanceFeedbackEngine there
         with patch(
-            "finance_feedback_engine.cli.main.FinanceFeedbackEngine",
+            "finance_feedback_engine.cli.commands.agent.FinanceFeedbackEngine",
             return_value=fake_engine,
         ):
             with patch(
-                "finance_feedback_engine.cli.main._initialize_agent",
+                "finance_feedback_engine.cli.commands.agent._initialize_agent",
                 return_value=fake_agent,
             ):
                 with patch(
@@ -756,13 +791,17 @@ def test_config_editor_command():
             "finance_feedback_engine.cli.main.load_config",
             return_value={"trading_platform": "mock"},
         ):
-            with patch(
-                "finance_feedback_engine.cli.main.Prompt.ask",
-                side_effect=["", "", "", "", "", ""],
-            ):  # Empty answers to skip all prompts
+            # config-editor uses click.prompt / click.confirm, not Rich Prompt.
+            # Return the provided default to keep the flow non-interactive and valid for Choice prompts.
+            with patch("click.prompt", side_effect=lambda *a, **kw: kw.get("default")):
                 with patch(
-                    "finance_feedback_engine.cli.main.console.input", return_value="n"
-                ):  # Don't save
-                    res = runner.invoke(cli, ["config-editor"])
-                    # Command may exit with 0 or 1 depending on save choice
-                    assert res.exit_code in [0, 1], res.output
+                    "click.confirm",
+                    side_effect=lambda *a, **kw: kw.get("default", False),
+                ):
+                    with patch(
+                        "finance_feedback_engine.cli.main.console.input",
+                        return_value="n",
+                    ):  # Don't save
+                        res = runner.invoke(cli, ["config-editor"])
+                        # Command may exit with 0 or 1 depending on save choice
+                        assert res.exit_code in [0, 1], res.output

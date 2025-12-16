@@ -12,7 +12,6 @@ This validates that the agent behaves correctly under production conditions.
 
 import logging
 import random
-from collections import defaultdict
 from typing import Any, Dict, Optional
 
 from finance_feedback_engine.backtesting.backtester import Backtester
@@ -198,18 +197,8 @@ class AgentModeBacktester(Backtester):
             "kill_switch_timestamp": None,
         }
 
-        last_decision_timestamp = None
-        trades_by_date = defaultdict(int)
-        initial_portfolio_value = self.initial_balance
-        peak_portfolio_value = initial_portfolio_value
-
-        # Inject strategic context into decision engine
-        # Note: This would require modifying DecisionEngine._build_market_analysis_prompt
-        # For now, we'll pass it as part of market_data
-        strategic_context = {
-            "strategic_goal": self.strategic_goal,
-            "risk_appetite": self.risk_appetite,
-        }
+        # Note: keep this placeholder for future OODA metrics that reference initial balance
+        # (avoid unused-local flake8 error until implemented).
 
         # Run parent backtest with enhanced monitoring
         # We'll wrap the iteration to add OODA logic

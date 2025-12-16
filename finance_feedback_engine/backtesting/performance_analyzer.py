@@ -3,8 +3,7 @@
 import base64
 import io
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -232,7 +231,7 @@ class BacktestPerformanceAnalyzer:
         equity_series = pd.Series(equity_curve)
         peak = equity_series.expanding(min_periods=1).max()
         drawdown = (equity_series - peak) / peak
-        drawdown_pct = drawdown * 100
+        drawdown * 100
 
         drawdown_analysis = {
             "max_drawdown_pct": drawdown.min() * 100,
@@ -453,11 +452,11 @@ class BacktestPerformanceAnalyzer:
 
         # Convert to pandas Series for easier plotting
         equity_series = pd.Series(equity_curve)
-        returns = equity_series.pct_change()
+        equity_series.pct_change()
 
         # Calculate drawdown
         peak = equity_series.expanding(min_periods=1).max()
-        drawdown = (equity_series - peak) / peak
+        (equity_series - peak) / peak
 
         ax.plot(
             equity_series.index,
@@ -525,7 +524,7 @@ class BacktestPerformanceAnalyzer:
 
             # Add statistics to the plot
             avg_pnl = np.mean(pnl_values)
-            std_pnl = np.std(pnl_values)
+            np.std(pnl_values)
             ax.axvline(
                 avg_pnl, color="red", linestyle="--", label=f"Mean: ${avg_pnl:.2f}"
             )

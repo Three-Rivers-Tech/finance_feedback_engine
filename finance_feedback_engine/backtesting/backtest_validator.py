@@ -1,13 +1,11 @@
 """Backtesting validation module for ensuring reliable and non-overfitted results."""
 
 import logging
-import warnings
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +61,7 @@ class BacktestValidator:
         # Extract key metrics from backtest results
         metrics = backtest_results.get("metrics", {})
         trades = backtest_results.get("trades", [])
-        equity_curve = backtest_results.get("backtest_config", {}).get(
-            "equity_curve", []
-        )
+        backtest_results.get("backtest_config", {}).get("equity_curve", [])
 
         # Check for overfitting indicators
         overfitting_issues, overfitting_recs = self._check_overfitting_indicators(

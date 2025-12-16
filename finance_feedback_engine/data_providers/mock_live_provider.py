@@ -621,7 +621,7 @@ class MockLiveProvider:
                 else:
                     try:
                         df.index = pd.to_datetime(df.index)
-                    except:
+                    except Exception:
                         # If we can't convert to datetime, return simple fallback
                         return []
 

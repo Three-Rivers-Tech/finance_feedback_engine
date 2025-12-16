@@ -142,7 +142,39 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
     for currency in known_base_currencies:
         if base_part.startswith(currency):
             found_base = True
-            break
+            # Extract the potential quote currency part
+            quote_part = asset_pair[len(currency) :]
+            # Ensure quote part is not empty and contains valid currency characters
+            if quote_part and all(c.isalpha() for c in quote_part):
+                # Validate that quote part is a recognized currency
+                if (
+                    quote_part in known_base_currencies
+                ):  # Using same list for quote currencies
+                    return (
+                        True,
+                        f"Asset pair '{asset_pair}' has valid base/quote composition",
+                    )
+                else:
+                    logger.warning(
+                        "Asset pair '%s' has unknown quote currency: %s",
+                        asset_pair,
+                        quote_part,
+                    )
+                    # For now, treat unknown quote currencies as valid but with warning
+                    return (
+                        True,
+                        f"Asset pair '{asset_pair}' has unknown quote currency: {quote_part}",
+                    )
+            else:
+                logger.warning(
+                    "Asset pair '%s' has invalid quote currency format: %s",
+                    asset_pair,
+                    quote_part,
+                )
+                return (
+                    False,
+                    f"Asset pair '{asset_pair}' has invalid quote currency: {quote_part}",
+                )
 
     if not found_base:
         logger.warning(
@@ -150,13 +182,10 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
             asset_pair,
             base_part,
         )
-        return False, f"Asset pair '{asset_pair}' has unknown base currency"
+        # For now, treat unknown base currencies as valid but with warning
+        return True, f"Asset pair '{asset_pair}' has unknown base currency"
 
-    # TODO: Add quote currency validation here
-    return True, f"Asset pair '{asset_pair}' has valid base currency"
-
-    # TODO: Add quote currency validation here
-    return True, f"Asset pair '{asset_pair}' has valid base currency"
+    return True, f"Asset pair '{asset_pair}' has valid base/quote composition"
 
 
 def validate_data_freshness(
