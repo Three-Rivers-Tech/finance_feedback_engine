@@ -71,7 +71,7 @@ if raw_asset_type is None:
     normalized_asset_type = 'crypto'  # Safe default
 elif isinstance(raw_asset_type, str):
     raw_lower = raw_asset_type.lower().strip()
-    
+
     # Check if already canonical
     if raw_lower in CANONICAL_ASSET_TYPES:
         normalized_asset_type = raw_lower

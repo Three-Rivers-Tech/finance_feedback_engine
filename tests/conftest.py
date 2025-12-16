@@ -1,18 +1,20 @@
-import sys
 import os
-import pytest
-from click.testing import CliRunner
-import pandas as pd
-from unittest.mock import MagicMock
-from pathlib import Path
-import yaml
 import shutil
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pandas as pd
+import pytest
+import yaml
+from click.testing import CliRunner
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 # --- Fixtures for CLI Testing ---
+
 
 @pytest.fixture(scope="function")
 def cli_runner():
@@ -51,7 +53,7 @@ def mock_engine(test_config_path):
     """
     from finance_feedback_engine import FinanceFeedbackEngine
 
-    with open(test_config_path, encoding='utf-8') as f:
+    with open(test_config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     return FinanceFeedbackEngine(config)
@@ -83,7 +85,7 @@ def cleanup_test_data():
     test_dirs = [
         Path("data/decisions_test"),
         Path("data/test_metrics"),
-        Path("data/test_memory")
+        Path("data/test_memory"),
     ]
 
     for test_dir in test_dirs:
@@ -97,7 +99,9 @@ def cleanup_test_data():
         if test_dir.exists():
             shutil.rmtree(test_dir, ignore_errors=True)
 
+
 # --- Fixtures for Data Testing ---
+
 
 @pytest.fixture(scope="session")
 def sample_historical_data() -> pd.DataFrame:
@@ -108,20 +112,21 @@ def sample_historical_data() -> pd.DataFrame:
     - DataFrames should have a DatetimeIndex and standard financial columns.
     - Useful for testing data validation, backtesting, and AI model inputs.
     """
-    dates = pd.to_datetime([
-        "2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05"
-    ], utc=True)
+    dates = pd.to_datetime(
+        ["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04", "2023-01-05"], utc=True
+    )
     data = {
-        'open': [100.0, 101.5, 102.0, 103.5, 104.0],
-        'high': [102.0, 102.5, 103.0, 104.5, 105.0],
-        'low': [99.5, 100.0, 101.5, 102.0, 103.0],
-        'close': [101.5, 102.0, 103.5, 104.0, 104.5],
-        'volume': [1000, 1100, 1050, 1200, 1150],
-        'RSI': [30.0, 35.0, 40.0, 45.0, 50.0] # Example feature
+        "open": [100.0, 101.5, 102.0, 103.5, 104.0],
+        "high": [102.0, 102.5, 103.0, 104.5, 105.0],
+        "low": [99.5, 100.0, 101.5, 102.0, 103.0],
+        "close": [101.5, 102.0, 103.5, 104.0, 104.5],
+        "volume": [1000, 1100, 1050, 1200, 1150],
+        "RSI": [30.0, 35.0, 40.0, 45.0, 50.0],  # Example feature
     }
     df = pd.DataFrame(data, index=dates)
-    df.index.name = 'timestamp'
+    df.index.name = "timestamp"
     return df
+
 
 # TODO: Add a fixture for invalid historical data to test validation
 # @pytest.fixture(scope="session")
@@ -134,6 +139,7 @@ def sample_historical_data() -> pd.DataFrame:
 
 
 # --- Fixtures for AI/ML Component Testing ---
+
 
 @pytest.fixture(scope="function")
 def mock_ai_model():
@@ -149,28 +155,47 @@ def mock_ai_model():
     # For more complex scenarios, you might use unittest.mock.create_autospec
     # from finance_feedback_engine.decision_engine.base_ai_model import BaseAIModel
     mock = MagicMock()
-    mock.predict.return_value = {"action": "BUY", "confidence": 0.9, "reasoning": "Mocked reason"}
-    mock.explain.return_value = {"key_factors": ["mock_feature_1"], "feature_contributions": {"mock_feature_1": 0.5}}
+    mock.predict.return_value = {
+        "action": "BUY",
+        "confidence": 0.9,
+        "reasoning": "Mocked reason",
+    }
+    mock.explain.return_value = {
+        "key_factors": ["mock_feature_1"],
+        "feature_contributions": {"mock_feature_1": 0.5},
+    }
     mock.get_metadata.return_value = {"model_name": "MockAI", "version": "0.0.1"}
     return mock
     # return DummyAIModel({"model_name": "TestMockModel"}) # Alternative: use a simple concrete dummy
+
 
 @pytest.fixture(scope="function")
 def mock_trading_platform():
     """
     Provides a mocked trading platform for testing interactions.
     """
-    from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+    from finance_feedback_engine.trading_platforms.base_platform import (
+        BaseTradingPlatform,
+    )
 
     mock = MagicMock(spec=BaseTradingPlatform)
     mock.get_balance.return_value = {"USD": 10000.0, "BTC": 0.5}
-    mock.execute_trade.return_value = {"order_id": "mock_123", "status": "FILLED", "success": True, "message": "Mock trade executed"}
-    mock.get_portfolio_breakdown.return_value = {"total_value_usd": 10000.0, "positions": []}
+    mock.execute_trade.return_value = {
+        "order_id": "mock_123",
+        "status": "FILLED",
+        "success": True,
+        "message": "Mock trade executed",
+    }
+    mock.get_portfolio_breakdown.return_value = {
+        "total_value_usd": 10000.0,
+        "positions": [],
+    }
     mock.get_account_info.return_value = {"max_leverage": 10.0}
     return mock
 
 
 # --- General Purpose Fixtures ---
+
 
 @pytest.fixture(scope="session")
 def temporary_file_path(tmp_path_factory):
@@ -179,6 +204,7 @@ def temporary_file_path(tmp_path_factory):
     """
     temp_dir = tmp_path_factory.mktemp("temp_test_files")
     return temp_dir / "test_file.txt"
+
 
 # TODO: Add more fixtures as needed for common test setups:
 # - Mocked external API responses (e.g., Alpha Vantage, Oanda)

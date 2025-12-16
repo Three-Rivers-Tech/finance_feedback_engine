@@ -1,52 +1,54 @@
 """Command-line interface for Finance Feedback Engine."""
 
-import click
-import logging
+import asyncio
+import copy
 import json
-import yaml
+import logging
+import os
+import re
 import subprocess
 import sys
-import re
-import os
-import copy
-import asyncio
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import click
+import yaml
+from packaging.requirements import Requirement
 from rich.console import Console
 from rich.table import Table
-from packaging.requirements import Requirement
-# from rich import print as rprint  # unused
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
-from finance_feedback_engine.cli.interactive import start_interactive_session
-from finance_feedback_engine.dashboard import (
-    PortfolioDashboardAggregator,
-    display_portfolio_dashboard
-)
-from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
-from finance_feedback_engine.monitoring.metrics import init_metrics, inc
-from finance_feedback_engine.cli.commands.analysis import (
-    analyze as analyze_command,
-    history as history_command
-)
-from finance_feedback_engine.cli.commands.trading import (
-    balance as balance_command,
-    execute as execute_command
+from finance_feedback_engine.cli.commands.agent import monitor as monitor_command
+from finance_feedback_engine.cli.commands.agent import run_agent as run_agent_command
+from finance_feedback_engine.cli.commands.analysis import analyze as analyze_command
+from finance_feedback_engine.cli.commands.analysis import history as history_command
+from finance_feedback_engine.cli.commands.backtest import backtest as backtest_command
+from finance_feedback_engine.cli.commands.backtest import (
+    monte_carlo as monte_carlo_command,
 )
 from finance_feedback_engine.cli.commands.backtest import (
-    backtest as backtest_command,
     portfolio_backtest as portfolio_backtest_command,
+)
+from finance_feedback_engine.cli.commands.backtest import (
     walk_forward as walk_forward_command,
-    monte_carlo as monte_carlo_command
 )
 from finance_feedback_engine.cli.commands.memory import (
     learning_report as learning_report_command,
-    prune_memory as prune_memory_command
 )
-from finance_feedback_engine.cli.commands.agent import (
-    run_agent as run_agent_command,
-    monitor as monitor_command
+from finance_feedback_engine.cli.commands.memory import (
+    prune_memory as prune_memory_command,
 )
+from finance_feedback_engine.cli.commands.trading import balance as balance_command
+from finance_feedback_engine.cli.commands.trading import execute as execute_command
+from finance_feedback_engine.cli.interactive import start_interactive_session
+from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.dashboard import (
+    PortfolioDashboardAggregator,
+    display_portfolio_dashboard,
+)
+from finance_feedback_engine.monitoring.metrics import inc, init_metrics
+from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+
+# from rich import print as rprint  # unused
 
 
 console = Console()
@@ -65,51 +67,67 @@ def _display_pulse_data(engine, asset_pair: str):
 
         # Try to fetch pulse from monitoring context first, then fall back to data_provider
         pulse = None
-        if hasattr(engine, 'monitoring_context_provider'):
-            context = engine.monitoring_context_provider.get_monitoring_context(asset_pair)
-            pulse = context.get('multi_timeframe_pulse')
+        if hasattr(engine, "monitoring_context_provider"):
+            context = engine.monitoring_context_provider.get_monitoring_context(
+                asset_pair
+            )
+            pulse = context.get("multi_timeframe_pulse")
 
-        if (not pulse or 'timeframes' not in (pulse or {})) and hasattr(engine, 'data_provider'):
+        if (not pulse or "timeframes" not in (pulse or {})) and hasattr(
+            engine, "data_provider"
+        ):
             try:
                 fetched = engine.data_provider.get_comprehensive_market_data(asset_pair)
-                pulse = (fetched or {}).get('multi_timeframe_pulse') or (fetched or {}).get('pulse')
+                pulse = (fetched or {}).get("multi_timeframe_pulse") or (
+                    fetched or {}
+                ).get("pulse")
                 # Normalize simple pulse dict into expected structure
-                if pulse and 'timeframes' not in pulse and isinstance(pulse, dict):
-                    pulse = {'timeframes': pulse}
+                if pulse and "timeframes" not in pulse and isinstance(pulse, dict):
+                    pulse = {"timeframes": pulse}
             except Exception as fetch_err:
-                console.print(f"[yellow]Multi-timeframe pulse unavailable: {fetch_err}[/yellow]")
+                console.print(
+                    f"[yellow]Multi-timeframe pulse unavailable: {fetch_err}[/yellow]"
+                )
 
-        if not pulse or 'timeframes' not in pulse:
+        if not pulse or "timeframes" not in pulse:
             console.print("[yellow]Multi-timeframe pulse data not available[/yellow]")
-            console.print("[dim]Ensure TradeMonitor is running or data_provider supports comprehensive pulse[/dim]")
+            console.print(
+                "[dim]Ensure TradeMonitor is running or data_provider supports comprehensive pulse[/dim]"
+            )
             return
 
         # Display pulse age
-        age_seconds = pulse.get('age_seconds', 0)
+        age_seconds = pulse.get("age_seconds", 0)
         age_mins = age_seconds / 60
-        freshness = "[green]FRESH[/green]" if age_mins < 10 else "[yellow]STALE[/yellow]"
+        freshness = (
+            "[green]FRESH[/green]" if age_mins < 10 else "[yellow]STALE[/yellow]"
+        )
         console.print(f"Pulse Age: {age_mins:.1f} minutes ({freshness})")
         console.print()
 
         # Create table for timeframe data
         from rich.table import Table
 
-        for tf, data in pulse['timeframes'].items():
+        for tf, data in pulse["timeframes"].items():
             table = Table(title=f"{tf.upper()} Timeframe", show_header=True)
             table.add_column("Indicator", style="cyan")
             table.add_column("Value", style="white")
             table.add_column("Interpretation", style="dim")
 
             # Trend
-            trend_color = "green" if data['trend'] == 'UPTREND' else "red" if data['trend'] == 'DOWNTREND' else "yellow"
+            trend_color = (
+                "green"
+                if data["trend"] == "UPTREND"
+                else "red" if data["trend"] == "DOWNTREND" else "yellow"
+            )
             table.add_row(
                 "Trend",
                 f"[{trend_color}]{data['trend']}[/{trend_color}]",
-                f"Signal Strength: {data.get('signal_strength', 0)}/100"
+                f"Signal Strength: {data.get('signal_strength', 0)}/100",
             )
 
             # RSI
-            rsi = data.get('rsi', 50)
+            rsi = data.get("rsi", 50)
             if rsi > 70:
                 rsi_status = "[red]OVERBOUGHT[/red]"
             elif rsi < 30:
@@ -119,37 +137,29 @@ def _display_pulse_data(engine, asset_pair: str):
             table.add_row("RSI", f"{rsi:.1f}", rsi_status)
 
             # MACD
-            macd = data.get('macd', {})
-            if macd.get('histogram', 0) > 0:
+            macd = data.get("macd", {})
+            if macd.get("histogram", 0) > 0:
                 macd_status = "[green]BULLISH[/green] (positive histogram)"
-            elif macd.get('histogram', 0) < 0:
+            elif macd.get("histogram", 0) < 0:
                 macd_status = "[red]BEARISH[/red] (negative histogram)"
             else:
                 macd_status = "NEUTRAL"
-            table.add_row(
-                "MACD",
-                f"{macd.get('macd', 0):.2f}",
-                macd_status
-            )
+            table.add_row("MACD", f"{macd.get('macd', 0):.2f}", macd_status)
 
             # Bollinger Bands
-            bbands = data.get('bollinger_bands', {})
-            percent_b = bbands.get('percent_b', 0.5)
+            bbands = data.get("bollinger_bands", {})
+            percent_b = bbands.get("percent_b", 0.5)
             if percent_b > 1.0:
                 bb_status = "[red]Above upper band[/red] (overbought)"
             elif percent_b < 0.0:
                 bb_status = "[green]Below lower band[/green] (oversold)"
             else:
                 bb_status = f"Within bands ({percent_b:.1%})"
-            table.add_row(
-                "Bollinger %B",
-                f"{percent_b:.3f}",
-                bb_status
-            )
+            table.add_row("Bollinger %B", f"{percent_b:.3f}", bb_status)
 
             # ADX
-            adx_data = data.get('adx', {})
-            adx_val = adx_data.get('adx', 0)
+            adx_data = data.get("adx", {})
+            adx_val = adx_data.get("adx", 0)
             if adx_val > 25:
                 adx_status = f"[green]STRONG TREND[/green] ({adx_val:.1f})"
             elif adx_val > 20:
@@ -157,24 +167,28 @@ def _display_pulse_data(engine, asset_pair: str):
             else:
                 adx_status = f"[yellow]Weak/ranging[/yellow] ({adx_val:.1f})"
 
-            plus_di = adx_data.get('plus_di', 0)
-            minus_di = adx_data.get('minus_di', 0)
-            direction = "[green]+DI dominant[/green]" if plus_di > minus_di else "[red]-DI dominant[/red]"
-
-            table.add_row(
-                "ADX",
-                f"{adx_val:.1f}",
-                f"{adx_status} | {direction}"
+            plus_di = adx_data.get("plus_di", 0)
+            minus_di = adx_data.get("minus_di", 0)
+            direction = (
+                "[green]+DI dominant[/green]"
+                if plus_di > minus_di
+                else "[red]-DI dominant[/red]"
             )
 
+            table.add_row("ADX", f"{adx_val:.1f}", f"{adx_status} | {direction}")
+
             # ATR & Volatility
-            atr = data.get('atr', 0)
-            volatility = data.get('volatility', 'medium')
-            vol_color = "red" if volatility == 'high' else "yellow" if volatility == 'medium' else "green"
+            atr = data.get("atr", 0)
+            volatility = data.get("volatility", "medium")
+            vol_color = (
+                "red"
+                if volatility == "high"
+                else "yellow" if volatility == "medium" else "green"
+            )
             table.add_row(
                 "ATR / Volatility",
                 f"{atr:.2f}",
-                f"[{vol_color}]{volatility.upper()}[/{vol_color}]"
+                f"[{vol_color}]{volatility.upper()}[/{vol_color}]",
             )
 
             console.print(table)
@@ -182,10 +196,10 @@ def _display_pulse_data(engine, asset_pair: str):
 
         # Cross-timeframe alignment
         console.print("[bold]Cross-Timeframe Alignment:[/bold]")
-        trends = [data['trend'] for data in pulse['timeframes'].values()]
-        uptrends = trends.count('UPTREND')
-        downtrends = trends.count('DOWNTREND')
-        ranging = trends.count('RANGING')
+        trends = [data["trend"] for data in pulse["timeframes"].values()]
+        uptrends = trends.count("UPTREND")
+        downtrends = trends.count("DOWNTREND")
+        ranging = trends.count("RANGING")
 
         if uptrends > downtrends and uptrends >= 3:
             alignment = "[bold green]BULLISH ALIGNMENT[/bold green]"
@@ -195,14 +209,15 @@ def _display_pulse_data(engine, asset_pair: str):
             alignment = "[yellow]MIXED SIGNALS[/yellow]"
 
         console.print(f"  {alignment}")
-        console.print(f"  Breakdown: {uptrends} up, {downtrends} down, {ranging} ranging")
+        console.print(
+            f"  Breakdown: {uptrends} up, {downtrends} down, {ranging} ranging"
+        )
 
         console.print("[bold cyan]=" * 40 + "[/bold cyan]\n")
 
     except Exception as e:
         console.print(f"[red]Error displaying pulse data: {e}[/red]")
         logger.exception("Pulse display error")
-
 
 
 def _parse_requirements_file(req_file: Path) -> list:
@@ -214,15 +229,15 @@ def _parse_requirements_file(req_file: Path) -> list:
     if not req_file.exists():
         return packages
 
-    with open(req_file, 'r', encoding='utf-8') as f:
+    with open(req_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             # Skip comments and empty lines
-            if not line or line.startswith('#'):
+            if not line or line.startswith("#"):
                 continue
 
             # Remove inline comments
-            line = line.split('#')[0].strip()
+            line = line.split("#")[0].strip()
             if not line:
                 continue
 
@@ -233,16 +248,15 @@ def _parse_requirements_file(req_file: Path) -> list:
                 continue
             except ImportError:
                 pass  # Fall back to regex approach
-            except Exception:
-                pass  # Invalid requirement, try regex fallback
+            except Exception as e:
+                # Invalid requirement, try regex fallback
+                logger.warning(f"Failed to parse requirement '{line}': {e}")
+                pass  # Fall back to regex approach
 
             # Fallback: Use regex to extract package name
             # Handles operators: ~=, !=, <=, <, >, ==, >=
             # Also strips extras [extra1,extra2] and environment markers
-            match = re.match(
-                r'^([a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?)',
-                line
-            )
+            match = re.match(r"^([a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?)", line)
             if match:
                 pkg = match.group(1)
                 if pkg:
@@ -254,21 +268,20 @@ def _get_installed_packages() -> dict:
     """Get currently installed packages as dict {name: version}."""
     try:
         result = subprocess.run(
-            [sys.executable, '-m', 'pip', 'list', '--format=json'],
+            [sys.executable, "-m", "pip", "list", "--format=json"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
         installed = json.loads(result.stdout)
         return {
-            pkg.get('name', '').lower(): pkg.get('version', '')
+            pkg.get("name", "").lower(): pkg.get("version", "")
             for pkg in installed
-            if isinstance(pkg, dict) and pkg.get('name')
+            if isinstance(pkg, dict) and pkg.get("name")
         }
     except Exception as e:
         console.print(
-            f"[yellow]Warning: Could not retrieve installed "
-            f"packages: {e}[/yellow]"
+            f"[yellow]Warning: Could not retrieve installed " f"packages: {e}[/yellow]"
         )
         return {}
 
@@ -278,7 +291,7 @@ def _check_dependencies() -> tuple:
 
     Returns (missing, installed) tuples.
     """
-    req_file = Path('requirements.txt')
+    req_file = Path("requirements.txt")
     if not req_file.exists():
         return ([], [])
 
@@ -291,12 +304,14 @@ def _check_dependencies() -> tuple:
     for pkg in required:
         pkg_lower = pkg.lower()
         # Normalize both hyphen and underscore for comparison
-        pkg_normalized = pkg_lower.replace('-', '_')
+        pkg_normalized = pkg_lower.replace("-", "_")
 
         # Check both forms (hyphen and underscore)
-        if (pkg_lower in installed_dict or
-                pkg_normalized in installed_dict or
-                pkg_lower.replace('_', '-') in installed_dict):
+        if (
+            pkg_lower in installed_dict
+            or pkg_normalized in installed_dict
+            or pkg_lower.replace("_", "-") in installed_dict
+        ):
             installed.append(pkg)
         else:
             missing.append(pkg)
@@ -315,19 +330,19 @@ def setup_logging(verbose: bool = False, config: dict = None):
     """
     # Map string level names to logging constants
     LEVEL_MAP = {
-        'DEBUG': logging.DEBUG,
-        'INFO': logging.INFO,
-        'WARNING': logging.WARNING,
-        'ERROR': logging.ERROR,
-        'CRITICAL': logging.CRITICAL
+        "DEBUG": logging.DEBUG,
+        "INFO": logging.INFO,
+        "WARNING": logging.WARNING,
+        "ERROR": logging.ERROR,
+        "CRITICAL": logging.CRITICAL,
     }
 
     # Priority 1: --verbose flag overrides everything
     if verbose:
         level = logging.DEBUG
     # Priority 2: Read from config
-    elif config and 'logging' in config and 'level' in config['logging']:
-        config_level = config['logging']['level']
+    elif config and "logging" in config and "level" in config["logging"]:
+        config_level = config["logging"]["level"]
         # Validate and map the config value
         if isinstance(config_level, str) and config_level.upper() in LEVEL_MAP:
             level = LEVEL_MAP[config_level.upper()]
@@ -344,8 +359,8 @@ def setup_logging(verbose: bool = False, config: dict = None):
     # Apply to root logger via basicConfig
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        force=True  # Override any existing config
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        force=True,  # Override any existing config
     )
 
     # Also set the root logger level explicitly
@@ -385,24 +400,25 @@ def load_tiered_config() -> dict:
     3. Environment variables (highest overall precedence)
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
-    base_config_path = Path('config/config.yaml')
-    local_config_path = Path('config/config.local.yaml')
+    base_config_path = Path("config/config.yaml")
+    local_config_path = Path("config/config.local.yaml")
 
     # Prefer local config as the primary file so local values take precedence.
     # Start with local (if present) then fill missing values from base config.
     config = {}
     # 1. Load local config first (preferred)
     if local_config_path.exists():
-        with open(local_config_path, 'r', encoding='utf-8') as f:
+        with open(local_config_path, "r", encoding="utf-8") as f:
             local_config = yaml.safe_load(f)
             if local_config:
                 config.update(local_config)
 
     # 2. Load base config and fill missing keys from it
     if base_config_path.exists():
-        with open(base_config_path, 'r', encoding='utf-8') as f:
+        with open(base_config_path, "r", encoding="utf-8") as f:
             base_config = yaml.safe_load(f)
             if base_config:
                 _deep_fill_missing(config, base_config)
@@ -411,16 +427,16 @@ def load_tiered_config() -> dict:
 
     # 3. Apply environment variables
     env_var_mappings = {
-        'ALPHA_VANTAGE_API_KEY': ('alpha_vantage_api_key',),
-        'COINBASE_API_KEY': ('trading_platform', 'coinbase', 'api_key'),
-        'COINBASE_API_SECRET': ('trading_platform', 'coinbase', 'api_secret'),
-        'COINBASE_PASSPHRASE': ('trading_platform', 'coinbase', 'passphrase'),
-        'OANDA_API_KEY': ('trading_platform', 'oanda', 'api_key'),
-        'OANDA_ACCOUNT_ID': ('trading_platform', 'oanda', 'account_id'),
+        "ALPHA_VANTAGE_API_KEY": ("alpha_vantage_api_key",),
+        "COINBASE_API_KEY": ("trading_platform", "coinbase", "api_key"),
+        "COINBASE_API_SECRET": ("trading_platform", "coinbase", "api_secret"),
+        "COINBASE_PASSPHRASE": ("trading_platform", "coinbase", "passphrase"),
+        "OANDA_API_KEY": ("trading_platform", "oanda", "api_key"),
+        "OANDA_ACCOUNT_ID": ("trading_platform", "oanda", "account_id"),
         # Boolean conversion needed
-        'OANDA_LIVE': ('trading_platform', 'oanda', 'live'),
-        'GEMINI_API_KEY': ('decision_engine', 'gemini', 'api_key'),
-        'GEMINI_MODEL_NAME': ('decision_engine', 'gemini', 'model_name'),
+        "OANDA_LIVE": ("trading_platform", "oanda", "live"),
+        "GEMINI_API_KEY": ("decision_engine", "gemini", "api_key"),
+        "GEMINI_MODEL_NAME": ("decision_engine", "gemini", "model_name"),
         # Add more as needed
     }
 
@@ -428,8 +444,8 @@ def load_tiered_config() -> dict:
         value = os.getenv(env_var)
         if value is not None:
             # Handle boolean conversion for specific keys
-            if env_var == 'OANDA_LIVE':
-                value = value.lower() == 'true'
+            if env_var == "OANDA_LIVE":
+                value = value.lower() == "true"
 
             current_level = config
             for i, key in enumerate(config_path_keys):
@@ -451,31 +467,25 @@ def load_config(config_path: str) -> dict:
     path = Path(config_path)
 
     if not path.exists():
-        raise click.ClickException(
-            f"Configuration file not found: {config_path}"
-        )
+        raise click.ClickException(f"Configuration file not found: {config_path}")
 
-    with open(path, 'r', encoding='utf-8') as f:
-        if path.suffix in ['.yaml', '.yml']:
+    with open(path, "r", encoding="utf-8") as f:
+        if path.suffix in [".yaml", ".yml"]:
             config = yaml.safe_load(f)
             if config is None:
                 raise click.ClickException(
-                    f"Configuration file {config_path} is empty or "
-                    f"invalid YAML"
+                    f"Configuration file {config_path} is empty or " f"invalid YAML"
                 )
             return config
-        elif path.suffix == '.json':
+        elif path.suffix == ".json":
             config = json.load(f)
             if config is None:
                 raise click.ClickException(
-                    f"Configuration file {config_path} is empty or "
-                    f"invalid JSON"
+                    f"Configuration file {config_path} is empty or " f"invalid JSON"
                 )
             return config
         else:
-            raise click.ClickException(
-                f"Unsupported config format: {path.suffix}"
-            )
+            raise click.ClickException(f"Unsupported config format: {path.suffix}")
 
 
 def _get_nested(config: dict, keys: tuple, default=None):
@@ -498,15 +508,14 @@ def _set_nested(config: dict, keys: tuple, value):
 
 @click.group(invoke_without_command=True)
 @click.option(
-    '--config', '-c',
+    "--config",
+    "-c",
     # Change default to None
     default=None,
-    help='Path to a specific config file (overrides tiered loading)'
+    help="Path to a specific config file (overrides tiered loading)",
 )
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option(
-    '--interactive', '-i', is_flag=True, help='Start in interactive mode'
-)
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
+@click.option("--interactive", "-i", is_flag=True, help="Start in interactive mode")
 @click.pass_context
 def cli(ctx, config, verbose, interactive):
     """Finance Feedback Engine 2.0 - AI-powered trading decision tool."""
@@ -517,17 +526,17 @@ def cli(ctx, config, verbose, interactive):
         # Use the old load_config
         final_config = load_config(config)
         # Store the path for other commands
-        ctx.obj['config_path'] = config
+        ctx.obj["config_path"] = config
     # Use tiered loading
     else:
         final_config = load_tiered_config()
         # Indicate that tiered loading was used, might not have a single path
         # Set a placeholder
-        ctx.obj['config_path'] = 'tiered'
+        ctx.obj["config_path"] = "tiered"
 
     # Store the final config
-    ctx.obj['config'] = final_config
-    ctx.obj['verbose'] = verbose
+    ctx.obj["config"] = final_config
+    ctx.obj["verbose"] = verbose
 
     # Setup logging with config and verbose flag
     # Verbose flag takes priority over config setting
@@ -536,14 +545,16 @@ def cli(ctx, config, verbose, interactive):
     # Initialize metrics early (safe no-op if prometheus_client missing)
     try:
         init_metrics()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to initialize metrics: {e}")
 
     # On interactive boot, check versions and prompt for update if needed
     if interactive:
         import subprocess
-        from importlib.metadata import version, PackageNotFoundError
+        from importlib.metadata import PackageNotFoundError, version
+
         from rich.prompt import Confirm
+
         console.print(
             "\n[bold cyan]Checking AI Provider Versions "
             "(interactive mode)...[/bold cyan]\n"
@@ -563,54 +574,57 @@ def cli(ctx, config, verbose, interactive):
             except PackageNotFoundError:
                 missing_libs.append(lib_name)
         cli_tools = [
-            ("Ollama", ["ollama", "--version"],
-             "curl -fsSL https://ollama.com/install.sh | sh"),
-            ("Copilot CLI", ["copilot", "--version"],
-             "npm i -g @githubnext/github-copilot-cli"),
+            (
+                "Ollama",
+                ["ollama", "--version"],
+                "curl -fsSL https://ollama.com/install.sh | sh",
+            ),
+            (
+                "Copilot CLI",
+                ["copilot", "--version"],
+                "npm i -g @githubnext/github-copilot-cli",
+            ),
             ("Qwen CLI", ["qwen", "--version"], "npm i -g @qwen/cli"),
             ("Node.js", ["node", "--version"], "nvm install --lts"),
         ]
         missing_tools = []
         for tool, cmd, upgrade_cmd in cli_tools:
             try:
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=5
-                )
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
                 if result.returncode != 0:
                     missing_tools.append((tool, upgrade_cmd))
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 missing_tools.append((tool, upgrade_cmd))
         # Emit a concise status log mapping missing components to AI providers
         import logging as _logging
+
         _logger = _logging.getLogger(__name__)
 
         provider_impact = {}
         # Map package/tool -> provider keys
         mapping = {
-            'ollama': 'local',
-            'copilot': 'cli',
-            'qwen': 'qwen',
-            'coinbase-advanced-py': 'coinbase',
-            'oandapyV20': 'oanda',
-            'node': 'cli',
+            "ollama": "local",
+            "copilot": "cli",
+            "qwen": "qwen",
+            "coinbase-advanced-py": "coinbase",
+            "oandapyV20": "oanda",
+            "node": "cli",
         }
 
         for lib in missing_libs:
-            prov = mapping.get(lib, 'unknown')
+            prov = mapping.get(lib, "unknown")
             provider_impact.setdefault(prov, []).append(lib)
 
         for tool, _ in missing_tools:
-            key = (tool.lower().split()[0]
-                   if isinstance(tool, str) else str(tool))
-            prov = mapping.get(key, 'unknown')
+            key = tool.lower().split()[0] if isinstance(tool, str) else str(tool)
+            prov = mapping.get(key, "unknown")
             provider_impact.setdefault(prov, []).append(tool)
 
         if provider_impact:
             _logger.info("Interactive startup: provider dependency status:")
             for prov, items in provider_impact.items():
                 _logger.info(
-                    "  %s: missing/outdated -> %s",
-                    prov, ', '.join(map(str, items))
+                    "  %s: missing/outdated -> %s", prov, ", ".join(map(str, items))
                 )
 
         if missing_libs or missing_tools:
@@ -629,13 +643,13 @@ def cli(ctx, config, verbose, interactive):
         return
 
 
-
-@cli.command(name='config-editor')
+@cli.command(name="config-editor")
 @click.option(
-    '--output', '-o',
-    default='config/config.local.yaml',
+    "--output",
+    "-o",
+    default="config/config.local.yaml",
     show_default=True,
-    help='Where to write your customized config overlay.'
+    help="Where to write your customized config overlay.",
 )
 @click.pass_context
 def config_editor(ctx, output):
@@ -644,7 +658,7 @@ def config_editor(ctx, output):
     Writes a focused overlay file (defaults to config/config.local.yaml)
     so your secrets are kept separate from base defaults.
     """
-    base_path = Path('config/config.yaml')
+    base_path = Path("config/config.yaml")
     target_path = Path(output)
 
     base_config = {}
@@ -653,8 +667,7 @@ def config_editor(ctx, output):
             base_config = load_config(str(base_path))
         except Exception as e:
             console.print(
-                f"[yellow]Warning: could not read base config: "
-                f"{e}[/yellow]"
+                f"[yellow]Warning: could not read base config: " f"{e}[/yellow]"
             )
 
     existing_config = {}
@@ -676,7 +689,7 @@ def config_editor(ctx, output):
         )
 
     def prompt_text(label, keys, secret=False, allow_empty=True):
-        default_val = current(keys, '')
+        default_val = current(keys, "")
         show_default = bool(default_val)
         val = click.prompt(
             label,
@@ -684,8 +697,7 @@ def config_editor(ctx, output):
             show_default=show_default,
             hide_input=secret,
         )
-        if (isinstance(val, str) and not val and
-                default_val and not allow_empty):
+        if isinstance(val, str) and not val and default_val and not allow_empty:
             val = default_val
         _set_nested(updated_config, keys, val)
 
@@ -703,7 +715,7 @@ def config_editor(ctx, output):
     def prompt_bool(label, keys):
         cur_val = current(keys, False)
         if isinstance(cur_val, str):
-            default_val = cur_val.lower() == 'true'
+            default_val = cur_val.lower() == "true"
         else:
             default_val = bool(cur_val)
         val = click.confirm(label, default=default_val, show_default=True)
@@ -728,7 +740,9 @@ def config_editor(ctx, output):
         if platform in {"coinbase", "coinbase_advanced"}:
             console.print("\n[bold]Coinbase credentials[/bold]")
             prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
-            prompt_text("API secret", ("platform_credentials", "api_secret"), secret=True)
+            prompt_text(
+                "API secret", ("platform_credentials", "api_secret"), secret=True
+            )
             prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
         elif platform == "oanda":
             console.print("\n[bold]Oanda credentials[/bold]")
@@ -774,20 +788,23 @@ def config_editor(ctx, output):
 
         # Write config
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(target_path, 'w', encoding='utf-8') as f:
+        with open(target_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(updated_config, f, sort_keys=False)
 
-        console.print(f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]")
+        console.print(
+            f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]"
+        )
     except click.Abort:
         console.print("[yellow]Cancelled.[/yellow]")
         return
 
 
-@cli.command(name='install-deps')
+@cli.command(name="install-deps")
 @click.option(
-    '--auto-install', '-y',
+    "--auto-install",
+    "-y",
     is_flag=True,
-    help='Automatically install missing dependencies without prompting'
+    help="Automatically install missing dependencies without prompting",
 )
 @click.pass_context
 def install_deps(ctx, auto_install):
@@ -803,19 +820,22 @@ def install_deps(ctx, auto_install):
 
         # Display summary table
         from rich.table import Table
+
         table = Table(title="Dependency Status")
         table.add_column("Status", style="bold")
         table.add_column("Count", justify="right")
         table.add_column("Packages", style="dim")
 
         if installed:
-            installed_preview = ', '.join(installed[:5])
+            installed_preview = ", ".join(installed[:5])
             if len(installed) > 5:
                 installed_preview += f" ... (+{len(installed) - 5} more)"
-            table.add_row("[green]✓ Installed[/green]", str(len(installed)), installed_preview)
+            table.add_row(
+                "[green]✓ Installed[/green]", str(len(installed)), installed_preview
+            )
 
         if missing:
-            missing_preview = ', '.join(missing[:5])
+            missing_preview = ", ".join(missing[:5])
             if len(missing) > 5:
                 missing_preview += f" ... (+{len(missing) - 5} more)"
             table.add_row("[red]✗ Missing[/red]", str(len(missing)), missing_preview)
@@ -834,6 +854,7 @@ def install_deps(ctx, auto_install):
         # Check coinbase-advanced-py (Python package)
         try:
             import coinbase_advanced_py
+
             additional_installed.append("coinbase-advanced-py")
         except ImportError:
             additional_missing.append("coinbase-advanced-py")
@@ -841,7 +862,11 @@ def install_deps(ctx, auto_install):
 
         # Check CLI tools
         cli_checks = [
-            ("ollama", ["ollama", "--version"], "curl -fsSL https://ollama.com/install.sh | sh"),
+            (
+                "ollama",
+                ["ollama", "--version"],
+                "curl -fsSL https://ollama.com/install.sh | sh",
+            ),
             ("node", ["node", "--version"], "nvm install --lts"),
         ]
 
@@ -888,23 +913,27 @@ def install_deps(ctx, auto_install):
 
         # Prompt for installation (unless auto-install)
         if not auto_install:
-            if ctx.obj.get('interactive'):
-                response = console.input("[bold]Install missing dependencies? [y/N]: [/bold]")
+            if ctx.obj.get("interactive"):
+                response = console.input(
+                    "[bold]Install missing dependencies? [y/N]: [/bold]"
+                )
             else:
                 response = input("Install missing dependencies? [y/N]: ")
 
-            if response.strip().lower() != 'y':
+            if response.strip().lower() != "y":
                 console.print("[yellow]Installation cancelled.[/yellow]")
                 return
 
         # Install missing Python packages
         if missing:
-            console.print("\n[bold cyan]Installing missing Python dependencies...[/bold cyan]")
+            console.print(
+                "\n[bold cyan]Installing missing Python dependencies...[/bold cyan]"
+            )
             try:
                 subprocess.run(
-                    [sys.executable, '-m', 'pip', 'install'] + missing,
+                    [sys.executable, "-m", "pip", "install"] + missing,
                     check=True,
-                    timeout=600
+                    timeout=600,
                 )
                 console.print(
                     "\n[bold green]✓ Python dependencies installed successfully!"
@@ -936,9 +965,13 @@ def install_deps(ctx, auto_install):
                     console.print(f"Installing {comp}...")
                     try:
                         subprocess.run(
-                            ["bash", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+                            [
+                                "bash",
+                                "-c",
+                                "curl -fsSL https://ollama.com/install.sh | sh",
+                            ],
                             check=True,
-                            timeout=300
+                            timeout=300,
                         )
                         console.print(f"[green]✓ {comp} installed successfully[/green]")
                     except Exception as e:
@@ -950,23 +983,26 @@ def install_deps(ctx, auto_install):
                         subprocess.run(
                             ["bash", "-c", "nvm install --lts && nvm use --lts"],
                             check=True,
-                            timeout=300
+                            timeout=300,
                         )
                         console.print(f"[green]✓ {comp} installed successfully[/green]")
                     except Exception as e:
                         console.print(f"[red]✗ {comp} installation failed: {e}[/red]")
-                        console.print("[yellow]Note: nvm must be installed first. Install nvm from https://github.com/nvm-sh/nvm[/yellow]")
+                        console.print(
+                            "[yellow]Note: nvm must be installed first. Install nvm from https://github.com/nvm-sh/nvm[/yellow]"
+                        )
     except Exception as e:
         # Be permissive in tests; don't crash on environment quirks
         console.print(f"[yellow]Dependency check encountered an issue: {e}[/yellow]")
         return
 
 
-@cli.command(name='update-ai')
+@cli.command(name="update-ai")
 @click.option(
-    '--auto-install', '-y',
+    "--auto-install",
+    "-y",
     is_flag=True,
-    help='Automatically update dependencies without prompting'
+    help="Automatically update dependencies without prompting",
 )
 @click.pass_context
 def update_ai(ctx, auto_install):
@@ -985,7 +1021,7 @@ def update_ai(ctx, auto_install):
         # Verified PyPI packages only. Do not include Node.js CLI names here.
         pip_ai_packages = [
             # Keep only valid PyPI package names; verify before adding new names.
-            'google-generativeai',
+            "google-generativeai",
         ]
 
         # === Node / npm CLI tools ===
@@ -993,25 +1029,26 @@ def update_ai(ctx, auto_install):
         # CLI command (e.g. `copilot --version`) and installed via `npm` if missing.
         # Mapping: display-name -> dict(check_cmd, install_cmd)
         node_cli_tools = {
-            'copilot-cli': {
-                'check_cmd': ['copilot', '--version'],
-                'install_cmd': ['npm', 'i', '-g', '@githubnext/github-copilot-cli'],
+            "copilot-cli": {
+                "check_cmd": ["copilot", "--version"],
+                "install_cmd": ["npm", "i", "-g", "@githubnext/github-copilot-cli"],
             },
-            'qwen-cli': {
-                'check_cmd': ['qwen', '--version'],
-                'install_cmd': ['npm', 'i', '-g', '@qwen/cli'],
+            "qwen-cli": {
+                "check_cmd": ["qwen", "--version"],
+                "install_cmd": ["npm", "i", "-g", "@qwen/cli"],
             },
             # 'codex-cli' is ambiguous (not a known PyPI package). Keep as npm candidate
             # but do not assume an exact package name on npm; user may need to adjust.
-            'codex-cli': {
-                'check_cmd': ['codex', '--version'],
-                'install_cmd': ['npm', 'i', '-g', 'codex-cli'],
+            "codex-cli": {
+                "check_cmd": ["codex", "--version"],
+                "install_cmd": ["npm", "i", "-g", "codex-cli"],
             },
         }
 
         installed_dict = _get_installed_packages()
 
         from rich.table import Table
+
         table = Table(title="AI Provider Dependencies (pip)")
         table.add_column("Package", style="cyan")
         table.add_column("Status", style="white")
@@ -1022,9 +1059,18 @@ def update_ai(ctx, auto_install):
 
         for pkg in pip_ai_packages:
             pkg_lower = pkg.lower()
-            pkg_normalized = pkg_lower.replace('-', '_')
-            if (pkg_lower in installed_dict or pkg_normalized in installed_dict or pkg_lower.replace('_', '-') in installed_dict):
-                version = (installed_dict.get(pkg_lower) or installed_dict.get(pkg_normalized) or installed_dict.get(pkg_lower.replace('_', '-')) or 'unknown')
+            pkg_normalized = pkg_lower.replace("-", "_")
+            if (
+                pkg_lower in installed_dict
+                or pkg_normalized in installed_dict
+                or pkg_lower.replace("_", "-") in installed_dict
+            ):
+                version = (
+                    installed_dict.get(pkg_lower)
+                    or installed_dict.get(pkg_normalized)
+                    or installed_dict.get(pkg_lower.replace("_", "-"))
+                    or "unknown"
+                )
                 table.add_row(pkg, "[green]✓ Installed[/green]", version)
                 installed_pip.append((pkg, version))
             else:
@@ -1045,22 +1091,30 @@ def update_ai(ctx, auto_install):
 
         for tool_name, info in node_cli_tools.items():
             try:
-                res = subprocess.run(info['check_cmd'], capture_output=True, text=True, timeout=5)
+                res = subprocess.run(
+                    info["check_cmd"], capture_output=True, text=True, timeout=5
+                )
                 if res.returncode == 0:
                     installed_node.append(tool_name)
-                    node_table.add_row(tool_name, "[green]✓ Installed[/green]", res.stdout.strip().splitlines()[0] if res.stdout else '')
+                    node_table.add_row(
+                        tool_name,
+                        "[green]✓ Installed[/green]",
+                        res.stdout.strip().splitlines()[0] if res.stdout else "",
+                    )
                 else:
                     missing_node.append(tool_name)
-                    node_table.add_row(tool_name, "[red]✗ Missing or errored[/red]", '')
+                    node_table.add_row(tool_name, "[red]✗ Missing or errored[/red]", "")
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 missing_node.append(tool_name)
-                node_table.add_row(tool_name, "[red]✗ Missing[/red]", '')
+                node_table.add_row(tool_name, "[red]✗ Missing[/red]", "")
 
         console.print(node_table)
         console.print()
 
         if not missing_pip and not missing_node:
-            console.print("[bold green]✓ All AI provider dependencies are installed![/bold green]\n")
+            console.print(
+                "[bold green]✓ All AI provider dependencies are installed![/bold green]\n"
+            )
         else:
             if missing_pip:
                 console.print("[yellow]Missing Python (PyPI) AI dependencies:[/yellow]")
@@ -1076,23 +1130,62 @@ def update_ai(ctx, auto_install):
 
         # If nothing to install, offer upgrades for pip packages
         if not missing_pip and installed_pip:
-            console.print("[yellow]Pip AI packages are present; you may upgrade them to latest versions.[/yellow]")
-            if auto_install or (ctx.obj.get('interactive') and console.input("[bold]Upgrade pip AI packages to latest? [y/N]: [/bold]").strip().lower() == 'y') or (not ctx.obj.get('interactive') and auto_install):
+            console.print(
+                "[yellow]Pip AI packages are present; you may upgrade them to latest versions.[/yellow]"
+            )
+            if (
+                auto_install
+                or (
+                    ctx.obj.get("interactive")
+                    and console.input(
+                        "[bold]Upgrade pip AI packages to latest? [y/N]: [/bold]"
+                    )
+                    .strip()
+                    .lower()
+                    == "y"
+                )
+                or (not ctx.obj.get("interactive") and auto_install)
+            ):
                 try:
-                    console.print("\n[bold cyan]Upgrading pip AI packages...[/bold cyan]")
-                    subprocess.run([sys.executable, '-m', 'pip', 'install', '--upgrade'] + [p for p, _ in installed_pip], check=True, timeout=600)
+                    console.print(
+                        "\n[bold cyan]Upgrading pip AI packages...[/bold cyan]"
+                    )
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install", "--upgrade"]
+                        + [p for p, _ in installed_pip],
+                        check=True,
+                        timeout=600,
+                    )
                     console.print("[bold green]✓ Pip AI packages upgraded[/bold green]")
                 except Exception as e:
-                    console.print(f"[yellow]Pip upgrade encountered an issue: {e}[/yellow]")
+                    console.print(
+                        f"[yellow]Pip upgrade encountered an issue: {e}[/yellow]"
+                    )
 
         # Install missing pip packages (if any)
         if missing_pip:
-            proceed = auto_install or (ctx.obj.get('interactive') and console.input("[bold]Install missing pip AI packages? [y/N]: [/bold]").strip().lower() == 'y')
+            proceed = auto_install or (
+                ctx.obj.get("interactive")
+                and console.input(
+                    "[bold]Install missing pip AI packages? [y/N]: [/bold]"
+                )
+                .strip()
+                .lower()
+                == "y"
+            )
             if proceed:
-                console.print("\n[bold cyan]Installing missing pip AI packages...[/bold cyan]")
+                console.print(
+                    "\n[bold cyan]Installing missing pip AI packages...[/bold cyan]"
+                )
                 try:
-                    subprocess.run([sys.executable, '-m', 'pip', 'install'] + missing_pip, check=True, timeout=600)
-                    console.print("[bold green]✓ Pip AI packages installed[/bold green]")
+                    subprocess.run(
+                        [sys.executable, "-m", "pip", "install"] + missing_pip,
+                        check=True,
+                        timeout=600,
+                    )
+                    console.print(
+                        "[bold green]✓ Pip AI packages installed[/bold green]"
+                    )
                 except Exception as e:
                     console.print(f"[red]Failed to install pip packages: {e}[/red]")
             else:
@@ -1102,31 +1195,49 @@ def update_ai(ctx, auto_install):
         if missing_node:
             try:
                 # Quick check for npm presence
-                npm_check = subprocess.run(['npm', '--version'], capture_output=True, text=True, timeout=5)
+                npm_check = subprocess.run(
+                    ["npm", "--version"], capture_output=True, text=True, timeout=5
+                )
                 if npm_check.returncode != 0:
-                    raise FileNotFoundError('npm not available')
+                    raise FileNotFoundError("npm not available")
                 npm_available = True
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 npm_available = False
 
             if not npm_available:
-                console.print("[yellow]npm is not available on PATH. Install Node.js/npm before installing CLI tools.[/yellow]")
-                console.print("[yellow]Suggested for Copilot CLI: `npm i -g @githubnext/github-copilot-cli`[/yellow]")
+                console.print(
+                    "[yellow]npm is not available on PATH. Install Node.js/npm before installing CLI tools.[/yellow]"
+                )
+                console.print(
+                    "[yellow]Suggested for Copilot CLI: `npm i -g @githubnext/github-copilot-cli`[/yellow]"
+                )
             else:
-                proceed_node = auto_install or (ctx.obj.get('interactive') and console.input("[bold]Install missing npm CLI tools now? [y/N]: [/bold]").strip().lower() == 'y')
+                proceed_node = auto_install or (
+                    ctx.obj.get("interactive")
+                    and console.input(
+                        "[bold]Install missing npm CLI tools now? [y/N]: [/bold]"
+                    )
+                    .strip()
+                    .lower()
+                    == "y"
+                )
                 if proceed_node:
                     for t in missing_node:
                         info = node_cli_tools.get(t)
                         if not info:
-                            console.print(f"[yellow]No install mapping for {t}; please install manually.[/yellow]")
+                            console.print(
+                                f"[yellow]No install mapping for {t}; please install manually.[/yellow]"
+                            )
                             continue
-                        install_cmd = info['install_cmd']
+                        install_cmd = info["install_cmd"]
                         console.print(f"Installing {t} via: {' '.join(install_cmd)}")
                         try:
                             subprocess.run(install_cmd, check=True, timeout=600)
                             console.print(f"[green]✓ {t} installed via npm[/green]")
                         except Exception as e:
-                            console.print(f"[red]Failed to install {t} via npm: {e}[/red]")
+                            console.print(
+                                f"[red]Failed to install {t} via npm: {e}[/red]"
+                            )
                 else:
                     console.print("[yellow]Skipping npm CLI installation.[/yellow]")
 
@@ -1148,7 +1259,7 @@ def update_ai(ctx, auto_install):
 def dashboard(ctx):
     """Show unified dashboard aggregating all platform portfolios."""
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
 
         # For now, we only have one platform instance
@@ -1158,7 +1269,7 @@ def dashboard(ctx):
         # Aggregate portfolio data
         aggregator = PortfolioDashboardAggregator(platforms)
         # Support tests that patch get_aggregated_portfolio
-        if hasattr(aggregator, 'get_aggregated_portfolio'):
+        if hasattr(aggregator, "get_aggregated_portfolio"):
             aggregated_data = aggregator.get_aggregated_portfolio()
         else:
             aggregated_data = aggregator.aggregate()
@@ -1169,10 +1280,10 @@ def dashboard(ctx):
         except Exception:
             if isinstance(aggregated_data, dict):
                 console.print("[bold cyan]Portfolio Dashboard[/bold cyan]")
-                total = aggregated_data.get('total_value')
+                total = aggregated_data.get("total_value")
                 if total is not None:
                     console.print(f"Total Value: ${total:,.2f}")
-                plats = aggregated_data.get('platforms') or []
+                plats = aggregated_data.get("platforms") or []
                 if plats:
                     console.print(f"Platforms: {', '.join(plats)}")
             else:
@@ -1192,7 +1303,7 @@ def dashboard(ctx):
 
 
 @cli.command()
-@click.argument('decision_id', required=True)
+@click.argument("decision_id", required=True)
 @click.pass_context
 def approve(ctx, decision_id):
     """
@@ -1202,15 +1313,17 @@ def approve(ctx, decision_id):
     Modify option allows editing position size, stop loss, and take profit.
     """
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
 
         # Load decision from storage
         from finance_feedback_engine.persistence.decision_store import DecisionStore
-        store = DecisionStore(config={'storage_path': 'data/decisions'})
+
+        store = DecisionStore(config={"storage_path": "data/decisions"})
 
         # Find decision by ID (glob match on filename)
         import glob
+
         decision_files = glob.glob(f"data/decisions/*_{decision_id}.json")
 
         if not decision_files:
@@ -1219,12 +1332,14 @@ def approve(ctx, decision_id):
 
         if not decision_files:
             console.print(f"[bold red]❌ Decision not found: {decision_id}[/bold red]")
-            console.print("[yellow]Use 'python main.py history' to see available decisions[/yellow]")
+            console.print(
+                "[yellow]Use 'python main.py history' to see available decisions[/yellow]"
+            )
             raise click.Abort()
 
         # Load the decision
         decision_file = decision_files[0]
-        with open(decision_file, 'r') as f:
+        with open(decision_file, "r") as f:
             decision = json.load(f)
 
         # Display decision details in Rich Panel with Table
@@ -1237,31 +1352,32 @@ def approve(ctx, decision_id):
         table.add_column("Field", style="cyan", width=20)
         table.add_column("Value", style="white")
 
-        table.add_row("Decision ID", decision.get('decision_id', 'N/A'))
-        table.add_row("Asset Pair", decision.get('asset_pair', 'N/A'))
-        table.add_row("Action", f"[bold {_get_action_color(decision.get('action'))}]{decision.get('action')}[/bold {_get_action_color(decision.get('action'))}]")
+        table.add_row("Decision ID", decision.get("decision_id", "N/A"))
+        table.add_row("Asset Pair", decision.get("asset_pair", "N/A"))
+        table.add_row(
+            "Action",
+            f"[bold {_get_action_color(decision.get('action'))}]{decision.get('action')}[/bold {_get_action_color(decision.get('action'))}]",
+        )
         table.add_row("Confidence", f"{decision.get('confidence', 0)}%")
-        table.add_row("Position Size", str(decision.get('position_size', 'N/A')))
+        table.add_row("Position Size", str(decision.get("position_size", "N/A")))
         table.add_row("Stop Loss", f"{decision.get('stop_loss', 'N/A')}%")
         table.add_row("Take Profit", f"{decision.get('take_profit', 'N/A')}%")
-        table.add_row("Market Regime", decision.get('market_regime', 'Unknown'))
+        table.add_row("Market Regime", decision.get("market_regime", "Unknown"))
 
         # Add sentiment if available
-        sentiment_data = decision.get('sentiment', {})
-        if sentiment_data and sentiment_data.get('available'):
+        sentiment_data = decision.get("sentiment", {})
+        if sentiment_data and sentiment_data.get("available"):
             sentiment_str = f"{sentiment_data.get('overall_sentiment', 'N/A')} (score: {sentiment_data.get('sentiment_score', 0):.2f})"
             table.add_row("Sentiment", sentiment_str)
 
-        table.add_row("Signal Only", str(decision.get('signal_only', False)))
+        table.add_row("Signal Only", str(decision.get("signal_only", False)))
 
         console.print(table)
 
         # Display reasoning in panel
-        reasoning = decision.get('reasoning', 'No reasoning provided')
+        reasoning = decision.get("reasoning", "No reasoning provided")
         reasoning_panel = Panel(
-            reasoning,
-            title="[bold cyan]Reasoning[/bold cyan]",
-            border_style="cyan"
+            reasoning, title="[bold cyan]Reasoning[/bold cyan]", border_style="cyan"
         )
         console.print("\n")
         console.print(reasoning_panel)
@@ -1273,16 +1389,18 @@ def approve(ctx, decision_id):
         action = Prompt.ask(
             "[bold cyan]Action?[/bold cyan]",
             choices=["yes", "no", "modify"],
-            default="no"
+            default="no",
         )
 
         if action == "no":
             console.print("[yellow]❌ Decision rejected[/yellow]")
-            _save_approval_response(decision_id, approved=False, modified=False, decision=decision)
+            _save_approval_response(
+                decision_id, approved=False, modified=False, decision=decision
+            )
             try:
                 inc("approvals", labels={"status": "rejected"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to increment approval metric: {e}")
             return
 
         elif action == "modify":
@@ -1291,26 +1409,24 @@ def approve(ctx, decision_id):
             # Prompt for modifications
             from rich.prompt import FloatPrompt
 
-            current_position = decision.get('position_size', 0)
-            current_stop_loss = decision.get('stop_loss', 2.0)
-            current_take_profit = decision.get('take_profit', 5.0)
+            current_position = decision.get("position_size", 0)
+            current_stop_loss = decision.get("stop_loss", 2.0)
+            current_take_profit = decision.get("take_profit", 5.0)
 
             console.print(f"[cyan]Current position size: {current_position}[/cyan]")
             new_position = FloatPrompt.ask(
                 "New position size",
-                default=float(current_position) if current_position else 0.0
+                default=float(current_position) if current_position else 0.0,
             )
 
             console.print(f"[cyan]Current stop loss: {current_stop_loss}%[/cyan]")
             new_stop_loss = FloatPrompt.ask(
-                "New stop loss (%)",
-                default=float(current_stop_loss)
+                "New stop loss (%)", default=float(current_stop_loss)
             )
 
             console.print(f"[cyan]Current take profit: {current_take_profit}%[/cyan]")
             new_take_profit = FloatPrompt.ask(
-                "New take profit (%)",
-                default=float(current_take_profit)
+                "New take profit (%)", default=float(current_take_profit)
             )
 
             # Validate ranges
@@ -1321,11 +1437,11 @@ def approve(ctx, decision_id):
             # No strict validation here - let platform handle it during execution
 
             # Update decision
-            decision['position_size'] = new_position
-            decision['stop_loss'] = new_stop_loss
-            decision['take_profit'] = new_take_profit
-            decision['modified'] = True
-            decision['modified_at'] = datetime.now().isoformat()
+            decision["position_size"] = new_position
+            decision["stop_loss"] = new_stop_loss
+            decision["take_profit"] = new_take_profit
+            decision["modified"] = True
+            decision["modified_at"] = datetime.now().isoformat()
 
             console.print("\n[green]✓ Decision modified[/green]")
 
@@ -1335,20 +1451,27 @@ def approve(ctx, decision_id):
             console.print(f"  Take profit: {new_take_profit}%")
 
             # Save and execute
-            _save_approval_response(decision_id, approved=True, modified=True, decision=decision)
+            _save_approval_response(
+                decision_id, approved=True, modified=True, decision=decision
+            )
             try:
                 inc("approvals", labels={"status": "modified"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to increment approvals metric: {e}")
 
             console.print("\n[bold green]✓ Executing modified decision...[/bold green]")
             result = engine.execute_decision(decision_id, modified_decision=decision)
             try:
-                inc("decisions_executed", labels={"result": "success" if result.get('success') else "failure"})
-            except Exception:
-                pass
+                inc(
+                    "decisions_executed",
+                    labels={
+                        "result": "success" if result.get("success") else "failure"
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to increment decisions_executed metric: {e}")
 
-            if result.get('success'):
+            if result.get("success"):
                 console.print("[bold green]✓ Trade executed successfully[/bold green]")
             else:
                 console.print("[bold red]✗ Trade execution failed[/bold red]")
@@ -1356,20 +1479,27 @@ def approve(ctx, decision_id):
 
         else:  # yes
             console.print("[green]✓ Decision approved[/green]")
-            _save_approval_response(decision_id, approved=True, modified=False, decision=decision)
+            _save_approval_response(
+                decision_id, approved=True, modified=False, decision=decision
+            )
             try:
                 inc("approvals", labels={"status": "approved"})
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to increment approvals metric: {e}")
 
             console.print("\n[bold green]✓ Executing decision...[/bold green]")
             result = engine.execute_decision(decision_id)
             try:
-                inc("decisions_executed", labels={"result": "success" if result.get('success') else "failure"})
-            except Exception:
-                pass
+                inc(
+                    "decisions_executed",
+                    labels={
+                        "result": "success" if result.get("success") else "failure"
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to increment executed decisions metric: {e}")
 
-            if result.get('success'):
+            if result.get("success"):
                 console.print("[bold green]✓ Trade executed successfully[/bold green]")
             else:
                 console.print("[bold red]✗ Trade execution failed[/bold red]")
@@ -1377,32 +1507,35 @@ def approve(ctx, decision_id):
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
-        if ctx.obj.get('verbose'):
+        if ctx.obj.get("verbose"):
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
 
 def _get_action_color(action: str) -> str:
     """Get color for action display."""
-    if action == 'BUY':
-        return 'green'
-    elif action == 'SELL':
-        return 'red'
-    elif action == 'HOLD':
-        return 'yellow'
+    if action == "BUY":
+        return "green"
+    elif action == "SELL":
+        return "red"
+    elif action == "HOLD":
+        return "yellow"
     else:
-        return 'white'
+        return "white"
 
 
-def _save_approval_response(decision_id: str, approved: bool, modified: bool, decision: dict):
+def _save_approval_response(
+    decision_id: str, approved: bool, modified: bool, decision: dict
+):
     """Save approval response to data/approvals/ directory."""
     approvals_dir = Path("data/approvals")
     approvals_dir.mkdir(parents=True, exist_ok=True)
 
     # Sanitize decision_id to prevent path traversal attacks
     # Allow only alphanumerics, dashes, and underscores
-    sanitized_id = re.sub(r'[^a-zA-Z0-9_-]', '_', decision_id)
+    sanitized_id = re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
     if not sanitized_id:
         raise ValueError("Invalid decision_id: contains no valid characters")
 
@@ -1411,7 +1544,7 @@ def _save_approval_response(decision_id: str, approved: bool, modified: bool, de
         "approved": approved,
         "modified": modified,
         "timestamp": datetime.now().isoformat(),
-        "source": "cli"
+        "source": "cli",
     }
 
     if modified:
@@ -1428,13 +1561,15 @@ def _save_approval_response(decision_id: str, approved: bool, modified: bool, de
     try:
         approval_file_resolved = approval_file.resolve()
         approvals_dir_resolved = approvals_dir.resolve()
-        if not str(approval_file_resolved).startswith(str(approvals_dir_resolved) + os.sep):
+        if not str(approval_file_resolved).startswith(
+            str(approvals_dir_resolved) + os.sep
+        ):
             raise ValueError(f"Path traversal attempt detected: {approval_file}")
     except (ValueError, OSError) as e:
         logger.error(f"Security violation in approval file path: {e}")
         raise
 
-    with open(approval_file, 'w', encoding='utf-8') as f:
+    with open(approval_file, "w", encoding="utf-8") as f:
         json.dump(approval_data, f, indent=2)
 
     logger.info(f"Approval response saved: {approval_file}")
@@ -1445,7 +1580,7 @@ def _save_approval_response(decision_id: str, approved: bool, modified: bool, de
 def status(ctx):
     """Show engine status and configuration."""
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
 
         console.print("[bold]Finance Feedback Engine Status[/bold]\n")
         console.print(
@@ -1460,9 +1595,7 @@ def status(ctx):
 
         # Try to initialize engine and fetch account info for dynamic leverage
         engine = FinanceFeedbackEngine(config)
-        console.print(
-            "\n[bold green]✓ Engine initialized successfully[/bold green]"
-        )
+        console.print("\n[bold green]✓ Engine initialized successfully[/bold green]")
 
         # Fetch and display dynamic leverage from exchange
         try:
@@ -1470,17 +1603,19 @@ def status(ctx):
             if isinstance(account_info, dict):
                 # Unified platform returns dict of platforms
                 for platform_name, info in account_info.items():
-                    if isinstance(info, dict) and 'max_leverage' in info:
-                        console.print(f"\n{platform_name.upper()} max leverage: {info['max_leverage']:.1f}x (from exchange)")
-            elif 'max_leverage' in account_info:
-                console.print(f"\nMax leverage: {account_info['max_leverage']:.1f}x (from exchange)")
+                    if isinstance(info, dict) and "max_leverage" in info:
+                        console.print(
+                            f"\n{platform_name.upper()} max leverage: {info['max_leverage']:.1f}x (from exchange)"
+                        )
+            elif "max_leverage" in account_info:
+                console.print(
+                    f"\nMax leverage: {account_info['max_leverage']:.1f}x (from exchange)"
+                )
         except Exception as e:
             logger.debug(f"Could not fetch leverage info: {e}")
 
     except Exception as e:
-        console.print(
-            "\n[bold red]✗ Engine initialization failed[/bold red]"
-        )
+        console.print("\n[bold red]✗ Engine initialization failed[/bold red]")
         console.print(f"Error: {str(e)}")
         raise click.Abort()
 
@@ -1490,10 +1625,10 @@ def status(ctx):
 def positions(ctx):
     """Display active trading positions from the configured platform."""
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
 
-        platform = getattr(engine, 'trading_platform', None)
+        platform = getattr(engine, "trading_platform", None)
         if platform is None:
             console.print("[yellow]No trading platform configured.[/yellow]")
             return
@@ -1504,19 +1639,42 @@ def positions(ctx):
         except Exception as e:  # Surface platform errors cleanly
             raise click.ClickException(f"Error fetching active positions: {e}")
 
-        positions_list = (positions_data or {}).get('positions', [])
+        positions_list = (positions_data or {}).get("positions", [])
         if not positions_list:
             console.print("No active positions found.")
             return
 
-        console.print(f"[bold cyan]Active Trading Positions ({platform_name})[/bold cyan]")
+        console.print(
+            f"[bold cyan]Active Trading Positions ({platform_name})[/bold cyan]"
+        )
         for pos in positions_list:
-            product = pos.get('product_id') or pos.get('instrument') or pos.get('symbol') or 'UNKNOWN'
-            side = pos.get('side') or pos.get('position_type') or pos.get('direction') or 'UNKNOWN'
-            size = pos.get('contracts') or pos.get('units') or pos.get('size') or pos.get('quantity')
-            entry = pos.get('entry_price') or pos.get('average_price') or pos.get('price')
-            current = pos.get('current_price') or pos.get('mark_price') or pos.get('price')
-            unrealized = pos.get('unrealized_pnl') or pos.get('unrealized_pl') or pos.get('pnl')
+            product = (
+                pos.get("product_id")
+                or pos.get("instrument")
+                or pos.get("symbol")
+                or "UNKNOWN"
+            )
+            side = (
+                pos.get("side")
+                or pos.get("position_type")
+                or pos.get("direction")
+                or "UNKNOWN"
+            )
+            size = (
+                pos.get("contracts")
+                or pos.get("units")
+                or pos.get("size")
+                or pos.get("quantity")
+            )
+            entry = (
+                pos.get("entry_price") or pos.get("average_price") or pos.get("price")
+            )
+            current = (
+                pos.get("current_price") or pos.get("mark_price") or pos.get("price")
+            )
+            unrealized = (
+                pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+            )
 
             console.print(
                 f"- {product}: {side} size={size} entry={entry} current={current} PnL={unrealized}"
@@ -1530,16 +1688,12 @@ def positions(ctx):
 
 
 @cli.command()
-@click.option(
-    '--confirm',
-    is_flag=True,
-    help='Skip confirmation prompt'
-)
+@click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
 def wipe_decisions(ctx, confirm):
     """Delete all stored trading decisions."""
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
 
         # Get current count
@@ -1558,26 +1712,21 @@ def wipe_decisions(ctx, confirm):
 
         # Confirm unless --confirm flag or interactive mode
         if not confirm:
-            if ctx.obj.get('interactive'):
-                response = console.input(
-                    "Are you sure you want to continue? [y/N]: "
-                )
+            if ctx.obj.get("interactive"):
+                response = console.input("Are you sure you want to continue? [y/N]: ")
             else:
                 response = click.confirm(
-                    "Are you sure you want to continue?",
-                    default=False
+                    "Are you sure you want to continue?", default=False
                 )
-                response = 'y' if response else 'n'
+                response = "y" if response else "n"
 
-            if response.lower() != 'y':
+            if response.lower() != "y":
                 console.print("[yellow]Cancelled.[/yellow]")
                 return
 
         # Wipe all decisions
         deleted = engine.decision_store.wipe_all_decisions()
-        console.print(
-            f"[bold green]✓ Wiped {deleted} decisions[/bold green]"
-        )
+        console.print(f"[bold green]✓ Wiped {deleted} decisions[/bold green]")
 
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
@@ -1593,11 +1742,12 @@ def wipe_decisions(ctx, confirm):
 # Now imported from cli/commands/agent.py
 # ============================================
 
-@cli.command(name='retrain-meta-learner')
+
+@cli.command(name="retrain-meta-learner")
 @click.option(
-    '--force',
+    "--force",
     is_flag=True,
-    help='Force retraining even if performance criteria are not met.'
+    help="Force retraining even if performance criteria are not met.",
 )
 @click.pass_context
 def retrain_meta_learner(ctx, force):
@@ -1605,29 +1755,41 @@ def retrain_meta_learner(ctx, force):
     try:
         from train_meta_learner import run_training
 
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
 
         console.print("\n[bold cyan]Checking meta-learner performance...[/bold cyan]")
 
         # Ensure memory is loaded (use memory_engine per project conventions)
-        mem = getattr(engine, 'memory_engine', getattr(engine, 'memory', None))
-        if not getattr(mem, 'trade_outcomes', None):
-            console.print("[yellow]No trade history found in memory. Cannot check performance.[/yellow]")
+        mem = getattr(engine, "memory_engine", getattr(engine, "memory", None))
+        if not getattr(mem, "trade_outcomes", None):
+            console.print(
+                "[yellow]No trade history found in memory. Cannot check performance.[/yellow]"
+            )
             return
-        perf = mem.get_strategy_performance_summary() if hasattr(mem, 'get_strategy_performance_summary') else {}
+        perf = (
+            mem.get_strategy_performance_summary()
+            if hasattr(mem, "get_strategy_performance_summary")
+            else {}
+        )
 
-        stacking_perf = perf.get('stacking')
+        stacking_perf = perf.get("stacking")
 
         if not stacking_perf:
-            console.print("[yellow]No performance data found for the 'stacking' strategy.[/yellow]")
-            console.print("Generate some decisions using the stacking strategy to gather data.")
+            console.print(
+                "[yellow]No performance data found for the 'stacking' strategy.[/yellow]"
+            )
+            console.print(
+                "Generate some decisions using the stacking strategy to gather data."
+            )
             return
 
-        win_rate = stacking_perf.get('win_rate', 0)
-        total_trades = stacking_perf.get('total_trades', 0)
+        win_rate = stacking_perf.get("win_rate", 0)
+        total_trades = stacking_perf.get("total_trades", 0)
 
-        console.print(f"Stacking strategy performance: {win_rate:.2f}% win rate over {total_trades} trades.")
+        console.print(
+            f"Stacking strategy performance: {win_rate:.2f}% win rate over {total_trades} trades."
+        )
 
         # Define retraining criteria
         win_rate_threshold = 55.0
@@ -1635,32 +1797,46 @@ def retrain_meta_learner(ctx, force):
 
         should_retrain = False
         if force:
-            console.print("[yellow]--force flag detected. Forcing retraining...[/yellow]")
+            console.print(
+                "[yellow]--force flag detected. Forcing retraining...[/yellow]"
+            )
             should_retrain = True
         elif total_trades < min_trades_threshold:
-            console.print(f"Skipping retraining: Not enough trades ({total_trades} < {min_trades_threshold}).")
+            console.print(
+                f"Skipping retraining: Not enough trades ({total_trades} < {min_trades_threshold})."
+            )
         elif win_rate >= win_rate_threshold:
-            console.print(f"Skipping retraining: Win rate is acceptable ({win_rate:.2f}% >= {win_rate_threshold:.2f}%).")
+            console.print(
+                f"Skipping retraining: Win rate is acceptable ({win_rate:.2f}% >= {win_rate_threshold:.2f}%)."
+            )
         else:
-            console.print("[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]")
+            console.print(
+                "[yellow]Performance threshold not met. Retraining meta-learner...[/yellow]"
+            )
             should_retrain = True
 
         if should_retrain:
             run_training()
-            console.print("[bold green]✓ Meta-learner retraining process complete.[/bold green]")
+            console.print(
+                "[bold green]✓ Meta-learner retraining process complete.[/bold green]"
+            )
         else:
-            console.print("[bold green]✓ No retraining needed at this time.[/bold green]")
+            console.print(
+                "[bold green]✓ No retraining needed at this time.[/bold green]"
+            )
 
     except ImportError:
-        console.print("[bold red]Error:[/bold red] Could not import 'train_meta_learner'. Make sure it is in the project root.")
+        console.print(
+            "[bold red]Error:[/bold red] Could not import 'train_meta_learner'. Make sure it is in the project root."
+        )
         raise click.Abort()
     except Exception as e:
         console.print(f"[bold red]An unexpected error occurred:[/bold red] {str(e)}")
-        if ctx.obj.get('verbose'):
+        if ctx.obj.get("verbose"):
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
-
 
 
 # ============================================
@@ -1681,19 +1857,19 @@ def retrain_meta_learner(ctx, force):
 # ============================================
 
 # Register commands from modular command files
-cli.add_command(analyze_command, name='analyze')
-cli.add_command(history_command, name='history')
-cli.add_command(balance_command, name='balance')
-cli.add_command(execute_command, name='execute')
-cli.add_command(backtest_command, name='backtest')
-cli.add_command(portfolio_backtest_command, name='portfolio-backtest')
-cli.add_command(walk_forward_command, name='walk-forward')
-cli.add_command(monte_carlo_command, name='monte-carlo')
-cli.add_command(learning_report_command, name='learning-report')
-cli.add_command(prune_memory_command, name='prune-memory')
-cli.add_command(run_agent_command, name='run-agent')
-cli.add_command(monitor_command, name='monitor')
+cli.add_command(analyze_command, name="analyze")
+cli.add_command(history_command, name="history")
+cli.add_command(balance_command, name="balance")
+cli.add_command(execute_command, name="execute")
+cli.add_command(backtest_command, name="backtest")
+cli.add_command(portfolio_backtest_command, name="portfolio-backtest")
+cli.add_command(walk_forward_command, name="walk-forward")
+cli.add_command(monte_carlo_command, name="monte-carlo")
+cli.add_command(learning_report_command, name="learning-report")
+cli.add_command(prune_memory_command, name="prune-memory")
+cli.add_command(run_agent_command, name="run-agent")
+cli.add_command(monitor_command, name="monitor")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     cli()

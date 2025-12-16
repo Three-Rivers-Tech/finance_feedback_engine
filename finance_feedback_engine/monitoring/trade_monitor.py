@@ -1,15 +1,15 @@
 """Live trade monitoring system - orchestrates trade detection and tracking."""
 
-import time
+import hashlib
 import logging
 import threading
-import hashlib
+import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List, Optional, Set, Tuple
-from queue import Queue, Empty
+from queue import Empty, Queue
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from .trade_tracker import TradeTrackerThread
 from .metrics_collector import TradeMetricsCollector
+from .trade_tracker import TradeTrackerThread
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,8 @@ class TradeMonitor:
         orchestrator=None,  # Orchestrator instance for control signals
         # --- Multi-timeframe market pulse configuration ---
         unified_data_provider=None,  # Instance of UnifiedDataProvider (optional)
-        timeframe_aggregator=None,   # Instance of TimeframeAggregator (optional)
-        pulse_interval: int = 300    # 5-minute pulse for multi-timeframe updates
+        timeframe_aggregator=None,  # Instance of TimeframeAggregator (optional)
+        pulse_interval: int = 300,  # 5-minute pulse for multi-timeframe updates
     ):
         """
         Initialize trade monitor.
@@ -77,32 +77,34 @@ class TradeMonitor:
             self.monitoring_context_provider = monitoring_context_provider
         else:
             from .context_provider import MonitoringContextProvider
+
             self.monitoring_context_provider = MonitoringContextProvider(
                 platform=self.platform,
                 trade_monitor=self,
                 metrics_collector=self.metrics_collector,
-                portfolio_initial_balance=self.portfolio_initial_balance
+                portfolio_initial_balance=self.portfolio_initial_balance,
             )
 
         # Thread management
         self.executor = ThreadPoolExecutor(
-            max_workers=self.MAX_CONCURRENT_TRADES,
-            thread_name_prefix="TradeMonitor"
+            max_workers=self.MAX_CONCURRENT_TRADES, thread_name_prefix="TradeMonitor"
         )
 
         # State tracking
         self.active_trackers: Dict[str, TradeTrackerThread] = {}
         self.tracked_trade_ids: Set[str] = set()
         self.pending_queue: Queue = Queue()
-        self.closed_trades_queue: Queue = Queue() # For agent to consume
-        self.expected_trades: Dict[str, tuple[str, float]] = {} # Maps asset_pair -> (decision_id, timestamp)
+        self.closed_trades_queue: Queue = Queue()  # For agent to consume
+        self.expected_trades: Dict[str, tuple[str, float]] = (
+            {}
+        )  # Maps asset_pair -> (decision_id, timestamp)
         self._expected_trades_lock = threading.Lock()
 
         # Control
         self._stop_event = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
         self._running = False
-        self._monitoring_state = 'active'
+        self._monitoring_state = "active"
 
         # --- Multi-timeframe market pulse state ---
         self.unified_data_provider = unified_data_provider
@@ -129,14 +131,12 @@ class TradeMonitor:
 
         # Start main monitoring thread
         self._monitor_thread = threading.Thread(
-            target=self._monitoring_loop,
-            daemon=True,
-            name="TradeMonitor-Main"
+            target=self._monitoring_loop, daemon=True, name="TradeMonitor-Main"
         )
         self._monitor_thread.start()
 
         # Initialize monitoring state (active/paused/stopped)
-        self._monitoring_state = 'active'
+        self._monitoring_state = "active"
 
         logger.info("TradeMonitor started successfully")
 
@@ -158,7 +158,7 @@ class TradeMonitor:
         self._stop_event.set()
 
         # Set state to stopped
-        self._monitoring_state = 'stopped'
+        self._monitoring_state = "stopped"
 
         # Stop all active trackers
         for trade_id, tracker in list(self.active_trackers.items()):
@@ -186,7 +186,7 @@ class TradeMonitor:
 
         try:
             while not self._stop_event.is_set():
-                if self._monitoring_state == 'active':
+                if self._monitoring_state == "active":
                     try:
                         # 1. Detect new trades from platform
                         self._detect_new_trades()
@@ -210,10 +210,7 @@ class TradeMonitor:
                         self._log_status()
 
                     except Exception as e:
-                        logger.error(
-                            f"Error in monitoring loop: {e}",
-                            exc_info=True
-                        )
+                        logger.error(f"Error in monitoring loop: {e}", exc_info=True)
                 else:
                     logger.debug(
                         f"Monitoring paused. Current state: {self._monitoring_state}"
@@ -223,10 +220,7 @@ class TradeMonitor:
                 self._stop_event.wait(self.detection_interval)
 
         except Exception as e:
-            logger.error(
-                f"Fatal error in monitoring loop: {e}",
-                exc_info=True
-            )
+            logger.error(f"Fatal error in monitoring loop: {e}", exc_info=True)
         finally:
             logger.info("Main monitoring loop exiting")
 
@@ -249,10 +243,7 @@ class TradeMonitor:
                     f"Current P&L: {current_pnl_pct:.2%} "
                     f"Threshold: -{self.portfolio_stop_loss_percentage:.2%}"
                 )
-                self._handle_portfolio_limit_hit(
-                    'stop_loss',
-                    current_pnl_pct
-                )
+                self._handle_portfolio_limit_hit("stop_loss", current_pnl_pct)
             elif (
                 self.portfolio_take_profit_percentage != 0
                 and current_pnl_pct >= self.portfolio_take_profit_percentage
@@ -262,10 +253,7 @@ class TradeMonitor:
                     f"Current P&L: {current_pnl_pct:.2f}% "
                     f"Threshold: {self.portfolio_take_profit_percentage:.2f}%"
                 )
-                self._handle_portfolio_limit_hit(
-                    'take_profit',
-                    current_pnl_pct
-                )
+                self._handle_portfolio_limit_hit("take_profit", current_pnl_pct)
             else:
                 logger.debug(
                     f"Portfolio P&L: {current_pnl_pct:.2%} "
@@ -287,20 +275,24 @@ class TradeMonitor:
             f"Portfolio {limit_type.upper()} hit. "
             f"Current P&L: {current_pnl_pct:.2%}. Pausing trading."
         )
-        self._monitoring_state = 'paused'
+        self._monitoring_state = "paused"
 
         if self.orchestrator:
-            logger.info(f"Signaling Orchestrator to pause trading due to portfolio {limit_type} hit.")
+            logger.info(
+                f"Signaling Orchestrator to pause trading due to portfolio {limit_type} hit."
+            )
             # Assume Orchestrator has a pause_trading method
             self.orchestrator.pause_trading(
                 reason=f"Portfolio {limit_type} hit: P&L {current_pnl_pct:.2%}"
             )
         else:
-            logger.warning("No Orchestrator instance available to signal for pausing trading.")
+            logger.warning(
+                "No Orchestrator instance available to signal for pausing trading."
+            )
 
         # Additional robust actions:
         # Close all open positions across platforms (this would be triggered by Orchestrator)
-        if hasattr(self.orchestrator, 'close_all_positions'):
+        if hasattr(self.orchestrator, "close_all_positions"):
             logger.info("Closing all open positions due to portfolio limit hit.")
             try:
                 self.orchestrator.close_all_positions()
@@ -322,12 +314,12 @@ class TradeMonitor:
         from datetime import datetime
 
         notification = {
-            'timestamp': datetime.now().isoformat(),
-            'event': f'portfolio_{limit_type}_hit',
-            'type': limit_type,
-            'pnl_percentage': pnl_pct,
-            'message': f'Portfolio {limit_type.upper()} limit hit. Current P&L: {pnl_pct:.2%}',
-            'action_taken': 'Trading paused and positions may be closed'
+            "timestamp": datetime.now().isoformat(),
+            "event": f"portfolio_{limit_type}_hit",
+            "type": limit_type,
+            "pnl_percentage": pnl_pct,
+            "message": f"Portfolio {limit_type.upper()} limit hit. Current P&L: {pnl_pct:.2%}",
+            "action_taken": "Trading paused and positions may be closed",
         }
 
         # Log the notification
@@ -336,7 +328,7 @@ class TradeMonitor:
         # If there's a notification service available, send the notification
         # For now, we'll just log it - in a real implementation this would send to
         # email, Slack, Telegram, etc.
-        if hasattr(self, 'notification_service') and self.notification_service:
+        if hasattr(self, "notification_service") and self.notification_service:
             try:
                 self.notification_service.send_alert(notification)
             except Exception as e:
@@ -348,19 +340,22 @@ class TradeMonitor:
         """Query platform for open positions and detect new trades."""
         try:
             portfolio = self.platform.get_portfolio_breakdown()
-            positions = portfolio.get('futures_positions', [])
+            positions = portfolio.get("futures_positions", [])
 
             for position in positions:
-                product_id = position.get('product_id', '')
-                side = position.get('side', 'UNKNOWN')
-                entry_price = position.get('entry_price', 0.0)
+                product_id = position.get("product_id", "")
+                side = position.get("side", "UNKNOWN")
+                entry_price = position.get("entry_price", 0.0)
 
                 # Generate stable trade ID from immutable attributes
                 stable_key = f"{product_id}:{side}:{entry_price:.8f}"
                 trade_id = hashlib.sha256(stable_key.encode()).hexdigest()[:16]
 
                 # Check if we're already tracking this trade
-                if trade_id in self.tracked_trade_ids or trade_id in self.active_trackers:
+                if (
+                    trade_id in self.tracked_trade_ids
+                    or trade_id in self.active_trackers
+                ):
                     continue
 
                 # New trade detected!
@@ -371,24 +366,26 @@ class TradeMonitor:
                 )
                 # Associate with a decision if one is expected for this asset
                 from ..utils.validation import standardize_asset_pair
-                standardized_key = standardize_asset_pair(product_id, separator='-')
+
+                standardized_key = standardize_asset_pair(product_id, separator="-")
                 with self._expected_trades_lock:
                     decision_id = self.expected_trades.pop(standardized_key, None)
                 if decision_id:
-                    logger.info(f"Associated new trade {trade_id} with decision {decision_id}")
+                    logger.info(
+                        f"Associated new trade {trade_id} with decision {decision_id}"
+                    )
 
                 # Queue for monitoring
-                self.pending_queue.put({
-                    'trade_id': trade_id,
-                    'position_data': position,
-                    'decision_id': decision_id
-                })
+                self.pending_queue.put(
+                    {
+                        "trade_id": trade_id,
+                        "position_data": position,
+                        "decision_id": decision_id,
+                    }
+                )
 
         except Exception as e:
-            logger.error(
-                f"Error detecting new trades: {e}",
-                exc_info=True
-            )
+            logger.error(f"Error detecting new trades: {e}", exc_info=True)
 
     def _cleanup_completed_trackers(self):
         """Remove trackers for completed trades."""
@@ -409,9 +406,9 @@ class TradeMonitor:
                 # Try to get pending trade (non-blocking)
                 trade_info = self.pending_queue.get_nowait()
 
-                trade_id = trade_info['trade_id']
-                position_data = trade_info['position_data']
-                decision_id = trade_info.get('decision_id')
+                trade_id = trade_info["trade_id"]
+                position_data = trade_info["position_data"]
+                decision_id = trade_info.get("decision_id")
 
                 # Create and start tracker thread
                 tracker = TradeTrackerThread(
@@ -420,7 +417,7 @@ class TradeMonitor:
                     platform=self.platform,
                     metrics_callback=self._on_trade_completed,
                     poll_interval=self.poll_interval,
-                    decision_id=decision_id
+                    decision_id=decision_id,
                 )
 
                 # Submit to executor for thread lifecycle management
@@ -437,10 +434,7 @@ class TradeMonitor:
                 # No pending trades
                 break
             except Exception as e:
-                logger.error(
-                    f"Error starting trade tracker: {e}",
-                    exc_info=True
-                )
+                logger.error(f"Error starting trade tracker: {e}", exc_info=True)
 
     def _on_trade_completed(self, metrics: Dict[str, Any]):
         """
@@ -449,7 +443,7 @@ class TradeMonitor:
         Args:
             metrics: Final trade metrics from tracker
         """
-        trade_id = metrics.get('trade_id', 'unknown')
+        trade_id = metrics.get("trade_id", "unknown")
 
         logger.info(
             f"📊 Trade completed: {trade_id} | "
@@ -474,10 +468,13 @@ class TradeMonitor:
         This helps the monitor link a newly detected trade to the decision that created it.
         """
         from ..utils.validation import standardize_asset_pair
+
         standardized_pair = standardize_asset_pair(asset_pair)
         with self._expected_trades_lock:
             self.expected_trades[standardized_pair] = (decision_id, time.time())
-        logger.info(f"Expecting new trade for {standardized_pair} from decision {decision_id}")
+        logger.info(
+            f"Expecting new trade for {standardized_pair} from decision {decision_id}"
+        )
 
     def _cleanup_stale_expectations(self, max_age_seconds: int = 300):
         """
@@ -486,7 +483,8 @@ class TradeMonitor:
         current_time = time.time()
         with self._expected_trades_lock:
             stale_keys = [
-                key for key, (decision_id, timestamp) in self.expected_trades.items()
+                key
+                for key, (decision_id, timestamp) in self.expected_trades.items()
                 if current_time - timestamp > max_age_seconds
             ]
             for key in stale_keys:
@@ -567,19 +565,19 @@ class TradeMonitor:
         # Active positions
         try:
             portfolio = self.platform.get_portfolio_breakdown()
-            futures_positions = portfolio.get('futures_positions', [])
+            futures_positions = portfolio.get("futures_positions", [])
             for pos in futures_positions:
-                pid = pos.get('product_id')
+                pid = pos.get("product_id")
                 if pid:
                     # Standardize to generic asset pair (remove hyphens for internal use)
-                    assets.add(pid.replace('-', '').upper())
+                    assets.add(pid.replace("-", "").upper())
         except Exception as e:
             logger.debug(f"Could not derive assets from portfolio: {e}")
 
         # Expected trades (decision associations)
         with self._expected_trades_lock:
             for asset_key in self.expected_trades.keys():
-                assets.add(asset_key.replace('-', '').upper())
+                assets.add(asset_key.replace("-", "").upper())
 
         return sorted(list(assets))
 
@@ -592,7 +590,7 @@ class TradeMonitor:
         Returns:
             Analysis dictionary or None if unavailable / stale.
         """
-        key = asset_pair.replace('-', '').upper()
+        key = asset_pair.replace("-", "").upper()
         cached = self._multi_timeframe_cache.get(key)
         if not cached:
             return None
@@ -621,9 +619,7 @@ class TradeMonitor:
                 status = tracker.get_current_status()
                 active_trades.append(status)
             except Exception as e:
-                logger.error(
-                    f"Error getting status for {trade_id}: {e}"
-                )
+                logger.error(f"Error getting status for {trade_id}: {e}")
 
         return active_trades
 
@@ -635,13 +631,13 @@ class TradeMonitor:
             Dictionary with monitoring metrics
         """
         return {
-            'is_running': self._running,
-            'active_trackers': len(self.active_trackers),
-            'pending_trades': self.pending_queue.qsize(),
-            'total_tracked': len(self.tracked_trade_ids),
-            'max_concurrent': self.MAX_CONCURRENT_TRADES,
-            'detection_interval': self.detection_interval,
-            'trade_metrics': self.metrics_collector.get_aggregate_statistics()
+            "is_running": self._running,
+            "active_trackers": len(self.active_trackers),
+            "pending_trades": self.pending_queue.qsize(),
+            "total_tracked": len(self.tracked_trade_ids),
+            "max_concurrent": self.MAX_CONCURRENT_TRADES,
+            "detection_interval": self.detection_interval,
+            "trade_metrics": self.metrics_collector.get_aggregate_statistics(),
         }
 
     def force_track_position(self, position_data: Dict[str, Any]) -> bool:
@@ -656,7 +652,7 @@ class TradeMonitor:
         Returns:
             True if tracking started, False if already tracked or slots full
         """
-        product_id = position_data.get('product_id', '')
+        product_id = position_data.get("product_id", "")
         trade_id = f"{product_id}_{position_data.get('side', 'UNKNOWN')}"
 
         if trade_id in self.tracked_trade_ids:
@@ -670,10 +666,8 @@ class TradeMonitor:
         logger.info(f"Manually forcing track: {trade_id}")
         self.tracked_trade_ids.add(trade_id)
         # Manually associated trades won't have a decision_id from the agent
-        self.pending_queue.put({
-            'trade_id': trade_id,
-            'position_data': position_data,
-            'decision_id': None
-        })
+        self.pending_queue.put(
+            {"trade_id": trade_id, "position_data": position_data, "decision_id": None}
+        )
 
         return True

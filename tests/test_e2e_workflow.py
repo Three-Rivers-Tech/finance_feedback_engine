@@ -39,7 +39,7 @@ class TestEndToEndWorkflow:
         os.makedirs(mock_config["decisions_dir"], exist_ok=True)
         store_config = {
             "storage_path": mock_config["decisions_dir"],
-            "max_decisions": 1000
+            "max_decisions": 1000,
         }
         return DecisionStore(store_config)
 
@@ -52,7 +52,7 @@ class TestEndToEndWorkflow:
                 "storage_path": mock_config["memory_dir"],
                 "max_memory_size": 1000,
                 "learning_rate": 0.1,
-                "context_window": 20
+                "context_window": 20,
             }
         }
         return PortfolioMemoryEngine(memory_config)
@@ -98,9 +98,7 @@ class TestEndToEndWorkflow:
 
         # Step 4: Record trade outcome in memory
         memory_engine.record_trade_outcome(
-            decision=decision,
-            exit_price=51500.0,
-            hit_take_profit=True
+            decision=decision, exit_price=51500.0, hit_take_profit=True
         )
 
         # Memory successfully recorded the outcome
@@ -232,9 +230,7 @@ class TestEndToEndWorkflow:
             retrieved = decision_store.get_decision_by_id(decision["id"])
             assert retrieved is not None
 
-    def test_data_persistence_across_sessions(
-        self, mock_config, decision_store
-    ):
+    def test_data_persistence_across_sessions(self, mock_config, decision_store):
         """
         Test that decisions persist across sessions
         """
@@ -252,7 +248,7 @@ class TestEndToEndWorkflow:
         # Simulate new session by creating new store instance
         new_store_config = {
             "storage_path": mock_config["decisions_dir"],
-            "max_decisions": 1000
+            "max_decisions": 1000,
         }
         new_store = DecisionStore(new_store_config)
 
@@ -278,10 +274,7 @@ class TestDecisionHistoryManagement:
         """Create decision store with temp directory"""
         decisions_dir = os.path.join(temp_data_dir, "decisions")
         os.makedirs(decisions_dir, exist_ok=True)
-        store_config = {
-            "storage_path": decisions_dir,
-            "max_decisions": 1000
-        }
+        store_config = {"storage_path": decisions_dir, "max_decisions": 1000}
         return DecisionStore(store_config)
 
     def test_save_and_retrieve_decision(self, decision_store):
@@ -338,7 +331,7 @@ class TestMemoryEngineBasics:
                 "storage_path": memory_dir,
                 "max_memory_size": 1000,
                 "learning_rate": 0.1,
-                "context_window": 20
+                "context_window": 20,
             }
         }
         return PortfolioMemoryEngine(memory_config)
@@ -356,9 +349,7 @@ class TestMemoryEngineBasics:
 
         # Should not raise error
         outcome = memory_engine.record_trade_outcome(
-            decision=decision,
-            exit_price=51000.0,
-            hit_take_profit=True
+            decision=decision, exit_price=51000.0, hit_take_profit=True
         )
 
         assert outcome is not None

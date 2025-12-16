@@ -1,10 +1,10 @@
 """Monitoring context provider for AI decision pipeline integration."""
 
+import json
 import logging
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from pathlib import Path
-import json
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class MonitoringContextProvider:
         platform,
         trade_monitor=None,
         metrics_collector=None,
-        portfolio_initial_balance: float = 0.0
+        portfolio_initial_balance: float = 0.0,
     ):
         """
         Initialize monitoring context provider.
@@ -47,9 +47,7 @@ class MonitoringContextProvider:
         logger.info("MonitoringContextProvider initialized")
 
     def get_monitoring_context(
-        self,
-        asset_pair: Optional[str] = None,
-        lookback_hours: int = 24
+        self, asset_pair: Optional[str] = None, lookback_hours: int = 24
     ) -> Dict[str, Any]:
         """
         Get comprehensive monitoring context for AI decision making.
@@ -67,53 +65,50 @@ class MonitoringContextProvider:
             - position_concentration: Asset allocation breakdown
         """
         context = {
-            'timestamp': datetime.utcnow().isoformat(),
-            'has_monitoring_data': False,
-            'active_positions': {'futures': []},
-            'active_trades_count': 0,
-            'recent_performance': {},
-            'risk_metrics': {},
-            'position_concentration': {},
-            'multi_timeframe_pulse': None,  # Multi-TF technical indicators
+            "timestamp": datetime.utcnow().isoformat(),
+            "has_monitoring_data": False,
+            "active_positions": {"futures": []},
+            "active_trades_count": 0,
+            "recent_performance": {},
+            "risk_metrics": {},
+            "position_concentration": {},
+            "multi_timeframe_pulse": None,  # Multi-TF technical indicators
         }
 
         try:
             # Get active positions from platform
-            if hasattr(self.platform, 'get_portfolio_breakdown'):
+            if hasattr(self.platform, "get_portfolio_breakdown"):
                 portfolio = self.platform.get_portfolio_breakdown()
 
                 # Extract active positions
-                futures_positions = portfolio.get('futures_positions', [])
-                holdings = portfolio.get('holdings', [])
+                futures_positions = portfolio.get("futures_positions", [])
+                holdings = portfolio.get("holdings", [])
 
                 # Filter by asset pair if specified
                 if asset_pair:
                     futures_positions = [
-                        p for p in futures_positions
-                        if asset_pair in p.get('product_id', '')
+                        p
+                        for p in futures_positions
+                        if asset_pair in p.get("product_id", "")
                     ]
-                    holdings = [
-                        h for h in holdings
-                        if asset_pair in h.get('asset', '')
-                    ]
+                    holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
 
-                context['active_positions'] = {
-                    'futures': futures_positions,
-                    'spot': holdings
+                context["active_positions"] = {
+                    "futures": futures_positions,
+                    "spot": holdings,
                 }
 
                 # Calculate risk metrics from active positions
-                context['risk_metrics'] = self._calculate_risk_metrics(
-                    futures_positions,
-                    portfolio
+                context["risk_metrics"] = self._calculate_risk_metrics(
+                    futures_positions, portfolio
                 )
 
                 # Position concentration analysis
-                context['position_concentration'] = (
-                    self._analyze_concentration(portfolio)
+                context["position_concentration"] = self._analyze_concentration(
+                    portfolio
                 )
 
-                context['has_monitoring_data'] = True
+                context["has_monitoring_data"] = True
 
         except Exception as e:
             logger.warning(f"Could not fetch active positions: {e}")
@@ -121,15 +116,13 @@ class MonitoringContextProvider:
         # Get active trade monitoring data
         if self.trade_monitor:
             try:
-                context['active_trades_count'] = len(
-                    self.trade_monitor.active_trackers
-                )
-                context['max_concurrent_trades'] = (
+                context["active_trades_count"] = len(self.trade_monitor.active_trackers)
+                context["max_concurrent_trades"] = (
                     self.trade_monitor.MAX_CONCURRENT_TRADES
                 )
-                context['slots_available'] = (
-                    self.trade_monitor.MAX_CONCURRENT_TRADES -
-                    len(self.trade_monitor.active_trackers)
+                context["slots_available"] = (
+                    self.trade_monitor.MAX_CONCURRENT_TRADES
+                    - len(self.trade_monitor.active_trackers)
                 )
             except Exception as e:
                 logger.warning(f"Could not fetch active trades: {e}")
@@ -137,11 +130,8 @@ class MonitoringContextProvider:
         # Get recent performance metrics
         if self.metrics_collector:
             try:
-                context['recent_performance'] = (
-                    self._get_recent_performance(
-                        asset_pair,
-                        lookback_hours
-                    )
+                context["recent_performance"] = self._get_recent_performance(
+                    asset_pair, lookback_hours
                 )
             except Exception as e:
                 logger.warning(f"Could not fetch recent performance: {e}")
@@ -151,8 +141,8 @@ class MonitoringContextProvider:
             try:
                 pulse = self.trade_monitor.get_latest_market_context(asset_pair)
                 if pulse:
-                    context['multi_timeframe_pulse'] = pulse
-                    context['has_monitoring_data'] = True
+                    context["multi_timeframe_pulse"] = pulse
+                    context["has_monitoring_data"] = True
                     logger.debug(
                         f"Fetched multi-timeframe pulse for {asset_pair}: "
                         f"{len(pulse.get('timeframes', {}))} timeframes"
@@ -163,9 +153,7 @@ class MonitoringContextProvider:
         return context
 
     def _calculate_risk_metrics(
-        self,
-        futures_positions: List[Dict[str, Any]],
-        portfolio: Dict[str, Any]
+        self, futures_positions: List[Dict[str, Any]], portfolio: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Calculate risk metrics from active positions.
@@ -185,36 +173,33 @@ class MonitoringContextProvider:
         short_exposure = 0.0
 
         for pos in futures_positions:
-            contracts = pos.get('contracts', 0)
-            current_price = pos.get('current_price', 0)
-            side = pos.get('side', 'LONG')
+            contracts = pos.get("contracts", 0)
+            current_price = pos.get("current_price", 0)
+            side = pos.get("side", "LONG")
 
             notional = abs(contracts * current_price)
             total_exposure += notional
-            unrealized_pnl += pos.get('unrealized_pnl', 0)
+            unrealized_pnl += pos.get("unrealized_pnl", 0)
 
-            if side == 'LONG':
+            if side == "LONG":
                 long_exposure += notional
             else:
                 short_exposure += notional
 
-        total_value = portfolio.get('total_value_usd', 1)
+        total_value = portfolio.get("total_value_usd", 1)
         leverage = total_exposure / total_value if total_value > 0 else 0
 
         return {
-            'total_exposure_usd': total_exposure,
-            'unrealized_pnl': unrealized_pnl,
-            'long_exposure': long_exposure,
-            'short_exposure': short_exposure,
-            'net_exposure': long_exposure - short_exposure,
-            'leverage_estimate': leverage,
-            'account_value': total_value
+            "total_exposure_usd": total_exposure,
+            "unrealized_pnl": unrealized_pnl,
+            "long_exposure": long_exposure,
+            "short_exposure": short_exposure,
+            "net_exposure": long_exposure - short_exposure,
+            "leverage_estimate": leverage,
+            "account_value": total_value,
         }
 
-    def _analyze_concentration(
-        self,
-        portfolio: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _analyze_concentration(self, portfolio: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze position concentration across assets.
 
@@ -225,22 +210,22 @@ class MonitoringContextProvider:
             - top_3_concentration: % in top 3 positions
             - diversification_score: 0-100 (higher = more diversified)
         """
-        futures_positions = portfolio.get('futures_positions', [])
-        total_value = portfolio.get('total_value_usd', 1)
+        futures_positions = portfolio.get("futures_positions", [])
+        total_value = portfolio.get("total_value_usd", 1)
 
         if not futures_positions or total_value <= 0:
             return {
-                'num_positions': 0,
-                'largest_position_pct': 0,
-                'top_3_concentration': 0,
-                'diversification_score': 0
+                "num_positions": 0,
+                "largest_position_pct": 0,
+                "top_3_concentration": 0,
+                "diversification_score": 0,
             }
 
         # Calculate position sizes as % of portfolio
         position_sizes = []
         for pos in futures_positions:
-            contracts = abs(pos.get('contracts', 0))
-            current_price = pos.get('current_price', 0)
+            contracts = abs(pos.get("contracts", 0))
+            current_price = pos.get("current_price", 0)
             notional = contracts * current_price
             pct = (notional / total_value) * 100
             position_sizes.append(pct)
@@ -256,16 +241,14 @@ class MonitoringContextProvider:
         diversification = max(0, 100 - (herfindahl * 100))
 
         return {
-            'num_positions': len(futures_positions),
-            'largest_position_pct': largest_pct,
-            'top_3_concentration': top_3_pct,
-            'diversification_score': diversification
+            "num_positions": len(futures_positions),
+            "largest_position_pct": largest_pct,
+            "top_3_concentration": top_3_pct,
+            "diversification_score": diversification,
         }
 
     def _get_recent_performance(
-        self,
-        asset_pair: Optional[str],
-        lookback_hours: int
+        self, asset_pair: Optional[str], lookback_hours: int
     ) -> Dict[str, Any]:
         """
         Get recent trade performance metrics.
@@ -291,19 +274,19 @@ class MonitoringContextProvider:
 
             for metric_file in metrics_dir.glob("trade_*.json"):
                 try:
-                    with open(metric_file, 'r', encoding='utf-8') as f:
+                    with open(metric_file, "r", encoding="utf-8") as f:
                         metrics = json.load(f)
 
                     # Check if within lookback period
-                    entry_time_str = metrics.get('entry_time', '')
-                    if entry_time_str.endswith('Z'):
-                        entry_time_str = entry_time_str[:-1] + '+00:00'
+                    entry_time_str = metrics.get("entry_time", "")
+                    if entry_time_str.endswith("Z"):
+                        entry_time_str = entry_time_str[:-1] + "+00:00"
                     entry_time = datetime.fromisoformat(entry_time_str)
 
                     if entry_time >= cutoff_time:
                         # Filter by asset if specified
                         if asset_pair:
-                            product = metrics.get('product_id', '')
+                            product = metrics.get("product_id", "")
                             if asset_pair not in product:
                                 continue
 
@@ -314,24 +297,18 @@ class MonitoringContextProvider:
                     continue
 
             if not recent_trades:
-                return {
-                    'trades_count': 0,
-                    'lookback_hours': lookback_hours
-                }
+                return {"trades_count": 0, "lookback_hours": lookback_hours}
 
             # Calculate aggregate metrics
-            profitable = sum(
-                1 for t in recent_trades
-                if t.get('realized_pnl', 0) > 0
-            )
-            total_pnl = sum(t.get('realized_pnl', 0) for t in recent_trades)
+            profitable = sum(1 for t in recent_trades if t.get("realized_pnl", 0) > 0)
+            total_pnl = sum(t.get("realized_pnl", 0) for t in recent_trades)
 
             return {
-                'trades_count': len(recent_trades),
-                'win_rate': (profitable / len(recent_trades)) * 100,
-                'avg_pnl': total_pnl / len(recent_trades),
-                'total_pnl': total_pnl,
-                'lookback_hours': lookback_hours
+                "trades_count": len(recent_trades),
+                "win_rate": (profitable / len(recent_trades)) * 100,
+                "avg_pnl": total_pnl / len(recent_trades),
+                "total_pnl": total_pnl,
+                "lookback_hours": lookback_hours,
             }
 
         except Exception as e:
@@ -354,10 +331,14 @@ class MonitoringContextProvider:
 
         # Get current total value of the portfolio from the platform
         current_context = self.get_monitoring_context()
-        current_portfolio_value = current_context.get('risk_metrics', {}).get('account_value', 0.0)
+        current_portfolio_value = current_context.get("risk_metrics", {}).get(
+            "account_value", 0.0
+        )
 
         # Calculate P&L as a percentage of initial balance
-        pnl_percentage = (current_portfolio_value - self.portfolio_initial_balance) / self.portfolio_initial_balance
+        pnl_percentage = (
+            current_portfolio_value - self.portfolio_initial_balance
+        ) / self.portfolio_initial_balance
 
         return pnl_percentage
 
@@ -374,30 +355,41 @@ class MonitoringContextProvider:
         Returns:
             Formatted string describing multi-timeframe technical analysis
         """
-        if not pulse or not pulse.get('timeframes'):
+        if not pulse or not pulse.get("timeframes"):
             return ""
 
         lines = ["\n=== MULTI-TIMEFRAME TECHNICAL ANALYSIS ==="]
 
         # Pulse metadata
-        pulse_age = pulse.get('age_seconds', 0)
+        pulse_age = pulse.get("age_seconds", 0)
         lines.append(f"Pulse Age: {pulse_age:.0f}s ago (refreshes every 5 min)")
 
-        timeframes = pulse.get('timeframes', {})
-        sorted_tfs = sorted(timeframes.keys(), key=lambda x: {
-            '1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440, 'daily': 1440
-        }.get(x, 999))
+        timeframes = pulse.get("timeframes", {})
+        sorted_tfs = sorted(
+            timeframes.keys(),
+            key=lambda x: {
+                "1m": 1,
+                "5m": 5,
+                "15m": 15,
+                "1h": 60,
+                "4h": 240,
+                "1d": 1440,
+                "daily": 1440,
+            }.get(x, 999),
+        )
 
         for tf in sorted_tfs:
             data = timeframes[tf]
             lines.append(f"\n[{tf.upper()} Timeframe]")
 
             # Trend analysis
-            trend = data.get('trend', 'UNKNOWN')
-            rsi = data.get('rsi')
-            signal_strength = data.get('signal_strength', 0)
+            trend = data.get("trend", "UNKNOWN")
+            rsi = data.get("rsi")
+            signal_strength = data.get("signal_strength", 0)
 
-            lines.append(f"  Trend: {trend} (Signal Strength: {signal_strength:.0f}/100)")
+            lines.append(
+                f"  Trend: {trend} (Signal Strength: {signal_strength:.0f}/100)"
+            )
 
             # RSI
             if rsi is not None:
@@ -410,11 +402,11 @@ class MonitoringContextProvider:
                 lines.append(f"  RSI: {rsi_text}")
 
             # MACD
-            macd_data = data.get('macd', {})
+            macd_data = data.get("macd", {})
             if macd_data:
-                macd_val = macd_data.get('macd', 0)
-                signal_val = macd_data.get('signal', 0)
-                histogram = macd_data.get('histogram', 0)
+                macd_val = macd_data.get("macd", 0)
+                signal_val = macd_data.get("signal", 0)
+                histogram = macd_data.get("histogram", 0)
 
                 if histogram > 0:
                     macd_text = "BULLISH (histogram positive)"
@@ -428,9 +420,9 @@ class MonitoringContextProvider:
                 )
 
             # Bollinger Bands
-            bbands = data.get('bollinger_bands', {})
+            bbands = data.get("bollinger_bands", {})
             if bbands:
-                percent_b = bbands.get('percent_b')
+                percent_b = bbands.get("percent_b")
                 if percent_b is not None:
                     if percent_b > 1.0:
                         bb_text = "Above upper band (overbought zone)"
@@ -445,11 +437,11 @@ class MonitoringContextProvider:
                     lines.append(f"  Bollinger Bands: {bb_text} (%B={percent_b:.2f})")
 
             # ADX (trend strength)
-            adx_data = data.get('adx', {})
+            adx_data = data.get("adx", {})
             if adx_data:
-                adx_val = adx_data.get('adx', 0)
-                plus_di = adx_data.get('plus_di', 0)
-                minus_di = adx_data.get('minus_di', 0)
+                adx_val = adx_data.get("adx", 0)
+                plus_di = adx_data.get("plus_di", 0)
+                minus_di = adx_data.get("minus_di", 0)
 
                 if adx_val > 25:
                     adx_text = "STRONG TREND"
@@ -459,14 +451,12 @@ class MonitoringContextProvider:
                     adx_text = "Weak/ranging"
 
                 direction = "+DI dominant" if plus_di > minus_di else "-DI dominant"
-                lines.append(
-                    f"  ADX: {adx_text} ({adx_val:.1f}) | {direction}"
-                )
+                lines.append(f"  ADX: {adx_text} ({adx_val:.1f}) | {direction}")
 
             # Volatility
-            volatility = data.get('volatility', 'unknown')
-            atr = data.get('atr')
-            if volatility != 'unknown':
+            volatility = data.get("volatility", "unknown")
+            atr = data.get("atr")
+            if volatility != "unknown":
                 vol_text = volatility.upper()
                 if atr:
                     vol_text += f" (ATR={atr:.2f})"
@@ -474,20 +464,20 @@ class MonitoringContextProvider:
 
         # Cross-timeframe alignment
         lines.append("\n[Cross-Timeframe Alignment]")
-        trend_counts = {'UPTREND': 0, 'DOWNTREND': 0, 'RANGING': 0}
+        trend_counts = {"UPTREND": 0, "DOWNTREND": 0, "RANGING": 0}
         for tf_data in timeframes.values():
-            trend = tf_data.get('trend', 'UNKNOWN')
-            if 'UPTREND' in trend:
-                trend_counts['UPTREND'] += 1
-            elif 'DOWNTREND' in trend:
-                trend_counts['DOWNTREND'] += 1
+            trend = tf_data.get("trend", "UNKNOWN")
+            if "UPTREND" in trend:
+                trend_counts["UPTREND"] += 1
+            elif "DOWNTREND" in trend:
+                trend_counts["DOWNTREND"] += 1
             else:
-                trend_counts['RANGING'] += 1
+                trend_counts["RANGING"] += 1
 
         total_tfs = len(timeframes)
-        if trend_counts['UPTREND'] >= total_tfs * 0.6:
+        if trend_counts["UPTREND"] >= total_tfs * 0.6:
             alignment = "BULLISH ALIGNMENT - Multiple timeframes confirm uptrend"
-        elif trend_counts['DOWNTREND'] >= total_tfs * 0.6:
+        elif trend_counts["DOWNTREND"] >= total_tfs * 0.6:
             alignment = "BEARISH ALIGNMENT - Multiple timeframes confirm downtrend"
         else:
             alignment = "MIXED SIGNALS - Timeframes show conflicting trends"
@@ -512,26 +502,26 @@ class MonitoringContextProvider:
         Returns:
             Formatted string for AI prompt injection
         """
-        if not context.get('has_monitoring_data'):
+        if not context.get("has_monitoring_data"):
             return "\nNo active trading positions currently.\n"
 
         lines = ["\n=== LIVE TRADING CONTEXT ==="]
 
         # Active positions summary
-        active_pos = context.get('active_positions', {})
-        futures = active_pos.get('futures', [])
+        active_pos = context.get("active_positions", {})
+        futures = active_pos.get("futures", [])
 
         if futures:
             lines.append(f"\nActive Positions: {len(futures)}")
             for pos in futures:
-                side = pos.get('side', 'UNKNOWN')
-                product = pos.get('product_id', 'N/A')
-                contracts = pos.get('contracts', 0)
-                entry = pos.get('entry_price', 0)
-                current = pos.get('current_price', 0)
-                pnl = pos.get('unrealized_pnl', 0)
+                side = pos.get("side", "UNKNOWN")
+                product = pos.get("product_id", "N/A")
+                contracts = pos.get("contracts", 0)
+                entry = pos.get("entry_price", 0)
+                current = pos.get("current_price", 0)
+                pnl = pos.get("unrealized_pnl", 0)
 
-                pnl_sign = '+' if pnl >= 0 else ''
+                pnl_sign = "+" if pnl >= 0 else ""
                 lines.append(
                     f"  • {side} {product}: {contracts:.2f} contracts "
                     f"@ ${entry:.2f} (current ${current:.2f}) "
@@ -541,25 +531,19 @@ class MonitoringContextProvider:
             lines.append("\nNo active positions")
 
         # Risk metrics
-        risk = context.get('risk_metrics', {})
+        risk = context.get("risk_metrics", {})
         if risk:
             lines.append("\nRisk Exposure:")
             lines.append(
                 f"  • Total Exposure: ${risk.get('total_exposure_usd', 0):,.2f}"
             )
-            lines.append(
-                f"  • Unrealized P&L: ${risk.get('unrealized_pnl', 0):,.2f}"
-            )
-            lines.append(
-                f"  • Leverage: {risk.get('leverage_estimate', 0):.2f}x"
-            )
-            lines.append(
-                f"  • Net Exposure: ${risk.get('net_exposure', 0):,.2f}"
-            )
+            lines.append(f"  • Unrealized P&L: ${risk.get('unrealized_pnl', 0):,.2f}")
+            lines.append(f"  • Leverage: {risk.get('leverage_estimate', 0):.2f}x")
+            lines.append(f"  • Net Exposure: ${risk.get('net_exposure', 0):,.2f}")
 
         # Position concentration
-        conc = context.get('position_concentration', {})
-        if conc and conc.get('num_positions', 0) > 0:
+        conc = context.get("position_concentration", {})
+        if conc and conc.get("num_positions", 0) > 0:
             lines.append("\nPosition Concentration:")
             lines.append(
                 f"  • Largest Position: "
@@ -571,7 +555,7 @@ class MonitoringContextProvider:
             )
 
         # Active trade slots
-        if context.get('max_concurrent_trades'):
+        if context.get("max_concurrent_trades"):
             lines.append(
                 f"\nMonitoring Capacity: "
                 f"{context.get('active_trades_count', 0)}/"
@@ -580,11 +564,10 @@ class MonitoringContextProvider:
             )
 
         # Recent performance
-        perf = context.get('recent_performance', {})
-        if perf.get('trades_count', 0) > 0:
+        perf = context.get("recent_performance", {})
+        if perf.get("trades_count", 0) > 0:
             lines.append(
-                f"\nRecent Performance "
-                f"({perf.get('lookback_hours', 24)}h):"
+                f"\nRecent Performance " f"({perf.get('lookback_hours', 24)}h):"
             )
             lines.append(
                 f"  • Trades: {perf.get('trades_count', 0)} "
@@ -598,7 +581,7 @@ class MonitoringContextProvider:
         lines.append("=" * 30 + "\n")
 
         # Multi-timeframe pulse (if available)
-        pulse = context.get('multi_timeframe_pulse')
+        pulse = context.get("multi_timeframe_pulse")
         if pulse:
             pulse_text = self._format_pulse_summary(pulse)
             if pulse_text:

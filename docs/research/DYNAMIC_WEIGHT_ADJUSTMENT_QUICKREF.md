@@ -55,10 +55,10 @@ if meta['weight_adjustment_applied']:
 
 ## Key Benefits
 
-✓ **100% uptime** - Continues working even when providers fail  
-✓ **Transparent** - All failures logged and tracked in metadata  
-✓ **Accurate** - Weights always sum to exactly 1.0  
-✓ **Automatic** - No configuration changes needed  
+✓ **100% uptime** - Continues working even when providers fail
+✓ **Transparent** - All failures logged and tracked in metadata
+✓ **Accurate** - Weights always sum to exactly 1.0
+✓ **Automatic** - No configuration changes needed
 
 ## Decision Metadata
 
@@ -166,13 +166,13 @@ python main.py analyze BTCUSD --provider ensemble
 
 ## Troubleshooting
 
-**Problem**: All providers failing  
+**Problem**: All providers failing
 **Solution**: Check network, API keys, and ensure Ollama is running
 
-**Problem**: Unexpected weight adjustments  
+**Problem**: Unexpected weight adjustments
 **Solution**: Review provider reliability and adjust original weights
 
-**Problem**: Low confidence after adjustment  
+**Problem**: Low confidence after adjustment
 **Solution**: Expected with fewer providers; consider minimum provider threshold
 
 ## Algorithm
@@ -181,13 +181,13 @@ python main.py analyze BTCUSD --provider ensemble
 def adjust_weights(active_providers, original_weights):
     # 1. Extract weights for active providers
     active_weights = {p: original_weights[p] for p in active_providers}
-    
+
     # 2. Calculate total
     total = sum(active_weights.values())
-    
+
     # 3. Renormalize to sum = 1.0
     adjusted = {p: w / total for p, w in active_weights.items()}
-    
+
     return adjusted
 ```
 

@@ -26,7 +26,7 @@ Top Topics: Financial Markets, Blockchain, Economy - Monetary
 
 Sentiment Interpretation:
 - Positive (>0.15): Bullish news momentum
-- Negative (<-0.15): Bearish news momentum  
+- Negative (<-0.15): Bearish news momentum
 - Neutral (-0.15 to 0.15): Mixed or balanced coverage
 ```
 
@@ -209,9 +209,9 @@ Sentiment: Neutral (+0.028)
 Macro: Fed Funds Rate 4.09% (elevated)
 
 AI Analysis:
-"Bearish price action with RSI approaching oversold territory suggests 
-potential for a bounce. However, neutral sentiment and elevated interest 
-rates create uncertainty. Recommend HOLD with close monitoring. If RSI 
+"Bearish price action with RSI approaching oversold territory suggests
+potential for a bounce. However, neutral sentiment and elevated interest
+rates create uncertainty. Recommend HOLD with close monitoring. If RSI
 drops below 30 with improving sentiment, consider small long position."
 ```
 

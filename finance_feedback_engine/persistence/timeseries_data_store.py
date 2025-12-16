@@ -1,10 +1,11 @@
 import json
+import logging
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +61,15 @@ class TimeSeriesDataStore:
                                          data point, expected to have a 'timestamp' key.
         """
         filepath = self._get_filepath(symbol)
-        
+
         # Ensure timestamp is string for JSON serialization
-        if isinstance(data_entry.get('timestamp'), datetime):
-            data_entry['timestamp'] = data_entry['timestamp'].isoformat()
-        
+        if isinstance(data_entry.get("timestamp"), datetime):
+            data_entry["timestamp"] = data_entry["timestamp"].isoformat()
+
         # Append new entry as a single JSON line (JSONL format)
-        with open(filepath, 'a', encoding='utf-8') as f:
+        with open(filepath, "a", encoding="utf-8") as f:
             json.dump(data_entry, f)
-            f.write('\n')
+            f.write("\n")
 
     def load_data(self, symbol: str) -> List[Dict[str, Any]]:
         """
@@ -87,7 +88,7 @@ class TimeSeriesDataStore:
             return []
 
         data = []
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:  # Skip empty lines
@@ -104,7 +105,7 @@ class TimeSeriesDataStore:
         df: pd.DataFrame,
         start_date: datetime,
         end_date: datetime,
-        timeframe: str
+        timeframe: str,
     ) -> None:
         """
         Save a DataFrame of historical OHLCV data to Parquet format.
@@ -121,7 +122,9 @@ class TimeSeriesDataStore:
             return
 
         try:
-            filepath = self._get_dataframe_filepath(asset_pair, start_date, end_date, timeframe)
+            filepath = self._get_dataframe_filepath(
+                asset_pair, start_date, end_date, timeframe
+            )
             df.to_parquet(filepath)
             logger.info(
                 f"✅ Saved {len(df)} candles for {asset_pair} ({timeframe}) to {filepath.name}"
@@ -131,11 +134,7 @@ class TimeSeriesDataStore:
             raise
 
     def load_dataframe(
-        self,
-        asset_pair: str,
-        start_date: datetime,
-        end_date: datetime,
-        timeframe: str
+        self, asset_pair: str, start_date: datetime, end_date: datetime, timeframe: str
     ) -> Optional[pd.DataFrame]:
         """
         Load a DataFrame of historical OHLCV data from Parquet format.
@@ -150,7 +149,9 @@ class TimeSeriesDataStore:
             DataFrame if found, None otherwise
         """
         try:
-            filepath = self._get_dataframe_filepath(asset_pair, start_date, end_date, timeframe)
+            filepath = self._get_dataframe_filepath(
+                asset_pair, start_date, end_date, timeframe
+            )
 
             if not filepath.exists():
                 return None

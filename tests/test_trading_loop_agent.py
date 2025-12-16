@@ -1,10 +1,14 @@
 # tests/test_trading_loop_agent.py
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent, AgentState
+import pytest
+
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import (
+    AgentState,
+    TradingLoopAgent,
+)
 
 
 @pytest.fixture
@@ -38,7 +42,7 @@ def agent_config():
         analysis_frequency_seconds=1,  # Changed from 0.1 to 1 (integer)
         main_loop_error_backoff_seconds=1,  # Changed from 0.1 to 1 (integer)
         autonomous_execution=True,
-        min_confidence_threshold=0.6
+        min_confidence_threshold=0.6,
     )
 
 

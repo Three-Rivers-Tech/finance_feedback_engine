@@ -1,9 +1,5 @@
 """Memory module for portfolio learning and adaptation."""
 
-from .portfolio_memory import (
-    PortfolioMemoryEngine,
-    TradeOutcome,
-    PerformanceSnapshot
-)
+from .portfolio_memory import PerformanceSnapshot, PortfolioMemoryEngine, TradeOutcome
 
-__all__ = ['PortfolioMemoryEngine', 'TradeOutcome', 'PerformanceSnapshot']
+__all__ = ["PortfolioMemoryEngine", "TradeOutcome", "PerformanceSnapshot"]

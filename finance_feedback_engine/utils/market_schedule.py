@@ -3,6 +3,7 @@
 All internal logic uses UTC for calculations but converts to local market
 zones (New York or London) for open/close boundaries and session labels.
 """
+
 import datetime as _dt
 from typing import Dict
 

@@ -153,7 +153,7 @@ LEARNING (record outcomes)
         - Store decision in `_current_decisions[asset_pair]`
         - Break on success
       - On failure: store timestamp in `_rejected_decisions_cache[asset_pair]`
-- **Error Handling**: 
+- **Error Handling**:
   - Max failures tracked, backoff applied
   - Transition happens regardless
 - **Transitions**: REASONING → RISK_CHECK
@@ -422,4 +422,3 @@ class AgentState(Enum):
 | **Learning Integration** | Basic | Full via trade monitor |
 | **Production Ready** | Good | Excellent |
 | **Testing** | Easy | More complex |
-

@@ -1,6 +1,7 @@
 """API routes for Finance Feedback Engine."""
 
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -31,6 +32,7 @@ async def health_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
     and portfolio information.
     """
     from .health_checks import get_enhanced_health_status
+
     return get_enhanced_health_status(engine)
 
 
@@ -42,12 +44,12 @@ async def readiness_check(engine: FinanceFeedbackEngine = Depends(get_engine)):
     Checks if the application is ready to serve requests.
     """
     from .health_checks import get_readiness_status
+
     status = get_readiness_status(engine)
 
     if not status["ready"]:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=status
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=status
         )
 
     return status
@@ -61,6 +63,7 @@ async def liveness_check():
     Checks if the application is alive.
     """
     from .health_checks import get_liveness_status
+
     return get_liveness_status()
 
 
@@ -73,12 +76,15 @@ async def metrics():
     TODO Phase 2: Instrument metrics in core.py and decision_engine.py
     """
     from ..monitoring.prometheus import generate_metrics
+
     return generate_metrics()
 
 
 # Telegram webhook endpoint (stubbed - implemented in telegram_bot.py)
 @telegram_router.post("/telegram")
-async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Depends(get_engine)):
+async def telegram_webhook(
+    request: Request, engine: FinanceFeedbackEngine = Depends(get_engine)
+):
     """
     Telegram webhook endpoint for approval bot.
 
@@ -87,14 +93,15 @@ async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Dep
     try:
         # Import here to avoid circular dependency but keep test patchability
         from ..integrations import telegram_bot as integrations_bot
+
         global telegram_bot
         if telegram_bot is None:
-            telegram_bot = getattr(integrations_bot, 'telegram_bot', None)
+            telegram_bot = getattr(integrations_bot, "telegram_bot", None)
 
         if telegram_bot is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Telegram bot not initialized. Check config/telegram.yaml"
+                detail="Telegram bot not initialized. Check config/telegram.yaml",
             )
 
         update_data = await request.json()
@@ -107,13 +114,14 @@ async def telegram_webhook(request: Request, engine: FinanceFeedbackEngine = Dep
         logger.error(f"Telegram webhook error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Webhook processing failed"
+            detail="Webhook processing failed",
         )
 
 
 # Decision endpoints
 class AnalysisRequest(BaseModel):
     """Request model for decision analysis."""
+
     asset_pair: str
     provider: str = "ensemble"
     include_sentiment: bool = True
@@ -122,6 +130,7 @@ class AnalysisRequest(BaseModel):
 
 class DecisionResponse(BaseModel):
     """Response model for decision analysis."""
+
     decision_id: str
     asset_pair: str
     action: str
@@ -131,8 +140,7 @@ class DecisionResponse(BaseModel):
 
 @decisions_router.post("/decisions", response_model=DecisionResponse)
 async def create_decision(
-    request: AnalysisRequest,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    request: AnalysisRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     Trigger a new trading decision analysis.
@@ -145,12 +153,13 @@ async def create_decision(
         Decision result with ID for tracking
     """
     import uuid
+
     try:
         decision = engine.analyze_asset(
             asset_pair=request.asset_pair,
             provider=request.provider,
             include_sentiment=request.include_sentiment,
-            include_macro=request.include_macro
+            include_macro=request.include_macro,
         )
 
         required_keys = {"decision_id", "asset_pair", "action", "confidence"}
@@ -158,7 +167,7 @@ async def create_decision(
         if missing_keys:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid decision format"
+                detail="Invalid decision format",
             )
 
         return DecisionResponse(
@@ -166,7 +175,7 @@ async def create_decision(
             asset_pair=decision["asset_pair"],
             action=decision["action"],
             confidence=decision["confidence"],
-            reasoning=decision.get("reasoning", "")
+            reasoning=decision.get("reasoning", ""),
         )
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -175,14 +184,13 @@ async def create_decision(
         logger.exception(f"Decision creation failed. Reference ID: {error_id}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error. Reference ID: {error_id}"
+            detail=f"Internal server error. Reference ID: {error_id}",
         )
 
 
 @decisions_router.get("/decisions")
 async def list_recent_decisions(
-    limit: int = 10,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    limit: int = 10, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     List recent trading decisions.
@@ -201,7 +209,7 @@ async def list_recent_decisions(
         logger.error(f"Failed to retrieve decisions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve decisions"
+            detail="Failed to retrieve decisions",
         )
 
 
@@ -215,17 +223,14 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         Portfolio balance, active positions, recent performance
     """
     try:
-        status_data = {
-            "balance": None,
-            "active_positions": 0,
-            "platform": None
-        }
+        status_data = {"balance": None, "active_positions": 0, "platform": None}
 
         # Get balance from platform
-        if hasattr(engine, 'platform'):
+        if hasattr(engine, "platform"):
             balance_info = engine.platform.get_balance()
             try:
                 from .health_checks import _safe_json
+
                 balance_info = _safe_json(balance_info)
             except Exception:
                 balance_info = balance_info
@@ -233,7 +238,7 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             status_data["platform"] = engine.config.get("trading_platform", "unknown")
 
             # Get portfolio breakdown if available
-            if hasattr(engine.platform, 'get_portfolio_breakdown'):
+            if hasattr(engine.platform, "get_portfolio_breakdown"):
                 breakdown = engine.platform.get_portfolio_breakdown()
                 status_data["active_positions"] = len(breakdown.get("positions", []))
 
@@ -242,5 +247,5 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         logger.error(f"Failed to get portfolio status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Status retrieval failed"
+            detail="Status retrieval failed",
         )

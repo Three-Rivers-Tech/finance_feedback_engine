@@ -7,16 +7,13 @@ AFTER: ~40 lines with only Coinbase-specific logic
 This demonstrates the power of inheritance for eliminating duplication.
 """
 
-from typing import Dict, Any, Optional
 import logging
 from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
-from .base_provider import (
-    BaseDataProvider,
-    InvalidAssetPairError,
-    DataUnavailableError
-)
 from finance_feedback_engine.utils.rate_limiter import RateLimiter
+
+from .base_provider import BaseDataProvider, DataUnavailableError, InvalidAssetPairError
 
 logger = logging.getLogger(__name__)
 
@@ -42,25 +39,25 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
 
     # Coinbase-specific granularity mappings
     GRANULARITIES = {
-        '1m': 60,
-        '5m': 300,
-        '15m': 900,
-        '1h': 3600,
-        '4h': 14400,
-        '1d': 86400,
-        'ONE_MINUTE': 60,
-        'FIVE_MINUTE': 300,
-        'FIFTEEN_MINUTE': 900,
-        'ONE_HOUR': 3600,
-        'FOUR_HOUR': 14400,
-        'ONE_DAY': 86400,
+        "1m": 60,
+        "5m": 300,
+        "15m": 900,
+        "1h": 3600,
+        "4h": 14400,
+        "1d": 86400,
+        "ONE_MINUTE": 60,
+        "FIVE_MINUTE": 300,
+        "FIFTEEN_MINUTE": 900,
+        "ONE_HOUR": 3600,
+        "FOUR_HOUR": 14400,
+        "ONE_DAY": 86400,
     }
 
     def __init__(
         self,
         credentials: Optional[Dict[str, Any]] = None,
         rate_limiter: Optional[RateLimiter] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize Coinbase data provider.
@@ -82,10 +79,7 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
 
         Coinbase public API: 15 req/sec, we use conservative 10 req/sec.
         """
-        return RateLimiter(
-            tokens_per_second=10.0,  # Conservative limit
-            max_tokens=30
-        )
+        return RateLimiter(tokens_per_second=10.0, max_tokens=30)  # Conservative limit
 
     def normalize_asset_pair(self, asset_pair: str) -> str:
         """
@@ -103,13 +97,13 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
             >>> provider.normalize_asset_pair("BTCUSD")
             "BTC-USD"
         """
-        pair = asset_pair.upper().replace('_', '').replace('-', '')
+        pair = asset_pair.upper().replace("_", "").replace("-", "")
 
         # Common crypto assets (BTC, ETH, etc.)
-        if pair.endswith('USD'):
+        if pair.endswith("USD"):
             base = pair[:-3]
             return f"{base}-USD"
-        elif pair.endswith('EUR'):
+        elif pair.endswith("EUR"):
             base = pair[:-3]
             return f"{base}-EUR"
         else:
@@ -120,10 +114,7 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
             )
 
     async def fetch_market_data(
-        self,
-        asset_pair: str,
-        timeframe: str = '1h',
-        limit: int = 100
+        self, asset_pair: str, timeframe: str = "1h", limit: int = 100
     ) -> Dict[str, Any]:
         """
         Fetch OHLCV candle data from Coinbase.
@@ -159,9 +150,9 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
         url = f"{self.base_url}/api/v3/brokerage/products/{product_id}/candles"
 
         params = {
-            'start': int(start_time.timestamp()),
-            'end': int(end_time.timestamp()),
-            'granularity': granularity
+            "start": int(start_time.timestamp()),
+            "end": int(end_time.timestamp()),
+            "granularity": granularity,
         }
 
         try:
@@ -174,7 +165,7 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
             response = await self._make_http_request(
                 url=url,
                 params=params,
-                timeout=self.timeout_market_data  # Inherited timeout config
+                timeout=self.timeout_market_data,  # Inherited timeout config
             )
 
             # Validate response
@@ -182,13 +173,12 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
 
         except Exception as e:
             logger.error(f"Failed to fetch {product_id} data: {e}")
-            raise DataUnavailableError(f"Coinbase data unavailable for {asset_pair}") from e
+            raise DataUnavailableError(
+                f"Coinbase data unavailable for {asset_pair}"
+            ) from e
 
     def _parse_candles(
-        self,
-        response: Dict[str, Any],
-        product_id: str,
-        timeframe: str
+        self, response: Dict[str, Any], product_id: str, timeframe: str
     ) -> Dict[str, Any]:
         """
         Parse Coinbase candle response into standard format.
@@ -201,19 +191,19 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
         Returns:
             Standardized candle data dict
         """
-        if not response or 'candles' not in response:
+        if not response or "candles" not in response:
             raise DataUnavailableError("No candle data in response")
 
-        candles = response['candles']
+        candles = response["candles"]
 
         # Convert to standard format
         return {
-            'asset_pair': product_id,
-            'timeframe': timeframe,
-            'candles': candles,
-            'count': len(candles),
-            'provider': self.provider_name,
-            'timestamp': datetime.utcnow().isoformat()
+            "asset_pair": product_id,
+            "timeframe": timeframe,
+            "candles": candles,
+            "count": len(candles),
+            "provider": self.provider_name,
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
 

@@ -1,0 +1,46 @@
+#!/bin/bash
+# Pre-commit hook to enforce test coverage threshold
+# Install: git config core.hooksPath .githooks && chmod +x .githooks/pre-commit
+# This hook runs pytest with coverage reporting and blocks commits if coverage < 70%
+
+set -e
+
+echo "🧪 Running tests with coverage check..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+COVERAGE_THRESHOLD=70
+
+# Run pytest with coverage
+if ! python -m pytest --cov=finance_feedback_engine --cov-fail-under=$COVERAGE_THRESHOLD -q 2>&1 | tee /tmp/pytest_output.txt; then
+    echo ""
+    echo -e "${RED}❌ Tests failed or coverage below ${COVERAGE_THRESHOLD}%${NC}"
+    echo ""
+    echo "To skip this check (NOT RECOMMENDED), use:"
+    echo "  git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+# Extract coverage percentage from output
+COVERAGE_PCT=$(grep -oP 'TOTAL\s+\K[0-9]+(?=%)' /tmp/pytest_output.txt | tail -1)
+
+if [ ! -z "$COVERAGE_PCT" ]; then
+    if [ "$COVERAGE_PCT" -ge "$COVERAGE_THRESHOLD" ]; then
+        echo ""
+        echo -e "${GREEN}✅ All tests passed! Coverage: ${COVERAGE_PCT}%${NC}"
+        echo ""
+    else
+        echo ""
+        echo -e "${RED}❌ Coverage ${COVERAGE_PCT}% is below threshold ${COVERAGE_THRESHOLD}%${NC}"
+        echo ""
+        exit 1
+    fi
+fi
+
+exit 0

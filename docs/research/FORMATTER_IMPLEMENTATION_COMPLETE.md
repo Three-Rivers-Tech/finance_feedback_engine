@@ -22,7 +22,7 @@ A complete redesign of backtest output formatting with:
    - Smart conditional display (only shows relevant data)
    - Professional Rich table styling
 
-2. **`demo_formatter.py`** 
+2. **`demo_formatter.py`**
    - Standalone demo script showing both output types
    - Run with: `python demo_formatter.py`
    - See live examples of the new formatting

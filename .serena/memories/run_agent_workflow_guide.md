@@ -227,13 +227,13 @@ if drawdown >= max_drawdown_pct:
 def _should_execute(decision):
     confidence = decision['confidence']  # 0-100
     threshold = config.min_confidence_threshold  # 0.6 default
-    
+
     if confidence < threshold * 100:
         return False
-    
+
     if trades_today >= max_daily_trades:
         return False
-    
+
     return True
 ```
 
@@ -519,4 +519,3 @@ pnl = (current_value - initial) / initial
 8. **Set Realistic Goals**: 5-10% monthly return is excellent for automated agents
 9. **Handle Crashes**: Use TradingLoopAgent for position recovery
 10. **Keep Logs**: Enable detailed logging for debugging
-

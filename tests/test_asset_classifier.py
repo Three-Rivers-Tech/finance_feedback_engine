@@ -1,9 +1,10 @@
 """Tests for asset classifier utility."""
 
 import pytest
+
 from finance_feedback_engine.utils.asset_classifier import (
     AssetClassifier,
-    classify_asset_pair
+    classify_asset_pair,
 )
 
 
@@ -60,7 +61,7 @@ class TestAssetClassifier:
 
     def test_custom_forex_currencies(self):
         """Test custom forex currency configuration."""
-        custom_forex = {'AAA', 'BBB', 'CCC'}
+        custom_forex = {"AAA", "BBB", "CCC"}
         classifier = AssetClassifier(forex_currencies=custom_forex)
 
         assert classifier.classify("AAABBB") == "forex"
@@ -70,7 +71,7 @@ class TestAssetClassifier:
 
     def test_custom_crypto_symbols(self):
         """Test custom crypto symbol configuration."""
-        custom_crypto = {'XXX', 'YYY'}
+        custom_crypto = {"XXX", "YYY"}
         classifier = AssetClassifier(crypto_symbols=custom_crypto)
 
         assert classifier.classify("XXXUSD") == "crypto"

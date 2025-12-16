@@ -1,6 +1,6 @@
 # Ensemble Error Propagation Analysis
 
-**Date**: December 13, 2025  
+**Date**: December 13, 2025
 **Status**: Critical Issues Identified - Requires Immediate Attention
 
 ## Executive Summary
@@ -137,7 +137,7 @@ INFO: Provider local -> HOLD (50%)
 async def _local_ai_inference(self, prompt: str, model_name: Optional[str] = None) -> Dict[str, Any]:
     """Local AI inference using Ollama LLM."""
     # ... existing code ...
-    
+
     try:
         from .local_llm_provider import LocalLLMProvider
         provider_config = dict(self.config, model_name=model_name or self.config.get('model_name', 'default'))
@@ -257,13 +257,13 @@ async def test_ensemble_tracks_local_failures():
         }
     }
     engine = DecisionEngine(config)
-    
+
     # Mock local to raise exception, cli to return valid decision
     with patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider') as mock_local:
         mock_local.side_effect = RuntimeError("Ollama service down")
-        
+
         decision = await engine._ensemble_ai_inference("test prompt")
-        
+
         # Verify local is in failed_providers
         assert 'local' in decision['ensemble_metadata']['failed_providers']
         assert 'cli' in decision['ensemble_metadata']['active_providers']
@@ -284,12 +284,12 @@ async def test_local_priority_fallback():
         }
     }
     engine = DecisionEngine(config)
-    
+
     with patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider') as mock_local:
         mock_local.side_effect = RuntimeError("Model not found")
-        
+
         decision = await engine._ensemble_ai_inference("test prompt")
-        
+
         # Verify gemini was actually queried (not just ignored)
         assert 'gemini' in decision['ensemble_metadata']['active_providers']
         # Verify fallback tier was used
@@ -302,12 +302,12 @@ async def test_single_local_provider_uses_fallback():
     """Verify single local provider returns fallback (not exception)."""
     config = {'decision_engine': {'ai_provider': 'local'}}
     engine = DecisionEngine(config)
-    
+
     with patch('finance_feedback_engine.decision_engine.engine.LocalLLMProvider') as mock_local:
         mock_local.side_effect = RuntimeError("Ollama down")
-        
+
         decision = await engine._local_ai_inference("test prompt")
-        
+
         # Should return fallback, NOT raise exception
         assert decision['action'] == 'HOLD'
         assert 'fallback' in decision['reasoning'].lower()

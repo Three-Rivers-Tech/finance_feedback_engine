@@ -62,10 +62,10 @@ python examples/monitoring_aware_decisions.py
 
 ## Key Benefits
 
-✅ AI knows all open positions  
-✅ Won't make conflicting trades  
-✅ Adjusts risk based on current exposure  
-✅ Learns from recent performance  
-✅ Prevents over-concentration  
+✅ AI knows all open positions
+✅ Won't make conflicting trades
+✅ Adjusts risk based on current exposure
+✅ Learns from recent performance
+✅ Prevents over-concentration
 
 No code changes after setup - just enable once!

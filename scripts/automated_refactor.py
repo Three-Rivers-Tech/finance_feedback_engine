@@ -2,8 +2,8 @@
 """Automated refactoring pipeline with performance measurement."""
 
 import asyncio
-import sys
 import logging
+import sys
 from pathlib import Path
 
 # Add parent directory to path
@@ -12,10 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # NOTE: Experimental module - see experiments/refactoring/
 # To use this feature, temporarily modify Python path to include experiments
 try:
-    from refactoring import (
-        RefactoringOrchestrator,
-        RefactoringTaskFactory
-    )
+    from refactoring import RefactoringOrchestrator, RefactoringTaskFactory
 except ImportError:
     print("⚠️  Experimental module not available. See experiments/refactoring/")
     print("   To enable: Add experiments directory to your Python path")
@@ -24,8 +21,7 @@ from finance_feedback_engine.utils.config_loader import load_config
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -40,7 +36,7 @@ async def main():
 
     # Load configuration
     try:
-        config = load_config('config/config.yaml')
+        config = load_config("config/config.yaml")
         print("✓ Configuration loaded")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -74,14 +70,14 @@ async def main():
     print()
 
     dry_run = input("Run in DRY RUN mode? (recommended) [Y/n]: ").strip().lower()
-    dry_run = dry_run != 'n'
+    dry_run = dry_run != "n"
 
     if dry_run:
         print("\n✓ Running in DRY RUN mode (no changes will be made)")
     else:
         print("\n⚠️  Running in LIVE mode - changes will be applied!")
         confirm = input("Are you sure? Type 'yes' to continue: ").strip()
-        if confirm != 'yes':
+        if confirm != "yes":
             print("Aborted.")
             return 0
 
@@ -92,25 +88,22 @@ async def main():
     print("\n🚀 Starting refactoring pipeline...\n")
 
     try:
-        report = await orchestrator.run(
-            dry_run=dry_run,
-            max_tasks=max_tasks
-        )
+        report = await orchestrator.run(dry_run=dry_run, max_tasks=max_tasks)
 
         # Display summary
         print("\n" + "=" * 70)
         print("  📊 FINAL SUMMARY")
         print("=" * 70)
 
-        summary = report['summary']
+        summary = report["summary"]
         print(f"\n  Total tasks:     {summary['total_tasks']}")
         print(f"  Completed:       {summary['completed']}")
         print(f"  Failed:          {summary['failed']}")
         print(f"  Rolled back:     {summary['rolled_back']}")
         print(f"  Improvement:     {summary['overall_improvement_score']:.3f}")
 
-        if 'metrics' in report:
-            metrics = report['metrics']
+        if "metrics" in report:
+            metrics = report["metrics"]
             print(f"\n  Avg CC reduction:     {metrics['avg_cc_reduction']:.1f}")
             print(f"  Avg LOC reduction:    {metrics['avg_loc_reduction']:.1f}")
             print(f"  Total CC reduced:     {metrics['total_complexity_reduced']}")
@@ -135,10 +128,11 @@ async def main():
     except Exception as e:
         print(f"\n\n✗ Pipeline failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

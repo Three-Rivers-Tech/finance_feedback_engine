@@ -4,12 +4,12 @@ This module provides centralized logic for classifying asset pairs (forex, crypt
 to enable clean platform routing without hard-coded logic scattered across the codebase.
 """
 
-from typing import Literal, Set
 import logging
+from typing import Literal, Set
 
 logger = logging.getLogger(__name__)
 
-AssetClass = Literal['forex', 'crypto', 'unknown']
+AssetClass = Literal["forex", "crypto", "unknown"]
 
 
 class AssetClassifier:
@@ -17,20 +17,50 @@ class AssetClassifier:
 
     # Default asset classification rules
     DEFAULT_FOREX_CURRENCIES: Set[str] = {
-        'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'USD',
-        'CNY', 'INR', 'MXN', 'BRL', 'ZAR', 'SGD', 'HKD', 'NOK',
-        'SEK', 'DKK', 'PLN', 'TRY', 'RUB'
+        "EUR",
+        "GBP",
+        "JPY",
+        "AUD",
+        "CAD",
+        "CHF",
+        "NZD",
+        "USD",
+        "CNY",
+        "INR",
+        "MXN",
+        "BRL",
+        "ZAR",
+        "SGD",
+        "HKD",
+        "NOK",
+        "SEK",
+        "DKK",
+        "PLN",
+        "TRY",
+        "RUB",
     }
 
     DEFAULT_CRYPTO_SYMBOLS: Set[str] = {
-        'BTC', 'ETH', 'SOL', 'AVAX', 'MATIC', 'ADA', 'DOT', 'LINK',
-        'UNI', 'AAVE', 'CRV', 'SUSHI', 'COMP', 'MKR', 'SNX', 'YFI'
+        "BTC",
+        "ETH",
+        "SOL",
+        "AVAX",
+        "MATIC",
+        "ADA",
+        "DOT",
+        "LINK",
+        "UNI",
+        "AAVE",
+        "CRV",
+        "SUSHI",
+        "COMP",
+        "MKR",
+        "SNX",
+        "YFI",
     }
 
     def __init__(
-        self,
-        forex_currencies: Set[str] = None,
-        crypto_symbols: Set[str] = None
+        self, forex_currencies: Set[str] = None, crypto_symbols: Set[str] = None
     ):
         """
         Initialize the asset classifier.
@@ -39,8 +69,16 @@ class AssetClassifier:
             forex_currencies: Set of forex currency codes (default: common forex pairs)
             crypto_symbols: Set of cryptocurrency symbols (default: common crypto)
         """
-        self.forex_currencies = forex_currencies if forex_currencies is not None else self.DEFAULT_FOREX_CURRENCIES
-        self.crypto_symbols = crypto_symbols if crypto_symbols is not None else self.DEFAULT_CRYPTO_SYMBOLS
+        self.forex_currencies = (
+            forex_currencies
+            if forex_currencies is not None
+            else self.DEFAULT_FOREX_CURRENCIES
+        )
+        self.crypto_symbols = (
+            crypto_symbols
+            if crypto_symbols is not None
+            else self.DEFAULT_CRYPTO_SYMBOLS
+        )
 
     def classify(self, asset_pair: str) -> AssetClass:
         """
@@ -64,19 +102,19 @@ class AssetClassifier:
             'crypto'
         """
         if not asset_pair:
-            return 'unknown'
+            return "unknown"
 
         asset_pair = asset_pair.upper().strip()
 
         # Check for crypto first (more specific pattern)
         if self._is_crypto(asset_pair):
-            return 'crypto'
+            return "crypto"
 
         # Check for forex
         if self._is_forex(asset_pair):
-            return 'forex'
+            return "forex"
 
-        return 'unknown'
+        return "unknown"
 
     def _is_forex(self, asset_pair: str) -> bool:
         """
@@ -87,11 +125,13 @@ class AssetClassifier:
         - EURUSD (6 characters, no separator)
         """
         # Format 1: EUR_USD (with underscore)
-        if '_' in asset_pair:
-            parts = asset_pair.split('_')
-            if (len(parts) == 2 and
-                parts[0] in self.forex_currencies and
-                parts[1] in self.forex_currencies):
+        if "_" in asset_pair:
+            parts = asset_pair.split("_")
+            if (
+                len(parts) == 2
+                and parts[0] in self.forex_currencies
+                and parts[1] in self.forex_currencies
+            ):
                 return True
 
         # Format 2: EURUSD (6 characters, no separator)
@@ -113,18 +153,21 @@ class AssetClassifier:
         - BTC_USD
         """
         # Remove common separators
-        normalized = asset_pair.replace('-', '').replace('_', '')
+        normalized = asset_pair.replace("-", "").replace("_", "")
 
         # Check if any crypto symbol appears at the start of the pair
         for symbol in self.crypto_symbols:
             if normalized.startswith(symbol):
                 # Optionally verify the remaining part is a known currency
-                remaining = normalized[len(symbol):]
+                remaining = normalized[len(symbol) :]
                 # Check if remaining is a forex currency or another crypto
-                if remaining in self.forex_currencies or remaining in self.crypto_symbols:
+                if (
+                    remaining in self.forex_currencies
+                    or remaining in self.crypto_symbols
+                ):
                     return True
                 # Also handle common stablecoins not in the default lists
-                if remaining in {'USDT', 'USDC', 'DAI', 'BUSD'}:
+                if remaining in {"USDT", "USDC", "DAI", "BUSD"}:
                     return True
 
         return False

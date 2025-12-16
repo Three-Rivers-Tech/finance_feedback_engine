@@ -115,7 +115,7 @@ Add to your `config.yaml`:
 monitoring:
   # Enable automatic context integration (default: true)
   enable_context_integration: true
-  
+
   # Monitoring intervals (seconds)
   detection_interval: 30  # How often to scan for new trades
   poll_interval: 30       # How often to update positions

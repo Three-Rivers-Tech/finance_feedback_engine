@@ -4,26 +4,32 @@ Vector memory store for semantic search capabilities.
 Uses Ollama embeddings and cosine similarity for intelligent memory retrieval.
 """
 
-import pickle
+import concurrent.futures
+import io
 import logging
+import os
+import pickle
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-import os
-import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
-timeout_val = os.getenv('EMBEDDING_TIMEOUT_SECS', '30')
+timeout_val = os.getenv("EMBEDDING_TIMEOUT_SECS", "30")
 try:
     EMBEDDING_TIMEOUT_SECS = int(timeout_val)
     if EMBEDDING_TIMEOUT_SECS <= 0:
         EMBEDDING_TIMEOUT_SECS = 30
-        logger.warning(f"EMBEDDING_TIMEOUT_SECS must be positive, got {timeout_val}, using default 30")
+        logger.warning(
+            f"EMBEDDING_TIMEOUT_SECS must be positive, got {timeout_val}, using default 30"
+        )
 except (ValueError, TypeError):
     EMBEDDING_TIMEOUT_SECS = 30
-    logger.warning(f"Invalid EMBEDDING_TIMEOUT_SECS value '{timeout_val}', using default 30")
+    logger.warning(
+        f"Invalid EMBEDDING_TIMEOUT_SECS value '{timeout_val}', using default 30"
+    )
 
 
 class VectorMemory:
@@ -47,13 +53,13 @@ class VectorMemory:
         # Allow callers to accidentally pass a dict; extract common keys safely
         if isinstance(storage_path, dict):
             storage_path = (
-                storage_path.get('vector_store_path')
-                or storage_path.get('vector_memory_path')
-                or storage_path.get('dir')
-                or 'data/memory/vectors.pkl'
+                storage_path.get("vector_store_path")
+                or storage_path.get("vector_memory_path")
+                or storage_path.get("dir")
+                or "data/memory/vectors.pkl"
             )
 
-        self.storage_path = Path(storage_path or 'data/memory/vectors.pkl')
+        self.storage_path = Path(storage_path or "data/memory/vectors.pkl")
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Storage for vectors and metadata
@@ -83,23 +89,27 @@ class VectorMemory:
             return None
 
         def _get_embedding(prompt):
-            return ollama.embeddings(model='nomic-embed-text', prompt=prompt)
+            return ollama.embeddings(model="nomic-embed-text", prompt=prompt)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_get_embedding, text)
             try:
                 response = future.result(timeout=EMBEDDING_TIMEOUT_SECS)
                 # Extract embedding vector
-                embedding = np.array(response['embedding'])
+                embedding = np.array(response["embedding"])
                 return embedding
             except concurrent.futures.TimeoutError:
-                logger.warning(f"Embedding generation timed out after {EMBEDDING_TIMEOUT_SECS} seconds")
+                logger.warning(
+                    f"Embedding generation timed out after {EMBEDDING_TIMEOUT_SECS} seconds"
+                )
                 return None
             except Exception as e:
                 logger.warning(f"Failed to generate embedding: {e}")
                 return None
 
-    def add_record(self, id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+    def add_record(
+        self, id: str, text: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Add a new record to the vector store.
 
@@ -121,20 +131,19 @@ class VectorMemory:
         if id in self.ids:
             index = self.ids.index(id)
             self.vectors[index] = embedding
-            self.metadata[id]['text'] = text
-            self.metadata[id]['metadata'] = metadata or {}
+            self.metadata[id]["text"] = text
+            self.metadata[id]["metadata"] = metadata or {}
         else:
             self.vectors.append(embedding)
             self.ids.append(id)
-            self.metadata[id] = {
-                'text': text,
-                'metadata': metadata or {}
-            }
+            self.metadata[id] = {"text": text, "metadata": metadata or {}}
 
         logger.debug(f"Added/Updated record {id} to vector store")
         return True
 
-    def find_similar(self, text: str, top_k: int = 5) -> List[Tuple[str, float, Dict[str, Any]]]:
+    def find_similar(
+        self, text: str, top_k: int = 5
+    ) -> List[Tuple[str, float, Dict[str, Any]]]:
         """
         Find similar records using cosine similarity.
 
@@ -162,13 +171,14 @@ class VectorMemory:
         try:
             vector_array = np.array(self.vectors)
         except Exception as e:
-            logger.error(f"Failed to convert vectors to array (inconsistent dimensions?): {e}")
+            logger.error(
+                f"Failed to convert vectors to array (inconsistent dimensions?): {e}"
+            )
             return []
 
         # Calculate cosine similarities
         similarities = cosine_similarity(
-            query_embedding.reshape(1, -1),
-            vector_array
+            query_embedding.reshape(1, -1), vector_array
         ).flatten()
 
         # Get top-k indices
@@ -181,7 +191,7 @@ class VectorMemory:
             similarity = float(similarities[idx])
             metadata = self.metadata[record_id].copy()
             # Remove vector from returned metadata for cleanliness
-            metadata.pop('vector', None)
+            metadata.pop("vector", None)
 
             results.append((record_id, similarity, metadata))
 
@@ -196,13 +206,9 @@ class VectorMemory:
             True if successfully saved, False otherwise
         """
         try:
-            data = {
-                'vectors': self.vectors,
-                'metadata': self.metadata,
-                'ids': self.ids
-            }
+            data = {"vectors": self.vectors, "metadata": self.metadata, "ids": self.ids}
 
-            with open(self.storage_path, 'wb') as f:
+            with open(self.storage_path, "wb") as f:
                 pickle.dump(data, f)
 
             logger.info(f"Saved {len(self.vectors)} vectors to {self.storage_path}")
@@ -219,12 +225,33 @@ class VectorMemory:
             return
 
         try:
-            with open(self.storage_path, 'rb') as f:
-                data = pickle.load(f)
+            with open(self.storage_path, "rb") as f:
+                # Read the raw data
+                raw_data = f.read()
 
-            self.vectors = data.get('vectors', [])
-            self.metadata = data.get('metadata', {})
-            self.ids = data.get('ids', [])
+                # Use a restricted unpickler to prevent arbitrary code execution
+                class RestrictedUnpickler(pickle.Unpickler):
+                    def find_class(self, module, name):
+                        # Only allow safe classes from these modules
+                        if module in (
+                            "numpy",
+                            "collections",
+                            "numpy.core.multiarray",
+                            "__builtin__",
+                            "builtins",
+                        ):
+                            return getattr(__import__(module, fromlist=[name]), name)
+                        # Prevent loading from unsafe modules that could execute arbitrary code
+                        raise pickle.UnpicklingError(
+                            f"Global '{module}.{name}' is forbidden"
+                        )
+
+                # Use a BytesIO object to pass data to the restricted unpickler
+                data = RestrictedUnpickler(io.BytesIO(raw_data)).load()
+
+            self.vectors = data.get("vectors", [])
+            self.metadata = data.get("metadata", {})
+            self.ids = data.get("ids", [])
 
             logger.info(f"Loaded {len(self.vectors)} vectors from {self.storage_path}")
 

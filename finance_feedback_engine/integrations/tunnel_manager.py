@@ -61,7 +61,7 @@ class TunnelManager:
             Public HTTPS URL for webhook registration
         """
         # Check for custom domain first (production setup)
-        custom_url = self.config.get('webhook_url')
+        custom_url = self.config.get("webhook_url")
         if custom_url:
             logger.info(f"✅ Using custom webhook URL: {custom_url} (port: {port})")
             self._public_url = custom_url
@@ -93,9 +93,12 @@ class TunnelManager:
             if self.tunnel and self._public_url and self._public_port is not None:
                 # Port mismatch - need to recreate tunnel for new port
                 if self._public_port != port:
-                    logger.info(f"🔄 Port changed ({self._public_port} → {port}), recreating tunnel...")
+                    logger.info(
+                        f"🔄 Port changed ({self._public_port} → {port}), recreating tunnel..."
+                    )
                     try:
                         from pyngrok import ngrok
+
                         ngrok.disconnect(self.tunnel.public_url)
                     except Exception as e:
                         logger.warning(f"Failed to disconnect old tunnel: {e}")
@@ -106,29 +109,40 @@ class TunnelManager:
                     # Port matches - check if tunnel is still active
                     try:
                         from pyngrok import ngrok
+
                         # Verify tunnel is still active by checking ngrok's tunnel list
                         active_tunnels = ngrok.get_tunnels()
-                        if any(t.public_url == self._public_url for t in active_tunnels):
-                            logger.debug(f"♻️  Reusing existing ngrok tunnel: {self._public_url} (port: {port})")
+                        if any(
+                            t.public_url == self._public_url for t in active_tunnels
+                        ):
+                            logger.debug(
+                                f"♻️  Reusing existing ngrok tunnel: {self._public_url} (port: {port})"
+                            )
                             return self._public_url
                         else:
                             # Tunnel object exists but is no longer active - clean up
-                            logger.info("🧹 Existing tunnel is closed, creating new one...")
+                            logger.info(
+                                "🧹 Existing tunnel is closed, creating new one..."
+                            )
                             self.tunnel = None
                             self._public_url = None
                             self._public_port = None
                     except Exception as e:
                         # Error checking tunnel status - assume stale, clean up
-                        logger.warning(f"⚠️  Tunnel validation failed ({e}), recreating...")
+                        logger.warning(
+                            f"⚠️  Tunnel validation failed ({e}), recreating..."
+                        )
                         self.tunnel = None
                         self._public_url = None
                         self._public_port = None
 
             try:
-                from pyngrok import ngrok, conf
+                from pyngrok import conf, ngrok
 
                 # Set auth token if provided
-                auth_token = self.config.get('ngrok_auth_token') or os.environ.get('NGROK_AUTHTOKEN')
+                auth_token = self.config.get("ngrok_auth_token") or os.environ.get(
+                    "NGROK_AUTHTOKEN"
+                )
                 if auth_token:
                     conf.get_default().auth_token = auth_token
                 else:
@@ -164,6 +178,7 @@ class TunnelManager:
         if self.tunnel:
             try:
                 from pyngrok import ngrok
+
                 ngrok.disconnect(self.tunnel.public_url)
                 logger.info("✅ ngrok tunnel closed")
             except Exception as e:
@@ -190,8 +205,15 @@ class TunnelManager:
         """Fallback cleanup on deletion (context manager preferred)."""
         try:
             self.close()
-        except Exception:
-            pass  # Suppress all exceptions in __del__
+        except Exception as e:
+            # Only log if there's an active logger
+            try:
+                logger.warning(
+                    f"Exception during TunnelManager cleanup in __del__: {e}"
+                )
+            except:
+                # If logging fails, suppress silently
+                pass
 
     # Test stub methods
     def get_tunnel_url(self, port: int = 8000) -> str:
@@ -210,6 +232,7 @@ class TunnelManager:
         """Check if pyngrok is installed (test stub)."""
         try:
             import pyngrok
+
             return True
         except ImportError:
             return False
@@ -217,7 +240,7 @@ class TunnelManager:
     def generate_custom_domain_config(self) -> dict:
         """Generate scaffold config for custom domain (test stub)."""
         return {
-            'webhook_url': 'https://example.com',
-            'ngrok_auth_token': None,
-            'note': 'Replace with your actual domain'
+            "webhook_url": "https://example.com",
+            "ngrok_auth_token": None,
+            "note": "Replace with your actual domain",
         }

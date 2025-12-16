@@ -28,7 +28,10 @@ class RedisManager:
         """
         try:
             import redis
-            client = redis.Redis(host='localhost', port=6379, socket_connect_timeout=2, password=password)
+
+            client = redis.Redis(
+                host="localhost", port=6379, socket_connect_timeout=2, password=password
+            )
             client.ping()
             return True
         except Exception as e:
@@ -44,13 +47,13 @@ class RedisManager:
             OS name: 'linux', 'darwin' (macOS), 'windows', or 'unknown'
         """
         system = platform.system().lower()
-        if 'linux' in system:
-            return 'linux'
-        elif 'darwin' in system:
-            return 'darwin'
-        elif 'windows' in system:
-            return 'windows'
-        return 'unknown'
+        if "linux" in system:
+            return "linux"
+        elif "darwin" in system:
+            return "darwin"
+        elif "windows" in system:
+            return "windows"
+        return "unknown"
 
     @staticmethod
     def prompt_user_install() -> bool:
@@ -65,14 +68,16 @@ class RedisManager:
 
             result = Confirm.ask(
                 "🔧 Redis not found. Required for Telegram approval queue. Install now?",
-                default=True
+                default=True,
             )
             return result
         except ImportError:
             # Fallback to basic input if Rich not available
             try:
-                response = input("Redis not found. Install now? [Y/n]: ").strip().lower()
-                return response in ('', 'y', 'yes')
+                response = (
+                    input("Redis not found. Install now? [Y/n]: ").strip().lower()
+                )
+                return response in ("", "y", "yes")
             except (KeyboardInterrupt, EOFError):
                 return False
 
@@ -88,10 +93,14 @@ class RedisManager:
         """Start Redis service (test stub)."""
         try:
             os_type = RedisManager.detect_os()
-            if os_type == 'linux':
-                subprocess.run(["sudo", "systemctl", "start", "redis"], check=True, timeout=10)
-            elif os_type == 'darwin':
-                subprocess.run(["brew", "services", "start", "redis"], check=True, timeout=10)
+            if os_type == "linux":
+                subprocess.run(
+                    ["sudo", "systemctl", "start", "redis"], check=True, timeout=10
+                )
+            elif os_type == "darwin":
+                subprocess.run(
+                    ["brew", "services", "start", "redis"], check=True, timeout=10
+                )
             return True
         except Exception as e:
             logger.error(f"Failed to start Redis: {e}")
@@ -113,7 +122,7 @@ class RedisManager:
                 ["sudo", "apt-get", "update"],
                 check=True,
                 capture_output=True,
-                timeout=60
+                timeout=60,
             )
 
             # Install Redis
@@ -121,7 +130,7 @@ class RedisManager:
                 ["sudo", "apt-get", "install", "-y", "redis-server"],
                 check=True,
                 capture_output=True,
-                timeout=120
+                timeout=120,
             )
 
             # Check if systemctl is available (systemd-based systems)
@@ -130,12 +139,18 @@ class RedisManager:
                     ["systemctl", "--version"],
                     check=True,
                     capture_output=True,
-                    timeout=5
+                    timeout=5,
                 )
                 has_systemctl = True
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            except (
+                subprocess.CalledProcessError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
                 has_systemctl = False
-                logger.warning("⚠️  systemctl not found - trying alternative service management")
+                logger.warning(
+                    "⚠️  systemctl not found - trying alternative service management"
+                )
 
             if has_systemctl:
                 # Enable and start Redis service via systemd
@@ -152,16 +167,24 @@ class RedisManager:
                             ["sudo", "systemctl", "enable", service_name],
                             check=True,
                             capture_output=True,
-                            timeout=10
+                            timeout=10,
                         )
-                        logger.debug(f"systemctl enable {service_name} - stdout: {result.stdout.decode()}")
+                        logger.debug(
+                            f"systemctl enable {service_name} - stdout: {result.stdout.decode()}"
+                        )
                     except subprocess.CalledProcessError as e:
                         logger.warning(f"⚠️  Failed to enable {service_name} service")
-                        logger.debug(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
-                        logger.debug(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                        logger.debug(
+                            f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}"
+                        )
+                        logger.debug(
+                            f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}"
+                        )
                         continue  # Try next service name
                     except subprocess.TimeoutExpired as e:
-                        logger.warning(f"⚠️  Timeout enabling {service_name} service: {e}")
+                        logger.warning(
+                            f"⚠️  Timeout enabling {service_name} service: {e}"
+                        )
                         continue  # Try next service name
 
                     # Try start
@@ -170,23 +193,35 @@ class RedisManager:
                             ["sudo", "systemctl", "start", service_name],
                             check=True,
                             capture_output=True,
-                            timeout=10
+                            timeout=10,
                         )
-                        logger.debug(f"systemctl start {service_name} - stdout: {result.stdout.decode()}")
-                        logger.info(f"✅ Redis installed and started via systemd ({service_name})")
+                        logger.debug(
+                            f"systemctl start {service_name} - stdout: {result.stdout.decode()}"
+                        )
+                        logger.info(
+                            f"✅ Redis installed and started via systemd ({service_name})"
+                        )
                         service_started = True
                         break  # Success, exit loop
                     except subprocess.CalledProcessError as e:
                         logger.warning(f"⚠️  Failed to start {service_name} service")
-                        logger.debug(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
-                        logger.debug(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
+                        logger.debug(
+                            f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}"
+                        )
+                        logger.debug(
+                            f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}"
+                        )
                         continue  # Try next service name
                     except subprocess.TimeoutExpired as e:
-                        logger.warning(f"⚠️  Timeout starting {service_name} service: {e}")
+                        logger.warning(
+                            f"⚠️  Timeout starting {service_name} service: {e}"
+                        )
                         continue  # Try next service name
 
                 if not service_started:
-                    logger.error(f"❌ Failed to start Redis via systemd (tried: {', '.join(service_names)})")
+                    logger.error(
+                        f"❌ Failed to start Redis via systemd (tried: {', '.join(service_names)})"
+                    )
                     return False
             else:
                 # Try alternative service management (SysVinit, Upstart, etc.)
@@ -195,17 +230,25 @@ class RedisManager:
                         ["sudo", "service", "redis-server", "start"],
                         check=True,
                         capture_output=True,
-                        timeout=10
+                        timeout=10,
                     )
                     logger.debug(f"service start output: {result.stdout.decode()}")
                     logger.info("✅ Redis installed and started via service command")
                 except (subprocess.CalledProcessError, FileNotFoundError) as e:
                     logger.error(f"❌ Failed to start Redis via service command: {e}")
                     if isinstance(e, subprocess.CalledProcessError):
-                        logger.error(f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}")
-                        logger.error(f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}")
-                    logger.warning("⚠️  Redis package installed but could not start service")
-                    logger.warning("   You may need to start Redis manually: sudo redis-server /etc/redis/redis.conf")
+                        logger.error(
+                            f"   stdout: {e.stdout.decode() if e.stdout else 'N/A'}"
+                        )
+                        logger.error(
+                            f"   stderr: {e.stderr.decode() if e.stderr else 'N/A'}"
+                        )
+                    logger.warning(
+                        "⚠️  Redis package installed but could not start service"
+                    )
+                    logger.warning(
+                        "   You may need to start Redis manually: sudo redis-server /etc/redis/redis.conf"
+                    )
                     return False
                 except subprocess.TimeoutExpired as e:
                     logger.error(f"❌ Timeout starting Redis via service command: {e}")
@@ -238,13 +281,12 @@ class RedisManager:
             # Check if Homebrew is installed
             try:
                 subprocess.run(
-                    ["brew", "--version"],
-                    check=True,
-                    capture_output=True,
-                    timeout=5
+                    ["brew", "--version"], check=True, capture_output=True, timeout=5
                 )
             except (subprocess.CalledProcessError, FileNotFoundError):
-                logger.error("❌ Homebrew not found. Please install from https://brew.sh")
+                logger.error(
+                    "❌ Homebrew not found. Please install from https://brew.sh"
+                )
                 return False
 
             # Install Redis
@@ -252,7 +294,7 @@ class RedisManager:
                 ["brew", "install", "redis"],
                 check=True,
                 capture_output=True,
-                timeout=300
+                timeout=300,
             )
 
             # Start Redis service
@@ -260,7 +302,7 @@ class RedisManager:
                 ["brew", "services", "start", "redis"],
                 check=True,
                 capture_output=True,
-                timeout=10
+                timeout=10,
             )
 
             logger.info("✅ Redis installed and started via Homebrew")
@@ -289,39 +331,39 @@ class RedisManager:
             # Check if Docker is installed
             try:
                 subprocess.run(
-                    ["docker", "--version"],
-                    check=True,
-                    capture_output=True,
-                    timeout=5
+                    ["docker", "--version"], check=True, capture_output=True, timeout=5
                 )
             except (subprocess.CalledProcessError, FileNotFoundError):
-                logger.error("❌ Docker not found. Please install from https://docker.com")
+                logger.error(
+                    "❌ Docker not found. Please install from https://docker.com"
+                )
                 return False
 
             # Stop any existing container
             subprocess.run(
-                ["docker", "stop", "ffe-redis"],
-                capture_output=True,
-                timeout=10
+                ["docker", "stop", "ffe-redis"], capture_output=True, timeout=10
             )
             subprocess.run(
-                ["docker", "rm", "ffe-redis"],
-                capture_output=True,
-                timeout=10
+                ["docker", "rm", "ffe-redis"], capture_output=True, timeout=10
             )
 
             # Start new Redis container
             subprocess.run(
                 [
-                    "docker", "run", "-d",
-                    "--name", "ffe-redis",
-                    "-p", "6379:6379",
-                    "--restart", "unless-stopped",
-                    "redis:alpine"
+                    "docker",
+                    "run",
+                    "-d",
+                    "--name",
+                    "ffe-redis",
+                    "-p",
+                    "6379:6379",
+                    "--restart",
+                    "unless-stopped",
+                    "redis:alpine",
                 ],
                 check=True,
                 capture_output=True,
-                timeout=30
+                timeout=30,
             )
 
             logger.info("✅ Redis container started successfully")
@@ -363,12 +405,16 @@ class RedisManager:
 
         # Skip installation if auto_install is False
         if not auto_install:
-            logger.error("❌ Redis required for Telegram approvals but auto-install disabled")
+            logger.error(
+                "❌ Redis required for Telegram approvals but auto-install disabled"
+            )
             return False
 
         # Prompt user
         if not cls.prompt_user_install():
-            logger.warning("⏭️  Redis installation declined by user. Telegram approvals disabled.")
+            logger.warning(
+                "⏭️  Redis installation declined by user. Telegram approvals disabled."
+            )
             return False
 
         # Detect OS and try installation
@@ -377,9 +423,9 @@ class RedisManager:
 
         success = False
 
-        if os_type == 'linux':
+        if os_type == "linux":
             success = cls.install_redis_linux()
-        elif os_type == 'darwin':
+        elif os_type == "darwin":
             success = cls.install_redis_macos()
         else:
             logger.warning(f"⚠️  Unsupported OS: {os_type}, trying Docker fallback...")
@@ -402,5 +448,7 @@ class RedisManager:
             logger.error("❌ Redis installed but not responding")
             return False
         else:
-            logger.error("❌ Redis setup failed. Telegram approvals disabled. Use CLI approval instead.")
+            logger.error(
+                "❌ Redis setup failed. Telegram approvals disabled. Use CLI approval instead."
+            )
             return False

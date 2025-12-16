@@ -1,13 +1,15 @@
-import pandas as pd
-from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, List, Optional
-import logging
-import copy
-import numpy as np
-from scipy import stats
 import asyncio
+import copy
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+import pandas as pd
+from scipy import stats
 
 logger = logging.getLogger(__name__)
+
 
 class ModelPerformanceMonitor:
     """
@@ -49,9 +51,12 @@ class ModelPerformanceMonitor:
       a model registry to ensure correct context for monitoring.
     """
 
-    def __init__(self, model_id: str,
-                 evaluation_interval: timedelta = timedelta(hours=1),
-                 drift_detection_threshold: float = 0.7):
+    def __init__(
+        self,
+        model_id: str,
+        evaluation_interval: timedelta = timedelta(hours=1),
+        drift_detection_threshold: float = 0.7,
+    ):
         self.model_id = model_id
         self.evaluation_interval = evaluation_interval
         self.drift_detection_threshold = drift_detection_threshold
@@ -68,11 +73,13 @@ class ModelPerformanceMonitor:
 
         logger.info(f"Initialized ModelPerformanceMonitor for model: {self.model_id}")
 
-    def record_prediction(self, features: pd.DataFrame, prediction: Dict[str, Any], timestamp: datetime):
+    def record_prediction(
+        self, features: pd.DataFrame, prediction: Dict[str, Any], timestamp: datetime
+    ):
         """
         Records a model prediction along with the features used.
         """
-        if 'prediction_id' not in prediction:
+        if "prediction_id" not in prediction:
             raise ValueError("prediction must contain 'prediction_id'")
 
         if isinstance(features, pd.DataFrame):
@@ -80,19 +87,28 @@ class ModelPerformanceMonitor:
         else:
             features_copy = copy.deepcopy(features)
 
-        self.predictions.append({
-            'prediction_id': prediction['prediction_id'],
-            'features': features_copy,
-            'prediction': prediction,
-            'timestamp': timestamp
-        })
-        logger.debug(f"Recorded prediction for {self.model_id} at {timestamp}: {prediction}")
+        self.predictions.append(
+            {
+                "prediction_id": prediction["prediction_id"],
+                "features": features_copy,
+                "prediction": prediction,
+                "timestamp": timestamp,
+            }
+        )
+        logger.debug(
+            f"Recorded prediction for {self.model_id} at {timestamp}: {prediction}"
+        )
 
-    def record_actual_outcome(self, prediction_id: str, actual_outcome: Any, timestamp: datetime):
+    def record_actual_outcome(
+        self, prediction_id: str, actual_outcome: Any, timestamp: datetime
+    ):
         """
         Records the actual outcome corresponding to a previous prediction.
         """
-    def record_actual_outcome(self, prediction_id: str, actual_outcome: Any, timestamp: datetime):
+
+    def record_actual_outcome(
+        self, prediction_id: str, actual_outcome: Any, timestamp: datetime
+    ):
         """
         Records the actual outcome corresponding to a previous prediction.
 
@@ -102,15 +118,19 @@ class ModelPerformanceMonitor:
             timestamp: When the outcome was observed.
         """
         if not isinstance(actual_outcome, dict):
-            raise TypeError("actual_outcome must be a dictionary with 'success' and 'profit' keys")
-        if 'success' not in actual_outcome or 'profit' not in actual_outcome:
+            raise TypeError(
+                "actual_outcome must be a dictionary with 'success' and 'profit' keys"
+            )
+        if "success" not in actual_outcome or "profit" not in actual_outcome:
             raise ValueError("actual_outcome must contain 'success' and 'profit' keys")
 
         self.outcomes[prediction_id] = {
-            'actual_outcome': actual_outcome,
-            'timestamp': timestamp
+            "actual_outcome": actual_outcome,
+            "timestamp": timestamp,
         }
-        logger.debug(f"Recorded actual outcome for prediction_id {prediction_id} at {timestamp}: {actual_outcome}")
+        logger.debug(
+            f"Recorded actual outcome for prediction_id {prediction_id} at {timestamp}: {actual_outcome}"
+        )
 
     def evaluate_performance(self) -> Dict[str, Any]:
         """
@@ -130,7 +150,7 @@ class ModelPerformanceMonitor:
         # Get matched predictions and outcomes
         matched = []
         for pred in self.predictions:
-            pid = pred['prediction_id']
+            pid = pred["prediction_id"]
             if pid in self.outcomes:
                 matched.append((pred, self.outcomes[pid]))
 
@@ -138,10 +158,16 @@ class ModelPerformanceMonitor:
         num_predictions = len(self.predictions)
         num_outcomes = len(self.outcomes)
         if matched:
-            correct = sum(1 for pred, out in matched if out['actual_outcome'].get('success', False))
+            correct = sum(
+                1
+                for pred, out in matched
+                if out["actual_outcome"].get("success", False)
+            )
             accuracy = correct / len(matched)
             win_rate = accuracy  # Assuming success means win for simplicity
-            total_pnl = sum(out['actual_outcome'].get('profit', 0.0) for pred, out in matched)
+            total_pnl = sum(
+                out["actual_outcome"].get("profit", 0.0) for pred, out in matched
+            )
         else:
             accuracy = 0.0
             win_rate = 0.0
@@ -163,7 +189,9 @@ class ModelPerformanceMonitor:
         # self.data_store.save_metrics(metrics)
         return metrics
 
-    def detect_data_drift(self, current_features: pd.DataFrame, baseline_features: pd.DataFrame) -> Dict[str, Any]:
+    def detect_data_drift(
+        self, current_features: pd.DataFrame, baseline_features: pd.DataFrame
+    ) -> Dict[str, Any]:
         """
         Detects data drift by comparing current input features to a baseline.
 
@@ -186,11 +214,13 @@ class ModelPerformanceMonitor:
             "model_id": self.model_id,
             "has_drift": False,
             "drift_score": 0.0,
-            "drifting_features": []
+            "drifting_features": [],
         }
 
         if current_features.empty or baseline_features.empty:
-            logger.info(f"Empty dataframes provided for drift detection in model {self.model_id}.")
+            logger.info(
+                f"Empty dataframes provided for drift detection in model {self.model_id}."
+            )
             return drift_results
 
         drift_scores = []
@@ -199,7 +229,10 @@ class ModelPerformanceMonitor:
         common_features = set(current_features.columns) & set(baseline_features.columns)
 
         for feature in common_features:
-            if feature in baseline_features.columns and feature in current_features.columns:
+            if (
+                feature in baseline_features.columns
+                and feature in current_features.columns
+            ):
                 # Prepare data - drop NaN values
                 current_data = current_features[feature].dropna()
                 baseline_data = baseline_features[feature].dropna()
@@ -208,7 +241,9 @@ class ModelPerformanceMonitor:
                     continue
 
                 # For numerical features, use KS test and PSI
-                if pd.api.types.is_numeric_dtype(current_data) and pd.api.types.is_numeric_dtype(baseline_data):
+                if pd.api.types.is_numeric_dtype(
+                    current_data
+                ) and pd.api.types.is_numeric_dtype(baseline_data):
                     # Kolmogorov-Smirnov test
                     ks_statistic, p_value = stats.ks_2samp(baseline_data, current_data)
 
@@ -237,7 +272,10 @@ class ModelPerformanceMonitor:
                         )
 
                         # Calculate PSI
-                        psi = np.sum((current_pct - baseline_pct) * np.log(current_pct / baseline_pct))
+                        psi = np.sum(
+                            (current_pct - baseline_pct)
+                            * np.log(current_pct / baseline_pct)
+                        )
 
                         # Determine if drift is significant using PSI thresholds
                         # PSI < 0.1: No significant change
@@ -245,18 +283,24 @@ class ModelPerformanceMonitor:
                         # PSI > 0.25: Significant change
                         psi_drift = psi > 0.1
 
-                        if psi_drift or p_value < 0.05:  # Significant drift based on either test
+                        if (
+                            psi_drift or p_value < 0.05
+                        ):  # Significant drift based on either test
                             drift_results["has_drift"] = True
-                            drift_results["drifting_features"].append({
-                                "feature": feature,
-                                "psi_score": float(psi),
-                                "ks_statistic": float(ks_statistic),
-                                "p_value": float(p_value),
-                                "reason": f"PSI: {psi:.3f}, KS: {ks_statistic:.3f}, p-value: {p_value:.3f}"
-                            })
+                            drift_results["drifting_features"].append(
+                                {
+                                    "feature": feature,
+                                    "psi_score": float(psi),
+                                    "ks_statistic": float(ks_statistic),
+                                    "p_value": float(p_value),
+                                    "reason": f"PSI: {psi:.3f}, KS: {ks_statistic:.3f}, p-value: {p_value:.3f}",
+                                }
+                            )
                             drift_scores.append(psi)
                     except Exception as e:
-                        logger.warning(f"Could not calculate drift for feature {feature}: {str(e)}")
+                        logger.warning(
+                            f"Could not calculate drift for feature {feature}: {str(e)}"
+                        )
                         # Fallback to simple mean difference check
                         mean_diff = abs(current_data.mean() - baseline_data.mean())
                         std_baseline = baseline_data.std()
@@ -264,12 +308,14 @@ class ModelPerformanceMonitor:
                             z_score = mean_diff / std_baseline
                             if z_score > 2:  # More than 2 std deviations
                                 drift_results["has_drift"] = True
-                                drift_results["drifting_features"].append({
-                                    "feature": feature,
-                                    "mean_diff": float(mean_diff),
-                                    "z_score": float(z_score),
-                                    "reason": f"Mean shift: {mean_diff:.3f}, Z-score: {z_score:.3f}"
-                                })
+                                drift_results["drifting_features"].append(
+                                    {
+                                        "feature": feature,
+                                        "mean_diff": float(mean_diff),
+                                        "z_score": float(z_score),
+                                        "reason": f"Mean shift: {mean_diff:.3f}, Z-score: {z_score:.3f}",
+                                    }
+                                )
                                 drift_scores.append(z_score)
                 # For categorical features, use PSI on categories
                 else:
@@ -279,7 +325,9 @@ class ModelPerformanceMonitor:
                         current_counts = current_data.value_counts()
 
                         # Get all unique categories from both datasets
-                        all_categories = set(baseline_counts.index) | set(current_counts.index)
+                        all_categories = set(baseline_counts.index) | set(
+                            current_counts.index
+                        )
 
                         # Calculate percentages
                         baseline_total = len(baseline_data)
@@ -287,20 +335,30 @@ class ModelPerformanceMonitor:
 
                         psi = 0.0
                         for cat in all_categories:
-                            baseline_pct = (baseline_counts.get(cat, 0) + 1) / baseline_total  # Smoothing
-                            current_pct = (current_counts.get(cat, 0) + 1) / current_total    # Smoothing
-                            psi += (current_pct - baseline_pct) * np.log(current_pct / baseline_pct)
+                            baseline_pct = (
+                                baseline_counts.get(cat, 0) + 1
+                            ) / baseline_total  # Smoothing
+                            current_pct = (
+                                current_counts.get(cat, 0) + 1
+                            ) / current_total  # Smoothing
+                            psi += (current_pct - baseline_pct) * np.log(
+                                current_pct / baseline_pct
+                            )
 
                         if psi > 0.1:  # Threshold for significant drift
                             drift_results["has_drift"] = True
-                            drift_results["drifting_features"].append({
-                                "feature": feature,
-                                "psi_score": float(psi),
-                                "reason": f"Categorical PSI: {psi:.3f}"
-                            })
+                            drift_results["drifting_features"].append(
+                                {
+                                    "feature": feature,
+                                    "psi_score": float(psi),
+                                    "reason": f"Categorical PSI: {psi:.3f}",
+                                }
+                            )
                             drift_scores.append(psi)
                     except Exception as e:
-                        logger.warning(f"Could not calculate drift for categorical feature {feature}: {str(e)}")
+                        logger.warning(
+                            f"Could not calculate drift for categorical feature {feature}: {str(e)}"
+                        )
 
         # Calculate overall drift score as average of individual scores
         if drift_scores:
@@ -309,16 +367,22 @@ class ModelPerformanceMonitor:
             drift_results["drift_score"] = 0.0
 
         if drift_results["has_drift"]:
-            logger.warning(f"Data drift detected for model {self.model_id}: {drift_results}")
+            logger.warning(
+                f"Data drift detected for model {self.model_id}: {drift_results}"
+            )
             self._trigger_alert("Data drift detected", drift_results)
         else:
-            logger.info(f"No significant data drift detected for model {self.model_id}.")
+            logger.info(
+                f"No significant data drift detected for model {self.model_id}."
+            )
 
         self.historical_drift_scores.append(drift_results)
         self.drift_store.append(drift_results)
         return drift_results
 
-    def detect_concept_drift(self, current_performance: Dict[str, Any], baseline_performance: Dict[str, Any]) -> Dict[str, Any]:
+    def detect_concept_drift(
+        self, current_performance: Dict[str, Any], baseline_performance: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Detects concept drift by comparing current model performance to a baseline.
 
@@ -343,7 +407,7 @@ class ModelPerformanceMonitor:
             "model_id": self.model_id,
             "has_drift": False,
             "drift_score": 0.0,
-            "metrics_affected": []
+            "metrics_affected": [],
         }
 
         # Dummy concept drift detection based on win rate
@@ -353,17 +417,35 @@ class ModelPerformanceMonitor:
         if baseline_win_rate == 0:
             drift_results["has_drift"] = False
             drift_results["drift_score"] = None
-            drift_results["metrics_affected"].append({"metric": "win_rate", "change": "Cannot compute change: baseline win rate is zero"})
-        elif (baseline_win_rate - current_win_rate) / baseline_win_rate > (1 - self.drift_detection_threshold):
+            drift_results["metrics_affected"].append(
+                {
+                    "metric": "win_rate",
+                    "change": "Cannot compute change: baseline win rate is zero",
+                }
+            )
+        elif (baseline_win_rate - current_win_rate) / baseline_win_rate > (
+            1 - self.drift_detection_threshold
+        ):
             drift_results["has_drift"] = True
-            drift_results["drift_score"] = (baseline_win_rate - current_win_rate) / baseline_win_rate
-            drift_results["metrics_affected"].append({"metric": "win_rate", "change": f"Dropped from {baseline_win_rate:.2f}% to {current_win_rate:.2f}%"})
+            drift_results["drift_score"] = (
+                baseline_win_rate - current_win_rate
+            ) / baseline_win_rate
+            drift_results["metrics_affected"].append(
+                {
+                    "metric": "win_rate",
+                    "change": f"Dropped from {baseline_win_rate:.2f}% to {current_win_rate:.2f}%",
+                }
+            )
 
         if drift_results["has_drift"]:
-            logger.warning(f"Concept drift detected for model {self.model_id}: {drift_results}")
+            logger.warning(
+                f"Concept drift detected for model {self.model_id}: {drift_results}"
+            )
             self._trigger_alert("Concept drift detected", drift_results)
         else:
-            logger.info(f"No significant concept drift detected for model {self.model_id}.")
+            logger.info(
+                f"No significant concept drift detected for model {self.model_id}."
+            )
 
         self.historical_drift_scores.append(drift_results)
         self.drift_store.append(drift_results)
@@ -391,14 +473,16 @@ class ModelPerformanceMonitor:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "model_id": self.model_id,
             "alert_type": alert_type,
-            "details": details
+            "details": details,
         }
 
         for callback in self.alert_callbacks:
             try:
                 callback(alert_data)
             except Exception as e:
-                logger.error(f"Error in alert callback for model {self.model_id}: {str(e)}")
+                logger.error(
+                    f"Error in alert callback for model {self.model_id}: {str(e)}"
+                )
 
     async def start_monitoring_loop(self):
         """
@@ -417,8 +501,14 @@ class ModelPerformanceMonitor:
                 if len(self.historical_metrics) >= 10:
                     # Use average of first 10 metrics as stable baseline
                     baseline_metrics = {
-                        "win_rate": sum(m['win_rate'] for m in self.historical_metrics[:10]) / 10,
-                        'accuracy': sum(m['accuracy'] for m in self.historical_metrics[:10]) / 10,
+                        "win_rate": sum(
+                            m["win_rate"] for m in self.historical_metrics[:10]
+                        )
+                        / 10,
+                        "accuracy": sum(
+                            m["accuracy"] for m in self.historical_metrics[:10]
+                        )
+                        / 10,
                     }
 
                 # Sleep until next evaluation interval
@@ -428,7 +518,9 @@ class ModelPerformanceMonitor:
                 logger.info(f"Monitoring loop cancelled for model {self.model_id}")
                 break
             except Exception as e:
-                logger.error(f"Error in monitoring loop for model {self.model_id}: {str(e)}")
+                logger.error(
+                    f"Error in monitoring loop for model {self.model_id}: {str(e)}"
+                )
                 # Continue loop despite errors to maintain monitoring
                 await asyncio.sleep(self.evaluation_interval.total_seconds())
 
@@ -463,6 +555,7 @@ class ModelPerformanceMonitor:
         """
         return self.historical_drift_scores
 
+
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -474,7 +567,7 @@ if __name__ == "__main__":
     # In a real scenario, these would come from the live system
     features_t0 = pd.DataFrame({"RSI": [60], "MACD": [0.2], "Price": [100]})
     prediction_t0 = {"action": "BUY", "confidence": 0.75}
-    outcome_t0 = 1 # 1 for successful trade
+    outcome_t0 = 1  # 1 for successful trade
 
     monitor.record_prediction(features_t0, prediction_t0, datetime.now(timezone.utc))
     # Simulate some delay and then outcome
@@ -490,19 +583,25 @@ if __name__ == "__main__":
     baseline_features_df = pd.DataFrame({"RSI": [50], "MACD": [0.1], "Price": [90]})
     current_features_df = pd.DataFrame({"RSI": [80], "MACD": [0.5], "Price": [110]})
     print("\n--- Detecting Data Drift ---")
-    data_drift_results = monitor.detect_data_drift(current_features_df, baseline_features_df)
+    data_drift_results = monitor.detect_data_drift(
+        current_features_df, baseline_features_df
+    )
     print(f"Data Drift Results: {data_drift_results}")
 
     # --- Detect Concept Drift ---
     baseline_perf = {"win_rate": 60.0, "total_pnl": 1000}
     current_perf_degraded = {"win_rate": 40.0, "total_pnl": -500}
     print("\n--- Detecting Concept Drift (Degraded Performance) ---")
-    concept_drift_results = monitor.detect_concept_drift(current_perf_degraded, baseline_perf)
+    concept_drift_results = monitor.detect_concept_drift(
+        current_perf_degraded, baseline_perf
+    )
     print(f"Concept Drift Results: {concept_drift_results}")
 
     current_perf_stable = {"win_rate": 58.0, "total_pnl": 900}
     print("\n--- Detecting Concept Drift (Stable Performance) ---")
-    concept_drift_results_stable = monitor.detect_concept_drift(current_perf_stable, baseline_perf)
+    concept_drift_results_stable = monitor.detect_concept_drift(
+        current_perf_stable, baseline_perf
+    )
     print(f"Concept Drift Results: {concept_drift_results_stable}")
 
     print("\n--- Historical Metrics ---")

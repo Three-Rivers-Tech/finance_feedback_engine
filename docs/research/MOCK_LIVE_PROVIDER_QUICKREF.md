@@ -50,10 +50,10 @@ while provider.has_more_data():
     window = provider.get_historical_window(window_size, include_current=False)
     ma = window['close'].mean()
     current = provider.get_current_price()
-    
+
     if current > ma:
         print("Buy signal")
-    
+
     provider.advance()
 ```
 
@@ -152,10 +152,10 @@ while provider.has_more_data():
     window = provider.get_historical_window(20, include_current=False)
     ma = window['close'].mean()
     price = provider.get_current_price()
-    
+
     if price > ma:
         signals.append(('BUY', price))
-    
+
     provider.advance()
 ```
 

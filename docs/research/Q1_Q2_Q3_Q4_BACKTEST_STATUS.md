@@ -1,7 +1,7 @@
 # 2025 Full-Year Portfolio Backtest: Quarterly Execution Status
 
-**Started**: December 8, 2025 @ 12:38 UTC  
-**Target**: Full-year 2025 backtest (BTCUSD, ETHUSD, EURUSD) with $10k initial capital  
+**Started**: December 8, 2025 @ 12:38 UTC
+**Target**: Full-year 2025 backtest (BTCUSD, ETHUSD, EURUSD) with $10k initial capital
 **Strategy**: 4 quarterly chunks with persistent cross-quarter memory learning
 
 ---
@@ -61,21 +61,21 @@ Metrics to Track:
 ## Planned: Q2-Q4 Execution
 
 ### Q2 2025 (Apr 1 - Jun 30)
-**Status**: Queued - starts after Q1 completes  
-**Learning**: Will load all Q1 outcomes (50-80 trades)  
-**Expected Improvement**: +2-5% win rate vs Q1  
+**Status**: Queued - starts after Q1 completes
+**Learning**: Will load all Q1 outcomes (50-80 trades)
+**Expected Improvement**: +2-5% win rate vs Q1
 **Timeline**: ~20 minutes after Q1 completes
 
 ### Q3 2025 (Jul 1 - Sep 30)
-**Status**: Queued - starts after Q2 completes  
-**Learning**: Cumulative (Q1+Q2 = 100-160 outcomes)  
-**Expected Improvement**: +2-5% additional win rate  
+**Status**: Queued - starts after Q2 completes
+**Learning**: Cumulative (Q1+Q2 = 100-160 outcomes)
+**Expected Improvement**: +2-5% additional win rate
 **Timeline**: ~40 minutes after Q1 completes
 
 ### Q4 2025 (Oct 1 - Dec 31)
-**Status**: Queued - starts after Q3 completes  
-**Learning**: Full year (Q1+Q2+Q3 = 150-240 outcomes)  
-**Expected Improvement**: +2-5% additional win rate  
+**Status**: Queued - starts after Q3 completes
+**Learning**: Full year (Q1+Q2+Q3 = 150-240 outcomes)
+**Expected Improvement**: +2-5% additional win rate
 **Timeline**: ~60 minutes after Q1 completes
 
 ---
@@ -104,7 +104,7 @@ TOTAL RUNTIME: ~60 minutes for all 4 quarters
    Trade 2 → Exit Signal → Save outcome_002.json
    ...
    Trade N → Exit Signal → Save outcome_NNN.json
-   
+
    End of Q1: 50-80 outcome files accumulated in data/memory/
    ```
 
@@ -323,7 +323,6 @@ Difference in Full Year:
 
 ---
 
-**Status**: Q1 running successfully since 12:38 UTC  
-**Next Update**: Check at 12:55-13:00 UTC for completion or continue running  
+**Status**: Q1 running successfully since 12:38 UTC
+**Next Update**: Check at 12:55-13:00 UTC for completion or continue running
 **Final Completion**: Expected by 13:40 UTC (full year)
-

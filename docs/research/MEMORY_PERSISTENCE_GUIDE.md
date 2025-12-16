@@ -1,8 +1,8 @@
 # Memory Persistence System - Architecture & Efficiency
 
-**Status**: Fully operational and battle-tested  
-**Storage Method**: Hybrid (JSON files + binary pickle)  
-**Persistence**: Automatic on every trade outcome and snapshot  
+**Status**: Fully operational and battle-tested
+**Storage Method**: Hybrid (JSON files + binary pickle)
+**Persistence**: Automatic on every trade outcome and snapshot
 **Memory Efficiency**: O(N) where N = number of trade outcomes
 
 ---
@@ -218,7 +218,7 @@ for provider, stats in perf.items():
 ```
 Provider        Q1      Q2      Q3      Q4      Trend
 llama3.2       60%     62%     65%     68%     ↑ improving
-gemini         45%     48%     52%     55%     ↑ improving  
+gemini         45%     48%     52%     55%     ↑ improving
 qwen2.5        50%     50%     48%     45%     ↓ declining
 ```
 
@@ -268,7 +268,7 @@ python chunked_backtest_runner.py
 
 **Memory Accumulation**:
 - After Q1: ~100-150 outcome files
-- After Q2: ~200-300 outcome files  
+- After Q2: ~200-300 outcome files
 - After Q3: ~300-450 outcome files
 - After Q4: ~400-600 outcome files (capped at max_memory_size)
 

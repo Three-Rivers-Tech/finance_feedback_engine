@@ -1,8 +1,10 @@
 """Tests for FastAPI endpoints (health, metrics, telegram, decisions, status)."""
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
+
 from finance_feedback_engine.api.app import app, app_state
 
 
@@ -26,11 +28,9 @@ def mock_engine():
     engine.platform.get_balance.return_value = {"total": 10000.0}
 
     # Mock decision store
-    engine.decision_store.get_recent_decisions.return_value = [{
-        "timestamp": "2024-12-04T10:00:00Z",
-        "asset_pair": "BTCUSD",
-        "action": "BUY"
-    }]
+    engine.decision_store.get_recent_decisions.return_value = [
+        {"timestamp": "2024-12-04T10:00:00Z", "asset_pair": "BTCUSD", "action": "BUY"}
+    ]
 
     return engine
 
@@ -39,7 +39,10 @@ def mock_engine():
 def client(mock_engine):
     """Create test client with mocked engine."""
     # Patch the engine creation in lifespan
-    with patch('finance_feedback_engine.api.app.FinanceFeedbackEngine', return_value=mock_engine):
+    with patch(
+        "finance_feedback_engine.api.app.FinanceFeedbackEngine",
+        return_value=mock_engine,
+    ):
         # Manually set app_state for testing
         app_state["engine"] = mock_engine
         client = TestClient(app)
@@ -152,7 +155,7 @@ class TestTelegramWebhook:
         # Accept 503 (service unavailable) or other status
         assert response.status_code in [200, 503, 422]
 
-    @patch('finance_feedback_engine.api.routes.telegram_bot', None)
+    @patch("finance_feedback_engine.api.routes.telegram_bot", None)
     def test_telegram_webhook_returns_503_when_bot_disabled(self, client):
         """Test webhook returns 503 when telegram bot is not configured."""
         response = client.post("/webhook/telegram", json={"update_id": 12345})
@@ -186,7 +189,9 @@ class TestCORSMiddleware:
 
     def test_cors_headers_present(self, client):
         """Test CORS headers are present in response."""
-        response = client.options("/health", headers={"Origin": "http://localhost:3000"})
+        response = client.options(
+            "/health", headers={"Origin": "http://localhost:3000"}
+        )
         # CORS should be configured
         assert response.status_code in [200, 405]  # OPTIONS may or may not be allowed
 
@@ -205,7 +210,10 @@ class TestLifespanManagement:
         # Add async close method to mock engine
         mock_engine.close = AsyncMock()
 
-        with patch('finance_feedback_engine.api.app.FinanceFeedbackEngine', return_value=mock_engine):
+        with patch(
+            "finance_feedback_engine.api.app.FinanceFeedbackEngine",
+            return_value=mock_engine,
+        ):
             with TestClient(app) as client:
                 # Engine should be in app_state after startup (while client is active)
                 client.get("/health")  # Trigger startup if needed
@@ -216,7 +224,10 @@ class TestLifespanManagement:
         # Add async close method to mock engine
         mock_engine.close = AsyncMock()
 
-        with patch('finance_feedback_engine.api.app.FinanceFeedbackEngine', return_value=mock_engine):
+        with patch(
+            "finance_feedback_engine.api.app.FinanceFeedbackEngine",
+            return_value=mock_engine,
+        ):
             with TestClient(app) as client:
                 client.get("/health")
             # After context exit, verify cleanup occurred
@@ -232,7 +243,9 @@ class TestErrorHandling:
     def test_health_check_handles_engine_errors(self):
         """Test health check gracefully handles engine errors."""
         broken_engine = Mock()
-        broken_engine.data_provider.alpha_vantage.circuit_breaker.state.name = Mock(side_effect=Exception("Provider error"))
+        broken_engine.data_provider.alpha_vantage.circuit_breaker.state.name = Mock(
+            side_effect=Exception("Provider error")
+        )
         broken_engine.platform.get_balance.side_effect = Exception("Balance error")
 
         app_state["engine"] = broken_engine
@@ -274,5 +287,5 @@ class TestDependencyInjection:
             app_state["engine"] = original_engine
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

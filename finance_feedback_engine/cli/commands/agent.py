@@ -6,28 +6,30 @@ and monitoring live trades.
 CRITICAL: These commands are core to the repository's autonomous trading functionality.
 """
 
-import click
-import json
 import asyncio
-import time
+import json
 import logging
+import time
 import traceback
 from pathlib import Path
+
+import click
 from rich.console import Console
-from rich.table import Table
 from rich.live import Live
+from rich.table import Table
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
-
 
 console = Console()
 logger = logging.getLogger(__name__)
 
 
-def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_pairs_override=None):
+def _initialize_agent(
+    config, engine, take_profit, stop_loss, autonomous, asset_pairs_override=None
+):
     """Initializes the trading agent and its components.
 
     Args:
@@ -38,44 +40,54 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
         autonomous: Whether to force autonomous execution
         asset_pairs_override: Optional list of asset pairs to override config (applies to both asset_pairs and watchlist)
     """
-    agent_config_data = config.get('agent', {})
+    agent_config_data = config.get("agent", {})
 
     # Apply asset pairs override if provided
     if asset_pairs_override:
-        agent_config_data['asset_pairs'] = asset_pairs_override
-        agent_config_data['watchlist'] = asset_pairs_override
-        console.print(f"[green]✓ Asset pairs and watchlist set to: {', '.join(asset_pairs_override)}[/green]")
+        agent_config_data["asset_pairs"] = asset_pairs_override
+        agent_config_data["watchlist"] = asset_pairs_override
+        console.print(
+            f"[green]✓ Asset pairs and watchlist set to: {', '.join(asset_pairs_override)}[/green]"
+        )
 
     agent_config = TradingAgentConfig(**agent_config_data)
 
     if autonomous:
         agent_config.autonomous.enabled = True
-        if hasattr(agent_config.autonomous, 'approval_required'):
+        if hasattr(agent_config.autonomous, "approval_required"):
             agent_config.autonomous.approval_required = False
-        elif hasattr(agent_config.autonomous, 'require_approval'):
+        elif hasattr(agent_config.autonomous, "require_approval"):
             agent_config.autonomous.require_approval = False
-        console.print("[yellow]--autonomous flag set: approvals disabled; running fully autonomous.[/yellow]")
+        console.print(
+            "[yellow]--autonomous flag set: approvals disabled; running fully autonomous.[/yellow]"
+        )
 
     if not agent_config.autonomous.enabled:
-        console.print("[yellow]Autonomous agent is not enabled in the configuration.[/yellow]")
+        console.print(
+            "[yellow]Autonomous agent is not enabled in the configuration.[/yellow]"
+        )
         # Offer to enable autonomous mode for this session instead of soft-failing.
         try:
             enable_now = click.confirm(
                 "Would you like to enable autonomous execution for this run?",
-                default=False
+                default=False,
             )
         except (click.Abort, KeyboardInterrupt, EOFError):
             enable_now = False
-            console.print("[yellow]Prompt cancelled. Autonomous execution not enabled for this run.[/yellow]")
+            console.print(
+                "[yellow]Prompt cancelled. Autonomous execution not enabled for this run.[/yellow]"
+            )
         # Unexpected exceptions propagate
 
         if enable_now:
             agent_config.autonomous.enabled = True
-            if hasattr(agent_config.autonomous, 'approval_required'):
+            if hasattr(agent_config.autonomous, "approval_required"):
                 agent_config.autonomous.approval_required = False
-            elif hasattr(agent_config.autonomous, 'require_approval'):
+            elif hasattr(agent_config.autonomous, "require_approval"):
                 agent_config.autonomous.require_approval = False
-            console.print("[yellow]Session-only autonomy enabled: approvals disabled.[/yellow]")
+            console.print(
+                "[yellow]Session-only autonomy enabled: approvals disabled.[/yellow]"
+            )
         else:
             # Signal-only mode: generate signals and send to Telegram/webhooks for approval
             # VALIDATION: Ensure notification channels are configured
@@ -125,13 +137,10 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
             console.print(
                 f"[cyan]✓ Running in signal-only mode with {', '.join(active_channels)} notifications.[/cyan]"
             )
-            console.print("[dim]  Trading signals will be sent for approval before execution.[/dim]")
-
-            # Keep agent_config.autonomous.enabled = False, which will trigger signal-only mode
-            # in the agent's execution logic
-            logger.info(
-                f"Signal-only mode validated. Active channels: {', '.join(active_channels)}"
+            console.print(
+                "[dim]Tip: pass `--autonomous` or set `agent.autonomous.enabled: true` in config to proceed without prompts.[/dim]"
             )
+            return None
 
     console.print("[green]✓ Agent configuration loaded.[/green]")
     console.print(f"  Portfolio Take Profit: {take_profit:.2%}")
@@ -177,95 +186,90 @@ def _initialize_agent(config, engine, take_profit, stop_loss, autonomous, asset_
 
     return agent
 
+
 async def _run_live_dashboard(engine, agent):
     """Runs the comprehensive live dashboard in the console."""
-    from finance_feedback_engine.cli.live_dashboard import LiveDashboard
     from finance_feedback_engine.cli.dashboard_aggregator import DashboardDataAggregator
+    from finance_feedback_engine.cli.live_dashboard import LiveDashboard
 
     # Initialize components
-    tm = getattr(engine, 'trade_monitor', None)
+    tm = getattr(engine, "trade_monitor", None)
     if not tm:
         logger.warning("TradeMonitor not available, dashboard may have limited data")
         return
 
-    memory_engine = getattr(engine, 'memory_engine', None)
+    memory_engine = getattr(engine, "memory_engine", None)
     if not memory_engine:
-        logger.warning("PortfolioMemoryEngine not available, performance stats will be limited")
+        logger.warning(
+            "PortfolioMemoryEngine not available, performance stats will be limited"
+        )
 
     aggregator = DashboardDataAggregator(
-        agent=agent,
-        engine=engine,
-        trade_monitor=tm,
-        portfolio_memory=memory_engine
+        agent=agent, engine=engine, trade_monitor=tm, portfolio_memory=memory_engine
     )
 
     # Get config for refresh rates
-    config = getattr(agent, 'config', None)
-    monitoring_cfg = config.monitoring if hasattr(config, 'monitoring') else {}
-    live_view_cfg = monitoring_cfg.get('live_view', {}) if isinstance(monitoring_cfg, dict) else {}
-    refresh_rates = live_view_cfg.get('refresh_rates', {
-        'fast': 10,
-        'medium': 30,
-        'slow': 60,
-        'lazy': 120
-    })
-
-    dashboard = LiveDashboard(
-        agent=agent,
-        aggregator=aggregator,
-        config=config
+    config = getattr(agent, "config", None)
+    monitoring_cfg = config.monitoring if hasattr(config, "monitoring") else {}
+    live_view_cfg = (
+        monitoring_cfg.get("live_view", {}) if isinstance(monitoring_cfg, dict) else {}
     )
+    refresh_rates = live_view_cfg.get(
+        "refresh_rates", {"fast": 10, "medium": 30, "slow": 60, "lazy": 120}
+    )
+
+    dashboard = LiveDashboard(agent=agent, aggregator=aggregator, config=config)
 
     # Track last update times for different refresh rates
     # Initialize to current time to avoid all updates firing on first iteration
     now = time.time()
     last_updates = {
-        'fast': now,      # Active trades, agent state
-        'medium': now,    # Portfolio, risk
-        'slow': now,      # Market pulse
-        'lazy': now       # Performance
+        "fast": now,  # Active trades, agent state
+        "medium": now,  # Portfolio, risk
+        "slow": now,  # Market pulse
+        "lazy": now,  # Performance
     }
 
     with Live(dashboard.render(), refresh_per_second=0.2) as live:
-        while not getattr(agent, 'stop_requested', False):
+        while not getattr(agent, "stop_requested", False):
             now = time.time()
             data_updated = False
 
             # Fast updates (10s): active trades, agent state
-            if now - last_updates['fast'] >= refresh_rates.get('fast', 10):
+            if now - last_updates["fast"] >= refresh_rates.get("fast", 10):
                 try:
                     dashboard.update_agent_status(aggregator.get_agent_status())
                     dashboard.update_active_trades(aggregator.get_active_trades())
-                    last_updates['fast'] = now
+                    last_updates["fast"] = now
                     data_updated = True
                 except Exception as e:
                     logger.debug(f"Error updating fast data: {e}")
 
             # Medium updates (30s): portfolio metrics
-            if now - last_updates['medium'] >= refresh_rates.get('medium', 30):
+            if now - last_updates["medium"] >= refresh_rates.get("medium", 30):
                 try:
                     dashboard.update_portfolio(aggregator.get_portfolio_snapshot())
                     dashboard.update_recent_decisions(aggregator.get_recent_decisions())
-                    last_updates['medium'] = now
+                    last_updates["medium"] = now
                     data_updated = True
                 except Exception as e:
                     logger.debug(f"Error updating medium data: {e}")
 
             # Slow updates (60s): market pulse
-            if now - last_updates['slow'] >= refresh_rates.get('slow', 60):
+            if now - last_updates["slow"] >= refresh_rates.get("slow", 60):
                 try:
                     dashboard.update_market_pulse(aggregator.get_market_pulse())
-                    last_updates['slow'] = now
+                    last_updates["slow"] = now
                     data_updated = True
                 except Exception as e:
                     logger.debug(f"Error updating slow data: {e}")
 
             # Lazy updates (120s): performance stats
-            if now - last_updates['lazy'] >= refresh_rates.get('lazy', 120):
+            if now - last_updates["lazy"] >= refresh_rates.get("lazy", 120):
                 try:
                     if memory_engine:
                         dashboard.update_performance(aggregator.get_performance_stats())
-                    last_updates['lazy'] = now
+                    last_updates["lazy"] = now
                     data_updated = True
                 except Exception as e:
                     logger.debug(f"Error updating performance data: {e}")
@@ -280,62 +284,76 @@ async def _run_live_dashboard(engine, agent):
             # Sleep 5s between update checks
             await asyncio.sleep(5.0)
 
+
 @click.command(name="run-agent")
 @click.option(
-    '--max-drawdown',
+    "--max-drawdown",
     type=float,
-    help='Legacy option accepted for test compatibility (ignored).'
+    help="Legacy option accepted for test compatibility (ignored).",
 )
 @click.option(
-    '--take-profit', '-tp',
+    "--take-profit",
+    "-tp",
     type=float,
     default=0.05,
     show_default=True,
-    help='Portfolio-level take-profit percentage (decimal, e.g., 0.05 for 5%).'
+    help="Portfolio-level take-profit percentage (decimal, e.g., 0.05 for 5%).",
 )
 @click.option(
-    '--stop-loss', '-sl',
+    "--stop-loss",
+    "-sl",
     type=float,
     default=0.02,
     show_default=True,
-    help='Portfolio-level stop-loss percentage (decimal, e.g., 0.02 for 2%).'
+    help="Portfolio-level stop-loss percentage (decimal, e.g., 0.02 for 2%).",
 )
 @click.option(
-    '--setup',
+    "--setup",
     is_flag=True,
-    help='Run interactive config setup before starting the agent.'
+    help="Run interactive config setup before starting the agent.",
 )
 @click.option(
-    '--autonomous',
+    "--autonomous",
     is_flag=True,
-    help='Override approval policy and force autonomous execution (no approvals).'
+    help="Override approval policy and force autonomous execution (no approvals).",
 )
 @click.option(
-    '--asset-pairs',
+    "--asset-pairs",
     type=str,
-    help='Comma-separated list of asset pairs to trade (e.g., "BTCUSD,ETHUSD,EURUSD"). Overrides config file.'
+    help='Comma-separated list of asset pairs to trade (e.g., "BTCUSD,ETHUSD,EURUSD"). Overrides config file.',
 )
 @click.pass_context
-def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs):
+def run_agent(
+    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs
+):
     """Starts the autonomous trading agent."""
     if 1 <= take_profit <= 100:
-        console.print(f"[yellow]Warning: Detected legacy take-profit percentage {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]")
+        console.print(
+            f"[yellow]Warning: Detected legacy take-profit percentage {take_profit}%. Converting to decimal: {take_profit/100:.3f}[/yellow]"
+        )
         take_profit /= 100
     elif take_profit > 100:
-        console.print(f"[red]Error: Invalid take-profit value {take_profit}. Please use a decimal (e.g., 0.05 for 5%).[/red]")
+        console.print(
+            f"[red]Error: Invalid take-profit value {take_profit}. Please use a decimal (e.g., 0.05 for 5%).[/red]"
+        )
         raise click.Abort()
     if 1 <= stop_loss <= 100:
-        console.print(f"[yellow]Warning: Detected legacy stop-loss percentage {stop_loss}%. Converting to decimal: {stop_loss/100:.3f}[/yellow]")
+        console.print(
+            f"[yellow]Warning: Detected legacy stop-loss percentage {stop_loss}%. Converting to decimal: {stop_loss/100:.3f}[/yellow]"
+        )
         stop_loss /= 100
     elif stop_loss > 100:
-        console.print(f"[red]Error: Invalid stop-loss value {stop_loss}. Stop-loss cannot exceed 100%.[/red]")
+        console.print(
+            f"[red]Error: Invalid stop-loss value {stop_loss}. Stop-loss cannot exceed 100%.[/red]"
+        )
         raise click.Abort()
 
     if setup:
         # Import config_editor here to avoid circular imports
         from finance_feedback_engine.cli.main import config_editor, load_tiered_config
+
         ctx.invoke(config_editor)
-        ctx.obj['config'] = load_tiered_config()
+        ctx.obj["config"] = load_tiered_config()
 
     console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
 
@@ -343,17 +361,22 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asse
     parsed_asset_pairs = None
     if asset_pairs:
         from finance_feedback_engine.utils.validation import standardize_asset_pair
+
         parsed_asset_pairs = [
             standardize_asset_pair(pair.strip())
-            for pair in asset_pairs.split(',')
+            for pair in asset_pairs.split(",")
             if pair.strip()
         ]
-        console.print(f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}")
+        console.print(
+            f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}"
+        )
 
     try:
-        config = ctx.obj['config']
+        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
-        agent = _initialize_agent(config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs)
+        agent = _initialize_agent(
+            config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs
+        )
 
         if not agent:
             return
@@ -361,8 +384,8 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asse
         console.print("[green]✓ Autonomous agent initialized.[/green]")
         console.print("[yellow]Press Ctrl+C to stop the agent.[/yellow]")
 
-        monitoring_cfg = config.get('monitoring', {})
-        enable_live_view = monitoring_cfg.get('enable_live_view', True)
+        monitoring_cfg = config.get("monitoring", {})
+        enable_live_view = monitoring_cfg.get("enable_live_view", True)
 
         # Use asyncio.run() for proper event loop management
         async def run_agent_tasks():
@@ -376,13 +399,15 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asse
         try:
             asyncio.run(run_agent_tasks())
         except KeyboardInterrupt:
-            console.print("\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]")
+            console.print(
+                "\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]"
+            )
             agent.stop()
             console.print("[bold green]✓ Agent stopped.[/bold green]")
 
     except Exception as e:
         console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
-        if ctx.obj.get('verbose'):
+        if ctx.obj.get("verbose"):
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -391,54 +416,66 @@ def run_agent(ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asse
 @click.pass_context
 def monitor(ctx):
     """Live trade monitoring commands."""
-    cfg = ctx.obj.get('config', {})
-    monitoring_cfg = cfg.get('monitoring', {})
-    manual_cli = monitoring_cfg.get('manual_cli', False)
+    cfg = ctx.obj.get("config", {})
+    monitoring_cfg = cfg.get("monitoring", {})
+    manual_cli = monitoring_cfg.get("manual_cli", False)
     if not manual_cli:
-        console.print("[yellow]Direct monitor control disabled (internal auto-start mode). Set monitoring.manual_cli: true to re-enable.[/yellow]")
+        console.print(
+            "[yellow]Direct monitor control disabled (internal auto-start mode). Set monitoring.manual_cli: true to re-enable.[/yellow]"
+        )
 
 
 @monitor.command()
 @click.pass_context
 def start(ctx):
     """Start live trade monitoring."""
-    cfg = ctx.obj.get('config', {})
-    monitoring_cfg = cfg.get('monitoring', {})
-    if monitoring_cfg.get('manual_cli', False):
-        console.print("[yellow]Manual start deprecated. Monitor auto-starts via config.monitoring.enabled.[/yellow]")
+    cfg = ctx.obj.get("config", {})
+    monitoring_cfg = cfg.get("monitoring", {})
+    if monitoring_cfg.get("manual_cli", False):
+        console.print(
+            "[yellow]Manual start deprecated. Monitor auto-starts via config.monitoring.enabled.[/yellow]"
+        )
     else:
-        console.print("[red]Monitor start blocked: set monitoring.manual_cli: true for legacy behavior (not recommended).[/red]")
+        console.print(
+            "[red]Monitor start blocked: set monitoring.manual_cli: true for legacy behavior (not recommended).[/red]"
+        )
 
 
-@monitor.command(name='status')
+@monitor.command(name="status")
 @click.pass_context
 def monitor_status(ctx):
     """Show live trade monitoring status."""
-    cfg = ctx.obj.get('config', {})
-    monitoring_cfg = cfg.get('monitoring', {})
-    if monitoring_cfg.get('manual_cli', False):
-        console.print("""[yellow]Status command deprecated; monitor runs internally.
-Use dashboard or decision context for monitoring insights.[/yellow]""")
+    cfg = ctx.obj.get("config", {})
+    monitoring_cfg = cfg.get("monitoring", {})
+    if monitoring_cfg.get("manual_cli", False):
+        console.print(
+            """[yellow]Status command deprecated; monitor runs internally.
+Use dashboard or decision context for monitoring insights.[/yellow]"""
+        )
     else:
-        console.print("[red]Monitor status disabled. Enable monitoring.manual_cli for legacy output (not recommended).[/red]")
+        console.print(
+            "[red]Monitor status disabled. Enable monitoring.manual_cli for legacy output (not recommended).[/red]"
+        )
 
 
 @monitor.command()
 @click.pass_context
 def metrics(ctx):
     """Show trade performance metrics."""
-    cfg = ctx.obj.get('config', {})
-    monitoring_cfg = cfg.get('monitoring', {})
-    if monitoring_cfg.get('manual_cli', False):
-        console.print("[yellow]Metrics command deprecated; aggregated metrics available internally.[/yellow]")
+    cfg = ctx.obj.get("config", {})
+    monitoring_cfg = cfg.get("monitoring", {})
+    if monitoring_cfg.get("manual_cli", False):
+        console.print(
+            "[yellow]Metrics command deprecated; aggregated metrics available internally.[/yellow]"
+        )
     else:
-        console.print("[red]Metrics disabled. Set monitoring.manual_cli true for legacy access (not recommended).[/red]")
+        console.print(
+            "[red]Metrics disabled. Set monitoring.manual_cli true for legacy access (not recommended).[/red]"
+        )
         try:
             metrics_dir = Path("data/trade_metrics")
             if not metrics_dir.exists():
-                console.print(
-                    "[yellow]No trade metrics found yet[/yellow]"
-                )
+                console.print("[yellow]No trade metrics found yet[/yellow]")
                 console.print(
                     "[dim]Metrics will appear here once trades complete[/dim]"
                 )
@@ -454,22 +491,24 @@ def metrics(ctx):
             all_metrics = []
             for file in metric_files:
                 try:
-                    with open(file, 'r') as f:
+                    with open(file, "r") as f:
                         metric = json.load(f)
                         all_metrics.append(metric)
                 except Exception as e:
-                    console.print(f"[dim]Warning: Could not load {file.name}: {e}[/dim]")
+                    console.print(
+                        f"[dim]Warning: Could not load {file.name}: {e}[/dim]"
+                    )
 
             if not all_metrics:
                 console.print("[yellow]No valid metrics found[/yellow]")
                 return
 
             # Calculate aggregate stats
-            winning = [m for m in all_metrics if m.get('realized_pnl', 0) > 0]
-            losing = [m for m in all_metrics if m.get('realized_pnl', 0) < 0]
-            breakeven = [m for m in all_metrics if m.get('realized_pnl', 0) == 0]
+            winning = [m for m in all_metrics if m.get("realized_pnl", 0) > 0]
+            losing = [m for m in all_metrics if m.get("realized_pnl", 0) < 0]
+            breakeven = [m for m in all_metrics if m.get("realized_pnl", 0) == 0]
 
-            total_pnl = sum(m.get('realized_pnl', 0) for m in all_metrics)
+            total_pnl = sum(m.get("realized_pnl", 0) for m in all_metrics)
             avg_pnl = total_pnl / len(all_metrics)
             win_rate = (len(winning) / len(all_metrics) * 100) if all_metrics else 0
 
@@ -481,10 +520,14 @@ def metrics(ctx):
             console.print(f"Win Rate:         {win_rate:.1f}%")
 
             pnl_color = "green" if total_pnl >= 0 else "red"
-            console.print(f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]")
+            console.print(
+                f"Total P&L:        [{pnl_color}]${total_pnl:,.2f}[/{pnl_color}]"
+            )
 
             avg_color = "green" if avg_pnl >= 0 else "red"
-            console.print(f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]")
+            console.print(
+                f"Average P&L:      [{avg_color}]${avg_pnl:,.2f}[/{avg_color}]"
+            )
 
             # Show recent trades
             console.print("\n[bold]Recent Trades:[/bold]\n")
@@ -498,33 +541,25 @@ def metrics(ctx):
 
             # Sort by exit time and show last 10
             sorted_metrics = sorted(
-                all_metrics,
-                key=lambda m: m.get('exit_time', ''),
-                reverse=True
+                all_metrics, key=lambda m: m.get("exit_time", ""), reverse=True
             )[:10]
 
             for m in sorted_metrics:
-                product = m.get('product_id', 'N/A')
-                side = m.get('side', 'N/A')
-                duration = m.get('holding_duration_hours', 0)
-                pnl = m.get('realized_pnl', 0)
-                reason = m.get('exit_reason', 'unknown')
+                product = m.get("product_id", "N/A")
+                side = m.get("side", "N/A")
+                duration = m.get("holding_duration_hours", 0)
+                pnl = m.get("realized_pnl", 0)
+                reason = m.get("exit_reason", "unknown")
 
                 pnl_color = "green" if pnl >= 0 else "red"
                 pnl_str = f"[{pnl_color}]${pnl:,.2f}[/{pnl_color}]"
 
-                table.add_row(
-                    product,
-                    side,
-                    f"{duration:.2f}h",
-                    pnl_str,
-                    reason
-                )
+                table.add_row(product, side, f"{duration:.2f}h", pnl_str, reason)
 
             console.print(table)
         except Exception as e:
             console.print(f"[red]Error:[/red] {e}")
-            if ctx.obj.get('verbose'):
+            if ctx.obj.get("verbose"):
                 console.print(traceback.format_exc())
 
 

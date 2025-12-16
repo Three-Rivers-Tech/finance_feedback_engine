@@ -1,8 +1,9 @@
 """Comprehensive tests for data providers (Alpha Vantage, Coinbase, Oanda, Unified)."""
 
-import pytest
 import asyncio
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 
 class TestAlphaVantageProvider:
@@ -11,53 +12,54 @@ class TestAlphaVantageProvider:
     @pytest.fixture
     def provider(self):
         """Create AlphaVantageProvider instance."""
-        from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
-        return AlphaVantageProvider(api_key='test_key')
+        from finance_feedback_engine.data_providers.alpha_vantage_provider import (
+            AlphaVantageProvider,
+        )
+
+        return AlphaVantageProvider(api_key="test_key")
 
     def test_initialization(self, provider):
         """Test provider initializes with API key."""
-        assert provider.api_key == 'test_key'
-        assert hasattr(provider, 'circuit_breaker')
+        assert provider.api_key == "test_key"
+        assert hasattr(provider, "circuit_breaker")
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_market_data_success(self, mock_get, provider):
         """Test successful market data retrieval."""
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'Time Series (Daily)': {
-                '2024-12-04': {
-                    '1. open': '100.00',
-                    '2. high': '105.00',
-                    '3. low': '99.00',
-                    '4. close': '103.00',
-                    '5. volume': '1000000'
+            "Time Series (Daily)": {
+                "2024-12-04": {
+                    "1. open": "100.00",
+                    "2. high": "105.00",
+                    "3. low": "99.00",
+                    "4. close": "103.00",
+                    "5. volume": "1000000",
                 }
             }
         }
         mock_get.return_value = mock_response
 
-        data = asyncio.run(provider.get_market_data('AAPL'))
+        data = asyncio.run(provider.get_market_data("AAPL"))
 
         assert data is not None
-        assert 'open' in data
-        assert 'close' in data
-        assert float(data['close']) == 103.00
+        assert "open" in data
+        assert "close" in data
+        assert float(data["close"]) == 103.00
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_market_data_rate_limit(self, mock_get, provider):
         """Test rate limiting handling."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'Note': 'API call frequency limit reached'
-        }
+        mock_response.json.return_value = {"Note": "API call frequency limit reached"}
         mock_get.return_value = mock_response
 
         with pytest.raises(Exception):
-            asyncio.run(provider.get_market_data('AAPL'))
+            asyncio.run(provider.get_market_data("AAPL"))
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_circuit_breaker_opens_on_failures(self, mock_get, provider):
         """Test circuit breaker opens after repeated failures."""
         mock_get.side_effect = Exception("API error")
@@ -65,46 +67,48 @@ class TestAlphaVantageProvider:
         # Trigger multiple failures
         for _ in range(5):
             try:
-                asyncio.run(provider.get_market_data('AAPL'))
+                asyncio.run(provider.get_market_data("AAPL"))
             except Exception:
                 pass
 
         # Circuit breaker should be open
-        assert provider.circuit_breaker.state.name in ['OPEN', 'HALF_OPEN']
+        assert provider.circuit_breaker.state.name in ["OPEN", "HALF_OPEN"]
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_comprehensive_market_data(self, mock_get, provider):
         """Test comprehensive data aggregation."""
         # Mock multiple API responses
         mock_response_market = Mock()
         mock_response_market.status_code = 200
         mock_response_market.json.return_value = {
-            'Time Series (Daily)': {
-                '2024-12-04': {
-                    '1. open': '100.00',
-                    '2. high': '105.00',
-                    '3. low': '99.00',
-                    '4. close': '103.00',
-                    '5. volume': '1000000'
+            "Time Series (Daily)": {
+                "2024-12-04": {
+                    "1. open": "100.00",
+                    "2. high": "105.00",
+                    "3. low": "99.00",
+                    "4. close": "103.00",
+                    "5. volume": "1000000",
                 }
             }
         }
 
         mock_get.return_value = mock_response_market
 
-        data = asyncio.run(provider.get_comprehensive_market_data('AAPL'))
+        data = asyncio.run(provider.get_comprehensive_market_data("AAPL"))
 
         assert data is not None
         # Check for either market_data key or direct price keys
-        assert 'open' in data or 'market_data' in data
+        assert "open" in data or "market_data" in data
 
     def test_api_key_required(self):
         """Test that API key is required."""
-        from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
+        from finance_feedback_engine.data_providers.alpha_vantage_provider import (
+            AlphaVantageProvider,
+        )
 
         with pytest.raises(Exception):
             provider = AlphaVantageProvider(api_key=None)
-            asyncio.run(provider.get_market_data('AAPL'))
+            asyncio.run(provider.get_market_data("AAPL"))
 
 
 class TestCoinbaseDataProvider:
@@ -113,20 +117,19 @@ class TestCoinbaseDataProvider:
     @pytest.fixture
     def provider(self):
         """Create CoinbaseDataProvider instance."""
-        from finance_feedback_engine.data_providers.coinbase_data import CoinbaseDataProvider
+        from finance_feedback_engine.data_providers.coinbase_data import (
+            CoinbaseDataProvider,
+        )
 
-        config = {
-            'api_key': 'test_key',
-            'api_secret': 'test_secret'
-        }
+        config = {"api_key": "test_key", "api_secret": "test_secret"}
 
         return CoinbaseDataProvider(config)
 
     def test_initialization(self, provider):
         """Test provider initializes with config."""
-        assert provider.api_key == 'test_key'
+        assert provider.api_key == "test_key"
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_candles(self, mock_get, provider):
         """Test getting candle data."""
         mock_response = Mock()
@@ -136,24 +139,18 @@ class TestCoinbaseDataProvider:
         ]
         mock_get.return_value = mock_response
 
-        candles = provider.get_candles('BTC-USD', granularity=86400)
+        candles = provider.get_candles("BTC-USD", granularity=86400)
 
         assert candles is not None
         assert isinstance(candles, list)
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_portfolio(self, mock_get, provider):
         """Test portfolio retrieval."""
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'accounts': [
-                {
-                    'currency': 'BTC',
-                    'balance': '1.5',
-                    'available': '1.5'
-                }
-            ]
+            "accounts": [{"currency": "BTC", "balance": "1.5", "available": "1.5"}]
         }
         mock_get.return_value = mock_response
 
@@ -161,13 +158,13 @@ class TestCoinbaseDataProvider:
 
         assert portfolio is not None
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_error_handling(self, mock_get, provider):
         """Test error handling for API failures."""
         mock_get.side_effect = Exception("Connection error")
 
         with pytest.raises(Exception):
-            provider.get_candles('BTC-USD')
+            provider.get_candles("BTC-USD")
 
 
 class TestOandaDataProvider:
@@ -178,53 +175,45 @@ class TestOandaDataProvider:
         """Create OandaDataProvider instance."""
         from finance_feedback_engine.data_providers.oanda_data import OandaDataProvider
 
-        config = {
-            'api_key': 'test_key',
-            'account_id': 'test_account'
-        }
+        config = {"api_key": "test_key", "account_id": "test_account"}
 
         return OandaDataProvider(config)
 
     def test_initialization(self, provider):
         """Test provider initializes with config."""
-        assert provider.api_key == 'test_key'
-        assert provider.account_id == 'test_account'
+        assert provider.api_key == "test_key"
+        assert provider.account_id == "test_account"
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_candles(self, mock_get, provider):
         """Test getting forex candle data."""
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'candles': [
+            "candles": [
                 {
-                    'time': '2024-12-04T10:00:00Z',
-                    'mid': {
-                        'o': '1.0500',
-                        'h': '1.0550',
-                        'l': '1.0480',
-                        'c': '1.0520'
-                    },
-                    'volume': 1000
+                    "time": "2024-12-04T10:00:00Z",
+                    "mid": {"o": "1.0500", "h": "1.0550", "l": "1.0480", "c": "1.0520"},
+                    "volume": 1000,
                 }
             ]
         }
         mock_get.return_value = mock_response
 
-        candles = provider.get_candles('EUR_USD', granularity='D')
+        candles = provider.get_candles("EUR_USD", granularity="D")
 
         assert candles is not None
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_account_summary(self, mock_get, provider):
         """Test account summary retrieval."""
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'account': {
-                'balance': '10000.00',
-                'unrealizedPL': '150.00',
-                'marginAvailable': '9000.00'
+            "account": {
+                "balance": "10000.00",
+                "unrealizedPL": "150.00",
+                "marginAvailable": "9000.00",
             }
         }
         mock_get.return_value = mock_response
@@ -240,33 +229,41 @@ class TestUnifiedDataProvider:
     @pytest.fixture
     def provider(self):
         """Create UnifiedDataProvider instance."""
-        from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
+        from finance_feedback_engine.data_providers.unified_data_provider import (
+            UnifiedDataProvider,
+        )
 
         config = {
-            'alpha_vantage': {'api_key': 'test_key'},
-            'coinbase': {'api_key': 'test_key', 'api_secret': 'test_secret'},
-            'oanda': {'api_key': 'test_key', 'account_id': 'test_account'}
+            "alpha_vantage": {"api_key": "test_key"},
+            "coinbase": {"api_key": "test_key", "api_secret": "test_secret"},
+            "oanda": {"api_key": "test_key", "account_id": "test_account"},
         }
 
-        with patch('finance_feedback_engine.data_providers.unified_data_provider.AlphaVantageProvider'):
-            with patch('finance_feedback_engine.data_providers.unified_data_provider.CoinbaseDataProvider'):
-                with patch('finance_feedback_engine.data_providers.unified_data_provider.OandaDataProvider'):
+        with patch(
+            "finance_feedback_engine.data_providers.unified_data_provider.AlphaVantageProvider"
+        ):
+            with patch(
+                "finance_feedback_engine.data_providers.unified_data_provider.CoinbaseDataProvider"
+            ):
+                with patch(
+                    "finance_feedback_engine.data_providers.unified_data_provider.OandaDataProvider"
+                ):
                     return UnifiedDataProvider(config)
 
     def test_initialization(self, provider):
         """Test unified provider initializes multiple sources."""
-        assert hasattr(provider, 'alpha_vantage')
+        assert hasattr(provider, "alpha_vantage")
 
     def test_get_market_data_routes_correctly(self, provider):
         """Test market data routing to correct provider."""
         # Mock alpha vantage
         provider.alpha_vantage = AsyncMock()
         provider.alpha_vantage.get_market_data.return_value = {
-            'open': 100.0,
-            'close': 103.0
+            "open": 100.0,
+            "close": 103.0,
         }
 
-        data = provider.get_market_data('AAPL')
+        data = provider.get_market_data("AAPL")
 
         assert data is not None
         provider.alpha_vantage.get_market_data.assert_called_once()
@@ -278,18 +275,16 @@ class TestUnifiedDataProvider:
             [1638360000, 50000.0, 51000.0, 49000.0, 50500.0, 100.0]
         ]
 
-        data = provider.get_market_data('BTC-USD')
+        data = provider.get_market_data("BTC-USD")
 
         assert data is not None or provider.coinbase.get_candles.called
 
     def test_get_forex_data_routes_to_oanda(self, provider):
         """Test forex data routes to Oanda."""
         provider.oanda = Mock()
-        provider.oanda.get_candles.return_value = {
-            'candles': []
-        }
+        provider.oanda.get_candles.return_value = {"candles": []}
 
-        data = provider.get_market_data('EUR_USD')
+        data = provider.get_market_data("EUR_USD")
 
         assert data is not None or provider.oanda.get_candles.called
 
@@ -303,7 +298,7 @@ class TestUnifiedDataProvider:
 
         # Should attempt fallback
         try:
-            data = provider.get_market_data('AAPL')
+            data = provider.get_market_data("AAPL")
         except ValueError:
             pass  # Expected if no fallback configured
 
@@ -316,33 +311,37 @@ class TestHistoricalDataProvider:
     @pytest.fixture
     def provider(self):
         """Create HistoricalDataProvider instance."""
-        from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
+        from finance_feedback_engine.data_providers.historical_data_provider import (
+            HistoricalDataProvider,
+        )
 
-        config = {
-            'alpha_vantage': {'api_key': 'test_key'}
-        }
+        config = {"alpha_vantage": {"api_key": "test_key"}}
 
-        with patch('finance_feedback_engine.data_providers.historical_data_provider.AlphaVantageProvider'):
+        with patch(
+            "finance_feedback_engine.data_providers.historical_data_provider.AlphaVantageProvider"
+        ):
             return HistoricalDataProvider(config)
 
     def test_initialization(self, provider):
         """Test provider initializes."""
-        assert hasattr(provider, 'alpha_vantage')
+        assert hasattr(provider, "alpha_vantage")
 
-    @patch('requests.get')
+    @patch("requests.get")
     def test_get_historical_data(self, mock_get, provider):
         """Test retrieving historical data with date range."""
         provider.alpha_vantage = AsyncMock()
         provider.alpha_vantage.get_market_data.return_value = {
-            'open': 100.0,
-            'close': 103.0,
-            'volume': 1000000
+            "open": 100.0,
+            "close": 103.0,
+            "volume": 1000000,
         }
 
-        data = provider.get_historical_data('AAPL', start_date='2024-01-01', end_date='2024-12-01')
+        data = provider.get_historical_data(
+            "AAPL", start_date="2024-01-01", end_date="2024-12-01"
+        )
 
         assert data is not None or provider.alpha_vantage.get_market_data.called
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

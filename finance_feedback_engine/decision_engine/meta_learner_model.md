@@ -125,7 +125,7 @@ Actual HOLD| 105 | 455
 
 ### Version 1.0.1 (Current)
 - **Release Date**: 2025-11-28
-- **Changes**: 
+- **Changes**:
   - Added comprehensive metadata and documentation
   - Improved feature scaling and normalization
   - Enhanced validation metrics tracking
@@ -158,7 +158,7 @@ Actual HOLD| 105 | 455
 
 ### Version 1.0.0
 - **Release Date**: 2025-11-20
-- **Changes**: 
+- **Changes**:
   - Converted model from multiclass (BUY/SELL/HOLD) to binary (BUY/HOLD) classification
   - Removed SELL predictions to reduce false positives and simplify exit logic
   - Added comprehensive metadata and documentation

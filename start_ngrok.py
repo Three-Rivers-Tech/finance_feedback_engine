@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Start ngrok tunnel and get public URL."""
 
-from pyngrok import ngrok
-import time
 import sys
-import yaml
+import tempfile
+import time
 from pathlib import Path
+
+import yaml
+from pyngrok import ngrok
 
 # Load auth token from config
 config_path = Path(__file__).parent / "config" / "config.local.yaml"
 with open(config_path) as f:
     config = yaml.safe_load(f)
-    auth_token = config.get('telegram', {}).get('ngrok_auth_token')
+    auth_token = config.get("telegram", {}).get("ngrok_auth_token")
     if not auth_token:
         print("❌ Error: ngrok_auth_token not found in config/config.local.yaml")
         sys.exit(1)
@@ -33,9 +35,11 @@ try:
     print(f"🔗 Webhook endpoint: {public_url}/webhook/telegram")
     print("\nPress Ctrl+C to stop the tunnel...")
 
-    # Write URL to file for later use
-    with open('/tmp/ngrok_url.txt', 'w') as f:
+    # Write URL to file in a secure temporary location
+    ngrok_url_path = Path(tempfile.mktemp(prefix="ngrok_url_", suffix=".txt"))
+    with open(ngrok_url_path, "w") as f:
         f.write(public_url)
+    print(f"🔗 URL saved to: {ngrok_url_path}")
 
     # Keep the tunnel alive
     try:

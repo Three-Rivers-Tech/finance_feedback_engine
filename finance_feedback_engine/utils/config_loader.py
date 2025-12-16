@@ -1,10 +1,12 @@
-import yaml
+import logging
 import os
 import re
-import logging
 from typing import Any, Dict
 
+import yaml
+
 logger = logging.getLogger(__name__)
+
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """
@@ -49,12 +51,12 @@ def load_config(config_path: str) -> Dict[str, Any]:
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
     # Enhanced regex to find ${ENV_VAR_NAME} patterns with optional default values
     # Pattern: ${ENV_VAR_NAME:default_value} or ${ENV_VAR_NAME}
-    env_var_pattern = re.compile(r'\$\{([^}]+)\}')
+    env_var_pattern = re.compile(r"\$\{([^}]+)\}")
 
     def resolve_env_vars(data: Any) -> Any:
         if isinstance(data, dict):
@@ -62,17 +64,24 @@ def load_config(config_path: str) -> Dict[str, Any]:
         elif isinstance(data, list):
             return [resolve_env_vars(elem) for elem in data]
         elif isinstance(data, str):
+
             def replace_env_var(match):
                 full_match = match.group(1)
 
                 # Handle default values: ENV_VAR_NAME:default_value
-                if ':' in full_match:
-                    env_var_name, default_value = full_match.split(':', 1)
+                if ":" in full_match:
+                    env_var_name, default_value = full_match.split(":", 1)
                     env_var_value = os.getenv(env_var_name.strip())
                     if env_var_value is None:
                         # Log a warning for using default values (as they might contain sensitive info)
-                        if 'key' in env_var_name.lower() or 'secret' in env_var_name.lower() or 'password' in env_var_name.lower():
-                            logger.warning(f"Using default value for sensitive environment variable '{env_var_name.strip()}'")
+                        if (
+                            "key" in env_var_name.lower()
+                            or "secret" in env_var_name.lower()
+                            or "password" in env_var_name.lower()
+                        ):
+                            logger.warning(
+                                f"Using default value for sensitive environment variable '{env_var_name.strip()}'"
+                            )
                         return default_value.strip()
                     return env_var_value.strip()
                 else:
@@ -84,10 +93,12 @@ def load_config(config_path: str) -> Dict[str, Any]:
                             f"'{config_path}' is not set. Please set it."
                         )
                     return env_var_value.strip()
+
             return env_var_pattern.sub(replace_env_var, data)
         return data
 
     return resolve_env_vars(config)
+
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":

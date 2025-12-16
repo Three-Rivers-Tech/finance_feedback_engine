@@ -136,14 +136,14 @@ platform = MockTradingPlatform(initial_balance={'FUTURES_USD': 10000.0})
 {
     # OHLCV
     'open': 100.0, 'high': 105.0, 'low': 98.0, 'close': 102.0, 'volume': 1000000,
-    
+
     # Enrichments
     'price_range': 7.0, 'price_range_pct': 6.86, 'body_size': 2.0,
     'trend': 'bullish', 'is_bullish': True,
-    
+
     # Technical indicators (dummy)
     'rsi': 50.0, 'macd': 0.0, 'bbands_upper': 107.0,
-    
+
     # Metadata
     'asset_pair': 'BTCUSD', 'provider': 'mock_live', 'timestamp': '...'
 }
@@ -288,8 +288,8 @@ MockLiveProvider is production-ready and fully tested. It provides a robust foun
 
 ---
 
-**Status**: ✅ COMPLETE  
-**Tests**: 32/32 passing  
-**Documentation**: Complete  
-**Demo**: All scenarios working  
+**Status**: ✅ COMPLETE
+**Tests**: 32/32 passing
+**Documentation**: Complete
+**Demo**: All scenarios working
 **Ready for**: Production use in backtesting workflows

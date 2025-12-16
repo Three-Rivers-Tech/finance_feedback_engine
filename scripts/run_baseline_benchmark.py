@@ -2,8 +2,8 @@
 """Run baseline performance benchmark for the trading agent."""
 
 import asyncio
-import sys
 import os
+import sys
 from pathlib import Path
 
 # Add parent directory to path
@@ -30,22 +30,24 @@ async def main():
     # Load configuration
     print("\n📋 Loading configuration...")
     try:
-        config = load_config('config/config.yaml')
+        config = load_config("config/config.yaml")
         print("✓ Configuration loaded successfully")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
         return 1
 
     # Benchmark parameters
-    asset_pairs = ['BTCUSD', 'ETHUSD']  # Default assets
-    start_date = '2024-01-01'
-    end_date = '2024-12-01'
+    asset_pairs = ["BTCUSD", "ETHUSD"]  # Default assets
+    start_date = "2024-01-01"
+    end_date = "2024-12-01"
 
     print(f"\n🎯 Benchmark Configuration:")
     print(f"   Assets:      {', '.join(asset_pairs)}")
     print(f"   Start Date:  {start_date}")
     print(f"   End Date:    {end_date}")
-    print(f"   AI Provider: {config.get('decision_engine', {}).get('ai_provider', 'unknown')}")
+    print(
+        f"   AI Provider: {config.get('decision_engine', {}).get('ai_provider', 'unknown')}"
+    )
 
     # Confirm
     print("\n⏳ Starting benchmark... (This may take several minutes)")
@@ -56,7 +58,7 @@ async def main():
             asset_pairs=asset_pairs,
             start_date=start_date,
             end_date=end_date,
-            config=config
+            config=config,
         )
 
         # Display results
@@ -88,8 +90,8 @@ async def main():
         # Baseline comparisons
         if report.vs_buy_hold:
             print(f"\n  vs Buy & Hold Strategy:")
-            sharpe_imp = report.vs_buy_hold['sharpe_improvement']
-            return_imp = report.vs_buy_hold['return_improvement']
+            sharpe_imp = report.vs_buy_hold["sharpe_improvement"]
+            return_imp = report.vs_buy_hold["return_improvement"]
 
             print(f"    Sharpe Improvement:  {sharpe_imp:+.2f}")
             print(f"    Return Improvement:  {return_imp:+.2f}%")
@@ -101,7 +103,7 @@ async def main():
 
         if report.vs_ma_crossover:
             print(f"\n  vs Moving Average Crossover:")
-            sharpe_imp = report.vs_ma_crossover['sharpe_improvement']
+            sharpe_imp = report.vs_ma_crossover["sharpe_improvement"]
             print(f"    Sharpe Improvement:  {sharpe_imp:+.2f}")
 
             if sharpe_imp > 0:
@@ -113,9 +115,11 @@ async def main():
         if report.backtest_scenarios:
             print(f"\n  Scenario Breakdown:")
             for scenario_name, metrics in report.backtest_scenarios.items():
-                print(f"    {scenario_name:20s}  Sharpe: {metrics.sharpe_ratio:>6.2f}  "
-                      f"Win%: {metrics.win_rate:>6.1%}  "
-                      f"DD: {metrics.max_drawdown:>6.2f}%")
+                print(
+                    f"    {scenario_name:20s}  Sharpe: {metrics.sharpe_ratio:>6.2f}  "
+                    f"Win%: {metrics.win_rate:>6.1%}  "
+                    f"DD: {metrics.max_drawdown:>6.2f}%"
+                )
 
         # Recommendations
         print(f"\n  💡 Recommendations:")
@@ -138,7 +142,9 @@ async def main():
 
         # Save location
         print(f"\n  💾 Report saved to:")
-        print(f"    data/benchmarks/{report.name}_{report.timestamp.strftime('%Y%m%d_%H%M%S')}.json")
+        print(
+            f"    data/benchmarks/{report.name}_{report.timestamp.strftime('%Y%m%d_%H%M%S')}.json"
+        )
 
         print("\n" + "=" * 70)
         print("  ✅ Benchmark complete!")
@@ -148,7 +154,9 @@ async def main():
         print(f"\n  📚 Next Steps:")
         print(f"    1. Review detailed report in data/benchmarks/")
         print(f"    2. Run improvement tests: python scripts/test_improvement.py")
-        print(f"    3. Monitor live performance: python scripts/monitor_live_performance.py")
+        print(
+            f"    3. Monitor live performance: python scripts/monitor_live_performance.py"
+        )
         print(f"    4. See full guide: docs/QUICK_START_PERFORMANCE_IMPROVEMENT.md")
 
         print()  # Final newline
@@ -158,10 +166,11 @@ async def main():
     except Exception as e:
         print(f"\n✗ Benchmark failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

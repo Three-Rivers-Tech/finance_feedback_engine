@@ -133,20 +133,20 @@ from finance_feedback_engine.utils.validation import validate_data_freshness
 def get_market_data_with_freshness_check(asset_pair, asset_type):
     """Fetch market data and validate freshness."""
     market_data = fetch_from_api(asset_pair)  # Your API call
-    
+
     is_fresh, age, warning = validate_data_freshness(
         market_data["timestamp"],
         asset_type=asset_type,
         timeframe="intraday" if asset_type == "stocks" else None
     )
-    
+
     if not is_fresh:
         logger.error(f"Rejecting stale data: {warning}")
         return None  # Skip decision
-    
+
     if warning:
         logger.warning(warning)  # Log but continue
-    
+
     logger.info(f"Data age: {age}")
     return market_data
 ```
@@ -162,10 +162,10 @@ def backtest_with_data_validation(historical_bars):
             asset_type="stocks",
             timeframe="daily"
         )
-        
+
         if not is_fresh:
             print(f"Warning: {bar['timestamp']} data exceeds threshold. {warning}")
-        
+
         process_bar(bar)
 ```
 
@@ -182,15 +182,15 @@ def validate_trade_with_freshness(decision, context, market_data):
         market_data["timestamp"],
         asset_type=context.get("asset_type", "crypto")
     )
-    
+
     if not is_fresh:
         logger.error(f"Trade blocked: {msg}")
         return False, msg
-    
+
     # Step 2: Check risk constraints
     gatekeeper = RiskGatekeeper()
     is_valid, risk_msg = gatekeeper.validate_trade(decision, context)
-    
+
     return is_valid, risk_msg if is_valid else msg
 ```
 

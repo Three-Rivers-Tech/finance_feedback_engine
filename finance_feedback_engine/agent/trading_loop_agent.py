@@ -3,24 +3,29 @@
 import asyncio
 import datetime
 import logging
+import queue
 import time
 from enum import Enum, auto
-from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+
 from finance_feedback_engine.agent.config import TradingAgentConfig
-from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
 
 logger = logging.getLogger(__name__)
 
+
 class AgentState(Enum):
     """Represents the current state of the trading agent."""
+
     IDLE = auto()
     PERCEPTION = auto()
     REASONING = auto()
     RISK_CHECK = auto()
     EXECUTION = auto()
     LEARNING = auto()
+
 
 class TradingLoopAgent:
     """
@@ -40,6 +45,7 @@ class TradingLoopAgent:
         self.trade_monitor = trade_monitor
         self.portfolio_memory = portfolio_memory
         self.trading_platform = trading_platform
+
         # Initialize RiskGatekeeper with configured risk parameters
         # Normalize percentage-like inputs: allow users to input >1 as whole percentages
         def _normalize_pct(value: float) -> float:
@@ -58,7 +64,7 @@ class TradingLoopAgent:
         self.is_running = False
         self.state = AgentState.IDLE
         self._current_decision = None
-        self._current_decisions = [] # New: to store multiple decisions
+        self._current_decisions = []  # New: to store multiple decisions
         # Track analysis failures and their timestamps for time-based decay
         self.analysis_failures = {}  # {failure_key: count}
         self.analysis_failure_timestamps = {}  # {failure_key: last_failure_datetime}
@@ -67,18 +73,18 @@ class TradingLoopAgent:
 
         # Enhanced backtesting and risk metrics tracking
         self._performance_metrics = {
-            'total_pnl': 0.0,
-            'winning_trades': 0,
-            'losing_trades': 0,
-            'total_trades': 0,
-            'win_rate': 0.0,
-            'avg_win': 0.0,
-            'avg_loss': 0.0,
-            'max_drawdown': 0.0,
-            'sharpe_ratio': 0.0,
-            'current_streak': 0,
-            'best_streak': 0,
-            'worst_streak': 0
+            "total_pnl": 0.0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "total_trades": 0,
+            "win_rate": 0.0,
+            "avg_win": 0.0,
+            "avg_loss": 0.0,
+            "max_drawdown": 0.0,
+            "sharpe_ratio": 0.0,
+            "current_streak": 0,
+            "best_streak": 0,
+            "worst_streak": 0,
         }
 
         # Startup recovery tracking
@@ -88,11 +94,14 @@ class TradingLoopAgent:
         self._max_startup_retries = 3
 
         # For preventing infinite loops on rejected trades
-        self._rejected_decisions_cache = {} # {decision_id: (rejection_timestamp, asset_pair)}
-        self._rejection_cooldown_seconds = 300 # 5 minutes cooldown
+        self._rejected_decisions_cache = (
+            {}
+        )  # {decision_id: (rejection_timestamp, asset_pair)}
+        self._rejection_cooldown_seconds = 300  # 5 minutes cooldown
 
         # Dashboard event queue for real-time updates
         import queue
+
         self._dashboard_event_queue = queue.Queue(maxsize=100)
         self._cycle_count = 0
         self._start_time = None  # Will be set in run()
@@ -150,8 +159,9 @@ class TradingLoopAgent:
         """
         import hashlib
         import time
-        from finance_feedback_engine.utils.validation import standardize_asset_pair
+
         from finance_feedback_engine.memory.portfolio_memory import TradeOutcome
+        from finance_feedback_engine.utils.validation import standardize_asset_pair
 
         logger.info("Starting position recovery from trading platform...")
 
@@ -166,74 +176,93 @@ class TradingLoopAgent:
                 positions = []
 
                 # Check if this is UnifiedTradingPlatform (has platform_breakdowns)
-                if 'platform_breakdowns' in portfolio:
-                    for platform_name, platform_data in portfolio['platform_breakdowns'].items():
-
+                if "platform_breakdowns" in portfolio:
+                    for platform_name, platform_data in portfolio[
+                        "platform_breakdowns"
+                    ].items():
                         # Coinbase futures positions
-                        if 'futures_positions' in platform_data:
-                            for pos in platform_data['futures_positions']:
-                                contracts = pos.get('contracts', 0)
+                        if "futures_positions" in platform_data:
+                            for pos in platform_data["futures_positions"]:
+                                contracts = pos.get("contracts", 0)
                                 if contracts and float(contracts) != 0:
-                                    positions.append({
-                                        'platform': f'{platform_name}_futures',
-                                        'product_id': pos.get('product_id', 'UNKNOWN'),
-                                        'side': pos.get('side', 'UNKNOWN'),
-                                        'size': float(contracts),
-                                        'entry_price': pos.get('entry_price', 0),
-                                        'current_price': pos.get('current_price', 0),
-                                        'unrealized_pnl': pos.get('unrealized_pnl', 0),
-                                        'leverage': pos.get('leverage', 1)
-                                    })
+                                    positions.append(
+                                        {
+                                            "platform": f"{platform_name}_futures",
+                                            "product_id": pos.get(
+                                                "product_id", "UNKNOWN"
+                                            ),
+                                            "side": pos.get("side", "UNKNOWN"),
+                                            "size": float(contracts),
+                                            "entry_price": pos.get("entry_price", 0),
+                                            "current_price": pos.get(
+                                                "current_price", 0
+                                            ),
+                                            "unrealized_pnl": pos.get(
+                                                "unrealized_pnl", 0
+                                            ),
+                                            "leverage": pos.get("leverage", 1),
+                                        }
+                                    )
 
                         # Oanda forex positions
-                        if 'positions' in platform_data:
-                            for pos in platform_data['positions']:
-                                units = pos.get('units', 0)
+                        if "positions" in platform_data:
+                            for pos in platform_data["positions"]:
+                                units = pos.get("units", 0)
                                 if units and float(units) != 0:
-                                    positions.append({
-                                        'platform': f'{platform_name}_forex',
-                                        'product_id': pos.get('instrument', 'UNKNOWN'),
-                                        'side': pos.get('position_type', 'UNKNOWN'),
-                                        'size': abs(float(units)),
-                                        'entry_price': 0,  # Oanda doesn't provide avg entry in summary
-                                        'current_price': 0,
-                                        'unrealized_pnl': pos.get('unrealized_pl', 0),
-                                        'leverage': 1
-                                    })
+                                    positions.append(
+                                        {
+                                            "platform": f"{platform_name}_forex",
+                                            "product_id": pos.get(
+                                                "instrument", "UNKNOWN"
+                                            ),
+                                            "side": pos.get("position_type", "UNKNOWN"),
+                                            "size": abs(float(units)),
+                                            "entry_price": 0,  # Oanda doesn't provide avg entry in summary
+                                            "current_price": 0,
+                                            "unrealized_pnl": pos.get(
+                                                "unrealized_pl", 0
+                                            ),
+                                            "leverage": 1,
+                                        }
+                                    )
 
                 # Direct platform access (non-unified)
                 else:
                     # Coinbase Advanced: futures_positions
-                    if 'futures_positions' in portfolio:
-                        for pos in portfolio['futures_positions']:
-                            contracts = pos.get('contracts', 0)
+                    if "futures_positions" in portfolio:
+                        for pos in portfolio["futures_positions"]:
+                            contracts = pos.get("contracts", 0)
                             if contracts and float(contracts) != 0:
-                                positions.append({
-                                    'platform': 'coinbase',
-                                    'product_id': pos.get('product_id', 'UNKNOWN'),
-                                    'side': pos.get('side', 'UNKNOWN'),
-                                    'size': float(contracts),
-                                    'entry_price': pos.get('entry_price', 0),
-                                    'current_price': pos.get('current_price', 0),
-                                    'unrealized_pnl': pos.get('unrealized_pnl', 0),
-                                    'leverage': pos.get('leverage', 1)
-                                })
+                                positions.append(
+                                    {
+                                        "platform": "coinbase",
+                                        "product_id": pos.get("product_id", "UNKNOWN"),
+                                        "side": pos.get("side", "UNKNOWN"),
+                                        "size": float(contracts),
+                                        "entry_price": pos.get("entry_price", 0),
+                                        "current_price": pos.get("current_price", 0),
+                                        "unrealized_pnl": pos.get("unrealized_pnl", 0),
+                                        "leverage": pos.get("leverage", 1),
+                                    }
+                                )
 
                     # Oanda: positions
-                    if 'positions' in portfolio:
-                        for pos in portfolio['positions']:
-                            units = pos.get('units', 0)
+                    if "positions" in portfolio:
+                        for pos in portfolio["positions"]:
+                            units = pos.get("units", 0)
                             if units and float(units) != 0:
-                                positions.append({
-                                    'platform': 'oanda',
-                                    'product_id': pos.get('instrument', 'UNKNOWN'),
-                                    'side': pos.get('position_type', 'UNKNOWN'),
-                                    'size': abs(float(units)),
-                                    'entry_price': 0,
-                                    'current_price': 0,
-                                    'unrealized_pnl': pos.get('unrealized_pl', 0),
-                                    'leverage': 1
-                                })
+                                positions.append(
+                                    {
+                                        "platform": "oanda",
+                                        "product_id": pos.get("instrument", "UNKNOWN"),
+                                        "side": pos.get("position_type", "UNKNOWN"),
+                                        "size": abs(float(units)),
+                                        "entry_price": 0,
+                                        "current_price": 0,
+                                        "unrealized_pnl": pos.get("unrealized_pl", 0),
+                                        "leverage": 1,
+                                    }
+                                )
 
                 logger.info(f"Found {len(positions)} open position(s) on platform")
 
@@ -241,19 +270,25 @@ class TradingLoopAgent:
                 for pos in positions:
                     try:
                         # Standardize asset pair
-                        product_id = pos['product_id']
+                        product_id = pos["product_id"]
                         asset_pair = standardize_asset_pair(product_id)
 
                         # Generate synthetic decision ID
                         timestamp = datetime.datetime.utcnow().isoformat()
-                        hash_input = f"{product_id}_{timestamp}_{pos['platform']}_{pos['size']}"
-                        hash_suffix = hashlib.md5(hash_input.encode()).hexdigest()[:8]
-                        decision_id = f"RECOVERED_{asset_pair}_{int(time.time())}_{hash_suffix}"
+                        hash_input = (
+                            f"{product_id}_{timestamp}_{pos['platform']}_{pos['size']}"
+                        )
+                        hash_suffix = hashlib.sha256(hash_input.encode()).hexdigest()[
+                            :8
+                        ]
+                        decision_id = (
+                            f"RECOVERED_{asset_pair}_{int(time.time())}_{hash_suffix}"
+                        )
 
                         # Get entry price (fallback to current price if unavailable)
-                        entry_price = pos['entry_price']
+                        entry_price = pos["entry_price"]
                         if entry_price == 0:
-                            entry_price = pos['current_price']
+                            entry_price = pos["current_price"]
                             if entry_price == 0:
                                 logger.warning(
                                     f"No entry price available for {asset_pair}, "
@@ -261,49 +296,60 @@ class TradingLoopAgent:
                                 )
                                 entry_price = "UNKNOWN"
 
-                        # Build synthetic decision record
+                        # Build synthetic decision record (with new fields)
                         synthetic_decision = {
-                            'id': decision_id,
-                            'asset_pair': asset_pair,
-                            'action': 'HOLD',
-                            'confidence': 50,
-                            'timestamp': timestamp,
-                            'entry_price': entry_price if entry_price != "UNKNOWN" else None,
-                            'recommended_position_size': pos['size'],
-                            'position_size': pos['size'],
-                            'signal_only': True,
-                            'ai_provider': 'recovery',
-                            'reasoning': f"Position recovered from {pos['platform']} platform on startup",
-                            'metadata': {
-                                'recovery_source': 'platform_startup',
-                                'platform': pos['platform'],
-                                'original_product_id': product_id,
-                                'side': pos['side'],
-                                'original_unrealized_pnl': pos['unrealized_pnl'],
-                                'leverage': pos['leverage'],
-                                'entry_price_status': 'known' if entry_price != "UNKNOWN" else 'unknown'
-                            }
+                            "id": decision_id,
+                            "asset_pair": asset_pair,
+                            "action": "HOLD",
+                            "confidence": 50,
+                            "timestamp": timestamp,
+                            "entry_price": (
+                                entry_price if entry_price != "UNKNOWN" else None
+                            ),
+                            "recommended_position_size": pos["size"],
+                            "position_size": pos["size"],
+                            "signal_only": True,
+                            "ai_provider": "recovery",
+                            "reasoning": f"Position recovered from {pos['platform']} platform on startup",
+                            "metadata": {
+                                "recovery_source": "platform_startup",
+                                "platform": pos["platform"],
+                                "original_product_id": product_id,
+                                "side": pos["side"],
+                                "original_unrealized_pnl": pos["unrealized_pnl"],
+                                "leverage": pos["leverage"],
+                                "entry_price_status": (
+                                    "known" if entry_price != "UNKNOWN" else "unknown"
+                                ),
+                                "current_price": pos.get("current_price"),  # New
+                                "avg_entry_price": pos.get("avg_entry_price"),  # New
+                                "averagePrice": pos.get("averagePrice"),  # New (Oanda)
+                            },
                         }
 
                         # Save decision to store
-                        if hasattr(self.engine, 'decision_store'):
+                        if hasattr(self.engine, "decision_store"):
                             self.engine.decision_store.save_decision(synthetic_decision)
-                            logger.info(f"Saved synthetic decision {decision_id} for {asset_pair}")
+                            logger.info(
+                                f"Saved synthetic decision {decision_id} for {asset_pair}"
+                            )
 
                         # Create partial TradeOutcome for portfolio memory
                         outcome = TradeOutcome(
                             decision_id=decision_id,
                             asset_pair=asset_pair,
-                            action='HOLD',
+                            action="HOLD",
                             entry_timestamp=timestamp,
                             exit_timestamp=None,
-                            entry_price=float(entry_price) if entry_price != "UNKNOWN" else 0.0,
+                            entry_price=(
+                                float(entry_price) if entry_price != "UNKNOWN" else 0.0
+                            ),
                             exit_price=None,
-                            position_size=pos['size'],
+                            position_size=pos["size"],
                             realized_pnl=None,
                             pnl_percentage=None,
                             holding_period_hours=None,
-                            ai_provider='recovery',
+                            ai_provider="recovery",
                             ensemble_providers=None,
                             decision_confidence=50,
                             market_sentiment=None,
@@ -311,7 +357,7 @@ class TradingLoopAgent:
                             price_trend=None,
                             was_profitable=None,
                             hit_stop_loss=False,
-                            hit_take_profit=False
+                            hit_take_profit=False,
                         )
 
                         # Append to portfolio memory (rebuild from platform truth)
@@ -319,29 +365,35 @@ class TradingLoopAgent:
                         logger.info(f"Added {asset_pair} to portfolio memory")
 
                         # Associate with trade monitor for tracking
-                        self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+                        self.trade_monitor.associate_decision_to_trade(
+                            decision_id, asset_pair
+                        )
                         logger.info(f"Associated {asset_pair} with trade monitor")
 
                         # Store position metadata for later reference
-                        self._recovered_positions.append({
-                            'decision_id': decision_id,
-                            'asset_pair': asset_pair,
-                            'side': pos['side'],
-                            'size': pos['size'],
-                            'unrealized_pnl': pos['unrealized_pnl'],
-                            'platform': pos['platform']
-                        })
+                        self._recovered_positions.append(
+                            {
+                                "decision_id": decision_id,
+                                "asset_pair": asset_pair,
+                                "side": pos["side"],
+                                "size": pos["size"],
+                                "unrealized_pnl": pos["unrealized_pnl"],
+                                "platform": pos["platform"],
+                            }
+                        )
 
                     except Exception as e:
                         logger.error(
                             f"Error processing position {pos.get('product_id', 'UNKNOWN')}: {e}",
-                            exc_info=True
+                            exc_info=True,
                         )
                         continue
 
                 # Log recovery summary
                 if self._recovered_positions:
-                    total_pnl = sum(p['unrealized_pnl'] for p in self._recovered_positions)
+                    total_pnl = sum(
+                        p["unrealized_pnl"] for p in self._recovered_positions
+                    )
                     logger.info(
                         f"✓ Position recovery complete: {len(self._recovered_positions)} position(s), "
                         f"Total unrealized P&L: ${total_pnl:.2f}"
@@ -358,14 +410,14 @@ class TradingLoopAgent:
                 if self._startup_retry_count >= self._max_startup_retries:
                     logger.error(
                         f"Failed to recover positions after {self._max_startup_retries} attempts: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     # Continue anyway with empty recovery
                     self._startup_complete.set()
                     return
                 else:
                     # Exponential backoff
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     logger.warning(
                         f"Position recovery attempt {attempt + 1} failed: {e}. "
                         f"Retrying in {delay:.1f}s..."
@@ -389,8 +441,7 @@ class TradingLoopAgent:
         # Block until position recovery completes
         try:
             await asyncio.wait_for(
-                self._recover_existing_positions(),
-                timeout=60.0  # 60 second timeout
+                self._recover_existing_positions(), timeout=60.0  # 60 second timeout
             )
         except asyncio.TimeoutError:
             logger.error(
@@ -428,23 +479,31 @@ class TradingLoopAgent:
         logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
 
         # Emit event for dashboard
-        self._emit_dashboard_event({
-            'type': 'state_transition',
-            'from': old_state.name,
-            'to': new_state.name,
-            'timestamp': time.time()
-        })
+        self._emit_dashboard_event(
+            {
+                "type": "state_transition",
+                "from": old_state.name,
+                "to": new_state.name,
+                "timestamp": time.time(),
+            }
+        )
 
     def _cleanup_rejected_cache(self):
         """
         Clean up expired entries from the rejection cache.
         """
         import datetime
+
         current_time = datetime.datetime.now()
         expired_keys = []
 
-        for decision_id, (rejection_time, asset_pair) in self._rejected_decisions_cache.items():
-            if (current_time - rejection_time).total_seconds() > self._rejection_cooldown_seconds:
+        for decision_id, (
+            rejection_time,
+            asset_pair,
+        ) in self._rejected_decisions_cache.items():
+            if (
+                current_time - rejection_time
+            ).total_seconds() > self._rejection_cooldown_seconds:
                 expired_keys.append(decision_id)
 
         for key in expired_keys:
@@ -458,12 +517,15 @@ class TradingLoopAgent:
         Args:
             event: Event dictionary with type, timestamp, and event-specific fields
         """
-        if hasattr(self, '_dashboard_event_queue'):
+        if hasattr(self, "_dashboard_event_queue"):
             try:
                 self._dashboard_event_queue.put_nowait(event)
-            except Exception:
-                # Queue full or other error - silently drop event
-                pass
+            except queue.Full:
+                # Queue is full - log and drop event
+                logger.warning("Dashboard event queue is full, dropping event")
+            except Exception as e:
+                # Other exception during queue operation - log it
+                logger.warning(f"Failed to emit dashboard event: {e}")
 
     async def handle_idle_state(self):
         """
@@ -485,12 +547,17 @@ class TradingLoopAgent:
         logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
 
         # --- Safety Check: Portfolio Kill Switch ---
-        if self.config.kill_switch_loss_pct is not None and self.config.kill_switch_loss_pct > 0:
+        if (
+            self.config.kill_switch_loss_pct is not None
+            and self.config.kill_switch_loss_pct > 0
+        ):
             try:
                 # Assuming get_monitoring_context() without args gives portfolio overview
-                portfolio_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+                portfolio_context = (
+                    self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+                )
                 # Assuming the context contains 'unrealized_pnl_percent'
-                portfolio_pnl_pct = portfolio_context.get('unrealized_pnl_percent', 0.0)
+                portfolio_pnl_pct = portfolio_context.get("unrealized_pnl_percent", 0.0)
 
                 if portfolio_pnl_pct < -self.config.kill_switch_loss_pct:
                     logger.critical(
@@ -501,12 +568,15 @@ class TradingLoopAgent:
                     self.stop()
                     return  # Halt immediately
             except Exception as e:
-                logger.error(f"Could not check portfolio kill switch due to an error: {e}", exc_info=True)
+                logger.error(
+                    f"Could not check portfolio kill switch due to an error: {e}",
+                    exc_info=True,
+                )
 
         # --- Additional Performance-based Kill Switches ---
 
         # Check for excessive consecutive losses
-        current_streak = self._performance_metrics['current_streak']
+        current_streak = self._performance_metrics["current_streak"]
         if current_streak < -5:  # 6 or more consecutive losses
             logger.critical(
                 f"PERFORMANCE KILL SWITCH TRIGGERED! "
@@ -516,8 +586,8 @@ class TradingLoopAgent:
             return
 
         # Check for deteriorating win rate over time
-        if self._performance_metrics['total_trades'] >= 20:
-            win_rate = self._performance_metrics['win_rate']
+        if self._performance_metrics["total_trades"] >= 20:
+            win_rate = self._performance_metrics["win_rate"]
             if win_rate < 25:  # Less than 25% win rate with sufficient history
                 logger.critical(
                     f"PERFORMANCE KILL SWITCH TRIGGERED! "
@@ -527,14 +597,16 @@ class TradingLoopAgent:
                 return
 
         # Check for negative trend in performance
-        if self._performance_metrics['total_trades'] >= 50:
+        if self._performance_metrics["total_trades"] >= 50:
             # If total P&L is significantly negative relative to risk taken
-            total_pnl = self._performance_metrics['total_pnl']
+            total_pnl = self._performance_metrics["total_pnl"]
             # This is a simplified check - in practice, you might want to calculate
             # risk-adjusted returns or compare to a benchmark
             # We'll assume a default threshold if no initial balance is available
-            balance_threshold = getattr(self.config, 'initial_balance', 10000.0) * 0.15
-            if total_pnl < -balance_threshold:  # Lost more than 15% of reference balance
+            balance_threshold = getattr(self.config, "initial_balance", 10000.0) * 0.15
+            if (
+                total_pnl < -balance_threshold
+            ):  # Lost more than 15% of reference balance
                 logger.critical(
                     f"PERFORMANCE KILL SWITCH TRIGGERED! "
                     f"Total loss of ${abs(total_pnl):.2f} exceeds 15% of reference balance. Stopping agent."
@@ -545,7 +617,9 @@ class TradingLoopAgent:
         # --- Daily Counter Reset ---
         today = datetime.date.today()
         if today > self.last_trade_date:
-            logger.info(f"New day detected. Resetting daily trade count from {self.daily_trade_count} to 0.")
+            logger.info(
+                f"New day detected. Resetting daily trade count from {self.daily_trade_count} to 0."
+            )
             self.daily_trade_count = 0
             self.last_trade_date = today
             # Reset all analysis failures on new day
@@ -576,8 +650,14 @@ class TradingLoopAgent:
         current_time = datetime.datetime.now()
         for key in list(self.analysis_failures.keys()):
             last_fail = self.analysis_failure_timestamps.get(key)
-            if last_fail and (current_time - last_fail).total_seconds() > self.config.reasoning_failure_decay_seconds:
-                logger.info(f"Resetting analysis_failures for {key} due to time-based decay.")
+            if (
+                last_fail
+                and (current_time - last_fail).total_seconds()
+                > self.config.reasoning_failure_decay_seconds
+            ):
+                logger.info(
+                    f"Resetting analysis_failures for {key} due to time-based decay."
+                )
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
@@ -588,15 +668,18 @@ class TradingLoopAgent:
             asset_rejected = False
             for timestamp, cached_asset_pair in self._rejected_decisions_cache.values():
                 if asset_pair == cached_asset_pair:
-                    logger.info(f"Skipping analysis for {asset_pair}: recently rejected. Cooldown active.")
+                    logger.info(
+                        f"Skipping analysis for {asset_pair}: recently rejected. Cooldown active."
+                    )
                     asset_rejected = True
                     break
             if asset_rejected:
                 continue
 
-
             if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
-                logger.warning(f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset).")
+                logger.warning(
+                    f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset)."
+                )
                 continue
 
             # Use asyncio.wait_for to prevent long-running operations from blocking the loop
@@ -606,43 +689,56 @@ class TradingLoopAgent:
                 # Wrap the analysis with a timeout to prevent blocking
                 decision = await asyncio.wait_for(
                     self.engine.analyze_asset(asset_pair),
-                    timeout=60  # Timeout after 60 seconds
+                    timeout=60,  # Timeout after 60 seconds
                 )
 
                 # Reset failure count and timestamp on success
                 self.analysis_failures[failure_key] = 0
                 self.analysis_failure_timestamps[failure_key] = current_time
 
-                if decision and decision.get('action') in ["BUY", "SELL"]:
+                if decision and decision.get("action") in ["BUY", "SELL"]:
                     if await self._should_execute(decision):
-                        self._current_decisions.append(decision) # Collect decision
-                        logger.info(f"Actionable decision collected for {asset_pair}: {decision['action']}")
+                        self._current_decisions.append(decision)  # Collect decision
+                        logger.info(
+                            f"Actionable decision collected for {asset_pair}: {decision['action']}"
+                        )
                     else:
-                        logger.info(f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence.")
+                        logger.info(
+                            f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence."
+                        )
                 else:
                     logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
 
             except asyncio.TimeoutError:
-                logger.warning(f"Analysis for {asset_pair} timed out, skipping this cycle.")
+                logger.warning(
+                    f"Analysis for {asset_pair} timed out, skipping this cycle."
+                )
                 self.analysis_failure_timestamps[failure_key] = current_time
-                self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
+                self.analysis_failures[failure_key] = (
+                    self.analysis_failures.get(failure_key, 0) + 1
+                )
             except Exception as e:
                 logger.warning(f"Analysis for {asset_pair} failed: {e}")
                 self.analysis_failure_timestamps[failure_key] = current_time
-                self.analysis_failures[failure_key] = self.analysis_failures.get(failure_key, 0) + 1
+                self.analysis_failures[failure_key] = (
+                    self.analysis_failures.get(failure_key, 0) + 1
+                )
                 logger.error(
                     f"Persistent failure analyzing {asset_pair}. "
                     f"It will be skipped for a while.",
-                    exc_info=True
+                    exc_info=True,
                 )
 
         # After analyzing all assets, transition based on collected decisions
         if self._current_decisions:
-            logger.info(f"Collected {len(self._current_decisions)} actionable decisions. Proceeding to RISK_CHECK.")
+            logger.info(
+                f"Collected {len(self._current_decisions)} actionable decisions. Proceeding to RISK_CHECK."
+            )
             await self._transition_to(AgentState.RISK_CHECK)
         else:
             logger.info("No actionable trades found for any asset. Going back to IDLE.")
             await self._transition_to(AgentState.IDLE)
+
     async def handle_risk_check_state(self):
         """
         RISK_CHECK: Running the RiskGatekeeper for all collected decisions.
@@ -657,62 +753,88 @@ class TradingLoopAgent:
 
         approved_decisions = []
         for decision in self._current_decisions:
-            decision_id = decision.get('id')
-            asset_pair = decision.get('asset_pair')
+            decision_id = decision.get("id")
+            asset_pair = decision.get("asset_pair")
 
             # Retrieve monitoring context for risk validation
             try:
-                monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
+                monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
+                    asset_pair=asset_pair
+                )
             except Exception as e:
-                logger.warning(f"Failed to get monitoring context for risk validation: {e}")
+                logger.warning(
+                    f"Failed to get monitoring context for risk validation: {e}"
+                )
                 monitoring_context = {}
 
             # First run the standard RiskGatekeeper validation
-            approved, reason = self.risk_gatekeeper.validate_trade(decision, monitoring_context)
+            approved, reason = self.risk_gatekeeper.validate_trade(
+                decision, monitoring_context
+            )
 
             # If standard validation passes, run additional performance-based risk checks
             if approved:
-                performance_approved, performance_reason = self._check_performance_based_risks(decision)
+                (
+                    performance_approved,
+                    performance_reason,
+                ) = self._check_performance_based_risks(decision)
                 if not performance_approved:
                     approved = False
                     reason = performance_reason
 
             if approved:
-                logger.info(f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue.")
+                logger.info(
+                    f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue."
+                )
                 approved_decisions.append(decision)
 
                 # Emit approval event for dashboard
-                self._emit_dashboard_event({
-                    'type': 'decision_approved',
-                    'asset': asset_pair,
-                    'action': decision.get('action', 'UNKNOWN'),
-                    'confidence': decision.get('confidence', 0),
-                    'reasoning': decision.get('reasoning', '')[:200],  # First 200 chars
-                    'timestamp': time.time()
-                })
+                self._emit_dashboard_event(
+                    {
+                        "type": "decision_approved",
+                        "asset": asset_pair,
+                        "action": decision.get("action", "UNKNOWN"),
+                        "confidence": decision.get("confidence", 0),
+                        "reasoning": decision.get("reasoning", "")[
+                            :200
+                        ],  # First 200 chars
+                        "timestamp": time.time(),
+                    }
+                )
             else:
-                logger.info(f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}.")
-                self._rejected_decisions_cache[decision_id] = (datetime.datetime.now(), asset_pair)  # Add to cache
+                logger.info(
+                    f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}."
+                )
+                self._rejected_decisions_cache[decision_id] = (
+                    datetime.datetime.now(),
+                    asset_pair,
+                )  # Add to cache
 
                 # Emit rejection event for dashboard
-                self._emit_dashboard_event({
-                    'type': 'decision_rejected',
-                    'asset': asset_pair,
-                    'action': decision.get('action', 'UNKNOWN'),
-                    'reason': reason,
-                    'timestamp': time.time()
-                })
+                self._emit_dashboard_event(
+                    {
+                        "type": "decision_rejected",
+                        "asset": asset_pair,
+                        "action": decision.get("action", "UNKNOWN"),
+                        "reason": reason,
+                        "timestamp": time.time(),
+                    }
+                )
 
-        self._current_decisions = approved_decisions # Keep only approved decisions
+        self._current_decisions = approved_decisions  # Keep only approved decisions
 
         if self._current_decisions:
-            logger.info(f"Proceeding to EXECUTION with {len(self._current_decisions)} approved decisions.")
+            logger.info(
+                f"Proceeding to EXECUTION with {len(self._current_decisions)} approved decisions."
+            )
             await self._transition_to(AgentState.EXECUTION)
         else:
             logger.info("No decisions approved by RiskGatekeeper. Going back to IDLE.")
             await self._transition_to(AgentState.IDLE)
 
-    def _check_performance_based_risks(self, decision: dict[str, any]) -> tuple[bool, str]:
+    def _check_performance_based_risks(
+        self, decision: dict[str, any]
+    ) -> tuple[bool, str]:
         """
         Check additional performance-based risk conditions.
 
@@ -723,49 +845,65 @@ class TradingLoopAgent:
             Tuple of (is_approved, reason) where is_approved indicates if the decision should proceed
         """
         # Check for excessive consecutive losses
-        current_streak = self._performance_metrics['current_streak']
-        worst_streak = self._performance_metrics['worst_streak']
+        current_streak = self._performance_metrics["current_streak"]
+        worst_streak = self._performance_metrics["worst_streak"]
 
         if current_streak < -3:  # 4 or more consecutive losses
-            return False, f"Rejected due to poor performance streak: {abs(current_streak)} consecutive losses"
+            return (
+                False,
+                f"Rejected due to poor performance streak: {abs(current_streak)} consecutive losses",
+            )
 
         # Check win rate if we have sufficient history
-        if self._performance_metrics['total_trades'] >= 10:
-            win_rate = self._performance_metrics['win_rate']
+        if self._performance_metrics["total_trades"] >= 10:
+            win_rate = self._performance_metrics["win_rate"]
             if win_rate < 30:  # Less than 30% win rate
                 # Only block if confidence is also low
-                decision_confidence = decision.get('confidence', 0)
+                decision_confidence = decision.get("confidence", 0)
                 if decision_confidence < 70:
-                    return False, f"Rejected due to low win rate ({win_rate:.1f}%) and low confidence ({decision_confidence}%)"
+                    return (
+                        False,
+                        f"Rejected due to low win rate ({win_rate:.1f}%) and low confidence ({decision_confidence}%)",
+                    )
 
         # Check loss magnitude vs win magnitude ratio
-        avg_loss = abs(self._performance_metrics['avg_loss'])
-        avg_win = self._performance_metrics['avg_win']
+        avg_loss = abs(self._performance_metrics["avg_loss"])
+        avg_win = self._performance_metrics["avg_win"]
 
         if avg_loss > 0 and avg_win > 0:
             loss_win_ratio = avg_loss / avg_win
             if loss_win_ratio > 2.0:  # Average losses are more than 2x average wins
-                decision_confidence = decision.get('confidence', 0)
+                decision_confidence = decision.get("confidence", 0)
                 if decision_confidence < 75:
-                    return False, f"Rejected due to high loss/win ratio ({loss_win_ratio:.2f}) and low confidence ({decision_confidence}%)"
+                    return (
+                        False,
+                        f"Rejected due to high loss/win ratio ({loss_win_ratio:.2f}) and low confidence ({decision_confidence}%)",
+                    )
 
         # If position sizing is used, check if the position would risk too much of recent profits
-        if decision.get('recommended_position_size'):
+        if decision.get("recommended_position_size"):
             # Calculate risk as percentage of recent P&L
-            recent_pnl = self._performance_metrics['total_pnl']
+            recent_pnl = self._performance_metrics["total_pnl"]
             if recent_pnl > 0:  # Only apply if we have positive P&L to protect
                 # Calculate potential loss from this position (roughly)
-                entry_price = decision.get('entry_price', 0)
-                position_size = decision.get('recommended_position_size', 0)
+                entry_price = decision.get("entry_price", 0)
+                position_size = decision.get("recommended_position_size", 0)
                 if entry_price > 0 and position_size > 0:
                     # Rough calculation for max potential loss (stop loss distance)
-                    stop_loss_price = decision.get('stop_loss_price')
+                    stop_loss_price = decision.get("stop_loss_price")
                     if stop_loss_price and entry_price > stop_loss_price:
-                        potential_loss = abs(entry_price - stop_loss_price) * position_size
+                        potential_loss = (
+                            abs(entry_price - stop_loss_price) * position_size
+                        )
                         risk_to_pnl_ratio = potential_loss / recent_pnl
 
-                        if risk_to_pnl_ratio > 0.5:  # Risking more than 50% of recent profits
-                            return False, f"Rejected due to high risk ({risk_to_pnl_ratio:.2%}) relative to recent profits"
+                        if (
+                            risk_to_pnl_ratio > 0.5
+                        ):  # Risking more than 50% of recent profits
+                            return (
+                                False,
+                                f"Rejected due to high risk ({risk_to_pnl_ratio:.2%}) relative to recent profits",
+                            )
 
         # All checks passed
         return True, "Performance-based risk checks passed"
@@ -779,8 +917,10 @@ class TradingLoopAgent:
         logger.info("State: EXECUTION - Processing decisions...")
 
         if not self._current_decisions:
-            logger.warning("EXECUTION state reached without decisions. Returning to LEARNING.")
-            await self._transition_to(AgentState.LEARNING)
+            logger.warning(
+                "EXECUTION state reached without decisions. Returning to IDLE."
+            )
+            await self._transition_to(AgentState.IDLE)
             return
 
         # Check if autonomous execution is enabled (prioritize autonomous.enabled over legacy autonomous_execution)
@@ -838,12 +978,12 @@ class TradingLoopAgent:
         failure_reasons = []
 
         for decision in self._current_decisions:
-            decision_id = decision.get('id')
-            asset_pair = decision.get('asset_pair')
-            action = decision.get('action')
-            confidence = decision.get('confidence', 0)
-            reasoning = decision.get('reasoning', 'No reasoning provided')
-            recommended_position_size = decision.get('recommended_position_size')
+            decision_id = decision.get("id")
+            asset_pair = decision.get("asset_pair")
+            action = decision.get("action")
+            confidence = decision.get("confidence", 0)
+            reasoning = decision.get("reasoning", "No reasoning provided")
+            recommended_position_size = decision.get("recommended_position_size")
 
             # Format message
             message = (
@@ -989,48 +1129,56 @@ class TradingLoopAgent:
         """
         try:
             # Extract trade details
-            realized_pnl = trade_outcome.get('realized_pnl', 0)
-            is_profitable = trade_outcome.get('was_profitable', realized_pnl > 0)
+            realized_pnl = trade_outcome.get("realized_pnl", 0)
+            is_profitable = trade_outcome.get("was_profitable", realized_pnl > 0)
 
             # Update basic metrics
-            self._performance_metrics['total_trades'] += 1
-            self._performance_metrics['total_pnl'] += realized_pnl
+            self._performance_metrics["total_trades"] += 1
+            self._performance_metrics["total_pnl"] += realized_pnl
 
             if is_profitable:
-                self._performance_metrics['winning_trades'] += 1
-                self._performance_metrics['avg_win'] = (
-                    (self._performance_metrics['avg_win'] * (self._performance_metrics['winning_trades'] - 1) + realized_pnl) /
-                    self._performance_metrics['winning_trades']
-                )
+                self._performance_metrics["winning_trades"] += 1
+                self._performance_metrics["avg_win"] = (
+                    self._performance_metrics["avg_win"]
+                    * (self._performance_metrics["winning_trades"] - 1)
+                    + realized_pnl
+                ) / self._performance_metrics["winning_trades"]
 
                 # Update streaks
-                self._performance_metrics['current_streak'] = max(1, self._performance_metrics['current_streak'] + 1)
-                self._performance_metrics['best_streak'] = max(
-                    self._performance_metrics['best_streak'],
-                    self._performance_metrics['current_streak']
+                self._performance_metrics["current_streak"] = max(
+                    1, self._performance_metrics["current_streak"] + 1
+                )
+                self._performance_metrics["best_streak"] = max(
+                    self._performance_metrics["best_streak"],
+                    self._performance_metrics["current_streak"],
                 )
             else:
-                self._performance_metrics['losing_trades'] += 1
-                self._performance_metrics['avg_loss'] = (
-                    (self._performance_metrics['avg_loss'] * (self._performance_metrics['losing_trades'] - 1) + abs(realized_pnl)) /
-                    self._performance_metrics['losing_trades']
-                )
+                self._performance_metrics["losing_trades"] += 1
+                self._performance_metrics["avg_loss"] = (
+                    self._performance_metrics["avg_loss"]
+                    * (self._performance_metrics["losing_trades"] - 1)
+                    + abs(realized_pnl)
+                ) / self._performance_metrics["losing_trades"]
 
                 # Update streaks
-                self._performance_metrics['current_streak'] = min(-1, self._performance_metrics['current_streak'] - 1)
-                self._performance_metrics['worst_streak'] = min(
-                    self._performance_metrics['worst_streak'],
-                    self._performance_metrics['current_streak']
+                self._performance_metrics["current_streak"] = min(
+                    -1, self._performance_metrics["current_streak"] - 1
+                )
+                self._performance_metrics["worst_streak"] = min(
+                    self._performance_metrics["worst_streak"],
+                    self._performance_metrics["current_streak"],
                 )
 
             # Update win rate
-            if self._performance_metrics['total_trades'] > 0:
-                self._performance_metrics['win_rate'] = (
-                    self._performance_metrics['winning_trades'] /
-                    self._performance_metrics['total_trades']
+            if self._performance_metrics["total_trades"] > 0:
+                self._performance_metrics["win_rate"] = (
+                    self._performance_metrics["winning_trades"]
+                    / self._performance_metrics["total_trades"]
                 ) * 100
 
-            logger.debug(f"Updated performance metrics: P&L=${realized_pnl:.2f}, Total=${self._performance_metrics['total_pnl']:.2f}")
+            logger.debug(
+                f"Updated performance metrics: P&L=${realized_pnl:.2f}, Total=${self._performance_metrics['total_pnl']:.2f}"
+            )
 
         except Exception as e:
             logger.error(f"Error updating performance metrics: {e}", exc_info=True)
@@ -1043,17 +1191,24 @@ class TradingLoopAgent:
             Dictionary with performance metrics
         """
         return {
-            'total_pnl': self._performance_metrics['total_pnl'],
-            'total_trades': self._performance_metrics['total_trades'],
-            'winning_trades': self._performance_metrics['winning_trades'],
-            'losing_trades': self._performance_metrics['losing_trades'],
-            'win_rate': self._performance_metrics['win_rate'],
-            'avg_win': self._performance_metrics['avg_win'],
-            'avg_loss': self._performance_metrics['avg_loss'],
-            'current_streak': self._performance_metrics['current_streak'],
-            'best_streak': self._performance_metrics['best_streak'],
-            'worst_streak': self._performance_metrics['worst_streak'],
-            'pnl_ratio': abs(self._performance_metrics['avg_win'] / self._performance_metrics['avg_loss']) if self._performance_metrics['avg_loss'] != 0 else float('inf')
+            "total_pnl": self._performance_metrics["total_pnl"],
+            "total_trades": self._performance_metrics["total_trades"],
+            "winning_trades": self._performance_metrics["winning_trades"],
+            "losing_trades": self._performance_metrics["losing_trades"],
+            "win_rate": self._performance_metrics["win_rate"],
+            "avg_win": self._performance_metrics["avg_win"],
+            "avg_loss": self._performance_metrics["avg_loss"],
+            "current_streak": self._performance_metrics["current_streak"],
+            "best_streak": self._performance_metrics["best_streak"],
+            "worst_streak": self._performance_metrics["worst_streak"],
+            "pnl_ratio": (
+                abs(
+                    self._performance_metrics["avg_win"]
+                    / self._performance_metrics["avg_loss"]
+                )
+                if self._performance_metrics["avg_loss"] != 0
+                else float("inf")
+            ),
         }
 
     async def _should_execute(self, decision) -> bool:
@@ -1063,15 +1218,20 @@ class TradingLoopAgent:
         Returns True if the decision should proceed to execution state, where it will
         be either executed (autonomous mode) or sent to Telegram (signal-only mode).
         """
-        confidence = decision.get('confidence', 0)  # 0-100 scale from decision validation
+        confidence = decision.get("confidence", 0)  # 0-100 scale from decision validation
         # Normalize confidence to 0-1 for comparison with config threshold (which is auto-normalized)
         confidence_normalized = confidence / 100.0
         if confidence_normalized < self.config.min_confidence_threshold:
-            logger.info(f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)")
+            logger.info(
+                f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
+            )
             return False
 
         # Check daily trade limit
-        if self.config.max_daily_trades > 0 and self.daily_trade_count >= self.config.max_daily_trades:
+        if (
+            self.config.max_daily_trades > 0
+            and self.daily_trade_count >= self.config.max_daily_trades
+        ):
             logger.warning(
                 f"Max daily trade limit ({self.config.max_daily_trades}) reached. "
                 f"Skipping trade for {decision.get('asset_pair')}."
@@ -1134,7 +1294,11 @@ class TradingLoopAgent:
             max_iterations = 10  # Prevent infinite loops in one cycle
             iterations = 0
 
-            while self.state != AgentState.IDLE and iterations < max_iterations and self.is_running:
+            while (
+                self.state != AgentState.IDLE
+                and iterations < max_iterations
+                and self.is_running
+            ):
                 handler = self.state_handlers.get(self.state)
                 if handler:
                     await handler()
@@ -1144,7 +1308,9 @@ class TradingLoopAgent:
                 iterations += 1
 
             if iterations >= max_iterations:
-                logger.warning("process_cycle exceeded max iterations, possible infinite loop")
+                logger.warning(
+                    "process_cycle exceeded max iterations, possible infinite loop"
+                )
                 return False
 
             return True

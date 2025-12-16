@@ -4,38 +4,38 @@ from typing import Dict, List, Literal
 
 # Free tier: 5 Ollama models (zero cost, runs locally)
 FREE_TIER = [
-    'llama3.2:3b-instruct-fp16',
-    'deepseek-r1:8b',
-    'mistral:7b-instruct',
-    'qwen2.5:7b-instruct',
-    'gemma2:9b',
+    "llama3.2:3b-instruct-fp16",
+    "deepseek-r1:8b",
+    "mistral:7b-instruct",
+    "qwen2.5:7b-instruct",
+    "gemma2:9b",
 ]
 
 # Premium tier: Cloud-based CLI providers (free tier with rate limits or paid)
 PREMIUM_TIER = [
-    'gemini',  # Gemini CLI (free tier: 60/min, 1000/day)
-    'qwen',    # Qwen CLI (free tier with rate limits)
-    'cli',     # Copilot CLI (requires GitHub Copilot subscription)
-    'codex'    # Codex CLI (fallback)
+    "gemini",  # Gemini CLI (free tier: 60/min, 1000/day)
+    "qwen",  # Qwen CLI (free tier with rate limits)
+    "cli",  # Copilot CLI (requires GitHub Copilot subscription)
+    "codex",  # Codex CLI (fallback)
 ]
 
 # VRAM requirements for Ollama models (in GB)
 # All models selected to run on consumer GPU with 8GB VRAM
 MODEL_VRAM_REQUIREMENTS: Dict[str, float] = {
-    'llama3.2:3b-instruct-fp16': 3.2,
-    'deepseek-r1:8b': 8.0,
-    'mistral:7b-instruct': 7.0,
-    'qwen2.5:7b-instruct': 7.0,
-    'gemma2:9b': 7.5,  # 9B model fits in 8GB due to quantization
+    "llama3.2:3b-instruct-fp16": 3.2,
+    "deepseek-r1:8b": 8.0,
+    "mistral:7b-instruct": 7.0,
+    "qwen2.5:7b-instruct": 7.0,
+    "gemma2:9b": 7.5,  # 9B model fits in 8GB due to quantization
 }
 
 # Approximate download sizes (in GB)
 MODEL_DOWNLOAD_SIZES: Dict[str, float] = {
-    'llama3.2:3b-instruct-fp16': 3.2,
-    'deepseek-r1:8b': 4.9,
-    'mistral:7b-instruct': 4.1,
-    'qwen2.5:7b-instruct': 4.4,
-    'gemma2:9b': 5.4,
+    "llama3.2:3b-instruct-fp16": 3.2,
+    "deepseek-r1:8b": 4.9,
+    "mistral:7b-instruct": 4.1,
+    "qwen2.5:7b-instruct": 4.4,
+    "gemma2:9b": 5.4,
 }
 
 
@@ -66,7 +66,7 @@ def get_ollama_models() -> List[str]:
     Returns:
         List of Ollama model names (excludes CLI providers)
     """
-    return [p for p in FREE_TIER if p != 'qwen']
+    return [p for p in FREE_TIER if p != "qwen"]
 
 
 def get_premium_provider_for_asset(asset_type: str) -> str:
@@ -86,15 +86,17 @@ def get_premium_provider_for_asset(asset_type: str) -> str:
     Raises:
         ValueError: If asset_type is not one of the supported types
     """
-    valid_types = ('crypto', 'forex', 'stock')
+    valid_types = ("crypto", "forex", "stock")
     if asset_type not in valid_types:
-        raise ValueError(f"Invalid asset_type '{asset_type}'. Must be one of {valid_types}")
+        raise ValueError(
+            f"Invalid asset_type '{asset_type}'. Must be one of {valid_types}"
+        )
 
-    if asset_type == 'crypto':
-        return 'cli'
+    if asset_type == "crypto":
+        return "cli"
     else:
         # Forex and stock both use Gemini
-        return 'gemini'
+        return "gemini"
 
 
 def get_fallback_provider() -> str:
@@ -104,10 +106,10 @@ def get_fallback_provider() -> str:
     Returns:
         Fallback provider name ('codex')
     """
-    return 'codex'
+    return "codex"
 
 
-def get_tier(provider_name: str) -> Literal['free', 'premium', 'unknown']:
+def get_tier(provider_name: str) -> Literal["free", "premium", "unknown"]:
     """
     Get the tier classification for a provider.
 
@@ -118,11 +120,11 @@ def get_tier(provider_name: str) -> Literal['free', 'premium', 'unknown']:
         'free', 'premium', or 'unknown'
     """
     if provider_name in FREE_TIER:
-        return 'free'
+        return "free"
     elif provider_name in PREMIUM_TIER:
-        return 'premium'
+        return "premium"
     else:
-        return 'unknown'
+        return "unknown"
 
 
 def is_ollama_model(provider_name: str) -> bool:

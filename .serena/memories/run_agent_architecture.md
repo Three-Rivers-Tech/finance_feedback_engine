@@ -425,4 +425,3 @@ agent:
 ### High Slippage on Execution
 - **Check**: Trades hitting limit orders badly
 - **Solution**: Reduce `risk_percentage` (smaller orders), check market liquidity
-

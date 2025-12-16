@@ -7,20 +7,21 @@ Implements state-of-the-art ensemble techniques inspired by:
 - Pareto-optimal multi-objective balancing
 """
 
-from typing import Dict, List, Any, Tuple, Optional
 import logging
-import numpy as np
-from datetime import datetime
 from copy import deepcopy
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
 from ..exceptions import InsufficientProvidersError
-from .voting_strategies import VotingStrategies
+from .debate_manager import DebateManager
 from .performance_tracker import PerformanceTracker
 from .two_phase_aggregator import TwoPhaseAggregator
-from .debate_manager import DebateManager
+from .voting_strategies import VotingStrategies
 
 
 class EnsembleDecisionManager:
@@ -36,7 +37,9 @@ class EnsembleDecisionManager:
     - Adaptive weight updates based on performance
     """
 
-    def _validate_dynamic_weights(self, weights: Optional[Dict[str, float]]) -> Dict[str, float]:
+    def _validate_dynamic_weights(
+        self, weights: Optional[Dict[str, float]]
+    ) -> Dict[str, float]:
         """
         Validate and clean dynamic weights dictionary.
 
@@ -52,20 +55,28 @@ class EnsembleDecisionManager:
         validated = {}
         for key, value in weights.items():
             if not isinstance(key, str):
-                logger.warning(f"Skipping non-string provider key: {key} (type: {type(key)})")
+                logger.warning(
+                    f"Skipping non-string provider key: {key} (type: {type(key)})"
+                )
                 continue
             try:
                 float_value = float(value)
                 if float_value < 0:
-                    logger.warning(f"Skipping negative weight for provider '{key}': {value}")
+                    logger.warning(
+                        f"Skipping negative weight for provider '{key}': {value}"
+                    )
                     continue
                 validated[key] = float_value
             except (ValueError, TypeError):
-                logger.warning(f"Skipping non-numeric weight for provider '{key}': {value} (type: {type(value)})")
+                logger.warning(
+                    f"Skipping non-numeric weight for provider '{key}': {value} (type: {type(value)})"
+                )
                 continue
         return validated
 
-    def __init__(self, config: Dict[str, Any], dynamic_weights: Optional[Dict[str, float]] = None):
+    def __init__(
+        self, config: Dict[str, Any], dynamic_weights: Optional[Dict[str, float]] = None
+    ):
         """
         Initialize ensemble manager.
 
@@ -75,57 +86,45 @@ class EnsembleDecisionManager:
         self.config = config
         # Store optional dynamic weights that can override config weights at runtime
         self.dynamic_weights = self._validate_dynamic_weights(dynamic_weights)
-        ensemble_config = config.get('ensemble', {})
+        ensemble_config = config.get("ensemble", {})
 
         # Base weights (default: equal weighting for common providers)
-        self.base_weights = ensemble_config.get('provider_weights', {
-            'local': 0.20,
-            'cli': 0.20,
-            'codex': 0.20,
-            'qwen': 0.20,
-            'gemini': 0.20
-        })
+        self.base_weights = ensemble_config.get(
+            "provider_weights",
+            {"local": 0.20, "cli": 0.20, "codex": 0.20, "qwen": 0.20, "gemini": 0.20},
+        )
         # Backward-compatibility alias expected by DecisionEngine
         # Expose as a property to avoid stale references when weights are recalculated
         # (see provider_weights property below)
 
         # Providers to use
         self.enabled_providers = ensemble_config.get(
-            'enabled_providers',
-            ['local', 'cli', 'codex', 'qwen', 'gemini']
+            "enabled_providers", ["local", "cli", "codex", "qwen", "gemini"]
         )
 
         # Voting strategy
         self.voting_strategy = ensemble_config.get(
-            'voting_strategy',
-            'weighted'  # Options: weighted, majority, stacking
+            "voting_strategy", "weighted"  # Options: weighted, majority, stacking
         )
 
         # Confidence threshold for ensemble agreement
-        self.agreement_threshold = ensemble_config.get(
-            'agreement_threshold',
-            0.6
-        )
+        self.agreement_threshold = ensemble_config.get("agreement_threshold", 0.6)
 
         # Adaptive learning settings
-        self.adaptive_learning = ensemble_config.get(
-            'adaptive_learning',
-            True
-        )
-        self.learning_rate = ensemble_config.get('learning_rate', 0.1)
+        self.adaptive_learning = ensemble_config.get("adaptive_learning", True)
+        self.learning_rate = ensemble_config.get("learning_rate", 0.1)
 
         # Debate mode settings
-        self.debate_mode = ensemble_config.get('debate_mode', False)
-        self.debate_providers = ensemble_config.get('debate_providers', {
-            'bull': 'gemini',
-            'bear': 'qwen',
-            'judge': 'local'
-        })
+        self.debate_mode = ensemble_config.get("debate_mode", False)
+        self.debate_providers = ensemble_config.get(
+            "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
+        )
 
         # Validate debate providers are enabled when debate mode is active
         if self.debate_mode:
             missing_providers = [
-                provider for provider in self.debate_providers.values()
+                provider
+                for provider in self.debate_providers.values()
                 if provider not in self.enabled_providers
             ]
             if missing_providers:
@@ -136,9 +135,17 @@ class EnsembleDecisionManager:
                 )
 
         # Local-First settings
-        self.local_keywords = ['local', 'llama', 'mistral', 'deepseek', 'gemma', 'phi', 'qwen:']
-        self.local_dominance_target = ensemble_config.get('local_dominance_target', 0.6)
-        self.min_local_providers = ensemble_config.get('min_local_providers', 1)
+        self.local_keywords = [
+            "local",
+            "llama",
+            "mistral",
+            "deepseek",
+            "gemma",
+            "phi",
+            "qwen:",
+        ]
+        self.local_dominance_target = ensemble_config.get("local_dominance_target", 0.6)
+        self.min_local_providers = ensemble_config.get("min_local_providers", 1)
 
         # Initialize specialized components
         self.voting_strategies = VotingStrategies(self.voting_strategy)
@@ -172,7 +179,9 @@ class EnsembleDecisionManager:
         name_lower = name.lower()
         return any(keyword.lower() in name_lower for keyword in self.local_keywords)
 
-    def _calculate_robust_weights(self, active_providers: List[str]) -> Dict[str, float]:
+    def _calculate_robust_weights(
+        self, active_providers: List[str]
+    ) -> Dict[str, float]:
         """
         Calculate robust weights with local dominance target.
 
@@ -240,7 +249,7 @@ class EnsembleDecisionManager:
         self,
         provider_decisions: Dict[str, Dict[str, Any]],
         failed_providers: Optional[List[str]] = None,
-        adjusted_weights: Optional[Dict[str, float]] = None
+        adjusted_weights: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """
         Aggregate decisions from multiple providers into unified decision.
@@ -267,8 +276,7 @@ class EnsembleDecisionManager:
         total_providers = len(self.enabled_providers)
         active_providers = len(provider_decisions)
         failure_rate = (
-            len(failed_providers) / total_providers
-            if total_providers > 0 else 0
+            len(failed_providers) / total_providers if total_providers > 0 else 0
         )
 
         logger.info(
@@ -286,22 +294,24 @@ class EnsembleDecisionManager:
 
         for provider, decision in provider_decisions.items():
             if provider in self.enabled_providers:
-                actions.append(decision.get('action', 'HOLD'))
-                confidences.append(decision.get('confidence', 50))
-                reasonings.append(decision.get('reasoning', ''))
-                amounts.append(decision.get('amount', 0))
+                actions.append(decision.get("action", "HOLD"))
+                confidences.append(decision.get("confidence", 50))
+                reasonings.append(decision.get("reasoning", ""))
+                amounts.append(decision.get("amount", 0))
                 provider_names.append(provider)
 
         # Graceful single-provider fallback: if none matched enabled list but we
         # have at least one provider_decision, use the first as a minimal ensemble.
         if not actions:
             if len(provider_decisions) >= 1:
-                fallback_provider, fallback_decision = next(iter(provider_decisions.items()))
+                fallback_provider, fallback_decision = next(
+                    iter(provider_decisions.items())
+                )
                 provider_names = [fallback_provider]
-                actions = [fallback_decision.get('action', 'HOLD')]
-                confidences = [fallback_decision.get('confidence', 50)]
-                reasonings = [fallback_decision.get('reasoning', '')]
-                amounts = [fallback_decision.get('amount', 0)]
+                actions = [fallback_decision.get("action", "HOLD")]
+                confidences = [fallback_decision.get("confidence", 50)]
+                reasonings = [fallback_decision.get("reasoning", "")]
+                amounts = [fallback_decision.get("amount", 0)]
                 fallback_tier_used = True
             else:
                 raise ValueError("No valid provider decisions found")
@@ -309,7 +319,9 @@ class EnsembleDecisionManager:
             fallback_tier_used = False
 
         # Detect active local providers and check quorum
-        active_local_providers = [p for p in provider_names if self._is_local_provider(p)]
+        active_local_providers = [
+            p for p in provider_names if self._is_local_provider(p)
+        ]
         local_quorum_met = len(active_local_providers) >= self.min_local_providers
 
         # Calculate robust weights directly
@@ -317,19 +329,20 @@ class EnsembleDecisionManager:
 
         # Apply progressive fallback strategy
         final_decision, fallback_tier = self._apply_voting_with_fallback(
-            provider_names, actions, confidences, reasonings, amounts,
-            robust_weights
+            provider_names, actions, confidences, reasonings, amounts, robust_weights
         )
 
         # If we entered the single-provider fallback early, mark the tier
-        if fallback_tier_used and fallback_tier != 'single_provider':
-            fallback_tier = 'single_provider'
+        if fallback_tier_used and fallback_tier != "single_provider":
+            fallback_tier = "single_provider"
 
         # Apply penalty logic if quorum not met
         quorum_penalty_applied = False
         if not local_quorum_met:
-            final_decision['confidence'] = int(final_decision['confidence'] * 0.7)
-            final_decision['reasoning'] = f"[WARNING: LOCAL QUORUM FAILED] {final_decision['reasoning']}"
+            final_decision["confidence"] = int(final_decision["confidence"] * 0.7)
+            final_decision["reasoning"] = (
+                f"[WARNING: LOCAL QUORUM FAILED] {final_decision['reasoning']}"
+            )
             quorum_penalty_applied = True
 
         # Adjust confidence based on provider availability
@@ -339,43 +352,48 @@ class EnsembleDecisionManager:
 
         # Add comprehensive ensemble metadata
         ensemble_metadata = {
-            'providers_used': provider_names,
-            'providers_failed': failed_providers,
-            'num_active': active_providers,
-            'num_total': total_providers,
-            'failure_rate': failure_rate,
-            'original_weights': {
-                p: self.base_weights.get(p, 0)
-                for p in self.enabled_providers
+            "providers_used": provider_names,
+            "providers_failed": failed_providers,
+            "num_active": active_providers,
+            "num_total": total_providers,
+            "failure_rate": failure_rate,
+            "original_weights": {
+                p: self.base_weights.get(p, 0) for p in self.enabled_providers
             },
-            'adjusted_weights': robust_weights,
-            'weight_adjustment_applied': len(failed_providers) > 0,
-            'voting_strategy': self.voting_strategy,
-            'fallback_tier': fallback_tier,
-            'provider_decisions': provider_decisions,
-            'agreement_score': self._calculate_agreement_score(actions),
-            'confidence_variance': float(np.var(confidences)),
-            'local_priority_applied': robust_weights is not None,
-            'local_models_used': [],  # to be filled by engine
-            'timestamp': datetime.utcnow().isoformat(),
-            'active_local_providers': active_local_providers,
-            'local_quorum_met': local_quorum_met,
-            'min_local_providers': self.min_local_providers,
-            'quorum_penalty_applied': quorum_penalty_applied
+            "adjusted_weights": robust_weights,
+            "weight_adjustment_applied": len(failed_providers) > 0,
+            "voting_strategy": self.voting_strategy,
+            "fallback_tier": fallback_tier,
+            "provider_decisions": provider_decisions,
+            "agreement_score": self._calculate_agreement_score(actions),
+            "confidence_variance": float(np.var(confidences)),
+            "local_priority_applied": robust_weights is not None,
+            "local_models_used": [],  # to be filled by engine
+            "timestamp": datetime.utcnow().isoformat(),
+            "active_local_providers": active_local_providers,
+            "local_quorum_met": local_quorum_met,
+            "min_local_providers": self.min_local_providers,
+            "quorum_penalty_applied": quorum_penalty_applied,
         }
 
         # Add confidence adjustment factor if it was applied
-        if 'confidence_adjustment_factor' in final_decision:
-            ensemble_metadata['confidence_adjustment_factor'] = final_decision.pop('confidence_adjustment_factor')
-            if 'original_confidence' in final_decision: # Check if original_confidence exists
-                ensemble_metadata['original_confidence'] = final_decision.pop('original_confidence')
-
-        final_decision['ensemble_metadata'] = ensemble_metadata
-
-        if 'voting_power' in final_decision:
-            final_decision['ensemble_metadata']['voting_power'] = (
-                final_decision['voting_power']
+        if "confidence_adjustment_factor" in final_decision:
+            ensemble_metadata["confidence_adjustment_factor"] = final_decision.pop(
+                "confidence_adjustment_factor"
             )
+            if (
+                "original_confidence" in final_decision
+            ):  # Check if original_confidence exists
+                ensemble_metadata["original_confidence"] = final_decision.pop(
+                    "original_confidence"
+                )
+
+        final_decision["ensemble_metadata"] = ensemble_metadata
+
+        if "voting_power" in final_decision:
+            final_decision["ensemble_metadata"]["voting_power"] = final_decision[
+                "voting_power"
+            ]
 
         logger.info(
             f"Ensemble decision: {final_decision['action']} "
@@ -391,7 +409,7 @@ class EnsembleDecisionManager:
         prompt: str,
         asset_pair: str,
         market_data: Dict[str, Any],
-        query_function: callable
+        query_function: callable,
     ) -> Dict[str, Any]:
         """
         Two-phase ensemble aggregation with smart premium API escalation.
@@ -434,31 +452,32 @@ class EnsembleDecisionManager:
             return await self.aggregate_decisions(provider_decisions, failed_providers)
 
         # Extract the results from the two-phase aggregator
-        phase1_result = result['phase1_result']
-        phase2_decisions = result['phase2_decisions']
-        phase2_failed = result['phase2_failed']
-        phase2_primary_used = result['phase2_primary_used']
-        phase2_fallback_used = result['phase2_fallback_used']
-        codex_tiebreaker_used = result['codex_tiebreaker_used']
-        normalized_asset_type = result['normalized_asset_type']
-        phase2_triggered = result.get('phase2_triggered', True)
-        phase2_skip_reason = result.get('phase2_skip_reason')
-        phase2_escalation_reason = result.get('phase2_escalation_reason')
-        phase1_metrics = phase1_result.get('phase1_metrics', result.get('phase1_metrics', {}))
+        phase1_result = result["phase1_result"]
+        phase2_decisions = result["phase2_decisions"]
+        phase2_failed = result["phase2_failed"]
+        phase2_primary_used = result["phase2_primary_used"]
+        phase2_fallback_used = result["phase2_fallback_used"]
+        codex_tiebreaker_used = result["codex_tiebreaker_used"]
+        normalized_asset_type = result["normalized_asset_type"]
+        phase2_triggered = result.get("phase2_triggered", True)
+        phase2_skip_reason = result.get("phase2_skip_reason")
+        phase2_escalation_reason = result.get("phase2_escalation_reason")
+        phase1_metrics = phase1_result.get(
+            "phase1_metrics", result.get("phase1_metrics", {})
+        )
 
         # Get Phase 1 decision from provider decisions
-        phase1_decisions = phase1_result['provider_decisions']
-        phase1_failed = phase1_result['failed_providers']
+        phase1_decisions = phase1_result["provider_decisions"]
+        phase1_failed = phase1_result["failed_providers"]
 
         # Aggregate Phase 1 decisions
         phase1_decision = await self.aggregate_decisions(
-            provider_decisions=phase1_decisions,
-            failed_providers=phase1_failed
+            provider_decisions=phase1_decisions, failed_providers=phase1_failed
         )
 
-        phase1_action = phase1_decision['action']
-        phase1_confidence = phase1_decision['confidence']
-        phase1_agreement = phase1_decision['ensemble_metadata']['agreement_score']
+        phase1_action = phase1_decision["action"]
+        phase1_confidence = phase1_decision["confidence"]
+        phase1_agreement = phase1_decision["ensemble_metadata"]["agreement_score"]
 
         logger.info(
             f"Phase 1 result: {phase1_action} "
@@ -471,63 +490,106 @@ class EnsembleDecisionManager:
                 f"Phase 2 not triggered (reason={phase2_skip_reason}); "
                 "using Phase 1 decision"
             )
-            phase1_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
-            phase1_decision['ensemble_metadata']['phase1_action'] = phase1_action
-            phase1_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
-            phase1_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
-            phase1_decision['ensemble_metadata']['phase2_triggered'] = False
-            phase1_decision['ensemble_metadata']['phase2_skip_reason'] = phase2_skip_reason
-            phase1_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
-            phase1_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
-            phase1_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
-            phase1_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
+            phase1_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
+                phase1_decisions.keys()
+            )
+            phase1_decision["ensemble_metadata"]["phase1_action"] = phase1_action
+            phase1_decision["ensemble_metadata"][
+                "phase1_confidence"
+            ] = phase1_confidence
+            phase1_decision["ensemble_metadata"][
+                "phase1_agreement_rate"
+            ] = phase1_agreement
+            phase1_decision["ensemble_metadata"]["phase2_triggered"] = False
+            phase1_decision["ensemble_metadata"][
+                "phase2_skip_reason"
+            ] = phase2_skip_reason
+            phase1_decision["ensemble_metadata"][
+                "phase2_escalation_reason"
+            ] = phase2_escalation_reason
+            phase1_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
+            phase1_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
+                "position_value"
+            )
+            phase1_decision["ensemble_metadata"]["phase1_escalation_triggers"] = (
+                result.get("escalation_triggers", [])
+            )
             return phase1_decision
 
         # If Phase 2 completely failed, use Phase 1 result
         if not phase2_decisions:
             logger.warning("Phase 2 complete failure - using Phase 1 result")
-            phase1_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
-            phase1_decision['ensemble_metadata']['phase1_action'] = phase1_action
-            phase1_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
-            phase1_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
-            phase1_decision['ensemble_metadata']['phase2_triggered'] = True
-            phase1_decision['ensemble_metadata']['phase2_primary_provider'] = result.get('phase2_primary_used')
-            phase1_decision['ensemble_metadata']['phase2_fallback_used'] = True
-            phase1_decision['ensemble_metadata']['phase2_failed'] = True
-            phase1_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
-            phase1_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
-            phase1_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
-            phase1_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
+            phase1_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
+                phase1_decisions.keys()
+            )
+            phase1_decision["ensemble_metadata"]["phase1_action"] = phase1_action
+            phase1_decision["ensemble_metadata"][
+                "phase1_confidence"
+            ] = phase1_confidence
+            phase1_decision["ensemble_metadata"][
+                "phase1_agreement_rate"
+            ] = phase1_agreement
+            phase1_decision["ensemble_metadata"]["phase2_triggered"] = True
+            phase1_decision["ensemble_metadata"]["phase2_primary_provider"] = (
+                result.get("phase2_primary_used")
+            )
+            phase1_decision["ensemble_metadata"]["phase2_fallback_used"] = True
+            phase1_decision["ensemble_metadata"]["phase2_failed"] = True
+            phase1_decision["ensemble_metadata"][
+                "phase2_escalation_reason"
+            ] = phase2_escalation_reason
+            phase1_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
+            phase1_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
+                "position_value"
+            )
+            phase1_decision["ensemble_metadata"]["phase1_escalation_triggers"] = (
+                result.get("escalation_triggers", [])
+            )
             return phase1_decision
 
         # Merge Phase 1 + Phase 2 decisions
         all_decisions = {**phase1_decisions, **phase2_decisions}
         all_failed = phase1_failed + phase2_failed
 
-        logger.info(f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions")
+        logger.info(
+            f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions"
+        )
 
         final_decision = await self.aggregate_decisions(
-            provider_decisions=all_decisions,
-            failed_providers=all_failed
+            provider_decisions=all_decisions, failed_providers=all_failed
         )
 
         # Check if Phase 2 changed the decision
-        decision_changed = final_decision['action'] != phase1_action
+        decision_changed = final_decision["action"] != phase1_action
 
         # Add comprehensive two-phase metadata
-        final_decision['ensemble_metadata']['phase1_providers_succeeded'] = list(phase1_decisions.keys())
-        final_decision['ensemble_metadata']['phase1_action'] = phase1_action
-        final_decision['ensemble_metadata']['phase1_confidence'] = phase1_confidence
-        final_decision['ensemble_metadata']['phase1_agreement_rate'] = phase1_agreement
-        final_decision['ensemble_metadata']['phase2_triggered'] = True
-        final_decision['ensemble_metadata']['phase2_primary_provider'] = phase2_primary_used
-        final_decision['ensemble_metadata']['phase2_fallback_used'] = phase2_fallback_used
-        final_decision['ensemble_metadata']['codex_tiebreaker'] = codex_tiebreaker_used
-        final_decision['ensemble_metadata']['decision_changed_by_premium'] = decision_changed
-        final_decision['ensemble_metadata']['phase2_escalation_reason'] = phase2_escalation_reason
-        final_decision['ensemble_metadata']['phase1_metrics'] = phase1_metrics
-        final_decision['ensemble_metadata']['phase1_position_value'] = result.get('position_value')
-        final_decision['ensemble_metadata']['phase1_escalation_triggers'] = result.get('escalation_triggers', [])
+        final_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
+            phase1_decisions.keys()
+        )
+        final_decision["ensemble_metadata"]["phase1_action"] = phase1_action
+        final_decision["ensemble_metadata"]["phase1_confidence"] = phase1_confidence
+        final_decision["ensemble_metadata"]["phase1_agreement_rate"] = phase1_agreement
+        final_decision["ensemble_metadata"]["phase2_triggered"] = True
+        final_decision["ensemble_metadata"][
+            "phase2_primary_provider"
+        ] = phase2_primary_used
+        final_decision["ensemble_metadata"][
+            "phase2_fallback_used"
+        ] = phase2_fallback_used
+        final_decision["ensemble_metadata"]["codex_tiebreaker"] = codex_tiebreaker_used
+        final_decision["ensemble_metadata"][
+            "decision_changed_by_premium"
+        ] = decision_changed
+        final_decision["ensemble_metadata"][
+            "phase2_escalation_reason"
+        ] = phase2_escalation_reason
+        final_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
+        final_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
+            "position_value"
+        )
+        final_decision["ensemble_metadata"]["phase1_escalation_triggers"] = result.get(
+            "escalation_triggers", []
+        )
 
         logger.info(
             f"Two-phase decision: {final_decision['action']} "
@@ -541,7 +603,7 @@ class EnsembleDecisionManager:
         bull_case: Dict[str, Any],
         bear_case: Dict[str, Any],
         judge_decision: Dict[str, Any],
-        failed_debate_providers: Optional[List[str]] = None
+        failed_debate_providers: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Synthesize debate decisions from bull, bear, and judge providers.
@@ -561,9 +623,7 @@ class EnsembleDecisionManager:
         )
 
     def _adjust_weights_for_active_providers(
-        self,
-        active_providers: List[str],
-        failed_providers: List[str]
+        self, active_providers: List[str], failed_providers: List[str]
     ) -> Dict[str, float]:
         """
         Dynamically adjust weights when some providers fail.
@@ -585,7 +645,7 @@ class EnsembleDecisionManager:
         confidences: List[int],
         reasonings: List[str],
         amounts: List[float],
-        adjusted_weights: Dict[str, float]
+        adjusted_weights: Dict[str, float],
     ) -> Tuple[Dict[str, Any], str]:
         """
         Apply voting strategy with progressive fallback tiers.
@@ -612,15 +672,18 @@ class EnsembleDecisionManager:
         # Try primary voting strategy using the VotingStrategies component
         try:
             decision = self.voting_strategies.apply_voting_strategy(
-                providers, actions, confidences, reasonings, amounts,
-                self.base_weights, adjusted_weights
+                providers,
+                actions,
+                confidences,
+                reasonings,
+                amounts,
+                self.base_weights,
+                adjusted_weights,
             )
 
             # Validate primary result
             if self._validate_decision(decision):
-                logger.debug(
-                    f"Primary strategy '{self.voting_strategy}' succeeded"
-                )
+                logger.debug(f"Primary strategy '{self.voting_strategy}' succeeded")
                 return decision, fallback_tier
             else:
                 logger.warning(
@@ -630,23 +693,26 @@ class EnsembleDecisionManager:
                 raise ValueError("Invalid primary decision")
 
         except Exception as e:
-            logger.warning(
-                f"Primary strategy failed: {e}, attempting fallback"
-            )
+            logger.warning(f"Primary strategy failed: {e}, attempting fallback")
 
         # Tier 2: Majority voting fallback using the VotingStrategies component
         if len(providers) >= 2:
             try:
-                fallback_tier = 'majority_fallback'
+                fallback_tier = "majority_fallback"
                 logger.info("Using majority voting fallback")
                 # Temporarily set voting strategy to majority
                 original_strategy = self.voting_strategy
-                self.voting_strategy = 'majority'
-                self.voting_strategies.voting_strategy = 'majority'
+                self.voting_strategy = "majority"
+                self.voting_strategies.voting_strategy = "majority"
 
                 decision = self.voting_strategies.apply_voting_strategy(
-                    providers, actions, confidences, reasonings, amounts,
-                    self.base_weights, adjusted_weights
+                    providers,
+                    actions,
+                    confidences,
+                    reasonings,
+                    amounts,
+                    self.base_weights,
+                    adjusted_weights,
                 )
 
                 # Restore original strategy
@@ -661,7 +727,7 @@ class EnsembleDecisionManager:
         # Tier 3: Simple averaging fallback (using the existing method for now since it's not in the new class)
         if len(providers) >= 2:
             try:
-                fallback_tier = 'average_fallback'
+                fallback_tier = "average_fallback"
                 logger.info("Using simple averaging fallback")
                 decision = self._simple_average(
                     providers, actions, confidences, reasonings, amounts
@@ -673,7 +739,7 @@ class EnsembleDecisionManager:
 
         # Tier 4: Single provider fallback
         if len(providers) >= 1:
-            fallback_tier = 'single_provider'
+            fallback_tier = "single_provider"
             logger.warning(
                 f"All ensemble methods failed, using single provider: "
                 f"{providers[0]}"
@@ -681,15 +747,15 @@ class EnsembleDecisionManager:
             # Select highest confidence provider
             best_idx = np.argmax(confidences)
             decision = {
-                'action': actions[best_idx],
-                'confidence': confidences[best_idx],
-                'reasoning': (
+                "action": actions[best_idx],
+                "confidence": confidences[best_idx],
+                "reasoning": (
                     f"SINGLE PROVIDER FALLBACK [{providers[best_idx]}]: "
                     f"{reasonings[best_idx]}"
                 ),
-                'amount': amounts[best_idx],
-                'fallback_used': True,
-                'fallback_provider': providers[best_idx]
+                "amount": amounts[best_idx],
+                "fallback_used": True,
+                "fallback_provider": providers[best_idx],
             }
             return decision, fallback_tier
 
@@ -702,7 +768,7 @@ class EnsembleDecisionManager:
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
     ) -> Dict[str, Any]:
         """
         Simple averaging fallback strategy.
@@ -732,20 +798,21 @@ class EnsembleDecisionManager:
 
         # Aggregate reasoning
         final_reasoning = (
-            f"SIMPLE AVERAGE FALLBACK ({len(providers)} providers):\n" +
-            "\n".join([
-                f"[{p}] {a} ({c}%): {r[:100]}"
-                for p, a, c, r
-                in zip(providers, actions, confidences, reasonings)
-            ])
+            f"SIMPLE AVERAGE FALLBACK ({len(providers)} providers):\n"
+            + "\n".join(
+                [
+                    f"[{p}] {a} ({c}%): {r[:100]}"
+                    for p, a, c, r in zip(providers, actions, confidences, reasonings)
+                ]
+            )
         )
 
         return {
-            'action': final_action,
-            'confidence': final_confidence,
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'simple_average_used': True
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "simple_average_used": True,
         }
 
     def _validate_decision(self, decision: Dict[str, Any]) -> bool:
@@ -758,35 +825,36 @@ class EnsembleDecisionManager:
         Returns:
             True if valid, False otherwise
         """
-        required_keys = ['action', 'confidence', 'reasoning', 'amount']
+        required_keys = ["action", "confidence", "reasoning", "amount"]
 
         # Check required keys exist
         if not all(key in decision for key in required_keys):
             return False
 
         # Validate action
-        if decision['action'] not in ['BUY', 'SELL', 'HOLD']:
+        if decision["action"] not in ["BUY", "SELL", "HOLD"]:
             return False
 
         # Validate confidence
-        conf = decision['confidence']
+        conf = decision["confidence"]
         if not isinstance(conf, (int, float)) or conf < 0 or conf > 100:
             return False
 
         # Validate reasoning
-        reasoning = decision['reasoning']
-        if (not isinstance(reasoning, str) or
-                not reasoning.strip()):
+        reasoning = decision["reasoning"]
+        if not isinstance(reasoning, str) or not reasoning.strip():
             return False
 
         # Validate amount
-        amt = decision['amount']
+        amt = decision["amount"]
         if not isinstance(amt, (int, float)) or amt < 0:
             return False
 
         return True
 
-    def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
+    def _is_valid_provider_response(
+        self, decision: Dict[str, Any], provider: str
+    ) -> bool:
         """
         Validate that a provider response dict is well-formed.
 
@@ -801,29 +869,32 @@ class EnsembleDecisionManager:
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if 'action' not in decision or 'confidence' not in decision:
-            logger.warning(f"Provider {provider}: missing required keys 'action' or 'confidence'")
+        if "action" not in decision or "confidence" not in decision:
+            logger.warning(
+                f"Provider {provider}: missing required keys 'action' or 'confidence'"
+            )
             return False
 
-        if decision['action'] not in ['BUY', 'SELL', 'HOLD']:
-            logger.warning(f"Provider {provider}: invalid action '{decision['action']}'")
+        if decision["action"] not in ["BUY", "SELL", "HOLD"]:
+            logger.warning(
+                f"Provider {provider}: invalid action '{decision['action']}'"
+            )
             return False
 
-        conf = decision['confidence']
+        conf = decision["confidence"]
         if not isinstance(conf, (int, float)):
             logger.warning(f"Provider {provider}: confidence is not numeric")
             return False
         if not (0 <= conf <= 100):
-            logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
+            logger.warning(
+                f"Provider {provider}: Confidence {conf} out of range [0, 100]"
+            )
             return False
 
         return True
 
     def _adjust_confidence_for_failures(
-        self,
-        decision: Dict[str, Any],
-        active_providers: int,
-        total_providers: int
+        self, decision: Dict[str, Any], active_providers: int, total_providers: int
     ) -> Dict[str, Any]:
         """
         Adjust confidence based on provider availability.
@@ -839,7 +910,7 @@ class EnsembleDecisionManager:
         """
         if active_providers >= total_providers:
             # No adjustment needed
-            decision['confidence_adjustment_factor'] = 1.0
+            decision["confidence_adjustment_factor"] = 1.0
             return decision
 
         # Calculate degradation factor based on provider availability
@@ -852,12 +923,12 @@ class EnsembleDecisionManager:
         availability_ratio = active_providers / total_providers
         adjustment_factor = 0.7 + 0.3 * availability_ratio
 
-        original_confidence = decision['confidence']
+        original_confidence = decision["confidence"]
         adjusted_confidence = int(original_confidence * adjustment_factor)
 
-        decision['confidence'] = adjusted_confidence
-        decision['confidence_adjustment_factor'] = adjustment_factor
-        decision['original_confidence'] = original_confidence
+        decision["confidence"] = adjusted_confidence
+        decision["confidence_adjustment_factor"] = adjustment_factor
+        decision["original_confidence"] = original_confidence
 
         logger.info(
             f"Confidence adjusted: {original_confidence} → "
@@ -874,7 +945,7 @@ class EnsembleDecisionManager:
         confidences: List[int],
         reasonings: List[str],
         amounts: List[float],
-        adjusted_weights: Optional[Dict[str, float]] = None
+        adjusted_weights: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """
         Weighted voting based on provider weights and confidences.
@@ -896,28 +967,22 @@ class EnsembleDecisionManager:
 
         # Get provider weights (use adjusted if provided, else original)
         if adjusted_weights is not None:
-            weights = np.array([
-                adjusted_weights.get(p, 0.0) for p in providers
-            ])
+            weights = np.array([adjusted_weights.get(p, 0.0) for p in providers])
         else:
-            weights = np.array([
-                self.base_weights.get(p, 1.0) for p in providers
-            ])
+            weights = np.array([self.base_weights.get(p, 1.0) for p in providers])
 
         # Combine weights with confidences for voting power
         voting_power = weights * norm_confidences
 
         # Handle edge case where all voting power is zero
         if voting_power.sum() == 0:
-            logger.warning(
-                "All voting power is zero, using equal weights"
-            )
+            logger.warning("All voting power is zero, using equal weights")
             voting_power = np.ones(len(providers))
 
         voting_power = voting_power / voting_power.sum()
 
         # Vote for each action
-        action_votes = {'BUY': 0.0, 'SELL': 0.0, 'HOLD': 0.0}
+        action_votes = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
         for action, power in zip(actions, voting_power):
             action_votes[action] += power
 
@@ -928,16 +993,13 @@ class EnsembleDecisionManager:
         # Winner's vote share * average confidence of supporters
         winner_power = action_votes[final_action]
         supporter_confidences = [
-            conf for act, conf in zip(actions, confidences)
-            if act == final_action
+            conf for act, conf in zip(actions, confidences) if act == final_action
         ]
 
         if supporter_confidences:
             base_confidence = np.mean(supporter_confidences)
             # Boost if strong agreement, penalize if weak
-            ensemble_confidence = int(
-                base_confidence * (0.8 + 0.4 * winner_power)
-            )
+            ensemble_confidence = int(base_confidence * (0.8 + 0.4 * winner_power))
         else:
             ensemble_confidence = 50
 
@@ -953,15 +1015,15 @@ class EnsembleDecisionManager:
         final_amount = float(np.average(amounts, weights=voting_power))
 
         return {
-            'action': final_action,
-            'confidence': int(ensemble_confidence),
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'action_votes': action_votes,
-            'voting_power': {
+            "action": final_action,
+            "confidence": int(ensemble_confidence),
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "action_votes": action_votes,
+            "voting_power": {
                 provider: float(power)
                 for provider, power in zip(providers, voting_power)
-            }
+            },
         }
 
     def _majority_voting(
@@ -970,7 +1032,7 @@ class EnsembleDecisionManager:
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
     ) -> Dict[str, Any]:
         """Simple majority voting (each provider gets one vote)."""
         if not actions:
@@ -983,8 +1045,7 @@ class EnsembleDecisionManager:
 
         # Average confidence of supporters
         supporter_confidences = [
-            conf for act, conf in zip(actions, confidences)
-            if act == final_action
+            conf for act, conf in zip(actions, confidences) if act == final_action
         ]
         if not supporter_confidences:
             raise ValueError(f"No supporters found for action {final_action}")
@@ -997,20 +1058,21 @@ class EnsembleDecisionManager:
 
         # Average amount from supporters
         supporter_amounts = [
-            amt for act, amt in zip(actions, amounts)
-            if act == final_action
+            amt for act, amt in zip(actions, amounts) if act == final_action
         ]
         if not supporter_amounts:
-            raise ValueError(f"No supporters found for amounts with action {final_action}")
+            raise ValueError(
+                f"No supporters found for amounts with action {final_action}"
+            )
 
         final_amount = float(np.mean(supporter_amounts))
 
         return {
-            'action': final_action,
-            'confidence': final_confidence,
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'vote_counts': dict(action_counts)
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "vote_counts": dict(action_counts),
         }
 
     def _stacking_ensemble(
@@ -1019,7 +1081,7 @@ class EnsembleDecisionManager:
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
     ) -> Dict[str, Any]:
         """
         Stacking ensemble with a trained meta-learner model.
@@ -1032,21 +1094,23 @@ class EnsembleDecisionManager:
                 "Meta-learner not initialized for stacking strategy. "
                 "Falling back to weighted voting."
             )
-            return self._weighted_voting(providers, actions, confidences, reasonings, amounts, None)
+            return self._weighted_voting(
+                providers, actions, confidences, reasonings, amounts, None
+            )
 
         # Generate meta-features
-        meta_features = self._generate_meta_features(
-            actions, confidences, amounts
-        )
+        meta_features = self._generate_meta_features(actions, confidences, amounts)
 
         # Create feature vector in the correct order
-        feature_vector = np.array([
-            meta_features['buy_ratio'],
-            meta_features['sell_ratio'],
-            meta_features['hold_ratio'],
-            meta_features['avg_confidence'],
-            meta_features['confidence_std']
-        ]).reshape(1, -1)
+        feature_vector = np.array(
+            [
+                meta_features["buy_ratio"],
+                meta_features["sell_ratio"],
+                meta_features["hold_ratio"],
+                meta_features["avg_confidence"],
+                meta_features["confidence_std"],
+            ]
+        ).reshape(1, -1)
 
         # Scale the features
         scaled_features = self.meta_feature_scaler.transform(feature_vector)
@@ -1063,22 +1127,21 @@ class EnsembleDecisionManager:
             providers, actions, reasonings, final_action
         )
 
-        final_amount = meta_features['avg_amount']
+        final_amount = meta_features["avg_amount"]
 
         return {
-            'action': final_action,
-            'confidence': final_confidence,
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'meta_features': meta_features,
-            'stacking_probabilities': dict(zip(self.meta_learner.classes_, probabilities))
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "meta_features": meta_features,
+            "stacking_probabilities": dict(
+                zip(self.meta_learner.classes_, probabilities)
+            ),
         }
 
     def _generate_meta_features(
-        self,
-        actions: List[str],
-        confidences: List[int],
-        amounts: List[float]
+        self, actions: List[str], confidences: List[int], amounts: List[float]
     ) -> Dict[str, Any]:
         """Generate meta-features from base model predictions."""
         from collections import Counter
@@ -1086,26 +1149,32 @@ class EnsembleDecisionManager:
         num_providers = len(actions)
         if num_providers == 0:
             return {
-                'buy_ratio': 0.0, 'sell_ratio': 0.0, 'hold_ratio': 0.0,
-                'avg_confidence': 0.0, 'confidence_std': 0.0,
-                'min_confidence': 0, 'max_confidence': 0,
-                'avg_amount': 0.0, 'amount_std': 0.0,
-                'num_providers': 0, 'action_diversity': 0
+                "buy_ratio": 0.0,
+                "sell_ratio": 0.0,
+                "hold_ratio": 0.0,
+                "avg_confidence": 0.0,
+                "confidence_std": 0.0,
+                "min_confidence": 0,
+                "max_confidence": 0,
+                "avg_amount": 0.0,
+                "amount_std": 0.0,
+                "num_providers": 0,
+                "action_diversity": 0,
             }
         action_counts = Counter(actions)
 
         return {
-            'buy_ratio': action_counts.get('BUY', 0) / num_providers,
-            'sell_ratio': action_counts.get('SELL', 0) / num_providers,
-            'hold_ratio': action_counts.get('HOLD', 0) / num_providers,
-            'avg_confidence': float(np.mean(confidences)),
-            'confidence_std': float(np.std(confidences)),
-            'min_confidence': min(confidences) if confidences else 0,
-            'max_confidence': max(confidences) if confidences else 0,
-            'avg_amount': float(np.mean(amounts)),
-            'amount_std': float(np.std(amounts)),
-            'num_providers': num_providers,
-            'action_diversity': len(action_counts)
+            "buy_ratio": action_counts.get("BUY", 0) / num_providers,
+            "sell_ratio": action_counts.get("SELL", 0) / num_providers,
+            "hold_ratio": action_counts.get("HOLD", 0) / num_providers,
+            "avg_confidence": float(np.mean(confidences)),
+            "confidence_std": float(np.std(confidences)),
+            "min_confidence": min(confidences) if confidences else 0,
+            "max_confidence": max(confidences) if confidences else 0,
+            "avg_amount": float(np.mean(amounts)),
+            "amount_std": float(np.std(amounts)),
+            "num_providers": num_providers,
+            "action_diversity": len(action_counts),
         }
 
     def _aggregate_reasoning(
@@ -1113,37 +1182,31 @@ class EnsembleDecisionManager:
         providers: List[str],
         actions: List[str],
         reasonings: List[str],
-        final_action: str
+        final_action: str,
     ) -> str:
         """Aggregate reasoning from providers supporting final action."""
         # Collect reasoning from supporters
         supporter_reasoning = [
             f"[{provider}]: {reasoning[:150]}"
-            for provider, action, reasoning
-            in zip(providers, actions, reasonings)
+            for provider, action, reasoning in zip(providers, actions, reasonings)
             if action == final_action
         ]
 
         # Collect dissenting opinions for transparency
         dissenting_reasoning = [
             f"[{provider} dissents -> {action}]: {reasoning[:100]}"
-            for provider, action, reasoning
-            in zip(providers, actions, reasonings)
+            for provider, action, reasoning in zip(providers, actions, reasonings)
             if action != final_action
         ]
 
         parts = [
             f"ENSEMBLE DECISION ({len(supporter_reasoning)} supporting):",
             "",
-            *supporter_reasoning
+            *supporter_reasoning,
         ]
 
         if dissenting_reasoning:
-            parts.extend([
-                "",
-                "Dissenting views:",
-                *dissenting_reasoning
-            ])
+            parts.extend(["", "Dissenting views:", *dissenting_reasoning])
 
         return "\n".join(parts)
 
@@ -1166,7 +1229,7 @@ class EnsembleDecisionManager:
         self,
         provider_decisions: Dict[str, Dict[str, Any]],
         actual_outcome: str,
-        performance_metric: float
+        performance_metric: float,
     ) -> None:
         """
         Adaptive weight update based on provider performance.
@@ -1181,7 +1244,10 @@ class EnsembleDecisionManager:
 
         # Use the PerformanceTracker component
         self.performance_tracker.update_provider_performance(
-            provider_decisions, actual_outcome, performance_metric, self.enabled_providers
+            provider_decisions,
+            actual_outcome,
+            performance_metric,
+            self.enabled_providers,
         )
 
         # Update the base weights with the newly calculated values
@@ -1211,9 +1277,9 @@ class EnsembleDecisionManager:
     def get_provider_stats(self) -> Dict[str, Any]:
         """Get current provider statistics and weights."""
         stats = {
-            'current_weights': self.base_weights,
-            'enabled_providers': self.enabled_providers,
-            'voting_strategy': self.voting_strategy,
+            "current_weights": self.base_weights,
+            "enabled_providers": self.enabled_providers,
+            "voting_strategy": self.voting_strategy,
         }
 
         # Use the PerformanceTracker component

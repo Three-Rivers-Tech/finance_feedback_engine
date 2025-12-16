@@ -151,7 +151,7 @@ result = engine.execute_decision(decision['id'])
     'margin_used': float,           # Margin in use
     'margin_available': float,      # Available margin
     'nav': float,                   # Net Asset Value
-    
+
     'positions': [                  # Open positions
         {
             'instrument': str,      # e.g., 'EUR_USD'
@@ -162,7 +162,7 @@ result = engine.execute_decision(decision['id'])
             'short_units': float,   # Short exposure
         }
     ],
-    
+
     'holdings': [                   # Currency exposures
         {
             'asset': str,           # Currency code
@@ -171,7 +171,7 @@ result = engine.execute_decision(decision['id'])
             'allocation_pct': float # % of total
         }
     ],
-    
+
     'platform': 'oanda',
     'account_id': str,
     'environment': str              # 'practice' or 'live'
@@ -256,6 +256,6 @@ All providers receive portfolio context automatically.
 
 ---
 
-**Implementation Date**: November 20, 2025  
-**Status**: ✅ Complete and tested  
+**Implementation Date**: November 20, 2025
+**Status**: ✅ Complete and tested
 **Breaking Changes**: None - fully backward compatible

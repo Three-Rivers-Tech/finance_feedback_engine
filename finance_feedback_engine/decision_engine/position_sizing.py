@@ -1,13 +1,13 @@
 """Position sizing calculator for trading decisions."""
 
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 # Minimum order sizes for different platforms (USD notional value)
 MIN_ORDER_SIZE_CRYPTO = 10.0  # Coinbase minimum order size
-MIN_ORDER_SIZE_FOREX = 1.0    # Oanda minimum micro lot
+MIN_ORDER_SIZE_FOREX = 1.0  # Oanda minimum micro lot
 MIN_ORDER_SIZE_DEFAULT = 10.0  # Default minimum for unknown platforms
 
 
@@ -27,7 +27,7 @@ class PositionSizingCalculator:
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool
+        signal_only_default: bool,
     ) -> Dict[str, Any]:
         """
         Calculate all position sizing parameters.
@@ -61,16 +61,16 @@ class PositionSizingCalculator:
             has_valid_balance
             and not signal_only_default
             and (
-                action in ['BUY', 'SELL']
-                or (action == 'HOLD' and has_existing_position)
+                action in ["BUY", "SELL"]
+                or (action == "HOLD" and has_existing_position)
             )
         )
 
         # Get risk parameters from agent config
-        agent_config = self.config.get('agent', {})
-        risk_percentage = agent_config.get('risk_percentage', 0.01)
-        default_stop_loss = agent_config.get('sizing_stop_loss_percentage', 0.02)
-        use_dynamic_stop_loss = agent_config.get('use_dynamic_stop_loss', True)
+        agent_config = self.config.get("agent", {})
+        risk_percentage = agent_config.get("risk_percentage", 0.01)
+        default_stop_loss = agent_config.get("sizing_stop_loss_percentage", 0.02)
+        use_dynamic_stop_loss = agent_config.get("use_dynamic_stop_loss", True)
 
         # Compatibility: Convert legacy percentage values (>1) to decimals
         if risk_percentage > 1:
@@ -92,24 +92,24 @@ class PositionSizingCalculator:
                 current_price=current_price,
                 context=context,
                 default_percentage=default_stop_loss,
-                atr_multiplier=agent_config.get('atr_multiplier', 2.0),
-                min_percentage=agent_config.get('min_stop_loss_pct', 0.01),
-                max_percentage=agent_config.get('max_stop_loss_pct', 0.05)
+                atr_multiplier=agent_config.get("atr_multiplier", 2.0),
+                min_percentage=agent_config.get("min_stop_loss_pct", 0.01),
+                max_percentage=agent_config.get("max_stop_loss_pct", 0.05),
             )
         else:
             sizing_stop_loss_percentage = default_stop_loss
             logger.info(
                 "Using fixed stop-loss: %.2f%% (dynamic stop-loss disabled)",
-                default_stop_loss * 100
+                default_stop_loss * 100,
             )
 
         # Initialize return values
         result = {
-            'recommended_position_size': None,
-            'stop_loss_price': None,
-            'sizing_stop_loss_percentage': None,
-            'risk_percentage': None,
-            'signal_only': False
+            "recommended_position_size": None,
+            "stop_loss_price": None,
+            "sizing_stop_loss_percentage": None,
+            "risk_percentage": None,
+            "signal_only": False,
         }
 
         # CASE 1: Normal mode with valid balance
@@ -120,26 +120,28 @@ class PositionSizingCalculator:
                 account_balance=total_balance,
                 risk_percentage=risk_percentage,
                 entry_price=current_price,
-                stop_loss_percentage=sizing_stop_loss_percentage
+                stop_loss_percentage=sizing_stop_loss_percentage,
             )
 
             # Calculate stop loss price
             position_type = self._determine_position_type(action)
             stop_loss_price = 0
-            if position_type == 'LONG' and current_price > 0:
+            if position_type == "LONG" and current_price > 0:
                 stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
-            elif position_type == 'SHORT' and current_price > 0:
+            elif position_type == "SHORT" and current_price > 0:
                 stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
 
-            result.update({
-                'recommended_position_size': recommended_position_size,
-                'stop_loss_price': stop_loss_price,
-                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
-                'risk_percentage': risk_percentage,
-                'signal_only': False
-            })
+            result.update(
+                {
+                    "recommended_position_size": recommended_position_size,
+                    "stop_loss_price": stop_loss_price,
+                    "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
+                    "risk_percentage": risk_percentage,
+                    "signal_only": False,
+                }
+            )
 
-            if action == 'HOLD' and has_existing_position:
+            if action == "HOLD" and has_existing_position:
                 logger.info(
                     "HOLD with existing position: sizing (%.4f units) from %s",
                     recommended_position_size,
@@ -156,19 +158,25 @@ class PositionSizingCalculator:
                 )
 
         # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
-        else:
             # Determine if this should be signal-only mode based on balance or config
             signal_only = signal_only_default or not has_valid_balance
 
             # HOLD without position: no sizing needed
-            if action == 'HOLD' and not has_existing_position:
+            if action == "HOLD" and not has_existing_position:
                 logger.info("HOLD without existing position - no position sizing shown")
-                result['signal_only'] = signal_only
+                result["signal_only"] = False
                 return result
 
             # Determine minimum order size based on asset type (must be set unconditionally)
-            is_crypto = context.get('market_data', {}).get('type') == 'crypto' or 'BTC' in context['asset_pair'] or 'ETH' in context['asset_pair']
-            is_forex = '_' in context['asset_pair'] or context.get('market_data', {}).get('type') == 'forex'
+            is_crypto = (
+                context.get("market_data", {}).get("type") == "crypto"
+                or "BTC" in context["asset_pair"]
+                or "ETH" in context["asset_pair"]
+            )
+            is_forex = (
+                "_" in context["asset_pair"]
+                or context.get("market_data", {}).get("type") == "forex"
+            )
 
             if is_crypto:
                 min_order_size = MIN_ORDER_SIZE_CRYPTO
@@ -191,11 +199,21 @@ class PositionSizingCalculator:
                     "Zero/low balance detected - using minimum order size: $%.2f USD notional = %.6f units @ $%.2f",
                     min_order_size,
                     recommended_position_size,
-                    current_price
+                    current_price,
                 )
             else:
-                # In signal-only mode or if price not available, set position size to None
-                recommended_position_size = None
+                # Fallback to signal-only with standard calculation if price is unavailable
+                default_balance = 10000.0
+                recommended_position_size = self.calculate_position_size(
+                    account_balance=default_balance,
+                    risk_percentage=risk_percentage,
+                    entry_price=current_price if current_price > 0 else 1,
+                    stop_loss_percentage=sizing_stop_loss_percentage,
+                )
+                logger.warning(
+                    "Current price unavailable - using default balance $%.2f for sizing recommendation",
+                    default_balance,
+                )
 
                 if signal_only:
                     logger.info(
@@ -207,19 +225,21 @@ class PositionSizingCalculator:
             if current_price > 0 and sizing_stop_loss_percentage > 0 and not signal_only:
                 stop_loss_price = (
                     current_price * (1 - sizing_stop_loss_percentage)
-                    if action == 'BUY'
+                    if action == "BUY"
                     else current_price * (1 + sizing_stop_loss_percentage)
                 )
             else:
                 stop_loss_price = None
 
-            result.update({
-                'recommended_position_size': recommended_position_size,
-                'stop_loss_price': stop_loss_price,
-                'sizing_stop_loss_percentage': sizing_stop_loss_percentage,
-                'risk_percentage': risk_percentage,
-                'signal_only': signal_only
-            })
+            result.update(
+                {
+                    "recommended_position_size": recommended_position_size,
+                    "stop_loss_price": stop_loss_price,
+                    "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
+                    "risk_percentage": risk_percentage,
+                    "signal_only": signal_only
+                }
+            )
 
             # Log appropriate message
             if signal_only:
@@ -232,13 +252,13 @@ class PositionSizingCalculator:
                     "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
                     balance_source,
                     recommended_position_size,
-                    min_order_size
+                    min_order_size,
                 )
             else:
                 logger.warning(
                     "Portfolio data unavailable - using minimum order size: %.6f units ($%.2f USD notional)",
                     recommended_position_size,
-                    min_order_size
+                    min_order_size,
                 )
 
         return result
@@ -250,7 +270,7 @@ class PositionSizingCalculator:
         default_percentage: float = 0.02,
         atr_multiplier: float = 2.0,
         min_percentage: float = 0.01,
-        max_percentage: float = 0.05
+        max_percentage: float = 0.05,
     ) -> float:
         """
         Calculate dynamic stop-loss percentage based on market volatility (ATR).
@@ -276,29 +296,29 @@ class PositionSizingCalculator:
         atr_value = None
 
         # Try to get ATR from monitoring context (multi-timeframe pulse)
-        monitoring_context = context.get('monitoring_context')
+        monitoring_context = context.get("monitoring_context")
         if monitoring_context:
-            pulse_data = monitoring_context.get('multi_timeframe_pulse')
+            pulse_data = monitoring_context.get("multi_timeframe_pulse")
             if pulse_data and isinstance(pulse_data, dict):
                 # Check for ATR in daily timeframe (most reliable for position sizing)
-                daily_data = pulse_data.get('1d') or pulse_data.get('daily')
-                if daily_data and 'atr' in daily_data:
-                    atr_value = daily_data.get('atr')
+                daily_data = pulse_data.get("1d") or pulse_data.get("daily")
+                if daily_data and "atr" in daily_data:
+                    atr_value = daily_data.get("atr")
                 # Fallback to 4h timeframe if daily not available
-                elif pulse_data.get('4h') and 'atr' in pulse_data.get('4h', {}):
-                    atr_value = pulse_data['4h'].get('atr')
+                elif pulse_data.get("4h") and "atr" in pulse_data.get("4h", {}):
+                    atr_value = pulse_data["4h"].get("atr")
 
         # Try to get ATR from market_data if not found in monitoring context
         if atr_value is None:
-            market_data = context.get('market_data', {})
-            if 'atr' in market_data:
-                atr_value = market_data.get('atr')
+            market_data = context.get("market_data", {})
+            if "atr" in market_data:
+                atr_value = market_data.get("atr")
             # Check for pulse data directly in market_data
-            elif 'pulse' in market_data and isinstance(market_data['pulse'], dict):
-                pulse = market_data['pulse']
-                daily_data = pulse.get('1d') or pulse.get('daily')
-                if daily_data and 'atr' in daily_data:
-                    atr_value = daily_data.get('atr')
+            elif "pulse" in market_data and isinstance(market_data["pulse"], dict):
+                pulse = market_data["pulse"]
+                daily_data = pulse.get("1d") or pulse.get("daily")
+                if daily_data and "atr" in daily_data:
+                    atr_value = daily_data.get("atr")
 
         # Calculate stop-loss based on ATR if available
         if atr_value is not None and atr_value > 0:
@@ -306,7 +326,9 @@ class PositionSizingCalculator:
             atr_based_percentage = (atr_value * atr_multiplier) / current_price
 
             # Apply bounds
-            stop_loss_percentage = max(min_percentage, min(atr_based_percentage, max_percentage))
+            stop_loss_percentage = max(
+                min_percentage, min(atr_based_percentage, max_percentage)
+            )
 
             logger.info(
                 "Dynamic stop-loss: ATR=%.4f, ATR-based=%.2f%%, bounded=%.2f%% (min=%.2f%%, max=%.2f%%)",
@@ -314,14 +336,14 @@ class PositionSizingCalculator:
                 atr_based_percentage * 100,
                 stop_loss_percentage * 100,
                 min_percentage * 100,
-                max_percentage * 100
+                max_percentage * 100,
             )
             return stop_loss_percentage
         else:
             # No ATR available, use default percentage
             logger.info(
                 "ATR not available, using default stop-loss: %.2f%%",
-                default_percentage * 100
+                default_percentage * 100,
             )
             return default_percentage
 
@@ -330,7 +352,7 @@ class PositionSizingCalculator:
         account_balance: float,
         risk_percentage: float = 0.01,
         entry_price: float = 0,
-        stop_loss_percentage: float = 0.02
+        stop_loss_percentage: float = 0.02,
     ) -> float:
         """
         Calculate appropriate position size based on risk management.
@@ -369,8 +391,8 @@ class PositionSizingCalculator:
         Returns:
             Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
         """
-        if action == 'BUY':
-            return 'LONG'
-        elif action == 'SELL':
-            return 'SHORT'
+        if action == "BUY":
+            return "LONG"
+        elif action == "SELL":
+            return "SHORT"
         return None
