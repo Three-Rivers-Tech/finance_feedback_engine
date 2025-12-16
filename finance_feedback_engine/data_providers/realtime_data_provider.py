@@ -53,15 +53,12 @@ class RealtimeDataProvider:
         self.validator = FinancialDataValidator()
         self.data_store = TimeSeriesDataStore()
 
-    async def _listen_for_data(self):
+    async def _listen_for_data(self) -> None:
         """Polls Alpha Vantage for new data."""
         while self._is_running:
             try:
                 data, _ = await self.ts.get_intraday(
-                    data,
-                    _=await self.ts.get_intraday(
-                        symbol=self.symbol, interval="1min", outputsize="compact"
-                    ),
+                    symbol=self.symbol, interval="1min", outputsize="compact"
                 )
 
                 # The Alpha Vantage API returns data in a descending order by time.

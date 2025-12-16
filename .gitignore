@@ -8,6 +8,7 @@ venv/
 .pytest_cache/
 # Type checker cache
 .mypy_cache/
+.ruff_cache/
 # Coverage artifacts
 .coverage
 .coverage.*
@@ -48,6 +49,11 @@ data/memory/
 data/trade_metrics/
 data/api_costs/
 data/historical_cache/
+# Data pipeline artifacts
+data/watermarks/
+data/dlq/
+data/delta_lake/
+data/cache/
 # Keep .gitkeep files in data subdirectories
 !data/**/.gitkeep
 

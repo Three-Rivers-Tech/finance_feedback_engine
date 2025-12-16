@@ -30,7 +30,7 @@ try:
     # Get the public URL
     public_url = tunnel.public_url
 
-    print(f"\n✅ Ngrok tunnel started successfully!")
+    print("\n✅ Ngrok tunnel started successfully!")
     print(f"📡 Public URL: {public_url}")
     print(f"🔗 Webhook endpoint: {public_url}/webhook/telegram")
     print("\nPress Ctrl+C to stop the tunnel...")

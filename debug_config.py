@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """Debug config loading for unified platform."""
 
-import yaml
-import sys
 from pathlib import Path
 
+import yaml
+
 # Load config files in order
-config_files = [
-    "config/config.yaml",
-    "config/config.local.yaml"
-]
+config_files = ["config/config.yaml", "config/config.local.yaml"]
 
 final_config = {}
 
@@ -29,22 +26,22 @@ print("\n=== Trading Platform Config ===")
 print(f"trading_platform: {final_config.get('trading_platform')}")
 
 print("\n=== Platforms List ===")
-platforms = final_config.get('platforms', [])
+platforms = final_config.get("platforms", [])
 print(f"Number of platforms: {len(platforms)}")
 
 for i, platform_config in enumerate(platforms):
     print(f"\nPlatform {i + 1}:")
     if isinstance(platform_config, dict):
-        name = platform_config.get('name')
-        creds = platform_config.get('credentials', {})
+        name = platform_config.get("name")
+        creds = platform_config.get("credentials", {})
         print(f"  name: {name}")
         print(f"  credentials keys: {list(creds.keys())}")
 
-        if name == 'coinbase_advanced':
+        if name == "coinbase_advanced":
             print(f"    api_key present: {'api_key' in creds}")
             print(f"    api_secret present: {'api_secret' in creds}")
             print(f"    use_sandbox: {creds.get('use_sandbox')}")
-        elif name == 'oanda':
+        elif name == "oanda":
             print(f"    api_key present: {'api_key' in creds}")
             print(f"    account_id present: {'account_id' in creds}")
             print(f"    environment: {creds.get('environment')}")
@@ -59,25 +56,25 @@ for platform_config in platforms:
         print(f"Skipping non-dict: {platform_config}")
         continue
 
-    name = platform_config.get('name', '')
+    name = platform_config.get("name", "")
     if not isinstance(name, str) or not name:
         print(f"Skipping invalid name: {platform_config}")
         continue
 
     platform_key = name.lower()
-    platform_creds = platform_config.get('credentials', {})
+    platform_creds = platform_config.get("credentials", {})
 
     if not isinstance(platform_creds, dict):
         print(f"Skipping non-dict credentials for {platform_key}")
         continue
 
     # Normalize key names
-    if platform_key in ['coinbase', 'coinbase_advanced']:
-        unified_credentials['coinbase'] = platform_creds
+    if platform_key in ["coinbase", "coinbase_advanced"]:
+        unified_credentials["coinbase"] = platform_creds
         print(f"✓ Added coinbase (from {platform_key})")
-    elif platform_key == 'oanda':
-        unified_credentials['oanda'] = platform_creds
-        print(f"✓ Added oanda")
+    elif platform_key == "oanda":
+        unified_credentials["oanda"] = platform_creds
+        print("✓ Added oanda")
     else:
         print(f"Unknown platform: {platform_key}")
 

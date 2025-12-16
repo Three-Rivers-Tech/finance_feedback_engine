@@ -39,7 +39,7 @@ def exponential_backoff_retry(
     Example:
         @exponential_backoff_retry(max_retries=3, base_delay=1.0)
         def fetch_data(url):
-            return requests.get(url)
+            return requests.get(url, timeout=10)
     """
 
     def decorator(func: Callable) -> Callable:

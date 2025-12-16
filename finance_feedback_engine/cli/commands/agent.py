@@ -91,27 +91,34 @@ def _initialize_agent(
         else:
             # Signal-only mode: generate signals and send to Telegram/webhooks for approval
             # VALIDATION: Ensure notification channels are configured
-            telegram_config = config.get('telegram', {})
-            telegram_enabled = telegram_config.get('enabled', False)
-            telegram_has_token = bool(telegram_config.get('bot_token'))
-            telegram_has_chat_id = bool(telegram_config.get('chat_id'))
+            telegram_config = config.get("telegram", {})
+            telegram_enabled = telegram_config.get("enabled", False)
+            telegram_has_token = bool(telegram_config.get("bot_token"))
+            telegram_has_chat_id = bool(telegram_config.get("chat_id"))
 
             # Check for webhook configuration (if implemented)
-            webhook_config = config.get('webhook', {})
-            webhook_enabled = webhook_config.get('enabled', False)
-            webhook_has_url = bool(webhook_config.get('url'))
+            webhook_config = config.get("webhook", {})
+            webhook_enabled = webhook_config.get("enabled", False)
+            webhook_has_url = bool(webhook_config.get("url"))
 
             # Determine if any notification channel is properly configured
             notification_available = (
-                (telegram_enabled and telegram_has_token and telegram_has_chat_id) or
-                (webhook_enabled and webhook_has_url)
-            )
+                telegram_enabled and telegram_has_token and telegram_has_chat_id
+            ) or (webhook_enabled and webhook_has_url)
 
             if not notification_available:
-                console.print("[red]❌ SIGNAL-ONLY MODE ERROR: No notification channels configured![/red]")
-                console.print("[yellow]Signal-only mode requires at least one notification channel:[/yellow]")
-                console.print("  1. Telegram: Set telegram.enabled=true, telegram.bot_token, and telegram.chat_id in config")
-                console.print("  2. Webhook: Set webhook.enabled=true and webhook.url in config")
+                console.print(
+                    "[red]❌ SIGNAL-ONLY MODE ERROR: No notification channels configured![/red]"
+                )
+                console.print(
+                    "[yellow]Signal-only mode requires at least one notification channel:[/yellow]"
+                )
+                console.print(
+                    "  1. Telegram: Set telegram.enabled=true, telegram.bot_token, and telegram.chat_id in config"
+                )
+                console.print(
+                    "  2. Webhook: Set webhook.enabled=true and webhook.url in config"
+                )
                 console.print("\n[yellow]Current configuration status:[/yellow]")
                 console.print(f"  Telegram enabled: {telegram_enabled}")
                 console.print(f"  Telegram token configured: {telegram_has_token}")
@@ -140,7 +147,6 @@ def _initialize_agent(
             console.print(
                 "[dim]Tip: pass `--autonomous` or set `agent.autonomous.enabled: true` in config to proceed without prompts.[/dim]"
             )
-            return None
 
     console.print("[green]✓ Agent configuration loaded.[/green]")
     console.print(f"  Portfolio Take Profit: {take_profit:.2%}")
@@ -172,8 +178,13 @@ def _initialize_agent(
 
     # Verify TradingLoopAgent supports signal-only mode if needed
     if not agent_config.autonomous.enabled:
-        if not hasattr(agent, 'supports_signal_only_mode') or not agent.supports_signal_only_mode():
-            console.print("[red]❌ ERROR: TradingLoopAgent does not support signal-only mode![/red]")
+        if (
+            not hasattr(agent, "supports_signal_only_mode")
+            or not agent.supports_signal_only_mode()
+        ):
+            console.print(
+                "[red]❌ ERROR: TradingLoopAgent does not support signal-only mode![/red]"
+            )
             logger.error(
                 "TradingLoopAgent lacks signal-only mode support. "
                 "Check that _send_signals_to_telegram() and signal routing are implemented."

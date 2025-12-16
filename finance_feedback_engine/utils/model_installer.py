@@ -256,7 +256,7 @@ class ModelInstaller:
                     name = ln.split()[0].strip().lower()
                     if name:
                         installed.add(name)
-                except Exception:
+                except (IndexError, AttributeError):
                     continue
 
             # Normalize requested model

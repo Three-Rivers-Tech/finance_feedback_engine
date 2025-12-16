@@ -10,9 +10,9 @@ Features:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 import pandas as pd
 
@@ -47,8 +47,7 @@ class DeltaLakeManager:
     def _check_spark_available(self) -> bool:
         """Check if PySpark is installed."""
         try:
-            import pyspark
-
+            __import__("pyspark")
             return True
         except ImportError:
             return False

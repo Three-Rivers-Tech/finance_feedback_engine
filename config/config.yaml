@@ -549,6 +549,29 @@ api_auth:
   # Useful for gradual migration to DB-based auth
   enable_fallback_to_config: true
 
+# API Timeout Configuration
+# Define timeout values for different API calls to prevent hanging requests
+api_timeouts:
+  # Data providers
+  market_data: 10
+  sentiment: 15
+  macro: 10
+
+  # Trading platforms (NEW)
+  platform_balance: 5      # Get balance operations
+  platform_portfolio: 10   # Portfolio breakdown (more data)
+  platform_execute: 30     # Trade execution (critical path)
+  platform_connection: 3   # Initial connection establishment
+
+  # AI providers (NEW)
+  llm_query: 45           # LLM decision generation
+  llm_debate: 90          # Debate mode (multiple LLM calls)
+  llm_connection: 5       # Provider connection timeout
+
+  # External services (NEW)
+  telegram_webhook: 5     # Telegram bot API
+  redis_operations: 2     # Redis cache operations
+
 # ============================================================
 # API KEYS (PLACEHOLDER - SET IN config.local.yaml)
 # ============================================================

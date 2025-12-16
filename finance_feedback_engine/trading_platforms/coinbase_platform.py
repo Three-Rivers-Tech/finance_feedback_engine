@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from requests.exceptions import RequestException
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
-from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
+from .base_platform import BaseTradingPlatform, PositionInfo
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     - Buying power and margin requirements
     """
 
-    def __init__(self, credentials: Dict[str, Any]):
+    def __init__(
+        self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize Coinbase Advanced platform.
 
@@ -37,12 +39,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 - api_secret: Coinbase API secret
                 - passphrase: Optional passphrase (for legacy API)
                 - use_sandbox: Optional bool for sandbox environment
+            config: Configuration dictionary containing timeout settings
         """
         super().__init__(credentials)
         self.api_key = credentials.get("api_key")
         self.api_secret = credentials.get("api_secret")
         self.passphrase = credentials.get("passphrase")
         self.use_sandbox = credentials.get("use_sandbox", False)
+
+        # Initialize timeout configuration
+        api_timeouts = (config or {}).get("api_timeouts", {})
+        self.timeout_config = {
+            "platform_balance": api_timeouts.get("platform_balance", 5),
+            "platform_portfolio": api_timeouts.get("platform_portfolio", 10),
+            "platform_execute": api_timeouts.get("platform_execute", 30),
+            "platform_connection": api_timeouts.get("platform_connection", 3),
+        }
 
         # Initialize Coinbase client (lazy loading)
         self._client = None
@@ -65,8 +77,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 # Initialize client with API credentials
                 # For CDP API keys (organizations/.../apiKeys/...), pass directly
                 self._client = RESTClient(
-                    api_key=self.api_key,
-                    api_secret=self.api_secret
+                    api_key=self.api_key, api_secret=self.api_secret
                 )
                 logger.info("Coinbase REST client initialized with CDP API format")
             except ImportError:
@@ -79,7 +90,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "Install coinbase-advanced-py"
                 )
             except Exception as e:
-                logger.error("Failed to initialize Coinbase client: %s", e, exc_info=True)
+                logger.error(
+                    "Failed to initialize Coinbase client: %s", e, exc_info=True
+                )
                 raise
 
         return self._client
@@ -493,87 +506,6 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         except Exception as e:
             logger.error("Error fetching portfolio breakdown: %s", e)
-            raise
-
-    def get_account_info(self) -> Dict[str, Any]:
-        """
-        Get Coinbase account information.
-
-        Returns:
-            Account details including platform, balance, and leverage info
-        """
-        logger.info("Fetching Coinbase account info")
-
-        try:
-            client = self._get_client()
-
-            # Get futures balance summary for account details
-            futures_summary = {}
-            balance = 0.0
-            max_leverage = 20.0  # Default max leverage for Coinbase perpetuals
-
-            try:
-                futures_response = client.get_futures_balance_summary()
-                balance_summary = getattr(futures_response, "balance_summary", None)
-
-                if balance_summary:
-                    total_usd_balance = balance_summary["total_usd_balance"]
-                    balance = float(total_usd_balance.get("value", 0))
-
-                    # Get buying power to calculate available leverage
-                    buying_power_dict = balance_summary.get("futures_buying_power", {})
-                    buying_power = float(buying_power_dict.get("value", 0))
-
-                    # Max leverage is typically 20x for Coinbase perpetuals
-                    # Calculate leverage from buying_power / balance ratio
-                    # with defensive checks and proper clamping
-                    if balance <= 0:
-                        logger.warning(
-                            "Account balance is <= 0 (%.2f); cannot calculate leverage",
-                            balance,
-                        )
-                        max_leverage = 1.0
-                    elif buying_power <= 0:
-                        logger.warning(
-                            "Buying power is <= 0 (%.2f); setting leverage to 1.0",
-                            buying_power,
-                        )
-                        max_leverage = 1.0
-                    else:
-                        # Normal case: compute leverage and clamp between 1.0 and 20.0
-                        calculated_leverage = buying_power / balance
-                        max_leverage = max(1.0, min(calculated_leverage, 20.0))
-
-                        # Log anomalous leverage values
-                        if buying_power < balance:
-                            logger.info(
-                                "Buying power (%.2f) < balance (%.2f); "
-                                "effective leverage %.2f",
-                                buying_power,
-                                balance,
-                                max_leverage,
-                            )
-                        elif calculated_leverage > 20.0:
-                            logger.warning(
-                                "Buying power ratio (%.2f) exceeds 20.0x cap; "
-                                "clamping to 20.0",
-                                calculated_leverage,
-                            )
-
-            except Exception as e:
-                logger.warning("Could not fetch futures balance: %s", e)
-
-            return {
-                "platform": "coinbase",
-                "account_type": "futures",
-                "currency": "USD",
-                "balance": balance,
-                "max_leverage": max_leverage,
-                "environment": "sandbox" if self.use_sandbox else "live",
-            }
-
-        except Exception as e:
-            logger.error("Error fetching Coinbase account info: %s", e)
             raise
 
     @retry(

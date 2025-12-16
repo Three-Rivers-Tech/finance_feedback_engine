@@ -8,7 +8,6 @@ Implements state-of-the-art ensemble techniques inspired by:
 """
 
 import logging
-from copy import deepcopy
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -17,7 +16,6 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
-from ..exceptions import InsufficientProvidersError
 from .debate_manager import DebateManager
 from .performance_tracker import PerformanceTracker
 from .two_phase_aggregator import TwoPhaseAggregator
@@ -152,6 +150,10 @@ class EnsembleDecisionManager:
         self.performance_tracker = PerformanceTracker(config, self.learning_rate)
         self.two_phase_aggregator = TwoPhaseAggregator(config)
         self.debate_manager = DebateManager(self.debate_providers)
+
+        # Initialize meta-learner for stacking ensemble (if needed)
+        self.meta_learner = self.voting_strategies.meta_learner
+        self.meta_feature_scaler = self.voting_strategies.meta_feature_scaler
 
         logger.info(
             f"Local-First Ensemble initialized. Target Local Dominance: {self.local_dominance_target:.0%}"
@@ -458,7 +460,7 @@ class EnsembleDecisionManager:
         phase2_primary_used = result["phase2_primary_used"]
         phase2_fallback_used = result["phase2_fallback_used"]
         codex_tiebreaker_used = result["codex_tiebreaker_used"]
-        normalized_asset_type = result["normalized_asset_type"]
+        result["normalized_asset_type"]
         phase2_triggered = result.get("phase2_triggered", True)
         phase2_skip_reason = result.get("phase2_skip_reason")
         phase2_escalation_reason = result.get("phase2_escalation_reason")
@@ -1084,10 +1086,10 @@ class EnsembleDecisionManager:
         amounts: List[float],
     ) -> Dict[str, Any]:
         """
-        Stacking ensemble with a trained meta-learner model.
+        Enhanced stacking ensemble with additional meta-features and improved decision logic.
 
-        Generates meta-features from base predictions, scales them, and
-        feeds them to a logistic regression model to get the final decision.
+        This implementation includes additional meta-features like action diversity,
+        confidence range, and prediction agreement to improve the meta-learner's performance.
         """
         if not self.meta_learner or not self.meta_feature_scaler:
             logger.warning(
@@ -1098,8 +1100,10 @@ class EnsembleDecisionManager:
                 providers, actions, confidences, reasonings, amounts, None
             )
 
-        # Generate meta-features
-        meta_features = self._generate_meta_features(actions, confidences, amounts)
+        # Generate enhanced meta-features
+        meta_features = self._generate_enhanced_meta_features(
+            actions, confidences, amounts
+        )
 
         # Create feature vector in the correct order
         feature_vector = np.array(
@@ -1109,6 +1113,10 @@ class EnsembleDecisionManager:
                 meta_features["hold_ratio"],
                 meta_features["avg_confidence"],
                 meta_features["confidence_std"],
+                meta_features["action_diversity_ratio"],
+                meta_features["confidence_range"],
+                meta_features["avg_amount"],
+                meta_features["amount_std"],
             ]
         ).reshape(1, -1)
 
@@ -1138,6 +1146,62 @@ class EnsembleDecisionManager:
             "stacking_probabilities": dict(
                 zip(self.meta_learner.classes_, probabilities)
             ),
+            "enhanced_meta_features": True,
+        }
+
+    def _generate_enhanced_meta_features(
+        self, actions: List[str], confidences: List[int], amounts: List[float]
+    ) -> Dict[str, Any]:
+        """Generate enhanced meta-features from base model predictions."""
+        num_providers = len(actions)
+        if num_providers == 0:
+            return {
+                "buy_ratio": 0.0,
+                "sell_ratio": 0.0,
+                "hold_ratio": 0.0,
+                "avg_confidence": 0.0,
+                "confidence_std": 0.0,
+                "min_confidence": 0,
+                "max_confidence": 0,
+                "avg_amount": 0.0,
+                "amount_std": 0.0,
+                "num_providers": 0,
+                "action_diversity": 0,
+                "action_diversity_ratio": 0.0,
+                "confidence_range": 0.0,
+            }
+
+        from collections import Counter
+
+        action_counts = Counter(actions)
+
+        # Basic features
+        buy_ratio = action_counts.get("BUY", 0) / num_providers
+        sell_ratio = action_counts.get("SELL", 0) / num_providers
+        hold_ratio = action_counts.get("HOLD", 0) / num_providers
+        avg_confidence = float(np.mean(confidences))
+        confidence_std = float(np.std(confidences))
+        min_confidence = min(confidences) if confidences else 0
+        max_confidence = max(confidences) if confidences else 0
+        avg_amount = float(np.mean(amounts))
+        amount_std = float(np.std(amounts))
+        num_unique_actions = len(action_counts)
+
+        return {
+            "buy_ratio": buy_ratio,
+            "sell_ratio": sell_ratio,
+            "hold_ratio": hold_ratio,
+            "avg_confidence": avg_confidence,
+            "confidence_std": confidence_std,
+            "min_confidence": min_confidence,
+            "max_confidence": max_confidence,
+            "avg_amount": avg_amount,
+            "amount_std": amount_std,
+            "num_providers": num_providers,
+            "action_diversity": num_unique_actions,
+            "action_diversity_ratio": num_unique_actions
+            / 3.0,  # Normalize by max possible actions
+            "confidence_range": max_confidence - min_confidence,
         }
 
     def _generate_meta_features(

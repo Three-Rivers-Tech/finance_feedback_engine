@@ -22,7 +22,6 @@ def test_forex_friday_boundary_stays_open():
     assert status_open["time_to_close"] > 0
 
     close_dt = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
-<<<<<<< HEAD
     status_closed = MarketSchedule.get_market_status(
         "EURUSD", "forex", now_utc=close_dt
     )
@@ -32,12 +31,10 @@ def test_forex_friday_boundary_stays_open():
 
 def test_forex_sunday_reopen_window():
     pre_reopen = _to_utc(dt.datetime(2024, 5, 12, 16, 0), MarketSchedule.NY_TZ)
-<<<<<<< HEAD
     status_closed = MarketSchedule.get_market_status(
         "EURUSD", "forex", now_utc=pre_reopen
     )
     assert status_closed["is_open"] is False
->>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
 
     post_reopen = _to_utc(dt.datetime(2024, 5, 12, 17, 0), MarketSchedule.NY_TZ)
     status_open = MarketSchedule.get_market_status(
@@ -138,7 +135,10 @@ def test_forex_saturday_open_with_warning():
     status = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=dt_saturday)
     assert status["is_open"] is True
     assert status["session"] == "Weekend"
-    assert status["warning"] == "Weekend forex trading has reduced liquidity and wider spreads"
+    assert (
+        status["warning"]
+        == "Weekend forex trading has reduced liquidity and wider spreads"
+    )
 
 
 def test_forex_time_to_close_friday():
@@ -209,12 +209,10 @@ def test_backtesting_forex_timestamp():
     # Friday 5 PM NY (previously closed window)
     dt_close = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
     timestamp_close = _to_unix(dt_close)
-<<<<<<< HEAD
     status_close = MarketSchedule.get_market_status_at_timestamp(
         "EURUSD", "forex", timestamp_close
     )
     assert status_close["is_open"] is False
->>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
 
 
 def test_backtesting_stock_timestamp():

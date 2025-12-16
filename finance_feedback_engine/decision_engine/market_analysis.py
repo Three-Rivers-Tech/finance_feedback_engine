@@ -1,12 +1,10 @@
 """Market analysis context for trading decisions."""
 
-import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 import pandas as pd
-import pytz
 
 from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDetector
 from finance_feedback_engine.utils.market_schedule import MarketSchedule

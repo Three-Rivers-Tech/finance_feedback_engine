@@ -211,7 +211,7 @@ class TunnelManager:
                 logger.warning(
                     f"Exception during TunnelManager cleanup in __del__: {e}"
                 )
-            except:
+            except Exception:
                 # If logging fails, suppress silently
                 pass
 
@@ -231,8 +231,7 @@ class TunnelManager:
     def ensure_ngrok_installed(self) -> bool:
         """Check if pyngrok is installed (test stub)."""
         try:
-            import pyngrok
-
+            __import__("pyngrok")
             return True
         except ImportError:
             return False

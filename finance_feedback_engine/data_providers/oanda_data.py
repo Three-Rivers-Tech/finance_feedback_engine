@@ -221,7 +221,7 @@ class OandaDataProvider:
             try:
                 dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 timestamp = int(dt.timestamp())
-            except:
+            except Exception:
                 # Fallback: use current time
                 timestamp = int(time.time())
 
