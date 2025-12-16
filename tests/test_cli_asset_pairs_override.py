@@ -1,38 +1,33 @@
 """Test --asset-pairs CLI override for run-agent command."""
 
-import pytest
-from unittest.mock import Mock, patch
-import yaml
-import tempfile
 import os
+import tempfile
+from unittest.mock import Mock, patch
+
+import pytest
+import yaml
 
 
 @pytest.fixture
 def test_config():
     """Create a minimal test configuration."""
     return {
-        'agent': {
-            'autonomous_execution': False,
-            'asset_pairs': ['BTCUSD', 'ETHUSD'],
-            'watchlist': ['BTCUSD', 'ETHUSD', 'EURUSD'],
-            'analysis_frequency_seconds': 300,
-            'autonomous': {
-                'enabled': False
-            }
+        "agent": {
+            "autonomous_execution": False,
+            "asset_pairs": ["BTCUSD", "ETHUSD"],
+            "watchlist": ["BTCUSD", "ETHUSD", "EURUSD"],
+            "analysis_frequency_seconds": 300,
+            "autonomous": {"enabled": False},
         },
-        'trading_platform': {
-            'type': 'mock'
-        },
-        'decision_engine': {
-            'ai_provider': 'copilot'
-        }
+        "trading_platform": {"type": "mock"},
+        "decision_engine": {"ai_provider": "copilot"},
     }
 
 
 @pytest.fixture
 def temp_config_file(test_config):
     """Create a temporary config file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(test_config, f)
         config_path = f.name
 
@@ -51,7 +46,7 @@ def test_asset_pairs_override_parsing():
     asset_pairs_input = "BTCUSD,ETHUSD,EURUSD"
     parsed_asset_pairs = [
         standardize_asset_pair(pair.strip())
-        for pair in asset_pairs_input.split(',')
+        for pair in asset_pairs_input.split(",")
         if pair.strip()
     ]
 
@@ -66,7 +61,7 @@ def test_asset_pairs_override_various_formats():
     asset_pairs_input = "btc-usd, eth-usd, EURUSD, gbp_usd"
     parsed_asset_pairs = [
         standardize_asset_pair(pair.strip())
-        for pair in asset_pairs_input.split(',')
+        for pair in asset_pairs_input.split(",")
         if pair.strip()
     ]
 
@@ -80,7 +75,7 @@ def test_asset_pairs_override_with_spaces():
     asset_pairs_input = " BTCUSD , ETHUSD , EURUSD "
     parsed_asset_pairs = [
         standardize_asset_pair(pair.strip())
-        for pair in asset_pairs_input.split(',')
+        for pair in asset_pairs_input.split(",")
         if pair.strip()
     ]
 
@@ -94,28 +89,26 @@ def test_asset_pairs_override_empty_entries():
     asset_pairs_input = "BTCUSD,,ETHUSD,,,EURUSD"
     parsed_asset_pairs = [
         standardize_asset_pair(pair.strip())
-        for pair in asset_pairs_input.split(',')
+        for pair in asset_pairs_input.split(",")
         if pair.strip()
     ]
 
     assert parsed_asset_pairs == ["BTCUSD", "ETHUSD", "EURUSD"]
 
 
-@patch('finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent')
-@patch('finance_feedback_engine.monitoring.trade_monitor.TradeMonitor')
+@patch("finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent")
+@patch("finance_feedback_engine.monitoring.trade_monitor.TradeMonitor")
 def test_initialize_agent_with_override(mock_monitor, mock_agent_class):
     """Test that _initialize_agent correctly applies asset pairs override."""
     from finance_feedback_engine.cli.main import _initialize_agent
 
     # Mock config
     config = {
-        'agent': {
-            'autonomous_execution': False,
-            'asset_pairs': ['BTCUSD', 'ETHUSD'],
-            'watchlist': ['BTCUSD', 'ETHUSD', 'EURUSD'],
-            'autonomous': {
-                'enabled': True
-            }
+        "agent": {
+            "autonomous_execution": False,
+            "asset_pairs": ["BTCUSD", "ETHUSD"],
+            "watchlist": ["BTCUSD", "ETHUSD", "EURUSD"],
+            "autonomous": {"enabled": True},
         }
     }
 
@@ -136,14 +129,14 @@ def test_initialize_agent_with_override(mock_monitor, mock_agent_class):
     mock_agent_class.return_value = mock_agent_instance
 
     # Test with asset pairs override
-    override = ['BTCUSD', 'EURUSD', 'GBPUSD']
+    override = ["BTCUSD", "EURUSD", "GBPUSD"]
     agent = _initialize_agent(
         config=config,
         engine=mock_engine,
         take_profit=0.05,
         stop_loss=0.02,
         autonomous=False,
-        asset_pairs_override=override
+        asset_pairs_override=override,
     )
 
     # Verify the agent was created
@@ -152,28 +145,26 @@ def test_initialize_agent_with_override(mock_monitor, mock_agent_class):
     # Verify TradingLoopAgent was called with overridden config
     assert mock_agent_class.called
     call_kwargs = mock_agent_class.call_args[1]
-    agent_config = call_kwargs['config']
+    agent_config = call_kwargs["config"]
 
     # Check that asset_pairs and watchlist were overridden
     assert agent_config.asset_pairs == override
     assert agent_config.watchlist == override
 
 
-@patch('finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent')
-@patch('finance_feedback_engine.monitoring.trade_monitor.TradeMonitor')
+@patch("finance_feedback_engine.agent.trading_loop_agent.TradingLoopAgent")
+@patch("finance_feedback_engine.monitoring.trade_monitor.TradeMonitor")
 def test_initialize_agent_without_override(mock_monitor, mock_agent_class):
     """Test that _initialize_agent uses config values when no override is provided."""
     from finance_feedback_engine.cli.main import _initialize_agent
 
     # Mock config
     config = {
-        'agent': {
-            'autonomous_execution': False,
-            'asset_pairs': ['BTCUSD', 'ETHUSD'],
-            'watchlist': ['BTCUSD', 'ETHUSD', 'EURUSD'],
-            'autonomous': {
-                'enabled': True
-            }
+        "agent": {
+            "autonomous_execution": False,
+            "asset_pairs": ["BTCUSD", "ETHUSD"],
+            "watchlist": ["BTCUSD", "ETHUSD", "EURUSD"],
+            "autonomous": {"enabled": True},
         }
     }
 
@@ -200,7 +191,7 @@ def test_initialize_agent_without_override(mock_monitor, mock_agent_class):
         take_profit=0.05,
         stop_loss=0.02,
         autonomous=False,
-        asset_pairs_override=None
+        asset_pairs_override=None,
     )
 
     # Verify the agent was created
@@ -209,8 +200,8 @@ def test_initialize_agent_without_override(mock_monitor, mock_agent_class):
     # Verify TradingLoopAgent was called with original config
     assert mock_agent_class.called
     call_kwargs = mock_agent_class.call_args[1]
-    agent_config = call_kwargs['config']
+    agent_config = call_kwargs["config"]
 
     # Check that asset_pairs and watchlist match config
-    assert agent_config.asset_pairs == ['BTCUSD', 'ETHUSD']
-    assert agent_config.watchlist == ['BTCUSD', 'ETHUSD', 'EURUSD']
+    assert agent_config.asset_pairs == ["BTCUSD", "ETHUSD"]
+    assert agent_config.watchlist == ["BTCUSD", "ETHUSD", "EURUSD"]

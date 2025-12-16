@@ -72,17 +72,17 @@ class TradeOutcome:
     realized_pnl: float
     pnl_percentage: float
     holding_period_hours: float
-    
+
     # Provider attribution
     ai_provider: str
     ensemble_providers: List[str]
     decision_confidence: int
-    
+
     # Market context
     market_sentiment: str
     volatility: float
     price_trend: str
-    
+
     # Outcome classification
     was_profitable: bool
     hit_stop_loss: bool
@@ -98,16 +98,16 @@ class PerformanceSnapshot:
     winning_trades: int
     losing_trades: int
     win_rate: float
-    
+
     total_pnl: float
     avg_win: float
     avg_loss: float
     profit_factor: float
-    
+
     max_drawdown: float
     sharpe_ratio: float
     sortino_ratio: float
-    
+
     provider_stats: Dict[str, Dict[str, float]]
     regime_performance: Dict[str, Dict[str, float]]
 ```
@@ -225,7 +225,7 @@ context = engine.get_memory_context(asset_pair='BTCUSD')
 if context['has_history']:
     print(f"Historical Trades: {context['total_historical_trades']}")
     print(f"Recent Win Rate: {context['recent_performance']['win_rate']:.1f}%")
-    
+
     # Asset-specific stats
     if 'asset_specific' in context:
         asset_stats = context['asset_specific']
@@ -367,10 +367,10 @@ You can extend the memory engine with custom metrics:
 class CustomMemoryEngine(PortfolioMemoryEngine):
     def analyze_performance(self, window_days=None):
         snapshot = super().analyze_performance(window_days)
-        
+
         # Add custom metrics
         outcomes = self.trade_outcomes
-        
+
         # Calculate custom metric: average holding period
         holding_periods = [
             o.holding_period_hours for o in outcomes
@@ -380,7 +380,7 @@ class CustomMemoryEngine(PortfolioMemoryEngine):
             sum(holding_periods) / len(holding_periods)
             if holding_periods else 0
         )
-        
+
         return snapshot
 ```
 
@@ -431,6 +431,6 @@ For issues or questions:
 
 ---
 
-**Version**: 2.0  
-**Last Updated**: January 2025  
+**Version**: 2.0
+**Last Updated**: January 2025
 **Author**: Finance Feedback Engine Team

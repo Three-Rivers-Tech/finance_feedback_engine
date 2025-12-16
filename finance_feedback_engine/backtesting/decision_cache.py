@@ -4,14 +4,14 @@ Caches AI decisions based on market conditions to avoid redundant queries.
 Particularly useful for backtesting where identical market states may occur.
 """
 
-import sqlite3
-import json
 import hashlib
+import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,11 @@ class DecisionCache:
     Persists across backtest runs for maximum efficiency.
     """
 
-    def __init__(self, db_path: str = "data/cache/backtest_decisions.db", max_connections: int = 5):
+    def __init__(
+        self,
+        db_path: str = "data/cache/backtest_decisions.db",
+        max_connections: int = 5,
+    ):
         """
         Initialize decision cache with SQLite backend.
 
@@ -45,7 +49,9 @@ class DecisionCache:
         self.session_hits = 0
         self.session_misses = 0
 
-        logger.info(f"Decision cache initialized at {db_path} with connection pooling (max {max_connections} connections)")
+        logger.info(
+            f"Decision cache initialized at {db_path} with connection pooling (max {max_connections} connections)"
+        )
 
     @contextmanager
     def _get_db_connection(self):
@@ -67,7 +73,8 @@ class DecisionCache:
         with self._get_db_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS decisions (
                     cache_key TEXT PRIMARY KEY,
                     asset_pair TEXT NOT NULL,
@@ -76,13 +83,16 @@ class DecisionCache:
                     decision_json TEXT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
             # Create index for faster lookups
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_asset_timestamp
                 ON decisions(asset_pair, timestamp)
-            """)
+            """
+            )
 
     def _hash_market_data(self, market_data: Dict[str, Any]) -> str:
         """
@@ -96,15 +106,17 @@ class DecisionCache:
         """
         # Extract relevant fields for hashing (exclude timestamp which is used separately)
         hashable_fields = {
-            k: v for k, v in market_data.items()
-            if k not in ['timestamp', 'historical_data']  # Exclude large/temporal fields
+            k: v
+            for k, v in market_data.items()
+            if k
+            not in ["timestamp", "historical_data"]  # Exclude large/temporal fields
         }
 
         # Convert to sorted JSON string for consistent hashing
         json_str = json.dumps(hashable_fields, sort_keys=True, default=str)
 
-        # Generate MD5 hash
-        return hashlib.md5(json_str.encode()).hexdigest()
+        # Generate SHA-256 hash
+        return hashlib.sha256(json_str.encode()).hexdigest()
 
     def build_market_hash(self, market_data: Dict[str, Any]) -> str:
         """Public wrapper to compute the market hash used in cache keys."""
@@ -124,8 +136,7 @@ class DecisionCache:
             cursor = conn.cursor()
 
             cursor.execute(
-                "SELECT decision_json FROM decisions WHERE cache_key = ?",
-                (cache_key,)
+                "SELECT decision_json FROM decisions WHERE cache_key = ?", (cache_key,)
             )
 
             result = cursor.fetchone()
@@ -137,8 +148,14 @@ class DecisionCache:
                 self.session_misses += 1
                 return None
 
-    def put(self, cache_key: str, decision: Dict[str, Any],
-            asset_pair: str, timestamp: str, market_hash: str):
+    def put(
+        self,
+        cache_key: str,
+        decision: Dict[str, Any],
+        asset_pair: str,
+        timestamp: str,
+        market_hash: str,
+    ):
         """
         Store decision in cache.
 
@@ -155,11 +172,14 @@ class DecisionCache:
             decision_json = json.dumps(decision, default=str)
 
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT OR REPLACE INTO decisions
                     (cache_key, asset_pair, timestamp, market_hash, decision_json)
                     VALUES (?, ?, ?, ?, ?)
-                """, (cache_key, asset_pair, timestamp, market_hash, decision_json))
+                """,
+                    (cache_key, asset_pair, timestamp, market_hash, decision_json),
+                )
 
                 conn.commit()
             except Exception as e:
@@ -167,8 +187,9 @@ class DecisionCache:
                 conn.rollback()
                 raise
 
-    def generate_cache_key(self, asset_pair: str, timestamp: str,
-                          market_data: Dict[str, Any]) -> str:
+    def generate_cache_key(
+        self, asset_pair: str, timestamp: str, market_data: Dict[str, Any]
+    ) -> str:
         """
         Generate cache key from components.
 
@@ -183,8 +204,9 @@ class DecisionCache:
         market_hash = self._hash_market_data(market_data)
         return f"{asset_pair}_{timestamp}_{market_hash}"
 
-    def build_cache_key(self, asset_pair: str, timestamp: str,
-                        market_data: Dict[str, Any]) -> str:
+    def build_cache_key(
+        self, asset_pair: str, timestamp: str, market_data: Dict[str, Any]
+    ) -> str:
         """Alias for generate_cache_key for clarity in public usage."""
         return self.generate_cache_key(asset_pair, timestamp, market_data)
 
@@ -200,10 +222,7 @@ class DecisionCache:
 
             cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
 
-            cursor.execute(
-                "DELETE FROM decisions WHERE created_at < ?",
-                (cutoff_date,)
-            )
+            cursor.execute("DELETE FROM decisions WHERE created_at < ?", (cutoff_date,))
 
             deleted_count = cursor.rowcount
             conn.commit()
@@ -227,12 +246,14 @@ class DecisionCache:
             total_cached = cursor.fetchone()[0]
 
             # Get cache by asset pair
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT asset_pair, COUNT(*) as count
                 FROM decisions
                 GROUP BY asset_pair
                 ORDER BY count DESC
-            """)
+            """
+            )
             by_asset = dict(cursor.fetchall())
 
         # Calculate hit rate for current session
@@ -240,11 +261,11 @@ class DecisionCache:
         hit_rate = (self.session_hits / total_queries) if total_queries > 0 else 0.0
 
         return {
-            'total_cached': total_cached,
-            'session_hits': self.session_hits,
-            'session_misses': self.session_misses,
-            'hit_rate': hit_rate,
-            'by_asset_pair': by_asset
+            "total_cached": total_cached,
+            "session_hits": self.session_hits,
+            "session_misses": self.session_misses,
+            "hit_rate": hit_rate,
+            "by_asset_pair": by_asset,
         }
 
     def clear_all(self) -> int:

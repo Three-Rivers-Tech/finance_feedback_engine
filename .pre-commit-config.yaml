@@ -3,7 +3,10 @@
 # Run manually: pre-commit run --all-files
 
 repos:
+<<<<<<< HEAD
   # General File Checks
+=======
+>>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -13,6 +16,7 @@ repos:
         name: Fix end of files
       - id: check-yaml
         name: Check YAML syntax
+        exclude: ^\.github/workflows/.*
       - id: check-added-large-files
         name: Check for large files
         args: ['--maxkb=1000']
@@ -20,18 +24,30 @@ repos:
         name: Check for merge conflicts
       - id: check-json
         name: Check JSON syntax
+        exclude: ^data/api_costs/.*
       - id: mixed-line-ending
         name: Fix mixed line endings
 
   # Python Code Formatting
   - repo: https://github.com/psf/black
-    rev: 23.12.1
+    rev: 24.10.0
     hooks:
       - id: black
         name: Format code with Black
         language_version: python3
         args: ['--line-length=88']
 
+<<<<<<< HEAD
+=======
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: Lint with Flake8
+        args: ['--max-line-length=120', '--extend-ignore=E203,W503,C901,E722']
+        files: ^finance_feedback_engine/.*\.py$
+
+>>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
   - repo: https://github.com/PyCQA/isort
     rev: 5.13.2
     hooks:
@@ -54,9 +70,10 @@ repos:
       - id: bandit
         name: Security check with Bandit
         args: ['-c', 'pyproject.toml']
-        additional_dependencies: ['bandit[toml]']
+        additional_dependencies: ['bandit[toml]', 'pbr']
         exclude: ^tests/
 
+<<<<<<< HEAD
   # Test execution before commit
   - repo: local
     hooks:
@@ -66,6 +83,18 @@ repos:
         language: system
         pass_filenames: false
         verbose: true
+=======
+  # Local hook to enforce test coverage
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: Run pytest with coverage check (70% threshold)
+        entry: bash .githooks/pre-commit
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+>>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
 
 # Configuration
 default_language_version:

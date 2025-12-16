@@ -1,5 +1,7 @@
-from typing import Dict, Any
+from typing import Any, Dict
+
 import pandas as pd
+
 
 class MockHistoricalDataProvider:
     def __init__(self, full_historical_data: pd.DataFrame):
@@ -14,9 +16,11 @@ class MockHistoricalDataProvider:
     ) -> pd.DataFrame:
         start_dt = pd.to_datetime(start_date)
         end_dt = pd.to_datetime(end_date)
-        
+
         # Filter the full dataset by the requested date range
-        mask = (self.full_historical_data.index >= start_dt) & (self.full_historical_data.index <= end_dt)
+        mask = (self.full_historical_data.index >= start_dt) & (
+            self.full_historical_data.index <= end_dt
+        )
         return self.full_historical_data.loc[mask]
 
     def get_market_data(self, asset_pair: str, **kwargs) -> Dict[str, Any]:

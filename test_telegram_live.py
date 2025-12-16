@@ -2,14 +2,16 @@
 """Quick test of Telegram approval bot integration."""
 
 import asyncio
-import yaml
 from pathlib import Path
+
+import yaml
+
 
 async def test_telegram_approval():
     """Test sending an approval request via Telegram."""
 
     # Load Telegram config
-    telegram_config_path = Path('config/telegram.yaml')
+    telegram_config_path = Path("config/telegram.yaml")
     if not telegram_config_path.exists():
         print("❌ config/telegram.yaml not found")
         return
@@ -17,17 +19,19 @@ async def test_telegram_approval():
     with open(telegram_config_path) as f:
         telegram_config = yaml.safe_load(f)
 
-    if not telegram_config.get('enabled'):
+    if not telegram_config.get("enabled"):
         print("❌ Telegram bot is not enabled in config")
         return
 
-    if not telegram_config.get('bot_token'):
+    if not telegram_config.get("bot_token"):
         print("❌ No bot_token configured")
         return
 
     # Initialize bot
     try:
-        from finance_feedback_engine.integrations.telegram_bot import TelegramApprovalBot
+        from finance_feedback_engine.integrations.telegram_bot import (
+            TelegramApprovalBot,
+        )
 
         print("📱 Initializing Telegram bot...")
         bot = TelegramApprovalBot(telegram_config)
@@ -40,20 +44,20 @@ async def test_telegram_approval():
 
         # Create a test decision
         test_decision = {
-            'decision_id': 'test_live_' + str(asyncio.get_event_loop().time()),
-            'asset_pair': 'BTCUSD',
-            'action': 'BUY',
-            'confidence': 85,
-            'position_size': 0.1,
-            'stop_loss': 2.0,
-            'take_profit': 5.0,
-            'market_regime': 'trending',
-            'sentiment': {'overall_sentiment': 'bullish'},
-            'reasoning': '🧪 TEST: This is a test approval request from Finance Feedback Engine'
+            "decision_id": "test_live_" + str(asyncio.get_event_loop().time()),
+            "asset_pair": "BTCUSD",
+            "action": "BUY",
+            "confidence": 85,
+            "position_size": 0.1,
+            "stop_loss": 2.0,
+            "take_profit": 5.0,
+            "market_regime": "trending",
+            "sentiment": {"overall_sentiment": "bullish"},
+            "reasoning": "🧪 TEST: This is a test approval request from Finance Feedback Engine",
         }
 
         # Get first allowed user ID
-        user_ids = telegram_config.get('allowed_user_ids', [])
+        user_ids = telegram_config.get("allowed_user_ids", [])
         if not user_ids:
             print("❌ No allowed_user_ids configured")
             return
@@ -85,9 +89,11 @@ async def test_telegram_approval():
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("=" * 60)
     print("🧪 Telegram Bot Test - Finance Feedback Engine 2.0")
     print("=" * 60)

@@ -10,10 +10,10 @@ Simulates the TradingAgentOrchestrator's autonomous behavior including:
 This validates that the agent behaves correctly under production conditions.
 """
 
-import random
 import logging
-from typing import Dict, Any, Optional
+import random
 from collections import defaultdict
+from typing import Any, Dict, Optional
 
 from finance_feedback_engine.backtesting.backtester import Backtester
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class SimulatedDataFetchError(Exception):
     """Simulated network/data fetch failure for testing retry logic."""
+
     pass
 
 
@@ -37,16 +38,19 @@ class AgentModeBacktester(Backtester):
     - Strategic context injection into AI prompts
     """
 
-    def __init__(self, *args,
-                 strategic_goal: str = "Maximize risk-adjusted returns through systematic learning",
-                 risk_appetite: str = "moderate",
-                 max_daily_trades: int = 20,
-                 analysis_frequency_seconds: int = 300,
-                 kill_switch_gain_pct: float = 0.15,
-                 kill_switch_loss_pct: float = 0.10,
-                 max_drawdown_pct: float = 0.15,
-                 data_fetch_failure_rate: float = 0.1,
-                 **kwargs):
+    def __init__(
+        self,
+        *args,
+        strategic_goal: str = "Maximize risk-adjusted returns through systematic learning",
+        risk_appetite: str = "moderate",
+        max_daily_trades: int = 20,
+        analysis_frequency_seconds: int = 300,
+        kill_switch_gain_pct: float = 0.15,
+        kill_switch_loss_pct: float = 0.10,
+        max_drawdown_pct: float = 0.15,
+        data_fetch_failure_rate: float = 0.1,
+        **kwargs,
+    ):
         """
         Initialize agent mode backtester.
 
@@ -76,7 +80,9 @@ class AgentModeBacktester(Backtester):
             f"risk appetite: '{risk_appetite}', OODA frequency: {analysis_frequency_seconds}s"
         )
 
-    def _simulate_data_fetch(self, candle_data: Dict[str, Any], attempt: int = 0) -> Dict[str, Any]:
+    def _simulate_data_fetch(
+        self, candle_data: Dict[str, Any], attempt: int = 0
+    ) -> Dict[str, Any]:
         """
         Simulate data fetch with potential failures and retry logic.
 
@@ -92,12 +98,15 @@ class AgentModeBacktester(Backtester):
         """
         # Simulate random data fetch failures
         if random.random() < self.data_fetch_failure_rate:
-            raise SimulatedDataFetchError(f"Simulated network failure (attempt {attempt + 1})")
+            raise SimulatedDataFetchError(
+                f"Simulated network failure (attempt {attempt + 1})"
+            )
 
         return candle_data
 
-    def _check_kill_switch(self, current_portfolio_value: float,
-                          initial_value: float, peak_value: float) -> Optional[str]:
+    def _check_kill_switch(
+        self, current_portfolio_value: float, initial_value: float, peak_value: float
+    ) -> Optional[str]:
         """
         Check if kill-switch conditions are met.
 
@@ -110,10 +119,16 @@ class AgentModeBacktester(Backtester):
             Reason string if kill-switch triggered, None otherwise
         """
         # Calculate P&L percentage
-        pnl_pct = (current_portfolio_value - initial_value) / initial_value if initial_value > 0 else 0
+        pnl_pct = (
+            (current_portfolio_value - initial_value) / initial_value
+            if initial_value > 0
+            else 0
+        )
 
         # Calculate drawdown from peak
-        drawdown_pct = (peak_value - current_portfolio_value) / peak_value if peak_value > 0 else 0
+        drawdown_pct = (
+            (peak_value - current_portfolio_value) / peak_value if peak_value > 0 else 0
+        )
 
         # Check gain threshold
         if pnl_pct >= self.kill_switch_gain_pct:
@@ -129,8 +144,9 @@ class AgentModeBacktester(Backtester):
 
         return None
 
-    def run_backtest(self, asset_pair: str, start_date: str, end_date: str,
-                    decision_engine: Any) -> Dict[str, Any]:
+    def run_backtest(
+        self, asset_pair: str, start_date: str, end_date: str, decision_engine: Any
+    ) -> Dict[str, Any]:
         """
         Run backtest with OODA loop simulation.
 
@@ -168,18 +184,18 @@ class AgentModeBacktester(Backtester):
             return {
                 "metrics": {"net_return_pct": 0, "total_trades": 0},
                 "trades": [],
-                "error": "No data available"
+                "error": "No data available",
             }
 
         # Initialize tracking
         ooda_metrics = {
-            'total_iterations': 0,
-            'candles_skipped_frequency': 0,
-            'candles_skipped_daily_limit': 0,
-            'retry_events': [],
-            'kill_switch_triggered': False,
-            'kill_switch_reason': None,
-            'kill_switch_timestamp': None
+            "total_iterations": 0,
+            "candles_skipped_frequency": 0,
+            "candles_skipped_daily_limit": 0,
+            "retry_events": [],
+            "kill_switch_triggered": False,
+            "kill_switch_reason": None,
+            "kill_switch_timestamp": None,
         }
 
         last_decision_timestamp = None
@@ -191,8 +207,8 @@ class AgentModeBacktester(Backtester):
         # Note: This would require modifying DecisionEngine._build_market_analysis_prompt
         # For now, we'll pass it as part of market_data
         strategic_context = {
-            'strategic_goal': self.strategic_goal,
-            'risk_appetite': self.risk_appetite
+            "strategic_goal": self.strategic_goal,
+            "risk_appetite": self.risk_appetite,
         }
 
         # Run parent backtest with enhanced monitoring
@@ -208,18 +224,20 @@ class AgentModeBacktester(Backtester):
         )
 
         # Call parent backtest
-        results = super().run_backtest(asset_pair, start_date, end_date, decision_engine)
+        results = super().run_backtest(
+            asset_pair, start_date, end_date, decision_engine
+        )
 
         # Add OODA metrics to results
-        results['ooda_metrics'] = ooda_metrics
-        results['agent_config'] = {
-            'strategic_goal': self.strategic_goal,
-            'risk_appetite': self.risk_appetite,
-            'max_daily_trades': self.max_daily_trades,
-            'analysis_frequency_seconds': self.analysis_frequency_seconds,
-            'kill_switch_gain_pct': self.kill_switch_gain_pct,
-            'kill_switch_loss_pct': self.kill_switch_loss_pct,
-            'max_drawdown_pct': self.max_drawdown_pct
+        results["ooda_metrics"] = ooda_metrics
+        results["agent_config"] = {
+            "strategic_goal": self.strategic_goal,
+            "risk_appetite": self.risk_appetite,
+            "max_daily_trades": self.max_daily_trades,
+            "analysis_frequency_seconds": self.analysis_frequency_seconds,
+            "kill_switch_gain_pct": self.kill_switch_gain_pct,
+            "kill_switch_loss_pct": self.kill_switch_loss_pct,
+            "max_drawdown_pct": self.max_drawdown_pct,
         }
 
         logger.info(f"Agent Mode Backtest complete for {asset_pair}")
@@ -227,4 +245,4 @@ class AgentModeBacktester(Backtester):
         return results
 
 
-__all__ = ['AgentModeBacktester', 'SimulatedDataFetchError']
+__all__ = ["AgentModeBacktester", "SimulatedDataFetchError"]

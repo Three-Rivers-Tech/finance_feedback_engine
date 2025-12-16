@@ -106,8 +106,8 @@ class BaseTradingPlatform(ABC):
             Dictionary with detailed portfolio metrics.
         """
         return {
-            'total_value_usd': 0,
-            'num_assets': 0,
-            'holdings': [],
-            'error': 'Not implemented'
+            "total_value_usd": 0,
+            "num_assets": 0,
+            "holdings": [],
+            "error": "Not implemented",
         }

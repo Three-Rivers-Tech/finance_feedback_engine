@@ -1,7 +1,7 @@
 """Input validation utilities."""
 
-import re
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Tuple
 
@@ -37,7 +37,7 @@ def standardize_asset_pair(asset_pair: str) -> str:
         raise ValueError("Asset pair must be a non-empty string")
 
     # Remove all non-alphanumeric characters and convert to uppercase
-    standardized = re.sub(r'[^A-Za-z0-9]', '', asset_pair).upper()
+    standardized = re.sub(r"[^A-Za-z0-9]", "", asset_pair).upper()
 
     if not standardized:
         raise ValueError(
@@ -50,14 +50,10 @@ def standardize_asset_pair(asset_pair: str) -> str:
         logger.warning(
             "Asset pair '%s' is unusually short (standardized: '%s')",
             asset_pair,
-            standardized
+            standardized,
         )
 
-    logger.debug(
-        "Standardized asset pair: '%s' -> '%s'",
-        asset_pair,
-        standardized
-    )
+    logger.debug("Standardized asset pair: '%s' -> '%s'", asset_pair, standardized)
 
     return standardized
 
@@ -77,7 +73,7 @@ def validate_asset_pair_format(asset_pair: str, min_length: int = 6) -> bool:
         return False
 
     # Should be uppercase with only alphanumeric characters
-    if not re.match(r'^[A-Z0-9]+$', asset_pair):
+    if not re.match(r"^[A-Z0-9]+$", asset_pair):
         return False
 
     # Check minimum length
@@ -85,6 +81,7 @@ def validate_asset_pair_format(asset_pair: str, min_length: int = 6) -> bool:
         return False
 
     return True
+
 
 def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
     """
@@ -105,10 +102,36 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
 
     # Check for common base currency prefixes
     known_base_currencies = {
-        'BTC', 'ETH', 'XRP', 'LTC', 'BCH', 'ADA', 'DOT', 'LINK', 'SOL',
-        'DOGE', 'AVAX', 'MATIC', 'UNI', 'SAND', 'MANA', 'AAVE', 'SUSHI',
-        'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'NZD', 'SGD', 'HKD',
-        'USD', 'USDT', 'USDC', 'DAI'
+        "BTC",
+        "ETH",
+        "XRP",
+        "LTC",
+        "BCH",
+        "ADA",
+        "DOT",
+        "LINK",
+        "SOL",
+        "DOGE",
+        "AVAX",
+        "MATIC",
+        "UNI",
+        "SAND",
+        "MANA",
+        "AAVE",
+        "SUSHI",
+        "EUR",
+        "GBP",
+        "JPY",
+        "CHF",
+        "CAD",
+        "AUD",
+        "NZD",
+        "SGD",
+        "HKD",
+        "USD",
+        "USDT",
+        "USDC",
+        "DAI",
     }
 
     # Check the first few characters for known base currencies
@@ -122,7 +145,11 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
             break
 
     if not found_base:
-        logger.warning("Asset pair '%s' starts with an unknown base currency: %s", asset_pair, base_part)
+        logger.warning(
+            "Asset pair '%s' starts with an unknown base currency: %s",
+            asset_pair,
+            base_part,
+        )
         return False, f"Asset pair '{asset_pair}' has unknown base currency"
 
     # TODO: Add quote currency validation here
@@ -133,9 +160,7 @@ def validate_asset_pair_composition(asset_pair: str) -> Tuple[bool, str]:
 
 
 def validate_data_freshness(
-    data_timestamp: str,
-    asset_type: str = "crypto",
-    timeframe: str = "intraday"
+    data_timestamp: str, asset_type: str = "crypto", timeframe: str = "intraday"
 ) -> Tuple[bool, str, str]:
     """Validate that data is fresh enough for trading decisions.
 
@@ -268,7 +293,7 @@ def validate_data_freshness(
         "Data freshness check: asset_type=%s, age=%s, is_fresh=%s",
         asset_kind,
         age_str,
-        is_fresh
+        is_fresh,
     )
 
     return is_fresh, age_str, warning_msg

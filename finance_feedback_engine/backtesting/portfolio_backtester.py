@@ -13,14 +13,17 @@ Preserves backward compatibility - does not modify AdvancedBacktester.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
-import pandas as pd
-import numpy as np
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+import pandas as pd
+
+from finance_feedback_engine.data_providers.historical_data_provider import (
+    HistoricalDataProvider,
+)
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
-from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
-from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class PortfolioPosition:
         take_profit: Take-profit price level
         unrealized_pnl: Current unrealized profit/loss
     """
+
     asset_pair: str
     entry_price: float
     units: float
@@ -69,6 +73,7 @@ class PortfolioState:
         trade_history: List of executed trades
         correlation_matrix: Current asset correlation matrix
     """
+
     cash: float
     positions: Dict[str, PortfolioPosition] = field(default_factory=dict)
     equity_curve: List[Tuple[datetime, float]] = field(default_factory=list)
@@ -128,7 +133,7 @@ class PortfolioBacktester:
         decision_engine: Optional[DecisionEngine] = None,
         data_provider: Optional[HistoricalDataProvider] = None,
         risk_gatekeeper: Optional[RiskGatekeeper] = None,
-        memory_engine: Optional[PortfolioMemoryEngine] = None
+        memory_engine: Optional[PortfolioMemoryEngine] = None,
     ):
         """
         Initialize portfolio backtester.
@@ -157,36 +162,51 @@ class PortfolioBacktester:
             portfolio_config = config.get("portfolio", {})
             self.risk_gatekeeper = RiskGatekeeper(
                 max_drawdown_pct=portfolio_config.get("max_drawdown", 0.05),
-                correlation_threshold=portfolio_config.get("correlation_threshold", 0.7),
+                correlation_threshold=portfolio_config.get(
+                    "correlation_threshold", 0.7
+                ),
                 max_correlated_assets=portfolio_config.get("max_positions", 5),
                 max_var_pct=portfolio_config.get("max_portfolio_risk", 0.05),
                 var_confidence=0.95,
-                is_backtest=True
+                is_backtest=True,
             )
 
         self.memory_engine = memory_engine or PortfolioMemoryEngine(config)
 
         # Portfolio configuration
         self.fee_rate = config.get("backtesting", {}).get("fee_rate", 0.001)  # 0.1%
-        self.slippage_rate = config.get("backtesting", {}).get("slippage_rate", 0.0001)  # 0.01%
-        self.max_positions = config.get("portfolio", {}).get("max_positions", len(asset_pairs))
-        self.correlation_threshold = config.get("portfolio", {}).get("correlation_threshold", 0.7)
-        self.correlation_window = config.get("portfolio", {}).get("correlation_window", 30)
-        self.max_portfolio_risk = config.get("portfolio", {}).get("max_portfolio_risk", 0.02)  # 2%
-        self.trading_dates_mode = config.get("backtesting", {}).get("trading_dates_mode", "intersection")
-        self.min_overlapping_trading_dates = config.get("backtesting", {}).get("min_overlapping_trading_dates", 5)
+        self.slippage_rate = config.get("backtesting", {}).get(
+            "slippage_rate", 0.0001
+        )  # 0.01%
+        self.max_positions = config.get("portfolio", {}).get(
+            "max_positions", len(asset_pairs)
+        )
+        self.correlation_threshold = config.get("portfolio", {}).get(
+            "correlation_threshold", 0.7
+        )
+        self.correlation_window = config.get("portfolio", {}).get(
+            "correlation_window", 30
+        )
+        self.max_portfolio_risk = config.get("portfolio", {}).get(
+            "max_portfolio_risk", 0.02
+        )  # 2%
+        self.trading_dates_mode = config.get("backtesting", {}).get(
+            "trading_dates_mode", "intersection"
+        )
+        self.min_overlapping_trading_dates = config.get("backtesting", {}).get(
+            "min_overlapping_trading_dates", 5
+        )
 
         # State tracking
         self.portfolio_state: Optional[PortfolioState] = None
         self.price_history: Dict[str, pd.DataFrame] = {}
 
-        logger.info(f"PortfolioBacktester initialized with {len(asset_pairs)} assets: {asset_pairs}")
+        logger.info(
+            f"PortfolioBacktester initialized with {len(asset_pairs)} assets: {asset_pairs}"
+        )
 
     def run_backtest(
-        self,
-        start_date: str,
-        end_date: str,
-        rebalance_frequency: str = "daily"
+        self, start_date: str, end_date: str, rebalance_frequency: str = "daily"
     ) -> Dict[str, Any]:
         """
         Run multi-asset portfolio backtest.
@@ -205,7 +225,9 @@ class PortfolioBacktester:
             - correlation_analysis: Asset correlation insights
         """
         logger.info(f"Starting portfolio backtest from {start_date} to {end_date}")
-        logger.info(f"Assets: {self.asset_pairs}, Initial balance: ${self.initial_balance:,.2f}")
+        logger.info(
+            f"Assets: {self.asset_pairs}, Initial balance: ${self.initial_balance:,.2f}"
+        )
 
         # Initialize portfolio state
         self.portfolio_state = PortfolioState(cash=self.initial_balance)
@@ -251,7 +273,9 @@ class PortfolioBacktester:
         # Calculate final metrics
         results = self._calculate_portfolio_metrics()
 
-        logger.info(f"Backtest complete. Final portfolio value: ${results['final_value']:,.2f}")
+        logger.info(
+            f"Backtest complete. Final portfolio value: ${results['final_value']:,.2f}"
+        )
         logger.info(f"Total return: {results['total_return']:.2f}%")
 
         return results
@@ -261,9 +285,7 @@ class PortfolioBacktester:
         for asset_pair in self.asset_pairs:
             logger.info(f"Loading historical data for {asset_pair}")
             df = self.data_provider.get_historical_data(
-                asset_pair=asset_pair,
-                start_date=start_date,
-                end_date=end_date
+                asset_pair=asset_pair, start_date=start_date, end_date=end_date
             )
             self.price_history[asset_pair] = df
             logger.info(f"Loaded {len(df)} candles for {asset_pair}")
@@ -274,7 +296,9 @@ class PortfolioBacktester:
 
         for asset, df in self.price_history.items():
             if df.empty:
-                logger.warning(f"No historical data for {asset}; skipping date alignment")
+                logger.warning(
+                    f"No historical data for {asset}; skipping date alignment"
+                )
                 continue
             date_sets.append(set(df.index))
 
@@ -321,7 +345,7 @@ class PortfolioBacktester:
         prices = {}
         for asset_pair in self.asset_pairs:
             if date in self.price_history[asset_pair].index:
-                prices[asset_pair] = self.price_history[asset_pair].loc[date, 'close']
+                prices[asset_pair] = self.price_history[asset_pair].loc[date, "close"]
         return prices
 
     def _update_correlation_matrix(self, current_date: datetime) -> None:
@@ -337,10 +361,10 @@ class PortfolioBacktester:
             # Get window of returns
             idx = df.index.get_loc(current_date)
             start_idx = max(0, idx - self.correlation_window)
-            window_df = df.iloc[start_idx:idx+1]
+            window_df = df.iloc[start_idx : idx + 1]
 
             if len(window_df) > 1:
-                returns = window_df['close'].pct_change().dropna()
+                returns = window_df["close"].pct_change().dropna()
                 returns_data[asset_pair] = returns
 
         # Calculate correlation matrix
@@ -348,7 +372,9 @@ class PortfolioBacktester:
             returns_df = pd.DataFrame(returns_data)
             self.portfolio_state.correlation_matrix = returns_df.corr()
 
-    def _update_positions(self, current_prices: Dict[str, float], date: datetime) -> None:
+    def _update_positions(
+        self, current_prices: Dict[str, float], date: datetime
+    ) -> None:
         """Update existing positions (P&L, stop-loss, take-profit triggers)."""
         positions_to_close = []
 
@@ -363,28 +389,36 @@ class PortfolioBacktester:
             # Check stop-loss / take-profit with side awareness
             if position.side == "SHORT":
                 if position.stop_loss and current_price >= position.stop_loss:
-                    logger.info(f"Stop-loss triggered for {asset_pair} at {current_price}")
+                    logger.info(
+                        f"Stop-loss triggered for {asset_pair} at {current_price}"
+                    )
                     positions_to_close.append(asset_pair)
                 elif position.take_profit and current_price <= position.take_profit:
-                    logger.info(f"Take-profit triggered for {asset_pair} at {current_price}")
+                    logger.info(
+                        f"Take-profit triggered for {asset_pair} at {current_price}"
+                    )
                     positions_to_close.append(asset_pair)
             else:
                 if position.stop_loss and current_price <= position.stop_loss:
-                    logger.info(f"Stop-loss triggered for {asset_pair} at {current_price}")
+                    logger.info(
+                        f"Stop-loss triggered for {asset_pair} at {current_price}"
+                    )
                     positions_to_close.append(asset_pair)
                 elif position.take_profit and current_price >= position.take_profit:
-                    logger.info(f"Take-profit triggered for {asset_pair} at {current_price}")
+                    logger.info(
+                        f"Take-profit triggered for {asset_pair} at {current_price}"
+                    )
                     positions_to_close.append(asset_pair)
 
         # Close triggered positions
         for asset_pair in positions_to_close:
             if asset_pair in current_prices:
-                self._close_position(asset_pair, current_prices[asset_pair], "trigger", date)
+                self._close_position(
+                    asset_pair, current_prices[asset_pair], "trigger", date
+                )
 
     def _generate_portfolio_decisions(
-        self,
-        current_date: datetime,
-        current_prices: Dict[str, float]
+        self, current_date: datetime, current_prices: Dict[str, float]
     ) -> Dict[str, Dict[str, Any]]:
         """
         Generate AI decisions for all assets with portfolio context.
@@ -412,10 +446,10 @@ class PortfolioBacktester:
             # Build market data dict for decision engine
             market_data = {
                 "close": current_prices[asset_pair],
-                "open": current_candle.get('open', current_prices[asset_pair]),
-                "high": current_candle.get('high', current_prices[asset_pair]),
-                "low": current_candle.get('low', current_prices[asset_pair]),
-                "volume": current_candle.get('volume', 0)
+                "open": current_candle.get("open", current_prices[asset_pair]),
+                "high": current_candle.get("high", current_prices[asset_pair]),
+                "low": current_candle.get("low", current_prices[asset_pair]),
+                "volume": current_candle.get("volume", 0),
             }
 
             # Unified cash balance; decision engine now falls back to USD when platform-specific keys are absent
@@ -426,7 +460,11 @@ class PortfolioBacktester:
                 "positions": portfolio_context.get("position_weights", {}),
                 "total_value": portfolio_context.get("total_value", 0),
                 "cash_pct": portfolio_context.get("cash_pct", 1.0),
-                "correlation_matrix": self.portfolio_state.correlation_matrix.to_dict() if self.portfolio_state.correlation_matrix is not None else None
+                "correlation_matrix": (
+                    self.portfolio_state.correlation_matrix.to_dict()
+                    if self.portfolio_state.correlation_matrix is not None
+                    else None
+                ),
             }
 
             # Generate decision via AI ensemble
@@ -435,16 +473,20 @@ class PortfolioBacktester:
                     asset_pair=asset_pair,
                     market_data=market_data,
                     balance=balance_dict,
-                    portfolio=portfolio_dict
+                    portfolio=portfolio_dict,
                 )
                 decisions[asset_pair] = decision
-                logger.debug(f"{asset_pair}: {decision['action']} (confidence: {decision['confidence']})")
+                logger.debug(
+                    f"{asset_pair}: {decision['action']} (confidence: {decision['confidence']})"
+                )
             except Exception as e:
                 logger.error(f"Error generating decision for {asset_pair}: {e}")
 
         return decisions
 
-    def _build_portfolio_context(self, current_prices: Dict[str, float]) -> Dict[str, Any]:
+    def _build_portfolio_context(
+        self, current_prices: Dict[str, float]
+    ) -> Dict[str, Any]:
         """Build portfolio-level context for AI decision-making."""
         total_value = self.portfolio_state.total_value(current_prices)
         weights = self.portfolio_state.position_weights(current_prices)
@@ -452,17 +494,21 @@ class PortfolioBacktester:
         return {
             "total_value": total_value,
             "cash": self.portfolio_state.cash,
-            "cash_pct": self.portfolio_state.cash / total_value if total_value > 0 else 1.0,
+            "cash_pct": (
+                self.portfolio_state.cash / total_value if total_value > 0 else 1.0
+            ),
             "num_positions": len(self.portfolio_state.positions),
             "position_weights": weights,
-            "total_unrealized_pnl": sum(pos.unrealized_pnl for pos in self.portfolio_state.positions.values())
+            "total_unrealized_pnl": sum(
+                pos.unrealized_pnl for pos in self.portfolio_state.positions.values()
+            ),
         }
 
     def _execute_portfolio_trades(
         self,
         decisions: Dict[str, Dict[str, Any]],
         current_prices: Dict[str, float],
-        current_date: datetime
+        current_date: datetime,
     ) -> None:
         """Execute validated trades with correlation-aware position sizing."""
         for asset_pair, decision in decisions.items():
@@ -478,26 +524,26 @@ class PortfolioBacktester:
             pnl = (total_value - self.initial_balance) / self.initial_balance
 
             risk_context = {
-                "recent_performance": {
-                    "total_pnl": pnl
-                },
+                "recent_performance": {"total_pnl": pnl},
                 "holdings": {
                     asset: "crypto" if "_" not in asset else "forex"
                     for asset in self.portfolio_state.positions.keys()
-                }
+                },
             }
 
             # Validate with risk gatekeeper
-            is_valid, validation_msg = self.risk_gatekeeper.validate_trade(decision, risk_context)
+            is_valid, validation_msg = self.risk_gatekeeper.validate_trade(
+                decision, risk_context
+            )
             if not is_valid:
-                logger.debug(f"Risk gatekeeper rejected {asset_pair} {action}: {validation_msg}")
+                logger.debug(
+                    f"Risk gatekeeper rejected {asset_pair} {action}: {validation_msg}"
+                )
                 continue
 
             # Calculate correlation-adjusted position size
             position_size = self._calculate_position_size(
-                asset_pair=asset_pair,
-                decision=decision,
-                current_prices=current_prices
+                asset_pair=asset_pair, decision=decision, current_prices=current_prices
             )
 
             if position_size == 0:
@@ -509,26 +555,65 @@ class PortfolioBacktester:
                 if current_position:
                     if current_position.side == "SHORT":
                         # Flip from short to long
-                        self._close_position(asset_pair, current_prices[asset_pair], "decision_close_short", current_date)
-                        self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                        self._close_position(
+                            asset_pair,
+                            current_prices[asset_pair],
+                            "decision_close_short",
+                            current_date,
+                        )
+                        self._execute_buy(
+                            asset_pair,
+                            position_size,
+                            current_prices[asset_pair],
+                            current_date,
+                            decision,
+                        )
                     elif current_position.side == "LONG":
                         # Close existing long before re-entering to preserve history and P&L
-                        self._close_position(asset_pair, current_prices[asset_pair], "decision_close_long", current_date)
-                        self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                        self._close_position(
+                            asset_pair,
+                            current_prices[asset_pair],
+                            "decision_close_long",
+                            current_date,
+                        )
+                        self._execute_buy(
+                            asset_pair,
+                            position_size,
+                            current_prices[asset_pair],
+                            current_date,
+                            decision,
+                        )
                 else:
-                    self._execute_buy(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                    self._execute_buy(
+                        asset_pair,
+                        position_size,
+                        current_prices[asset_pair],
+                        current_date,
+                        decision,
+                    )
             elif action == "SELL":
                 # Close existing LONG; if none, open SHORT
                 if current_position and current_position.side == "LONG":
-                    self._close_position(asset_pair, current_prices[asset_pair], "decision_close_long", current_date)
+                    self._close_position(
+                        asset_pair,
+                        current_prices[asset_pair],
+                        "decision_close_long",
+                        current_date,
+                    )
                 elif not current_position:
-                    self._execute_short(asset_pair, position_size, current_prices[asset_pair], current_date, decision)
+                    self._execute_short(
+                        asset_pair,
+                        position_size,
+                        current_prices[asset_pair],
+                        current_date,
+                        decision,
+                    )
 
     def _calculate_position_size(
         self,
         asset_pair: str,
         decision: Dict[str, Any],
-        current_prices: Dict[str, float]
+        current_prices: Dict[str, float],
     ) -> float:
         """
         Calculate position size with correlation adjustment.
@@ -589,14 +674,20 @@ class PortfolioBacktester:
                 continue
 
             try:
-                corr = abs(self.portfolio_state.correlation_matrix.loc[asset_pair, existing_asset])
+                corr = abs(
+                    self.portfolio_state.correlation_matrix.loc[
+                        asset_pair, existing_asset
+                    ]
+                )
                 max_correlation = max(max_correlation, corr)
             except (KeyError, TypeError):
                 continue
 
         # Reduce position size if correlation exceeds threshold
         if max_correlation > self.correlation_threshold:
-            reduction = (max_correlation - self.correlation_threshold) / (1.0 - self.correlation_threshold)
+            reduction = (max_correlation - self.correlation_threshold) / (
+                1.0 - self.correlation_threshold
+            )
             return 1.0 - (reduction * 0.5)  # Max 50% reduction
 
         return 1.0
@@ -607,7 +698,7 @@ class PortfolioBacktester:
         position_size: float,
         price: float,
         date: datetime,
-        decision: Dict[str, Any]
+        decision: Dict[str, Any],
     ) -> None:
         """Execute buy order with fees and slippage."""
         # Apply slippage
@@ -621,7 +712,9 @@ class PortfolioBacktester:
         total_cost = position_size + fee
 
         if total_cost > self.portfolio_state.cash:
-            logger.debug(f"Insufficient cash for {asset_pair} buy: need ${total_cost:.2f}, have ${self.portfolio_state.cash:.2f}")
+            logger.debug(
+                f"Insufficient cash for {asset_pair} buy: need ${total_cost:.2f}, have ${self.portfolio_state.cash:.2f}"
+            )
             return
 
         # Update cash
@@ -635,7 +728,7 @@ class PortfolioBacktester:
             entry_time=date,
             stop_loss=execution_price * 0.98,  # 2% stop-loss
             take_profit=execution_price * 1.05,  # 5% take-profit
-            side="LONG"
+            side="LONG",
         )
         self.portfolio_state.positions[asset_pair] = position
 
@@ -648,11 +741,13 @@ class PortfolioBacktester:
             "cost": total_cost,
             "fee": fee,
             "date": date,
-            "decision": decision
+            "decision": decision,
         }
         self.portfolio_state.trade_history.append(trade)
 
-        logger.info(f"BUY {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, cost=${total_cost:.2f}")
+        logger.info(
+            f"BUY {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, cost=${total_cost:.2f}"
+        )
 
     def _execute_short(
         self,
@@ -660,7 +755,7 @@ class PortfolioBacktester:
         position_size: float,
         price: float,
         date: datetime,
-        decision: Dict[str, Any]
+        decision: Dict[str, Any],
     ) -> None:
         """Open a SHORT position (SELL to open)."""
         execution_price = price * (1 - self.slippage_rate)
@@ -680,7 +775,7 @@ class PortfolioBacktester:
             entry_time=date,
             stop_loss=execution_price * 1.02,  # reversed for short
             take_profit=execution_price * 0.95,  # reversed for short
-            side="SHORT"
+            side="SHORT",
         )
         self.portfolio_state.positions[asset_pair] = position
 
@@ -692,18 +787,20 @@ class PortfolioBacktester:
             "proceeds": proceeds,
             "fee": fee,
             "date": date,
-            "decision": decision
+            "decision": decision,
         }
         self.portfolio_state.trade_history.append(trade)
 
-        logger.info(f"OPEN SHORT {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, proceeds=${proceeds:.2f}")
+        logger.info(
+            f"OPEN SHORT {asset_pair}: {units:.4f} units @ ${execution_price:.2f}, proceeds=${proceeds:.2f}"
+        )
 
     def _close_position(
         self,
         asset_pair: str,
         price: float,
         reason: str,
-        date: Optional[datetime] = None
+        date: Optional[datetime] = None,
     ) -> None:
         """Close an existing position."""
         if asset_pair not in self.portfolio_state.positions:
@@ -724,8 +821,12 @@ class PortfolioBacktester:
             pnl = (position.entry_price - execution_price) * units_abs - fee
 
             # Update cash: pay to buy back
-            self.portfolio_state.cash -= (cost + fee)
-            pnl_pct = (pnl / (position.entry_price * units_abs)) * 100 if position.entry_price > 0 else 0
+            self.portfolio_state.cash -= cost + fee
+            pnl_pct = (
+                (pnl / (position.entry_price * units_abs)) * 100
+                if position.entry_price > 0
+                else 0
+            )
         else:
             # LONG close
             gross_proceeds = position.units * execution_price
@@ -755,7 +856,7 @@ class PortfolioBacktester:
             "pnl_pct": pnl_pct,
             "date": date,
             "reason": reason,
-            "hold_time": (date - position.entry_time).days if date else None
+            "hold_time": (date - position.entry_time).days if date else None,
         }
         self.portfolio_state.trade_history.append(trade)
 
@@ -767,11 +868,15 @@ class PortfolioBacktester:
             f"P&L=${pnl:.2f} ({pnl_pct:.2f}%), reason={reason}"
         )
 
-    def _close_all_positions(self, current_prices: Dict[str, float], date: datetime) -> None:
+    def _close_all_positions(
+        self, current_prices: Dict[str, float], date: datetime
+    ) -> None:
         """Close all open positions."""
         for asset_pair in list(self.portfolio_state.positions.keys()):
             if asset_pair in current_prices:
-                self._close_position(asset_pair, current_prices[asset_pair], "portfolio_stop", date)
+                self._close_position(
+                    asset_pair, current_prices[asset_pair], "portfolio_stop", date
+                )
 
     def _check_portfolio_stop_loss(self, current_value: float) -> bool:
         """Check if portfolio-level stop-loss triggered."""
@@ -796,7 +901,9 @@ class PortfolioBacktester:
 
         # Final value and return
         final_value = values[-1]
-        total_return = ((final_value - self.initial_balance) / self.initial_balance) * 100
+        total_return = (
+            (final_value - self.initial_balance) / self.initial_balance
+        ) * 100
 
         # Sharpe ratio (annualized)
         if len(returns) > 1 and returns.std() > 0:
@@ -815,9 +922,17 @@ class PortfolioBacktester:
         completed_trades = [t for t in self.portfolio_state.trade_history if "pnl" in t]
         winning_trades = [t for t in completed_trades if t["pnl"] > 0]
 
-        win_rate = (len(winning_trades) / len(completed_trades) * 100) if completed_trades else 0
+        win_rate = (
+            (len(winning_trades) / len(completed_trades) * 100)
+            if completed_trades
+            else 0
+        )
         avg_win = np.mean([t["pnl"] for t in winning_trades]) if winning_trades else 0
-        avg_loss = np.mean([t["pnl"] for t in completed_trades if t["pnl"] < 0]) if completed_trades else 0
+        avg_loss = (
+            np.mean([t["pnl"] for t in completed_trades if t["pnl"] < 0])
+            if completed_trades
+            else 0
+        )
 
         # Per-asset attribution
         asset_attribution = self._calculate_asset_attribution()
@@ -835,7 +950,7 @@ class PortfolioBacktester:
             "avg_loss": avg_loss,
             "asset_attribution": asset_attribution,
             "equity_curve": self.portfolio_state.equity_curve,
-            "trade_history": self.portfolio_state.trade_history
+            "trade_history": self.portfolio_state.trade_history,
         }
 
         return results
@@ -845,13 +960,17 @@ class PortfolioBacktester:
         attribution = {}
 
         for asset_pair in self.asset_pairs:
-            asset_trades = [t for t in self.portfolio_state.trade_history if t["asset_pair"] == asset_pair and "pnl" in t]
+            asset_trades = [
+                t
+                for t in self.portfolio_state.trade_history
+                if t["asset_pair"] == asset_pair and "pnl" in t
+            ]
 
             if not asset_trades:
                 attribution[asset_pair] = {
                     "total_pnl": 0.0,
                     "num_trades": 0,
-                    "win_rate": 0.0
+                    "win_rate": 0.0,
                 }
                 continue
 
@@ -863,7 +982,11 @@ class PortfolioBacktester:
                 "total_pnl": total_pnl,
                 "num_trades": len(asset_trades),
                 "win_rate": win_rate,
-                "contribution_pct": (total_pnl / (self.initial_balance * 0.01)) if self.initial_balance > 0 else 0
+                "contribution_pct": (
+                    (total_pnl / (self.initial_balance * 0.01))
+                    if self.initial_balance > 0
+                    else 0
+                ),
             }
 
         return attribution

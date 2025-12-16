@@ -1,10 +1,12 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-import pandas as pd
 import logging
 import random
+from abc import ABC, abstractmethod
+from typing import Any, Dict
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
+
 
 class BaseAIModel(ABC):
     """
@@ -59,6 +61,7 @@ class BaseAIModel(ABC):
             return version
 
         import os
+
         model_path = config.get("model_path")
         if model_path:
             try:
@@ -75,10 +78,14 @@ class BaseAIModel(ABC):
                     version_file = os.path.join(model_dir, "VERSION")
                     if os.path.isfile(version_file):
                         try:
-                            with open(version_file, "r", encoding="utf-8", errors="replace") as f:
+                            with open(
+                                version_file, "r", encoding="utf-8", errors="replace"
+                            ) as f:
                                 return f.read().strip()
                         except (OSError, UnicodeDecodeError) as e:
-                            logger.warning(f"Failed to read VERSION file at {version_file}: {e}")
+                            logger.warning(
+                                f"Failed to read VERSION file at {version_file}: {e}"
+                            )
             except OSError as e:
                 # Log OS-related path errors and fall back to default
                 logger.warning(f"Model path validation failed: {e}")
@@ -108,7 +115,9 @@ class BaseAIModel(ABC):
         pass
 
     @abstractmethod
-    def explain(self, features: pd.DataFrame, decision: Dict[str, Any]) -> Dict[str, Any]:
+    def explain(
+        self, features: pd.DataFrame, decision: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Provides an explanation for a generated trading decision.
 
@@ -178,7 +187,7 @@ class BaseAIModel(ABC):
             "type": "abstract",
             "capabilities": ["prediction", "explanation"],
             "timestamp": pd.Timestamp.now().isoformat(),
-            "config": self.config.copy()
+            "config": self.config.copy(),
         }
 
         # Add specific metadata from config if available
@@ -188,26 +197,36 @@ class BaseAIModel(ABC):
             metadata["training_date"] = self.config["training_date"]
         if "parameters" in self.config:
             params = self.config["parameters"]
-            metadata["parameters"] = params.copy() if isinstance(params, dict) else params
+            metadata["parameters"] = (
+                params.copy() if isinstance(params, dict) else params
+            )
         if "expected_features" in self.config:
             metadata["expected_features"] = self.config["expected_features"]
 
         return metadata
 
+
 class DummyAIModel(BaseAIModel):
     """
     A dummy implementation of BaseAIModel for testing and demonstration purposes.
     """
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        logger.info(f"Initialized DummyAIModel: {self.model_name} (version: {self.version})")
+        logger.info(
+            f"Initialized DummyAIModel: {self.model_name} (version: {self.version})"
+        )
 
     def predict(self, features: pd.DataFrame) -> Dict[str, Any]:
         """
         Generates a trading decision based on input features with basic logic.
         """
         if features.empty:
-            return {"action": "HOLD", "confidence": 0.5, "reasoning": "No features provided."}
+            return {
+                "action": "HOLD",
+                "confidence": 0.5,
+                "reasoning": "No features provided.",
+            }
 
         # Use the last row of features for decision making (most recent data)
         latest_features = features.iloc[-1] if len(features) > 0 else features
@@ -220,24 +239,44 @@ class DummyAIModel(BaseAIModel):
         if "RSI" in latest_features:
             rsi = latest_features["RSI"]
             if rsi > 70:
-                signals.append(("SELL", 0.2, f"RSI at {rsi:.2f} indicates overbought conditions"))
+                signals.append(
+                    ("SELL", 0.2, f"RSI at {rsi:.2f} indicates overbought conditions")
+                )
             elif rsi < 30:
-                signals.append(("BUY", 0.2, f"RSI at {rsi:.2f} indicates oversold conditions"))
+                signals.append(
+                    ("BUY", 0.2, f"RSI at {rsi:.2f} indicates oversold conditions")
+                )
 
         if "MACD" in latest_features:
             macd = latest_features["MACD"]
             if macd > 0.1:
-                signals.append(("BUY", 0.15, f"Positive MACD at {macd:.3f} supports upward momentum"))
+                signals.append(
+                    (
+                        "BUY",
+                        0.15,
+                        f"Positive MACD at {macd:.3f} supports upward momentum",
+                    )
+                )
             elif macd < -0.1:
-                signals.append(("SELL", 0.15, f"Negative MACD at {macd:.3f} supports downward momentum"))
+                signals.append(
+                    (
+                        "SELL",
+                        0.15,
+                        f"Negative MACD at {macd:.3f} supports downward momentum",
+                    )
+                )
 
         if "LastClose" in latest_features and "SMA_20" in latest_features:
             price = latest_features["LastClose"]
             sma = latest_features["SMA_20"]
             if price > sma * 1.02:  # Price 2% above SMA
-                signals.append(("BUY", 0.1, f"Price {price:.2f} is above 20-period SMA {sma:.2f}"))
+                signals.append(
+                    ("BUY", 0.1, f"Price {price:.2f} is above 20-period SMA {sma:.2f}")
+                )
             elif price < sma * 0.98:  # Price 2% below SMA
-                signals.append(("SELL", 0.1, f"Price {price:.2f} is below 20-period SMA {sma:.2f}"))
+                signals.append(
+                    ("SELL", 0.1, f"Price {price:.2f} is below 20-period SMA {sma:.2f}")
+                )
 
         # Aggregate scores per action
         score = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
@@ -257,12 +296,23 @@ class DummyAIModel(BaseAIModel):
 
         confidence = min(base_confidence + aggregated_score, 0.9)
         confidence = round(confidence, 2)
-        reasoning = f"Dummy model recommends {final_action} with {confidence*100}% confidence. " + "; ".join(reasoning_parts)
+        reasoning = (
+            f"Dummy model recommends {final_action} with {confidence*100}% confidence. "
+            + "; ".join(reasoning_parts)
+        )
 
-        logger.info(f"DummyAIModel predicted: {final_action} with {confidence*100}% confidence.")
-        return {"action": final_action, "confidence": confidence, "reasoning": reasoning}
+        logger.info(
+            f"DummyAIModel predicted: {final_action} with {confidence*100}% confidence."
+        )
+        return {
+            "action": final_action,
+            "confidence": confidence,
+            "reasoning": reasoning,
+        }
 
-    def explain(self, features: pd.DataFrame, decision: Dict[str, Any]) -> Dict[str, Any]:
+    def explain(
+        self, features: pd.DataFrame, decision: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Provides a feature-based explanation for the decision.
         """
@@ -270,7 +320,7 @@ class DummyAIModel(BaseAIModel):
             return {
                 "key_factors": ["Insufficient data"],
                 "feature_contributions": {},
-                "model_specific_details": "No features provided for explanation."
+                "model_specific_details": "No features provided for explanation.",
             }
 
         # Use the last row of features for explanation (most recent data)
@@ -300,7 +350,9 @@ class DummyAIModel(BaseAIModel):
                     coerced_value = None
 
             feature_contributions[col] = (
-                round(coerced_value, 3) if isinstance(coerced_value, (int, float)) else "non-numeric"
+                round(coerced_value, 3)
+                if isinstance(coerced_value, (int, float))
+                else "non-numeric"
             )
 
             # Identify significant factors based on common thresholds
@@ -323,20 +375,28 @@ class DummyAIModel(BaseAIModel):
                 if not features[col].empty:
                     recent_avg = features[col].tail(5).mean()
                     if val > recent_avg * 1.05:
-                        key_factors.append(f"Price above recent average ({recent_avg:.2f})")
+                        key_factors.append(
+                            f"Price above recent average ({recent_avg:.2f})"
+                        )
                     elif val < recent_avg * 0.95:
-                        key_factors.append(f"Price below recent average ({recent_avg:.2f})")
+                        key_factors.append(
+                            f"Price below recent average ({recent_avg:.2f})"
+                        )
 
         # If no key factors identified, mention the decision and confidence
         if not key_factors:
-            key_factors = [f"Decision based on general market conditions",
-                          f"Confidence level: {decision.get('confidence', 0.5):.2f}"]
+            key_factors = [
+                f"Decision based on general market conditions",
+                f"Confidence level: {decision.get('confidence', 0.5):.2f}",
+            ]
 
         explanation = {
             "key_factors": key_factors,
             "feature_contributions": feature_contributions,
             "model_specific_details": f"The {decision.get('action', 'HOLD')} decision was based on technical analysis of the provided features.",
-            "decision_rationale": decision.get("reasoning", "No specific rationale available")
+            "decision_rationale": decision.get(
+                "reasoning", "No specific rationale available"
+            ),
         }
         logger.info(f"DummyAIModel explained decision: {decision['action']}.")
         return explanation
@@ -365,16 +425,18 @@ class DummyAIModel(BaseAIModel):
         # In a real implementation, this would save model weights
         # For dummy model, just create a dummy file
         import os
+
         dirpath = os.path.dirname(model_path)
         if dirpath:
             os.makedirs(dirpath, exist_ok=True)
         try:
-            with open(model_path, 'w', encoding='utf-8') as f:
+            with open(model_path, "w", encoding="utf-8") as f:
                 f.write(f"Dummy model: {self.model_name}, version: {self.version}")
         except (OSError, IOError) as e:
             # Prefer using module logger; re-raise if critical
             logger.error(f"Failed to save model to {model_path}: {e}")
             raise
+
 
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
@@ -383,12 +445,9 @@ if __name__ == "__main__":
     dummy_model = DummyAIModel(dummy_config)
 
     # Create dummy features
-    test_features = pd.DataFrame({
-        "RSI": [70.0],
-        "MACD": [0.5],
-        "Volume": [10000.0],
-        "LastClose": [1000.0]
-    })
+    test_features = pd.DataFrame(
+        {"RSI": [70.0], "MACD": [0.5], "Volume": [10000.0], "LastClose": [1000.0]}
+    )
 
     print("--- Dummy Model Prediction ---")
     decision = dummy_model.predict(test_features)

@@ -1,9 +1,9 @@
 """Decision validator for trading decisions."""
 
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional
 import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,20 +18,24 @@ class DecisionValidator:
         self.backtest_mode = backtest_mode
 
         # Safely extract decision_engine config section
-        decision_engine = config.get('decision_engine')
+        decision_engine = config.get("decision_engine")
         if not isinstance(decision_engine, dict):
             decision_engine = {}
 
         # Extract portfolio parameters with validation
-        stop_loss_raw = decision_engine.get('portfolio_stop_loss_percentage', 0.02)
-        take_profit_raw = decision_engine.get('portfolio_take_profit_percentage', 0.05)
+        stop_loss_raw = decision_engine.get("portfolio_stop_loss_percentage", 0.02)
+        take_profit_raw = decision_engine.get("portfolio_take_profit_percentage", 0.05)
 
         # Validate numeric types, fall back to defaults if invalid
         if not isinstance(stop_loss_raw, (int, float)):
-            logger.warning(f"Invalid portfolio_stop_loss_percentage type: {type(stop_loss_raw).__name__}. Using default: 0.02")
+            logger.warning(
+                f"Invalid portfolio_stop_loss_percentage type: {type(stop_loss_raw).__name__}. Using default: 0.02"
+            )
             stop_loss_raw = 0.02
         if not isinstance(take_profit_raw, (int, float)):
-            logger.warning(f"Invalid portfolio_take_profit_percentage type: {type(take_profit_raw).__name__}. Using default: 0.05")
+            logger.warning(
+                f"Invalid portfolio_take_profit_percentage type: {type(take_profit_raw).__name__}. Using default: 0.05"
+            )
             take_profit_raw = 0.05
 
         self.portfolio_stop_loss_percentage = stop_loss_raw
@@ -39,10 +43,14 @@ class DecisionValidator:
 
         # Compatibility: Convert legacy percentage values (>1) to decimals
         if self.portfolio_stop_loss_percentage > 1:
-            logger.warning(f"Detected legacy portfolio_stop_loss_percentage {self.portfolio_stop_loss_percentage}%. Converting to decimal: {self.portfolio_stop_loss_percentage/100:.3f}")
+            logger.warning(
+                f"Detected legacy portfolio_stop_loss_percentage {self.portfolio_stop_loss_percentage}%. Converting to decimal: {self.portfolio_stop_loss_percentage/100:.3f}"
+            )
             self.portfolio_stop_loss_percentage /= 100
         if self.portfolio_take_profit_percentage > 1:
-            logger.warning(f"Detected legacy portfolio_take_profit_percentage {self.portfolio_take_profit_percentage}%. Converting to decimal: {self.portfolio_take_profit_percentage/100:.3f}")
+            logger.warning(
+                f"Detected legacy portfolio_take_profit_percentage {self.portfolio_take_profit_percentage}%. Converting to decimal: {self.portfolio_take_profit_percentage/100:.3f}"
+            )
             self.portfolio_take_profit_percentage /= 100
 
     def create_decision(
@@ -77,35 +85,46 @@ class DecisionValidator:
         decision_id = str(uuid.uuid4())
 
         # Extract basic decision parameters
-        current_price = context.get('market_data', {}).get('close', 0)
-        action = ai_response.get('action', 'HOLD')
+        current_price = context.get("market_data", {}).get("close", 0)
+        action = ai_response.get("action", "HOLD")
 
         # Extract position sizing results
-        recommended_position_size = position_sizing_result.get('recommended_position_size', 0)
-        stop_loss_price = position_sizing_result.get('stop_loss_price')
-        sizing_stop_loss_percentage = position_sizing_result.get('sizing_stop_loss_percentage', 0)
-        risk_percentage = position_sizing_result.get('risk_percentage', 0)
-        signal_only = position_sizing_result.get('signal_only', False)
+        recommended_position_size = position_sizing_result.get(
+            "recommended_position_size", 0
+        )
+        stop_loss_price = position_sizing_result.get("stop_loss_price")
+        sizing_stop_loss_percentage = position_sizing_result.get(
+            "sizing_stop_loss_percentage", 0
+        )
+        risk_percentage = position_sizing_result.get("risk_percentage", 0)
+        signal_only = position_sizing_result.get("signal_only", False)
 
         # Calculate suggested_amount based on action and position sizing
-        suggested_amount = ai_response.get('amount', 0)
+        suggested_amount = ai_response.get("amount", 0)
 
         # Override suggested_amount to 0 for HOLD with no position
-        if action == 'HOLD' and not has_existing_position:
+        if action == "HOLD" and not has_existing_position:
             suggested_amount = 0
             logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
 
         # For non-signal-only BUY/SELL: recommended_position_size is in asset units (e.g., BTC);
         # convert to USD notional by multiplying by current_price when the quote is USD/USDT
-        if not signal_only and action in ['BUY', 'SELL'] and recommended_position_size and current_price > 0:
+        if (
+            not signal_only
+            and action in ["BUY", "SELL"]
+            and recommended_position_size
+            and current_price > 0
+        ):
             # Crypto futures expect USD notional; we derive notional from unit size * price
-            if is_crypto and (asset_pair.endswith('USD') or asset_pair.endswith('USDT')):
+            if is_crypto and (
+                asset_pair.endswith("USD") or asset_pair.endswith("USDT")
+            ):
                 suggested_amount = recommended_position_size * current_price
                 logger.info(
                     "Position sizing: $%.2f USD notional for crypto futures (%.6f units @ $%.2f)",
                     suggested_amount,
                     recommended_position_size,
-                    current_price
+                    current_price,
                 )
             else:
                 # For forex or other, use unit amount
@@ -113,64 +132,66 @@ class DecisionValidator:
 
         # Assemble decision object
         decision = {
-            'id': decision_id,
-            'asset_pair': asset_pair,
-            'timestamp': datetime.utcnow().isoformat(),
-            'action': action,
-            'confidence': ai_response.get('confidence', 50),
-            'reasoning': ai_response.get('reasoning', 'No reasoning provided'),
-            'suggested_amount': suggested_amount,
-            'recommended_position_size': recommended_position_size,
-            'position_type': self._determine_position_type(action),
-            'entry_price': current_price,
-            'stop_loss_price': stop_loss_price,
-            'stop_loss_fraction': sizing_stop_loss_percentage,
-            'take_profit_percentage': None,  # Individual trade TP is not explicitly set by the DecisionEngine
-            'risk_percentage': risk_percentage,
-            'signal_only': signal_only,
-            'portfolio_stop_loss_percentage': self.portfolio_stop_loss_percentage,
-            'portfolio_take_profit_percentage': self.portfolio_take_profit_percentage,
-            'market_data': context['market_data'],
-            'balance_snapshot': context['balance'],
-            'price_change': context['price_change'],
-            'volatility': context['volatility'],
+            "id": decision_id,
+            "asset_pair": asset_pair,
+            "timestamp": datetime.utcnow().isoformat(),
+            "action": action,
+            "confidence": ai_response.get("confidence", 50),
+            "reasoning": ai_response.get("reasoning", "No reasoning provided"),
+            "suggested_amount": suggested_amount,
+            "recommended_position_size": recommended_position_size,
+            "position_type": self._determine_position_type(action),
+            "entry_price": current_price,
+            "stop_loss_price": stop_loss_price,
+            "stop_loss_fraction": sizing_stop_loss_percentage,
+            "take_profit_percentage": None,  # Individual trade TP is not explicitly set by the DecisionEngine
+            "risk_percentage": risk_percentage,
+            "signal_only": signal_only,
+            "portfolio_stop_loss_percentage": self.portfolio_stop_loss_percentage,
+            "portfolio_take_profit_percentage": self.portfolio_take_profit_percentage,
+            "market_data": context["market_data"],
+            "balance_snapshot": context["balance"],
+            "price_change": context["price_change"],
+            "volatility": context["volatility"],
             # Surface portfolio unrealized P&L if available from platform data
-            'portfolio_unrealized_pnl': (
-                context.get('portfolio', {}) or {}
-            ).get('unrealized_pnl'),
-            'executed': False,
+            "portfolio_unrealized_pnl": (context.get("portfolio", {}) or {}).get(
+                "unrealized_pnl"
+            ),
+            "executed": False,
             # These would be set by the AIDecisionManager
-            'ai_provider': 'unknown',  # Placeholder, will be set by calling class
-            'model_name': 'unknown',   # Placeholder, will be set by calling class
-            'backtest_mode': self.backtest_mode,
+            "ai_provider": "unknown",  # Placeholder, will be set by calling class
+            "model_name": "unknown",  # Placeholder, will be set by calling class
+            "backtest_mode": self.backtest_mode,
             # --- Multi-timeframe and risk context fields ---
-            'multi_timeframe_trend': context.get('multi_timeframe_trend'),
-            'multi_timeframe_entry_signals': context.get('multi_timeframe_entry_signals'),
-            'multi_timeframe_sources': context.get('multi_timeframe_sources'),
-            'data_source_path': context.get('data_source_path'),
-            'monitor_pulse_age_seconds': context.get('monitor_pulse_age_seconds'),
-            'var_snapshot': context.get('var_snapshot'),
-            'correlation_alerts': context.get('correlation_alerts'),
-            'correlation_summary': context.get('correlation_summary')
+            "multi_timeframe_trend": context.get("multi_timeframe_trend"),
+            "multi_timeframe_entry_signals": context.get(
+                "multi_timeframe_entry_signals"
+            ),
+            "multi_timeframe_sources": context.get("multi_timeframe_sources"),
+            "data_source_path": context.get("data_source_path"),
+            "monitor_pulse_age_seconds": context.get("monitor_pulse_age_seconds"),
+            "var_snapshot": context.get("var_snapshot"),
+            "correlation_alerts": context.get("correlation_alerts"),
+            "correlation_summary": context.get("correlation_summary"),
         }
 
         # Add ensemble metadata if available
-        if 'ensemble_metadata' in ai_response:
-            decision['ensemble_metadata'] = ai_response['ensemble_metadata']
+        if "ensemble_metadata" in ai_response:
+            decision["ensemble_metadata"] = ai_response["ensemble_metadata"]
 
         # Add action_votes if available (from weighted voting)
-        if 'action_votes' in ai_response:
-            decision['action_votes'] = ai_response['action_votes']
+        if "action_votes" in ai_response:
+            decision["action_votes"] = ai_response["action_votes"]
 
         # Add meta_features if available (from stacking)
-        if 'meta_features' in ai_response:
-            decision['meta_features'] = ai_response['meta_features']
+        if "meta_features" in ai_response:
+            decision["meta_features"] = ai_response["meta_features"]
 
         logger.info(
             "Decision created: %s %s (confidence: %s%%)",
-            decision['action'],
+            decision["action"],
             asset_pair,
-            decision['confidence'],
+            decision["confidence"],
         )
 
         return decision
@@ -186,8 +207,8 @@ class DecisionValidator:
         Returns:
             Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
         """
-        if action == 'BUY':
-            return 'LONG'
-        elif action == 'SELL':
-            return 'SHORT'
+        if action == "BUY":
+            return "LONG"
+        elif action == "SELL":
+            return "SHORT"
         return None

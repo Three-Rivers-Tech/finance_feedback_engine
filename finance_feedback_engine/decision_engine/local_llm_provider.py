@@ -5,14 +5,12 @@ Automatically downloads and configures Llama-3.2-3B-Instruct for
 trading decisions if not already available.
 """
 
-from typing import Dict, Any
 import logging
-import subprocess
 import re
-from .decision_validation import (
-    try_parse_decision_json,
-    build_fallback_decision,
-)
+import subprocess
+from typing import Any, Dict
+
+from .decision_validation import build_fallback_decision, try_parse_decision_json
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +42,16 @@ class LocalLLMProvider:
         self.config = config
 
         # Read local models and priority from config
-        decision_engine_config = config.get('decision_engine', {})
-        self.local_models = decision_engine_config.get('local_models', [])
+        decision_engine_config = config.get("decision_engine", {})
+        self.local_models = decision_engine_config.get("local_models", [])
         if not isinstance(self.local_models, list):
             logger.warning("local_models must be a list, using empty list.")
             self.local_models = []
-        self.local_priority = decision_engine_config.get('local_priority', False)
+        self.local_priority = decision_engine_config.get("local_priority", False)
 
         # Normalize model name: "default" -> actual default model
-        requested_model = config.get('model_name', 'default')
-        if requested_model == 'default':
+        requested_model = config.get("model_name", "default")
+        if requested_model == "default":
             self.model_name = self.DEFAULT_MODEL
         else:
             self.model_name = requested_model
@@ -74,7 +72,11 @@ class LocalLLMProvider:
         try:
             # Use configured local_models if available, else defaults
             if self.local_models:
-                secondary_candidates = self.local_models[1:] if len(self.local_models) > 1 else [self.SECONDARY_MODEL]
+                secondary_candidates = (
+                    self.local_models[1:]
+                    if len(self.local_models) > 1
+                    else [self.SECONDARY_MODEL]
+                )
             else:
                 secondary_candidates = [self.SECONDARY_MODEL]
 
@@ -112,11 +114,11 @@ class LocalLLMProvider:
         """
         try:
             result = subprocess.run(
-                ['ollama', '--version'],
+                ["ollama", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-                check=False
+                check=False,
             )
 
             if result.returncode == 0:
@@ -124,15 +126,11 @@ class LocalLLMProvider:
                 logger.info("Ollama installed: %s", version)
                 return True
             else:
-                logger.warning(
-                    "Ollama command failed, attempting installation..."
-                )
+                logger.warning("Ollama command failed, attempting installation...")
                 return self._install_ollama()
 
         except FileNotFoundError:
-            logger.warning(
-                "Ollama not found in PATH, attempting installation..."
-            )
+            logger.warning("Ollama not found in PATH, attempting installation...")
             return self._install_ollama()
         except subprocess.TimeoutExpired:
             logger.error("Ollama version check timeout")
@@ -148,9 +146,9 @@ class LocalLLMProvider:
         Returns:
             bool: True if installation successful
         """
+        import os
         import platform
         import tempfile
-        import os
 
         system = platform.system()
         logger.info(f"Detected platform: {system}")
@@ -161,24 +159,24 @@ class LocalLLMProvider:
                 logger.info(f"Installing Ollama on {system}...")
 
                 # Download script first to avoid shell injection
-                with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.sh') as temp_script:
+                with tempfile.NamedTemporaryFile(
+                    mode="w+", delete=False, suffix=".sh"
+                ) as temp_script:
                     # Download the install script to a temporary file
                     import requests
+
                     response = requests.get("https://ollama.ai/install.sh", timeout=60)
                     response.raise_for_status()
                     temp_script.write(response.text)
                     temp_script_path = temp_script.name
 
                 try:
-                    # Make script executable
-                    os.chmod(temp_script_path, 0o755)
-
                     # Run the downloaded script safely
                     result = subprocess.run(
                         [temp_script_path],
                         capture_output=True,
                         text=True,
-                        timeout=300  # 5 minutes
+                        timeout=300,  # 5 minutes
                     )
 
                     if result.returncode != 0:
@@ -191,16 +189,18 @@ class LocalLLMProvider:
                     logger.info(f"Installation output: {result.stdout}")
                 finally:
                     # Clean up the temporary script file
-                    if temp_script_path is not None and os.path.exists(temp_script_path):
+                    if temp_script_path is not None and os.path.exists(
+                        temp_script_path
+                    ):
                         try:
                             os.unlink(temp_script_path)
                         except Exception as cleanup_error:
-                            logger.warning(f"Failed to clean up temporary script: {cleanup_error}")
+                            logger.warning(
+                                f"Failed to clean up temporary script: {cleanup_error}"
+                            )
 
             elif system == "Windows":
-                logger.error(
-                    "Automatic installation not supported on Windows"
-                )
+                logger.error("Automatic installation not supported on Windows")
                 raise RuntimeError(
                     "Automatic Ollama installation not supported on Windows.\n"
                     "Please download and install manually from: "
@@ -212,16 +212,11 @@ class LocalLLMProvider:
 
             # Verify installation
             verify_result = subprocess.run(
-                ["ollama", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["ollama", "--version"], capture_output=True, text=True, timeout=5
             )
 
             if verify_result.returncode == 0:
-                logger.info(
-                    "Installation verified: %s" % verify_result.stdout.strip()
-                )
+                logger.info("Installation verified: %s" % verify_result.stdout.strip())
                 return True
             else:
                 raise RuntimeError("Ollama installed but verification failed")
@@ -247,19 +242,12 @@ class LocalLLMProvider:
             return
 
         # Model not available - need to download
-        logger.info(
-            f"Model {self.model_name} not found locally. "
-            f"Downloading..."
-        )
-        logger.info(
-            "This is a one-time download. Please wait..."
-        )
+        logger.info(f"Model {self.model_name} not found locally. " f"Downloading...")
+        logger.info("This is a one-time download. Please wait...")
 
         # Attempt to download requested model
         if self._download_model(self.model_name):
-            logger.info(
-                f"Successfully downloaded {self.model_name}"
-            )
+            logger.info(f"Successfully downloaded {self.model_name}")
             return
 
         # Download failed - try fallback if we were trying primary
@@ -271,9 +259,7 @@ class LocalLLMProvider:
 
             if self._download_model(self.FALLBACK_MODEL):
                 self.model_name = self.FALLBACK_MODEL
-                logger.info(
-                    f"Using fallback model: {self.FALLBACK_MODEL}"
-                )
+                logger.info(f"Using fallback model: {self.FALLBACK_MODEL}")
                 logger.warning(
                     f"Primary model {self.DEFAULT_MODEL} download failed. "
                     f"Performance may be reduced with fallback model."
@@ -302,27 +288,21 @@ class LocalLLMProvider:
             bool: True if download successful, False otherwise
         """
         try:
-            logger.info(
-                f"Downloading {model_name} from Ollama library..."
-            )
-            logger.info(
-                "This may take several minutes depending on your connection."
-            )
+            logger.info(f"Downloading {model_name} from Ollama library...")
+            logger.info("This may take several minutes depending on your connection.")
 
             # Run ollama pull command
             result = subprocess.run(
-                ['ollama', 'pull', model_name],
+                ["ollama", "pull", model_name],
                 capture_output=True,
                 text=True,
                 timeout=600,  # 10 minute timeout for download
-                check=False
+                check=False,
             )
 
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
-                logger.error(
-                    f"Download failed for {model_name}: {error_msg}"
-                )
+                logger.error(f"Download failed for {model_name}: {error_msg}")
                 return False
 
             # Verify the model was actually downloaded
@@ -344,9 +324,7 @@ class LocalLLMProvider:
             )
             return False
         except Exception as e:
-            logger.error(
-                f"Unexpected error downloading {model_name}: {e}"
-            )
+            logger.error(f"Unexpected error downloading {model_name}: {e}")
             return False
 
     def _delete_model(self, model_name: str) -> bool:
@@ -363,30 +341,25 @@ class LocalLLMProvider:
             logger.info(f"Deleting model {model_name}...")
 
             result = subprocess.run(
-                ['ollama', 'rm', model_name],
+                ["ollama", "rm", model_name],
                 capture_output=True,
                 text=True,
                 timeout=30,
-                check=False
+                check=False,
             )
 
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
-                logger.warning(
-                    f"Failed to delete model {model_name}: {error_msg}"
-                )
+                logger.warning(f"Failed to delete model {model_name}: {error_msg}")
                 return False
 
             # Verify deletion
             if self._is_model_available(model_name):
-                logger.warning(
-                    f"Model {model_name} still available after deletion"
-                )
+                logger.warning(f"Model {model_name} still available after deletion")
                 return False
 
             logger.info(
-                f"Model {model_name} deleted successfully. "
-                f"Freed ~2.5GB disk space."
+                f"Model {model_name} deleted successfully. " f"Freed ~2.5GB disk space."
             )
             return True
 
@@ -408,11 +381,11 @@ class LocalLLMProvider:
             logger.debug(f"Unloading model {self.model_name} from memory")
 
             result = subprocess.run(
-                ['ollama', 'stop', self.model_name],
+                ["ollama", "stop", self.model_name],
                 capture_output=True,
                 text=True,
                 timeout=10,
-                check=False
+                check=False,
             )
 
             if result.returncode == 0:
@@ -432,18 +405,18 @@ class LocalLLMProvider:
         """Check if model is available locally."""
         try:
             result = subprocess.run(
-                ['ollama', 'list'],
+                ["ollama", "list"],
                 capture_output=True,
                 text=True,
                 timeout=10,
-                check=False
+                check=False,
             )
 
             if result.returncode == 0:
                 # Parse model list
                 models = result.stdout.lower()
                 # Handle both full name and short name
-                model_base = model_name.split(':')[0].lower()
+                model_base = model_name.split(":")[0].lower()
                 return model_base in models or model_name.lower() in models
 
             return False
@@ -465,7 +438,9 @@ class LocalLLMProvider:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                logger.info(f"Querying local LLM: {self.model_name} (attempt {attempt + 1}/{max_retries})")
+                logger.info(
+                    f"Querying local LLM: {self.model_name} (attempt {attempt + 1}/{max_retries})"
+                )
 
                 # Create system prompt for trading
                 full_prompt = (
@@ -480,19 +455,17 @@ class LocalLLMProvider:
 
                 # Call Ollama with proper format
                 result = subprocess.run(
-                    [
-                        'ollama', 'run', self.model_name,
-                        '--format', 'json',
-                        full_prompt
-                    ],
+                    ["ollama", "run", self.model_name, "--format", "json", full_prompt],
                     capture_output=True,
                     text=True,
                     timeout=90,  # Increased timeout to 90 seconds
-                    check=False
+                    check=False,
                 )
 
                 if result.returncode != 0:
-                    logger.error(f"Ollama inference failed on attempt {attempt + 1}: {result.stderr}")
+                    logger.error(
+                        f"Ollama inference failed on attempt {attempt + 1}: {result.stderr}"
+                    )
 
                     # If this is the last attempt, return fallback
                     if attempt == max_retries - 1:
@@ -502,6 +475,7 @@ class LocalLLMProvider:
 
                     # Retry with a brief delay
                     import time
+
                     time.sleep(2 * (attempt + 1))  # Increasing delay (2s, 4s, 6s)
                     continue
 
@@ -509,7 +483,9 @@ class LocalLLMProvider:
 
                 # Check if response is empty
                 if not response_text:
-                    logger.warning(f"Empty response from LLM on attempt {attempt + 1}: {response_text}")
+                    logger.warning(
+                        f"Empty response from LLM on attempt {attempt + 1}: {response_text}"
+                    )
 
                     # If this is the last attempt, return fallback
                     if attempt == max_retries - 1:
@@ -519,6 +495,7 @@ class LocalLLMProvider:
 
                     # Retry with a brief delay
                     import time
+
                     time.sleep(2 * (attempt + 1))
                     continue
 
@@ -528,17 +505,21 @@ class LocalLLMProvider:
                 if decision:
                     # Safely convert confidence to int (default 60 if missing/invalid)
                     try:
-                        confidence_val = decision.get('confidence', 60)
-                        decision['confidence'] = int(confidence_val) if confidence_val is not None else 60
+                        confidence_val = decision.get("confidence", 60)
+                        decision["confidence"] = (
+                            int(confidence_val) if confidence_val is not None else 60
+                        )
                     except (ValueError, TypeError):
-                        decision['confidence'] = 60
+                        decision["confidence"] = 60
 
                     # Safely convert amount to float (default 0.1 if missing/invalid)
                     try:
-                        amount_val = decision.get('amount', 0.1)
-                        decision['amount'] = float(amount_val) if amount_val is not None else 0.1
+                        amount_val = decision.get("amount", 0.1)
+                        decision["amount"] = (
+                            float(amount_val) if amount_val is not None else 0.1
+                        )
                     except (ValueError, TypeError):
-                        decision['amount'] = 0.1
+                        decision["amount"] = 0.1
 
                     logger.info(
                         f"Local LLM decision: {decision['action']} "
@@ -558,7 +539,9 @@ class LocalLLMProvider:
                 return self._parse_text_response(response_text)
 
             except subprocess.TimeoutExpired:
-                logger.error(f"Local LLM inference timeout (>90s) on attempt {attempt + 1}")
+                logger.error(
+                    f"Local LLM inference timeout (>90s) on attempt {attempt + 1}"
+                )
 
                 # If this is the last attempt, return fallback
                 if attempt == max_retries - 1:
@@ -568,6 +551,7 @@ class LocalLLMProvider:
 
                 # Retry with a brief delay
                 import time
+
                 time.sleep(2 * (attempt + 1))
 
             except Exception as e:
@@ -581,70 +565,69 @@ class LocalLLMProvider:
 
                 # Retry with a brief delay
                 import time
+
                 time.sleep(2 * (attempt + 1))
 
         # This should never be reached due to the return statements in the loop,
         # but included for completeness
-        return build_fallback_decision("Local LLM failed after all retries, using fallback decision.")
+        return build_fallback_decision(
+            "Local LLM failed after all retries, using fallback decision."
+        )
 
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """Parse text response for trading decision."""
         text_upper = text.upper()
 
         # Extract action
-        if 'BUY' in text_upper and 'SELL' not in text_upper:
-            action = 'BUY'
-        elif 'SELL' in text_upper and 'BUY' not in text_upper:
-            action = 'SELL'
+        if "BUY" in text_upper and "SELL" not in text_upper:
+            action = "BUY"
+        elif "SELL" in text_upper and "BUY" not in text_upper:
+            action = "SELL"
         else:
-            action = 'HOLD'
+            action = "HOLD"
 
         # Extract confidence
-        confidence_match = re.search(r'(\d+)\s*%', text)
+        confidence_match = re.search(r"(\d+)\s*%", text)
         confidence = int(confidence_match.group(1)) if confidence_match else 65
 
         # Extract reasoning (first meaningful line)
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
         reasoning = lines[0][:200] if lines else "Local LLM analysis"
 
         # Extract amount
-        amount_match = re.search(r'(\d+\.?\d*)\s*(BTC|ETH|units?)', text, re.IGNORECASE)
+        amount_match = re.search(r"(\d+\.?\d*)\s*(BTC|ETH|units?)", text, re.IGNORECASE)
         amount = float(amount_match.group(1)) if amount_match else 0.1
 
         return {
-            'action': action,
-            'confidence': confidence,
-            'reasoning': reasoning,
-            'amount': amount
+            "action": action,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "amount": amount,
         }
 
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
         try:
             result = subprocess.run(
-                ['ollama', 'show', self.model_name],
+                ["ollama", "show", self.model_name],
                 capture_output=True,
                 text=True,
                 timeout=10,
-                check=False
+                check=False,
             )
 
             if result.returncode == 0:
                 return {
-                    'model_name': self.model_name,
-                    'status': 'available',
-                    'info': result.stdout
+                    "model_name": self.model_name,
+                    "status": "available",
+                    "info": result.stdout,
                 }
 
             return {
-                'model_name': self.model_name,
-                'status': 'error',
-                'info': result.stderr
+                "model_name": self.model_name,
+                "status": "error",
+                "info": result.stderr,
             }
 
         except Exception as e:
-            return {
-                'model_name': self.model_name,
-                'status': 'error',
-                'info': str(e)
-            }
+            return {"model_name": self.model_name, "status": "error", "info": str(e)}

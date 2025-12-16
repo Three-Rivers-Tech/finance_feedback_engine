@@ -6,12 +6,12 @@ A reinforcement learning-inspired memory system that learns from trade outcomes 
 
 ## Key Capabilities
 
-✅ **Experience Replay** - Stores (decision, outcome) pairs for learning  
-✅ **Performance Attribution** - Tracks which AI providers generate profitable trades  
-✅ **Context Generation** - Feeds historical performance into new AI decisions  
-✅ **Adaptive Learning** - Recommends provider weight adjustments based on results  
-✅ **Market Regime Detection** - Identifies what works in bullish/bearish/sideways markets  
-✅ **Risk Metrics** - Sharpe ratio, Sortino ratio, max drawdown, profit factor  
+✅ **Experience Replay** - Stores (decision, outcome) pairs for learning
+✅ **Performance Attribution** - Tracks which AI providers generate profitable trades
+✅ **Context Generation** - Feeds historical performance into new AI decisions
+✅ **Adaptive Learning** - Recommends provider weight adjustments based on results
+✅ **Market Regime Detection** - Identifies what works in bullish/bearish/sideways markets
+✅ **Risk Metrics** - Sharpe ratio, Sortino ratio, max drawdown, profit factor
 
 ## Quick Start
 
@@ -121,7 +121,7 @@ Aggregated metrics at a point in time:
 
 ### Minimum Data Requirements
 - **20+ trades**: Basic context generation
-- **50+ trades per provider**: Reliable weight recommendations  
+- **50+ trades per provider**: Reliable weight recommendations
 - **100+ trades**: Accurate confidence calibration
 
 ### Sample Workflow
@@ -233,18 +233,18 @@ data/
 class CustomMemory(PortfolioMemoryEngine):
     def analyze_performance(self, window_days=None):
         snapshot = super().analyze_performance(window_days)
-        
+
         # Add custom metric: average holding period
         outcomes = self.trade_outcomes
         holding_periods = [
-            o.holding_period_hours 
+            o.holding_period_hours
             for o in outcomes if o.holding_period_hours
         ]
         snapshot.avg_holding_period = (
             sum(holding_periods) / len(holding_periods)
             if holding_periods else 0
         )
-        
+
         return snapshot
 ```
 

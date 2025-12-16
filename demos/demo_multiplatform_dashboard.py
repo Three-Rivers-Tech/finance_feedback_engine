@@ -12,11 +12,11 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from finance_feedback_engine.trading_platforms import BaseTradingPlatform
 from finance_feedback_engine.dashboard import (
     PortfolioDashboardAggregator,
-    display_portfolio_dashboard
+    display_portfolio_dashboard,
 )
+from finance_feedback_engine.trading_platforms import BaseTradingPlatform
 
 
 class SimulatedCoinbasePlatform(BaseTradingPlatform):
@@ -36,22 +36,22 @@ class SimulatedCoinbasePlatform(BaseTradingPlatform):
 
     def get_portfolio_breakdown(self):
         return {
-            'total_value_usd': 45000.00,
-            'num_assets': 2,
-            'holdings': [
+            "total_value_usd": 45000.00,
+            "num_assets": 2,
+            "holdings": [
                 {
-                    'asset': 'BTC',
-                    'amount': 0.75,
-                    'value_usd': 30000.00,
-                    'allocation_pct': 66.67
+                    "asset": "BTC",
+                    "amount": 0.75,
+                    "value_usd": 30000.00,
+                    "allocation_pct": 66.67,
                 },
                 {
-                    'asset': 'ETH',
-                    'amount': 5.0,
-                    'value_usd': 15000.00,
-                    'allocation_pct': 33.33
-                }
-            ]
+                    "asset": "ETH",
+                    "amount": 5.0,
+                    "value_usd": 15000.00,
+                    "allocation_pct": 33.33,
+                },
+            ],
         }
 
 
@@ -72,28 +72,28 @@ class SimulatedOandaPlatform(BaseTradingPlatform):
 
     def get_portfolio_breakdown(self):
         return {
-            'total_value_usd': 12500.00,
-            'num_assets': 3,
-            'holdings': [
+            "total_value_usd": 12500.00,
+            "num_assets": 3,
+            "holdings": [
                 {
-                    'asset': 'EUR_USD',
-                    'amount': 100000.0,  # 100k units
-                    'value_usd': 7500.00,
-                    'allocation_pct': 60.0
+                    "asset": "EUR_USD",
+                    "amount": 100000.0,  # 100k units
+                    "value_usd": 7500.00,
+                    "allocation_pct": 60.0,
                 },
                 {
-                    'asset': 'GBP_USD',
-                    'amount': 50000.0,
-                    'value_usd': 3000.00,
-                    'allocation_pct': 24.0
+                    "asset": "GBP_USD",
+                    "amount": 50000.0,
+                    "value_usd": 3000.00,
+                    "allocation_pct": 24.0,
                 },
                 {
-                    'asset': 'USD',
-                    'amount': 2000.00,
-                    'value_usd': 2000.00,
-                    'allocation_pct': 16.0
-                }
-            ]
+                    "asset": "USD",
+                    "amount": 2000.00,
+                    "value_usd": 2000.00,
+                    "allocation_pct": 16.0,
+                },
+            ],
         }
 
 
@@ -126,16 +126,20 @@ def main():
     print("Summary:")
 
     # Display per-platform summaries from aggregated data
-    for platform_info in aggregated_data.get('platforms', []):
-        platform_name = platform_info.get('name', 'Unknown').replace('Simulated', '').strip()
-        breakdown = platform_info.get('breakdown', {})
-        platform_value = breakdown.get('total_value_usd', 0.0)
-        platform_assets = breakdown.get('num_assets', 0)
-        print(f"  {platform_name:<20} ${platform_value:>10,.2f} ({platform_assets} assets)")
+    for platform_info in aggregated_data.get("platforms", []):
+        platform_name = (
+            platform_info.get("name", "Unknown").replace("Simulated", "").strip()
+        )
+        breakdown = platform_info.get("breakdown", {})
+        platform_value = breakdown.get("total_value_usd", 0.0)
+        platform_assets = breakdown.get("num_assets", 0)
+        print(
+            f"  {platform_name:<20} ${platform_value:>10,.2f} ({platform_assets} assets)"
+        )
 
     # Display totals from aggregated data
-    total_value = aggregated_data.get('total_value_usd', 0.0)
-    total_assets = aggregated_data.get('num_assets', 0)
+    total_value = aggregated_data.get("total_value_usd", 0.0)
+    total_assets = aggregated_data.get("num_assets", 0)
     print(f"  {'─' * 76}")
     print(f"  {'Total':<20} ${total_value:>10,.2f} ({total_assets} assets)")
     print()
@@ -145,5 +149,5 @@ def main():
     print("=" * 80)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

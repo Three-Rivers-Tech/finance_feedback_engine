@@ -1,8 +1,8 @@
 # 2025 Full Year Portfolio Backtest - Chunked Strategy & Memory Efficiency
 
-**Strategy**: 4 quarterly chunks (Q1-Q4) with persistent cross-quarter learning  
-**Assets**: BTCUSD, ETHUSD, EURUSD  
-**Capital**: $10,000  
+**Strategy**: 4 quarterly chunks (Q1-Q4) with persistent cross-quarter learning
+**Assets**: BTCUSD, ETHUSD, EURUSD
+**Capital**: $10,000
 **Status**: Q1 (Jan-Mar) running, will accumulate memories for Q2-Q4
 
 ---
@@ -18,7 +18,7 @@
    - No adaptive learning over time
 ```
 
-### Solution: Quarterly Chunks  
+### Solution: Quarterly Chunks
 ```
 ✅ 4 × 90-day backtests (Q1, Q2, Q3, Q4):
    - Runtime: ~6 hours each (90 days vs 365)
@@ -135,28 +135,28 @@ By Q4, ensemble has:
 ## Execution Timeline
 
 ### Q1 2025 (Jan 1 - Mar 31)
-**Status**: Currently running  
-**Command**: 
+**Status**: Currently running
+**Command**:
 ```bash
 python main.py portfolio-backtest BTCUSD ETHUSD EURUSD \
   --start 2025-01-01 --end 2025-03-31 --initial-balance 10000
 ```
-**Expected Duration**: 10-15 hours (6 models × 90 days × 3 assets)  
-**Outcomes Generated**: ~60 trades  
+**Expected Duration**: 10-15 hours (6 models × 90 days × 3 assets)
+**Outcomes Generated**: ~60 trades
 **Memory Size**: ~1.5 MB (outcomes) + 5 MB (vectors) = 6.5 MB
 
 ### Q2 2025 (Apr 1 - Jun 30)
-**Status**: Will start after Q1 completes  
-**Command**: Same, just dates 2025-04-01 to 2025-06-30  
-**Loading**: Automatically loads Q1's 60 outcomes  
+**Status**: Will start after Q1 completes
+**Command**: Same, just dates 2025-04-01 to 2025-06-30
+**Loading**: Automatically loads Q1's 60 outcomes
 **Expected Win Rate Improvement**: +5-10%
 
 ### Q3 2025 (Jul 1 - Sep 30)
-**Status**: Will start after Q2 completes  
+**Status**: Will start after Q2 completes
 **Cumulative Learning**: Q1 + Q2 outcomes (120 trades)
 
 ### Q4 2025 (Oct 1 - Dec 31)
-**Status**: Final quarter  
+**Status**: Final quarter
 **Cumulative Learning**: Q1 + Q2 + Q3 outcomes (180+ trades)
 
 ---
@@ -165,19 +165,19 @@ python main.py portfolio-backtest BTCUSD ETHUSD EURUSD \
 
 ### Disk Usage Growth
 ```
-After Q1: 
+After Q1:
 ├─ outcome_*.json: 60 files × 3KB = 180 KB
 ├─ vectors.pkl: 5 MB
 ├─ snapshots: 10 KB
 └─ TOTAL: ~5.2 MB
 
-After Q2: 
+After Q2:
 └─ TOTAL: ~5.4 MB (only ~200 KB new outcome files)
 
-After Q3: 
+After Q3:
 └─ TOTAL: ~5.6 MB (capped at max_memory_size=1000)
 
-After Q4: 
+After Q4:
 └─ TOTAL: ~5.8 MB (stable, oldest outcomes culled)
 ```
 
@@ -212,7 +212,7 @@ cat data/memory/provider_performance.json | python -m json.tool
 ### Verify Cross-Quarter Learning
 ```bash
 # After Q1 completes, check Q1 performance
-ls -1 data/memory/outcome_*.json | wc -l  
+ls -1 data/memory/outcome_*.json | wc -l
 # Should show ~60
 
 # Start Q2, check if Q1 outcomes loaded
@@ -380,15 +380,14 @@ ls -lt data/memory/outcome_*.json | head -5
 
 ## Summary: Chunked Strategy Advantages
 
-✅ **Efficiency**: 4 × 15hr runs > 1 × 24hr run (resilience + learning)  
-✅ **Learning**: Q2-Q4 benefit from Q1+ outcomes automatically  
-✅ **Safety**: Each quarter independently saved (no single point of failure)  
-✅ **Memory**: Stays ~6-8 MB disk, ~200 MB RAM (efficient)  
-✅ **Monitoring**: Can track progress quarterly, not daily  
+✅ **Efficiency**: 4 × 15hr runs > 1 × 24hr run (resilience + learning)
+✅ **Learning**: Q2-Q4 benefit from Q1+ outcomes automatically
+✅ **Safety**: Each quarter independently saved (no single point of failure)
+✅ **Memory**: Stays ~6-8 MB disk, ~200 MB RAM (efficient)
+✅ **Monitoring**: Can track progress quarterly, not daily
 ✅ **Scalability**: Can extend beyond 2025 without re-training
 
 ---
 
-**Current Status**: Q1 2025 running (started ~12:29 UTC)  
+**Current Status**: Q1 2025 running (started ~12:29 UTC)
 **Next Step**: Monitor completion, then run Q2 with Q1 learning loaded
-

@@ -1,6 +1,6 @@
 # Bug Fixes - Finance Feedback Engine 2.0
-**Date:** December 2, 2025  
-**Status:** Ready to implement  
+**Date:** December 2, 2025
+**Status:** Ready to implement
 **Priority:** Critical - 8 bugs identified
 
 ---
@@ -12,10 +12,10 @@
 
 ## FIX #1: Alpha Vantage Client Session Parameter ⚠️ CRITICAL
 
-**File:** `finance_feedback_engine/data_providers/alpha_vantage_provider.py`  
-**Lines:** 133, 162  
-**Error:** `ClientSession.__init__() got an unexpected keyword argument 'session'`  
-**Impact:** Market data fetching fails, falls back to mock data  
+**File:** `finance_feedback_engine/data_providers/alpha_vantage_provider.py`
+**Lines:** 133, 162
+**Error:** `ClientSession.__init__() got an unexpected keyword argument 'session'`
+**Impact:** Market data fetching fails, falls back to mock data
 
 **Change Line 133:**
 ```python
@@ -41,10 +41,10 @@ client = RetryClient(client_session=self.session, retry_options=retry)
 
 ## FIX #2: Market Regime NumPy/Pandas Type Mismatch ⚠️ CRITICAL
 
-**File:** `finance_feedback_engine/utils/market_regime_detector.py`  
-**Lines:** 122-123  
-**Error:** `'numpy.ndarray' object has no attribute 'replace'`  
-**Impact:** Regime classification (ADX/ATR) completely fails  
+**File:** `finance_feedback_engine/utils/market_regime_detector.py`
+**Lines:** 122-123
+**Error:** `'numpy.ndarray' object has no attribute 'replace'`
+**Impact:** Regime classification (ADX/ATR) completely fails
 
 **Change Lines 122-123:**
 ```python
@@ -66,10 +66,10 @@ minus_di = pd.Series(minus_di).replace([np.inf, -np.inf], 0).fillna(0)
 
 ## FIX #3: Vector Memory Missing Method Definition ⚠️ HIGH
 
-**File:** `finance_feedback_engine/memory/vector_store.py`  
-**Lines:** 136-201  
-**Error:** `'VectorMemory' object has no attribute 'find_similar'`  
-**Impact:** Semantic memory retrieval fails  
+**File:** `finance_feedback_engine/memory/vector_store.py`
+**Lines:** 136-201
+**Error:** `'VectorMemory' object has no attribute 'find_similar'`
+**Impact:** Semantic memory retrieval fails
 
 **Issue:** Method docstring exists but function definition is missing/malformed
 
@@ -141,41 +141,41 @@ minus_di = pd.Series(minus_di).replace([np.inf, -np.inf], 0).fillna(0)
 
 ## FIX #4: Coinbase Product ID Format ⚠️ HIGH
 
-**File:** `finance_feedback_engine/trading_platforms/coinbase_platform.py`  
-**Error:** `Invalid product_id` for BTCUSD  
-**Impact:** Trade execution fails on Coinbase  
+**File:** `finance_feedback_engine/trading_platforms/coinbase_platform.py`
+**Error:** `Invalid product_id` for BTCUSD
+**Impact:** Trade execution fails on Coinbase
 
 **Step 1 - Add helper method (insert around line 440):**
 ```python
     def _format_product_id(self, asset_pair: str) -> str:
         """
         Convert standardized asset pair format to Coinbase product ID format.
-        
+
         Args:
             asset_pair: Asset pair in format BTCUSD, BTC-USD, or BTC/USD
-            
+
         Returns:
             Product ID in Coinbase format (e.g., BTC-USD)
         """
         # Already in correct format
         if '-' in asset_pair:
             return asset_pair
-            
+
         # Remove any existing separators
         clean_pair = asset_pair.replace('/', '').replace('_', '')
-        
+
         # Common crypto pairs (3-letter base currency)
         if len(clean_pair) == 6:
             return f"{clean_pair[:3]}-{clean_pair[3:]}"
-        
+
         # Handle longer currency codes (e.g., ETHUSD -> ETH-USD)
         if len(clean_pair) == 7:
             return f"{clean_pair[:4]}-{clean_pair[4:]}"
-            
+
         # Default: assume first 3 chars are base currency
         if len(clean_pair) >= 6:
             return f"{clean_pair[:3]}-{clean_pair[3:]}"
-            
+
         logger.warning(f"Unexpected asset_pair format: {asset_pair}, returning as-is")
         return asset_pair
 ```
@@ -221,10 +221,10 @@ Use `product_id` variable instead of `asset_pair`
 
 ## FIX #5: Backtesting Async/Sync Mismatch ⚠️ CRITICAL
 
-**File:** `finance_feedback_engine/backtesting/backtester.py`  
-**Line:** 304  
-**Error:** `'coroutine' object has no attribute 'get'`  
-**Impact:** Backtesting completely fails  
+**File:** `finance_feedback_engine/backtesting/backtester.py`
+**Line:** 304
+**Error:** `'coroutine' object has no attribute 'get'`
+**Impact:** Backtesting completely fails
 
 **Add import at top of file:**
 ```python
@@ -246,10 +246,10 @@ seed = asyncio.run(self.data_provider.get_market_data(asset_pair))
 
 ## FIX #6: Test Dictionary Handling ⚠️ MEDIUM
 
-**File:** `finance_feedback_engine/cli/main.py`  
-**Line:** 85  
-**Error:** `ValueError('dictionary update sequence element #0 has length 1; 2 is required')`  
-**Impact:** Test suite fails  
+**File:** `finance_feedback_engine/cli/main.py`
+**Line:** 85
+**Error:** `ValueError('dictionary update sequence element #0 has length 1; 2 is required')`
+**Impact:** Test suite fails
 
 **Change Line 85:**
 ```python
@@ -270,9 +270,9 @@ return {
 
 ## FIX #7: Add --autonomous Flag ⚠️ HIGH
 
-**File:** `finance_feedback_engine/cli/main.py`  
-**Issue:** Documentation shows `--autonomous` flag but it doesn't exist  
-**Impact:** Command fails with "No such option"  
+**File:** `finance_feedback_engine/cli/main.py`
+**Issue:** Documentation shows `--autonomous` flag but it doesn't exist
+**Impact:** Command fails with "No such option"
 
 **Add option after line 1784 (after --setup):**
 ```python
@@ -307,9 +307,9 @@ if autonomous:
 
 ## FIX #8: Async Context Manager for Sessions ⚠️ MEDIUM
 
-**File:** `finance_feedback_engine/data_providers/alpha_vantage_provider.py`  
-**Issue:** Unclosed aiohttp sessions causing resource leaks  
-**Impact:** Memory leaks, SSL connection warnings  
+**File:** `finance_feedback_engine/data_providers/alpha_vantage_provider.py`
+**Issue:** Unclosed aiohttp sessions causing resource leaks
+**Impact:** Memory leaks, SSL connection warnings
 
 **Add methods to AlphaVantageProvider class (after close() method, around line 75):**
 ```python
@@ -317,7 +317,7 @@ if autonomous:
         """Async context manager entry."""
         await self._ensure_session()
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.close()
@@ -417,6 +417,6 @@ git push origin bugfix/critical-fixes-2025-12-02
 
 ---
 
-**Status:** Ready for implementation  
-**Estimated Time:** 1-2 hours for all fixes  
+**Status:** Ready for implementation
+**Estimated Time:** 1-2 hours for all fixes
 **Risk Level:** Low (all changes isolated, well-tested)

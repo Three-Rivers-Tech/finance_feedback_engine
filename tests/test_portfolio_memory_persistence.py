@@ -1,11 +1,13 @@
 """Tests for PortfolioMemoryEngine persistence (save/load/atomic writes)."""
 
-import pytest
 import json
 from unittest.mock import patch
+
+import pytest
+
 from finance_feedback_engine.memory.portfolio_memory import (
     PortfolioMemoryEngine,
-    TradeOutcome
+    TradeOutcome,
 )
 
 
@@ -22,7 +24,7 @@ def sample_decision():
         "reasoning": "Strong uptrend",
         "timestamp": "2024-12-04T10:00:00Z",
         "ai_provider": "local",
-        "ensemble_providers": ["local", "codex"]
+        "ensemble_providers": ["local", "codex"],
     }
 
 
@@ -30,15 +32,13 @@ def sample_decision():
 def mock_config(tmp_path):
     """Create mock config for PortfolioMemoryEngine."""
     return {
-        'portfolio_memory': {
-            'enabled': True,
-            'max_memory_size': 100,
-            'learning_rate': 0.1,
-            'context_window': 20
+        "portfolio_memory": {
+            "enabled": True,
+            "max_memory_size": 100,
+            "learning_rate": 0.1,
+            "context_window": 20,
         },
-        'persistence': {
-            'storage_path': str(tmp_path)
-        }
+        "persistence": {"storage_path": str(tmp_path)},
     }
 
 
@@ -54,9 +54,7 @@ class TestRecordTradeOutcome:
     def test_record_trade_creates_outcome(self, memory_engine, sample_decision):
         """Test recording trade creates TradeOutcome object."""
         outcome = memory_engine.record_trade_outcome(
-            sample_decision,
-            exit_price=52000.0,
-            exit_timestamp="2024-12-04T12:00:00Z"
+            sample_decision, exit_price=52000.0, exit_timestamp="2024-12-04T12:00:00Z"
         )
 
         assert isinstance(outcome, TradeOutcome)
@@ -67,8 +65,7 @@ class TestRecordTradeOutcome:
     def test_record_trade_calculates_pnl(self, memory_engine, sample_decision):
         """Test PnL calculation for completed trade."""
         outcome = memory_engine.record_trade_outcome(
-            sample_decision,
-            exit_price=52000.0
+            sample_decision, exit_price=52000.0
         )
 
         # PnL = (exit - entry) * position_size
@@ -78,9 +75,7 @@ class TestRecordTradeOutcome:
     def test_record_trade_stop_loss_flag(self, memory_engine, sample_decision):
         """Test stop loss flag is recorded."""
         outcome = memory_engine.record_trade_outcome(
-            sample_decision,
-            exit_price=49000.0,
-            hit_stop_loss=True
+            sample_decision, exit_price=49000.0, hit_stop_loss=True
         )
 
         assert outcome.hit_stop_loss is True
@@ -89,9 +84,7 @@ class TestRecordTradeOutcome:
     def test_record_trade_take_profit_flag(self, memory_engine, sample_decision):
         """Test take profit flag is recorded."""
         outcome = memory_engine.record_trade_outcome(
-            sample_decision,
-            exit_price=55000.0,
-            hit_take_profit=True
+            sample_decision, exit_price=55000.0, hit_take_profit=True
         )
 
         assert outcome.hit_take_profit is True
@@ -120,12 +113,12 @@ class TestSaveToDisk:
         with open(filepath) as f:
             data = json.load(f)
 
-        assert data['version'] == '1.0'
-        assert 'saved_at' in data
-        assert 'trade_history' in data
-        assert 'provider_performance' in data
-        assert 'experience_buffer' in data
-        assert len(data['trade_history']) == 1
+        assert data["version"] == "1.0"
+        assert "saved_at" in data
+        assert "trade_history" in data
+        assert "provider_performance" in data
+        assert "experience_buffer" in data
+        assert len(data["trade_history"]) == 1
 
     def test_save_empty_memory(self, memory_engine, tmp_path):
         """Test saving with no trades."""
@@ -136,7 +129,7 @@ class TestSaveToDisk:
         with open(filepath) as f:
             data = json.load(f)
 
-        assert data['trade_history'] == []
+        assert data["trade_history"] == []
 
     def test_save_creates_directory(self, memory_engine, tmp_path):
         """Test save creates parent directories if needed."""
@@ -155,7 +148,7 @@ class TestSaveToDisk:
                 "entry_price": 1000.0 * (i + 1),
                 "position_size": 0.1,
                 "confidence": 80,
-                "timestamp": "2024-12-04T10:00:00Z"
+                "timestamp": "2024-12-04T10:00:00Z",
             }
             memory_engine.record_trade_outcome(decision, exit_price=1100.0 * (i + 1))
 
@@ -165,7 +158,7 @@ class TestSaveToDisk:
         with open(filepath) as f:
             data = json.load(f)
 
-        assert len(data['trade_history']) == 3
+        assert len(data["trade_history"]) == 3
 
 
 class TestLoadFromDisk:
@@ -209,7 +202,9 @@ class TestLoadFromDisk:
 class TestAutoSave:
     """Test auto-save functionality."""
 
-    @patch('finance_feedback_engine.memory.portfolio_memory.PortfolioMemoryEngine.save_to_disk')
+    @patch(
+        "finance_feedback_engine.memory.portfolio_memory.PortfolioMemoryEngine.save_to_disk"
+    )
     def test_record_triggers_auto_save(self, mock_save, memory_engine, sample_decision):
         """Test recording trade triggers auto-save."""
         memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)
@@ -219,9 +214,14 @@ class TestAutoSave:
 
     def test_auto_save_handles_errors_gracefully(self, memory_engine, sample_decision):
         """Test auto-save errors don't crash recording."""
-        with patch('finance_feedback_engine.memory.portfolio_memory.PortfolioMemoryEngine.save_to_disk', side_effect=Exception("Save error")):
+        with patch(
+            "finance_feedback_engine.memory.portfolio_memory.PortfolioMemoryEngine.save_to_disk",
+            side_effect=Exception("Save error"),
+        ):
             # Should not raise, just log warning
-            outcome = memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)
+            outcome = memory_engine.record_trade_outcome(
+                sample_decision, exit_price=52000.0
+            )
             assert outcome is not None
 
 
@@ -230,15 +230,17 @@ class TestProviderPerformanceTracking:
 
     def test_provider_stats_updated(self, memory_engine, sample_decision):
         """Test provider performance stats are updated."""
-        sample_decision['ai_provider'] = 'codex'
-        memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)  # Profitable
+        sample_decision["ai_provider"] = "codex"
+        memory_engine.record_trade_outcome(
+            sample_decision, exit_price=52000.0
+        )  # Profitable
 
-        assert 'codex' in memory_engine.provider_performance
-        assert memory_engine.provider_performance['codex']['total_trades'] == 1
+        assert "codex" in memory_engine.provider_performance
+        assert memory_engine.provider_performance["codex"]["total_trades"] == 1
 
     def test_provider_stats_persist(self, memory_engine, sample_decision, tmp_path):
         """Test provider stats are saved and loaded."""
-        sample_decision['ai_provider'] = 'local'
+        sample_decision["ai_provider"] = "local"
         memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)
 
         filepath = tmp_path / "provider_test.json"
@@ -247,8 +249,8 @@ class TestProviderPerformanceTracking:
         with open(filepath) as f:
             data = json.load(f)
 
-        assert 'local' in data['provider_performance']
+        assert "local" in data["provider_performance"]
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

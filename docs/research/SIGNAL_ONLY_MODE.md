@@ -61,9 +61,9 @@ The CLI displays a clear warning when in signal-only mode:
 ```python
 # Check if balance data is available and valid
 has_valid_balance = (
-    balance and 
-    isinstance(balance, dict) and 
-    len(balance) > 0 and 
+    balance and
+    isinstance(balance, dict) and
+    len(balance) > 0 and
     sum(balance.values()) > 0
 )
 

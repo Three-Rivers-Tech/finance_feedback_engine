@@ -3,8 +3,8 @@
 ## Summary
 Successfully deprecated legacy SMA-based backtester and migrated to AI-driven AdvancedBacktester with comprehensive features.
 
-**Status:** 🟢 Production-ready  
-**Date:** 2025-12-03  
+**Status:** 🟢 Production-ready
+**Date:** 2025-12-03
 **Testing:** CLI integration verified
 
 ---
@@ -15,7 +15,7 @@ Successfully deprecated legacy SMA-based backtester and migrated to AI-driven Ad
 - `finance_feedback_engine/backtesting/backtester.py` — Legacy SMA crossover backtester
   - Added deprecation warnings to `__init__()` and module docstring
   - Method redirects users to `AdvancedBacktester`
-  
+
 - `FinanceFeedbackEngine.backtest()` method in `core.py`
   - Added `@deprecated` decorator
   - Users directed to CLI command: `python main.py backtest`
@@ -50,10 +50,10 @@ Successfully deprecated legacy SMA-based backtester and migrated to AI-driven Ad
 - ~~`--long-window`~~
 
 ### 4. Mock AI Provider for Fast Backtesting
-**Problem:** Real AI providers (local Ollama, GitHub Copilot CLI, etc.) take 10-30+ seconds per decision.  
+**Problem:** Real AI providers (local Ollama, GitHub Copilot CLI, etc.) take 10-30+ seconds per decision.
 **Solution:** Implemented `_mock_ai_inference()` in `DecisionEngine` for instant testing.
 
-**Performance:** 
+**Performance:**
 - **Mock mode:** ~0.5 seconds for 61-day backtest (instant decisions)
 - **Real AI mode:** ~10+ minutes for same period (20s × 61 candles = 1220s)
 
@@ -101,7 +101,7 @@ AI-Driven Backtest Summary
 │ Total Fees          │     $0.00 │
 └─────────────────────┴───────────┘
 ```
-**Runtime:** <1 second  
+**Runtime:** <1 second
 **Status:** ✅ PASS — All HOLD signals (realistic with 60% HOLD probability)
 
 ### ✅ Test 2: Longer Period (Jan 1 - Mar 1, 2024)
@@ -109,8 +109,8 @@ AI-Driven Backtest Summary
 python main.py --config config/config.backtest.yaml backtest BTCUSD --start 2024-01-01 --end 2024-03-01
 ```
 
-**Data:** 61 candles  
-**Runtime:** <2 seconds  
+**Data:** 61 candles
+**Runtime:** <2 seconds
 **Status:** ✅ PASS — Consistent HOLD behavior
 
 ### ✅ Test 3: Simple Mock Engine Test
@@ -127,7 +127,7 @@ Final Value: $10000.00
 Total Return: 0.00%
 Total Trades: 0
 ```
-**Runtime:** 0.5 seconds  
+**Runtime:** 0.5 seconds
 **Status:** ✅ PASS — Isolated test confirms backtester core logic works
 
 ---
@@ -135,31 +135,31 @@ Total Trades: 0
 ## Bug Fixes Applied
 
 ### 1. Missing `asyncio` Import
-**File:** `finance_feedback_engine/cli/main.py`  
-**Error:** `NameError: name 'asyncio' is not defined`  
+**File:** `finance_feedback_engine/cli/main.py`
+**Error:** `NameError: name 'asyncio' is not defined`
 **Fix:** Added `import asyncio` at module top
 
 ### 2. Async Event Loop Issue in `_detect_market_regime()`
-**File:** `finance_feedback_engine/decision_engine/engine.py`  
-**Error:** `RuntimeError: asyncio.run() cannot be called from a running event loop`  
+**File:** `finance_feedback_engine/decision_engine/engine.py`
+**Error:** `RuntimeError: asyncio.run() cannot be called from a running event loop`
 **Fix:** Modified to detect running loop and skip async regime detection gracefully
 
 ### 3. Missing Logger in CLI
-**File:** `finance_feedback_engine/cli/main.py`  
-**Error:** `NameError: name 'logger' is not defined`  
+**File:** `finance_feedback_engine/cli/main.py`
+**Error:** `NameError: name 'logger' is not defined`
 **Fix:** Added `import logging` and `logger = logging.getLogger(__name__)`
 
 ### 4. Missing `historical_data_provider` Attribute
-**File:** `finance_feedback_engine/core.py`  
-**Error:** `AttributeError: 'FinanceFeedbackEngine' object has no attribute 'historical_data_provider'`  
+**File:** `finance_feedback_engine/core.py`
+**Error:** `AttributeError: 'FinanceFeedbackEngine' object has no attribute 'historical_data_provider'`
 **Fix:** Added initialization in `__init__()`:
 ```python
 self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
 ```
 
 ### 5. Indentation Error in `core.py`
-**File:** `finance_feedback_engine/core.py` line 65  
-**Error:** `IndentationError: unexpected indent`  
+**File:** `finance_feedback_engine/core.py` line 65
+**Error:** `IndentationError: unexpected indent`
 **Fix:** Corrected indentation from 8 spaces to 4 spaces (matching class standard)
 
 ---

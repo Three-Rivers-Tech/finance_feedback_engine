@@ -5,8 +5,8 @@ Provides detailed health information about all components.
 """
 
 import logging
-from typing import Dict, Any
 from datetime import datetime, timedelta
+from typing import Any, Dict
 
 from ..core import FinanceFeedbackEngine
 
@@ -41,92 +41,81 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "uptime_seconds": (datetime.utcnow() - _startup_time).total_seconds(),
-        "components": {}
+        "components": {},
     }
 
     # Check platform connectivity
     try:
-        if hasattr(engine, 'platform'):
+        if hasattr(engine, "platform"):
             balance = _safe_json(engine.platform.get_balance())
             health["components"]["platform"] = {
                 "status": "healthy",
-                "name": engine.config.get('trading_platform', 'unknown'),
-                "balance": balance
+                "name": engine.config.get("trading_platform", "unknown"),
+                "balance": balance,
             }
         else:
             health["components"]["platform"] = {
                 "status": "unavailable",
-                "message": "No platform configured"
+                "message": "No platform configured",
             }
     except Exception as e:
         logger.error(f"Platform health check failed: {e}")
-        health["components"]["platform"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health["components"]["platform"] = {"status": "unhealthy", "error": str(e)}
         health["status"] = "degraded"
 
     # Check data provider
     try:
-        if hasattr(engine, 'data_provider'):
+        if hasattr(engine, "data_provider"):
             # Simple check - see if we can get config
-            provider_config = engine.config.get('alpha_vantage_api_key')
+            provider_config = engine.config.get("alpha_vantage_api_key")
             health["components"]["data_provider"] = {
                 "status": "healthy" if provider_config else "degraded",
-                "message": "Alpha Vantage configured" if provider_config else "No API key"
+                "message": (
+                    "Alpha Vantage configured" if provider_config else "No API key"
+                ),
             }
         else:
             health["components"]["data_provider"] = {
                 "status": "unavailable",
-                "message": "Data provider not initialized"
+                "message": "Data provider not initialized",
             }
     except Exception as e:
         logger.error(f"Data provider health check failed: {e}")
-        health["components"]["data_provider"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health["components"]["data_provider"] = {"status": "unhealthy", "error": str(e)}
         health["status"] = "degraded"
 
     # Check decision store
     try:
-        if hasattr(engine, 'decision_store'):
+        if hasattr(engine, "decision_store"):
             recent = engine.decision_store.get_recent_decisions(limit=1)
             health["components"]["decision_store"] = {
                 "status": "healthy",
-                "recent_decisions": len(recent)
+                "recent_decisions": len(recent),
             }
         else:
-            health["components"]["decision_store"] = {
-                "status": "unavailable"
-            }
+            health["components"]["decision_store"] = {"status": "unavailable"}
     except Exception as e:
         logger.error(f"Decision store health check failed: {e}")
         health["components"]["decision_store"] = {
             "status": "unhealthy",
-            "error": str(e)
+            "error": str(e),
         }
         health["status"] = "degraded"
 
     # Check circuit breakers
     try:
-        if hasattr(engine, 'platform') and hasattr(engine.platform, '_execute_breaker'):
+        if hasattr(engine, "platform") and hasattr(engine.platform, "_execute_breaker"):
             breaker = engine.platform._execute_breaker
             health["components"]["circuit_breaker"] = {
                 "status": "healthy" if breaker.state == 0 else "open",
                 "state": breaker.state,
-                "failure_count": breaker.failure_count
+                "failure_count": breaker.failure_count,
             }
         else:
-            health["components"]["circuit_breaker"] = {
-                "status": "not_applicable"
-            }
+            health["components"]["circuit_breaker"] = {"status": "not_applicable"}
     except Exception as e:
         logger.warning(f"Circuit breaker health check failed: {e}")
-        health["components"]["circuit_breaker"] = {
-            "status": "unknown",
-            "error": str(e)
-        }
+        health["components"]["circuit_breaker"] = {"status": "unknown", "error": str(e)}
 
     return _safe_json(health)
 
@@ -145,27 +134,27 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         return {
             "ready": False,
             "reason": "Application is still starting up",
-            "uptime_seconds": uptime
+            "uptime_seconds": uptime,
         }
 
     # Check critical components
     try:
         # Platform must be accessible
-        if hasattr(engine, 'platform'):
+        if hasattr(engine, "platform"):
             balance = _safe_json(engine.platform.get_balance())
 
         # If we got here, we're ready
         return {
             "ready": True,
             "uptime_seconds": uptime,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         return {
             "ready": False,
             "reason": f"Platform not ready: {str(e)}",
-            "uptime_seconds": uptime
+            "uptime_seconds": uptime,
         }
 
 
@@ -181,5 +170,5 @@ def get_liveness_status() -> Dict[str, Any]:
     return {
         "alive": True,
         "timestamp": datetime.utcnow().isoformat(),
-        "uptime_seconds": (datetime.utcnow() - _startup_time).total_seconds()
+        "uptime_seconds": (datetime.utcnow() - _startup_time).total_seconds(),
     }

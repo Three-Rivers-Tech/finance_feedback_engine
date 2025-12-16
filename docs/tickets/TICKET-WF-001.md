@@ -38,5 +38,3 @@ Related files
 - `finance_feedback_engine/backtesting/walk_forward.py`
 - `qa_results_full.json`, `qa_results_fixed.json`
 - `docs/QA_ISSUES.md`
-
-

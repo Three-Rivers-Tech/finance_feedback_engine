@@ -134,11 +134,11 @@ backtesting:
   stop_loss_percentage: 0.02            # 2% default stop-loss
   take_profit_percentage: 0.05          # 5% default take-profit
   max_concurrent_positions: 2           # Hard limit
-  
+
   # Margin trading (optional)
   override_leverage: null               # Custom leverage
   override_maintenance_margin: null     # Custom maintenance margin %
-  
+
   # Features
   enable_decision_cache: true           # SQLite caching
   enable_portfolio_memory: true         # AI feedback loop
@@ -149,7 +149,7 @@ backtesting:
 ensemble:
   debate_mode: true                     # REQUIRED for backtesting
   enabled_providers: [mock_provider]    # Use mock only
-  
+
 agent:
   kill_switch_gain_pct: 0.05           # Close on 5% gain
   kill_switch_loss_pct: 0.02           # Close on 2% loss
@@ -372,4 +372,3 @@ def validate_position(decision, portfolio_state):
     # Return (is_valid, message)
     pass
 ```
-

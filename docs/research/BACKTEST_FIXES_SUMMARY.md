@@ -76,7 +76,7 @@ Total Fees: $15.06
 
 **Test Suite Status:**
 - `test_backtest_mode.py`: 2/2 passing ✅
-- Portfolio Memory: 32/32 passing ✅  
+- Portfolio Memory: 32/32 passing ✅
 - DecisionEngine validation: Fixed NameError (+26 tests) ✅
 - CLI approval workflows: Fixed validation (+20 tests) ✅
 - Overall: 392 tests passing (84% improvement from session start)

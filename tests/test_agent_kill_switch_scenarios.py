@@ -3,10 +3,13 @@ Test autonomous agent kill-switch and risk management scenarios.
 
 Tests portfolio-level stop-loss, take-profit, max drawdown, and safety limits.
 """
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 
 
 @pytest.fixture
@@ -24,15 +27,17 @@ def mock_dependencies():
         "trading_platform": trading_platform,
     }
 
+
 @pytest.fixture
 def agent_config():
     """Provides a default TradingAgentConfig for kill switch tests."""
     return TradingAgentConfig(
-        asset_pairs=['BTCUSD'],
-        kill_switch_loss_pct=2.0, # 2%
+        asset_pairs=["BTCUSD"],
+        kill_switch_loss_pct=2.0,  # 2%
         autonomous_execution=True,
         max_daily_trades=5,
     )
+
 
 @pytest.fixture
 def trading_agent(agent_config, mock_dependencies):
@@ -55,8 +60,10 @@ class TestKillSwitchProtection:
     async def test_stop_loss_trigger(self, trading_agent, mock_dependencies):
         """Test that stop-loss threshold triggers kill-switch."""
         # Arrange: Mock portfolio with -3% loss (breaching the -2% threshold)
-        mock_dependencies["trade_monitor"].monitoring_context_provider.get_monitoring_context.return_value = {
-            'unrealized_pnl_percent': -3.0
+        mock_dependencies[
+            "trade_monitor"
+        ].monitoring_context_provider.get_monitoring_context.return_value = {
+            "unrealized_pnl_percent": -3.0
         }
         trading_agent.is_running = True
         original_stop_method = trading_agent.stop
@@ -73,8 +80,10 @@ class TestKillSwitchProtection:
     async def test_no_kill_switch_within_limits(self, trading_agent, mock_dependencies):
         """Test that kill-switch doesn't trigger within normal limits."""
         # Arrange: Mock portfolio with -1% loss (within the -2% threshold)
-        mock_dependencies["trade_monitor"].monitoring_context_provider.get_monitoring_context.return_value = {
-            'unrealized_pnl_percent': -1.0
+        mock_dependencies[
+            "trade_monitor"
+        ].monitoring_context_provider.get_monitoring_context.return_value = {
+            "unrealized_pnl_percent": -1.0
         }
         trading_agent.is_running = True
         original_stop_method = trading_agent.stop
@@ -97,7 +106,7 @@ class TestDailyTradeLimit:
         # Arrange
         trading_agent.config.max_daily_trades = 2
         trading_agent.daily_trade_count = 2
-        decision = {'confidence': 90, 'asset_pair': 'BTCUSD'}
+        decision = {"confidence": 90, "asset_pair": "BTCUSD"}
 
         # Act
         can_trade = await trading_agent._should_execute(decision)
@@ -111,7 +120,7 @@ class TestDailyTradeLimit:
         # Arrange
         trading_agent.config.max_daily_trades = 2
         trading_agent.daily_trade_count = 1
-        decision = {'confidence': 90}
+        decision = {"confidence": 90}
 
         # Act
         can_trade = await trading_agent._should_execute(decision)
@@ -120,7 +129,9 @@ class TestDailyTradeLimit:
         assert can_trade is True
 
     @pytest.mark.asyncio
-    async def test_reasoning_state_skips_trade_when_limit_reached(self, trading_agent, mock_dependencies):
+    async def test_reasoning_state_skips_trade_when_limit_reached(
+        self, trading_agent, mock_dependencies
+    ):
         """
         Test that handle_reasoning_state does not collect decisions
         when the daily trade limit is reached.
@@ -130,8 +141,10 @@ class TestDailyTradeLimit:
         trading_agent.daily_trade_count = 2
 
         # Mock the engine to return an actionable decision
-        mock_decision = {'action': 'BUY', 'confidence': 95, 'asset_pair': 'BTCUSD'}
-        mock_dependencies["engine"].analyze_asset = AsyncMock(return_value=mock_decision)
+        mock_decision = {"action": "BUY", "confidence": 95, "asset_pair": "BTCUSD"}
+        mock_dependencies["engine"].analyze_asset = AsyncMock(
+            return_value=mock_decision
+        )
 
         # Ensure the agent's decision list is empty
         trading_agent._current_decisions = []
@@ -141,4 +154,4 @@ class TestDailyTradeLimit:
 
         # Assert: No decisions should have been collected for execution
         assert len(trading_agent._current_decisions) == 0
-        mock_dependencies["engine"].analyze_asset.assert_called_once_with('BTCUSD')
+        mock_dependencies["engine"].analyze_asset.assert_called_once_with("BTCUSD")

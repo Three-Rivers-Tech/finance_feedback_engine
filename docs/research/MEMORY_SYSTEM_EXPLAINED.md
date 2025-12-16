@@ -8,7 +8,7 @@ Your memory system is **production-ready and highly efficient**:
 ```
 Full Year 2025 Memory Cost:
 ├─ Trade Outcomes (JSON): ~1.5 MB
-├─ Vector Embeddings (Pickle): ~5 MB  
+├─ Vector Embeddings (Pickle): ~5 MB
 ├─ Performance Snapshots (JSON): ~50 KB
 └─ TOTAL: ~6.5 MB disk (negligible)
 
@@ -80,15 +80,15 @@ def _save_outcome(self, trade_outcome: TradeOutcome) -> None:
         self.storage_path,
         f"outcome_{trade_outcome.decision_id}.json"
     )
-    
+
     # Atomic write: write to temp file, then rename
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp:
         json.dump(trade_outcome.to_dict(), tmp)
         tmp_path = tmp.name
-    
+
     # Atomic rename (atomic on all OSes)
     os.rename(tmp_path, outcome_file)
-    
+
     logger.info(f"Saved outcome: {outcome_file}")
 ```
 
@@ -105,10 +105,10 @@ def save_index(self) -> None:
         'metadata': self.metadata,    # timestamps, regimes
         'ids': self.outcome_ids       # mapping to outcomes
     }
-    
+
     with open(self.index_path, 'wb') as f:
         pickle.dump(data, f)
-    
+
     logger.info(f"Saved {len(self.vectors)} vectors")
 ```
 
@@ -121,28 +121,28 @@ def save_index(self) -> None:
 def __init__(self, storage_path: str):
     self.storage_path = storage_path
     os.makedirs(storage_path, exist_ok=True)
-    
+
     # Auto-load on initialization
     self._load_memory()
-    
+
 def _load_memory(self) -> None:
     """Load all persisted outcomes from disk."""
     # Find all outcome files
     outcome_files = glob.glob(
         os.path.join(self.storage_path, "outcome_*.json")
     )
-    
+
     for file in outcome_files:
         with open(file) as f:
             outcome = TradeOutcome.from_dict(json.load(f))
             self.experience_buffer.append(outcome)
-    
+
     # Load provider performance
     perf_file = os.path.join(self.storage_path, 'provider_performance.json')
     if os.path.exists(perf_file):
         with open(perf_file) as f:
             self.provider_performance = json.load(f)
-    
+
     logger.info(f"Loaded {len(self.experience_buffer)} outcomes")
 ```
 
@@ -154,30 +154,30 @@ def _load_memory(self) -> None:
 
 def generate_decision(self, asset_pair: str) -> dict:
     """Generate decision using memory-informed AI."""
-    
+
     # Search similar past trades
     similar_outcomes = self.memory.semantic_search(
         query=f"{asset_pair} in TRENDING regime",
         top_k=5
     )
-    
+
     # Get provider performance from memory
     provider_weights = self.memory.provider_performance
-    
+
     # Build AI prompt with memory context
     prompt = f"""
     Asset: {asset_pair}
     Similar past trades (from memory):
     {self._format_similar_trades(similar_outcomes)}
-    
+
     Provider performance (from {len(self.memory.experience_buffer)} trades):
     - llama3.2: 62% win rate
     - deepseek: 50% win rate
     - ... (weights auto-adjusted)
-    
+
     Given this historical context, what's your trading decision?
     """
-    
+
     # AI uses memory-enhanced prompt
     response = self.ensemble_manager.query(prompt)
     return response
@@ -398,4 +398,3 @@ Full Year: $10k × 1.05 × 1.08 × 1.12 × 1.15 = $14,700 (+47%)
 3. Run Q2 which auto-loads Q1 outcomes
 4. Repeat for Q3 and Q4
 5. Review full-year metrics showing cross-quarter learning
-

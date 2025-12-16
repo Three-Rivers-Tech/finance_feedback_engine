@@ -21,12 +21,12 @@ def aggregate_decisions(
     failed_providers: Optional[List[str]] = None  # NEW
 ) -> Dict[str, Any]:
     # ... validation ...
-    
+
     # Dynamically adjust weights for active providers
     adjusted_weights = self._adjust_weights_for_active_providers(
         provider_names, failed_providers
     )
-    
+
     # Pass adjusted weights to voting methods
     final_decision = self._weighted_voting(
         provider_names, actions, confidences, reasonings, amounts,
@@ -88,25 +88,25 @@ def _adjust_weights_for_active_providers(
 def _ensemble_ai_inference(self, prompt: str) -> Dict[str, Any]:
     provider_decisions = {}
     failed_providers = []  # NEW: Track failures
-    
+
     for provider in enabled:
         try:
             decision = self._query_provider(provider, prompt)
-            
+
             # NEW: Validate response quality
             if self._is_valid_provider_response(decision, provider):
                 provider_decisions[provider] = decision
             else:
                 failed_providers.append(provider)
-                
+
         except Exception as e:
             failed_providers.append(provider)
             continue
-    
+
     # NEW: Handle complete failure
     if not provider_decisions:
         return self._fallback_with_metadata(failed_providers)
-    
+
     # NEW: Pass failure info to ensemble manager
     return self.ensemble_manager.aggregate_decisions(
         provider_decisions,
@@ -123,7 +123,7 @@ def _is_valid_provider_response(
 ) -> bool:
     """
     Check if provider response is valid (not a fallback).
-    
+
     Detects:
     - Fallback keywords in reasoning
     - Invalid actions

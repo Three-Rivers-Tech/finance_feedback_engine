@@ -10,18 +10,18 @@ Provides endpoints for:
 - Performance metrics
 """
 
-import logging
 import asyncio
 import copy
-from typing import Dict, Any, Optional, List
+import logging
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field, validator
 
+from ..agent.trading_loop_agent import AgentState, TradingLoopAgent
 from ..core import FinanceFeedbackEngine
-from ..agent.trading_loop_agent import TradingLoopAgent, AgentState
 from .dependencies import get_engine, verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ _agent_lock = asyncio.Lock()
 
 class BotState(str, Enum):
     """Bot operational states."""
+
     STOPPED = "stopped"
     STARTING = "starting"
     RUNNING = "running"
@@ -52,30 +53,17 @@ class AgentControlRequest(BaseModel):
     """Request model for agent control operations."""
 
     asset_pairs: Optional[List[str]] = Field(
-        None,
-        description="Asset pairs to trade (overrides config)"
+        None, description="Asset pairs to trade (overrides config)"
     )
-    autonomous: bool = Field(
-        True,
-        description="Whether to run in autonomous mode"
-    )
+    autonomous: bool = Field(True, description="Whether to run in autonomous mode")
     take_profit: Optional[float] = Field(
-        None,
-        ge=0.001,
-        le=1.0,
-        description="Take profit percentage (0.001 to 1.0)"
+        None, ge=0.001, le=1.0, description="Take profit percentage (0.001 to 1.0)"
     )
     stop_loss: Optional[float] = Field(
-        None,
-        ge=0.001,
-        le=1.0,
-        description="Stop loss percentage (0.001 to 1.0)"
+        None, ge=0.001, le=1.0, description="Stop loss percentage (0.001 to 1.0)"
     )
     max_concurrent_trades: Optional[int] = Field(
-        None,
-        ge=1,
-        le=10,
-        description="Maximum concurrent trades"
+        None, ge=1, le=10, description="Maximum concurrent trades"
     )
 
 
@@ -100,15 +88,19 @@ class ManualTradeRequest(BaseModel):
 
     asset_pair: str = Field(..., description="Asset pair to trade")
     action: str = Field(..., description="Trade action: BUY or SELL")
-    size: Optional[float] = Field(None, description="Position size (uses default if not specified)")
-    price: Optional[float] = Field(None, description="Limit price (market order if not specified)")
+    size: Optional[float] = Field(
+        None, description="Position size (uses default if not specified)"
+    )
+    price: Optional[float] = Field(
+        None, description="Limit price (market order if not specified)"
+    )
     stop_loss: Optional[float] = Field(None, description="Stop loss price")
     take_profit: Optional[float] = Field(None, description="Take profit price")
 
-    @validator('action')
+    @validator("action")
     def validate_action(cls, v):
-        if v.upper() not in ['BUY', 'SELL', 'LONG', 'SHORT']:
-            raise ValueError('Action must be BUY, SELL, LONG, or SHORT')
+        if v.upper() not in ["BUY", "SELL", "LONG", "SHORT"]:
+            raise ValueError("Action must be BUY, SELL, LONG, or SHORT")
         return v.upper()
 
 
@@ -121,12 +113,12 @@ class ConfigUpdateRequest(BaseModel):
     max_concurrent_trades: Optional[int] = Field(None, ge=1, le=10)
     provider_weights: Optional[Dict[str, float]] = None
 
-    @validator('provider_weights')
+    @validator("provider_weights")
     def validate_weights(cls, v):
         if v is not None:
             total = sum(v.values())
             if not (0.99 <= total <= 1.01):
-                raise ValueError('Provider weights must sum to 1.0')
+                raise ValueError("Provider weights must sum to 1.0")
         return v
 
 
@@ -134,11 +126,12 @@ class ConfigUpdateRequest(BaseModel):
 # BOT CONTROL ENDPOINTS
 # ============================================================================
 
+
 @bot_control_router.post("/start", response_model=AgentStatusResponse)
 async def start_agent(
     request: AgentControlRequest,
     background_tasks: BackgroundTasks,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    engine: FinanceFeedbackEngine = Depends(get_engine),
 ):
     """
     Start the trading agent.
@@ -151,28 +144,32 @@ async def start_agent(
         logger.info("Starting trading agent via API...")
 
         async with _agent_lock:
-            if _agent_instance is not None and _agent_task is not None and not _agent_task.done():
+            if (
+                _agent_instance is not None
+                and _agent_task is not None
+                and not _agent_task.done()
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Agent is already running. Stop it first before starting again."
+                    detail="Agent is already running. Stop it first before starting again.",
                 )
 
             # Create config from request
             config = copy.deepcopy(engine.config)
 
-            config['agent'] = config.get('agent', {})
+            config["agent"] = config.get("agent", {})
 
             if request.asset_pairs:
-                config['agent']['asset_pairs'] = request.asset_pairs
+                config["agent"]["asset_pairs"] = request.asset_pairs
 
             if request.take_profit:
-                config['agent']['take_profit_percentage'] = request.take_profit
+                config["agent"]["take_profit_percentage"] = request.take_profit
 
             if request.stop_loss:
-                config['agent']['sizing_stop_loss_percentage'] = request.stop_loss
+                config["agent"]["sizing_stop_loss_percentage"] = request.stop_loss
 
             if request.max_concurrent_trades:
-                config['agent']['max_concurrent_trades'] = request.max_concurrent_trades
+                config["agent"]["max_concurrent_trades"] = request.max_concurrent_trades
 
             # Initialize agent
             _agent_instance = TradingLoopAgent(config, engine)
@@ -190,19 +187,21 @@ async def start_agent(
 
             return AgentStatusResponse(
                 state=BotState.RUNNING,
-                agent_ooda_state=_agent_instance.state.value if _agent_instance else None,
+                agent_ooda_state=(
+                    _agent_instance.state.value if _agent_instance else None
+                ),
                 uptime_seconds=0.0,
                 config={
                     "asset_pairs": request.asset_pairs,
-                    "autonomous": request.autonomous
-                }
+                    "autonomous": request.autonomous,
+                },
             )
 
     except Exception as e:
         logger.error(f"Failed to start agent: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start agent: {str(e)}"
+            detail=f"Failed to start agent: {str(e)}",
         )
 
 
@@ -221,12 +220,11 @@ async def stop_agent():
         async with _agent_lock:
             if _agent_instance is None or _agent_task is None or _agent_task.done():
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Agent is not running"
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Agent is not running"
                 )
 
             # Signal agent to stop
-            if hasattr(_agent_instance, 'stop'):
+            if hasattr(_agent_instance, "stop"):
                 await _agent_instance.stop()
 
             # Cancel the task
@@ -250,14 +248,13 @@ async def stop_agent():
         logger.error(f"Error stopping agent: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error stopping agent: {str(e)}"
+            detail=f"Error stopping agent: {str(e)}",
         )
 
 
 @bot_control_router.post("/emergency-stop")
 async def emergency_stop(
-    close_positions: bool = True,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    close_positions: bool = True, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     EMERGENCY STOP - Immediately halt all trading.
@@ -285,37 +282,44 @@ async def emergency_stop(
 
             # Close positions if requested
             closed_positions = []
-            if close_positions and hasattr(engine, 'platform'):
+            if close_positions and hasattr(engine, "platform"):
                 logger.warning("Closing all open positions...")
 
                 # Get open positions
-                if hasattr(engine.platform, 'get_portfolio_breakdown'):
+                if hasattr(engine.platform, "get_portfolio_breakdown"):
                     breakdown = engine.platform.get_portfolio_breakdown()
-                    positions = breakdown.get('positions', [])
+                    positions = breakdown.get("positions", [])
 
                     for position in positions:
                         try:
-                            # Execute close trade
-                            result = engine.platform.execute_trade({
-                                'asset_pair': position['asset_pair'],
-                                'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
-                                'size': position.get('size', 0),
-                                'order_type': 'MARKET'})
-                            result = await engine.platform.execute_trade({
-                                'asset_pair': position['asset_pair'],
-                                'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
-                                'size': position.get('size', 0),
-                                'order_type': 'MARKET'
-                            })
+                            # Execute close trade (async)
+                            result = await engine.platform.execute_trade(
+                                {
+                                    "asset_pair": position["asset_pair"],
+                                    "action": (
+                                        "SELL"
+                                        if position.get("side") == "LONG"
+                                        else "BUY"
+                                    ),
+                                    "size": position.get("size", 0),
+                                    "order_type": "MARKET",
+                                }
+                            )
                             closed_positions.append(result)
-                "message": "Emergency stop executed",
-                "closed_positions": len(closed_positions),
-                "timestamp": datetime.utcnow().isoformat()
+                        except Exception:
+                            # Continue closing other positions even if one fails
+                            continue
+
+                return {
+                    "message": "Emergency stop executed",
+                    "closed_positions": len(closed_positions),
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Emergency stop failed: {str(e)}"
+            detail=f"Emergency stop failed: {str(e)}",
         )
 
 
@@ -330,9 +334,7 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
         # Check if agent is running
         if _agent_instance is None or _agent_task is None or _agent_task.done():
             return AgentStatusResponse(
-                state=BotState.STOPPED,
-                total_trades=0,
-                active_positions=0
+                state=BotState.STOPPED, total_trades=0, active_positions=0
             )
 
         # Get agent state
@@ -342,20 +344,20 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
         portfolio_value = None
         active_positions = 0
 
-        if hasattr(engine, 'platform'):
+        if hasattr(engine, "platform"):
             try:
                 balance = engine.platform.get_balance()
-                portfolio_value = balance.get('total', balance.get('balance'))
+                portfolio_value = balance.get("total", balance.get("balance"))
 
-                if hasattr(engine.platform, 'get_portfolio_breakdown'):
+                if hasattr(engine.platform, "get_portfolio_breakdown"):
                     breakdown = engine.platform.get_portfolio_breakdown()
-                    active_positions = len(breakdown.get('positions', []))
+                    active_positions = len(breakdown.get("positions", []))
             except Exception as e:
                 logger.warning(f"Could not fetch portfolio info: {e}")
 
         # Calculate uptime
         uptime = None
-        if hasattr(_agent_instance, 'start_time'):
+        if hasattr(_agent_instance, "start_time"):
             uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
 
         return AgentStatusResponse(
@@ -364,25 +366,21 @@ async def get_agent_status(engine: FinanceFeedbackEngine = Depends(get_engine)):
             uptime_seconds=uptime,
             active_positions=active_positions,
             portfolio_value=portfolio_value,
-            current_asset_pair=getattr(_agent_instance, 'current_asset_pair', None),
+            current_asset_pair=getattr(_agent_instance, "current_asset_pair", None),
             config={
-                "asset_pairs": engine.config.get('agent', {}).get('asset_pairs', []),
-                "autonomous": True
-            }
+                "asset_pairs": engine.config.get("agent", {}).get("asset_pairs", []),
+                "autonomous": True,
+            },
         )
 
     except Exception as e:
         logger.error(f"Error getting agent status: {e}", exc_info=True)
-        return AgentStatusResponse(
-            state=BotState.ERROR,
-            error_message=str(e)
-        )
+        return AgentStatusResponse(state=BotState.ERROR, error_message=str(e))
 
 
 @bot_control_router.patch("/config")
 async def update_config(
-    request: ConfigUpdateRequest,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    request: ConfigUpdateRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     Update agent configuration in real-time.
@@ -393,19 +391,19 @@ async def update_config(
         # Work on a copy to keep updates atomic and avoid partial mutations.
         config_snapshot = copy.deepcopy(engine.config)
 
-        agent_cfg = config_snapshot.setdefault('agent', {})
-        ensemble_cfg = config_snapshot.setdefault('ensemble', {})
+        agent_cfg = config_snapshot.setdefault("agent", {})
+        ensemble_cfg = config_snapshot.setdefault("ensemble", {})
 
         if not isinstance(agent_cfg, dict):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Engine config 'agent' section must be a mapping"
+                detail="Engine config 'agent' section must be a mapping",
             )
 
         if not isinstance(ensemble_cfg, dict):
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Engine config 'ensemble' section must be a mapping"
+                detail="Engine config 'ensemble' section must be a mapping",
             )
 
         updates_for_agent: Dict[str, Any] = {}
@@ -414,33 +412,52 @@ async def update_config(
 
         if request.stop_loss_pct is not None:
             if not isinstance(request.stop_loss_pct, (int, float)):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "stop_loss_pct must be numeric")
-            updates_for_agent['sizing_stop_loss_percentage'] = float(request.stop_loss_pct)
-            response_updates['stop_loss_pct'] = float(request.stop_loss_pct)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "stop_loss_pct must be numeric"
+                )
+            updates_for_agent["sizing_stop_loss_percentage"] = float(
+                request.stop_loss_pct
+            )
+            response_updates["stop_loss_pct"] = float(request.stop_loss_pct)
 
         if request.position_size_pct is not None:
             if not isinstance(request.position_size_pct, (int, float)):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "position_size_pct must be numeric")
-            updates_for_agent['sizing_risk_percentage'] = float(request.position_size_pct)
-            response_updates['position_size_pct'] = float(request.position_size_pct)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "position_size_pct must be numeric"
+                )
+            updates_for_agent["sizing_risk_percentage"] = float(
+                request.position_size_pct
+            )
+            response_updates["position_size_pct"] = float(request.position_size_pct)
 
         if request.confidence_threshold is not None:
             if not isinstance(request.confidence_threshold, (int, float)):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "confidence_threshold must be numeric")
-            updates_for_agent['min_confidence_threshold'] = float(request.confidence_threshold)
-            response_updates['confidence_threshold'] = float(request.confidence_threshold)
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "confidence_threshold must be numeric"
+                )
+            updates_for_agent["min_confidence_threshold"] = float(
+                request.confidence_threshold
+            )
+            response_updates["confidence_threshold"] = float(
+                request.confidence_threshold
+            )
 
         if request.max_concurrent_trades is not None:
             if not isinstance(request.max_concurrent_trades, int):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "max_concurrent_trades must be an integer")
-            updates_for_agent['max_concurrent_trades'] = request.max_concurrent_trades
-            response_updates['max_concurrent_trades'] = request.max_concurrent_trades
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "max_concurrent_trades must be an integer",
+                )
+            updates_for_agent["max_concurrent_trades"] = request.max_concurrent_trades
+            response_updates["max_concurrent_trades"] = request.max_concurrent_trades
 
         if request.provider_weights is not None:
             if not isinstance(request.provider_weights, dict):
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "provider_weights must be a mapping")
-            updates_for_ensemble['provider_weights'] = request.provider_weights
-            response_updates['provider_weights'] = request.provider_weights
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, "provider_weights must be a mapping"
+                )
+            updates_for_ensemble["provider_weights"] = request.provider_weights
+            response_updates["provider_weights"] = request.provider_weights
 
         # Apply collected updates to the snapshot
         agent_cfg.update(updates_for_agent)
@@ -455,21 +472,20 @@ async def update_config(
         return {
             "status": "updated",
             "updates": response_updates,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Failed to update config: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Config update failed: {str(e)}"
+            detail=f"Config update failed: {str(e)}",
         )
 
 
 @bot_control_router.post("/manual-trade")
 async def execute_manual_trade(
-    request: ManualTradeRequest,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    request: ManualTradeRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     Execute a manual trade, bypassing the autonomous agent.
@@ -481,27 +497,27 @@ async def execute_manual_trade(
 
         # Build trade parameters
         trade_params = {
-            'asset_pair': request.asset_pair,
-            'action': request.action,
-            'order_type': 'LIMIT' if request.price else 'MARKET'
+            "asset_pair": request.asset_pair,
+            "action": request.action,
+            "order_type": "LIMIT" if request.price else "MARKET",
         }
 
         if request.size:
-            trade_params['size'] = request.size
+            trade_params["size"] = request.size
 
         if request.price:
-            trade_params['price'] = request.price
+            trade_params["price"] = request.price
 
         if request.stop_loss:
-            trade_params['stop_loss'] = request.stop_loss
+            trade_params["stop_loss"] = request.stop_loss
 
         if request.take_profit:
-            trade_params['take_profit'] = request.take_profit
+            trade_params["take_profit"] = request.take_profit
 
-        if not hasattr(engine, 'platform'):
+        if not hasattr(engine, "platform"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Trading platform is not available"
+                detail="Trading platform is not available",
             )
 
         # Execute trade
@@ -512,14 +528,14 @@ async def execute_manual_trade(
         return {
             "status": "executed",
             "trade": result,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Manual trade failed: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Trade execution failed: {str(e)}"
+            detail=f"Trade execution failed: {str(e)}",
         )
 
 
@@ -529,31 +545,33 @@ async def get_open_positions(engine: FinanceFeedbackEngine = Depends(get_engine)
     Get all open positions.
     """
     try:
-        if not hasattr(engine.platform, 'get_portfolio_breakdown'):
-            return {"positions": [], "message": "Platform does not support position tracking"}
+        if not hasattr(engine.platform, "get_portfolio_breakdown"):
+            return {
+                "positions": [],
+                "message": "Platform does not support position tracking",
+            }
 
         breakdown = engine.platform.get_portfolio_breakdown()
-        positions = breakdown.get('positions', [])
+        positions = breakdown.get("positions", [])
 
         return {
             "positions": positions,
             "count": len(positions),
-            "total_value": breakdown.get('total_value'),
-            "timestamp": datetime.utcnow().isoformat()
+            "total_value": breakdown.get("total_value"),
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
         logger.error(f"Failed to get positions: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve positions: {str(e)}"
+            detail=f"Failed to retrieve positions: {str(e)}",
         )
 
 
 @bot_control_router.post("/positions/{position_id}/close")
 async def close_position(
-    position_id: str,
-    engine: FinanceFeedbackEngine = Depends(get_engine)
+    position_id: str, engine: FinanceFeedbackEngine = Depends(get_engine)
 ):
     """
     Close a specific open position.
@@ -561,37 +579,39 @@ async def close_position(
     try:
         # Get position details
         breakdown = engine.platform.get_portfolio_breakdown()
-        positions = breakdown.get('positions', [])
+        positions = breakdown.get("positions", [])
 
-        position = next((p for p in positions if p.get('id') == position_id), None)
+        position = next((p for p in positions if p.get("id") == position_id), None)
 
         if not position:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Position {position_id} not found"
+                detail=f"Position {position_id} not found",
             )
 
-        size = position.get('size')
+        size = position.get("size")
         if not size or size <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Position {position_id} has invalid size: {size}"
+                detail=f"Position {position_id} has invalid size: {size}",
             )
 
         # Check platform availability
-        if not hasattr(engine, 'platform'):
+        if not hasattr(engine, "platform"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Trading platform is not available"
+                detail="Trading platform is not available",
             )
 
         # Execute closing trade
-        result = await engine.platform.execute_trade({
-            'asset_pair': position['asset_pair'],
-            'action': 'SELL' if position.get('side') == 'LONG' else 'BUY',
-            'size': size,
-            'order_type': 'MARKET'
-        })
+        result = await engine.platform.execute_trade(
+            {
+                "asset_pair": position["asset_pair"],
+                "action": "SELL" if position.get("side") == "LONG" else "BUY",
+                "size": size,
+                "order_type": "MARKET",
+            }
+        )
 
         logger.info(f"✅ Position {position_id} closed")
 
@@ -599,7 +619,7 @@ async def close_position(
             "status": "closed",
             "position_id": position_id,
             "result": result,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
     except HTTPException:
@@ -608,5 +628,5 @@ async def close_position(
         logger.error(f"Failed to close position: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Position close failed: {str(e)}"
+            detail=f"Position close failed: {str(e)}",
         )

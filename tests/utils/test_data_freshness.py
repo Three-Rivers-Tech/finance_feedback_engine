@@ -34,7 +34,9 @@ class TestValidateDataFreshness:
     def test_crypto_critical_threshold_15_minutes(self):
         """Crypto data > 15 mins should be critical (not fresh)."""
         now = dt.datetime.now(timezone.utc)
-        very_stale_ts = (now - dt.timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+        very_stale_ts = (
+            (now - dt.timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+        )
 
         is_fresh, age_str, warning = validate_data_freshness(very_stale_ts, "crypto")
         assert is_fresh is False
@@ -54,7 +56,9 @@ class TestValidateDataFreshness:
     def test_forex_critical_threshold_15_minutes(self):
         """Forex data > 15 mins should be critical."""
         now = dt.datetime.now(timezone.utc)
-        very_stale_ts = (now - dt.timedelta(minutes=16)).isoformat().replace("+00:00", "Z")
+        very_stale_ts = (
+            (now - dt.timedelta(minutes=16)).isoformat().replace("+00:00", "Z")
+        )
 
         is_fresh, age_str, warning = validate_data_freshness(very_stale_ts, "forex")
         assert is_fresh is False
@@ -75,7 +79,9 @@ class TestValidateDataFreshness:
     def test_stock_intraday_critical_threshold_15_minutes(self):
         """Stock intraday data > 15 mins should be critical."""
         now = dt.datetime.now(timezone.utc)
-        very_stale_ts = (now - dt.timedelta(minutes=18)).isoformat().replace("+00:00", "Z")
+        very_stale_ts = (
+            (now - dt.timedelta(minutes=18)).isoformat().replace("+00:00", "Z")
+        )
 
         is_fresh, age_str, warning = validate_data_freshness(
             very_stale_ts, "stocks", timeframe="intraday"
@@ -110,7 +116,9 @@ class TestValidateDataFreshness:
     def test_timestamp_with_z_suffix(self):
         """Should handle ISO 8601 with 'Z' UTC indicator."""
         now = dt.datetime.now(timezone.utc)
-        ts = (now - dt.timedelta(minutes=1)).isoformat(timespec="seconds").replace("+00:00", "") + "Z"
+        ts = (now - dt.timedelta(minutes=1)).isoformat(timespec="seconds").replace(
+            "+00:00", ""
+        ) + "Z"
 
         is_fresh, age_str, warning = validate_data_freshness(ts, "crypto")
         assert is_fresh is True
@@ -149,7 +157,9 @@ class TestValidateDataFreshness:
         now = dt.datetime.now(timezone.utc)
         ts = (now - dt.timedelta(hours=2)).isoformat().replace("+00:00", "Z")
 
-        is_fresh, age_str, warning = validate_data_freshness(ts, "stocks", timeframe="daily")
+        is_fresh, age_str, warning = validate_data_freshness(
+            ts, "stocks", timeframe="daily"
+        )
         assert "2.00" in age_str
         assert "hours" in age_str
 
@@ -219,7 +229,9 @@ class TestValidateDataFreshness:
         now = dt.datetime.now(timezone.utc)
         ts = (now - dt.timedelta(minutes=8)).isoformat().replace("+00:00", "Z")
 
-        is_fresh, age_str, warning = validate_data_freshness(ts, "stocks")  # No timeframe
+        is_fresh, age_str, warning = validate_data_freshness(
+            ts, "stocks"
+        )  # No timeframe
         assert is_fresh is True
         assert "intraday" in warning.lower()
 

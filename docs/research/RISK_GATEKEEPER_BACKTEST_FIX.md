@@ -41,8 +41,8 @@ pytest tests/risk/test_gatekeeper_backtest_timestamp.py -v
 
 ## Error Message Format
 ```
-ValueError: Failed to parse timestamp in backtest mode for BTCUSD: 
-timestamp=invalid-timestamp-format, error=<original exception>. 
+ValueError: Failed to parse timestamp in backtest mode for BTCUSD:
+timestamp=invalid-timestamp-format, error=<original exception>.
 Backtest requires valid timestamps.
 ```
 

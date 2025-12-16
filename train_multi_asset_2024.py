@@ -20,10 +20,10 @@ Memory accumulates in:
 """
 
 
-import sys
 import logging
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
 # Setup logging
 LOG_DIR = Path("data") / "training_logs"
@@ -34,11 +34,8 @@ log_file = LOG_DIR / f"training_log_{timestamp}.txt"
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)],
 )
 
 logger = logging.getLogger(__name__)
@@ -92,8 +89,8 @@ def run_training() -> bool:
             correlation_threshold=0.7,
             max_positions=3,
             timeout_seconds=1800,  # 30 minutes per quarter
-            year=2024  # Use 2024 instead of default 2025
-        )        # Execute quarterly backtests (memories persist across quarters)
+            year=2024,  # Use 2024 instead of default 2025
+        )  # Execute quarterly backtests (memories persist across quarters)
         print_header("EXECUTING QUARTERLY BACKTESTS")
         full_year_results = runner.run_full_year()
 
@@ -102,23 +99,33 @@ def run_training() -> bool:
             print_header("TRAINING COMPLETE - SUMMARY")
             logger.info(f"Final Balance: ${full_year_results['final_balance']:,.2f}")
             logger.info(f"Total Return: {full_year_results['total_return_pct']:.2f}%")
-            logger.info(f"Annualized Sharpe: {full_year_results['annualized_sharpe']:.2f}")
-            logger.info(f"Max Drawdown: {full_year_results['max_quarterly_drawdown']:.2f}%")
+            logger.info(
+                f"Annualized Sharpe: {full_year_results['annualized_sharpe']:.2f}"
+            )
+            logger.info(
+                f"Max Drawdown: {full_year_results['max_quarterly_drawdown']:.2f}%"
+            )
             logger.info(f"Total Trades: {full_year_results['total_trades']}")
             logger.info(f"Win Rate: {full_year_results['overall_win_rate']:.1f}%")
             logger.info("")
             logger.info("Memory Accumulated:")
-            logger.info(f"  Outcomes: {full_year_results['memory_persistence']['outcomes_stored']}")
-            logger.info(f"  Snapshots: {full_year_results['memory_persistence']['snapshots_stored']}")
+            logger.info(
+                f"  Outcomes: {full_year_results['memory_persistence']['outcomes_stored']}"
+            )
+            logger.info(
+                f"  Snapshots: {full_year_results['memory_persistence']['snapshots_stored']}"
+            )
             logger.info("")
 
             # Log quarterly breakdown
             logger.info("Quarterly Breakdown:")
-            for q in full_year_results['quarterly_breakdown']:
-                logger.info(f"  Q{q.get('quarter', '?')} 2024: "
-                           f"Return={q.get('return_pct', 0):.2f}%, "
-                           f"Trades={q.get('total_trades', 0)}, "
-                           f"WinRate={q.get('win_rate', 0):.1f}%")
+            for q in full_year_results["quarterly_breakdown"]:
+                logger.info(
+                    f"  Q{q.get('quarter', '?')} 2024: "
+                    f"Return={q.get('return_pct', 0):.2f}%, "
+                    f"Trades={q.get('total_trades', 0)}, "
+                    f"WinRate={q.get('win_rate', 0):.1f}%"
+                )
             logger.info("")
 
             logger.info("Training COMPLETED SUCCESSFULLY")

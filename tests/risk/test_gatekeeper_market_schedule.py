@@ -1,6 +1,7 @@
 """Test RiskGatekeeper market schedule integration."""
 
 import datetime as dt
+
 import pytz
 
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
@@ -192,7 +193,9 @@ class TestGatekeeperMarketSchedule:
         # Crypto is open even on weekend
         assert "Market closed" not in msg
         # Check that market schedule reports weekend
-        status = MarketSchedule.get_market_status_at_timestamp("ETHUSD", "crypto", timestamp)
+        status = MarketSchedule.get_market_status_at_timestamp(
+            "ETHUSD", "crypto", timestamp
+        )
         assert status["warning"] == "Weekend Low Liquidity"
 
     def test_market_check_is_first_validation(self):

@@ -1,13 +1,14 @@
 """Telegram bot for trading decision approvals."""
 
 import logging
-from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 try:  # Optional dependency used in async file writes
     import aiofiles  # type: ignore
 except ImportError:  # pragma: no cover - fallback for environments without aiofiles
+
     class _AiofilesStub:
         open = None
 
@@ -16,7 +17,7 @@ except ImportError:  # pragma: no cover - fallback for environments without aiof
 logger = logging.getLogger(__name__)
 
 # Global telegram bot instance (initialized if config enabled)
-telegram_bot: Optional['TelegramApprovalBot'] = None
+telegram_bot: Optional["TelegramApprovalBot"] = None
 
 
 class TelegramApprovalBot:
@@ -38,17 +39,20 @@ class TelegramApprovalBot:
             config: Telegram configuration with bot_token, allowed_user_ids, etc.
         """
         self.config = config
-        self.bot_token = config.get('bot_token')
-        self.allowed_users = set(config.get('allowed_user_ids', []))
-        self.use_redis = config.get('use_redis', False)
+        self.bot_token = config.get("bot_token")
+        self.allowed_users = set(config.get("allowed_user_ids", []))
+        self.use_redis = config.get("use_redis", False)
 
         # Import python-telegram-bot
         try:
             from telegram import Bot
+
             self.bot = Bot(token=self.bot_token)
             logger.info("✅ Telegram Bot instance created")
         except ImportError:
-            logger.error("❌ python-telegram-bot library not installed. Run: pip install python-telegram-bot")
+            logger.error(
+                "❌ python-telegram-bot library not installed. Run: pip install python-telegram-bot"
+            )
             self.bot = None
         except Exception as e:
             logger.error(f"❌ Failed to create Telegram Bot: {e}")
@@ -64,6 +68,7 @@ class TelegramApprovalBot:
 
         # Tunnel manager for webhook URL
         from .tunnel_manager import TunnelManager
+
         self.tunnel_manager = TunnelManager(config)
 
         logger.info("✅ Telegram approval bot initialized")
@@ -75,15 +80,18 @@ class TelegramApprovalBot:
 
             # Ensure Redis is running (with user prompts)
             if not RedisManager.ensure_running():
-                logger.warning("⚠️  Redis setup failed. Falling back to in-memory queue.")
+                logger.warning(
+                    "⚠️  Redis setup failed. Falling back to in-memory queue."
+                )
                 self.use_redis = False
                 return
 
             import redis
+
             self.redis_client = redis.Redis(
-                host=self.config.get('redis_host', 'localhost'),
-                port=self.config.get('redis_port', 6379),
-                decode_responses=True
+                host=self.config.get("redis_host", "localhost"),
+                port=self.config.get("redis_port", 6379),
+                decode_responses=True,
             )
             self.redis_client.ping()
             logger.info("✅ Redis connection established for approval queue")
@@ -104,21 +112,24 @@ class TelegramApprovalBot:
         Prevents path traversal and unsafe filenames.
         """
         import re
-        safe = re.sub(r'[^A-Za-z0-9_-]', '_', decision_id)
+
+        safe = re.sub(r"[^A-Za-z0-9_-]", "_", decision_id)
         # Limit long underscore runs produced by path traversal patterns while
         # preserving other substitutions (tests expect 6 underscores for ../../)
-        safe = re.sub(r'(?<!_)_{7}(?!_)', '______', safe)
+        safe = re.sub(r"(?<!_)_{7}(?!_)", "______", safe)
         if (
-            safe.endswith('_')
+            safe.endswith("_")
             and decision_id
             and not decision_id[-1].isalnum()
-            and decision_id[-1] not in ['_', '-']
+            and decision_id[-1] not in ["_", "-"]
         ):
             # Preserve trailing unsafe character length for filenames
-            safe += '_'
+            safe += "_"
         return safe
 
-    async def _write_approval_file(self, decision_id: str, approval_data: dict, status: str):
+    async def _write_approval_file(
+        self, decision_id: str, approval_data: dict, status: str
+    ):
         """
         Write approval/rejection file asynchronously with sanitized filename.
 
@@ -127,15 +138,18 @@ class TelegramApprovalBot:
             approval_data: Data to write
             status: 'approved' or 'rejected'
         """
-        if not getattr(aiofiles, 'open', None):
-            raise RuntimeError("aiofiles is required for Telegram approval persistence. Install with 'pip install aiofiles'.")
+        if not getattr(aiofiles, "open", None):
+            raise RuntimeError(
+                "aiofiles is required for Telegram approval persistence. Install with 'pip install aiofiles'."
+            )
 
         safe_id = self._sanitize_decision_id(decision_id)
         approvals_dir = Path("data/approvals")
         approvals_dir.mkdir(parents=True, exist_ok=True)
         approval_file = approvals_dir / f"{safe_id}_{status}.json"
-        async with aiofiles.open(approval_file, 'w') as f:
+        async with aiofiles.open(approval_file, "w") as f:
             import json
+
             await f.write(json.dumps(approval_data, indent=2))
 
     async def setup_webhook(self, public_url: str):
@@ -209,12 +223,18 @@ class TelegramApprovalBot:
 
             keyboard = [
                 [
-                    InlineKeyboardButton("✅ Approve", callback_data=f"approve:{decision_id}"),
-                    InlineKeyboardButton("❌ Reject", callback_data=f"reject:{decision_id}")
+                    InlineKeyboardButton(
+                        "✅ Approve", callback_data=f"approve:{decision_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "❌ Reject", callback_data=f"reject:{decision_id}"
+                    ),
                 ],
                 [
-                    InlineKeyboardButton("✏️ Modify", callback_data=f"modify:{decision_id}")
-                ]
+                    InlineKeyboardButton(
+                        "✏️ Modify", callback_data=f"modify:{decision_id}"
+                    )
+                ],
             ]
             return InlineKeyboardMarkup(keyboard)
         except ImportError:
@@ -230,12 +250,14 @@ class TelegramApprovalBot:
             user_id: Telegram user ID to send to
         """
         if not self.bot:
-            logger.error("❌ Cannot send approval request: Telegram bot not initialized")
+            logger.error(
+                "❌ Cannot send approval request: Telegram bot not initialized"
+            )
             raise RuntimeError("Telegram bot not initialized")
 
         try:
             message_text = self.format_decision_message(decision)
-            decision_id = decision.get('decision_id')
+            decision_id = decision.get("decision_id")
             if not decision_id:
                 logger.error("❌ Cannot send approval request: missing decision_id")
                 raise ValueError("Decision must have a decision_id")
@@ -246,21 +268,22 @@ class TelegramApprovalBot:
                 chat_id=user_id,
                 text=message_text,
                 reply_markup=keyboard,
-                parse_mode='Markdown'
+                parse_mode="Markdown",
             )
 
             # Store in approval queue
             if self.use_redis and self.redis_client:
                 import json
+
                 self.redis_client.setex(
-                    f"approval:{decision_id}",
-                    3600,  # 1 hour TTL
-                    json.dumps(decision)
+                    f"approval:{decision_id}", 3600, json.dumps(decision)  # 1 hour TTL
                 )
             else:
                 self.approval_queue[decision_id] = decision
 
-            logger.info(f"📤 Approval request sent to user {user_id} for decision {decision_id}")
+            logger.info(
+                f"📤 Approval request sent to user {user_id} for decision {decision_id}"
+            )
         except Exception as e:
             logger.error(f"❌ Failed to send approval request: {e}")
             raise
@@ -279,6 +302,7 @@ class TelegramApprovalBot:
 
         try:
             from telegram import Update
+
             update = Update.de_json(update_data, self.bot)
 
             # Handle callback queries (button presses)
@@ -289,7 +313,9 @@ class TelegramApprovalBot:
             elif update.message and update.message.text:
                 await self._handle_message(update.message)
 
-            logger.debug(f"✅ Processed Telegram update_id: {update_data.get('update_id')}")
+            logger.debug(
+                f"✅ Processed Telegram update_id: {update_data.get('update_id')}"
+            )
         except Exception as e:
             logger.error(f"❌ Error processing Telegram update: {e}")
             raise
@@ -303,14 +329,18 @@ class TelegramApprovalBot:
             engine: FinanceFeedbackEngine instance
         """
         # Authorization check
-        user_id = getattr(getattr(query, 'from_user', None), 'id', None)
+        user_id = getattr(getattr(query, "from_user", None), "id", None)
         if user_id is None or user_id not in self.allowed_users:
             await query.answer("⛔ Unauthorized", show_alert=True)
-            logger.warning(f"⛔ Unauthorized Telegram user attempted action: user_id={user_id}")
+            logger.warning(
+                f"⛔ Unauthorized Telegram user attempted action: user_id={user_id}"
+            )
             return
 
         # Parse callback data
-        callback_data = query.data  # Format: "approve:decision_id" or "reject:decision_id"
+        callback_data = (
+            query.data
+        )  # Format: "approve:decision_id" or "reject:decision_id"
         try:
             action, decision_id = callback_data.split(":", 1)
         except ValueError:
@@ -318,35 +348,37 @@ class TelegramApprovalBot:
             logger.error(f"Invalid callback data: {callback_data}")
             return
 
-        if action == 'approve':
+        if action == "approve":
             # Execute decision
             try:
                 await self._approve_decision(decision_id, engine)
                 await query.answer("✅ Decision approved and executed")
                 await query.edit_message_text(
                     text=f"{query.message.text}\n\n✅ **APPROVED** by user {user_id}",
-                    parse_mode='Markdown'
+                    parse_mode="Markdown",
                 )
             except Exception as e:
                 await query.answer(f"❌ Execution failed: {str(e)}", show_alert=True)
                 logger.error(f"Failed to execute decision {decision_id}: {e}")
 
-        elif action == 'reject':
+        elif action == "reject":
             # Save rejection
             try:
                 await self._reject_decision(decision_id)
                 await query.answer("❌ Decision rejected")
                 await query.edit_message_text(
                     text=f"{query.message.text}\n\n❌ **REJECTED** by user {user_id}",
-                    parse_mode='Markdown'
+                    parse_mode="Markdown",
                 )
             except Exception as e:
                 await query.answer(f"❌ Rejection failed: {str(e)}", show_alert=True)
                 logger.error(f"Failed to reject decision {decision_id}: {e}")
 
-        elif action == 'modify':
+        elif action == "modify":
             # Start modification flow (not implemented yet)
-            await query.answer("✏️ Modification not implemented yet. Use CLI for now.", show_alert=True)
+            await query.answer(
+                "✏️ Modification not implemented yet. Use CLI for now.", show_alert=True
+            )
 
         else:
             await query.answer(f"❌ Unknown action: {action}", show_alert=True)
@@ -363,19 +395,21 @@ class TelegramApprovalBot:
         user_id = message.from_user.id
         if user_id not in self.allowed_users:
             await message.reply_text("⛔ Unauthorized")
-            logger.warning(f"⛔ Unauthorized Telegram user attempted command: user_id={user_id}")
+            logger.warning(
+                f"⛔ Unauthorized Telegram user attempted command: user_id={user_id}"
+            )
             return
 
         text = message.text.strip()
 
         # Handle basic commands
-        if text == '/start':
+        if text == "/start":
             await message.reply_text(
                 "👋 Welcome to Finance Feedback Engine!\n\n"
                 "I'll send you trading decision approval requests.\n"
                 "Use the buttons to approve or reject each decision."
             )
-        elif text == '/status':
+        elif text == "/status":
             # Query Redis for pending approvals if enabled
             if self.use_redis and self.redis_client:
                 try:
@@ -402,7 +436,7 @@ class TelegramApprovalBot:
             "decision_id": decision_id,
             "approved": True,
             "timestamp": datetime.now().isoformat(),
-            "source": "telegram"
+            "source": "telegram",
         }
         await self._write_approval_file(decision_id, approval_data, status="approved")
         logger.info(f"✅ Decision {decision_id} approved via Telegram")
@@ -426,7 +460,7 @@ class TelegramApprovalBot:
             "decision_id": decision_id,
             "approved": False,
             "timestamp": datetime.now().isoformat(),
-            "source": "telegram"
+            "source": "telegram",
         }
         await self._write_approval_file(decision_id, approval_data, status="rejected")
         logger.info(f"❌ Decision {decision_id} rejected via Telegram")
@@ -451,11 +485,11 @@ def init_telegram_bot(config: dict) -> Optional[TelegramApprovalBot]:
     """
     global telegram_bot
 
-    if not config.get('enabled', False):
+    if not config.get("enabled", False):
         logger.info("⏭️  Telegram bot disabled in config")
         return None
 
-    if not config.get('bot_token'):
+    if not config.get("bot_token"):
         logger.warning("⚠️  Telegram bot_token not configured. Bot disabled.")
         return None
 

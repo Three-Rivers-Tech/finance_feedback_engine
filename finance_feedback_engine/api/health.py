@@ -1,9 +1,9 @@
 """Health check endpoint for Finance Feedback Engine API."""
 
-import time
 import logging
-from typing import Dict, Any
+import time
 from datetime import datetime
+from typing import Any, Dict
 
 from ..core import FinanceFeedbackEngine
 
@@ -37,20 +37,24 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         "uptime_seconds": uptime_seconds,
         "circuit_breakers": {},
         "last_decision_at": None,
-        "portfolio_balance": None
+        "portfolio_balance": None,
     }
 
     # Get circuit breaker states from data providers
     try:
-        if hasattr(engine, 'data_provider'):
+        if hasattr(engine, "data_provider"):
             data_provider = engine.data_provider
 
             # Check Alpha Vantage circuit breaker
-            if hasattr(data_provider, 'alpha_vantage') and hasattr(data_provider.alpha_vantage, 'circuit_breaker'):
+            if hasattr(data_provider, "alpha_vantage") and hasattr(
+                data_provider.alpha_vantage, "circuit_breaker"
+            ):
                 av_cb = data_provider.alpha_vantage.circuit_breaker
                 health_data["circuit_breakers"]["alpha_vantage"] = {
-                    "state": av_cb.state.name if hasattr(av_cb, 'state') else "UNKNOWN",
-                    "failure_count": av_cb.failure_count if hasattr(av_cb, 'failure_count') else 0
+                    "state": av_cb.state.name if hasattr(av_cb, "state") else "UNKNOWN",
+                    "failure_count": (
+                        av_cb.failure_count if hasattr(av_cb, "failure_count") else 0
+                    ),
                 }
         else:
             # Data provider missing is fatal
@@ -64,10 +68,12 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     # Get portfolio balance from platform
     try:
-        if hasattr(engine, 'platform'):
+        if hasattr(engine, "platform"):
             balance_info = engine.platform.get_balance()
             if balance_info:
-                health_data["portfolio_balance"] = balance_info.get("total", balance_info.get("balance"))
+                health_data["portfolio_balance"] = balance_info.get(
+                    "total", balance_info.get("balance")
+                )
             else:
                 logger.warning("Platform returned empty balance info")
                 health_data["portfolio_balance"] = None
@@ -86,7 +92,7 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     # Get last decision timestamp from decision store
     try:
-        if hasattr(engine, 'decision_store'):
+        if hasattr(engine, "decision_store"):
             recent_decisions = engine.decision_store.get_recent_decisions(limit=1)
             if recent_decisions:
                 health_data["last_decision_at"] = recent_decisions[0].get("timestamp")
