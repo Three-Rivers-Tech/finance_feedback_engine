@@ -144,11 +144,11 @@ class MyPlatform(BaseTradingPlatform):
     def get_balance(self):
         # Implementation
         pass
-    
+
     def execute_trade(self, decision):
         # Implementation
         pass
-    
+
     def get_account_info(self):
         # Implementation
         pass

@@ -3,24 +3,25 @@
 Script to update ensemble weights based on historical performance.
 """
 
+import logging
 import os
 import sys
-import yaml
-import logging
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
+import yaml
+
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from finance_feedback_engine.learning.feedback_analyzer import (  # noqa: E402
-    FeedbackAnalyzer
+    FeedbackAnalyzer,
 )
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def update_weights(config_path: str = "config/config.local.yaml"):
     # if possible, but for now we'll just read it to modify the dict
     # and dump it back.
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config_data = yaml.safe_load(f)
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
@@ -57,9 +58,7 @@ def update_weights(config_path: str = "config/config.local.yaml"):
         logger.warning("No performance data found. No weights updated.")
         return
 
-    current_weights = config_data.get('ensemble', {}).get(
-        'provider_weights', {}
-    )
+    current_weights = config_data.get("ensemble", {}).get("provider_weights", {})
 
     # Calculate new weights based on adjustments
     # The analyzer returns adjustment factors (e.g. 1.5, 0.5, 1.0)
@@ -89,8 +88,8 @@ def update_weights(config_path: str = "config/config.local.yaml"):
         # Default to equal weight for new providers (1/5 providers = 0.2)
         DEFAULT_WEIGHT = 0.2
         current_weight = current_weights.get(provider, DEFAULT_WEIGHT)
-        factor = adjustment_data['suggested_adjustment_factor']
-        win_rate = adjustment_data['current_win_rate']
+        factor = adjustment_data["suggested_adjustment_factor"]
+        win_rate = adjustment_data["current_win_rate"]
 
         # Apply adjustment
         new_raw_weight = current_weight * factor
@@ -132,9 +131,7 @@ def update_weights(config_path: str = "config/config.local.yaml"):
         delta = new_weight - old_weight
         if abs(delta) > 0.001:
             # Find the specific log for this provider if available
-            specific_log = next(
-                (log for log in changes_log if provider in log), ""
-            )
+            specific_log = next((log for log in changes_log if provider in log), "")
             logger.info(
                 f"  {provider}: {old_weight:.4f} -> {new_weight:.4f} "
                 f"(Delta: {delta:+.4f})"
@@ -145,27 +142,25 @@ def update_weights(config_path: str = "config/config.local.yaml"):
             logger.info(f"  {provider}: Unchanged at {new_weight:.4f}")
 
     # Update config data
-    if 'ensemble' not in config_data:
-        config_data['ensemble'] = {}
-    config_data['ensemble']['provider_weights'] = normalized_weights
+    if "ensemble" not in config_data:
+        config_data["ensemble"] = {}
+    config_data["ensemble"]["provider_weights"] = normalized_weights
 
     # Write back to file
     try:
-        config_dir = os.path.dirname(config_path) or '.'
+        config_dir = os.path.dirname(config_path) or "."
         with tempfile.NamedTemporaryFile(
-            mode='w', dir=config_dir, delete=False, suffix='.yaml'
+            mode="w", dir=config_dir, delete=False, suffix=".yaml"
         ) as f:
             temp_path = f.name
-            yaml.dump(
-                config_data, f, default_flow_style=False, sort_keys=False
-            )
+            yaml.dump(config_data, f, default_flow_style=False, sort_keys=False)
         # Atomic replace (works on both POSIX and Windows)
         os.replace(temp_path, config_path)
         logger.info(f"Successfully updated configuration at {config_path}")
     except Exception as e:
         logger.error(f"Failed to write config: {e}")
         # Clean up temp file if it exists
-        if 'temp_path' in locals() and os.path.exists(temp_path):
+        if "temp_path" in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
 
 

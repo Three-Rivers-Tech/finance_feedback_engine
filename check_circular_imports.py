@@ -12,7 +12,7 @@ from pathlib import Path
 def find_imports(file_path):
     """Find all imports in a Python file."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             tree = ast.parse(f.read())
     except (OSError, SyntaxError) as exc:
         # Skip unreadable files or those with syntax errors but warn for visibility
@@ -41,14 +41,14 @@ def analyze_circular_imports(root_dir):
 
     for file_path in python_files:
         # Skip test files and external libraries
-        skip_dirs = {'test', 'tests', '__pycache__', '.venv', '.git'}
+        skip_dirs = {"test", "tests", "__pycache__", ".venv", ".git"}
         if any(part in skip_dirs for part in file_path.parts):
             continue
 
         imports = find_imports(file_path)
-        relative_path = file_path.relative_to(root_path).with_suffix('')
+        relative_path = file_path.relative_to(root_path).with_suffix("")
         # Convert path to module notation
-        module_path = str(relative_path).replace(os.sep, '.')
+        module_path = str(relative_path).replace(os.sep, ".")
 
         file_imports[module_path] = imports
 
@@ -58,7 +58,11 @@ def analyze_circular_imports(root_dir):
     for module, imports in file_imports.items():
         for imp in imports:
             # Check if this import might lead back to original module
-            if imp == module or imp.startswith(f"{module}.") or module.startswith(f"{imp}."):
+            if (
+                imp == module
+                or imp.startswith(f"{module}.")
+                or module.startswith(f"{imp}.")
+            ):
                 # Avoid flagging self-imports or direct parent/child module references
                 continue
 

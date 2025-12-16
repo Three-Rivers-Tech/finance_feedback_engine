@@ -115,7 +115,7 @@ alerts = []
 for holding in portfolio['holdings']:
     asset = holding['asset']
     allocation = holding['allocation_pct']
-    
+
     if allocation > ALERT_THRESHOLD:
         alerts.append({
             'asset': asset,
@@ -149,7 +149,7 @@ fiat_value = 0
 for holding in portfolio['holdings']:
     asset = holding['asset']
     value = holding['value_usd']
-    
+
     if asset in ['USD', 'USDC', 'USDT']:
         fiat_value += value
     else:
@@ -183,14 +183,14 @@ The agent knows to edit `finance_feedback_engine/trading_platforms/coinbase_plat
 def get_crypto_holdings(self) -> List[Dict[str, Any]]:
     """
     Get only cryptocurrency holdings (excludes fiat like USD, USDC).
-    
+
     Returns:
         List of crypto holdings with amount, value, allocation
     """
     portfolio = self.get_portfolio_breakdown()
-    
+
     FIAT_CURRENCIES = {'USD', 'USDC', 'USDT', 'DAI', 'EUR', 'GBP'}
-    
+
     return [
         h for h in portfolio['holdings']
         if h['asset'] not in FIAT_CURRENCIES

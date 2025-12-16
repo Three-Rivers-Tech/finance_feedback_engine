@@ -77,28 +77,28 @@ Comprehensive forex trading capabilities:
 ## Key Features Summary
 
 ### Data Enrichment
-✓ News sentiment analysis  
-✓ Macroeconomic indicators  
-✓ Technical indicators (RSI, trends)  
-✓ Candlestick pattern analysis  
+✓ News sentiment analysis
+✓ Macroeconomic indicators
+✓ Technical indicators (RSI, trends)
+✓ Candlestick pattern analysis
 
 ### AI Ensemble System
-✓ Multi-provider support (local, CLI, Codex, Qwen)  
-✓ Dynamic weight adjustment  
-✓ Automatic failure handling  
-✓ Weighted/majority/stacking strategies  
+✓ Multi-provider support (local, CLI, Codex, Qwen)
+✓ Dynamic weight adjustment
+✓ Automatic failure handling
+✓ Weighted/majority/stacking strategies
 
 ### Trading Platforms
-✓ Coinbase Advanced (crypto)  
-✓ Oanda (forex)  
-✓ Extensible platform factory  
-✓ Portfolio breakdown support  
+✓ Coinbase Advanced (crypto)
+✓ Oanda (forex)
+✓ Extensible platform factory
+✓ Portfolio breakdown support
 
 ### Risk Management
-✓ Position sizing calculations  
-✓ Risk percentage controls (1%)  
-✓ Stop-loss settings (2%)  
-✓ Margin monitoring  
+✓ Position sizing calculations
+✓ Risk percentage controls (1%)
+✓ Stop-loss settings (2%)
+✓ Margin monitoring
 
 ---
 
@@ -124,7 +124,7 @@ Comprehensive forex trading capabilities:
 # New features demo
 python demo_features.py
 
-# Oanda forex demo  
+# Oanda forex demo
 python demo_oanda_features.py
 
 # Interactive bash demo
@@ -193,6 +193,6 @@ Get free API key: https://www.alphavantage.co/support/#api-key
 
 ---
 
-**Demo Date:** November 20, 2025  
-**Engine Version:** 2.0.0  
+**Demo Date:** November 20, 2025
+**Engine Version:** 2.0.0
 **Status:** ✅ All demos successful

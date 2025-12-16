@@ -1,6 +1,6 @@
 import json
-from unittest.mock import patch
 import subprocess
+from unittest.mock import patch
 
 from finance_feedback_engine.utils.model_installer import ModelInstaller
 
@@ -21,7 +21,7 @@ def test_verify_model_success():
     with patch("subprocess.run") as run:
         run.side_effect = [
             _completed_proc(stdout=list_json, returncode=0),
-            _completed_proc(stdout=show_json, returncode=0)
+            _completed_proc(stdout=show_json, returncode=0),
         ]
         assert mi._verify_model("gemma2:9b-instruct") is True
 
@@ -35,7 +35,7 @@ def test_verify_model_failure_missing_digest():
     with patch("subprocess.run") as run:
         run.side_effect = [
             _completed_proc(stdout=list_json, returncode=0),
-            _completed_proc(stdout=show_json, returncode=0)
+            _completed_proc(stdout=show_json, returncode=0),
         ]
         assert mi._verify_model("gemma2:9b-instruct") is False
 

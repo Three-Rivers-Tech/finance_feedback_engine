@@ -15,25 +15,26 @@ Stores memories persistently:
 Memory persists across backtest chunks, enabling cross-quarter learning.
 """
 
-import subprocess
 import json
 import logging
 import os
 import re
-from pathlib import Path
-from datetime import datetime
+import subprocess
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
 
 @dataclass
 class BacktestChunk:
     """Single quarterly backtest period."""
+
     quarter: int
     start_date: str
     end_date: str
@@ -64,7 +65,7 @@ class ChunkedBacktestRunner:
         correlation_threshold: float = 0.7,
         max_positions: int = None,
         timeout_seconds: int = None,
-        year: int = 2025
+        year: int = 2025,
     ):
         """
         Initialize chunked backtest runner.
@@ -96,8 +97,10 @@ class ChunkedBacktestRunner:
         if timeout_seconds is not None:
             self.timeout_seconds = timeout_seconds
         else:
-            env_timeout = os.environ.get('BACKTEST_TIMEOUT_SECONDS')
-            self.timeout_seconds = int(env_timeout) if env_timeout else self.DEFAULT_BACKTEST_TIMEOUT
+            env_timeout = os.environ.get("BACKTEST_TIMEOUT_SECONDS")
+            self.timeout_seconds = (
+                int(env_timeout) if env_timeout else self.DEFAULT_BACKTEST_TIMEOUT
+            )
 
         # Output paths
         self.results_dir = Path("data/backtest_results")
@@ -110,7 +113,9 @@ class ChunkedBacktestRunner:
         logger.info(f"  Assets: {', '.join(assets)}")
         logger.info(f"  Initial Balance: ${initial_balance:,.2f}")
         logger.info(f"  Correlation Threshold: {correlation_threshold}")
-        logger.info(f"  Per-Quarter Timeout: {self.timeout_seconds}s ({self.timeout_seconds / 60:.0f} minutes)")
+        logger.info(
+            f"  Per-Quarter Timeout: {self.timeout_seconds}s ({self.timeout_seconds / 60:.0f} minutes)"
+        )
         logger.info(f"  Memory Path: {self.memory_dir}")
 
     def run_full_year(self) -> Dict[str, Any]:
@@ -133,7 +138,7 @@ class ChunkedBacktestRunner:
             "total_trades": 0,
             "winning_trades": 0,
             "total_pnl": 0,
-            "quarterly_returns": []
+            "quarterly_returns": [],
         }
 
         # Run each quarter
@@ -152,10 +157,12 @@ class ChunkedBacktestRunner:
                 cumulative_metrics["total_trades"] += result.get("total_trades", 0)
                 cumulative_metrics["winning_trades"] += result.get("winning_trades", 0)
                 cumulative_metrics["total_pnl"] += result.get("total_pnl", 0)
-                cumulative_metrics["quarterly_returns"].append({
-                    "quarter": f"Q{chunk.quarter}",
-                    "return_pct": result.get("return_pct", 0)
-                })
+                cumulative_metrics["quarterly_returns"].append(
+                    {
+                        "quarter": f"Q{chunk.quarter}",
+                        "return_pct": result.get("return_pct", 0),
+                    }
+                )
 
                 # Log memory status after each quarter
                 self._log_memory_status()
@@ -179,13 +186,20 @@ class ChunkedBacktestRunner:
 
         # Build CLI command
         cmd = [
-            "python", "main.py", "portfolio-backtest",
+            "python",
+            "main.py",
+            "portfolio-backtest",
             *self.assets,
-            "--start", chunk.start_date,
-            "--end", chunk.end_date,
-            "--initial-balance", str(self.initial_balance),
-            "--correlation-threshold", str(self.correlation_threshold),
-            "--max-positions", str(self.max_positions)
+            "--start",
+            chunk.start_date,
+            "--end",
+            chunk.end_date,
+            "--initial-balance",
+            str(self.initial_balance),
+            "--correlation-threshold",
+            str(self.correlation_threshold),
+            "--max-positions",
+            str(self.max_positions),
         ]
 
         logger.info(f"Command: {' '.join(cmd)}")
@@ -198,7 +212,7 @@ class ChunkedBacktestRunner:
                 cwd=Path(__file__).parent,
                 capture_output=True,
                 text=True,
-                timeout=self.timeout_seconds
+                timeout=self.timeout_seconds,
             )
 
             if result.returncode != 0:
@@ -219,7 +233,9 @@ class ChunkedBacktestRunner:
             return metrics
 
         except subprocess.TimeoutExpired:
-            logger.error(f"Backtest timeout for {chunk} (>{self.timeout_seconds}s / {self.timeout_seconds / 60:.0f} min)")
+            logger.error(
+                f"Backtest timeout for {chunk} (>{self.timeout_seconds}s / {self.timeout_seconds / 60:.0f} min)"
+            )
             return None
         except Exception as e:
             logger.error(f"Backtest error for {chunk}: {e}")
@@ -244,38 +260,44 @@ class ChunkedBacktestRunner:
 
             header_line = lines[header_index]
             # Strip ANSI color codes
-            header_line = re.sub(r'\x1b\[[0-9;]*m', '', header_line)
-            headers = [h.strip().lower().replace(' ', '_') for h in header_line.split('┃')][1:-1]
+            header_line = re.sub(r"\x1b\[[0-9;]*m", "", header_line)
+            headers = [
+                h.strip().lower().replace(" ", "_") for h in header_line.split("┃")
+            ][1:-1]
 
             # Data rows start after the header separator line (e.g., ┡━━━━... or ├─────...)
-            for line in lines[header_index + 2:]:
-                if '└' in line:  # End of table
+            for line in lines[header_index + 2 :]:
+                if "└" in line:  # End of table
                     break
-                if '│' in line:
+                if "│" in line:
                     # Strip ANSI color codes from data row
-                    line = re.sub(r'\x1b\[[0-9;]*m', '', line)
-                    values = [v.strip() for v in line.split('│')][1:-1]
+                    line = re.sub(r"\x1b\[[0-9;]*m", "", line)
+                    values = [v.strip() for v in line.split("│")][1:-1]
 
                     if len(values) == len(headers):
                         trade = dict(zip(headers, values))
                         try:
                             # Perform type conversion
-                            trade['id'] = int(trade['id'])
-                            trade['entry_price'] = float(trade['entry_price'])
-                            trade['exit_price'] = float(trade['exit_price'])
-                            trade['amount'] = float(trade['amount'])
-                            trade['pnl'] = float(trade['pnl'])
-                            trade['fees'] = float(trade['fees'])
+                            trade["id"] = int(trade["id"])
+                            trade["entry_price"] = float(trade["entry_price"])
+                            trade["exit_price"] = float(trade["exit_price"])
+                            trade["amount"] = float(trade["amount"])
+                            trade["pnl"] = float(trade["pnl"])
+                            trade["fees"] = float(trade["fees"])
                             trade_history.append(trade)
                         except (ValueError, KeyError) as e:
-                            self.logger.warning(f"Could not parse trade row: '{line}'. Error: {e}")
+                            self.logger.warning(
+                                f"Could not parse trade row: '{line}'. Error: {e}"
+                            )
                             continue
         except Exception as e:
             self.logger.error(f"An error occurred while parsing trade history: {e}")
 
         return trade_history
 
-    def _parse_backtest_output(self, output: str, chunk: BacktestChunk) -> Dict[str, Any]:
+    def _parse_backtest_output(
+        self, output: str, chunk: BacktestChunk
+    ) -> Dict[str, Any]:
         """
         Parse backtest CLI output to extract metrics.
 
@@ -305,60 +327,74 @@ class ChunkedBacktestRunner:
             "unrealized_pnl": 0.0,
             "total_pnl": 0.0,
             "winning_trades": 0,
-            "trade_history": []
+            "trade_history": [],
         }
 
         try:
             # Parse Final Value: Extract dollar amount using regex
-            final_value_match = re.search(r'Final Value.*?\$([0-9,]+\.?\d*)', output)
+            final_value_match = re.search(r"Final Value.*?\$([0-9,]+\.?\d*)", output)
             if final_value_match:
                 try:
-                    metrics["final_value"] = float(final_value_match.group(1).replace(',', ''))
+                    metrics["final_value"] = float(
+                        final_value_match.group(1).replace(",", "")
+                    )
                 except ValueError:
-                    logger.debug(f"Failed to parse Final Value: {final_value_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Final Value: {final_value_match.group(1)}"
+                    )
 
             # Parse Total Return percentage
-            total_return_match = re.search(r'Total Return.*?([-+]?\d+\.?\d*)%', output)
+            total_return_match = re.search(r"Total Return.*?([-+]?\d+\.?\d*)%", output)
             if total_return_match:
                 try:
                     metrics["return_pct"] = float(total_return_match.group(1))
                 except ValueError:
-                    logger.debug(f"Failed to parse Total Return: {total_return_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Total Return: {total_return_match.group(1)}"
+                    )
 
             # Parse Sharpe Ratio
-            sharpe_match = re.search(r'Sharpe Ratio.*?([-+]?\d+\.?\d*)', output)
+            sharpe_match = re.search(r"Sharpe Ratio.*?([-+]?\d+\.?\d*)", output)
             if sharpe_match:
                 try:
                     metrics["sharpe_ratio"] = float(sharpe_match.group(1))
                 except ValueError:
-                    logger.debug(f"Failed to parse Sharpe Ratio: {sharpe_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Sharpe Ratio: {sharpe_match.group(1)}"
+                    )
 
             # Parse Max Drawdown percentage
-            drawdown_match = re.search(r'Max Drawdown.*?([-+]?\d+\.?\d*)%', output)
+            drawdown_match = re.search(r"Max Drawdown.*?([-+]?\d+\.?\d*)%", output)
             if drawdown_match:
                 try:
                     metrics["max_drawdown"] = float(drawdown_match.group(1))
                 except ValueError:
-                    logger.debug(f"Failed to parse Max Drawdown: {drawdown_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Max Drawdown: {drawdown_match.group(1)}"
+                    )
 
             # Parse Total Trades (integer)
-            total_trades_match = re.search(r'Total Trades.*?(\d+)', output)
+            total_trades_match = re.search(r"Total Trades.*?(\d+)", output)
             if total_trades_match:
                 try:
                     metrics["total_trades"] = int(total_trades_match.group(1))
                 except ValueError:
-                    logger.debug(f"Failed to parse Total Trades: {total_trades_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Total Trades: {total_trades_match.group(1)}"
+                    )
 
             # Parse Completed Trades (integer)
-            completed_trades_match = re.search(r'Completed Trades.*?(\d+)', output)
+            completed_trades_match = re.search(r"Completed Trades.*?(\d+)", output)
             if completed_trades_match:
                 try:
                     metrics["completed_trades"] = int(completed_trades_match.group(1))
                 except ValueError:
-                    logger.debug(f"Failed to parse Completed Trades: {completed_trades_match.group(1)}")
+                    logger.debug(
+                        f"Failed to parse Completed Trades: {completed_trades_match.group(1)}"
+                    )
 
             # Parse Win Rate percentage
-            win_rate_match = re.search(r'Win Rate.*?([-+]?\d+\.?\d*)%', output)
+            win_rate_match = re.search(r"Win Rate.*?([-+]?\d+\.?\d*)%", output)
             if win_rate_match:
                 try:
                     metrics["win_rate"] = float(win_rate_match.group(1))
@@ -380,7 +416,9 @@ class ChunkedBacktestRunner:
 
         # Distinguish realized vs unrealized PnL
         if metrics["trade_history"]:
-            realized_pnl = sum(trade.get("pnl", 0) for trade in metrics["trade_history"])
+            realized_pnl = sum(
+                trade.get("pnl", 0) for trade in metrics["trade_history"]
+            )
             metrics["realized_pnl"] = realized_pnl
             metrics["unrealized_pnl"] = metrics["total_pnl"] - realized_pnl
         else:
@@ -390,15 +428,21 @@ class ChunkedBacktestRunner:
         if metrics["completed_trades"] > 0:
             # Re-calculate winning trades from history if available
             if metrics["trade_history"]:
-                winning_trades = sum(1 for trade in metrics["trade_history"] if trade.get("pnl", 0) > 0)
+                winning_trades = sum(
+                    1 for trade in metrics["trade_history"] if trade.get("pnl", 0) > 0
+                )
                 metrics["winning_trades"] = winning_trades
                 if metrics["completed_trades"] > 0:
-                     metrics["win_rate"] = (winning_trades / metrics["completed_trades"]) * 100
-            else: # Fallback to parsed win rate
-                metrics["winning_trades"] = int(metrics["completed_trades"] * metrics["win_rate"] / 100)
+                    metrics["win_rate"] = (
+                        winning_trades / metrics["completed_trades"]
+                    ) * 100
+            else:  # Fallback to parsed win rate
+                metrics["winning_trades"] = int(
+                    metrics["completed_trades"] * metrics["win_rate"] / 100
+                )
         else:
-             metrics["win_rate"] = 0.0
-             metrics["winning_trades"] = 0
+            metrics["win_rate"] = 0.0
+            metrics["winning_trades"] = 0
 
         return metrics
 
@@ -426,9 +470,7 @@ class ChunkedBacktestRunner:
         logger.info(f"  Regime Perf: {'✓' if regime_perf.exists() else '✗'}")
 
     def _calculate_summary(
-        self,
-        quarterly_results: List[Dict[str, Any]],
-        cumulative: Dict[str, Any]
+        self, quarterly_results: List[Dict[str, Any]], cumulative: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Calculate full-year summary metrics."""
 
@@ -444,7 +486,9 @@ class ChunkedBacktestRunner:
             q["final_value"] = current_balance * (1 + q_return)
 
             # Calculate realized vs unrealized PnL
-            realized_pnl = sum(t.get("pnl", 0) for t in q.get("trade_history", []) if "pnl" in t)
+            realized_pnl = sum(
+                t.get("pnl", 0) for t in q.get("trade_history", []) if "pnl" in t
+            )
             total_pnl = q["final_value"] - q["initial_balance"]
             unrealized_pnl = total_pnl - realized_pnl
 
@@ -454,23 +498,31 @@ class ChunkedBacktestRunner:
             current_balance = q["final_value"]
 
         quarterly_returns = [r["return_pct"] for r in quarterly_results]
-        quarterly_sharpes = [r["sharpe_ratio"] for r in quarterly_results if r["sharpe_ratio"] != 0]
+        quarterly_sharpes = [
+            r["sharpe_ratio"] for r in quarterly_results if r["sharpe_ratio"] != 0
+        ]
         quarterly_drawdowns = [r["max_drawdown"] for r in quarterly_results]
 
         # Full year return (geometric)
         full_year_value = self.initial_balance
         for q in quarterly_results:
             q_return = q["return_pct"] / 100.0
-            full_year_value *= (1 + q_return)
-        full_year_return = ((full_year_value - self.initial_balance) / self.initial_balance) * 100
+            full_year_value *= 1 + q_return
+        full_year_return = (
+            (full_year_value - self.initial_balance) / self.initial_balance
+        ) * 100
 
         # Annualized Sharpe (average of quarterly, annualized)
-        avg_quarterly_sharpe = sum(quarterly_sharpes) / len(quarterly_sharpes) if quarterly_sharpes else 0
-        annualized_sharpe = avg_quarterly_sharpe * (4 ** 0.5)  # Annualize from quarterly
+        avg_quarterly_sharpe = (
+            sum(quarterly_sharpes) / len(quarterly_sharpes) if quarterly_sharpes else 0
+        )
+        annualized_sharpe = avg_quarterly_sharpe * (4**0.5)  # Annualize from quarterly
 
         # Calculate annual realized vs unrealized PnL
         total_realized_pnl = sum(q.get("realized_pnl", 0) for q in quarterly_results)
-        total_unrealized_pnl = sum(q.get("unrealized_pnl", 0) for q in quarterly_results)
+        total_unrealized_pnl = sum(
+            q.get("unrealized_pnl", 0) for q in quarterly_results
+        )
 
         summary = {
             "period": f"Full Year {self.year}",
@@ -479,11 +531,19 @@ class ChunkedBacktestRunner:
             "final_balance": full_year_value,
             "total_return_pct": full_year_return,
             "annualized_sharpe": annualized_sharpe,
-            "max_quarterly_drawdown": max(quarterly_drawdowns) if quarterly_drawdowns else 0,
+            "max_quarterly_drawdown": (
+                max(quarterly_drawdowns) if quarterly_drawdowns else 0
+            ),
             "total_trades": cumulative["total_trades"],
-            "total_completed_trades": sum(r.get("completed_trades", 0) for r in quarterly_results),
+            "total_completed_trades": sum(
+                r.get("completed_trades", 0) for r in quarterly_results
+            ),
             "total_winning_trades": cumulative["winning_trades"],
-            "overall_win_rate": (cumulative["winning_trades"] / cumulative["total_trades"] * 100) if cumulative["total_trades"] > 0 else 0,
+            "overall_win_rate": (
+                (cumulative["winning_trades"] / cumulative["total_trades"] * 100)
+                if cumulative["total_trades"] > 0
+                else 0
+            ),
             "realized_pnl": total_realized_pnl,
             "unrealized_pnl": total_unrealized_pnl,
             "total_pnl": full_year_value - self.initial_balance,
@@ -492,8 +552,8 @@ class ChunkedBacktestRunner:
                 "outcomes_stored": len(list(self.memory_dir.glob("outcome_*.json"))),
                 "snapshots_stored": len(list(self.memory_dir.glob("snapshot_*.json"))),
                 "vectors_file": str(self.memory_dir / "vectors.pkl"),
-                "learning_accumulated_across_quarters": True
-            }
+                "learning_accumulated_across_quarters": True,
+            },
         }
 
         return summary
@@ -518,7 +578,9 @@ class ChunkedBacktestRunner:
         print(f"Final Balance: ${summary.get('final_balance', 0):,.2f}")
         print(f"Total Return: {summary.get('total_return_pct', 0):.2f}%")
         print(f"Annualized Sharpe: {summary.get('annualized_sharpe', 0):.2f}")
-        print(f"Max Quarterly Drawdown: {summary.get('max_quarterly_drawdown', 0):.2f}%")
+        print(
+            f"Max Quarterly Drawdown: {summary.get('max_quarterly_drawdown', 0):.2f}%"
+        )
         print("\nTrading Statistics:")
         print(f"  Total Trades: {summary.get('total_trades', 0)}")
         print(f"  Completed Trades: {summary.get('total_completed_trades', 0)}")
@@ -527,14 +589,16 @@ class ChunkedBacktestRunner:
         print(f"  Total P&L: ${summary.get('total_pnl', 0):,.2f}")
 
         print("\nMemory Persistence (Accumulated Learning):")
-        mem = summary.get('memory_persistence', {})
+        mem = summary.get("memory_persistence", {})
         print(f"  Outcomes stored: {mem.get('outcomes_stored', 0)}")
         print(f"  Snapshots stored: {mem.get('snapshots_stored', 0)}")
         print(f"  Vector memory: {mem.get('vectors_file', 'N/A')}")
-        print(f"  Cross-quarter learning: {mem.get('learning_accumulated_across_quarters', False)}")
+        print(
+            f"  Cross-quarter learning: {mem.get('learning_accumulated_across_quarters', False)}"
+        )
 
         print("\nQuarterly Breakdown:")
-        for q in summary.get('quarterly_breakdown', []):
+        for q in summary.get("quarterly_breakdown", []):
             print(f"\n  Q{q.get('quarter', '?')} {self.year}:")
             print(f"    Return: {q.get('return_pct', 0):.2f}%")
             print(f"    Sharpe: {q.get('sharpe_ratio', 0):.2f}")
@@ -550,7 +614,7 @@ class ChunkedBacktestRunner:
         filename = self.results_dir / f"full_year_summary_{timestamp}.json"
 
         try:
-            with open(filename, 'w') as f:
+            with open(filename, "w") as f:
                 json.dump(summary, f, indent=2)
             logger.info(f"Summary saved to {filename}")
         except Exception as e:
@@ -563,7 +627,7 @@ if __name__ == "__main__":
         assets=["BTCUSD", "ETHUSD", "EURUSD"],
         initial_balance=10000,
         correlation_threshold=0.7,
-        max_positions=3
+        max_positions=3,
     )
 
     # Execute quarterly backtests (memories persist across quarters)

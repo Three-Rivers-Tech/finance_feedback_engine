@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """Test learning validation metrics."""
 
-from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine, TradeOutcome
-from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
 import json
 from datetime import datetime, timedelta, timezone
+
+from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
+from finance_feedback_engine.memory.portfolio_memory import (
+    PortfolioMemoryEngine,
+    TradeOutcome,
+)
 
 print("Testing Learning Validation Metrics...")
 
 # Initialize memory with minimal config
-config = {
-    'memory': {
-        'max_outcomes': 1000,
-        'learning_rate': 0.1,
-        'context_window': 50
-    }
-}
+config = {"memory": {"max_outcomes": 1000, "learning_rate": 0.1, "context_window": 50}}
 memory = PortfolioMemoryEngine(config)
 
 # Simulate learning progression: early trades worse, later trades better
 base_date = datetime.now(timezone.utc)
-providers = ['anthropic', 'openai', 'google']
+providers = ["anthropic", "openai", "google"]
 
 print("\n1. Adding 100 simulated trades showing learning progression...")
 for i in range(100):
@@ -29,6 +27,7 @@ for i in range(100):
     win_probability = 0.4 + (skill_factor * 0.3)  # 40% -> 70% win rate
 
     import random
+
     random.seed(i)
     is_win = random.random() < win_probability
 
@@ -36,14 +35,14 @@ for i in range(100):
     if skill_factor < 0.3:
         provider = random.choice(providers)
     elif skill_factor < 0.7:
-        provider = 'anthropic' if random.random() < 0.6 else random.choice(providers)
+        provider = "anthropic" if random.random() < 0.6 else random.choice(providers)
     else:
-        provider = 'anthropic' if random.random() < 0.8 else random.choice(providers)
+        provider = "anthropic" if random.random() < 0.8 else random.choice(providers)
 
     outcome = TradeOutcome(
         decision_id=f"test_{i}",
         asset_pair="BTCUSD",
-        action='BUY',
+        action="BUY",
         entry_timestamp=(base_date + timedelta(hours=i)).isoformat(),
         exit_timestamp=(base_date + timedelta(hours=i, minutes=30)).isoformat(),
         entry_price=50000.0,
@@ -54,7 +53,7 @@ for i in range(100):
         pnl_percentage=2.0 if is_win else -2.0,
         was_profitable=is_win,
         ai_provider=provider,
-        decision_confidence=60 + int(skill_factor * 30)
+        decision_confidence=60 + int(skill_factor * 30),
     )
     # Directly append to avoid needing full decision dict
     memory.trade_outcomes.append(outcome)

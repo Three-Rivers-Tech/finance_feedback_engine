@@ -99,7 +99,7 @@ python main.py analyze EUR-USD
 python main.py analyze "EUR/USD"
 ```
 
-> **Note**: All formats are automatically converted to uppercase without separators (e.g., `btc-usd` → `BTCUSD`).  
+> **Note**: All formats are automatically converted to uppercase without separators (e.g., `btc-usd` → `BTCUSD`).
 > See [docs/ASSET_PAIR_VALIDATION.md](docs/ASSET_PAIR_VALIDATION.md) for complete details.
 
 **Output:**
@@ -360,15 +360,15 @@ class KrakenPlatform(BaseTradingPlatform):
     def __init__(self, credentials):
         super().__init__(credentials)
         # Initialize Kraken API client
-        
+
     def get_balance(self):
         # Implement Kraken balance fetching
         pass
-    
+
     def execute_trade(self, decision):
         # Implement Kraken trade execution
         pass
-    
+
     def get_account_info(self):
         # Implement Kraken account info
         pass
@@ -393,17 +393,17 @@ while True:
     for asset in assets:
         try:
             decision = engine.analyze_asset(asset)
-            
+
             # Only execute high-confidence decisions
             if decision['confidence'] > 80:
                 print(f"Executing: {asset} - {decision['action']}")
                 engine.execute_decision(decision['id'])
             else:
                 print(f"Low confidence, skipping: {asset}")
-                
+
         except Exception as e:
             print(f"Error analyzing {asset}: {e}")
-    
+
     # Wait 5 minutes before next analysis
     time.sleep(300)
 ```
@@ -441,7 +441,7 @@ If you see `"mock": True` in market data, it means:
 - API rate limit exceeded
 - Invalid API key
 
-**Solution:** 
+**Solution:**
 - Verify your API key
 - Check Alpha Vantage dashboard for rate limits
 - Use premium API key for higher limits

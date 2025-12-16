@@ -1,15 +1,15 @@
 """Unified data provider with cascading fallback across Alpha Vantage, Coinbase, and Oanda."""
 
-from typing import Dict, Any, List, Optional, Tuple
 import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 from cachetools import TTLCache
 
+from ..utils.circuit_breaker import CircuitBreakerOpenError
+from ..utils.rate_limiter import RateLimiter
 from .alpha_vantage_provider import AlphaVantageProvider
 from .coinbase_data import CoinbaseDataProvider
 from .oanda_data import OandaDataProvider
-from ..utils.rate_limiter import RateLimiter
-from ..utils.circuit_breaker import CircuitBreakerOpenError
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class UnifiedDataProvider:
         alpha_vantage_api_key: Optional[str] = None,
         coinbase_credentials: Optional[Dict[str, Any]] = None,
         oanda_credentials: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize unified data provider.
@@ -50,8 +50,7 @@ class UnifiedDataProvider:
 
         # Shared rate limiter (30 tokens capacity, 6 tokens/min refill)
         self.rate_limiter = RateLimiter(
-            tokens_per_second=0.1,  # 6 per minute = 0.1 per second
-            max_tokens=30
+            tokens_per_second=0.1, max_tokens=30  # 6 per minute = 0.1 per second
         )
 
         # Initialize providers
@@ -64,7 +63,7 @@ class UnifiedDataProvider:
                 self.alpha_vantage = AlphaVantageProvider(
                     api_key=alpha_vantage_api_key,
                     config=config,
-                    rate_limiter=self.rate_limiter
+                    rate_limiter=self.rate_limiter,
                 )
                 logger.info("Alpha Vantage provider initialized (primary)")
             except Exception as e:
@@ -73,8 +72,7 @@ class UnifiedDataProvider:
         if coinbase_credentials:
             try:
                 self.coinbase = CoinbaseDataProvider(
-                    credentials=coinbase_credentials,
-                    rate_limiter=self.rate_limiter
+                    credentials=coinbase_credentials, rate_limiter=self.rate_limiter
                 )
                 logger.info("Coinbase data provider initialized (crypto fallback)")
             except Exception as e:
@@ -83,8 +81,7 @@ class UnifiedDataProvider:
         if oanda_credentials:
             try:
                 self.oanda = OandaDataProvider(
-                    credentials=oanda_credentials,
-                    rate_limiter=self.rate_limiter
+                    credentials=oanda_credentials, rate_limiter=self.rate_limiter
                 )
                 logger.info("Oanda data provider initialized (forex fallback)")
             except Exception as e:
@@ -98,7 +95,7 @@ class UnifiedDataProvider:
     def _is_crypto(self, asset_pair: str) -> bool:
         """Check if asset pair is crypto."""
         pair = asset_pair.upper()
-        crypto_symbols = ['BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'DOT', 'LINK']
+        crypto_symbols = ["BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK"]
         return any(symbol in pair for symbol in crypto_symbols)
 
     def _is_forex(self, asset_pair: str) -> bool:
@@ -116,8 +113,21 @@ class UnifiedDataProvider:
 
         # Load fiat currency codes (ISO-like 3-letter); allow config override
         fiat_list = self.config.get(
-            'forex_currencies',
-            ['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'CNY', 'HKD', 'SEK', 'NOK']
+            "forex_currencies",
+            [
+                "USD",
+                "EUR",
+                "GBP",
+                "JPY",
+                "CHF",
+                "AUD",
+                "CAD",
+                "NZD",
+                "CNY",
+                "HKD",
+                "SEK",
+                "NOK",
+            ],
         )
 
         # Attempt to split pair into two 3-letter codes (common format in this project)
@@ -135,9 +145,7 @@ class UnifiedDataProvider:
         return False
 
     def _get_cached_candles(
-        self,
-        asset_pair: str,
-        granularity: str
+        self, asset_pair: str, granularity: str
     ) -> Optional[Tuple[List[Dict[str, Any]], str]]:
         """
         Get candles from cache if available and fresh.
@@ -153,7 +161,9 @@ class UnifiedDataProvider:
         cached = self._cache.get(cache_key)
         if cached is not None:
             candles, provider_name = cached
-            logger.debug(f"Cache hit for {asset_pair} {granularity} (provider: {provider_name})")
+            logger.debug(
+                f"Cache hit for {asset_pair} {granularity} (provider: {provider_name})"
+            )
             return candles, provider_name
         return None
 
@@ -162,7 +172,7 @@ class UnifiedDataProvider:
         asset_pair: str,
         granularity: str,
         candles: List[Dict[str, Any]],
-        provider_name: str
+        provider_name: str,
     ) -> None:
         """
         Store candles in cache along with original provider name.
@@ -175,14 +185,16 @@ class UnifiedDataProvider:
         """
         cache_key = (asset_pair.upper(), granularity)
         self._cache[cache_key] = (candles, provider_name)
-        logger.debug(f"Cached {len(candles)} candles for {asset_pair} {granularity} from {provider_name}")
+        logger.debug(
+            f"Cached {len(candles)} candles for {asset_pair} {granularity} from {provider_name}"
+        )
 
     def get_candles(
         self,
         asset_pair: str,
-        granularity: str = '1d',
+        granularity: str = "1d",
         limit: int = 300,
-        force_provider: Optional[str] = None
+        force_provider: Optional[str] = None,
     ) -> Tuple[List[Dict[str, Any]], str]:
         """
         Fetch historical candles with cascading provider fallback.
@@ -215,34 +227,34 @@ class UnifiedDataProvider:
 
         if force_provider:
             # Force specific provider
-            if force_provider == 'alpha_vantage' and self.alpha_vantage:
-                providers = [('alpha_vantage', self.alpha_vantage)]
-            elif force_provider == 'coinbase' and self.coinbase:
-                providers = [('coinbase', self.coinbase)]
-            elif force_provider == 'oanda' and self.oanda:
-                providers = [('oanda', self.oanda)]
+            if force_provider == "alpha_vantage" and self.alpha_vantage:
+                providers = [("alpha_vantage", self.alpha_vantage)]
+            elif force_provider == "coinbase" and self.coinbase:
+                providers = [("coinbase", self.coinbase)]
+            elif force_provider == "oanda" and self.oanda:
+                providers = [("oanda", self.oanda)]
         else:
             # Cascading fallback based on asset type
             if is_crypto:
                 # Crypto: Alpha Vantage → Coinbase
                 if self.alpha_vantage:
-                    providers.append(('alpha_vantage', self.alpha_vantage))
+                    providers.append(("alpha_vantage", self.alpha_vantage))
                 if self.coinbase:
-                    providers.append(('coinbase', self.coinbase))
+                    providers.append(("coinbase", self.coinbase))
             elif is_forex:
                 # Forex: Alpha Vantage → Oanda
                 if self.alpha_vantage:
-                    providers.append(('alpha_vantage', self.alpha_vantage))
+                    providers.append(("alpha_vantage", self.alpha_vantage))
                 if self.oanda:
-                    providers.append(('oanda', self.oanda))
+                    providers.append(("oanda", self.oanda))
             else:
                 # Unknown: try all in order
                 if self.alpha_vantage:
-                    providers.append(('alpha_vantage', self.alpha_vantage))
+                    providers.append(("alpha_vantage", self.alpha_vantage))
                 if self.coinbase:
-                    providers.append(('coinbase', self.coinbase))
+                    providers.append(("coinbase", self.coinbase))
                 if self.oanda:
-                    providers.append(('oanda', self.oanda))
+                    providers.append(("oanda", self.oanda))
 
         # Try each provider in order
         last_error = None
@@ -251,11 +263,13 @@ class UnifiedDataProvider:
                 logger.debug(f"Trying provider: {provider_name}")
 
                 # Use provider-specific method if available
-                if hasattr(provider, 'get_candles'):
+                if hasattr(provider, "get_candles"):
                     candles = provider.get_candles(asset_pair, granularity, limit)
                 else:
                     # Alpha Vantage doesn't have get_candles yet, skip for now
-                    logger.debug(f"Provider {provider_name} doesn't support get_candles")
+                    logger.debug(
+                        f"Provider {provider_name} doesn't support get_candles"
+                    )
                     continue
 
                 if candles:
@@ -281,9 +295,7 @@ class UnifiedDataProvider:
         raise ValueError(error_msg)
 
     def get_multi_timeframe_data(
-        self,
-        asset_pair: str,
-        timeframes: Optional[List[str]] = None
+        self, asset_pair: str, timeframes: Optional[List[str]] = None
     ) -> Dict[str, Tuple[List[Dict[str, Any]], str]]:
         """
         Fetch data across multiple timeframes.
@@ -296,7 +308,7 @@ class UnifiedDataProvider:
             Dictionary mapping timeframe to (candles, provider_name)
         """
         if timeframes is None:
-            timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
+            timeframes = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
         results = {}
 
@@ -306,14 +318,12 @@ class UnifiedDataProvider:
                 results[tf] = (candles, provider)
             except Exception as e:
                 logger.warning(f"Failed to fetch {tf} data: {e}")
-                results[tf] = ([], 'failed')
+                results[tf] = ([], "failed")
 
         return results
 
     def aggregate_all_timeframes(
-        self,
-        asset_pair: str,
-        timeframes: Optional[List[str]] = None
+        self, asset_pair: str, timeframes: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Fetch and synchronize multi-timeframe data with metadata.
@@ -347,7 +357,7 @@ class UnifiedDataProvider:
         from datetime import datetime, timezone
 
         if timeframes is None:
-            timeframes = ['1m', '5m', '15m', '1h', '4h', '1d']
+            timeframes = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
         # Track cache hits separately when fetching individual timeframes
         timestamp_utc = datetime.now(timezone.utc).isoformat()
@@ -359,8 +369,8 @@ class UnifiedDataProvider:
                 "requested_timeframes": timeframes,
                 "available_timeframes": [],
                 "missing_timeframes": [],
-                "cache_hit_rate": 0.0
-            }
+                "cache_hit_rate": 0.0,
+            },
         }
 
         # Fetch all timeframes in a single call so tests can patch effectively
@@ -368,14 +378,14 @@ class UnifiedDataProvider:
 
         cache_hits = 0
         for tf in timeframes:
-            candles, provider = data_by_tf.get(tf, ([], 'failed'))
+            candles, provider = data_by_tf.get(tf, ([], "failed"))
             cache_key = (asset_pair.upper(), tf)
             is_cached = cache_key in self._cache and bool(candles)
 
             if is_cached:
                 cache_hits += 1
 
-            if candles and provider != 'failed':
+            if candles and provider != "failed":
                 result["metadata"]["available_timeframes"].append(tf)
             else:
                 result["metadata"]["missing_timeframes"].append(tf)
@@ -387,7 +397,7 @@ class UnifiedDataProvider:
                 "source_provider": provider,
                 "last_updated": timestamp_utc,  # Approximation (real impl would track per-TF)
                 "is_cached": is_cached,
-                "candles_count": len(candles)
+                "candles_count": len(candles),
             }
 
         # Calculate cache hit rate

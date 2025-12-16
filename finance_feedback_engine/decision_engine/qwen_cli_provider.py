@@ -4,16 +4,14 @@ Free Qwen CLI integration for trading decisions.
 Requires Node.js v20+ and OAuth authentication.
 """
 
-from typing import Dict, Any
-import logging
-import subprocess
 import json
+import logging
 import re
-from .decision_validation import (
-    try_parse_decision_json,
-    build_fallback_decision,
-)
+import subprocess
+from typing import Any, Dict
+
 from ..utils.rate_limiter import RateLimiter
+from .decision_validation import build_fallback_decision, try_parse_decision_json
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ logger = logging.getLogger(__name__)
 class QwenCLIProvider:
     """
     Qwen CLI provider for generating trading decisions.
-    
+
     Uses the free Qwen CLI tool (requires Node.js v20+ and OAuth).
     No API charges - completely free to use.
     """
@@ -34,17 +32,17 @@ class QwenCLIProvider:
             config: Configuration dictionary
         """
         self.config = config
-        
+
         # Rate limiter for Qwen CLI: 60 req/min, with burst capacity of 2000 tokens
         # Using 1 token/second = 60/min, max tokens = 2000 for burst capacity
         # Note: This does not enforce a daily quota; the bucket refills at 1 token/sec
         self.rate_limiter = RateLimiter(
             tokens_per_second=1.0,  # 60 requests per minute
-            max_tokens=2000  # burst capacity
+            max_tokens=2000,  # burst capacity
         )
-        
+
         logger.info("Qwen CLI provider initialized")
-        
+
         # Verify qwen is available
         self._verify_qwen_available()
 
@@ -52,11 +50,11 @@ class QwenCLIProvider:
         """Check that 'qwen' binary exists and is functional."""
         try:
             result = subprocess.run(
-                ['qwen', '--version'],
+                ["qwen", "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-                check=False
+                check=False,
             )
             if result.returncode == 0:
                 logger.info("Qwen CLI available: %s", result.stdout.strip())
@@ -87,7 +85,7 @@ class QwenCLIProvider:
         except Exception as e:
             logger.warning(f"Rate limit check failed: {e}")
             # Continue anyway - rate limiter is best-effort
-        
+
         logger.info("Querying Qwen CLI for trading decision")
 
         formatted_prompt = self._format_prompt_for_qwen(prompt)
@@ -96,32 +94,29 @@ class QwenCLIProvider:
             # Use 'qwen' command with prompt
             # Qwen CLI typically accepts prompt via stdin or as argument
             result = subprocess.run(
-                ['qwen', formatted_prompt],
+                ["qwen", formatted_prompt],
                 capture_output=True,
                 text=True,
                 timeout=30,
-                check=False
+                check=False,
             )
-            
+
             if result.returncode != 0:
-                logger.warning(
-                    "Qwen CLI failed: %s",
-                    result.stderr.strip()
-                )
+                logger.warning("Qwen CLI failed: %s", result.stderr.strip())
                 return self._fallback_decision()
-            
+
             output = result.stdout.strip()
-            
+
             # Try JSON parse first
             parsed = self._parse_qwen_response(output)
             if parsed:
                 return parsed
-            
+
             # Fallback to text extraction if output exists
             if output:
                 logger.info("Falling back to text extraction")
                 return self._extract_decision_from_text(output)
-                
+
         except subprocess.TimeoutExpired:
             logger.warning("Qwen CLI timeout")
         except (OSError, ValueError, json.JSONDecodeError) as exc:
@@ -132,9 +127,9 @@ class QwenCLIProvider:
     def _format_prompt_for_qwen(self, prompt: str) -> str:
         """Wrap original prompt with explicit JSON response contract."""
         return (
-            "You are a concise trading advisor. Return ONLY valid JSON.\n" +
-            prompt +
-            (
+            "You are a concise trading advisor. Return ONLY valid JSON.\n"
+            + prompt
+            + (
                 "\n\nResponse must be valid JSON with this exact schema:\n"
                 "{\n"
                 '  "action": "BUY|SELL|HOLD",\n'
@@ -142,8 +137,8 @@ class QwenCLIProvider:
                 '  "reasoning": "<brief explanation>",\n'
                 '  "amount": <float or 0>\n'
                 "}\n"
-            ) +
-            "Return only the JSON object, no markdown, "
+            )
+            + "Return only the JSON object, no markdown, "
             "no code blocks, no extra text."
         )
 
@@ -160,41 +155,38 @@ class QwenCLIProvider:
         # Try direct JSON parse
         data = try_parse_decision_json(output)
         if data:
-            data['confidence'] = int(data.get('confidence', 50))
-            data['amount'] = float(data.get('amount', 0))
+            data["confidence"] = int(data.get("confidence", 50))
+            data["amount"] = float(data.get("amount", 0))
             logger.info(
-                "Qwen decision parsed: %s (%d%%)",
-                data['action'], data['confidence']
+                "Qwen decision parsed: %s (%d%%)", data["action"], data["confidence"]
             )
             return data
 
         # Try to extract JSON from markdown code blocks
-        json_match = re.search(
-            r'```(?:json)?\s*(\{.*?\})\s*```',
-            output,
-            re.DOTALL
-        )
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", output, re.DOTALL)
         if json_match:
             data = try_parse_decision_json(json_match.group(1))
             if data:
-                data['confidence'] = int(data.get('confidence', 50))
-                data['amount'] = float(data.get('amount', 0))
+                data["confidence"] = int(data.get("confidence", 50))
+                data["amount"] = float(data.get("amount", 0))
                 logger.info(
                     "Qwen decision from code block: %s (%d%%)",
-                    data['action'], data['confidence']
+                    data["action"],
+                    data["confidence"],
                 )
                 return data
 
         # Try to find JSON object in text
-        json_match = re.search(r'\{[^{}]*\}', output, re.DOTALL)
+        json_match = re.search(r"\{[^{}]*\}", output, re.DOTALL)
         if json_match:
             data = try_parse_decision_json(json_match.group(0))
             if data:
-                data['confidence'] = int(data.get('confidence', 50))
-                data['amount'] = float(data.get('amount', 0))
+                data["confidence"] = int(data.get("confidence", 50))
+                data["amount"] = float(data.get("amount", 0))
                 logger.info(
                     "Qwen decision extracted: %s (%d%%)",
-                    data['action'], data['confidence']
+                    data["action"],
+                    data["confidence"],
                 )
                 return data
 
@@ -211,38 +203,36 @@ class QwenCLIProvider:
             Parsed decision dictionary
         """
         text_upper = text.upper()
-        
+
         # Determine action
-        action = 'HOLD'  # Default
-        if 'BUY' in text_upper and 'SELL' not in text_upper:
-            action = 'BUY'
-        elif 'SELL' in text_upper and 'BUY' not in text_upper:
-            action = 'SELL'
-        
+        action = "HOLD"  # Default
+        if "BUY" in text_upper and "SELL" not in text_upper:
+            action = "BUY"
+        elif "SELL" in text_upper and "BUY" not in text_upper:
+            action = "SELL"
+
         # Extract confidence if present
         confidence = 50  # Default
-        conf_match = re.search(r'confidence[:\s]+(\d+)', text, re.IGNORECASE)
+        conf_match = re.search(r"confidence[:\s]+(\d+)", text, re.IGNORECASE)
         if conf_match:
             confidence = min(100, max(0, int(conf_match.group(1))))
-        
+
         # Use first sentence as reasoning
         if text:
-            reasoning = text.split('.')[0].strip()
+            reasoning = text.split(".")[0].strip()
         else:
-            reasoning = 'No reasoning provided'
+            reasoning = "No reasoning provided"
         if len(reasoning) > 200:
-            reasoning = reasoning[:197] + '...'
-        
+            reasoning = reasoning[:197] + "..."
+
         decision = {
-            'action': action,
-            'confidence': confidence,
-            'reasoning': reasoning,
-            'amount': 0
+            "action": action,
+            "confidence": confidence,
+            "reasoning": reasoning,
+            "amount": 0,
         }
-        
-        logger.info(
-            "Extracted from text: %s (%d%%)", action, confidence
-        )
+
+        logger.info("Extracted from text: %s (%d%%)", action, confidence)
         return decision
 
     def _fallback_decision(self) -> Dict[str, Any]:
@@ -254,5 +244,5 @@ class QwenCLIProvider:
         """
         logger.warning("Using fallback decision")
         return build_fallback_decision(
-            'Qwen CLI unavailable or failed, using conservative fallback.'
+            "Qwen CLI unavailable or failed, using conservative fallback."
         )

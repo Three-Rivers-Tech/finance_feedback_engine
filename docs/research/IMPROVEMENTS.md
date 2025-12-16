@@ -162,7 +162,7 @@ Corrected the Ollama API invocation:
   - 3 billion parameters
   - Optimized for CPU inference
   - Good balance of performance and resource usage
-  
+
 - **Fallback Model**: `llama3.2:1b-instruct-fp16` (2.5 GB)
   - 1 billion parameters
   - Ultra-compact for constrained environments

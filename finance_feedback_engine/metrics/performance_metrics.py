@@ -1,10 +1,11 @@
 """Comprehensive performance metrics collection and analysis."""
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
-import numpy as np
 from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 
 @dataclass
@@ -57,34 +58,34 @@ class TradingPerformanceMetrics:
     def to_dict(self) -> Dict[str, Any]:
         """Convert metrics to dictionary."""
         return {
-            'return_metrics': {
-                'total_return': self.total_return,
-                'annualized_return': self.annualized_return,
-                'sharpe_ratio': self.sharpe_ratio,
-                'sortino_ratio': self.sortino_ratio,
-                'calmar_ratio': self.calmar_ratio
+            "return_metrics": {
+                "total_return": self.total_return,
+                "annualized_return": self.annualized_return,
+                "sharpe_ratio": self.sharpe_ratio,
+                "sortino_ratio": self.sortino_ratio,
+                "calmar_ratio": self.calmar_ratio,
             },
-            'risk_metrics': {
-                'max_drawdown': self.max_drawdown,
-                'max_drawdown_duration_days': self.max_drawdown_duration_days,
-                'var_95': self.value_at_risk_95,
-                'var_99': self.value_at_risk_99,
-                'volatility': self.volatility,
-                'downside_deviation': self.downside_deviation
+            "risk_metrics": {
+                "max_drawdown": self.max_drawdown,
+                "max_drawdown_duration_days": self.max_drawdown_duration_days,
+                "var_95": self.value_at_risk_95,
+                "var_99": self.value_at_risk_99,
+                "volatility": self.volatility,
+                "downside_deviation": self.downside_deviation,
             },
-            'win_loss_metrics': {
-                'win_rate': self.win_rate,
-                'profit_factor': self.profit_factor,
-                'avg_win': self.avg_win,
-                'avg_loss': self.avg_loss,
-                'win_loss_ratio': self.win_loss_ratio
+            "win_loss_metrics": {
+                "win_rate": self.win_rate,
+                "profit_factor": self.profit_factor,
+                "avg_win": self.avg_win,
+                "avg_loss": self.avg_loss,
+                "win_loss_ratio": self.win_loss_ratio,
             },
-            'trade_statistics': {
-                'total_trades': self.total_trades,
-                'profitable_trades': self.profitable_trades,
-                'losing_trades': self.losing_trades,
-                'avg_trade_duration_hours': self.avg_trade_duration_hours
-            }
+            "trade_statistics": {
+                "total_trades": self.total_trades,
+                "profitable_trades": self.profitable_trades,
+                "losing_trades": self.losing_trades,
+                "avg_trade_duration_hours": self.avg_trade_duration_hours,
+            },
         }
 
 
@@ -109,27 +110,31 @@ class PerformanceMetricsCollector:
         Args:
             trade_outcome: Trade outcome dictionary with pnl, entry/exit prices, etc.
         """
-        self.trade_history.append({
-            'timestamp': trade_outcome.get('exit_timestamp', datetime.utcnow()),
-            'pnl': trade_outcome.get('realized_pnl', 0.0),
-            'pnl_pct': trade_outcome.get('pnl_percentage', 0.0),
-            'was_profitable': trade_outcome.get('was_profitable', False),
-            'duration_hours': trade_outcome.get('holding_period_hours', 0.0),
-            'position_size': trade_outcome.get('position_size', 0.0),
-            'entry_price': trade_outcome.get('entry_price', 0.0),
-            'exit_price': trade_outcome.get('exit_price', 0.0),
-            'asset_pair': trade_outcome.get('asset_pair', 'UNKNOWN')
-        })
+        self.trade_history.append(
+            {
+                "timestamp": trade_outcome.get("exit_timestamp", datetime.utcnow()),
+                "pnl": trade_outcome.get("realized_pnl", 0.0),
+                "pnl_pct": trade_outcome.get("pnl_percentage", 0.0),
+                "was_profitable": trade_outcome.get("was_profitable", False),
+                "duration_hours": trade_outcome.get("holding_period_hours", 0.0),
+                "position_size": trade_outcome.get("position_size", 0.0),
+                "entry_price": trade_outcome.get("entry_price", 0.0),
+                "exit_price": trade_outcome.get("exit_price", 0.0),
+                "asset_pair": trade_outcome.get("asset_pair", "UNKNOWN"),
+            }
+        )
 
         # Update equity curve
         if not self.equity_curve:
-            self.initial_balance = trade_outcome.get('initial_balance', 10000.0)
+            self.initial_balance = trade_outcome.get("initial_balance", 10000.0)
             self.equity_curve.append(self.initial_balance)
 
-        current_equity = self.equity_curve[-1] + trade_outcome.get('realized_pnl', 0.0)
+        current_equity = self.equity_curve[-1] + trade_outcome.get("realized_pnl", 0.0)
         self.equity_curve.append(current_equity)
 
-    def calculate_metrics(self, window_days: Optional[int] = None) -> TradingPerformanceMetrics:
+    def calculate_metrics(
+        self, window_days: Optional[int] = None
+    ) -> TradingPerformanceMetrics:
         """
         Calculate comprehensive performance metrics.
 
@@ -145,7 +150,7 @@ class PerformanceMetricsCollector:
         # Filter by time window if specified
         if window_days:
             cutoff_time = datetime.utcnow() - timedelta(days=window_days)
-            trades = [t for t in self.trade_history if t['timestamp'] >= cutoff_time]
+            trades = [t for t in self.trade_history if t["timestamp"] >= cutoff_time]
         else:
             trades = list(self.trade_history)
 
@@ -168,20 +173,25 @@ class PerformanceMetricsCollector:
         var_99 = self._calculate_var(trades, confidence=0.99)
 
         # Win/Loss metrics
-        profitable_trades = [t for t in trades if t['was_profitable']]
-        losing_trades = [t for t in trades if not t['was_profitable']]
+        profitable_trades = [t for t in trades if t["was_profitable"]]
+        losing_trades = [t for t in trades if not t["was_profitable"]]
 
         win_rate = len(profitable_trades) / len(trades) if trades else 0.0
-        avg_win = np.mean([t['pnl'] for t in profitable_trades]) if profitable_trades else 0.0
-        avg_loss = np.mean([abs(t['pnl']) for t in losing_trades]) if losing_trades else 0.0
-
-        profit_factor = (
-            sum(t['pnl'] for t in profitable_trades) / sum(abs(t['pnl']) for t in losing_trades)
-            if losing_trades and sum(abs(t['pnl']) for t in losing_trades) > 0
-            else float('inf') if profitable_trades else 0.0
+        avg_win = (
+            np.mean([t["pnl"] for t in profitable_trades]) if profitable_trades else 0.0
+        )
+        avg_loss = (
+            np.mean([abs(t["pnl"]) for t in losing_trades]) if losing_trades else 0.0
         )
 
-        win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else float('inf')
+        profit_factor = (
+            sum(t["pnl"] for t in profitable_trades)
+            / sum(abs(t["pnl"]) for t in losing_trades)
+            if losing_trades and sum(abs(t["pnl"]) for t in losing_trades) > 0
+            else float("inf") if profitable_trades else 0.0
+        )
+
+        win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else float("inf")
 
         # Streaks
         longest_win_streak, longest_lose_streak = self._calculate_streaks(trades)
@@ -192,10 +202,12 @@ class PerformanceMetricsCollector:
         losing_months = sum(1 for r in monthly_returns if r < 0)
 
         # Trade statistics
-        avg_duration = np.mean([t['duration_hours'] for t in trades]) if trades else 0.0
+        avg_duration = np.mean([t["duration_hours"] for t in trades]) if trades else 0.0
 
         # Calmar ratio
-        calmar_ratio = annualized_return / abs(max_drawdown) if max_drawdown != 0 else 0.0
+        calmar_ratio = (
+            annualized_return / abs(max_drawdown) if max_drawdown != 0 else 0.0
+        )
 
         return TradingPerformanceMetrics(
             total_return=total_return,
@@ -214,8 +226,8 @@ class PerformanceMetricsCollector:
             avg_win=avg_win,
             avg_loss=avg_loss,
             win_loss_ratio=win_loss_ratio,
-            largest_win=max([t['pnl'] for t in trades]) if trades else 0.0,
-            largest_loss=min([t['pnl'] for t in trades]) if trades else 0.0,
+            largest_win=max([t["pnl"] for t in trades]) if trades else 0.0,
+            largest_loss=min([t["pnl"] for t in trades]) if trades else 0.0,
             total_trades=len(trades),
             profitable_trades=len(profitable_trades),
             losing_trades=len(losing_trades),
@@ -224,7 +236,7 @@ class PerformanceMetricsCollector:
             winning_months=winning_months,
             losing_months=losing_months,
             longest_winning_streak=longest_win_streak,
-            longest_losing_streak=longest_lose_streak
+            longest_losing_streak=longest_lose_streak,
         )
 
     def _calculate_total_return(self) -> float:
@@ -237,15 +249,17 @@ class PerformanceMetricsCollector:
 
         return ((final - initial) / initial) * 100 if initial > 0 else 0.0
 
-    def _calculate_annualized_return(self, total_return: float, trades: List[Dict]) -> float:
+    def _calculate_annualized_return(
+        self, total_return: float, trades: List[Dict]
+    ) -> float:
         """Calculate annualized return."""
         if not trades or len(trades) < 2:
             return 0.0
 
-        first_trade = min(trades, key=lambda x: x['timestamp'])
-        last_trade = max(trades, key=lambda x: x['timestamp'])
+        first_trade = min(trades, key=lambda x: x["timestamp"])
+        last_trade = max(trades, key=lambda x: x["timestamp"])
 
-        days = (last_trade['timestamp'] - first_trade['timestamp']).days
+        days = (last_trade["timestamp"] - first_trade["timestamp"]).days
 
         if days == 0:
             return 0.0
@@ -260,7 +274,7 @@ class PerformanceMetricsCollector:
         if not trades:
             return 0.0
 
-        returns = [t['pnl_pct'] for t in trades]
+        returns = [t["pnl_pct"] for t in trades]
 
         mean_return = np.mean(returns)
         std_return = np.std(returns)
@@ -278,12 +292,12 @@ class PerformanceMetricsCollector:
         if not trades:
             return 0.0
 
-        returns = [t['pnl_pct'] for t in trades]
+        returns = [t["pnl_pct"] for t in trades]
         mean_return = np.mean(returns)
 
         downside_returns = [r for r in returns if r < 0]
         if not downside_returns:
-            return float('inf') if mean_return > 0 else 0.0
+            return float("inf") if mean_return > 0 else 0.0
 
         downside_std = np.std(downside_returns)
 
@@ -332,7 +346,7 @@ class PerformanceMetricsCollector:
         if not trades:
             return 0.0
 
-        returns = [t['pnl_pct'] for t in trades]
+        returns = [t["pnl_pct"] for t in trades]
         std = np.std(returns)
 
         # Annualize
@@ -345,7 +359,7 @@ class PerformanceMetricsCollector:
         if not trades:
             return 0.0
 
-        returns = [t['pnl_pct'] for t in trades]
+        returns = [t["pnl_pct"] for t in trades]
         downside_returns = [r for r in returns if r < 0]
 
         if not downside_returns:
@@ -363,7 +377,7 @@ class PerformanceMetricsCollector:
         if not trades:
             return 0.0
 
-        returns = [t['pnl'] for t in trades]
+        returns = [t["pnl"] for t in trades]
 
         var = np.percentile(returns, (1 - confidence) * 100)
 
@@ -379,8 +393,8 @@ class PerformanceMetricsCollector:
         max_win_streak = 0
         max_lose_streak = 0
 
-        for trade in sorted(trades, key=lambda x: x['timestamp']):
-            if trade['was_profitable']:
+        for trade in sorted(trades, key=lambda x: x["timestamp"]):
+            if trade["was_profitable"]:
                 current_win_streak += 1
                 current_lose_streak = 0
                 max_win_streak = max(max_win_streak, current_win_streak)
@@ -400,11 +414,11 @@ class PerformanceMetricsCollector:
         monthly_pnl = {}
 
         for trade in trades:
-            month_key = trade['timestamp'].strftime('%Y-%m')
+            month_key = trade["timestamp"].strftime("%Y-%m")
             if month_key not in monthly_pnl:
                 monthly_pnl[month_key] = 0.0
 
-            monthly_pnl[month_key] += trade['pnl']
+            monthly_pnl[month_key] += trade["pnl"]
 
         # Convert to percentage returns (simplified)
         monthly_returns = []
@@ -446,7 +460,7 @@ class RollingMetricsCalculator:
         if not trades:
             return 0.0
 
-        profitable = sum(1 for t in trades if t['was_profitable'])
+        profitable = sum(1 for t in trades if t["was_profitable"])
         return profitable / len(trades)
 
     def calculate_current_drawdown(self) -> float:

@@ -1,7 +1,7 @@
 """Oanda trading platform integration."""
 
-from typing import Any, Dict, List, Optional
 import logging
+from typing import Any, Dict, List, Optional
 
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 
@@ -33,19 +33,17 @@ class OandaPlatform(BaseTradingPlatform):
         """
         super().__init__(credentials)
         # Support both 'access_token' and 'api_key' for flexibility
-        self.api_key = (
-            credentials.get('access_token') or credentials.get('api_key')
-        )
-        self.account_id = credentials.get('account_id')
-        self.environment = credentials.get('environment', 'practice')
+        self.api_key = credentials.get("access_token") or credentials.get("api_key")
+        self.account_id = credentials.get("account_id")
+        self.environment = credentials.get("environment", "practice")
 
         # Set base URL based on environment
-        if credentials.get('base_url'):
-            self.base_url = credentials['base_url']
+        if credentials.get("base_url"):
+            self.base_url = credentials["base_url"]
         else:
             self.base_url = (
                 "https://api-fxpractice.oanda.com"
-                if self.environment == 'practice'
+                if self.environment == "practice"
                 else "https://api-fxtrade.oanda.com"
             )
 
@@ -55,7 +53,7 @@ class OandaPlatform(BaseTradingPlatform):
         logger.info(
             "Oanda platform initialized (%s environment, base_url=%s)",
             self.environment,
-            self.base_url
+            self.base_url,
         )
 
     def _get_client(self):
@@ -71,19 +69,14 @@ class OandaPlatform(BaseTradingPlatform):
 
                 # Initialize client with API token and environment
                 self._client = API(
-                    access_token=self.api_key,
-                    environment=self.environment
+                    access_token=self.api_key, environment=self.environment
                 )
                 logger.info("Oanda API client initialized")
             except ImportError:
                 logger.warning(
-                    "oandapyV20 not installed. "
-                    "Install with: pip install oandapyV20"
+                    "oandapyV20 not installed. " "Install with: pip install oandapyV20"
                 )
-                raise ValueError(
-                    "Oanda library not available. "
-                    "Install oandapyV20"
-                )
+                raise ValueError("Oanda library not available. " "Install oandapyV20")
             except Exception as e:
                 logger.error("Failed to initialize Oanda client: %s", e)
                 raise
@@ -111,31 +104,25 @@ class OandaPlatform(BaseTradingPlatform):
             request = AccountSummary(accountID=self.account_id)
             response = client.request(request)
 
-            if 'account' in response:
-                account = response['account']
+            if "account" in response:
+                account = response["account"]
 
                 # Get base currency balance
-                currency = account.get('currency', 'USD')
-                balance = float(account.get('balance', 0))
+                currency = account.get("currency", "USD")
+                balance = float(account.get("balance", 0))
 
                 if balance > 0:
                     balances[currency] = balance
-                    logger.info(
-                        "Oanda balance: %.2f %s",
-                        balance,
-                        currency
-                    )
+                    logger.info("Oanda balance: %.2f %s", balance, currency)
 
             return balances
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. "
-                "Install with: pip install oandapyV20"
+                "Oanda library not installed. " "Install with: pip install oandapyV20"
             )
             raise ValueError(
-                "Oanda library required for real data. "
-                "Please install oandapyV20"
+                "Oanda library required for real data. " "Please install oandapyV20"
             )
         except Exception as e:
             logger.error("Error fetching Oanda balances: %s", e)
@@ -169,6 +156,7 @@ class OandaPlatform(BaseTradingPlatform):
         try:
             from oandapyV20.endpoints.accounts import AccountDetails
             from oandapyV20.endpoints.positions import OpenPositions
+
             # Instruments endpoint provides marginRate per instrument
             # Instruments import removed; some oandapyV20 versions differ
             # in constructor signatures and may raise instantiation errors.
@@ -178,12 +166,12 @@ class OandaPlatform(BaseTradingPlatform):
             # Get account details
             account_request = AccountDetails(accountID=self.account_id)
             account_response = client.request(account_request)
-            account = account_response.get('account', {})
+            account = account_response.get("account", {})
 
             # Get open positions
             positions_request = OpenPositions(accountID=self.account_id)
             positions_response = client.request(positions_request)
-            positions_data = positions_response.get('positions', [])
+            positions_data = positions_response.get("positions", [])
 
             # NOTE: Some oandapyV20 Instruments endpoints can be awkward to
             # instantiate across versions. To avoid compatibility issues,
@@ -194,69 +182,70 @@ class OandaPlatform(BaseTradingPlatform):
             # or by falling back to a default leverage estimate.
 
             # Parse account info
-            base_currency = account.get('currency', 'USD')
-            balance = float(account.get('balance', 0))
-            unrealized_pl = float(account.get('unrealizedPL', 0))
-            margin_used = float(account.get('marginUsed', 0))
-            margin_available = float(account.get('marginAvailable', 0))
-            nav = float(account.get('NAV', balance))
+            base_currency = account.get("currency", "USD")
+            balance = float(account.get("balance", 0))
+            unrealized_pl = float(account.get("unrealizedPL", 0))
+            margin_used = float(account.get("marginUsed", 0))
+            margin_available = float(account.get("marginAvailable", 0))
+            nav = float(account.get("NAV", balance))
 
             # Parse positions
             positions = []
             holdings_map = {}  # Track net exposure per currency
 
             for pos in positions_data:
-                instrument = pos.get('instrument', 'UNKNOWN')
+                instrument = pos.get("instrument", "UNKNOWN")
 
                 # Parse long position
-                long_pos = pos.get('long', {})
-                long_units = float(long_pos.get('units', 0))
-                long_pl = float(long_pos.get('unrealizedPL', 0))
+                long_pos = pos.get("long", {})
+                long_units = float(long_pos.get("units", 0))
+                long_pl = float(long_pos.get("unrealizedPL", 0))
 
                 # Parse short position
-                short_pos = pos.get('short', {})
-                short_units = float(short_pos.get('units', 0))
-                short_pl = float(short_pos.get('unrealizedPL', 0))
+                short_pos = pos.get("short", {})
+                short_units = float(short_pos.get("units", 0))
+                short_pl = float(short_pos.get("unrealizedPL", 0))
 
                 # Net position
                 net_units = long_units + short_units
                 net_pl = long_pl + short_pl
 
                 if net_units != 0:
-                    position_type = 'LONG' if net_units > 0 else 'SHORT'
+                    position_type = "LONG" if net_units > 0 else "SHORT"
                     # Use averagePrice from the dominant side
                     if abs(long_units) >= abs(short_units):
-                        average_price = float(long_pos.get('averagePrice', 0) or 0)
+                        average_price = float(long_pos.get("averagePrice", 0) or 0)
                     else:
-                        average_price = float(short_pos.get('averagePrice', 0) or 0)
+                        average_price = float(short_pos.get("averagePrice", 0) or 0)
                     # current_price must come from pricing endpoint (already fetched below)
                     current_price = 0.0  # Will be populated from price_map if needed
-                    opened_at: Optional[str] = pos.get('openTime')
+                    opened_at: Optional[str] = pos.get("openTime")
                     position_id = (
-                        pos.get('id')
-                        or f"{instrument}_{position_type.lower()}"
+                        pos.get("id") or f"{instrument}_{position_type.lower()}"
                     )
 
-                    positions.append({
-                        'id': str(position_id),
-                        'instrument': instrument,
-                        'units': net_units,
-                        'entry_price': average_price,
-                        'current_price': current_price,
-                        'pnl': net_pl,
-                        'opened_at': opened_at,
-                        'position_type': position_type,
-                        'unrealized_pl': net_pl,
-                        'long_units': long_units,
-                        'short_units': abs(short_units),
-                        'long_pl': long_pl,
-                        'short_pl': short_pl
-                    })
+                    positions.append(
+                        {
+                            "id": str(position_id),
+                            "instrument": instrument,
+                            "units": net_units,
+                            "entry_price": average_price,
+                            "current_price": current_price,
+                            "pnl": net_pl,
+                            "opened_at": opened_at,
+                            "position_type": position_type,
+                            "unrealized_pl": net_pl,
+                            "long_units": long_units,
+                            "short_units": abs(short_units),
+                            "long_pl": long_pl,
+                            "short_pl": short_pl,
+                        }
+                    )
 
                     # Track currency exposure (simplified)
                     # Extract base and quote currencies
-                    if '_' in instrument:
-                        base, quote = instrument.split('_')
+                    if "_" in instrument:
+                        base, quote = instrument.split("_")
 
                         # Add to holdings map
                         if base not in holdings_map:
@@ -273,7 +262,7 @@ class OandaPlatform(BaseTradingPlatform):
             # Build set of instruments to request pricing for
             instrument_set = set()
             for p in positions:
-                instr = p.get('instrument')
+                instr = p.get("instrument")
                 if instr:
                     instrument_set.add(instr)
 
@@ -281,8 +270,8 @@ class OandaPlatform(BaseTradingPlatform):
             # the account base currency (e.g., convert JPY -> USD)
             conversion_candidates = set()
             for instr in list(instrument_set):
-                if '_' in instr:
-                    base, quote = instr.split('_')
+                if "_" in instr:
+                    base, quote = instr.split("_")
                     if quote != base_currency:
                         # Try both directions; we'll use whichever pricing
                         # instrument is available and invert if needed.
@@ -290,12 +279,8 @@ class OandaPlatform(BaseTradingPlatform):
                         conversion_candidates.add(f"{base_currency}_{quote}")
 
             # Merge instrument lists and remove any empties
-            all_request_instruments = list(
-                instrument_set.union(conversion_candidates)
-            )
-            all_request_instruments = [
-                i for i in all_request_instruments if i
-            ]
+            all_request_instruments = list(instrument_set.union(conversion_candidates))
+            all_request_instruments = [i for i in all_request_instruments if i]
 
             price_map = {}
             try:
@@ -303,32 +288,30 @@ class OandaPlatform(BaseTradingPlatform):
                 if all_request_instruments:
                     from oandapyV20.endpoints.pricing import PricingInfo
 
-                    params = {
-                        "instruments": ",".join(all_request_instruments)
-                    }
+                    params = {"instruments": ",".join(all_request_instruments)}
                     pricing_request = PricingInfo(
                         accountID=self.account_id, params=params
                     )
                     pricing_response = client.request(pricing_request)
 
                     # Build price map using mid-price of bid/ask
-                    for p in pricing_response.get('prices', []):
-                        instr = p.get('instrument')
-                        bids = p.get('bids', [])
-                        asks = p.get('asks', [])
+                    for p in pricing_response.get("prices", []):
+                        instr = p.get("instrument")
+                        bids = p.get("bids", [])
+                        asks = p.get("asks", [])
                         mid = None
                         try:
                             if bids and asks:
-                                bid = float(bids[0].get('price'))
-                                ask = float(asks[0].get('price'))
+                                bid = float(bids[0].get("price"))
+                                ask = float(asks[0].get("price"))
                                 mid = (bid + ask) / 2.0
                             else:
                                 # Fallback to closeout prices if present. Do
                                 # not assume an arbitrary price of 1.0 — set
                                 # to None so missing pricing is observable
                                 # downstream.
-                                cb = p.get('closeoutBid')
-                                ca = p.get('closeoutAsk')
+                                cb = p.get("closeoutBid")
+                                ca = p.get("closeoutAsk")
                                 if cb is not None or ca is not None:
                                     try:
                                         mid = float(cb or ca)
@@ -351,11 +334,12 @@ class OandaPlatform(BaseTradingPlatform):
                                         {
                                             k: v
                                             for k, v in p.items()
-                                            if k in (
-                                                'bids',
-                                                'asks',
-                                                'closeoutBid',
-                                                'closeoutAsk',
+                                            if k
+                                            in (
+                                                "bids",
+                                                "asks",
+                                                "closeoutBid",
+                                                "closeoutAsk",
                                             )
                                         },
                                     )
@@ -371,11 +355,12 @@ class OandaPlatform(BaseTradingPlatform):
                                 {
                                     k: v
                                     for k, v in p.items()
-                                    if k in (
-                                        'bids',
-                                        'asks',
-                                        'closeoutBid',
-                                        'closeoutAsk',
+                                    if k
+                                    in (
+                                        "bids",
+                                        "asks",
+                                        "closeoutBid",
+                                        "closeoutAsk",
                                     )
                                 },
                             )
@@ -384,10 +369,7 @@ class OandaPlatform(BaseTradingPlatform):
                         if instr and mid is not None:
                             price_map[instr] = mid
             except Exception as e:
-                logger.warning(
-                    "Could not fetch live pricing for instruments: %s",
-                    e
-                )
+                logger.warning("Could not fetch live pricing for instruments: %s", e)
 
             # Compute per-position notional (in quote currency) and convert
             # to account base currency (usually USD) using price_map.
@@ -395,8 +377,8 @@ class OandaPlatform(BaseTradingPlatform):
             position_usd_values = []  # tuples of (instr, units, usd_value)
 
             for p in positions:
-                instr = p.get('instrument')
-                units = float(p.get('units', 0))
+                instr = p.get("instrument")
+                units = float(p.get("units", 0))
                 price = price_map.get(instr)
 
                 # notional is in quote currency (price is quote per base)
@@ -413,8 +395,8 @@ class OandaPlatform(BaseTradingPlatform):
 
                 # If the quote currency matches account base, we're done
                 usd_value = None
-                if '_' in instr:
-                    base, quote = instr.split('_')
+                if "_" in instr:
+                    base, quote = instr.split("_")
                     if quote == base_currency:
                         usd_value = notional_in_quote
                     else:
@@ -428,9 +410,7 @@ class OandaPlatform(BaseTradingPlatform):
                         elif inverse in price_map and price_map.get(inverse):
                             conv_rate_inv = price_map[inverse]
                             try:
-                                usd_value = (
-                                    notional_in_quote * (1.0 / conv_rate_inv)
-                                )
+                                usd_value = notional_in_quote * (1.0 / conv_rate_inv)
                             except Exception:
                                 usd_value = None
 
@@ -439,24 +419,18 @@ class OandaPlatform(BaseTradingPlatform):
                 if usd_value is None:
                     # If account reports margin_used, allocate proportionally
                     # otherwise derive margin exposure using a default leverage
-                    usd_value = (notional_in_quote / default_leverage)
+                    usd_value = notional_in_quote / default_leverage
 
                 position_usd_values.append((instr, units, usd_value))
 
             # Allocate margin_used proportionally across positions if available
             if margin_used and any(v for (_, _, v) in position_usd_values):
-                total_notional = sum(
-                    abs(v) for (_, _, v) in position_usd_values
-                )
+                total_notional = sum(abs(v) for (_, _, v) in position_usd_values)
                 if total_notional > 0:
                     # Scale to margin_used
                     scaled = []
                     for instr, units, usd_val in position_usd_values:
-                        prop = (
-                            (abs(usd_val) / total_notional)
-                            if total_notional
-                            else 0
-                        )
+                        prop = (abs(usd_val) / total_notional) if total_notional else 0
                         scaled_val = prop * margin_used
                         scaled.append((instr, units, scaled_val))
                     position_usd_values = scaled
@@ -468,37 +442,39 @@ class OandaPlatform(BaseTradingPlatform):
                 except Exception:
                     v = 0.0
                 total_exposure_usd += v
-                holdings.append({
-                    'asset': instr,
-                    'amount': units,
-                    'value_usd': v,
-                    'allocation_pct': 0
-                })
+                holdings.append(
+                    {
+                        "asset": instr,
+                        "amount": units,
+                        "value_usd": v,
+                        "allocation_pct": 0,
+                    }
+                )
 
             # Calculate allocation percentages
             if total_exposure_usd > 0:
                 for holding in holdings:
-                    holding['allocation_pct'] = (
-                        holding['value_usd'] / total_exposure_usd * 100
+                    holding["allocation_pct"] = (
+                        holding["value_usd"] / total_exposure_usd * 100
                     )
 
             # Build portfolio summary
             portfolio = {
-                'total_value_usd': nav,
-                'num_assets': len(holdings),
-                'base_currency': base_currency,
-                'balance': balance,
-                'unrealized_pl': unrealized_pl,
+                "total_value_usd": nav,
+                "num_assets": len(holdings),
+                "base_currency": base_currency,
+                "balance": balance,
+                "unrealized_pl": unrealized_pl,
                 # Alias to keep naming consistent with other platforms.
-                'unrealized_pnl': unrealized_pl,
-                'margin_used': margin_used,
-                'margin_available': margin_available,
-                'nav': nav,
-                'positions': positions,
-                'holdings': holdings,
-                'platform': 'oanda',
-                'account_id': self.account_id,
-                'environment': self.environment
+                "unrealized_pnl": unrealized_pl,
+                "margin_used": margin_used,
+                "margin_available": margin_available,
+                "nav": nav,
+                "positions": positions,
+                "holdings": holdings,
+                "platform": "oanda",
+                "account_id": self.account_id,
+                "environment": self.environment,
             }
 
             logger.info(
@@ -506,28 +482,25 @@ class OandaPlatform(BaseTradingPlatform):
                 nav,
                 base_currency,
                 len(positions),
-                len(holdings)
+                len(holdings),
             )
 
             return portfolio
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. "
-                "Install with: pip install oandapyV20"
+                "Oanda library not installed. " "Install with: pip install oandapyV20"
             )
-            raise ValueError(
-                "Oanda library required. Please install oandapyV20"
-            )
+            raise ValueError("Oanda library required. Please install oandapyV20")
         except Exception as e:
             logger.error("Error fetching Oanda portfolio: %s", e)
             # Return minimal portfolio on error
             return {
-                'total_value_usd': 0,
-                'num_assets': 0,
-                'positions': [],
-                'holdings': [],
-                'error': str(e)
+                "total_value_usd": 0,
+                "num_assets": 0,
+                "positions": [],
+                "holdings": [],
+                "error": str(e),
             }
 
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -546,16 +519,16 @@ class OandaPlatform(BaseTradingPlatform):
         """
         logger.info(f"Executing trade on Oanda: {decision}")
 
-        action = decision.get('action', 'HOLD')
+        action = decision.get("action", "HOLD")
 
-        if action == 'HOLD':
+        if action == "HOLD":
             return {
-                'success': True,
-                'platform': 'oanda',
-                'decision_id': decision.get('id'),
-                'environment': self.environment,
-                'message': 'HOLD - no trade executed',
-                'timestamp': decision.get('timestamp')
+                "success": True,
+                "platform": "oanda",
+                "decision_id": decision.get("id"),
+                "environment": self.environment,
+                "message": "HOLD - no trade executed",
+                "timestamp": decision.get("timestamp"),
             }
 
         try:
@@ -564,33 +537,33 @@ class OandaPlatform(BaseTradingPlatform):
             client = self._get_client()
 
             # Parse decision parameters
-            asset_pair = decision.get('asset_pair', '')
+            asset_pair = decision.get("asset_pair", "")
             # Convert to Oanda format (e.g., EURUSD -> EUR_USD)
-            if '_' not in asset_pair and len(asset_pair) == 6:
+            if "_" not in asset_pair and len(asset_pair) == 6:
                 instrument = f"{asset_pair[:3]}_{asset_pair[3:]}"
             else:
                 instrument = asset_pair
 
-            units = decision.get('recommended_position_size', 1000)
-            entry_price = decision.get('entry_price', 0)
-            stop_loss_pct = decision.get('stop_loss_percentage', 0.02)
+            units = decision.get("recommended_position_size", 1000)
+            entry_price = decision.get("entry_price", 0)
+            stop_loss_pct = decision.get("stop_loss_percentage", 0.02)
 
             # Determine order direction
-            if action == 'BUY':
+            if action == "BUY":
                 order_units = abs(units)
-            elif action == 'SELL':
+            elif action == "SELL":
                 order_units = -abs(units)
             else:
                 return {
-                    'success': False,
-                    'platform': 'oanda',
-                    'error': f"Unknown action: {action}"
+                    "success": False,
+                    "platform": "oanda",
+                    "error": f"Unknown action: {action}",
                 }
 
             # Calculate stop loss price
             stop_loss_price = None
             if entry_price > 0:
-                if action == 'BUY':
+                if action == "BUY":
                     stop_loss_price = entry_price * (1 - stop_loss_pct)
                 else:
                     stop_loss_price = entry_price * (1 + stop_loss_pct)
@@ -602,7 +575,7 @@ class OandaPlatform(BaseTradingPlatform):
                     "instrument": instrument,
                     "units": str(int(order_units)),
                     "timeInForce": "FOK",  # Fill or Kill
-                    "positionFill": "DEFAULT"
+                    "positionFill": "DEFAULT",
                 }
             }
 
@@ -613,72 +586,75 @@ class OandaPlatform(BaseTradingPlatform):
                 }
 
             # Execute order
-            order_request = OrderCreate(
-                accountID=self.account_id,
-                data=order_data
-            )
+            order_request = OrderCreate(accountID=self.account_id, data=order_data)
             response = client.request(order_request)
 
             # Check for API-level errors in the response
-            if 'errorMessage' in response or 'orderRejectTransaction' in response:
-                error_message = response.get('errorMessage', response.get('orderRejectTransaction', {}).get('rejectReason', 'Unknown error'))
+            if "errorMessage" in response or "orderRejectTransaction" in response:
+                error_message = response.get(
+                    "errorMessage",
+                    response.get("orderRejectTransaction", {}).get(
+                        "rejectReason", "Unknown error"
+                    ),
+                )
                 logger.error(f"Oanda API returned an error: {error_message}")
                 return {
-                    'success': False,
-                    'platform': 'oanda',
-                    'decision_id': decision.get('id'),
-                    'error': error_message,
-                    'timestamp': decision.get('timestamp')
+                    "success": False,
+                    "platform": "oanda",
+                    "decision_id": decision.get("id"),
+                    "error": error_message,
+                    "timestamp": decision.get("timestamp"),
                 }
 
             # Parse response
-            order_fill = response.get('orderFillTransaction', {})
-            order_create = response.get('orderCreateTransaction', {})
+            order_fill = response.get("orderFillTransaction", {})
+            order_create = response.get("orderCreateTransaction", {})
 
             # If neither fill nor create transaction is present, assume failure
             if not order_fill and not order_create:
-                logger.error(f"Oanda trade execution failed: No fill or create transaction in response. Full response: {response}")
+                logger.error(
+                    f"Oanda trade execution failed: No fill or create transaction in response. Full response: {response}"
+                )
                 return {
-                    'success': False,
-                    'platform': 'oanda',
-                    'decision_id': decision.get('id'),
-                    'error': 'No order fill or create transaction found in response.',
-                    'response': response
+                    "success": False,
+                    "platform": "oanda",
+                    "decision_id": decision.get("id"),
+                    "error": "No order fill or create transaction found in response.",
+                    "response": response,
                 }
 
             return {
-                'success': True,
-                'platform': 'oanda',
-                'decision_id': decision.get('id'),
-                'environment': self.environment,
-                'instrument': instrument,
-                'units': order_units,
-                'order_id': order_fill.get('id', order_create.get('id')),
-                'price': float(order_fill.get('price', 0)),
-                'pl': float(order_fill.get('pl', 0)),
-                'timestamp': decision.get('timestamp'),
-                'message': 'Trade executed successfully',
-                'response': response
+                "success": True,
+                "platform": "oanda",
+                "decision_id": decision.get("id"),
+                "environment": self.environment,
+                "instrument": instrument,
+                "units": order_units,
+                "order_id": order_fill.get("id", order_create.get("id")),
+                "price": float(order_fill.get("price", 0)),
+                "pl": float(order_fill.get("pl", 0)),
+                "timestamp": decision.get("timestamp"),
+                "message": "Trade executed successfully",
+                "response": response,
             }
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. "
-                "Install with: pip install oandapyV20"
+                "Oanda library not installed. " "Install with: pip install oandapyV20"
             )
             return {
-                'success': False,
-                'platform': 'oanda',
-                'error': 'Oanda library not installed'
+                "success": False,
+                "platform": "oanda",
+                "error": "Oanda library not installed",
             }
         except Exception as e:
             logger.error("Error executing Oanda trade: %s", e)
             return {
-                'success': False,
-                'platform': 'oanda',
-                'decision_id': decision.get('id'),
-                'error': str(e),
-                'timestamp': decision.get('timestamp')
+                "success": False,
+                "platform": "oanda",
+                "decision_id": decision.get("id"),
+                "error": str(e),
+                "timestamp": decision.get("timestamp"),
             }
 
     def get_active_positions(self) -> PositionsResponse:
@@ -691,8 +667,8 @@ class OandaPlatform(BaseTradingPlatform):
         """
         logger.info("Fetching active positions from Oanda")
         portfolio = self.get_portfolio_breakdown()
-        positions: List[PositionInfo] = portfolio.get('positions', [])
-        return {'positions': positions}
+        positions: List[PositionInfo] = portfolio.get("positions", [])
+        return {"positions": positions}
 
     def get_account_info(self) -> Dict[str, Any]:
         """
@@ -712,51 +688,50 @@ class OandaPlatform(BaseTradingPlatform):
             request = AccountDetails(accountID=self.account_id)
             response = client.request(request)
 
-            account = response.get('account', {})
+            account = response.get("account", {})
 
             # Calculate effective leverage from margin rate
-            margin_rate = float(account.get('marginRate', 0.02))
+            margin_rate = float(account.get("marginRate", 0.02))
             effective_leverage = 1.0 / margin_rate if margin_rate > 0 else 50.0
 
             return {
-                'platform': 'oanda',
-                'account_id': self.account_id,
-                'environment': self.environment,
-                'account_type': 'forex',
-                'currency': account.get('currency', 'USD'),
-                'balance': float(account.get('balance', 0)),
-                'nav': float(account.get('NAV', 0)),
-                'unrealized_pl': float(account.get('unrealizedPL', 0)),
-                'margin_used': float(account.get('marginUsed', 0)),
-                'margin_available': float(account.get('marginAvailable', 0)),
-                'margin_rate': margin_rate,
-                'max_leverage': effective_leverage,  # Dynamically calculated from margin_rate
-                'open_trade_count': int(account.get('openTradeCount', 0)),
-                'open_position_count': int(account.get('openPositionCount', 0)),
-                'status': 'active',
-                'balances': self.get_balance()
+                "platform": "oanda",
+                "account_id": self.account_id,
+                "environment": self.environment,
+                "account_type": "forex",
+                "currency": account.get("currency", "USD"),
+                "balance": float(account.get("balance", 0)),
+                "nav": float(account.get("NAV", 0)),
+                "unrealized_pl": float(account.get("unrealizedPL", 0)),
+                "margin_used": float(account.get("marginUsed", 0)),
+                "margin_available": float(account.get("marginAvailable", 0)),
+                "margin_rate": margin_rate,
+                "max_leverage": effective_leverage,  # Dynamically calculated from margin_rate
+                "open_trade_count": int(account.get("openTradeCount", 0)),
+                "open_position_count": int(account.get("openPositionCount", 0)),
+                "status": "active",
+                "balances": self.get_balance(),
             }
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. "
-                "Install with: pip install oandapyV20"
+                "Oanda library not installed. " "Install with: pip install oandapyV20"
             )
             # Return mock data as fallback
             return {
-                'platform': 'oanda',
-                'account_id': self.account_id,
-                'environment': self.environment,
-                'account_type': 'forex',
-                'status': 'library_not_installed',
-                'error': 'Install oandapyV20 for real data',
-                'balances': {}
+                "platform": "oanda",
+                "account_id": self.account_id,
+                "environment": self.environment,
+                "account_type": "forex",
+                "status": "library_not_installed",
+                "error": "Install oandapyV20 for real data",
+                "balances": {},
             }
         except Exception as e:
             logger.error("Error fetching Oanda account info: %s", e)
             return {
-                'platform': 'oanda',
-                'account_id': self.account_id,
-                'environment': self.environment,
-                'error': str(e)
+                "platform": "oanda",
+                "account_id": self.account_id,
+                "environment": self.environment,
+                "error": str(e),
             }

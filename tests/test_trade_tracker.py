@@ -1,6 +1,8 @@
 """Tests for finance_feedback_engine.monitoring.trade_tracker module."""
-import pytest
+
 from unittest.mock import Mock
+
+import pytest
 
 from finance_feedback_engine.monitoring.trade_tracker import TradeTrackerThread
 
@@ -24,7 +26,7 @@ class TestTradeTrackerThread:
             "entry_price": 100.0,
             "position_size": 1.0,
             "stop_loss": 95.0,
-            "take_profit": 110.0
+            "take_profit": 110.0,
         }
 
     @pytest.fixture
@@ -39,14 +41,14 @@ class TestTradeTrackerThread:
             trade_id="test_trade_123",
             position_data=position_data,
             platform=mock_platform,
-            metrics_callback=metrics_callback
+            metrics_callback=metrics_callback,
         )
 
     def test_init(self, tracker):
         """Test TradeTrackerThread initialization."""
         assert tracker is not None
-        assert hasattr(tracker, 'start')
-        assert hasattr(tracker, 'stop')
+        assert hasattr(tracker, "start")
+        assert hasattr(tracker, "stop")
 
     def test_start_tracking(self, tracker):
         """Test starting the tracker thread."""
@@ -75,7 +77,7 @@ class TestTradeTrackerThread:
 
     def test_is_running_property(self, tracker):
         """Test the is_running property."""
-        assert hasattr(tracker, 'is_running')
+        assert hasattr(tracker, "is_running")
         # Initially should be False
         assert tracker.is_running in [True, False]
 
@@ -98,16 +100,16 @@ class TestPositionTracking:
             "entry_price": 100.0,
             "position_size": 1.0,
             "stop_loss": 95.0,
-            "take_profit": 110.0
+            "take_profit": 110.0,
         }
-        
+
         tracker = TradeTrackerThread(
             trade_id="long_test",
             position_data=position_data,
             platform=mock_platform,
-            metrics_callback=Mock()
+            metrics_callback=Mock(),
         )
-        
+
         status = tracker.get_current_status()
         assert status is not None
         assert isinstance(status, dict)
@@ -120,16 +122,16 @@ class TestPositionTracking:
             "entry_price": 100.0,
             "position_size": 1.0,
             "stop_loss": 105.0,
-            "take_profit": 90.0
+            "take_profit": 90.0,
         }
-        
+
         tracker = TradeTrackerThread(
             trade_id="short_test",
             position_data=position_data,
             platform=mock_platform,
-            metrics_callback=Mock()
+            metrics_callback=Mock(),
         )
-        
+
         status = tracker.get_current_status()
         assert status is not None
         assert isinstance(status, dict)

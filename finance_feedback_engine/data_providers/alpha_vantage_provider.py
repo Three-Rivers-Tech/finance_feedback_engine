@@ -1,10 +1,11 @@
 """Alpha Vantage data provider module."""
 
-from typing import Dict, Any, Optional, Tuple, List
 import logging
-import aiohttp
-from aiohttp_retry import RetryClient, ExponentialRetry
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import aiohttp
+from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 class AlphaVantageProvider:
     """
     Data provider for Alpha Vantage Premium API.
-    
+
     Supports various asset types including cryptocurrencies and forex.
     """
 
@@ -22,11 +23,18 @@ class AlphaVantageProvider:
 
     def __post_init_session_lock(self):
         # Helper to ensure the session lock exists (for pickling/compatibility)
-        if not hasattr(self, '_session_lock'):
+        if not hasattr(self, "_session_lock"):
             import asyncio
+
             self._session_lock = asyncio.Lock()
 
-    def __init__(self, api_key: Optional[str] = None, config: Optional[Dict[str, Any]] = None, session: Optional[aiohttp.ClientSession] = None, rate_limiter: Optional[Any] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
+        session: Optional[aiohttp.ClientSession] = None,
+        rate_limiter: Optional[Any] = None,
+    ):
         """
         Initialize Alpha Vantage provider.
 
@@ -46,24 +54,24 @@ class AlphaVantageProvider:
         self.rate_limiter = rate_limiter
         self._owned_session = False
         import asyncio
+
         self._session_lock = asyncio.Lock()
         self._context_count = 0  # Track active async context manager entries
 
-        
         # Timeout configuration (industry best practice)
-        api_timeouts = self.config.get('api_timeouts', {})
-        self.timeout_market_data = api_timeouts.get('market_data', 10)
-        self.timeout_sentiment = api_timeouts.get('sentiment', 15)
-        self.timeout_macro = api_timeouts.get('macro', 10)
-        
+        api_timeouts = self.config.get("api_timeouts", {})
+        self.timeout_market_data = api_timeouts.get("market_data", 10)
+        self.timeout_sentiment = api_timeouts.get("sentiment", 15)
+        self.timeout_macro = api_timeouts.get("macro", 10)
+
         # Circuit breaker for API calls (prevent cascading failures)
         self.circuit_breaker = CircuitBreaker(
             failure_threshold=5,
             recovery_timeout=60.0,
             expected_exception=aiohttp.ClientError,
-            name="AlphaVantage-API"
+            name="AlphaVantage-API",
         )
-        
+
         logger.info(
             "Alpha Vantage provider initialized with timeouts: "
             f"market={self.timeout_market_data}s, "
@@ -116,18 +124,14 @@ class AlphaVantageProvider:
         if self.rate_limiter is not None:
             try:
                 # Prefer async context manager if available
-                if (
-                    hasattr(self.rate_limiter, "__aenter__")
-                    and hasattr(self.rate_limiter, "__aexit__")
+                if hasattr(self.rate_limiter, "__aenter__") and hasattr(
+                    self.rate_limiter, "__aexit__"
                 ):
                     # Use as async context manager for the whole request
                     async with self.rate_limiter:
-                        return await self._do_async_request(
-                            params, timeout
-                        )
-                elif (
-                    hasattr(self.rate_limiter, "acquire")
-                    and hasattr(self.rate_limiter, "release")
+                        return await self._do_async_request(params, timeout)
+                elif hasattr(self.rate_limiter, "acquire") and hasattr(
+                    self.rate_limiter, "release"
                 ):
                     # Semaphore-like interface: acquire before, release in finally
                     await self.rate_limiter.acquire()
@@ -201,7 +205,6 @@ class AlphaVantageProvider:
             if self.session is None:
                 self.session = aiohttp.ClientSession()
                 self._owned_session = True
-        
 
     async def get_market_data(self, asset_pair: str) -> Dict[str, Any]:
         """
@@ -212,20 +215,20 @@ class AlphaVantageProvider:
 
         Returns:
             Dictionary containing market data
-            
+
         Raises:
             CircuitBreakerOpenError: If circuit breaker is open
             ValueError: If data validation fails
         """
         logger.info("Fetching market data for %s", asset_pair)
-        
+
         try:
             # Determine asset type and fetch appropriate data
-            if 'BTC' in asset_pair or 'ETH' in asset_pair:
+            if "BTC" in asset_pair or "ETH" in asset_pair:
                 market_data = await self._get_crypto_data(asset_pair)
             else:
                 market_data = await self._get_forex_data(asset_pair)
-            
+
             # Validate data quality
             is_valid, issues = self.validate_market_data(market_data, asset_pair)
             if not is_valid:
@@ -233,13 +236,13 @@ class AlphaVantageProvider:
                     f"Market data validation issues for {asset_pair}: {issues}"
                 )
                 # Continue with warning, but flag in data
-                market_data['validation_warnings'] = issues
-            
+                market_data["validation_warnings"] = issues
+
             # Enrich with additional context
             market_data = await self._enrich_market_data(market_data, asset_pair)
-            
+
             return market_data
-            
+
         except CircuitBreakerOpenError:
             logger.error(f"Circuit breaker open for {asset_pair}")
             raise
@@ -255,7 +258,7 @@ class AlphaVantageProvider:
         asset_pair: str,
         start: str,
         end: str,
-        timeframe: str = '1h',
+        timeframe: str = "1h",
     ) -> list:
         """Return a list of OHLC dictionaries within [start,end] for the specified timeframe.
 
@@ -277,13 +280,13 @@ class AlphaVantageProvider:
             List of OHLC candle dictionaries
         """
         # Validate timeframe
-        valid_timeframes = ['1m', '5m', '15m', '30m', '1h', '1d']
+        valid_timeframes = ["1m", "5m", "15m", "30m", "1h", "1d"]
         if timeframe not in valid_timeframes:
             logger.warning(
                 f"Invalid timeframe '{timeframe}', defaulting to '1h'. "
                 f"Valid options: {valid_timeframes}"
             )
-            timeframe = '1h'
+            timeframe = "1h"
 
         try:
             start_dt = datetime.strptime(start, "%Y-%m-%d").date()
@@ -292,36 +295,42 @@ class AlphaVantageProvider:
                 raise ValueError("End date precedes start date")
 
             # Decide endpoint by asset type
-            if 'BTC' in asset_pair or 'ETH' in asset_pair:
+            if "BTC" in asset_pair or "ETH" in asset_pair:
                 # Crypto
-                if asset_pair.endswith('USD'):
+                if asset_pair.endswith("USD"):
                     symbol = asset_pair[:-3]
-                    market = 'USD'
+                    market = "USD"
                 else:
                     symbol = asset_pair[:3]
                     market = asset_pair[3:]
 
                 # Use INTRADAY for intraday, DAILY for daily
-                if timeframe == '1d':
+                if timeframe == "1d":
                     params = {
-                        'function': 'DIGITAL_CURRENCY_DAILY',
-                        'symbol': symbol,
-                        'market': market,
-                        'apikey': self.api_key,
+                        "function": "DIGITAL_CURRENCY_DAILY",
+                        "symbol": symbol,
+                        "market": market,
+                        "apikey": self.api_key,
                     }
-                    series_key = 'Time Series (Digital Currency Daily)'
+                    series_key = "Time Series (Digital Currency Daily)"
                 else:
                     # Intraday: map timeframe to API interval
-                    interval_map = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min'}
-                    interval = interval_map.get(timeframe, '60min')
-                    params = {
-                        'function': 'DIGITAL_CURRENCY_INTRADAY',
-                        'symbol': symbol,
-                        'market': market,
-                        'interval': interval,
-                        'apikey': self.api_key,
+                    interval_map = {
+                        "1m": "1min",
+                        "5m": "5min",
+                        "15m": "15min",
+                        "30m": "30min",
+                        "1h": "60min",
                     }
-                    series_key = f'Time Series Crypto ({interval})'
+                    interval = interval_map.get(timeframe, "60min")
+                    params = {
+                        "function": "DIGITAL_CURRENCY_INTRADAY",
+                        "symbol": symbol,
+                        "market": market,
+                        "interval": interval,
+                        "apikey": self.api_key,
+                    }
+                    series_key = f"Time Series Crypto ({interval})"
 
                 data = await self._async_request(params, timeout=15)
             else:
@@ -330,33 +339,41 @@ class AlphaVantageProvider:
                 to_currency = asset_pair[3:]
 
                 # Use INTRADAY for intraday, DAILY for daily
-                if timeframe == '1d':
+                if timeframe == "1d":
                     params = {
-                        'function': 'FX_DAILY',
-                        'from_symbol': from_currency,
-                        'to_symbol': to_currency,
-                        'apikey': self.api_key,
+                        "function": "FX_DAILY",
+                        "from_symbol": from_currency,
+                        "to_symbol": to_currency,
+                        "apikey": self.api_key,
                     }
-                    series_key = 'Time Series FX (Daily)'
+                    series_key = "Time Series FX (Daily)"
                 else:
                     # Intraday: map timeframe to API interval
-                    interval_map = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min'}
-                    interval = interval_map.get(timeframe, '60min')
-                    params = {
-                        'function': 'FX_INTRADAY',
-                        'from_symbol': from_currency,
-                        'to_symbol': to_currency,
-                        'interval': interval,
-                        'apikey': self.api_key,
+                    interval_map = {
+                        "1m": "1min",
+                        "5m": "5min",
+                        "15m": "15min",
+                        "30m": "30min",
+                        "1h": "60min",
                     }
-                    series_key = f'Time Series FX ({interval})'
+                    interval = interval_map.get(timeframe, "60min")
+                    params = {
+                        "function": "FX_INTRADAY",
+                        "from_symbol": from_currency,
+                        "to_symbol": to_currency,
+                        "interval": interval,
+                        "apikey": self.api_key,
+                    }
+                    series_key = f"Time Series FX ({interval})"
 
                 data = await self._async_request(params, timeout=15)
 
             if series_key not in data:
                 logger.warning(
                     "Historical data unexpected format for %s (timeframe: %s, expected key: %s)",
-                    asset_pair, timeframe, series_key
+                    asset_pair,
+                    timeframe,
+                    series_key,
                 )
                 return self._generate_mock_series(start_dt, end_dt, timeframe)
 
@@ -364,7 +381,7 @@ class AlphaVantageProvider:
             candles = []
 
             # Parse datetime based on timeframe
-            if timeframe == '1d':
+            if timeframe == "1d":
                 # Daily format: YYYY-MM-DD
                 date_format = "%Y-%m-%d"
             else:
@@ -373,7 +390,7 @@ class AlphaVantageProvider:
 
             for timestamp_str, candle_data in time_series.items():
                 try:
-                    if timeframe == '1d':
+                    if timeframe == "1d":
                         candle_dt = datetime.strptime(timestamp_str, date_format).date()
                     else:
                         candle_dt = datetime.strptime(timestamp_str, date_format).date()
@@ -384,54 +401,66 @@ class AlphaVantageProvider:
 
                     # Field name differences for crypto vs forex
                     o_val = (
-                        candle_data.get('1a. open (USD)')
-                        or candle_data.get('1. open')
-                        or candle_data.get('1. open', 0)
+                        candle_data.get("1a. open (USD)")
+                        or candle_data.get("1. open")
+                        or candle_data.get("1. open", 0)
                     )
                     h_val = (
-                        candle_data.get('2a. high (USD)')
-                        or candle_data.get('2. high')
-                        or candle_data.get('2. high', 0)
+                        candle_data.get("2a. high (USD)")
+                        or candle_data.get("2. high")
+                        or candle_data.get("2. high", 0)
                     )
                     low_val = (
-                        candle_data.get('3a. low (USD)')
-                        or candle_data.get('3. low')
-                        or candle_data.get('3. low', 0)
+                        candle_data.get("3a. low (USD)")
+                        or candle_data.get("3. low")
+                        or candle_data.get("3. low", 0)
                     )
                     c_val = (
-                        candle_data.get('4a. close (USD)')
-                        or candle_data.get('4. close')
-                        or candle_data.get('4. close', 0)
+                        candle_data.get("4a. close (USD)")
+                        or candle_data.get("4. close")
+                        or candle_data.get("4. close", 0)
                     )
-                    candles.append({
-                        'date': timestamp_str,
-                        'open': float(o_val),
-                        'high': float(h_val),
-                        'low': float(low_val),
-                        'close': float(c_val),
-                    })
+                    candles.append(
+                        {
+                            "date": timestamp_str,
+                            "open": float(o_val),
+                            "high": float(h_val),
+                            "low": float(low_val),
+                            "close": float(c_val),
+                        }
+                    )
                 except (ValueError, TypeError):
                     continue
 
             # Sort ascending by date
-            candles.sort(key=lambda x: x['date'])
+            candles.sort(key=lambda x: x["date"])
 
             if not candles:
                 logger.warning(
                     "No candles extracted for %s (timeframe: %s) in date range %s to %s",
-                    asset_pair, timeframe, start_dt, end_dt
+                    asset_pair,
+                    timeframe,
+                    start_dt,
+                    end_dt,
                 )
                 return self._generate_mock_series(start_dt, end_dt, timeframe)
 
             logger.info(
                 "Fetched %d %s candles for %s from %s to %s",
-                len(candles), timeframe, asset_pair, start_dt, end_dt
+                len(candles),
+                timeframe,
+                asset_pair,
+                start_dt,
+                end_dt,
             )
             return candles
 
         except Exception as e:  # noqa: BLE001
             logger.error(
-                "Historical data fetch failed for %s (timeframe: %s): %s", asset_pair, timeframe, e
+                "Historical data fetch failed for %s (timeframe: %s): %s",
+                asset_pair,
+                timeframe,
+                e,
             )
             try:
                 start_dt = datetime.strptime(start, "%Y-%m-%d").date()
@@ -440,7 +469,7 @@ class AlphaVantageProvider:
             except Exception:
                 return []
 
-    def _generate_mock_series(self, start_dt, end_dt, timeframe: str = '1d') -> list:
+    def _generate_mock_series(self, start_dt, end_dt, timeframe: str = "1d") -> list:
         """Synthetic series fallback (linear drift) supporting intraday timeframes.
 
         Args:
@@ -456,29 +485,31 @@ class AlphaVantageProvider:
         base = 100.0
         out = []
 
-        if timeframe == '1d':
+        if timeframe == "1d":
             # Daily candles
             span = (end_dt - start_dt).days + 1
             for i in range(span):
                 d = start_dt + timedelta(days=i)
                 drift = 1 + (i / span) * 0.02  # +2% over full period
                 close = base * drift
-                out.append({
-                    'date': d.isoformat(),
-                    'open': close * 0.995,
-                    'high': close * 1.01,
-                    'low': close * 0.99,
-                    'close': close,
-                    'mock': True,
-                })
+                out.append(
+                    {
+                        "date": d.isoformat(),
+                        "open": close * 0.995,
+                        "high": close * 1.01,
+                        "low": close * 0.99,
+                        "close": close,
+                        "mock": True,
+                    }
+                )
         else:
             # Intraday candles
             timeframe_to_minutes = {
-                '1m': 1,
-                '5m': 5,
-                '15m': 15,
-                '30m': 30,
-                '1h': 60,
+                "1m": 1,
+                "5m": 5,
+                "15m": 15,
+                "30m": 30,
+                "1h": 60,
             }
             minutes_per_candle = timeframe_to_minutes.get(timeframe, 60)
 
@@ -492,15 +523,17 @@ class AlphaVantageProvider:
                 drift = 1 + (candle_index / 1000) * 0.02  # Gentle drift
                 volatility = 1 + (candle_index % 10) * 0.001  # Intraday volatility
                 close = base * drift * volatility
-                
-                out.append({
-                    'date': current.strftime("%Y-%m-%d %H:%M:%S"),
-                    'open': close * 0.998,
-                    'high': close * 1.005,
-                    'low': close * 0.995,
-                    'close': close,
-                    'mock': True,
-                })
+
+                out.append(
+                    {
+                        "date": current.strftime("%Y-%m-%d %H:%M:%S"),
+                        "open": close * 0.998,
+                        "high": close * 1.005,
+                        "low": close * 0.995,
+                        "close": close,
+                        "mock": True,
+                    }
+                )
 
                 current += timedelta(minutes=minutes_per_candle)
                 candle_index += 1
@@ -522,25 +555,25 @@ class AlphaVantageProvider:
         """
         try:
             # Calculate additional technical indicators
-            open_price = market_data.get('open', 0)
-            high_price = market_data.get('high', 0)
-            low_price = market_data.get('low', 0)
-            close_price = market_data.get('close', 0)
-            
+            open_price = market_data.get("open", 0)
+            high_price = market_data.get("high", 0)
+            low_price = market_data.get("low", 0)
+            close_price = market_data.get("close", 0)
+
             # Price range
             price_range = high_price - low_price
             price_range_pct = (
                 (price_range / close_price * 100) if close_price > 0 else 0
             )
-            
+
             # Body vs wick analysis (candlestick)
             body = abs(close_price - open_price)
             body_pct = (body / close_price * 100) if close_price > 0 else 0
-            
+
             # Upper and lower wicks
             upper_wick = high_price - max(open_price, close_price)
             lower_wick = min(open_price, close_price) - low_price
-            
+
             # Trend direction
             is_bullish = close_price > open_price
             trend = (
@@ -548,34 +581,32 @@ class AlphaVantageProvider:
                 if is_bullish
                 else "bearish" if close_price < open_price else "neutral"
             )
-            
+
             # Position in range (where did it close)
             if price_range > 0:
-                close_position_in_range = (
-                    (close_price - low_price) / price_range
-                )
+                close_position_in_range = (close_price - low_price) / price_range
             else:
                 close_position_in_range = 0.5
-            
+
             # Add enrichments
-            market_data['price_range'] = price_range
-            market_data['price_range_pct'] = price_range_pct
-            market_data['body_size'] = body
-            market_data['body_pct'] = body_pct
-            market_data['upper_wick'] = upper_wick
-            market_data['lower_wick'] = lower_wick
-            market_data['trend'] = trend
-            market_data['is_bullish'] = is_bullish
-            market_data['close_position_in_range'] = close_position_in_range
-            
+            market_data["price_range"] = price_range
+            market_data["price_range_pct"] = price_range_pct
+            market_data["body_size"] = body
+            market_data["body_pct"] = body_pct
+            market_data["upper_wick"] = upper_wick
+            market_data["lower_wick"] = lower_wick
+            market_data["trend"] = trend
+            market_data["is_bullish"] = is_bullish
+            market_data["close_position_in_range"] = close_position_in_range
+
             # Fetch technical indicators if available
             technical_data = await self._get_technical_indicators(asset_pair)
             if technical_data:
                 market_data.update(technical_data)
-            
+
         except Exception as e:  # noqa: BLE001
             logger.warning("Error enriching market data: %s", e)
-        
+
         return market_data
 
     async def _get_technical_indicators(self, asset_pair: str) -> Dict[str, Any]:
@@ -589,91 +620,97 @@ class AlphaVantageProvider:
             Dictionary with technical indicators
         """
         indicators = {}
-        
+
         try:
             # Determine symbol format
-            if 'BTC' in asset_pair or 'ETH' in asset_pair:
+            if "BTC" in asset_pair or "ETH" in asset_pair:
                 # For crypto, use the base currency
                 symbol = asset_pair[:3] if len(asset_pair) > 3 else asset_pair
             else:
                 # For forex, we'll skip detailed indicators for now as AlphaVantage
                 # does not directly support technical indicator functions for FX pairs.
                 return indicators
-            
+
             # --- Fetch RSI (Relative Strength Index) ---
             try:
                 rsi_params = {
-                    'function': 'RSI',
-                    'symbol': symbol,
-                    'interval': 'daily',
-                    'time_period': 14,
-                    'series_type': 'close',
-                    'apikey': self.api_key
+                    "function": "RSI",
+                    "symbol": symbol,
+                    "interval": "daily",
+                    "time_period": 14,
+                    "series_type": "close",
+                    "apikey": self.api_key,
                 }
                 rsi_data = await self._async_request(
                     rsi_params, timeout=self.timeout_market_data
                 )
-                if 'Technical Analysis: RSI' in rsi_data:
-                    rsi_series = rsi_data['Technical Analysis: RSI']
+                if "Technical Analysis: RSI" in rsi_data:
+                    rsi_series = rsi_data["Technical Analysis: RSI"]
                     latest_rsi = list(rsi_series.values())[0]
-                    indicators['rsi'] = float(latest_rsi.get('RSI', 0))
-                    
+                    indicators["rsi"] = float(latest_rsi.get("RSI", 0))
+
                     # Interpret RSI
-                    if indicators['rsi'] > 70:
-                        indicators['rsi_signal'] = 'overbought'
-                    elif indicators['rsi'] < 30:
-                        indicators['rsi_signal'] = 'oversold'
+                    if indicators["rsi"] > 70:
+                        indicators["rsi_signal"] = "overbought"
+                    elif indicators["rsi"] < 30:
+                        indicators["rsi_signal"] = "oversold"
                     else:
-                        indicators['rsi_signal'] = 'neutral'
+                        indicators["rsi_signal"] = "neutral"
             except Exception as e:
                 logger.debug(f"Could not fetch RSI for {asset_pair}: {e}")
 
             # --- Fetch MACD (Moving Average Convergence Divergence) ---
             try:
                 macd_params = {
-                    'function': 'MACD',
-                    'symbol': symbol,
-                    'interval': 'daily',
-                    'series_type': 'close',
-                    'apikey': self.api_key
+                    "function": "MACD",
+                    "symbol": symbol,
+                    "interval": "daily",
+                    "series_type": "close",
+                    "apikey": self.api_key,
                 }
                 macd_data = await self._async_request(
                     macd_params, timeout=self.timeout_market_data
                 )
-                if 'Technical Analysis: MACD' in macd_data:
-                    macd_series = macd_data['Technical Analysis: MACD']
+                if "Technical Analysis: MACD" in macd_data:
+                    macd_series = macd_data["Technical Analysis: MACD"]
                     latest_macd = list(macd_series.values())[0]
-                    indicators['macd'] = float(latest_macd.get('MACD', 0))
-                    indicators['macd_signal'] = float(latest_macd.get('MACD_Signal', 0))
-                    indicators['macd_hist'] = float(latest_macd.get('MACD_Hist', 0))
+                    indicators["macd"] = float(latest_macd.get("MACD", 0))
+                    indicators["macd_signal"] = float(latest_macd.get("MACD_Signal", 0))
+                    indicators["macd_hist"] = float(latest_macd.get("MACD_Hist", 0))
             except Exception as e:
                 logger.debug(f"Could not fetch MACD for {asset_pair}: {e}")
 
             # --- Fetch BBANDS (Bollinger Bands) ---
             try:
                 bbands_params = {
-                    'function': 'BBANDS',
-                    'symbol': symbol,
-                    'interval': 'daily',
-                    'time_period': 20,
-                    'series_type': 'close',
-                    'apikey': self.api_key
+                    "function": "BBANDS",
+                    "symbol": symbol,
+                    "interval": "daily",
+                    "time_period": 20,
+                    "series_type": "close",
+                    "apikey": self.api_key,
                 }
                 bbands_data = await self._async_request(
                     bbands_params, timeout=self.timeout_market_data
                 )
-                if 'Technical Analysis: BBANDS' in bbands_data:
-                    bbands_series = bbands_data['Technical Analysis: BBANDS']
+                if "Technical Analysis: BBANDS" in bbands_data:
+                    bbands_series = bbands_data["Technical Analysis: BBANDS"]
                     latest_bbands = list(bbands_series.values())[0]
-                    indicators['bbands_upper'] = float(latest_bbands.get('Real Upper Band', 0))
-                    indicators['bbands_middle'] = float(latest_bbands.get('Real Middle Band', 0))
-                    indicators['bbands_lower'] = float(latest_bbands.get('Real Lower Band', 0))
+                    indicators["bbands_upper"] = float(
+                        latest_bbands.get("Real Upper Band", 0)
+                    )
+                    indicators["bbands_middle"] = float(
+                        latest_bbands.get("Real Middle Band", 0)
+                    )
+                    indicators["bbands_lower"] = float(
+                        latest_bbands.get("Real Lower Band", 0)
+                    )
             except Exception as e:
                 logger.debug(f"Could not fetch BBANDS for {asset_pair}: {e}")
-            
+
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch technical indicators: %s", e)
-        
+
         return indicators
 
     async def get_news_sentiment(
@@ -690,78 +727,75 @@ class AlphaVantageProvider:
             Dictionary with sentiment analysis
         """
         sentiment_data = {
-            'available': False,
-            'overall_sentiment': 'neutral',
-            'sentiment_score': 0.0,
-            'news_count': 0,
-            'top_topics': []
+            "available": False,
+            "overall_sentiment": "neutral",
+            "sentiment_score": 0.0,
+            "news_count": 0,
+            "top_topics": [],
         }
-        
+
         try:
             # Extract ticker/symbol
-            if 'BTC' in asset_pair:
-                tickers = 'CRYPTO:BTC'
-            elif 'ETH' in asset_pair:
-                tickers = 'CRYPTO:ETH'
+            if "BTC" in asset_pair:
+                tickers = "CRYPTO:BTC"
+            elif "ETH" in asset_pair:
+                tickers = "CRYPTO:ETH"
             else:
                 # For forex, use currency codes
                 tickers = asset_pair[:3]
-            
+
             params = {
-                'function': 'NEWS_SENTIMENT',
-                'tickers': tickers,
-                'apikey': self.api_key,
-                'limit': limit
+                "function": "NEWS_SENTIMENT",
+                "tickers": tickers,
+                "apikey": self.api_key,
+                "limit": limit,
             }
-            
+
             data = await self._async_request(params, timeout=10)
-            
-            if 'feed' in data and len(data['feed']) > 0:
-                sentiment_data['available'] = True
-                sentiment_data['news_count'] = len(data['feed'])
-                
+
+            if "feed" in data and len(data["feed"]) > 0:
+                sentiment_data["available"] = True
+                sentiment_data["news_count"] = len(data["feed"])
+
                 # Calculate average sentiment
                 sentiment_scores = []
                 topics = []
-                
-                for article in data['feed'][:limit]:
+
+                for article in data["feed"][:limit]:
                     # Overall article sentiment
-                    overall_score = float(
-                        article.get('overall_sentiment_score', 0)
-                    )
+                    overall_score = float(article.get("overall_sentiment_score", 0))
                     sentiment_scores.append(overall_score)
-                    
+
                     # Extract topics
-                    if 'topics' in article:
-                        for topic in article['topics']:
-                            topics.append(topic.get('topic', ''))
-                
+                    if "topics" in article:
+                        for topic in article["topics"]:
+                            topics.append(topic.get("topic", ""))
+
                 # Average sentiment
                 if sentiment_scores:
-                    avg_sentiment = (
-                        sum(sentiment_scores) / len(sentiment_scores)
-                    )
-                    sentiment_data['sentiment_score'] = avg_sentiment
-                    
+                    avg_sentiment = sum(sentiment_scores) / len(sentiment_scores)
+                    sentiment_data["sentiment_score"] = avg_sentiment
+
                     # Classify sentiment
                     if avg_sentiment > 0.15:
-                        sentiment_data['overall_sentiment'] = 'bullish'
+                        sentiment_data["overall_sentiment"] = "bullish"
                     elif avg_sentiment < -0.15:
-                        sentiment_data['overall_sentiment'] = 'bearish'
+                        sentiment_data["overall_sentiment"] = "bearish"
                     else:
-                        sentiment_data['overall_sentiment'] = 'neutral'
-                
+                        sentiment_data["overall_sentiment"] = "neutral"
+
                 # Top topics
                 if topics:
                     from collections import Counter
+
                     topic_counts = Counter(topics)
-                    sentiment_data['top_topics'] = [
+                    sentiment_data["top_topics"] = [
                         t[0] for t in topic_counts.most_common(3)
                     ]
-                
+
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch news sentiment: %s", e)
-        
+
         return sentiment_data
 
     async def get_macro_indicators(
@@ -777,35 +811,27 @@ class AlphaVantageProvider:
             Dictionary with macro indicators
         """
         if indicators is None:
-            indicators = [
-                'REAL_GDP', 'INFLATION', 'FEDERAL_FUNDS_RATE', 'UNEMPLOYMENT'
-            ]
-        
-        macro_data = {
-            'available': False,
-            'indicators': {}
-        }
-        
+            indicators = ["REAL_GDP", "INFLATION", "FEDERAL_FUNDS_RATE", "UNEMPLOYMENT"]
+
+        macro_data = {"available": False, "indicators": {}}
+
         try:
             for indicator in indicators[:3]:  # Limit to avoid rate limits
-                params = {
-                    'function': indicator,
-                    'apikey': self.api_key
-                }
-                
+                params = {"function": indicator, "apikey": self.api_key}
+
                 data = await self._async_request(params, timeout=10)
-                
-                if 'data' in data and len(data['data']) > 0:
-                    latest = data['data'][0]
-                    macro_data['indicators'][indicator] = {
-                        'value': latest.get('value', 'N/A'),
-                        'date': latest.get('date', 'N/A')
+
+                if "data" in data and len(data["data"]) > 0:
+                    latest = data["data"][0]
+                    macro_data["indicators"][indicator] = {
+                        "value": latest.get("value", "N/A"),
+                        "date": latest.get("date", "N/A"),
                     }
-                    macro_data['available'] = True
-                
+                    macro_data["available"] = True
+
         except Exception as e:  # noqa: BLE001
             logger.debug("Could not fetch macro indicators: %s", e)
-        
+
         return macro_data
 
     async def get_comprehensive_market_data(
@@ -827,17 +853,17 @@ class AlphaVantageProvider:
         """
         # Get base market data
         market_data = await self.get_market_data(asset_pair)
-        
+
         # Add sentiment if requested
         if include_sentiment:
             sentiment = await self.get_news_sentiment(asset_pair)
-            market_data['sentiment'] = sentiment
-        
+            market_data["sentiment"] = sentiment
+
         # Add macro indicators if requested
         if include_macro:
             macro = await self.get_macro_indicators()
-            market_data['macro'] = macro
-        
+            market_data["macro"] = macro
+
         return market_data
 
     async def _get_crypto_data(self, asset_pair: str) -> Dict[str, Any]:
@@ -851,77 +877,71 @@ class AlphaVantageProvider:
             Dictionary containing crypto market data
         """
         # Extract base and quote currencies
-        if asset_pair.endswith('USD'):
+        if asset_pair.endswith("USD"):
             symbol = asset_pair[:-3]
-            market = 'USD'
+            market = "USD"
         else:
             symbol = asset_pair[:3]
             market = asset_pair[3:]
 
         params = {
-            'function': 'DIGITAL_CURRENCY_DAILY',
-            'symbol': symbol,
-            'market': market,
-            'apikey': self.api_key
+            "function": "DIGITAL_CURRENCY_DAILY",
+            "symbol": symbol,
+            "market": market,
+            "apikey": self.api_key,
         }
 
         try:
             # Use circuit breaker for API call
             async def api_call():
-                return await self._async_request(params, timeout=self.timeout_market_data)
-            
+                return await self._async_request(
+                    params, timeout=self.timeout_market_data
+                )
+
             data = await self.circuit_breaker.call(api_call)
 
-            if 'Time Series (Digital Currency Daily)' in data:
-                time_series = data['Time Series (Digital Currency Daily)']
+            if "Time Series (Digital Currency Daily)" in data:
+                time_series = data["Time Series (Digital Currency Daily)"]
                 latest_date = list(time_series.keys())[0]
                 latest_data = time_series[latest_date]
 
                 # Try different field name formats (API response varies)
                 open_price = float(
-                    latest_data.get('1a. open (USD)') or
-                    latest_data.get('1. open') or
-                    0
+                    latest_data.get("1a. open (USD)") or latest_data.get("1. open") or 0
                 )
                 high_price = float(
-                    latest_data.get('2a. high (USD)') or
-                    latest_data.get('2. high') or
-                    0
+                    latest_data.get("2a. high (USD)") or latest_data.get("2. high") or 0
                 )
                 low_price = float(
-                    latest_data.get('3a. low (USD)') or
-                    latest_data.get('3. low') or
-                    0
+                    latest_data.get("3a. low (USD)") or latest_data.get("3. low") or 0
                 )
                 close_price = float(
-                    latest_data.get('4a. close (USD)') or
-                    latest_data.get('4. close') or
-                    0
+                    latest_data.get("4a. close (USD)")
+                    or latest_data.get("4. close")
+                    or 0
                 )
-                volume = float(latest_data.get('5. volume', 0))
-                market_cap = float(
-                    latest_data.get('6. market cap (USD)', 0)
-                )
+                volume = float(latest_data.get("5. volume", 0))
+                market_cap = float(latest_data.get("6. market cap (USD)", 0))
 
                 return {
-                    'asset_pair': asset_pair,
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'date': latest_date,
-                    'open': open_price,
-                    'high': high_price,
-                    'low': low_price,
-                    'close': close_price,
-                    'volume': volume,
-                    'market_cap': market_cap,
-                    'type': 'crypto'
+                    "asset_pair": asset_pair,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "date": latest_date,
+                    "open": open_price,
+                    "high": high_price,
+                    "low": low_price,
+                    "close": close_price,
+                    "volume": volume,
+                    "market_cap": market_cap,
+                    "type": "crypto",
                 }
             else:
                 logger.warning("Unexpected response format: %s", data)
-                return self._create_mock_data(asset_pair, 'crypto')
+                return self._create_mock_data(asset_pair, "crypto")
 
         except Exception as e:  # noqa: BLE001
             logger.error("Error fetching crypto data: %s", e)
-            return self._create_mock_data(asset_pair, 'crypto')
+            return self._create_mock_data(asset_pair, "crypto")
 
     async def _get_forex_data(self, asset_pair: str) -> Dict[str, Any]:
         """
@@ -937,45 +957,45 @@ class AlphaVantageProvider:
         to_currency = asset_pair[3:]
 
         params = {
-            'function': 'FX_DAILY',
-            'from_symbol': from_currency,
-            'to_symbol': to_currency,
-            'apikey': self.api_key
+            "function": "FX_DAILY",
+            "from_symbol": from_currency,
+            "to_symbol": to_currency,
+            "apikey": self.api_key,
         }
 
         try:
             # Use circuit breaker for API call
             async def api_call():
-                return await self._async_request(params, timeout=self.timeout_market_data)
-            
+                return await self._async_request(
+                    params, timeout=self.timeout_market_data
+                )
+
             data = await self.circuit_breaker.call(api_call)
 
-            if 'Time Series FX (Daily)' in data:
-                time_series = data['Time Series FX (Daily)']
+            if "Time Series FX (Daily)" in data:
+                time_series = data["Time Series FX (Daily)"]
                 latest_date = list(time_series.keys())[0]
                 latest_data = time_series[latest_date]
 
                 return {
-                    'asset_pair': asset_pair,
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'date': latest_date,
-                    'open': float(latest_data.get('1. open', 0)),
-                    'high': float(latest_data.get('2. high', 0)),
-                    'low': float(latest_data.get('3. low', 0)),
-                    'close': float(latest_data.get('4. close', 0)),
-                    'type': 'forex'
+                    "asset_pair": asset_pair,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "date": latest_date,
+                    "open": float(latest_data.get("1. open", 0)),
+                    "high": float(latest_data.get("2. high", 0)),
+                    "low": float(latest_data.get("3. low", 0)),
+                    "close": float(latest_data.get("4. close", 0)),
+                    "type": "forex",
                 }
             else:
                 logger.warning("Unexpected response format: %s", data)
-                return self._create_mock_data(asset_pair, 'forex')
+                return self._create_mock_data(asset_pair, "forex")
 
         except Exception as e:  # noqa: BLE001
             logger.error("Error fetching forex data: %s", e)
-            return self._create_mock_data(asset_pair, 'forex')
+            return self._create_mock_data(asset_pair, "forex")
 
-    def _create_mock_data(
-        self, asset_pair: str, asset_type: str
-    ) -> Dict[str, Any]:
+    def _create_mock_data(self, asset_pair: str, asset_type: str) -> Dict[str, Any]:
         """
         Create mock data for testing/demo purposes.
 
@@ -987,20 +1007,20 @@ class AlphaVantageProvider:
             Mock market data
         """
         logger.info("Creating mock data for %s", asset_pair)
-        
-        base_price = 50000.0 if asset_type == 'crypto' else 1.1
-        
+
+        base_price = 50000.0 if asset_type == "crypto" else 1.1
+
         return {
-            'asset_pair': asset_pair,
-            'timestamp': datetime.utcnow().isoformat(),
-            'date': datetime.utcnow().date().isoformat(),
-            'open': base_price,
-            'high': base_price * 1.02,
-            'low': base_price * 0.98,
-            'close': base_price * 1.01,
-            'volume': 1000000.0 if asset_type == 'crypto' else 0,
-            'type': asset_type,
-            'mock': True
+            "asset_pair": asset_pair,
+            "timestamp": datetime.utcnow().isoformat(),
+            "date": datetime.utcnow().date().isoformat(),
+            "open": base_price,
+            "high": base_price * 1.02,
+            "low": base_price * 0.98,
+            "close": base_price * 1.01,
+            "volume": 1000000.0 if asset_type == "crypto" else 0,
+            "type": asset_type,
+            "mock": True,
         }
 
     def validate_market_data(
@@ -1008,7 +1028,7 @@ class AlphaVantageProvider:
     ) -> Tuple[bool, List[str]]:
         """
         Validate market data quality and completeness.
-        
+
         Industry best practice: Always validate input data before processing
         to catch stale data, missing fields, or invalid values.
 
@@ -1020,68 +1040,59 @@ class AlphaVantageProvider:
             Tuple of (is_valid, list_of_issues)
         """
         issues = []
-        
+
         # Check for required OHLC fields
-        required_fields = ['open', 'high', 'low', 'close']
-        missing_fields = [
-            f for f in required_fields
-            if f not in data or data[f] == 0
-        ]
+        required_fields = ["open", "high", "low", "close"]
+        missing_fields = [f for f in required_fields if f not in data or data[f] == 0]
         if missing_fields:
             issues.append(f"Missing OHLC fields: {missing_fields}")
-        
+
         # Check for stale data (if timestamp available)
-        if 'timestamp' in data and not data.get('mock', False):
+        if "timestamp" in data and not data.get("mock", False):
             try:
                 data_time = datetime.fromisoformat(
-                    data['timestamp'].replace('Z', '+00:00')
+                    data["timestamp"].replace("Z", "+00:00")
                 )
                 age = datetime.utcnow() - data_time.replace(tzinfo=None)
                 if age.total_seconds() > 86400:  # 24 hour threshold for daily data
                     issues.append(
-                        f"Market data is stale "
-                        f"({age.total_seconds():.0f}s old)"
+                        f"Market data is stale " f"({age.total_seconds():.0f}s old)"
                     )
             except (ValueError, TypeError) as e:
                 issues.append(f"Invalid timestamp format: {e}")
-        
+
         # Sanity checks on OHLC values
         if all(f in data for f in required_fields):
-            high = data['high']
-            low = data['low']
-            close = data['close']
-            open_price = data['open']
-            
+            high = data["high"]
+            low = data["low"]
+            close = data["close"]
+            open_price = data["open"]
+
             if high < low:
-                issues.append(
-                    f"Invalid OHLC: high ({high}) < low ({low})"
-                )
-            
+                issues.append(f"Invalid OHLC: high ({high}) < low ({low})")
+
             if not (low <= close <= high):
                 issues.append(
-                    f"Invalid OHLC: close ({close}) "
-                    f"not in range [{low}, {high}]"
+                    f"Invalid OHLC: close ({close}) " f"not in range [{low}, {high}]"
                 )
-            
+
             if not (low <= open_price <= high):
                 issues.append(
                     f"Invalid OHLC: open ({open_price}) "
                     f"not in range [{low}, {high}]"
                 )
-            
+
             # Check for zero or negative prices
             if any(data[f] <= 0 for f in required_fields):
                 issues.append("OHLC contains zero or negative values")
-        
+
         # Return validation result
         is_valid = len(issues) == 0
         if not is_valid:
-            logger.warning(
-                f"Market data validation failed for {asset_pair}: {issues}"
-            )
-        
+            logger.warning(f"Market data validation failed for {asset_pair}: {issues}")
+
         return is_valid, issues
-    
+
     def get_circuit_breaker_stats(self) -> Dict[str, Any]:
         """Get circuit breaker statistics for monitoring."""
         return self.circuit_breaker.get_stats()

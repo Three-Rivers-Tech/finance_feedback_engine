@@ -60,10 +60,17 @@ def test_rejects_trade_with_stale_stock_intraday_data():
     """Gatekeeper should reject stock intraday trades with data > 15 min old."""
     gatekeeper = RiskGatekeeper()
     # Use a Wednesday market open timestamp (2024-12-11 14:30 UTC = 9:30 AM NY, open)
-    open_timestamp = int(dt.datetime(2024, 12, 11, 14, 30, 0, tzinfo=timezone.utc).timestamp())
+    open_timestamp = int(
+        dt.datetime(2024, 12, 11, 14, 30, 0, tzinfo=timezone.utc).timestamp()
+    )
     stale_ts = (
-        dt.datetime.fromtimestamp(open_timestamp, tz=timezone.utc) - dt.timedelta(minutes=18)
-    ).isoformat().replace("+00:00", "Z")
+        (
+            dt.datetime.fromtimestamp(open_timestamp, tz=timezone.utc)
+            - dt.timedelta(minutes=18)
+        )
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
     decision = {
         "action": "SELL",
@@ -205,6 +212,7 @@ def test_defaults_to_intraday_for_stocks_without_timeframe():
     }
 
     is_valid, msg = gatekeeper.validate_trade(decision, context)
+
     # Should use intraday threshold (> 5 min warns, > 15 min rejects)
     # 8 minutes should warn but pass
     def test_warns_on_stale_crypto_data_but_allows_trade(self):
@@ -231,4 +239,5 @@ def test_defaults_to_intraday_for_stocks_without_timeframe():
         assert is_valid is True
         # Verify warning is logged (if warnings are captured in msg) or assert no rejection
         assert "Stale market data" not in msg or "CRITICAL" not in msg
+
     assert "Stale market data" not in msg

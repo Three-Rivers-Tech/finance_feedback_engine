@@ -1,6 +1,6 @@
 # Backtester Realism Enhancements - Implementation Complete ✅
 
-**Date:** 2025-01-XX  
+**Date:** 2025-01-XX
 **Status:** Core implementation complete, syntax errors fixed, SHORT positions verified
 
 ## 🎯 Objectives Completed
@@ -55,7 +55,7 @@ if self.platform:
     account_info = self.platform.get_account_info(asset_pair="BTCUSD")
     self.max_leverage = override_leverage or account_info.get('max_leverage', 5.0)
     self.maintenance_margin_pct = (
-        override_maintenance_margin or 
+        override_maintenance_margin or
         account_info.get('maintenance_margin_rate') or
         account_info.get('margin_closeout_percent') or
         0.5  # 50% fallback
@@ -101,7 +101,7 @@ if is_liquidation:
 ```python
 def _calculate_liquidation_price(self, entry_price, units, balance, side):
     maintenance_margin = balance * self.maintenance_margin_pct
-    
+
     if side == "LONG":
         # LONG liquidation: price drops
         return entry_price - ((balance - maintenance_margin) / units)
@@ -125,7 +125,7 @@ def _calculate_liquidation_price(self, entry_price, units, balance, side):
 ### 5. Intraday Stop-Loss & Take-Profit
 **File:** `finance_feedback_engine/backtesting/backtester.py` (`run_backtest` loop)
 
-**Old Behavior:** Checked stop/take-profit against candle `close`  
+**Old Behavior:** Checked stop/take-profit against candle `close`
 **New Behavior:** Checks against candle `high` and `low`
 
 **LONG Positions:**
@@ -153,15 +153,15 @@ if self.risk_gatekeeper and self.enable_risk_gatekeeper:
     gatekeeper_context = {
         'recent_performance': {'total_pnl': total_pnl},
         'holdings': {p.asset_pair: 'crypto' for p in open_positions.values()},
-        'open_positions': [{'asset_pair': p.asset_pair, 'entry_price': p.entry_price, 
-                            'current_price': candle['close']} 
+        'open_positions': [{'asset_pair': p.asset_pair, 'entry_price': p.entry_price,
+                            'current_price': candle['close']}
                            for p in open_positions.values()],
         'equity_curve': equity_curve,
         'initial_balance': self.initial_balance
     }
-    
+
     validation_result = self.risk_gatekeeper.validate_trade(decision, gatekeeper_context)
-    
+
     if not validation_result[0]:  # validation_result is (bool, str)
         rejection_reason = validation_result[1]
         logger.warning(f"Trade REJECTED by RiskGatekeeper at {timestamp}: {rejection_reason}")
@@ -204,16 +204,16 @@ if self.timeframe_aggregator and self.enable_multi_timeframe_pulse:
 if action == "SELL" and asset_pair not in open_positions:
     # Open SHORT position
     short_units = -(trade_amount_quote / current_price)  # Negative units
-    
+
     # Reversed stop-loss/take-profit
     short_stop_loss = current_price * (1 + self.stop_loss_percentage)  # ABOVE entry
     short_take_profit = current_price * (1 - self.take_profit_percentage)  # BELOW entry
-    
+
     # Calculate SHORT liquidation price
     short_liq_price = self._calculate_liquidation_price(
         current_price, short_units, new_balance, "SHORT"
     )
-    
+
     position = Position(
         asset_pair=asset_pair,
         units=short_units,  # Negative
@@ -232,7 +232,7 @@ elif action == "BUY" and asset_pair in open_positions and position.side == "SHOR
     # Close SHORT position (BUY to cover)
     sell_units = abs(position.units)  # Convert to positive for BUY
     trade_amount_quote = sell_units * current_price
-    
+
     # Execute BUY (covers SHORT)
     new_balance, units_bought, fee, trade_details = self._execute_trade(
         current_balance, current_price, "BUY", trade_amount_quote, "BUY", timestamp,
@@ -247,7 +247,7 @@ for position in open_positions.values():
         unrealized_pnl = (candle['close'] - position.entry_price) * position.units
     else:  # SHORT
         unrealized_pnl = (position.entry_price - candle['close']) * abs(position.units)
-    
+
     current_equity += unrealized_pnl
 ```
 
@@ -263,7 +263,7 @@ backtesting:
   enable_risk_gatekeeper: true  # NEW: Enable validation
   enable_multi_timeframe_pulse: true  # NEW: Enable pulse integration
   maintenance_margin_pct: 0.5  # NEW: 50% fallback if platform unavailable
-  
+
   # Existing parameters
   initial_balance: 10000
   fee_percentage: 0.001
@@ -353,7 +353,7 @@ All compilation errors resolved:
 Add to backtest commands:
 ```python
 @backtest.command()
-@click.option('--timeframe', type=click.Choice(['1h', 'daily']), 
+@click.option('--timeframe', type=click.Choice(['1h', 'daily']),
               default='1h', help='Candle timeframe (default: 1h)')
 def run(asset_pair: str, timeframe: str):
     # Pass timeframe to backtester initialization
@@ -471,6 +471,6 @@ Test cases needed:
 
 ---
 
-**Implementation Status:** ✅ **CORE COMPLETE**  
-**Next Actions:** CLI flags, historical data provider updates, comprehensive testing  
+**Implementation Status:** ✅ **CORE COMPLETE**
+**Next Actions:** CLI flags, historical data provider updates, comprehensive testing
 **Blockers:** None - ready for testing and integration

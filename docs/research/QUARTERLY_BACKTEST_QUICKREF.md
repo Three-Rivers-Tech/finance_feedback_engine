@@ -7,7 +7,7 @@ Your 2025 full-year backtest is running in 4 quarterly chunks with persistent cr
 ## Current Status (As of ~12:43 UTC)
 
 **Q1 2025 (Jan-Mar)**: RUNNING ✓
-- Started: 12:38 UTC  
+- Started: 12:38 UTC
 - Progress: ~5 minutes in
 - Expected Duration: 15-20 minutes
 - Next Event: Q1 completion (~12:53-13:00 UTC)
@@ -151,7 +151,7 @@ cat data/memory/provider_performance.json | python -m json.tool | head -30
 ### Before Starting Q2
 ```bash
 # Verify Q1 results saved
-ls -lh data/memory/ 
+ls -lh data/memory/
 
 # Confirm outcome files exist
 ls -1 data/memory/outcome_*.json | head -5
@@ -413,4 +413,3 @@ Choose:
 - **Automated**: `python chunked_backtest_runner.py`
 - **Manual**: Run 4 commands above, one after each completes
 - **Monitor**: `tail -f /tmp/q1_backtest.log`
-

@@ -1,9 +1,12 @@
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent, AgentState
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import (
+    AgentState,
+    TradingLoopAgent,
+)
 
 
 @pytest.fixture
@@ -32,7 +35,13 @@ def agent_config():
 
 
 @pytest.fixture
-def trading_agent(agent_config, mock_engine, mock_trade_monitor, mock_portfolio_memory, mock_trading_platform):
+def trading_agent(
+    agent_config,
+    mock_engine,
+    mock_trade_monitor,
+    mock_portfolio_memory,
+    mock_trading_platform,
+):
     return TradingLoopAgent(
         config=agent_config,
         engine=mock_engine,
@@ -45,7 +54,7 @@ def trading_agent(agent_config, mock_engine, mock_trade_monitor, mock_portfolio_
 @pytest.mark.asyncio
 async def test_agent_state_transitions(trading_agent):
     # Mocking sleep to speed up the test
-    with patch('asyncio.sleep', new=AsyncMock()):
+    with patch("asyncio.sleep", new=AsyncMock()):
         # IDLE -> LEARNING
         assert trading_agent.state == AgentState.IDLE
         await trading_agent.handle_idle_state()
@@ -62,33 +71,46 @@ async def test_agent_state_transitions(trading_agent):
 
 @pytest.mark.asyncio
 async def test_run_agent_command():
-    from finance_feedback_engine.cli.main import run_agent
     from click.testing import CliRunner
 
+    from finance_feedback_engine.cli.main import run_agent
+
     runner = CliRunner()
-    
+
     # Mock config that will be passed via context
     test_config = {
-        'agent': {'autonomous': {'enabled': False}},
-        'monitoring': {'enable_live_view': False}
+        "agent": {"autonomous": {"enabled": False}},
+        "monitoring": {"enable_live_view": False},
     }
-    
-    with patch('finance_feedback_engine.cli.main.FinanceFeedbackEngine') as mock_ffe:
-         mock_ffe.return_value = MagicMock()
-        
-    with patch('finance_feedback_engine.cli.main._initialize_agent') as mock_init_agent:
+
+    with patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine") as mock_ffe:
+        mock_ffe.return_value = MagicMock()
+
+    with patch("finance_feedback_engine.cli.main._initialize_agent") as mock_init_agent:
         mock_agent = MagicMock()
         mock_agent.run = AsyncMock()
         mock_init_agent.return_value = mock_agent
 
-        with patch('finance_feedback_engine.cli.main._run_live_market_view', new_callable=AsyncMock) as mock_live_view:
-            result = runner.invoke(run_agent, ['--autonomous'], obj={'config': test_config})
-            
+        with patch(
+            "finance_feedback_engine.cli.main._run_live_market_view",
+            new_callable=AsyncMock,
+        ) as mock_live_view:
+            result = runner.invoke(
+                run_agent, ["--autonomous"], obj={"config": test_config}
+            )
+
             # Conditional assertions based on exit code
             if result.exit_code == 0:
                 # Success: agent should have been initialized
-                assert mock_init_agent.called, "Agent initialization should be called on successful execution"
+                assert (
+                    mock_init_agent.called
+                ), "Agent initialization should be called on successful execution"
             else:
                 # Failure: validate expected error exit codes and output
-                assert result.exit_code in [1, 2], f"Unexpected exit code: {result.exit_code}"
-                assert result.output or result.exception, "Error exit should produce output or exception"
+                assert result.exit_code in [
+                    1,
+                    2,
+                ], f"Unexpected exit code: {result.exit_code}"
+                assert (
+                    result.output or result.exception
+                ), "Error exit should produce output or exception"

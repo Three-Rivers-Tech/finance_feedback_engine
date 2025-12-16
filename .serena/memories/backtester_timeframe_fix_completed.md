@@ -1,8 +1,8 @@
 # Backtester Timeframe Fix - COMPLETED
 
-**Status**: ✅ FIXED AND TESTED  
-**Date**: December 2025  
-**Issue**: Backtester was using daily candles only, preventing realistic intraday market simulation  
+**Status**: ✅ FIXED AND TESTED
+**Date**: December 2025
+**Issue**: Backtester was using daily candles only, preventing realistic intraday market simulation
 
 ## Problem & Solution
 
@@ -23,7 +23,7 @@ Both endpoints return only daily candles, regardless of backtest date range.
 - Added conditional logic:
   - **Daily** (timeframe='1d'): Uses DAILY endpoints (existing behavior)
   - **Intraday** (timeframe='1m'/'5m'/'15m'/'30m'/'1h'): Uses INTRADAY endpoints
-    - Crypto: `DIGITAL_CURRENCY_INTRADAY` 
+    - Crypto: `DIGITAL_CURRENCY_INTRADAY`
     - Forex: `FX_INTRADAY`
 - Updated `_generate_mock_series()` to support intraday candle generation with realistic intervals
 

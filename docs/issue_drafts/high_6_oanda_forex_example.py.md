@@ -6,7 +6,7 @@
 
 **Context before:**
 ```
-    
+
     # Initialize engine with Oanda configuration
 ```
 **Context after:**

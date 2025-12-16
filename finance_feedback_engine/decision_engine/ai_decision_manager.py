@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from .ensemble_manager import EnsembleDecisionManager
 from .decision_validation import build_fallback_decision
+from .ensemble_manager import EnsembleDecisionManager
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +21,12 @@ class AIDecisionManager:
     def __init__(self, config: Dict[str, Any], backtest_mode: bool = False):
         self.config = config
         self.backtest_mode = backtest_mode
-        self.ai_provider = config.get('decision_engine', {}).get('ai_provider', 'local')
-        self.model_name = config.get('decision_engine', {}).get('model_name', 'default')
+        self.ai_provider = config.get("decision_engine", {}).get("ai_provider", "local")
+        self.model_name = config.get("decision_engine", {}).get("model_name", "default")
 
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None
-        if self.ai_provider == 'ensemble':
+        if self.ai_provider == "ensemble":
             self._get_ensemble_manager()
 
     def _get_ensemble_manager(self):
@@ -39,7 +39,7 @@ class AIDecisionManager:
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
-        market_data: Optional[Dict[str, Any]] = None
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -55,24 +55,26 @@ class AIDecisionManager:
         logger.info(f"Querying AI provider: {self.ai_provider}")
 
         # Mock mode: fast random decisions for backtesting
-        if self.ai_provider == 'mock':
+        if self.ai_provider == "mock":
             return await self._mock_ai_inference(prompt)
 
         # Ensemble mode: query multiple providers and aggregate
-        if self.ai_provider == 'ensemble':
-            return await self._ensemble_ai_inference(prompt, asset_pair=asset_pair, market_data=market_data)
+        if self.ai_provider == "ensemble":
+            return await self._ensemble_ai_inference(
+                prompt, asset_pair=asset_pair, market_data=market_data
+            )
 
         # Route to appropriate single provider
-        if self.ai_provider == 'local':
+        if self.ai_provider == "local":
             return await self._local_ai_inference(prompt)
-        elif self.ai_provider == 'cli':
+        elif self.ai_provider == "cli":
             return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == 'codex':
+        elif self.ai_provider == "codex":
             return await self._codex_ai_inference(prompt)
-        elif self.ai_provider == 'qwen':
+        elif self.ai_provider == "qwen":
             # Qwen CLI provider
             return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == 'gemini':
+        elif self.ai_provider == "gemini":
             return await self._gemini_ai_inference(prompt)
         else:
             raise ValueError(f"Unknown AI provider: {self.ai_provider}")
@@ -83,12 +85,12 @@ class AIDecisionManager:
         """
         logger.info("Mock AI inference")
         # Simulate some asynchronous work
-        await asyncio.sleep(0.01) # Small delay to simulate async operation
+        await asyncio.sleep(0.01)  # Small delay to simulate async operation
         return {
             "action": "HOLD",
             "confidence": 50,
             "reasoning": "Mock decision for backtesting",
-            "amount": 0.0
+            "amount": 0.0,
         }
 
     async def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
@@ -106,13 +108,23 @@ class AIDecisionManager:
         """
         logger.info("Using debate mode ensemble")
 
-        bull_provider = self.ensemble_manager.debate_providers.get('bull')
-        bear_provider = self.ensemble_manager.debate_providers.get('bear')
-        judge_provider = self.ensemble_manager.debate_providers.get('judge')
+        bull_provider = self.ensemble_manager.debate_providers.get("bull")
+        bear_provider = self.ensemble_manager.debate_providers.get("bear")
+        judge_provider = self.ensemble_manager.debate_providers.get("judge")
         # Validate debate providers are configured
         if not all([bull_provider, bear_provider, judge_provider]):
-            missing = [role for role, p in [('bull', bull_provider), ('bear', bear_provider), ('judge', judge_provider)] if not p]
-            raise ValueError(f"Debate mode requires bull, bear, and judge providers. Missing: {missing}")
+            missing = [
+                role
+                for role, p in [
+                    ("bull", bull_provider),
+                    ("bear", bear_provider),
+                    ("judge", judge_provider),
+                ]
+                if not p
+            ]
+            raise ValueError(
+                f"Debate mode requires bull, bear, and judge providers. Missing: {missing}"
+            )
 
         failed_debate_providers = []
 
@@ -124,12 +136,18 @@ class AIDecisionManager:
         # Query bull provider (bullish case)
         try:
             bull_case = await self._query_single_provider(bull_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(bull_case, bull_provider):
-                logger.warning(f"Debate: {bull_provider} (bull) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                bull_case, bull_provider
+            ):
+                logger.warning(
+                    f"Debate: {bull_provider} (bull) returned invalid response"
+                )
                 failed_debate_providers.append(bull_provider)
                 bull_case = None
             else:
-                logger.info(f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
             failed_debate_providers.append(bull_provider)
@@ -137,12 +155,18 @@ class AIDecisionManager:
         # Query bear provider (bearish case)
         try:
             bear_case = await self._query_single_provider(bear_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(bear_case, bear_provider):
-                logger.warning(f"Debate: {bear_provider} (bear) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                bear_case, bear_provider
+            ):
+                logger.warning(
+                    f"Debate: {bear_provider} (bear) returned invalid response"
+                )
                 failed_debate_providers.append(bear_provider)
                 bear_case = None
             else:
-                logger.info(f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
             failed_debate_providers.append(bear_provider)
@@ -150,12 +174,18 @@ class AIDecisionManager:
         # Query judge provider (final decision)
         try:
             judge_decision = await self._query_single_provider(judge_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(judge_decision, judge_provider):
-                logger.warning(f"Debate: {judge_provider} (judge) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                judge_decision, judge_provider
+            ):
+                logger.warning(
+                    f"Debate: {judge_provider} (judge) returned invalid response"
+                )
                 failed_debate_providers.append(judge_provider)
                 judge_decision = None
             else:
-                logger.info(f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
             failed_debate_providers.append(judge_provider)
@@ -175,12 +205,14 @@ class AIDecisionManager:
             bull_case=bull_case,
             bear_case=bear_case,
             judge_decision=judge_decision,
-            failed_debate_providers=failed_debate_providers
+            failed_debate_providers=failed_debate_providers,
         )
 
         return final_decision
 
-    async def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
+    async def _query_single_provider(
+        self, provider_name: str, prompt: str
+    ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
         from .provider_tiers import is_ollama_model
@@ -190,16 +222,16 @@ class AIDecisionManager:
             return await self._local_ai_inference(prompt, model_name=provider_name)
 
         # Route abstract provider names
-        if provider_name == 'local':
+        if provider_name == "local":
             return await self._local_ai_inference(prompt)
-        elif provider_name == 'cli':
+        elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
-        elif provider_name == 'codex':
+        elif provider_name == "codex":
             return await self._codex_ai_inference(prompt)
-        elif provider_name == 'qwen':
+        elif provider_name == "qwen":
             # Qwen CLI provider (routed to CLI)
             return await self._cli_ai_inference(prompt)
-        elif provider_name == 'gemini':
+        elif provider_name == "gemini":
             return await self._gemini_ai_inference(prompt)
         else:
             # Unknown provider - raise error, let ensemble manager handle
@@ -209,7 +241,7 @@ class AIDecisionManager:
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
-        market_data: Optional[Dict[str, Any]] = None
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Centralized ensemble logic with debate mode and two-phase support."""
         # Debate mode: structured debate with bull, bear, and judge providers
@@ -217,10 +249,18 @@ class AIDecisionManager:
             return await self._debate_mode_inference(prompt)
 
         # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
-        if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
+        if (
+            self.ensemble_manager.config.get("ensemble", {})
+            .get("two_phase", {})
+            .get("enabled", False)
+        ):
             return await self.ensemble_manager.aggregate_decisions_two_phase(
-                prompt, asset_pair, market_data,
-                lambda provider, prompt_text: self._query_single_provider(provider, prompt_text)
+                prompt,
+                asset_pair,
+                market_data,
+                lambda provider, prompt_text: self._query_single_provider(
+                    provider, prompt_text
+                ),
             )
         # Fallback to simple parallel query if two-phase is off
         return await self._simple_parallel_ensemble(prompt)
@@ -239,7 +279,9 @@ class AIDecisionManager:
         Returns:
             Aggregated decision from all provider responses
         """
-        logger.info(f"Using simple parallel ensemble with {len(self.ensemble_manager.enabled_providers)} providers")
+        logger.info(
+            f"Using simple parallel ensemble with {len(self.ensemble_manager.enabled_providers)} providers"
+        )
 
         provider_decisions = {}
         failed_providers = []
@@ -257,11 +299,12 @@ class AIDecisionManager:
 
         try:
             results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True),
-                timeout=ENSEMBLE_TIMEOUT
+                asyncio.gather(*tasks, return_exceptions=True), timeout=ENSEMBLE_TIMEOUT
             )
         except asyncio.TimeoutError:
-            logger.error(f"Parallel ensemble timed out after {ENSEMBLE_TIMEOUT}s; cancelling provider tasks")
+            logger.error(
+                f"Parallel ensemble timed out after {ENSEMBLE_TIMEOUT}s; cancelling provider tasks"
+            )
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -273,9 +316,13 @@ class AIDecisionManager:
                 failed_providers.append(provider)
             else:
                 decision = result
-                if self.ensemble_manager._is_valid_provider_response(decision, provider):
+                if self.ensemble_manager._is_valid_provider_response(
+                    decision, provider
+                ):
                     provider_decisions[provider] = decision
-                    logger.debug(f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
+                    logger.debug(
+                        f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)"
+                    )
                 else:
                     logger.warning(f"Provider {provider} returned invalid response")
                     failed_providers.append(provider)
@@ -290,11 +337,12 @@ class AIDecisionManager:
 
         # Aggregate results using ensemble manager
         return await self.ensemble_manager.aggregate_decisions(
-            provider_decisions=provider_decisions,
-            failed_providers=failed_providers
+            provider_decisions=provider_decisions, failed_providers=failed_providers
         )
 
-    async def _local_ai_inference(self, prompt: str, model_name: Optional[str] = None) -> Dict[str, Any]:
+    async def _local_ai_inference(
+        self, prompt: str, model_name: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
 
@@ -312,7 +360,10 @@ class AIDecisionManager:
             from .local_llm_provider import LocalLLMProvider
 
             # Create config with model override if specified
-            provider_config = dict(self.config, model_name=model_name or self.config.get('model_name', 'default'))
+            provider_config = dict(
+                self.config,
+                model_name=model_name or self.config.get("model_name", "default"),
+            )
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
             return await asyncio.to_thread(provider.query, prompt)
@@ -320,64 +371,87 @@ class AIDecisionManager:
             logger.error(
                 f"Local LLM failed due to missing import: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'dependency',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "dependency",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision("Local LLM import error, using fallback decision.")
+            return build_fallback_decision(
+                "Local LLM import error, using fallback decision."
+            )
         except RuntimeError as e:
             logger.error(
                 f"Local LLM failed due to runtime error: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'infrastructure',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "infrastructure",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision(f"Local LLM runtime error: {str(e)}, using fallback decision.")
+            return build_fallback_decision(
+                f"Local LLM runtime error: {str(e)}, using fallback decision."
+            )
         except Exception as e:
             logger.error(
                 f"Local LLM failed due to unexpected error: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'unknown',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "unknown",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision(f"Local LLM unexpected error: {str(e)}, using fallback decision.")
+            return build_fallback_decision(
+                f"Local LLM unexpected error: {str(e)}, using fallback decision."
+            )
 
     async def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("CLI AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "CLI placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "CLI placeholder",
+            "amount": 0.0,
+        }
 
     async def _codex_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("Codex AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "Codex placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Codex placeholder",
+            "amount": 0.0,
+        }
 
     async def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("Gemini AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "Gemini placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Gemini placeholder",
+            "amount": 0.0,
+        }
 
-    def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
+    def _is_valid_provider_response(
+        self, decision: Dict[str, Any], provider: str
+    ) -> bool:
         """
         Validate that a provider response dict is well-formed.
 
@@ -392,25 +466,33 @@ class AIDecisionManager:
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if 'action' not in decision or 'confidence' not in decision:
-            logger.warning(f"Provider {provider}: missing required keys 'action' or 'confidence'")
+        if "action" not in decision or "confidence" not in decision:
+            logger.warning(
+                f"Provider {provider}: missing required keys 'action' or 'confidence'"
+            )
             return False
 
-        if decision.get('action') not in ['BUY', 'SELL', 'HOLD']:
-            logger.warning(f"Provider {provider}: invalid action '{decision.get('action')}'")
+        if decision.get("action") not in ["BUY", "SELL", "HOLD"]:
+            logger.warning(
+                f"Provider {provider}: invalid action '{decision.get('action')}'"
+            )
             return False
 
-        conf = decision.get('confidence')
+        conf = decision.get("confidence")
         if not isinstance(conf, (int, float)):
             logger.warning(f"Provider {provider}: confidence is not numeric")
             return False
         if not (0 <= conf <= 100):
-            logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
+            logger.warning(
+                f"Provider {provider}: Confidence {conf} out of range [0, 100]"
+            )
             return False
 
-        if 'reasoning' in decision:
-            reasoning = decision['reasoning']
+        if "reasoning" in decision:
+            reasoning = decision["reasoning"]
             if not isinstance(reasoning, str) or not reasoning.strip():
-                logger.warning(f"Provider {provider}: reasoning is empty or not a string")
+                logger.warning(
+                    f"Provider {provider}: reasoning is empty or not a string"
+                )
                 return False
         return True

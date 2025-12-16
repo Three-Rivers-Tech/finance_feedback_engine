@@ -2,17 +2,21 @@
 """Test Gemini CLI provider integration."""
 
 import sys
-from finance_feedback_engine.decision_engine.gemini_cli_provider import GeminiCLIProvider
+
+from finance_feedback_engine.decision_engine.gemini_cli_provider import (
+    GeminiCLIProvider,
+)
+
 
 def test_gemini_provider():
     """Test Gemini CLI provider initialization and basic query."""
     print("🔧 Testing Gemini CLI Provider Integration")
     print("=" * 60)
-    
+
     # Test 1: Check if provider can be instantiated
     print("\n1. Initializing Gemini CLI provider...")
     try:
-        provider = GeminiCLIProvider({'model_name': 'gemini-2.5-flash'})
+        provider = GeminiCLIProvider({"model_name": "gemini-2.5-flash"})
         print("   ✅ Provider initialized successfully")
     except ValueError as e:
         print(f"   ⚠️  Provider initialization failed: {e}")
@@ -23,7 +27,7 @@ def test_gemini_provider():
         print("   2. API Key: export GEMINI_API_KEY='your-key'")
         print("      Get key from: https://aistudio.google.com/apikey")
         return False
-    
+
     # Test 2: Test query with sample prompt
     print("\n2. Testing sample trading decision query...")
     prompt = """
@@ -31,11 +35,11 @@ def test_gemini_provider():
     - Current price: $45,000
     - 24h change: +5%
     - Volume: High
-    
+
     Provide trading recommendation in JSON format:
     {"action": "BUY|SELL|HOLD", "confidence": 0-100, "reasoning": "brief explanation", "amount": 0}
     """
-    
+
     try:
         result = provider.query(prompt)
         print("   ✅ Query successful")
@@ -49,13 +53,14 @@ def test_gemini_provider():
         print(f"   ❌ Query failed: {e}")
         return False
 
+
 if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("Finance Feedback Engine - Gemini CLI Provider Test")
     print("=" * 60)
-    
+
     success = test_gemini_provider()
-    
+
     print("\n" + "=" * 60)
     if success:
         print("✅ All tests passed!")
@@ -68,5 +73,5 @@ if __name__ == "__main__":
         print("  2. Authenticate with OAuth or API key")
         print("  3. Re-run this test")
     print("=" * 60 + "\n")
-    
+
     sys.exit(0 if success else 1)

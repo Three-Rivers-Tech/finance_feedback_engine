@@ -18,10 +18,11 @@ from __future__ import annotations
 import json
 import logging
 from collections import defaultdict, deque
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, asdict
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -92,9 +93,9 @@ class PerformanceSnapshot:
         """Convert to dictionary."""
         data = asdict(self)
         if self.provider_stats is None:
-            data['provider_stats'] = {}
+            data["provider_stats"] = {}
         if self.regime_performance is None:
-            data['regime_performance'] = {}
+            data["regime_performance"] = {}
         return data
 
 
@@ -122,15 +123,15 @@ class PortfolioMemoryEngine:
                 - context_window: Number of recent trades for context (default: 20)
         """
         self.config = config
-        memory_config = config.get('portfolio_memory', {})
+        memory_config = config.get("portfolio_memory", {})
 
-        storage_path = config.get('persistence', {}).get('storage_path', 'data')
-        self.storage_path = Path(storage_path) / 'memory'
+        storage_path = config.get("persistence", {}).get("storage_path", "data")
+        self.storage_path = Path(storage_path) / "memory"
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-        self.max_memory_size = memory_config.get('max_memory_size', 1000)
-        self.learning_rate = memory_config.get('learning_rate', 0.1)
-        self.context_window = memory_config.get('context_window', 20)
+        self.max_memory_size = memory_config.get("max_memory_size", 1000)
+        self.learning_rate = memory_config.get("learning_rate", 0.1)
+        self.context_window = memory_config.get("context_window", 20)
 
         # Experience replay buffer: (decision, outcome) pairs
         self.experience_buffer: deque = deque(maxlen=self.max_memory_size)
@@ -142,28 +143,24 @@ class PortfolioMemoryEngine:
         # Provider performance tracking
         self.provider_performance: Dict[str, Dict[str, Any]] = defaultdict(
             lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0,
-                'confidence_calibration': []  # (confidence, was_correct) pairs
+                "total_trades": 0,
+                "winning_trades": 0,
+                "total_pnl": 0.0,
+                "confidence_calibration": [],  # (confidence, was_correct) pairs
             }
         )
 
         # Market regime tracking (bullish/bearish/sideways)
         self.regime_performance: Dict[str, Dict[str, Any]] = defaultdict(
-            lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0
-            }
+            lambda: {"total_trades": 0, "winning_trades": 0, "total_pnl": 0.0}
         )
 
         # Ensemble strategy performance tracking
         self.strategy_performance: Dict[str, Dict[str, Any]] = defaultdict(
             lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0,
+                "total_trades": 0,
+                "winning_trades": 0,
+                "total_pnl": 0.0,
             }
         )
 
@@ -188,7 +185,7 @@ class PortfolioMemoryEngine:
         exit_price: float,
         exit_timestamp: Optional[str] = None,
         hit_stop_loss: bool = False,
-        hit_take_profit: bool = False
+        hit_take_profit: bool = False,
     ) -> TradeOutcome:
         """
         Record the outcome of a completed trade.
@@ -211,39 +208,43 @@ class PortfolioMemoryEngine:
             pass  # Will create outcome below and return it
 
         # Extract decision metadata
-        decision_id = decision.get('id', 'unknown')
-        asset_pair = decision.get('asset_pair', 'UNKNOWN')
-        action = decision.get('action', 'HOLD')
+        decision_id = decision.get("id", "unknown")
+        asset_pair = decision.get("asset_pair", "UNKNOWN")
+        action = decision.get("action", "HOLD")
 
-        entry_timestamp = decision.get('timestamp', datetime.utcnow().isoformat())
-        entry_price = decision.get('entry_price') or decision.get(
-            'market_data', {}
-        ).get('close', 0)
-        position_size = decision.get('recommended_position_size', decision.get('position_size', 0))
+        entry_timestamp = decision.get("timestamp", datetime.utcnow().isoformat())
+        entry_price = decision.get("entry_price") or decision.get(
+            "market_data", {}
+        ).get("close", 0)
+        position_size = decision.get(
+            "recommended_position_size", decision.get("position_size", 0)
+        )
 
-        ai_provider = decision.get('ai_provider', 'unknown')
-        ensemble_metadata = decision.get('ensemble_metadata', {})
-        ensemble_providers = ensemble_metadata.get('providers_used')
-        confidence = decision.get('confidence', 50)
+        ai_provider = decision.get("ai_provider", "unknown")
+        ensemble_metadata = decision.get("ensemble_metadata", {})
+        ensemble_providers = ensemble_metadata.get("providers_used")
+        confidence = decision.get("confidence", 50)
 
         # Market context
-        market_data = decision.get('market_data', {})
-        sentiment_data = market_data.get('sentiment', {})
-        technical_data = market_data.get('technical', {})
+        market_data = decision.get("market_data", {})
+        sentiment_data = market_data.get("sentiment", {})
+        technical_data = market_data.get("technical", {})
 
-        market_sentiment = sentiment_data.get('overall_sentiment')
-        volatility = decision.get('volatility') or technical_data.get('volatility')
-        price_trend = technical_data.get('price_trend')
+        market_sentiment = sentiment_data.get("overall_sentiment")
+        volatility = decision.get("volatility") or technical_data.get("volatility")
+        price_trend = technical_data.get("price_trend")
 
         # Calculate P&L
-        if action == 'BUY' or action == 'LONG':
+        if action == "BUY" or action == "LONG":
             pnl = (exit_price - entry_price) * position_size
-            pnl_pct = ((exit_price - entry_price) / entry_price * 100
-                      if entry_price > 0 else 0)
-        elif action == 'SELL' or action == 'SHORT':
+            pnl_pct = (
+                (exit_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
+            )
+        elif action == "SELL" or action == "SHORT":
             pnl = (entry_price - exit_price) * position_size
-            pnl_pct = ((entry_price - exit_price) / entry_price * 100
-                      if entry_price > 0 else 0)
+            pnl_pct = (
+                (entry_price - exit_price) / entry_price * 100 if entry_price > 0 else 0
+            )
         else:  # HOLD
             pnl = 0
             pnl_pct = 0
@@ -251,8 +252,8 @@ class PortfolioMemoryEngine:
         # Calculate holding period
         exit_ts = exit_timestamp or datetime.utcnow().isoformat()
         try:
-            entry_dt = datetime.fromisoformat(entry_timestamp.replace('Z', '+00:00'))
-            exit_dt = datetime.fromisoformat(exit_ts.replace('Z', '+00:00'))
+            entry_dt = datetime.fromisoformat(entry_timestamp.replace("Z", "+00:00"))
+            exit_dt = datetime.fromisoformat(exit_ts.replace("Z", "+00:00"))
             holding_hours = (exit_dt - entry_dt).total_seconds() / 3600
         except Exception:
             holding_hours = None
@@ -278,7 +279,7 @@ class PortfolioMemoryEngine:
             price_trend=price_trend,
             was_profitable=pnl > 0,
             hit_stop_loss=hit_stop_loss,
-            hit_take_profit=hit_take_profit
+            hit_take_profit=hit_take_profit,
         )
 
         # Only update memory state if not in read-only mode
@@ -319,13 +320,17 @@ class PortfolioMemoryEngine:
             "saved_at": datetime.now().isoformat(),
             "trade_history": [outcome.to_dict() for outcome in self.trade_outcomes],
             "provider_performance": self.provider_performance,
-            "experience_buffer": [outcome.to_dict() for outcome in self.experience_buffer]
+            "experience_buffer": [
+                outcome.to_dict() for outcome in self.experience_buffer
+            ],
         }
 
         # Atomic write: write to temp file, then rename
-        temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(filepath), suffix=".tmp")
+        temp_fd, temp_path = tempfile.mkstemp(
+            dir=os.path.dirname(filepath), suffix=".tmp"
+        )
         try:
-            with os.fdopen(temp_fd, 'w') as f:
+            with os.fdopen(temp_fd, "w") as f:
                 json.dump(data, f, indent=2)
 
             # Atomic rename
@@ -335,12 +340,16 @@ class PortfolioMemoryEngine:
             # Clean up temp file on error
             try:
                 os.unlink(temp_path)
-            except:
-                pass
+            except OSError as cleanup_error:
+                logger.warning(
+                    f"Failed to clean up temporary file {temp_path}: {cleanup_error}"
+                )
             raise RuntimeError(f"Failed to save portfolio memory: {e}")
 
     @classmethod
-    def load_from_disk(cls, filepath: str = "data/memory/portfolio_memory.json") -> "PortfolioMemory":
+    def load_from_disk(
+        cls, filepath: str = "data/memory/portfolio_memory.json"
+    ) -> "PortfolioMemory":
         """
         Load portfolio memory from disk.
 
@@ -353,11 +362,13 @@ class PortfolioMemoryEngine:
         import os
 
         if not os.path.exists(filepath):
-            logger.info(f"No portfolio memory found at {filepath}, creating new instance")
+            logger.info(
+                f"No portfolio memory found at {filepath}, creating new instance"
+            )
             return cls(config={})
 
         try:
-            with open(filepath, 'r') as f:
+            with open(filepath, "r") as f:
                 data = json.load(f)
 
             # Validate version
@@ -381,7 +392,9 @@ class PortfolioMemoryEngine:
                 outcome = TradeOutcome(**exp_dict)
                 instance.experience_buffer.append(outcome)
 
-            logger.info(f"Portfolio memory loaded from {filepath}: {len(instance.trade_outcomes)} trades")
+            logger.info(
+                f"Portfolio memory loaded from {filepath}: {len(instance.trade_outcomes)} trades"
+            )
             return instance
 
         except Exception as e:
@@ -389,7 +402,7 @@ class PortfolioMemoryEngine:
             logger.info("Creating new portfolio memory instance")
             return cls(config={})
 
-    # Create outcome record (old continuation)
+        # Create outcome record (old continuation)
         outcome = TradeOutcome(
             decision_id=decision_id,
             asset_pair=asset_pair,
@@ -410,18 +423,16 @@ class PortfolioMemoryEngine:
             price_trend=price_trend,
             was_profitable=(pnl > 0),
             hit_stop_loss=hit_stop_loss,
-            hit_take_profit=hit_take_profit
+            hit_take_profit=hit_take_profit,
         )
 
         # Store outcome
         self.trade_outcomes.append(outcome)
 
         # Add to experience buffer
-        self.experience_buffer.append({
-            'decision': decision,
-            'outcome': outcome.to_dict(),
-            'timestamp': exit_ts
-        })
+        self.experience_buffer.append(
+            {"decision": decision, "outcome": outcome.to_dict(), "timestamp": exit_ts}
+        )
 
         # Update provider performance
         self._update_provider_performance(outcome, decision)
@@ -440,83 +451,89 @@ class PortfolioMemoryEngine:
         return outcome
 
     def _update_provider_performance(
-        self,
-        outcome: TradeOutcome,
-        decision: Dict[str, Any]
+        self, outcome: TradeOutcome, decision: Dict[str, Any]
     ) -> None:
         """Update performance stats for providers and strategies."""
         # Update primary provider
         if outcome.ai_provider:
             provider = outcome.ai_provider
             stats = self.provider_performance[provider]
-            stats['total_trades'] += 1
+            stats["total_trades"] += 1
             if outcome.was_profitable:
-                stats['winning_trades'] += 1
-            stats['total_pnl'] += outcome.realized_pnl or 0
+                stats["winning_trades"] += 1
+            stats["total_pnl"] += outcome.realized_pnl or 0
 
             # Track confidence calibration
-            stats['confidence_calibration'].append({
-                'confidence': outcome.decision_confidence,
-                'was_profitable': outcome.was_profitable,
-                'pnl': outcome.realized_pnl
-            })
+            stats["confidence_calibration"].append(
+                {
+                    "confidence": outcome.decision_confidence,
+                    "was_profitable": outcome.was_profitable,
+                    "pnl": outcome.realized_pnl,
+                }
+            )
 
         # Update ensemble providers and strategy
-        if outcome.ai_provider == 'ensemble':
-            ensemble_meta = decision.get('ensemble_metadata', {})
-            provider_decisions = ensemble_meta.get('provider_decisions', {})
+        if outcome.ai_provider == "ensemble":
+            ensemble_meta = decision.get("ensemble_metadata", {})
+            provider_decisions = ensemble_meta.get("provider_decisions", {})
 
             # Update individual providers within the ensemble
             if outcome.ensemble_providers:
                 for provider in outcome.ensemble_providers:
                     stats = self.provider_performance[provider]
-                    stats['total_trades'] += 1
+                    stats["total_trades"] += 1
 
                     provider_decision = provider_decisions.get(provider, {})
-                    provider_action = provider_decision.get('action')
+                    provider_action = provider_decision.get("action")
 
                     if provider_action == outcome.action and outcome.was_profitable:
-                        stats['winning_trades'] += 1
+                        stats["winning_trades"] += 1
 
-                    voting_power = ensemble_meta.get('voting_power', {})
-                    provider_weight = voting_power.get(provider, 1.0 / len(outcome.ensemble_providers) if outcome.ensemble_providers else 0)
-                    stats['total_pnl'] += (outcome.realized_pnl or 0) * provider_weight
+                    voting_power = ensemble_meta.get("voting_power", {})
+                    provider_weight = voting_power.get(
+                        provider,
+                        (
+                            1.0 / len(outcome.ensemble_providers)
+                            if outcome.ensemble_providers
+                            else 0
+                        ),
+                    )
+                    stats["total_pnl"] += (outcome.realized_pnl or 0) * provider_weight
 
             # Update strategy performance
-            strategy = ensemble_meta.get('voting_strategy')
+            strategy = ensemble_meta.get("voting_strategy")
             if strategy:
                 strat_stats = self.strategy_performance[strategy]
-                strat_stats['total_trades'] += 1
+                strat_stats["total_trades"] += 1
                 if outcome.was_profitable:
-                    strat_stats['winning_trades'] += 1
-                strat_stats['total_pnl'] += outcome.realized_pnl or 0
+                    strat_stats["winning_trades"] += 1
+                strat_stats["total_pnl"] += outcome.realized_pnl or 0
 
     def _update_regime_performance(self, outcome: TradeOutcome) -> None:
         """Track performance in different market regimes."""
         if outcome.market_sentiment:
             regime = outcome.market_sentiment.lower()
             stats = self.regime_performance[regime]
-            stats['total_trades'] += 1
+            stats["total_trades"] += 1
             if outcome.was_profitable:
-                stats['winning_trades'] += 1
-            stats['total_pnl'] += outcome.realized_pnl or 0
+                stats["winning_trades"] += 1
+            stats["total_pnl"] += outcome.realized_pnl or 0
 
         # Also track by price trend
         if outcome.price_trend:
             trend = outcome.price_trend.lower()
             stats = self.regime_performance[f"trend_{trend}"]
-            stats['total_trades'] += 1
+            stats["total_trades"] += 1
             if outcome.was_profitable:
-                stats['winning_trades'] += 1
-            stats['total_pnl'] += outcome.realized_pnl or 0
+                stats["winning_trades"] += 1
+            stats["total_pnl"] += outcome.realized_pnl or 0
 
     # ===================================================================
     # Performance Analysis
     # ===================================================================
 
     def analyze_performance(
-        self,
-        window_days: Optional[int] = None
+        self, window_days: Optional[int] = None
     ) -> PerformanceSnapshot:
         """
         Analyze portfolio performance over specified window.
@@ -532,16 +549,15 @@ class PortfolioMemoryEngine:
         if window_days:
             cutoff = datetime.utcnow() - timedelta(days=window_days)
             outcomes = [
-                o for o in outcomes
-                if datetime.fromisoformat(
-                    o.exit_timestamp.replace('Z', '+00:00')
-                ) >= cutoff
+                o
+                for o in outcomes
+                if datetime.fromisoformat(o.exit_timestamp.replace("Z", "+00:00"))
+                >= cutoff
             ]
 
         if not outcomes:
             return PerformanceSnapshot(
-                timestamp=datetime.utcnow().isoformat(),
-                total_trades=0
+                timestamp=datetime.utcnow().isoformat(), total_trades=0
             )
 
         # Calculate aggregate metrics
@@ -554,7 +570,8 @@ class PortfolioMemoryEngine:
 
         wins = [o.realized_pnl for o in outcomes if o.was_profitable and o.realized_pnl]
         losses = [
-            abs(o.realized_pnl) for o in outcomes
+            abs(o.realized_pnl)
+            for o in outcomes
             if not o.was_profitable and o.realized_pnl
         ]
 
@@ -568,7 +585,7 @@ class PortfolioMemoryEngine:
         # Calculate max drawdown
         equity_curve = []
         cumulative_pnl = 0
-        for o in sorted(outcomes, key=lambda x: x.exit_timestamp or ''):
+        for o in sorted(outcomes, key=lambda x: x.exit_timestamp or ""):
             cumulative_pnl += o.realized_pnl or 0
             equity_curve.append(cumulative_pnl)
 
@@ -577,7 +594,11 @@ class PortfolioMemoryEngine:
         # Calculate risk-adjusted metrics using daily returns
         daily_returns = []
         for o in outcomes:
-            if o.pnl_percentage is not None and o.holding_period_hours and o.holding_period_hours > 0:
+            if (
+                o.pnl_percentage is not None
+                and o.holding_period_hours
+                and o.holding_period_hours > 0
+            ):
                 # Normalize per-trade return to an equivalent daily return
                 daily_return = o.pnl_percentage * (24 / o.holding_period_hours)
                 daily_returns.append(daily_return)
@@ -592,13 +613,11 @@ class PortfolioMemoryEngine:
         # Regime performance
         regime_perf = {}
         for regime, stats in self.regime_performance.items():
-            if stats['total_trades'] > 0:
+            if stats["total_trades"] > 0:
                 regime_perf[regime] = {
-                    'win_rate': (
-                        stats['winning_trades'] / stats['total_trades'] * 100
-                    ),
-                    'total_pnl': stats['total_pnl'],
-                    'total_trades': stats['total_trades']
+                    "win_rate": (stats["winning_trades"] / stats["total_trades"] * 100),
+                    "total_pnl": stats["total_pnl"],
+                    "total_trades": stats["total_trades"],
                 }
 
         snapshot = PerformanceSnapshot(
@@ -615,7 +634,7 @@ class PortfolioMemoryEngine:
             sharpe_ratio=sharpe_ratio,
             sortino_ratio=sortino_ratio,
             provider_stats=provider_stats,
-            regime_performance=regime_perf
+            regime_performance=regime_perf,
         )
 
         self.performance_snapshots.append(snapshot)
@@ -627,50 +646,56 @@ class PortfolioMemoryEngine:
         """Calculate per-provider performance statistics."""
         stats = {}
         for provider, perf in self.provider_performance.items():
-            total = perf['total_trades']
+            total = perf["total_trades"]
             if total > 0:
-                win_rate = perf['winning_trades'] / total * 100
-                avg_pnl = perf['total_pnl'] / total
+                win_rate = perf["winning_trades"] / total * 100
+                avg_pnl = perf["total_pnl"] / total
 
                 # Confidence calibration analysis
-                calibration = perf.get('confidence_calibration', [])
+                calibration = perf.get("confidence_calibration", [])
                 if calibration:
                     # Group by confidence buckets
-                    high_conf = [c for c in calibration if c['confidence'] >= 70]
-                    med_conf = [
-                        c for c in calibration
-                        if 40 <= c['confidence'] < 70
-                    ]
-                    low_conf = [c for c in calibration if c['confidence'] < 40]
+                    high_conf = [c for c in calibration if c["confidence"] >= 70]
+                    med_conf = [c for c in calibration if 40 <= c["confidence"] < 70]
+                    low_conf = [c for c in calibration if c["confidence"] < 40]
 
                     high_conf_winrate = (
-                        sum(1 for c in high_conf if c['was_profitable']) /
-                        len(high_conf) * 100 if high_conf else 0
+                        sum(1 for c in high_conf if c["was_profitable"])
+                        / len(high_conf)
+                        * 100
+                        if high_conf
+                        else 0
                     )
                     med_conf_winrate = (
-                        sum(1 for c in med_conf if c['was_profitable']) /
-                        len(med_conf) * 100 if med_conf else 0
+                        sum(1 for c in med_conf if c["was_profitable"])
+                        / len(med_conf)
+                        * 100
+                        if med_conf
+                        else 0
                     )
                     low_conf_winrate = (
-                        sum(1 for c in low_conf if c['was_profitable']) /
-                        len(low_conf) * 100 if low_conf else 0
+                        sum(1 for c in low_conf if c["was_profitable"])
+                        / len(low_conf)
+                        * 100
+                        if low_conf
+                        else 0
                     )
 
                     stats[provider] = {
-                        'win_rate': win_rate,
-                        'total_trades': total,
-                        'total_pnl': perf['total_pnl'],
-                        'avg_pnl_per_trade': avg_pnl,
-                        'high_confidence_winrate': high_conf_winrate,
-                        'medium_confidence_winrate': med_conf_winrate,
-                        'low_confidence_winrate': low_conf_winrate
+                        "win_rate": win_rate,
+                        "total_trades": total,
+                        "total_pnl": perf["total_pnl"],
+                        "avg_pnl_per_trade": avg_pnl,
+                        "high_confidence_winrate": high_conf_winrate,
+                        "medium_confidence_winrate": med_conf_winrate,
+                        "low_confidence_winrate": low_conf_winrate,
                     }
                 else:
                     stats[provider] = {
-                        'win_rate': win_rate,
-                        'total_trades': total,
-                        'total_pnl': perf['total_pnl'],
-                        'avg_pnl_per_trade': avg_pnl
+                        "win_rate": win_rate,
+                        "total_trades": total,
+                        "total_pnl": perf["total_pnl"],
+                        "avg_pnl_per_trade": avg_pnl,
                     }
 
         return stats
@@ -692,9 +717,7 @@ class PortfolioMemoryEngine:
         return max_dd
 
     def _calculate_sharpe_ratio(
-        self,
-        returns: List[float],
-        risk_free_rate: float = 0.0
+        self, returns: List[float], risk_free_rate: float = 0.0
     ) -> Optional[float]:
         """Calculate Sharpe ratio from returns."""
         if not returns or len(returns) < 2:
@@ -714,9 +737,7 @@ class PortfolioMemoryEngine:
         return float(sharpe)
 
     def _calculate_sortino_ratio(
-        self,
-        returns: List[float],
-        risk_free_rate: float = 0.0
+        self, returns: List[float], risk_free_rate: float = 0.0
     ) -> Optional[float]:
         """Calculate Sortino ratio (downside deviation only)."""
         if not returns or len(returns) < 2:
@@ -745,9 +766,7 @@ class PortfolioMemoryEngine:
     # ===================================================================
 
     def get_performance_over_period(
-        self,
-        days: int = 90,
-        asset_pair: Optional[str] = None
+        self, days: int = 90, asset_pair: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Calculate portfolio performance metrics over a specified time period.
@@ -778,35 +797,28 @@ class PortfolioMemoryEngine:
 
         # Filter outcomes by time period
         period_outcomes = [
-            o for o in self.trade_outcomes
-            if o.exit_timestamp and
-            datetime.fromisoformat(
-                o.exit_timestamp.replace('Z', '+00:00')
-            ) >= cutoff_date
+            o
+            for o in self.trade_outcomes
+            if o.exit_timestamp
+            and datetime.fromisoformat(o.exit_timestamp.replace("Z", "+00:00"))
+            >= cutoff_date
         ]
 
         # Filter by asset if specified
         if asset_pair:
-            period_outcomes = [
-                o for o in period_outcomes
-                if o.asset_pair == asset_pair
-            ]
+            period_outcomes = [o for o in period_outcomes if o.asset_pair == asset_pair]
 
         if not period_outcomes:
             return {
-                'has_data': False,
-                'period_days': days,
-                'message': f'No completed trades in the last {days} days'
+                "has_data": False,
+                "period_days": days,
+                "message": f"No completed trades in the last {days} days",
             }
 
         # Calculate core metrics
         total_pnl = sum(o.realized_pnl or 0 for o in period_outcomes)
-        winning_trades = [
-            o for o in period_outcomes if (o.realized_pnl or 0) > 0
-        ]
-        losing_trades = [
-            o for o in period_outcomes if (o.realized_pnl or 0) <= 0
-        ]
+        winning_trades = [o for o in period_outcomes if (o.realized_pnl or 0) > 0]
+        losing_trades = [o for o in period_outcomes if (o.realized_pnl or 0) <= 0]
 
         win_count = len(winning_trades)
         loss_count = len(losing_trades)
@@ -814,11 +826,15 @@ class PortfolioMemoryEngine:
         win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
 
         # Average win/loss
-        avg_win = (sum(o.realized_pnl or 0 for o in winning_trades) / win_count
-                   if win_count > 0 else 0)
+        avg_win = (
+            sum(o.realized_pnl or 0 for o in winning_trades) / win_count
+            if win_count > 0
+            else 0
+        )
         avg_loss = (
             sum(o.realized_pnl or 0 for o in losing_trades) / loss_count
-            if loss_count > 0 else 0
+            if loss_count > 0
+            else 0
         )
 
         # Profit factor (gross profit / gross loss)
@@ -833,89 +849,86 @@ class PortfolioMemoryEngine:
 
         # Average holding period
         holding_periods = [
-            o.holding_period_hours for o in period_outcomes
+            o.holding_period_hours
+            for o in period_outcomes
             if o.holding_period_hours is not None
         ]
         avg_holding_hours = (
-            sum(holding_periods) / len(holding_periods)
-            if holding_periods else None
+            sum(holding_periods) / len(holding_periods) if holding_periods else None
         )
 
         # Calculate ROI percentage (assuming we can estimate average capital)
         # This is approximate - real ROI needs starting capital
-        avg_position_value = sum(
-            abs(o.entry_price * o.position_size) for o in period_outcomes
-        ) / total_trades if total_trades > 0 else 1
+        avg_position_value = (
+            sum(abs(o.entry_price * o.position_size) for o in period_outcomes)
+            / total_trades
+            if total_trades > 0
+            else 1
+        )
         roi_percentage = (
-            (total_pnl / avg_position_value * 100)
-            if avg_position_value > 0 else 0
+            (total_pnl / avg_position_value * 100) if avg_position_value > 0 else 0
         )
 
         # Recent momentum: compare first half vs second half of period
         mid_point = len(period_outcomes) // 2
         if mid_point > 0:
             first_half_pnl = sum(
-                o.realized_pnl or 0
-                for o in period_outcomes[:mid_point]
+                o.realized_pnl or 0 for o in period_outcomes[:mid_point]
             )
             second_half_pnl = sum(
-                o.realized_pnl or 0
-                for o in period_outcomes[mid_point:]
+                o.realized_pnl or 0 for o in period_outcomes[mid_point:]
             )
 
             if second_half_pnl > first_half_pnl * 1.1:
-                momentum = 'improving'
+                momentum = "improving"
             elif second_half_pnl < first_half_pnl * 0.9:
-                momentum = 'declining'
+                momentum = "declining"
             else:
-                momentum = 'stable'
+                momentum = "stable"
         else:
-            momentum = 'insufficient_data'
+            momentum = "insufficient_data"
 
         # Sharpe ratio (if we have enough data)
         sharpe_ratio = None
         if len(period_outcomes) >= 10:
             returns = [
-                (o.realized_pnl or 0) / (o.entry_price * o.position_size)
-                if o.entry_price * o.position_size > 0 else 0
+                (
+                    (o.realized_pnl or 0) / (o.entry_price * o.position_size)
+                    if o.entry_price * o.position_size > 0
+                    else 0
+                )
                 for o in period_outcomes
             ]
             sharpe_ratio = self._calculate_sharpe_ratio(returns)
 
         return {
-            'has_data': True,
-            'period_days': days,
-            'period_start': cutoff_date.isoformat(),
-            'period_end': datetime.utcnow().isoformat(),
-
+            "has_data": True,
+            "period_days": days,
+            "period_start": cutoff_date.isoformat(),
+            "period_end": datetime.utcnow().isoformat(),
             # Core performance
-            'realized_pnl': total_pnl,
-            'total_trades': total_trades,
-            'win_rate': win_rate,
-            'winning_trades': win_count,
-            'losing_trades': loss_count,
-
+            "realized_pnl": total_pnl,
+            "total_trades": total_trades,
+            "win_rate": win_rate,
+            "winning_trades": win_count,
+            "losing_trades": loss_count,
             # Win/loss analysis
-            'avg_win': avg_win,
-            'avg_loss': avg_loss,
-            'profit_factor': profit_factor,
-            'gross_profit': gross_profit,
-            'gross_loss': gross_loss,
-
+            "avg_win": avg_win,
+            "avg_loss": avg_loss,
+            "profit_factor": profit_factor,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
             # Extremes
-            'best_trade': best_trade,
-            'worst_trade': worst_trade,
-
+            "best_trade": best_trade,
+            "worst_trade": worst_trade,
             # Risk metrics
-            'sharpe_ratio': sharpe_ratio,
-            'roi_percentage': roi_percentage,
-
+            "sharpe_ratio": sharpe_ratio,
+            "roi_percentage": roi_percentage,
             # Trading behavior
-            'average_holding_hours': avg_holding_hours,
-            'recent_momentum': momentum,
-
+            "average_holding_hours": avg_holding_hours,
+            "recent_momentum": momentum,
             # Asset filter
-            'asset_pair': asset_pair if asset_pair else 'all'
+            "asset_pair": asset_pair if asset_pair else "all",
         }
 
     def generate_context(
@@ -923,7 +936,7 @@ class PortfolioMemoryEngine:
         asset_pair: Optional[str] = None,
         max_recent: Optional[int] = None,
         include_long_term: bool = True,
-        long_term_days: int = 90
+        long_term_days: int = 90,
     ) -> Dict[str, Any]:
         """
         Generate performance context to inform new trading decisions.
@@ -948,16 +961,13 @@ class PortfolioMemoryEngine:
         long_term_performance = None
         if include_long_term:
             long_term_performance = self.get_performance_over_period(
-                days=long_term_days,
-                asset_pair=asset_pair
+                days=long_term_days, asset_pair=asset_pair
             )
 
-        if not outcomes and not (long_term_performance and
-                                 long_term_performance.get('has_data')):
-            return {
-                'has_history': False,
-                'message': 'No historical trades available'
-            }
+        if not outcomes and not (
+            long_term_performance and long_term_performance.get("has_data")
+        ):
+            return {"has_history": False, "message": "No historical trades available"}
 
         # Aggregate recent performance
         recent_pnl = sum(o.realized_pnl or 0 for o in outcomes)
@@ -965,29 +975,29 @@ class PortfolioMemoryEngine:
         recent_win_rate = recent_wins / len(outcomes) * 100 if outcomes else 0
 
         # Recent performance by action
-        action_stats = defaultdict(lambda: {'count': 0, 'wins': 0, 'pnl': 0.0})
+        action_stats = defaultdict(lambda: {"count": 0, "wins": 0, "pnl": 0.0})
         for o in outcomes:
             stats = action_stats[o.action]
-            stats['count'] += 1
+            stats["count"] += 1
             if o.was_profitable:
-                stats['wins'] += 1
-            stats['pnl'] += o.realized_pnl or 0
+                stats["wins"] += 1
+            stats["pnl"] += o.realized_pnl or 0
 
         # Provider performance (recent)
-        provider_stats = defaultdict(lambda: {'count': 0, 'wins': 0})
+        provider_stats = defaultdict(lambda: {"count": 0, "wins": 0})
         for o in outcomes:
             if o.ai_provider:
                 stats = provider_stats[o.ai_provider]
-                stats['count'] += 1
+                stats["count"] += 1
                 if o.was_profitable:
-                    stats['wins'] += 1
+                    stats["wins"] += 1
 
         # Current streak
         streak_type = None
         streak_count = 0
         if outcomes:
             last_profitable = outcomes[-1].was_profitable
-            streak_type = 'winning' if last_profitable else 'losing'
+            streak_type = "winning" if last_profitable else "losing"
             for o in reversed(outcomes):
                 if o.was_profitable == last_profitable:
                     streak_count += 1
@@ -995,68 +1005,62 @@ class PortfolioMemoryEngine:
                     break
 
         context = {
-            'has_history': True,
-            'total_historical_trades': len(self.trade_outcomes),
-            'recent_trades_analyzed': len(outcomes),
-            'recent_performance': {
-                'total_pnl': recent_pnl,
-                'win_rate': recent_win_rate,
-                'winning_trades': recent_wins,
-                'losing_trades': len(outcomes) - recent_wins
+            "has_history": True,
+            "total_historical_trades": len(self.trade_outcomes),
+            "recent_trades_analyzed": len(outcomes),
+            "recent_performance": {
+                "total_pnl": recent_pnl,
+                "win_rate": recent_win_rate,
+                "winning_trades": recent_wins,
+                "losing_trades": len(outcomes) - recent_wins,
             },
-            'action_performance': {
+            "action_performance": {
                 action: {
-                    'win_rate': (
-                        stats['wins'] / stats['count'] * 100
-                        if stats['count'] > 0 else 0
+                    "win_rate": (
+                        stats["wins"] / stats["count"] * 100
+                        if stats["count"] > 0
+                        else 0
                     ),
-                    'total_pnl': stats['pnl'],
-                    'count': stats['count']
+                    "total_pnl": stats["pnl"],
+                    "count": stats["count"],
                 }
                 for action, stats in action_stats.items()
             },
-            'provider_performance': {
+            "provider_performance": {
                 provider: {
-                    'win_rate': (
-                        stats['wins'] / stats['count'] * 100
-                        if stats['count'] > 0 else 0
+                    "win_rate": (
+                        stats["wins"] / stats["count"] * 100
+                        if stats["count"] > 0
+                        else 0
                     ),
-                    'count': stats['count']
+                    "count": stats["count"],
                 }
                 for provider, stats in provider_stats.items()
             },
-            'current_streak': {
-                'type': streak_type,
-                'count': streak_count
-            },
-            'long_term_performance': long_term_performance
+            "current_streak": {"type": streak_type, "count": streak_count},
+            "long_term_performance": long_term_performance,
         }
 
         # Add asset-specific context
         if asset_pair:
-            context['asset_pair'] = asset_pair
+            context["asset_pair"] = asset_pair
             asset_outcomes = [
-                o for o in self.trade_outcomes
-                if o.asset_pair == asset_pair
+                o for o in self.trade_outcomes if o.asset_pair == asset_pair
             ]
             if asset_outcomes:
                 asset_pnl = sum(o.realized_pnl or 0 for o in asset_outcomes)
                 asset_wins = sum(1 for o in asset_outcomes if o.was_profitable)
-                context['asset_specific'] = {
-                    'total_trades': len(asset_outcomes),
-                    'total_pnl': asset_pnl,
-                    'win_rate': (
-                        asset_wins / len(asset_outcomes) * 100
-                        if asset_outcomes else 0
-                    )
+                context["asset_specific"] = {
+                    "total_trades": len(asset_outcomes),
+                    "total_pnl": asset_pnl,
+                    "win_rate": (
+                        asset_wins / len(asset_outcomes) * 100 if asset_outcomes else 0
+                    ),
                 }
 
         return context
 
-    def format_context_for_prompt(
-        self,
-        context: Dict[str, Any]
-    ) -> str:
+    def format_context_for_prompt(self, context: Dict[str, Any]) -> str:
         """
         Format performance context into human-readable text for AI prompts.
 
@@ -1066,7 +1070,7 @@ class PortfolioMemoryEngine:
         Returns:
             Formatted string suitable for AI prompt
         """
-        if not context.get('has_history'):
+        if not context.get("has_history"):
             return "No historical trading data available."
 
         lines = [
@@ -1082,35 +1086,31 @@ class PortfolioMemoryEngine:
         ]
 
         # Current streak
-        streak = context.get('current_streak', {})
-        if streak.get('type'):
-            lines.append(
-                f"  Current Streak: {streak['count']} {streak['type']} trades"
-            )
+        streak = context.get("current_streak", {})
+        if streak.get("type"):
+            lines.append(f"  Current Streak: {streak['count']} {streak['type']} trades")
 
         # Action performance
         lines.append("\nAction Performance:")
-        for action, stats in context.get('action_performance', {}).items():
+        for action, stats in context.get("action_performance", {}).items():
             lines.append(
                 f"  {action}: {stats['win_rate']:.1f}% win rate, "
                 f"${stats['total_pnl']:.2f} P&L ({stats['count']} trades)"
             )
 
         # Provider performance
-        if context.get('provider_performance'):
+        if context.get("provider_performance"):
             lines.append("\nProvider Performance:")
-            for provider, stats in context['provider_performance'].items():
+            for provider, stats in context["provider_performance"].items():
                 lines.append(
                     f"  {provider}: {stats['win_rate']:.1f}% win rate "
                     f"({stats['count']} trades)"
                 )
 
         # Asset-specific
-        if context.get('asset_specific'):
-            asset_stats = context['asset_specific']
-            lines.append(
-                f"\n{context.get('asset_pair', 'This Asset')} Specific:"
-            )
+        if context.get("asset_specific"):
+            asset_stats = context["asset_specific"]
+            lines.append(f"\n{context.get('asset_pair', 'This Asset')} Specific:")
             lines.append(
                 f"  {asset_stats['total_trades']} trades, "
                 f"{asset_stats['win_rate']:.1f}% win rate, "
@@ -1136,19 +1136,19 @@ class PortfolioMemoryEngine:
 
         if not stats:
             return {
-                'recommended_weights': {},
-                'confidence': 'low',
-                'reason': 'Insufficient data'
+                "recommended_weights": {},
+                "confidence": "low",
+                "reason": "Insufficient data",
             }
 
         # Calculate weights based on win rate and avg P&L
         scores = {}
         for provider, perf in stats.items():
             # Combined score: 60% win rate, 40% avg P&L
-            win_rate_norm = perf['win_rate'] / 100  # Normalize to 0-1
+            win_rate_norm = perf["win_rate"] / 100  # Normalize to 0-1
 
             # Normalize avg P&L (assuming reasonable range -100 to +100)
-            avg_pnl = perf.get('avg_pnl_per_trade', 0)
+            avg_pnl = perf.get("avg_pnl_per_trade", 0)
             pnl_norm = np.tanh(avg_pnl / 50)  # Sigmoid-like normalization
             pnl_norm = (pnl_norm + 1) / 2  # Scale to 0-1
 
@@ -1164,21 +1164,19 @@ class PortfolioMemoryEngine:
             weights = {p: 1.0 / len(scores) for p in scores}
 
         # Determine confidence based on sample size
-        min_trades = min(perf['total_trades'] for perf in stats.values())
+        min_trades = min(perf["total_trades"] for perf in stats.values())
         if min_trades >= 50:
-            confidence = 'high'
+            confidence = "high"
         elif min_trades >= 20:
-            confidence = 'medium'
+            confidence = "medium"
         else:
-            confidence = 'low'
+            confidence = "low"
 
         return {
-            'recommended_weights': weights,
-            'confidence': confidence,
-            'provider_stats': stats,
-            'sample_sizes': {
-                p: perf['total_trades'] for p, perf in stats.items()
-            }
+            "recommended_weights": weights,
+            "confidence": confidence,
+            "provider_stats": stats,
+            "sample_sizes": {p: perf["total_trades"] for p, perf in stats.items()},
         }
 
     def get_strategy_performance_summary(self) -> Dict[str, Dict[str, Any]]:
@@ -1187,14 +1185,14 @@ class PortfolioMemoryEngine:
         """
         summary = {}
         for strategy, stats in self.strategy_performance.items():
-            total_trades = stats['total_trades']
+            total_trades = stats["total_trades"]
             if total_trades > 0:
-                win_rate = (stats['winning_trades'] / total_trades) * 100
+                win_rate = (stats["winning_trades"] / total_trades) * 100
                 summary[strategy] = {
-                    'total_trades': total_trades,
-                    'winning_trades': stats['winning_trades'],
-                    'total_pnl': stats['total_pnl'],
-                    'win_rate': win_rate
+                    "total_trades": total_trades,
+                    "winning_trades": stats["winning_trades"],
+                    "total_pnl": stats["total_pnl"],
+                    "win_rate": win_rate,
                 }
         return summary
 
@@ -1208,19 +1206,19 @@ class PortfolioMemoryEngine:
         filepath = self.storage_path / filename
 
         try:
-            with open(filepath, 'w') as f:
+            with open(filepath, "w") as f:
                 json.dump(outcome.to_dict(), f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save outcome: {e}")
 
     def _save_snapshot(self, snapshot: PerformanceSnapshot) -> None:
         """Save performance snapshot to disk."""
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         filename = f"snapshot_{timestamp}.json"
         filepath = self.storage_path / filename
 
         try:
-            with open(filepath, 'w') as f:
+            with open(filepath, "w") as f:
                 json.dump(snapshot.to_dict(), f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save snapshot: {e}")
@@ -1229,28 +1227,30 @@ class PortfolioMemoryEngine:
         """Load historical outcomes and snapshots from disk."""
         # Load outcomes
         outcome_files = sorted(self.storage_path.glob("outcome_*.json"))
-        for filepath in outcome_files[-self.max_memory_size:]:
+        for filepath in outcome_files[-self.max_memory_size :]:
             try:
-                with open(filepath, 'r') as f:
+                with open(filepath, "r") as f:
                     outcome_data = json.load(f)
                 outcome = TradeOutcome(**outcome_data)
                 self.trade_outcomes.append(outcome)
 
                 # Rebuild experience buffer (simplified - no original decision)
-                self.experience_buffer.append({
-                    'decision': None,  # Not stored separately
-                    'outcome': outcome_data,
-                    'timestamp': outcome.exit_timestamp
-                })
+                self.experience_buffer.append(
+                    {
+                        "decision": None,  # Not stored separately
+                        "outcome": outcome_data,
+                        "timestamp": outcome.exit_timestamp,
+                    }
+                )
 
                 # Rebuild provider performance (simplified reconstruction)
                 if outcome.ai_provider:
                     provider = outcome.ai_provider
                     stats = self.provider_performance[provider]
-                    stats['total_trades'] += 1
+                    stats["total_trades"] += 1
                     if outcome.was_profitable:
-                        stats['winning_trades'] += 1
-                    stats['total_pnl'] += outcome.realized_pnl or 0
+                        stats["winning_trades"] += 1
+                    stats["total_pnl"] += outcome.realized_pnl or 0
 
             except Exception as e:
                 logger.warning(f"Failed to load outcome from {filepath}: {e}")
@@ -1259,7 +1259,7 @@ class PortfolioMemoryEngine:
         snapshot_files = sorted(self.storage_path.glob("snapshot_*.json"))
         for filepath in snapshot_files[-100:]:  # Keep last 100 snapshots
             try:
-                with open(filepath, 'r') as f:
+                with open(filepath, "r") as f:
                     snapshot_data = json.load(f)
                 snapshot = PerformanceSnapshot(**snapshot_data)
                 self.performance_snapshots.append(snapshot)
@@ -1276,7 +1276,7 @@ class PortfolioMemoryEngine:
         # Save provider performance summary
         summary_path = self.storage_path / "provider_performance.json"
         try:
-            with open(summary_path, 'w') as f:
+            with open(summary_path, "w") as f:
                 json.dump(dict(self.provider_performance), f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save provider performance: {e}")
@@ -1284,7 +1284,7 @@ class PortfolioMemoryEngine:
         # Save regime performance
         regime_path = self.storage_path / "regime_performance.json"
         try:
-            with open(regime_path, 'w') as f:
+            with open(regime_path, "w") as f:
                 json.dump(dict(self.regime_performance), f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save regime performance: {e}")
@@ -1294,15 +1294,15 @@ class PortfolioMemoryEngine:
     def get_summary(self) -> Dict[str, Any]:
         """Get summary of memory engine state."""
         return {
-            'total_outcomes': len(self.trade_outcomes),
-            'total_experiences': len(self.experience_buffer),
-            'total_snapshots': len(self.performance_snapshots),
-            'providers_tracked': len(self.provider_performance),
-            'regimes_tracked': len(self.regime_performance),
-            'storage_path': str(self.storage_path),
-            'max_memory_size': self.max_memory_size,
-            'learning_rate': self.learning_rate,
-            'context_window': self.context_window
+            "total_outcomes": len(self.trade_outcomes),
+            "total_experiences": len(self.experience_buffer),
+            "total_snapshots": len(self.performance_snapshots),
+            "providers_tracked": len(self.provider_performance),
+            "regimes_tracked": len(self.regime_performance),
+            "storage_path": str(self.storage_path),
+            "max_memory_size": self.max_memory_size,
+            "learning_rate": self.learning_rate,
+            "context_window": self.context_window,
         }
 
     # ===================================================================
@@ -1322,19 +1322,25 @@ class PortfolioMemoryEngine:
         from copy import deepcopy
 
         snapshot_data = {
-            'trade_outcomes': deepcopy([outcome.to_dict() for outcome in self.trade_outcomes]),
-            'experience_buffer': deepcopy(list(self.experience_buffer)),
-            'provider_performance': deepcopy(dict(self.provider_performance)),
-            'regime_performance': deepcopy(dict(self.regime_performance)),
-            'strategy_performance': deepcopy(dict(self.strategy_performance)),
-            'performance_snapshots': deepcopy([snap.to_dict() for snap in self.performance_snapshots]),
-            'max_memory_size': self.max_memory_size,
-            'learning_rate': self.learning_rate,
-            'context_window': self.context_window,
-            'readonly': self._readonly
+            "trade_outcomes": deepcopy(
+                [outcome.to_dict() for outcome in self.trade_outcomes]
+            ),
+            "experience_buffer": deepcopy(list(self.experience_buffer)),
+            "provider_performance": deepcopy(dict(self.provider_performance)),
+            "regime_performance": deepcopy(dict(self.regime_performance)),
+            "strategy_performance": deepcopy(dict(self.strategy_performance)),
+            "performance_snapshots": deepcopy(
+                [snap.to_dict() for snap in self.performance_snapshots]
+            ),
+            "max_memory_size": self.max_memory_size,
+            "learning_rate": self.learning_rate,
+            "context_window": self.context_window,
+            "readonly": self._readonly,
         }
 
-        logger.debug(f"Created memory snapshot with {len(self.trade_outcomes)} outcomes")
+        logger.debug(
+            f"Created memory snapshot with {len(self.trade_outcomes)} outcomes"
+        )
         return snapshot_data
 
     def restore(self, snapshot: Dict[str, Any]) -> None:
@@ -1352,62 +1358,59 @@ class PortfolioMemoryEngine:
         # Restore trade outcomes
         self.trade_outcomes = [
             TradeOutcome(**outcome_data)
-            for outcome_data in snapshot.get('trade_outcomes', [])
+            for outcome_data in snapshot.get("trade_outcomes", [])
         ]
 
         # Restore experience buffer
         self.experience_buffer = deque(
-            deepcopy(snapshot.get('experience_buffer', [])),
-            maxlen=self.max_memory_size
+            deepcopy(snapshot.get("experience_buffer", [])), maxlen=self.max_memory_size
         )
 
         # Restore provider performance
         self.provider_performance = defaultdict(
             lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0,
-                'confidence_calibration': []
+                "total_trades": 0,
+                "winning_trades": 0,
+                "total_pnl": 0.0,
+                "confidence_calibration": [],
             }
         )
-        for provider, stats in snapshot.get('provider_performance', {}).items():
+        for provider, stats in snapshot.get("provider_performance", {}).items():
             self.provider_performance[provider] = deepcopy(stats)
 
         # Restore regime performance
         self.regime_performance = defaultdict(
-            lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0
-            }
+            lambda: {"total_trades": 0, "winning_trades": 0, "total_pnl": 0.0}
         )
-        for regime, stats in snapshot.get('regime_performance', {}).items():
+        for regime, stats in snapshot.get("regime_performance", {}).items():
             self.regime_performance[regime] = deepcopy(stats)
 
         # Restore strategy performance
         self.strategy_performance = defaultdict(
             lambda: {
-                'total_trades': 0,
-                'winning_trades': 0,
-                'total_pnl': 0.0,
+                "total_trades": 0,
+                "winning_trades": 0,
+                "total_pnl": 0.0,
             }
         )
-        for strategy, stats in snapshot.get('strategy_performance', {}).items():
+        for strategy, stats in snapshot.get("strategy_performance", {}).items():
             self.strategy_performance[strategy] = deepcopy(stats)
 
         # Restore performance snapshots
         self.performance_snapshots = [
             PerformanceSnapshot(**snap_data)
-            for snap_data in snapshot.get('performance_snapshots', [])
+            for snap_data in snapshot.get("performance_snapshots", [])
         ]
 
         # Restore config values
-        self.max_memory_size = snapshot.get('max_memory_size', self.max_memory_size)
-        self.learning_rate = snapshot.get('learning_rate', self.learning_rate)
-        self.context_window = snapshot.get('context_window', self.context_window)
-        self._readonly = snapshot.get('readonly', False)
+        self.max_memory_size = snapshot.get("max_memory_size", self.max_memory_size)
+        self.learning_rate = snapshot.get("learning_rate", self.learning_rate)
+        self.context_window = snapshot.get("context_window", self.context_window)
+        self._readonly = snapshot.get("readonly", False)
 
-        logger.info(f"Restored memory snapshot with {len(self.trade_outcomes)} outcomes")
+        logger.info(
+            f"Restored memory snapshot with {len(self.trade_outcomes)} outcomes"
+        )
 
     def set_readonly(self, enabled: bool) -> None:
         """
@@ -1429,8 +1432,7 @@ class PortfolioMemoryEngine:
         return self._readonly
 
     def generate_learning_validation_metrics(
-        self,
-        asset_pair: Optional[str] = None
+        self, asset_pair: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate comprehensive learning validation metrics.
@@ -1445,9 +1447,10 @@ class PortfolioMemoryEngine:
             Comprehensive validation metrics dictionary
         """
         from finance_feedback_engine.backtesting.monte_carlo import (
-            generate_learning_validation_metrics
+            generate_learning_validation_metrics,
         )
+
         return generate_learning_validation_metrics(self, asset_pair)
 
 
-__all__ = ['PortfolioMemoryEngine', 'TradeOutcome', 'PerformanceSnapshot']
+__all__ = ["PortfolioMemoryEngine", "TradeOutcome", "PerformanceSnapshot"]

@@ -1,8 +1,8 @@
 # Critical Issue: Backtester Uses Daily Candles Only
 
-**Status**: Root cause identified  
-**Severity**: CRITICAL - Breaks realistic market state simulation  
-**Date Identified**: December 2025  
+**Status**: Root cause identified
+**Severity**: CRITICAL - Breaks realistic market state simulation
+**Date Identified**: December 2025
 
 ## Problem Statement
 
@@ -21,7 +21,7 @@ This means the backtester cannot capture:
 
 ## Root Cause
 
-**File**: `finance_feedback_engine/data_providers/alpha_vantage_provider.py`  
+**File**: `finance_feedback_engine/data_providers/alpha_vantage_provider.py`
 **Method**: `AlphaVantageProvider.get_historical_data()` (lines 252-357)
 
 ### Problematic Code

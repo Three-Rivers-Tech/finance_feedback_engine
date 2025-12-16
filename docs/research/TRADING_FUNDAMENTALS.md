@@ -59,7 +59,7 @@ Exit: BUY (cover) 0.1 BTC at $45,000
 P&L: ($50,000 - $45,000) × 0.1 = $500 profit (+10%)
 ```
 
-**⚠️ Key Difference:** 
+**⚠️ Key Difference:**
 - **LONG:** Profit when price goes UP ⬆️
 - **SHORT:** Profit when price goes DOWN ⬇️
 

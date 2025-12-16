@@ -1,10 +1,13 @@
 """Test UnifiedTradingPlatform routing logic."""
 
-import pytest
-from unittest.mock import Mock
 from datetime import datetime, timezone
+from unittest.mock import Mock
 
-from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
+import pytest
+
+from finance_feedback_engine.trading_platforms.unified_platform import (
+    UnifiedTradingPlatform,
+)
 
 
 class TestUnifiedPlatformRouting:
@@ -18,7 +21,7 @@ class TestUnifiedPlatformRouting:
         platform.get_balance.return_value = {"FUTURES_USD": 10000.0}
         platform.execute_trade.return_value = {
             "success": True,
-            "decision_id": "test-001"
+            "decision_id": "test-001",
         }
         platform.get_account_info.return_value = {"status": "active"}
         return platform
@@ -31,7 +34,7 @@ class TestUnifiedPlatformRouting:
         platform.get_balance.return_value = {"USD": 50000.0}
         platform.execute_trade.return_value = {
             "success": True,
-            "decision_id": "test-002"
+            "decision_id": "test-002",
         }
         platform.get_account_info.return_value = {"status": "active"}
         return platform
@@ -42,22 +45,22 @@ class TestUnifiedPlatformRouting:
         # Mock the platform classes
         monkeypatch.setattr(
             "finance_feedback_engine.trading_platforms.unified_platform.CoinbaseAdvancedPlatform",
-            lambda x: mock_coinbase
+            lambda x: mock_coinbase,
         )
         monkeypatch.setattr(
             "finance_feedback_engine.trading_platforms.unified_platform.OandaPlatform",
-            lambda x: mock_oanda
+            lambda x: mock_oanda,
         )
 
         credentials = {
             "coinbase": {"api_key": "test", "api_secret": "test"},
-            "oanda": {"api_token": "test", "account_id": "test"}
+            "oanda": {"api_token": "test", "account_id": "test"},
         }
 
         unified = UnifiedTradingPlatform(credentials)
         # Replace the mocked instances with our fixtures
-        unified.platforms['coinbase'] = mock_coinbase
-        unified.platforms['oanda'] = mock_oanda
+        unified.platforms["coinbase"] = mock_coinbase
+        unified.platforms["oanda"] = mock_oanda
         return unified
 
     def test_eurusd_routes_to_oanda(self, unified_platform, mock_oanda):
@@ -68,7 +71,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "EURUSD",
             "suggested_amount": 1000.0,
             "entry_price": 1.10,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -85,7 +88,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "BTCUSD",
             "suggested_amount": 5000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -102,7 +105,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "ETHUSD",
             "suggested_amount": 3000.0,
             "entry_price": 2500.0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -119,7 +122,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "GBPUSD",
             "suggested_amount": 1000.0,
             "entry_price": 1.25,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -136,7 +139,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "USDJPY",
             "suggested_amount": 1000.0,
             "entry_price": 150.0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -145,7 +148,9 @@ class TestUnifiedPlatformRouting:
         mock_oanda.execute_trade.assert_called_once_with(decision)
         assert result["success"] is True
 
-    def test_eur_usd_with_underscore_routes_to_oanda(self, unified_platform, mock_oanda):
+    def test_eur_usd_with_underscore_routes_to_oanda(
+        self, unified_platform, mock_oanda
+    ):
         """Test that EUR_USD (with underscore) routes to Oanda platform."""
         decision = {
             "id": "test-eur-usd-underscore",
@@ -153,7 +158,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "EUR_USD",
             "suggested_amount": 1000.0,
             "entry_price": 1.10,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -170,7 +175,7 @@ class TestUnifiedPlatformRouting:
             "asset_pair": "XYZABC",
             "suggested_amount": 1000.0,
             "entry_price": 1.0,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         result = unified_platform.execute_trade(decision)
@@ -188,7 +193,7 @@ class TestUnifiedPlatformRouting:
                 "asset_pair": "BTCUSD",
                 "suggested_amount": 1000.0,
                 "entry_price": 50000.0,
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
             {
                 "id": "test-ethusd",
@@ -196,7 +201,7 @@ class TestUnifiedPlatformRouting:
                 "asset_pair": "ETHUSD",
                 "suggested_amount": 500.0,
                 "entry_price": 2500.0,
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
             {
                 "id": "test-eurusd",
@@ -204,8 +209,8 @@ class TestUnifiedPlatformRouting:
                 "asset_pair": "EURUSD",
                 "suggested_amount": 1000.0,
                 "entry_price": 1.10,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            }
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
         ]
 
         results = []
@@ -219,7 +224,9 @@ class TestUnifiedPlatformRouting:
         assert mock_oanda.execute_trade.call_count == 1
 
         # Verify specific routing
-        coinbase_calls = [call[0][0] for call in mock_coinbase.execute_trade.call_args_list]
+        coinbase_calls = [
+            call[0][0] for call in mock_coinbase.execute_trade.call_args_list
+        ]
         oanda_calls = [call[0][0] for call in mock_oanda.execute_trade.call_args_list]
 
         assert any(c["asset_pair"] == "BTCUSD" for c in coinbase_calls)

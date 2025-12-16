@@ -1,16 +1,13 @@
 """Unified trading platform to manage multiple accounts."""
 
-from typing import Any, Dict, List
 import logging
+from typing import Any, Dict, List
 
-from .base_platform import (
-    BaseTradingPlatform,
-    PositionInfo,
-    PositionsResponse,
-)
+from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
+
+from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .coinbase_platform import CoinbaseAdvancedPlatform
 from .oanda_platform import OandaPlatform
-from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
 
 logger = logging.getLogger(__name__)
 
@@ -35,26 +32,19 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         self.platforms: Dict[str, BaseTradingPlatform] = {}
 
         # Support both 'coinbase' and 'coinbase_advanced' keys
-        coinbase_creds = (
-            credentials.get('coinbase') or
-            credentials.get('coinbase_advanced')
+        coinbase_creds = credentials.get("coinbase") or credentials.get(
+            "coinbase_advanced"
         )
         if coinbase_creds:
-            logger.info(
-                "Initializing Coinbase Advanced platform for unified access."
-            )
-            self.platforms['coinbase'] = CoinbaseAdvancedPlatform(
-                coinbase_creds
-            )
+            logger.info("Initializing Coinbase Advanced platform for unified access.")
+            self.platforms["coinbase"] = CoinbaseAdvancedPlatform(coinbase_creds)
 
-        if 'oanda' in credentials and credentials['oanda']:
+        if "oanda" in credentials and credentials["oanda"]:
             logger.info("Initializing Oanda platform for unified access.")
-            self.platforms['oanda'] = OandaPlatform(credentials['oanda'])
+            self.platforms["oanda"] = OandaPlatform(credentials["oanda"])
 
         if not self.platforms:
-            raise ValueError(
-                "No platforms were configured for UnifiedTradingPlatform."
-            )
+            raise ValueError("No platforms were configured for UnifiedTradingPlatform.")
 
     def get_balance(self) -> Dict[str, float]:
         """
@@ -83,32 +73,30 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         - Crypto (BTC, ETH) trades are routed to Coinbase.
         - Forex (e.g., EUR_USD) trades are routed to Oanda.
         """
-        asset_pair = decision.get('asset_pair', '').upper()
+        asset_pair = decision.get("asset_pair", "").upper()
 
         # Classify asset and route to appropriate platform
         asset_class = classify_asset_pair(asset_pair)
 
         target_platform = None
-        if asset_class == 'crypto':
-            target_platform = self.platforms.get('coinbase')
-        elif asset_class == 'forex':
-            target_platform = self.platforms.get('oanda')
+        if asset_class == "crypto":
+            target_platform = self.platforms.get("coinbase")
+        elif asset_class == "forex":
+            target_platform = self.platforms.get("oanda")
 
         if target_platform:
             logger.info(
                 "Routing trade for %s to %s",
                 asset_pair,
-                target_platform.__class__.__name__
+                target_platform.__class__.__name__,
             )
             return target_platform.execute_trade(decision)
         else:
-            logger.error(
-                "No suitable platform found for asset pair: %s", asset_pair
-            )
+            logger.error("No suitable platform found for asset pair: %s", asset_pair)
             return {
-                'success': False,
-                'error': f"No platform available for asset pair {asset_pair}",
-                'decision_id': decision.get('id')
+                "success": False,
+                "error": f"No platform available for asset pair {asset_pair}",
+                "decision_id": decision.get("id"),
             }
 
     def get_account_info(self) -> Dict[str, Any]:
@@ -121,7 +109,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 combined_info[name] = platform.get_account_info()
             except (ValueError, TypeError, KeyError) as e:
                 logger.error("Failed to get account info from %s: %s", name, e)
-                combined_info[name] = {'error': str(e)}
+                combined_info[name] = {"error": str(e)}
         return combined_info
 
     def get_active_positions(self) -> PositionsResponse:
@@ -138,16 +126,15 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             try:
                 # Call get_active_positions on the sub-platform
                 platform_positions_data = platform_instance.get_active_positions()
-                for pos in platform_positions_data.get('positions', []):
+                for pos in platform_positions_data.get("positions", []):
                     # Add platform name to each position for context in CLI display
-                    pos['platform'] = name
+                    pos["platform"] = name
                     all_positions.append(pos)
             except Exception as e:
                 logger.warning(
-                    "Could not fetch active positions from %s platform: %s",
-                    name, e
+                    "Could not fetch active positions from %s platform: %s", name, e
                 )
-        return {'positions': all_positions}
+        return {"positions": all_positions}
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
@@ -168,15 +155,12 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 breakdown = platform.get_portfolio_breakdown()
                 platform_breakdowns[name] = breakdown
 
-                total_value_usd += breakdown.get('total_value_usd', 0)
+                total_value_usd += breakdown.get("total_value_usd", 0)
                 # Capture unrealized P&L if the platform exposes it
-                total_unrealized += breakdown.get('unrealized_pnl', 0.0)
+                total_unrealized += breakdown.get("unrealized_pnl", 0.0)
 
                 # Capture cash/balance if provided by the platform
-                bal = (
-                    breakdown.get('balance') or
-                    breakdown.get('total_balance_usd')
-                )
+                bal = breakdown.get("balance") or breakdown.get("total_balance_usd")
                 if bal is not None:
                     try:
                         cash_balances[name] = float(bal)
@@ -184,43 +168,39 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                         cash_balances[name] = 0.0
 
                 # Add platform prefix to holdings
-                holdings = breakdown.get('holdings', [])
+                holdings = breakdown.get("holdings", [])
                 for holding in holdings:
-                    holding['platform'] = name
+                    holding["platform"] = name
                 all_holdings.extend(holdings)
 
-                num_assets += breakdown.get('num_assets', 0)
+                num_assets += breakdown.get("num_assets", 0)
 
             except (ValueError, TypeError, KeyError) as e:
-                logger.error(
-                    "Failed to get portfolio breakdown from %s: %s", name, e
-                )
+                logger.error("Failed to get portfolio breakdown from %s: %s", name, e)
 
         # Recalculate allocation percentages across the entire portfolio.
         # Use total notional exposure (sum of all holdings' values) rather
         # than account balance, so allocations make sense for leveraged positions.
         total_notional_exposure = sum(
-            holding.get('value_usd', 0) for holding in all_holdings
+            holding.get("value_usd", 0) for holding in all_holdings
         )
 
         if total_notional_exposure > 0:
             for holding in all_holdings:
                 allocation = (
-                    holding.get('value_usd', 0) / total_notional_exposure
+                    holding.get("value_usd", 0) / total_notional_exposure
                 ) * 100
-                holding['allocation_pct'] = allocation
+                holding["allocation_pct"] = allocation
 
         # Sum cash balances across platforms
-        cash_balance_usd = (
-            sum(cash_balances.values()) if cash_balances else 0.0
-        )
+        cash_balance_usd = sum(cash_balances.values()) if cash_balances else 0.0
 
         return {
-            'total_value_usd': total_value_usd,
-            'cash_balance_usd': cash_balance_usd,
-            'per_platform_cash': cash_balances,
-            'num_assets': num_assets,
-            'holdings': all_holdings,
-            'platform_breakdowns': platform_breakdowns,
-            'unrealized_pnl': total_unrealized
+            "total_value_usd": total_value_usd,
+            "cash_balance_usd": cash_balance_usd,
+            "per_platform_cash": cash_balances,
+            "num_assets": num_assets,
+            "holdings": all_holdings,
+            "platform_breakdowns": platform_breakdowns,
+            "unrealized_pnl": total_unrealized,
         }

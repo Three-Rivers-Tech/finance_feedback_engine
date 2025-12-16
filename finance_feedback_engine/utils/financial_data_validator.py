@@ -1,64 +1,66 @@
+from typing import Any, Dict, List, Union
+
 import pandas as pd
-from typing import Union, List, Dict, Any
 
 # Define common financial data validation rules and error messages
 VALIDATION_RULES = {
     "price": {
         "min": 0.0,
         "type": (int, float),
-        "error_msg": "Price must be a non-negative numerical value."
+        "error_msg": "Price must be a non-negative numerical value.",
     },
     "volume": {
         "min": 0,
         "type": (int, float),
-        "error_msg": "Volume must be a non-negative numerical value."
+        "error_msg": "Volume must be a non-negative numerical value.",
     },
     "timestamp": {
-        "format": "ISO_8601", # Expecting ISO 8601 string or datetime objects
+        "format": "ISO_8601",  # Expecting ISO 8601 string or datetime objects
         "timezone": "UTC",
-        "error_msg": "Timestamp must be a valid UTC ISO 8601 string or datetime object."
+        "error_msg": "Timestamp must be a valid UTC ISO 8601 string or datetime object.",
     },
     "currency_pair": {
-        "format": "UPPERCASE_ALPHANUMERIC", # e.g., "BTCUSD", "EURUSD"
-        "length": 6, # Assuming 3 for base and 3 for quote currency
-        "error_msg": "Currency pair must be a 6-character uppercase alphanumeric string."
+        "format": "UPPERCASE_ALPHANUMERIC",  # e.g., "BTCUSD", "EURUSD"
+        "length": 6,  # Assuming 3 for base and 3 for quote currency
+        "error_msg": "Currency pair must be a 6-character uppercase alphanumeric string.",
     },
     "stop_loss": {
         "min": 0.0,
         "type": (int, float),
-        "error_msg": "Stop loss must be a non-negative numerical value."
+        "error_msg": "Stop loss must be a non-negative numerical value.",
     },
     "take_profit": {
         "min": 0.0,
         "type": (int, float),
-        "error_msg": "Take profit must be a non-negative numerical value."
+        "error_msg": "Take profit must be a non-negative numerical value.",
     },
     "order_type": {
         "allowed_values": ["MARKET", "LIMIT", "STOP", "STOP_LIMIT", "TRAILING_STOP"],
-        "error_msg": "Order type must be one of: MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP."
+        "error_msg": "Order type must be one of: MARKET, LIMIT, STOP, STOP_LIMIT, TRAILING_STOP.",
     },
     "account_balance": {
         "min": 0.0,
         "type": (int, float),
-        "error_msg": "Account balance must be a non-negative numerical value."
+        "error_msg": "Account balance must be a non-negative numerical value.",
     },
     "confidence": {
         "min": 0.0,
         "max": 1.0,
         "type": (int, float),
-        "error_msg": "Confidence must be a numerical value between 0 and 1."
+        "error_msg": "Confidence must be a numerical value between 0 and 1.",
     },
     "position_size": {
         "min": 0.0,
         "type": (int, float),
-        "error_msg": "Position size must be a non-negative numerical value."
+        "error_msg": "Position size must be a non-negative numerical value.",
     },
     "leverage": {
         "min": 1.0,
         "type": (int, float),
-        "error_msg": "Leverage must be a numerical value of 1 or greater."
-    }
+        "error_msg": "Leverage must be a numerical value of 1 or greater.",
+    },
 }
+
 
 class FinancialDataValidator:
     """
@@ -110,27 +112,45 @@ class FinancialDataValidator:
 
         expected_type = rule.get("type")
         if expected_type and not isinstance(value, expected_type):
-            errors.append(rule["error_msg"] + f" (Expected type: {expected_type}, Got: {type(value)})")
-            return errors # Type mismatch usually means other checks will fail
+            errors.append(
+                rule["error_msg"]
+                + f" (Expected type: {expected_type}, Got: {type(value)})"
+            )
+            return errors  # Type mismatch usually means other checks will fail
 
         # Check min value if specified
         if "min" in rule and isinstance(value, (int, float)) and value < rule["min"]:
-            errors.append(rule["error_msg"] + f" (Value {value} is less than min {rule['min']})")
+            errors.append(
+                rule["error_msg"] + f" (Value {value} is less than min {rule['min']})"
+            )
 
         # Check max value if specified
         if "max" in rule and isinstance(value, (int, float)) and value > rule["max"]:
-            errors.append(rule["error_msg"] + f" (Value {value} is greater than max {rule['max']})")
+            errors.append(
+                rule["error_msg"]
+                + f" (Value {value} is greater than max {rule['max']})"
+            )
 
         if rule_name == "timestamp":
             # Implement robust timestamp validation using pandas
             try:
                 pd.to_datetime(value, utc=True)
             except (ValueError, TypeError):
-                errors.append(rule["error_msg"] + f" (Invalid timestamp format or timezone for: {value})")
+                errors.append(
+                    rule["error_msg"]
+                    + f" (Invalid timestamp format or timezone for: {value})"
+                )
 
         elif rule_name == "currency_pair":
-            if not (isinstance(value, str) and value.isupper() and value.isalnum() and len(value) == rule.get("length", 6)):
-                errors.append(rule["error_msg"] + f" (Invalid currency pair format: {value})")
+            if not (
+                isinstance(value, str)
+                and value.isupper()
+                and value.isalnum()
+                and len(value) == rule.get("length", 6)
+            ):
+                errors.append(
+                    rule["error_msg"] + f" (Invalid currency pair format: {value})"
+                )
             return errors
 
         elif rule_name == "order_type":
@@ -229,9 +249,13 @@ class FinancialDataValidator:
                     column_errors[column] = col_errors
         return column_errors
 
-    def validate_schema(self, df: pd.DataFrame, required_columns: List[str] = None,
-                       optional_columns: List[str] = None,
-                       column_types: Dict[str, type] = None) -> List[str]:
+    def validate_schema(
+        self,
+        df: pd.DataFrame,
+        required_columns: List[str] = None,
+        optional_columns: List[str] = None,
+        column_types: Dict[str, type] = None,
+    ) -> List[str]:
         """
         Validates DataFrame schema against expected structure.
 
@@ -259,18 +283,30 @@ class FinancialDataValidator:
                     if not non_null_values.empty:
                         # For performance, sample a subset for type checking if the series is large
                         if len(non_null_values) > 1000:
-                            sample_values = non_null_values.sample(n=min(1000, len(non_null_values)))
+                            sample_values = non_null_values.sample(
+                                n=min(1000, len(non_null_values))
+                            )
                         else:
                             sample_values = non_null_values
 
-                        invalid_types = [val for val in sample_values if not isinstance(val, expected_type)]
+                        invalid_types = [
+                            val
+                            for val in sample_values
+                            if not isinstance(val, expected_type)
+                        ]
                         if invalid_types:
-                            errors.append(f"Column '{col}' contains invalid types. Expected {expected_type}, found values: {invalid_types[:5]}...")  # Show first 5 invalid values
+                            errors.append(
+                                f"Column '{col}' contains invalid types. Expected {expected_type}, found values: {invalid_types[:5]}..."
+                            )  # Show first 5 invalid values
 
         return errors
 
-    def validate_time_series_gaps(self, df: pd.DataFrame, timestamp_column: str = 'timestamp',
-                                  expected_frequency: str = None) -> List[str]:
+    def validate_time_series_gaps(
+        self,
+        df: pd.DataFrame,
+        timestamp_column: str = "timestamp",
+        expected_frequency: str = None,
+    ) -> List[str]:
         """
         Validates time series data for gaps, duplicates, or irregularities.
 
@@ -285,21 +321,27 @@ class FinancialDataValidator:
         errors = []
 
         if timestamp_column not in df.columns:
-            errors.append(f"Timestamp column '{timestamp_column}' not found in DataFrame")
+            errors.append(
+                f"Timestamp column '{timestamp_column}' not found in DataFrame"
+            )
             return errors
 
         # Convert to datetime if it's not already
         try:
             timestamps = pd.to_datetime(df[timestamp_column], utc=True).sort_values()
         except Exception as e:
-            errors.append(f"Could not convert '{timestamp_column}' to datetime: {str(e)}")
+            errors.append(
+                f"Could not convert '{timestamp_column}' to datetime: {str(e)}"
+            )
             return errors
 
         # Check for duplicates
         duplicate_mask = timestamps.duplicated()
         if duplicate_mask.any():
             duplicate_times = timestamps[duplicate_mask]
-            errors.append(f"Duplicate timestamps found: {list(duplicate_times.values)[:10]}...")  # Show first 10 duplicates
+            errors.append(
+                f"Duplicate timestamps found: {list(duplicate_times.values)[:10]}..."
+            )  # Show first 10 duplicates
 
         # Check for gaps if expected frequency is provided
         if expected_frequency:
@@ -309,15 +351,19 @@ class FinancialDataValidator:
                     start=timestamps.min(),
                     end=timestamps.max(),
                     freq=expected_frequency,
-                    tz='UTC'
+                    tz="UTC",
                 )
 
                 # Find missing timestamps
                 missing_times = full_range.difference(timestamps)
                 if len(missing_times) > 0:
-                    errors.append(f"Time series gaps detected. Missing {len(missing_times)} timestamps based on {expected_frequency} frequency.")
+                    errors.append(
+                        f"Time series gaps detected. Missing {len(missing_times)} timestamps based on {expected_frequency} frequency."
+                    )
             except Exception as e:
-                errors.append(f"Could not validate time series gaps with frequency '{expected_frequency}': {str(e)}")
+                errors.append(
+                    f"Could not validate time series gaps with frequency '{expected_frequency}': {str(e)}"
+                )
 
         # Basic ordering check (should be sorted)
         if not timestamps.is_monotonic_increasing:
@@ -325,7 +371,9 @@ class FinancialDataValidator:
 
         return errors
 
-    def validate_cross_field_constraints(self, df: pd.DataFrame, constraints: List[Dict[str, str]] = None) -> List[str]:
+    def validate_cross_field_constraints(
+        self, df: pd.DataFrame, constraints: List[Dict[str, str]] = None
+    ) -> List[str]:
         """
         Validates relationships between different fields (e.g., open < high, low < close).
 
@@ -342,10 +390,30 @@ class FinancialDataValidator:
         if not constraints:
             # Use common financial constraints if none provided
             constraints = [
-                {"field1": "open", "operator": "<=", "field2": "high", "description": "Open price should be less than or equal to high price"},
-                {"field1": "low", "operator": "<=", "field2": "close", "description": "Low price should be less than or equal to close price"},
-                {"field1": "low", "operator": "<=", "field2": "high", "description": "Low price should be less than or equal to high price"},
-                {"field1": "close", "operator": "<=", "field2": "high", "description": "Close price should be less than or equal to high price"}
+                {
+                    "field1": "open",
+                    "operator": "<=",
+                    "field2": "high",
+                    "description": "Open price should be less than or equal to high price",
+                },
+                {
+                    "field1": "low",
+                    "operator": "<=",
+                    "field2": "close",
+                    "description": "Low price should be less than or equal to close price",
+                },
+                {
+                    "field1": "low",
+                    "operator": "<=",
+                    "field2": "high",
+                    "description": "Low price should be less than or equal to high price",
+                },
+                {
+                    "field1": "close",
+                    "operator": "<=",
+                    "field2": "high",
+                    "description": "Close price should be less than or equal to high price",
+                },
             ]
 
         for constraint in constraints:
@@ -391,6 +459,7 @@ class FinancialDataValidator:
         """
         self.rules[rule_name] = rule
 
+
 # Example Usage (for demonstration within this stub)
 if __name__ == "__main__":
     validator = FinancialDataValidator()
@@ -405,7 +474,7 @@ if __name__ == "__main__":
         "take_profit": 130.0,
         "order_type": "LIMIT",
         "confidence": 0.85,
-        "position_size": 10.0
+        "position_size": 10.0,
     }
     invalid_data = {
         "price": -10.0,
@@ -416,7 +485,7 @@ if __name__ == "__main__":
         "take_profit": 150.0,
         "order_type": "INVALID_TYPE",
         "confidence": 1.5,
-        "position_size": -2.0
+        "position_size": -2.0,
     }
 
     print("Validating single entry:")
@@ -439,7 +508,9 @@ if __name__ == "__main__":
     print(f"  is_valid_stop_loss(100.0): {validator.is_valid_stop_loss(100.0)}")
     print(f"  is_valid_stop_loss(-10.0): {validator.is_valid_stop_loss(-10.0)}")
     print(f"  is_valid_order_type('LIMIT'): {validator.is_valid_order_type('LIMIT')}")
-    print(f"  is_valid_order_type('INVALID'): {validator.is_valid_order_type('INVALID')}")
+    print(
+        f"  is_valid_order_type('INVALID'): {validator.is_valid_order_type('INVALID')}"
+    )
     print(f"  is_valid_confidence(0.75): {validator.is_valid_confidence(0.75)}")
     print(f"  is_valid_confidence(1.5): {validator.is_valid_confidence(1.5)}")
 
@@ -447,10 +518,15 @@ if __name__ == "__main__":
     df_data = {
         "price": [100.0, 200.5, -50.0, 300.0],
         "volume": [10, 20, 30, "forty"],
-        "timestamp": ["2023-01-01T00:00:00Z", "2023-01-01T01:00:00Z", "invalid-time", "2023-01-01T03:00:00Z"],
+        "timestamp": [
+            "2023-01-01T00:00:00Z",
+            "2023-01-01T01:00:00Z",
+            "invalid-time",
+            "2023-01-01T03:00:00Z",
+        ],
         "currency_pair": ["BTCUSD", "ETHUSD", "INVALID", "EURUSD"],
         "stop_loss": [95.0, 190.0, 200.0, 280.0],
-        "take_profit": [105.0, 210.0, 220.0, 320.0]
+        "take_profit": [105.0, 210.0, 220.0, 320.0],
     }
     test_df = pd.DataFrame(df_data)
 
@@ -468,8 +544,8 @@ if __name__ == "__main__":
     print("\nTesting schema validation:")
     schema_errors = validator.validate_schema(
         test_df,
-        required_columns=['price', 'volume', 'timestamp'],
-        column_types={'price': (int, float), 'volume': (int, float)}
+        required_columns=["price", "volume", "timestamp"],
+        column_types={"price": (int, float), "volume": (int, float)},
     )
     if schema_errors:
         print("  Schema errors:")
@@ -480,12 +556,14 @@ if __name__ == "__main__":
 
     # Test cross-field validation
     print("\nTesting cross-field validation:")
-    cross_df = pd.DataFrame({
-        'open': [100, 200, 300],
-        'high': [105, 195, 310],  # Second row has open > high (invalid)
-        'low': [95, 190, 290],
-        'close': [102, 198, 305]
-    })
+    cross_df = pd.DataFrame(
+        {
+            "open": [100, 200, 300],
+            "high": [105, 195, 310],  # Second row has open > high (invalid)
+            "low": [95, 190, 290],
+            "close": [102, 198, 305],
+        }
+    )
     cross_errors = validator.validate_cross_field_constraints(cross_df)
     if cross_errors:
         print("  Cross-field errors:")
