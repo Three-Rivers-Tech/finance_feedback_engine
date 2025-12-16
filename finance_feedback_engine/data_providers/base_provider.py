@@ -5,15 +5,16 @@ Eliminates duplication across AlphaVantage, Coinbase, Oanda, and other providers
 Provides common functionality: rate limiting, circuit breaking, HTTP clients, timeouts.
 """
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-import logging
 import asyncio
-import aiohttp
-from aiohttp_retry import RetryClient, ExponentialRetry
+import logging
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
 
-from finance_feedback_engine.utils.rate_limiter import RateLimiter
+import aiohttp
+from aiohttp_retry import ExponentialRetry, RetryClient
+
 from finance_feedback_engine.utils.circuit_breaker import CircuitBreaker
+from finance_feedback_engine.utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class BaseDataProvider(ABC):
         self,
         config: Optional[Dict[str, Any]] = None,
         rate_limiter: Optional[RateLimiter] = None,
-        session: Optional[aiohttp.ClientSession] = None
+        session: Optional[aiohttp.ClientSession] = None,
     ):
         """
         Initialize base provider with shared infrastructure.
@@ -92,11 +93,11 @@ class BaseDataProvider(ABC):
             RateLimiter instance with conservative defaults
         """
         # Get provider-specific config or use defaults
-        rate_config = self.config.get('rate_limiter', {})
+        rate_config = self.config.get("rate_limiter", {})
 
         return RateLimiter(
-            tokens_per_second=rate_config.get('tokens_per_second', 5.0),
-            max_tokens=rate_config.get('max_tokens', 15)
+            tokens_per_second=rate_config.get("tokens_per_second", 5.0),
+            max_tokens=rate_config.get("max_tokens", 15),
         )
 
     def _create_circuit_breaker(self) -> CircuitBreaker:
@@ -108,22 +109,22 @@ class BaseDataProvider(ABC):
         Returns:
             CircuitBreaker instance configured for this provider
         """
-        cb_config = self.config.get('circuit_breaker', {})
+        cb_config = self.config.get("circuit_breaker", {})
 
         return CircuitBreaker(
-            failure_threshold=cb_config.get('failure_threshold', 5),
-            recovery_timeout=cb_config.get('recovery_timeout', 60.0),
+            failure_threshold=cb_config.get("failure_threshold", 5),
+            recovery_timeout=cb_config.get("recovery_timeout", 60.0),
             expected_exception=aiohttp.ClientError,
-            name=f"{self.provider_name}-API"
+            name=f"{self.provider_name}-API",
         )
 
     def _configure_timeouts(self):
         """Configure API timeout values from config."""
-        api_timeouts = self.config.get('api_timeouts', {})
+        api_timeouts = self.config.get("api_timeouts", {})
 
-        self.timeout_default = api_timeouts.get('default', 10)
-        self.timeout_market_data = api_timeouts.get('market_data', self.timeout_default)
-        self.timeout_sentiment = api_timeouts.get('sentiment', 15)
+        self.timeout_default = api_timeouts.get("default", 10)
+        self.timeout_market_data = api_timeouts.get("market_data", self.timeout_default)
+        self.timeout_sentiment = api_timeouts.get("sentiment", 15)
 
         logger.debug(
             f"{self.provider_name} timeouts configured: "
@@ -214,7 +215,7 @@ class BaseDataProvider(ABC):
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
         timeout: Optional[float] = None,
-        method: str = 'GET'
+        method: str = "GET",
     ) -> Dict[str, Any]:
         """
         Make HTTP request with rate limiting and circuit breaking.
@@ -253,15 +254,10 @@ class BaseDataProvider(ABC):
             # Use RetryClient for automatic retries with exponential backoff
             retry_options = ExponentialRetry(attempts=3)
             async with RetryClient(
-                client_session=self.session,
-                retry_options=retry_options
+                client_session=self.session, retry_options=retry_options
             ) as retry_client:
                 async with retry_client.request(
-                    method,
-                    url,
-                    params=params,
-                    headers=headers,
-                    timeout=client_timeout
+                    method, url, params=params, headers=headers, timeout=client_timeout
                 ) as response:
                     response.raise_for_status()
                     return await response.json()
@@ -291,7 +287,9 @@ class BaseDataProvider(ABC):
             ValueError: If response is invalid
         """
         if not isinstance(response, dict):
-            raise ValueError(f"{self.provider_name}: Invalid response type, expected dict")
+            raise ValueError(
+                f"{self.provider_name}: Invalid response type, expected dict"
+            )
 
         return response
 
@@ -299,19 +297,23 @@ class BaseDataProvider(ABC):
 # Error classes for common provider failures
 class DataProviderError(Exception):
     """Base exception for data provider errors."""
+
     pass
 
 
 class RateLimitExceededError(DataProviderError):
     """Raised when API rate limit is exceeded."""
+
     pass
 
 
 class InvalidAssetPairError(DataProviderError):
     """Raised when asset pair format is invalid."""
+
     pass
 
 
 class DataUnavailableError(DataProviderError):
     """Raised when requested data is not available."""
+
     pass

@@ -22,23 +22,27 @@ def test_forex_friday_boundary_stays_open():
     assert status_open["time_to_close"] > 0
 
     close_dt = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
-    status_weekend = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=close_dt)
-    assert status_weekend["is_open"] is True
-    assert status_weekend["session"] == "Weekend"
-    assert status_weekend["warning"] == "Weekend forex trading has reduced liquidity and wider spreads"
-    assert status_weekend["time_to_close"] == 0
-    assert status_weekend["time_to_open"] == 0
+<<<<<<< HEAD
+    status_closed = MarketSchedule.get_market_status(
+        "EURUSD", "forex", now_utc=close_dt
+    )
+    assert status_closed["is_open"] is False
+    assert status_closed["session"] == "Closed"
 
 
 def test_forex_sunday_reopen_window():
     pre_reopen = _to_utc(dt.datetime(2024, 5, 12, 16, 0), MarketSchedule.NY_TZ)
-    status_pre = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=pre_reopen)
-    assert status_pre["is_open"] is True
-    assert status_pre["session"] == "Weekend"
-    assert status_pre["warning"] == "Weekend forex trading has reduced liquidity and wider spreads"
+<<<<<<< HEAD
+    status_closed = MarketSchedule.get_market_status(
+        "EURUSD", "forex", now_utc=pre_reopen
+    )
+    assert status_closed["is_open"] is False
+>>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
 
     post_reopen = _to_utc(dt.datetime(2024, 5, 12, 17, 0), MarketSchedule.NY_TZ)
-    status_open = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=post_reopen)
+    status_open = MarketSchedule.get_market_status(
+        "EURUSD", "forex", now_utc=post_reopen
+    )
     assert status_open["is_open"] is True
     assert status_open["session"] != "Closed"
     assert status_open["warning"] == ""
@@ -205,10 +209,12 @@ def test_backtesting_forex_timestamp():
     # Friday 5 PM NY (previously closed window)
     dt_close = _to_utc(dt.datetime(2024, 5, 10, 17, 0), MarketSchedule.NY_TZ)
     timestamp_close = _to_unix(dt_close)
-    status_close = MarketSchedule.get_market_status_at_timestamp("EURUSD", "forex", timestamp_close)
-    assert status_close["is_open"] is True
-    assert status_close["session"] == "Weekend"
-    assert status_close["warning"] == "Weekend forex trading has reduced liquidity and wider spreads"
+<<<<<<< HEAD
+    status_close = MarketSchedule.get_market_status_at_timestamp(
+        "EURUSD", "forex", timestamp_close
+    )
+    assert status_close["is_open"] is False
+>>>>>>> 997bdc1 (Refactor test cases for UnifiedTradingPlatform routing and improve code readability)
 
 
 def test_backtesting_stock_timestamp():
@@ -224,7 +230,9 @@ def test_backtesting_crypto_timestamp():
     """Test crypto market status via Unix timestamp (should be open)."""
     dt_any = _to_utc(dt.datetime(2024, 5, 10, 12, 0), MarketSchedule.NY_TZ)  # Friday
     timestamp = _to_unix(dt_any)
-    status = MarketSchedule.get_market_status_at_timestamp("BTCUSD", "crypto", timestamp)
+    status = MarketSchedule.get_market_status_at_timestamp(
+        "BTCUSD", "crypto", timestamp
+    )
     assert status["is_open"] is True
     assert status["warning"] == ""  # Friday is weekday for crypto
 
@@ -233,7 +241,9 @@ def test_backtesting_crypto_weekend_timestamp():
     """Test crypto weekend warning via Unix timestamp."""
     dt_saturday = _to_utc(dt.datetime(2024, 5, 11, 8, 0), MarketSchedule.NY_TZ)
     timestamp = _to_unix(dt_saturday)
-    status = MarketSchedule.get_market_status_at_timestamp("ETHUSD", "crypto", timestamp)
+    status = MarketSchedule.get_market_status_at_timestamp(
+        "ETHUSD", "crypto", timestamp
+    )
     assert status["is_open"] is True
     assert status["warning"] == "Weekend Low Liquidity"
 
@@ -259,7 +269,9 @@ def test_default_asset_type_is_crypto():
     dt_saturday = _to_utc(dt.datetime(2024, 5, 11, 10, 0), MarketSchedule.NY_TZ)
 
     status_none = MarketSchedule.get_market_status("BTC", None, now_utc=dt_saturday)
-    status_unknown = MarketSchedule.get_market_status("BTC", "unknown", now_utc=dt_saturday)
+    status_unknown = MarketSchedule.get_market_status(
+        "BTC", "unknown", now_utc=dt_saturday
+    )
 
     assert status_none["is_open"] is True
     assert status_unknown["is_open"] is True
@@ -277,9 +289,10 @@ def test_timezone_awareness():
     assert ny_dt == london_dt
 
     status_ny = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=ny_dt)
-    status_london = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=london_dt)
+    status_london = MarketSchedule.get_market_status(
+        "EURUSD", "forex", now_utc=london_dt
+    )
 
     # Should have identical results
     assert status_ny["is_open"] == status_london["is_open"]
     assert status_ny["session"] == status_london["session"]
-

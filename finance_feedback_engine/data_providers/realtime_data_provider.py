@@ -1,14 +1,18 @@
 import asyncio
 import logging
-from typing import Dict, Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from alpha_vantage.async_support.timeseries import TimeSeries
 
-from finance_feedback_engine.utils.financial_data_validator import FinancialDataValidator
-from finance_feedback_engine.persistence.timeseries_data_store import TimeSeriesDataStore
-
+from finance_feedback_engine.persistence.timeseries_data_store import (
+    TimeSeriesDataStore,
+)
+from finance_feedback_engine.utils.financial_data_validator import (
+    FinancialDataValidator,
+)
 
 logger = logging.getLogger(__name__)
+
 
 class RealtimeDataProvider:
     """
@@ -31,6 +35,7 @@ class RealtimeDataProvider:
       flexible processing of ingested data, decoupling ingestion from business
       logic.
     """
+
     def __init__(
         self,
         api_key: str,
@@ -44,7 +49,7 @@ class RealtimeDataProvider:
         self.interval = interval
         self._is_running = False
         self._task: Optional[asyncio.Task] = None
-        self.ts = TimeSeries(key=self.api_key, output_format='pandas')
+        self.ts = TimeSeries(key=self.api_key, output_format="pandas")
         self.validator = FinancialDataValidator()
         self.data_store = TimeSeriesDataStore()
 
@@ -53,21 +58,24 @@ class RealtimeDataProvider:
         while self._is_running:
             try:
                 data, _ = await self.ts.get_intraday(
-                    data, _ = await self.ts.get_intraday(
-                        symbol=self.symbol, interval='1min', outputsize='compact'
-                    )
+                    data,
+                    _=await self.ts.get_intraday(
+                        symbol=self.symbol, interval="1min", outputsize="compact"
+                    ),
                 )
-                
+
                 # The Alpha Vantage API returns data in a descending order by time.
                 # We only want the latest data point.
-                latest_data = data.head(1).to_dict('records')[0]
-                
+                latest_data = data.head(1).to_dict("records")[0]
+
                 # Convert the index (timestamp) to a column
-                latest_data['timestamp'] = data.index[0]
-                
+                latest_data["timestamp"] = data.index[0]
+
                 errors = self.validator.validate_single_entry(latest_data)
                 if errors:
-                    logger.warning(f"Invalid data received: {errors} - Data: {latest_data}")
+                    logger.warning(
+                        f"Invalid data received: {errors} - Data: {latest_data}"
+                    )
                 else:
                     self.data_handler(latest_data)
                     self.data_store.save_data(self.symbol, latest_data)

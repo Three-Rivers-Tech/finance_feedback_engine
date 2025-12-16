@@ -1,9 +1,9 @@
 """Decision engine for generating AI-powered trading decisions."""
 
-from typing import Dict, Any, Optional
 import logging
 import uuid
 from datetime import datetime
+from typing import Any, Dict, Optional
 import asyncio
 import pytz
 
@@ -70,7 +70,9 @@ class DecisionEngine:
     - Never risk more than you can afford to lose
     """
 
-    def __init__(self, config: Dict[str, Any], data_provider=None, backtest_mode: bool = False):
+    def __init__(
+        self, config: Dict[str, Any], data_provider=None, backtest_mode: bool = False
+    ):
         """
         Initialize the decision engine.
 
@@ -96,8 +98,8 @@ class DecisionEngine:
 
         # Initialize specialized managers
         from .ai_decision_manager import AIDecisionManager
-        from .market_analysis import MarketAnalysisContext
         from .decision_validator import DecisionValidator
+        from .market_analysis import MarketAnalysisContext
         from .position_sizing import PositionSizingCalculator
 
         self.ai_manager = AIDecisionManager(config, backtest_mode)
@@ -106,9 +108,9 @@ class DecisionEngine:
         self.position_sizing_calc = PositionSizingCalculator(config)
 
         # Local models and priority configuration
-        decision_config = config.get('decision_engine', {})
-        self.local_models = decision_config.get('local_models', [])
-        self.local_priority = decision_config.get('local_priority', False)
+        decision_config = config.get("decision_engine", {})
+        self.local_models = decision_config.get("local_models", [])
+        self.local_priority = decision_config.get("local_priority", False)
 
         # Extract portfolio risk parameters from decision_engine config
         self.portfolio_stop_loss_percentage = decision_config.get('portfolio_stop_loss_percentage', 0.02)
@@ -116,15 +118,21 @@ class DecisionEngine:
 
         # Validate local_models
         if not isinstance(self.local_models, list):
-            raise ValueError(f"local_models must be a list, got {type(self.local_models)}")
+            raise ValueError(
+                f"local_models must be a list, got {type(self.local_models)}"
+            )
 
         # Validate local_priority
         valid_priority_values = (True, False, "soft")
         if isinstance(self.local_priority, str):
             if self.local_priority not in valid_priority_values:
-                raise ValueError(f"local_priority string must be 'soft', got '{self.local_priority}'")
+                raise ValueError(
+                    f"local_priority string must be 'soft', got '{self.local_priority}'"
+                )
         elif not isinstance(self.local_priority, (bool, int, float)):
-            raise ValueError(f"local_priority must be bool, int, float, or 'soft', got {type(self.local_priority)}")
+            raise ValueError(
+                f"local_priority must be bool, int, float, or 'soft', got {type(self.local_priority)}"
+            )
 
         logger.info(f"Local models configured: {self.local_models}")
         logger.info(f"Local priority: {self.local_priority}")
@@ -137,21 +145,25 @@ class DecisionEngine:
         try:
             # Accept either direct path or nested config keys
             # Check top-level 'memory' key first (full config), then fall back to original config (backward compatibility)
-            vm_cfg = config.get('memory', {})
+            vm_cfg = config.get("memory", {})
             if not isinstance(vm_cfg, dict):
                 vm_cfg = {}
             storage_path = (
-                vm_cfg.get('vector_store_path')
-                or vm_cfg.get('vector_memory_path')
-                or vm_cfg.get('dir')
-                or 'data/memory/vectors.pkl'
+                vm_cfg.get("vector_store_path")
+                or vm_cfg.get("vector_memory_path")
+                or vm_cfg.get("dir")
+                or "data/memory/vectors.pkl"
             )
             self.vector_memory = VectorMemory(storage_path)
             logger.info("Vector memory initialized successfully")
         except Exception as e:
-            logger.warning(f"Failed to initialize vector memory: {e}. Proceeding without semantic search.")
+            logger.warning(
+                f"Failed to initialize vector memory: {e}. Proceeding without semantic search."
+            )
 
-        logger.info(f"Decision engine initialized with provider: {self.ai_manager.ai_provider}")
+        logger.info(
+            f"Decision engine initialized with provider: {self.ai_manager.ai_provider}"
+        )
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -184,11 +196,11 @@ class DecisionEngine:
         Returns:
             AI prompt string
         """
-        asset_pair = context['asset_pair']
-        market_data = context['market_data']
-        balance = context['balance']
-        price_change = context['price_change']
-        volatility = context['volatility']
+        asset_pair = context["asset_pair"]
+        market_data = context["market_data"]
+        balance = context["balance"]
+        price_change = context["price_change"]
+        volatility = context["volatility"]
 
         # Build comprehensive market data section
         market_info = f"""Asset Pair: {asset_pair}
@@ -214,27 +226,29 @@ Close Position: {market_data.get('close_position_in_range', 0.5):.1%} in daily r
 """
 
         # Add temporal context (market schedule and data freshness)
-        market_status = context.get('market_status', {})
-        data_freshness = context.get('data_freshness', {})
+        market_status = context.get("market_status", {})
+        data_freshness = context.get("data_freshness", {})
         utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
-        ny_tz = pytz.timezone('America/New_York')
-        ny_time = utc_now.astimezone(ny_tz).strftime('%Y-%m-%d %H:%M:%S %Z')
-        utc_time = utc_now.strftime('%Y-%m-%d %H:%M:%S UTC')
+        ny_tz = pytz.timezone("America/New_York")
+        ny_time = utc_now.astimezone(ny_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
+        utc_time = utc_now.strftime("%Y-%m-%d %H:%M:%S UTC")
 
         # Market status info
-        is_open = market_status.get('is_open', True)
-        session = market_status.get('session', 'Unknown')
-        time_to_close = market_status.get('time_to_close', 0)
-        market_warning = market_status.get('warning', '')
+        is_open = market_status.get("is_open", True)
+        session = market_status.get("session", "Unknown")
+        time_to_close = market_status.get("time_to_close", 0)
+        market_warning = market_status.get("warning", "")
 
         # Data freshness info
-        is_fresh = data_freshness.get('is_fresh', True)
-        age_str = data_freshness.get('age_minutes', 'Unknown')
-        freshness_msg = data_freshness.get('message', '')
+        is_fresh = data_freshness.get("is_fresh", True)
+        age_str = data_freshness.get("age_minutes", "Unknown")
+        freshness_msg = data_freshness.get("message", "")
 
         # Emoji indicators
         status_emoji = "✅" if is_open else "🔴"
-        freshness_emoji = "✅" if is_fresh else "⚠️" if "WARNING" in freshness_msg else "🔴"
+        freshness_emoji = (
+            "✅" if is_fresh else "⚠️" if "WARNING" in freshness_msg else "🔴"
+        )
 
         # Build temporal context section
         market_info += f"""
@@ -278,7 +292,7 @@ TIME-BASED RULES (MANDATORY):
 """
 
         # Add volume/market cap for crypto
-        if market_data.get('type') == 'crypto':
+        if market_data.get("type") == "crypto":
             market_info += f"""
 VOLUME & MARKET DATA:
 ---------------------
@@ -287,7 +301,7 @@ Market Cap: ${market_data.get('market_cap', 0):,.0f}
 """
 
         # Add technical indicators if available
-        if 'rsi' in market_data:
+        if "rsi" in market_data:
             market_info += f"""
 TECHNICAL INDICATORS:
 ---------------------
@@ -295,8 +309,8 @@ RSI (14): {market_data.get('rsi', 0):.2f} ({market_data.get('rsi_signal', 'neutr
 """
 
         # Add news sentiment if available
-        if 'sentiment' in market_data and market_data['sentiment'].get('available'):
-            sentiment = market_data['sentiment']
+        if "sentiment" in market_data and market_data["sentiment"].get("available"):
+            sentiment = market_data["sentiment"]
             market_info += f"""
 NEWS SENTIMENT ANALYSIS:
 ------------------------
@@ -312,15 +326,17 @@ Sentiment Interpretation:
 """
 
         # Add macroeconomic indicators if available
-        if 'macro' in market_data and market_data['macro'].get('available'):
-            macro = market_data['macro']
+        if "macro" in market_data and market_data["macro"].get("available"):
+            macro = market_data["macro"]
             market_info += """
 MACROECONOMIC CONTEXT:
 ----------------------
 """
-            for indicator, data in macro.get('indicators', {}).items():
-                readable_name = indicator.replace('_', ' ').title()
-                market_info += f"{readable_name}: {data.get('value')} (as of {data.get('date')})\n"
+            for indicator, data in macro.get("indicators", {}).items():
+                readable_name = indicator.replace("_", " ").title()
+                market_info += (
+                    f"{readable_name}: {data.get('value')} (as of {data.get('date')})\n"
+                )
 
             market_info += """
 Macro Impact Considerations:
@@ -338,11 +354,11 @@ Intraday Volatility: {volatility:.2f}%
 """
 
         # Add portfolio information if available
-        portfolio = context.get('portfolio')
-        if portfolio and portfolio.get('holdings'):
-            total_value = portfolio.get('total_value_usd', 0)
-            num_assets = portfolio.get('num_assets', 0)
-            unrealized_pnl = portfolio.get('unrealized_pnl')
+        portfolio = context.get("portfolio")
+        if portfolio and portfolio.get("holdings"):
+            total_value = portfolio.get("total_value_usd", 0)
+            num_assets = portfolio.get("num_assets", 0)
+            unrealized_pnl = portfolio.get("unrealized_pnl")
 
             market_info += """
 CURRENT PORTFOLIO:
@@ -356,21 +372,21 @@ CURRENT PORTFOLIO:
                 market_info += f"Unrealized P&L: ${unrealized_pnl:,.2f}\n"
 
             market_info += "\nHoldings:\n"
-            for holding in portfolio.get('holdings', []):
-                currency = holding.get('currency')
-                amount = holding.get('amount', 0)
-                value_usd = holding.get('value_usd', 0)
-                allocation = holding.get('allocation_pct', 0)
+            for holding in portfolio.get("holdings", []):
+                currency = holding.get("currency")
+                amount = holding.get("amount", 0)
+                value_usd = holding.get("value_usd", 0)
+                allocation = holding.get("allocation_pct", 0)
                 market_info += (
                     f"  {currency}: {amount:.6f} "
                     f"(${value_usd:,.2f} - {allocation:.1f}%)\n"
                 )
 
             # Check if we already hold the asset being analyzed
-            asset_base = asset_pair.replace('USD', '').replace('USDT', '')
+            asset_base = asset_pair.replace("USD", "").replace("USDT", "")
             current_holding = None
-            for holding in portfolio.get('holdings', []):
-                if holding.get('currency') == asset_base:
+            for holding in portfolio.get("holdings", []):
+                if holding.get("currency") == asset_base:
                     current_holding = holding
                     break
 
@@ -383,29 +399,29 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
 """
 
         # Add portfolio memory context if available
-        memory_context = context.get('memory_context')
-        if memory_context and memory_context.get('has_history'):
+        memory_context = context.get("memory_context")
+        if memory_context and memory_context.get("has_history"):
             memory_text = self._format_memory_context(memory_context)
             market_info += f"\n{memory_text}\n"
 
         # Add live monitoring context if available
-        monitoring_context = context.get('monitoring_context')
-        if monitoring_context and monitoring_context.get('has_monitoring_data'):
+        monitoring_context = context.get("monitoring_context")
+        if monitoring_context and monitoring_context.get("has_monitoring_data"):
             monitoring_text = self.monitoring_provider.format_for_ai_prompt(
                 monitoring_context
             )
             market_info += f"\n{monitoring_text}\n"
 
         # Add historical similarity analysis if available
-        semantic_memory = context.get('semantic_memory')
+        semantic_memory = context.get("semantic_memory")
         if semantic_memory and self._should_include_semantic_memory():
             similarity_text = self._format_semantic_memory(semantic_memory)
             market_info += f"\n{similarity_text}\n"
 
         # Prepend market regime if available
-        regime = context.get('regime', 'UNKNOWN')
+        regime = context.get("regime", "UNKNOWN")
         regime_prefix = ""
-        if regime != 'UNKNOWN':
+        if regime != "UNKNOWN":
             regime_prefix = f"CURRENT MARKET REGIME: {regime}. Adjust your strategy to favor trend-following indicators.\n\n"
 
         prompt = f"""{regime_prefix}You are an educational trading analysis system demonstrating technical and fundamental market analysis for learning purposes.
@@ -493,7 +509,7 @@ Format response as a structured technical analysis demonstration.
 
     def _format_memory_context(self, context: Dict[str, Any]) -> str:
         """Format portfolio memory context for AI prompts."""
-        if not context or not context.get('has_history'):
+        if not context or not context.get("has_history"):
             return "No historical trading data available."
 
         lines = [
@@ -508,20 +524,20 @@ Format response as a structured technical analysis demonstration.
             f"Losses: {context.get('recent_performance', {}).get('losing_trades', 0)}",
         ]
 
-        streak = context.get('current_streak', {})
-        if streak.get('type'):
+        streak = context.get("current_streak", {})
+        if streak.get("type"):
             lines.append(
                 f"  Current Streak: {streak.get('count', 0)} {streak.get('type')} trades"
             )
 
         lines.append("\nAction Performance:")
-        for action, stats in context.get('action_performance', {}).items():
+        for action, stats in context.get("action_performance", {}).items():
             lines.append(
                 f"  {action}: {stats.get('win_rate', 0):.1f}% win rate, "
                 f"${stats.get('total_pnl', 0):.2f} P&L ({stats.get('count', 0)} trades)"
             )
 
-        provider_perf = context.get('provider_performance', {})
+        provider_perf = context.get("provider_performance", {})
         if provider_perf:
             lines.append("\nProvider Performance:")
             for provider, stats in provider_perf.items():
@@ -530,44 +546,34 @@ Format response as a structured technical analysis demonstration.
                     f"({stats.get('count', 0)} trades)"
                 )
 
-        if context.get('asset_specific'):
-            asset_stats = context['asset_specific']
-            lines.append(
-                f"\n{context.get('asset_pair', 'This Asset')} Specific:"
-            )
+        if context.get("asset_specific"):
+            asset_stats = context["asset_specific"]
+            lines.append(f"\n{context.get('asset_pair', 'This Asset')} Specific:")
             lines.append(
                 f"  {asset_stats.get('total_trades', 0)} trades, "
                 f"{asset_stats.get('win_rate', 0):.1f}% win rate, "
                 f"${asset_stats.get('total_pnl', 0):.2f} total P&L"
             )
 
-        long_term = context.get('long_term_performance')
-        if long_term and long_term.get('has_data'):
+        long_term = context.get("long_term_performance")
+        if long_term and long_term.get("has_data"):
             lines.append("\nLong-Term Performance:")
-            lines.append(
-                f"  Period: last {long_term.get('period_days', 0)} days"
-            )
+            lines.append(f"  Period: last {long_term.get('period_days', 0)} days")
             lines.append(
                 f"  Trades: {long_term.get('total_trades', 0)} | Win Rate: {long_term.get('win_rate', 0):.1f}%"
             )
             lines.append(
                 f"  Profit Factor: {long_term.get('profit_factor', 0):.2f} | ROI: {long_term.get('roi_percentage', 0):.2f}%"
             )
-            lines.append(
-                f"  Realized P&L: ${long_term.get('realized_pnl', 0):.2f}"
-            )
-            avg_win = long_term.get('avg_win')
-            avg_loss = long_term.get('avg_loss')
+            lines.append(f"  Realized P&L: ${long_term.get('realized_pnl', 0):.2f}")
+            avg_win = long_term.get("avg_win")
+            avg_loss = long_term.get("avg_loss")
             if avg_win is not None and avg_loss is not None:
-                lines.append(
-                    f"  Avg Win: ${avg_win:.2f} | Avg Loss: ${avg_loss:.2f}"
-                )
-            best = long_term.get('best_trade')
-            worst = long_term.get('worst_trade')
+                lines.append(f"  Avg Win: ${avg_win:.2f} | Avg Loss: ${avg_loss:.2f}")
+            best = long_term.get("best_trade")
+            worst = long_term.get("worst_trade")
             if best is not None and worst is not None:
-                lines.append(
-                    f"  Best Trade: ${best:.2f} | Worst Trade: ${worst:.2f}"
-                )
+                lines.append(f"  Best Trade: ${best:.2f} | Worst Trade: ${worst:.2f}")
 
         lines.append("=" * 35)
         return "\n".join(lines)
@@ -576,7 +582,7 @@ Format response as a structured technical analysis demonstration.
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
-        market_data: Optional[Dict[str, Any]] = None
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -607,9 +613,9 @@ Format response as a structured technical analysis demonstration.
         """
         logger.info("Using debate mode ensemble")
 
-        bull_provider = self.ensemble_manager.debate_providers.get('bull')
-        bear_provider = self.ensemble_manager.debate_providers.get('bear')
-        judge_provider = self.ensemble_manager.debate_providers.get('judge')
+        bull_provider = self.ensemble_manager.debate_providers.get("bull")
+        bear_provider = self.ensemble_manager.debate_providers.get("bear")
+        judge_provider = self.ensemble_manager.debate_providers.get("judge")
 
         failed_debate_providers = []
         bull_case = None
@@ -619,12 +625,18 @@ Format response as a structured technical analysis demonstration.
         # Query bull provider (bullish case)
         try:
             bull_case = await self._query_single_provider(bull_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(bull_case, bull_provider):
-                logger.warning(f"Debate: {bull_provider} (bull) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                bull_case, bull_provider
+            ):
+                logger.warning(
+                    f"Debate: {bull_provider} (bull) returned invalid response"
+                )
                 failed_debate_providers.append(bull_provider)
                 bull_case = None
             else:
-                logger.info(f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
             failed_debate_providers.append(bull_provider)
@@ -632,12 +644,18 @@ Format response as a structured technical analysis demonstration.
         # Query bear provider (bearish case)
         try:
             bear_case = await self._query_single_provider(bear_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(bear_case, bear_provider):
-                logger.warning(f"Debate: {bear_provider} (bear) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                bear_case, bear_provider
+            ):
+                logger.warning(
+                    f"Debate: {bear_provider} (bear) returned invalid response"
+                )
                 failed_debate_providers.append(bear_provider)
                 bear_case = None
             else:
-                logger.info(f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
             failed_debate_providers.append(bear_provider)
@@ -645,12 +663,18 @@ Format response as a structured technical analysis demonstration.
         # Query judge provider (final decision)
         try:
             judge_decision = await self._query_single_provider(judge_provider, prompt)
-            if not self.ensemble_manager._is_valid_provider_response(judge_decision, judge_provider):
-                logger.warning(f"Debate: {judge_provider} (judge) returned invalid response")
+            if not self.ensemble_manager._is_valid_provider_response(
+                judge_decision, judge_provider
+            ):
+                logger.warning(
+                    f"Debate: {judge_provider} (judge) returned invalid response"
+                )
                 failed_debate_providers.append(judge_provider)
                 judge_decision = None
             else:
-                logger.info(f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)")
+                logger.info(
+                    f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)"
+                )
         except Exception as e:
             logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
             failed_debate_providers.append(judge_provider)
@@ -670,12 +694,14 @@ Format response as a structured technical analysis demonstration.
             bull_case=bull_case,
             bear_case=bear_case,
             judge_decision=judge_decision,
-            failed_debate_providers=failed_debate_providers
+            failed_debate_providers=failed_debate_providers,
         )
 
         return final_decision
 
-    async def _query_single_provider(self, provider_name: str, prompt: str) -> Dict[str, Any]:
+    async def _query_single_provider(
+        self, provider_name: str, prompt: str
+    ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
         from .provider_tiers import is_ollama_model
@@ -685,16 +711,16 @@ Format response as a structured technical analysis demonstration.
             return await self._local_ai_inference(prompt, model_name=provider_name)
 
         # Route abstract provider names
-        if provider_name == 'local':
+        if provider_name == "local":
             return await self._local_ai_inference(prompt)
-        elif provider_name == 'cli':
+        elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
-        elif provider_name == 'codex':
+        elif provider_name == "codex":
             return await self._codex_ai_inference(prompt)
-        elif provider_name == 'qwen':
+        elif provider_name == "qwen":
             # Qwen CLI provider (routed to CLI)
             return await self._cli_ai_inference(prompt)
-        elif provider_name == 'gemini':
+        elif provider_name == "gemini":
             return await self._gemini_ai_inference(prompt)
         else:
             # Unknown provider - raise error, let ensemble manager handle
@@ -704,7 +730,7 @@ Format response as a structured technical analysis demonstration.
         self,
         prompt: str,
         asset_pair: Optional[str] = None,
-        market_data: Optional[Dict[str, Any]] = None
+        market_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Centralized ensemble logic with debate mode and two-phase support."""
         # Debate mode: structured debate with bull, bear, and judge providers
@@ -712,10 +738,18 @@ Format response as a structured technical analysis demonstration.
             return await self._debate_mode_inference(prompt)
 
         # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
-        if self.ensemble_manager.config.get('ensemble', {}).get('two_phase', {}).get('enabled', False):
+        if (
+            self.ensemble_manager.config.get("ensemble", {})
+            .get("two_phase", {})
+            .get("enabled", False)
+        ):
             return await self.ensemble_manager.aggregate_decisions_two_phase(
-                prompt, asset_pair, market_data,
-                lambda provider, prompt_text: self._query_single_provider(provider, prompt_text)
+                prompt,
+                asset_pair,
+                market_data,
+                lambda provider, prompt_text: self._query_single_provider(
+                    provider, prompt_text
+                ),
             )
         # Fallback to simple parallel query if two-phase is off
         return await self._simple_parallel_ensemble(prompt)
@@ -734,7 +768,9 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Aggregated decision from all provider responses
         """
-        logger.info(f"Using simple parallel ensemble with {len(self.ensemble_manager.enabled_providers)} providers")
+        logger.info(
+            f"Using simple parallel ensemble with {len(self.ensemble_manager.enabled_providers)} providers"
+        )
 
         provider_decisions = {}
         failed_providers = []
@@ -754,9 +790,13 @@ Format response as a structured technical analysis demonstration.
                 failed_providers.append(provider)
             else:
                 decision = result
-                if self.ensemble_manager._is_valid_provider_response(decision, provider):
+                if self.ensemble_manager._is_valid_provider_response(
+                    decision, provider
+                ):
                     provider_decisions[provider] = decision
-                    logger.debug(f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)")
+                    logger.debug(
+                        f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)"
+                    )
                 else:
                     logger.warning(f"Provider {provider} returned invalid response")
                     failed_providers.append(provider)
@@ -771,11 +811,12 @@ Format response as a structured technical analysis demonstration.
 
         # Aggregate results using ensemble manager
         return await self.ensemble_manager.aggregate_decisions(
-            provider_decisions=provider_decisions,
-            failed_providers=failed_providers
+            provider_decisions=provider_decisions, failed_providers=failed_providers
         )
 
-    async def _local_ai_inference(self, prompt: str, model_name: Optional[str] = None) -> Dict[str, Any]:
+    async def _local_ai_inference(
+        self, prompt: str, model_name: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
 
@@ -795,7 +836,10 @@ Format response as a structured technical analysis demonstration.
             from .local_llm_provider import LocalLLMProvider
 
             # Create config with model override if specified
-            provider_config = dict(self.config, model_name=model_name or self.config.get('model_name', 'default'))
+            provider_config = dict(
+                self.config,
+                model_name=model_name or self.config.get("model_name", "default"),
+            )
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
             return await asyncio.to_thread(provider.query, prompt)
@@ -803,64 +847,87 @@ Format response as a structured technical analysis demonstration.
             logger.error(
                 f"Local LLM failed due to missing import: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'dependency',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "dependency",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision("Local LLM import error, using fallback decision.")
+            return build_fallback_decision(
+                "Local LLM import error, using fallback decision."
+            )
         except RuntimeError as e:
             logger.error(
                 f"Local LLM failed due to runtime error: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'infrastructure',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "infrastructure",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision(f"Local LLM runtime error: {str(e)}, using fallback decision.")
+            return build_fallback_decision(
+                f"Local LLM runtime error: {str(e)}, using fallback decision."
+            )
         except Exception as e:
             logger.error(
                 f"Local LLM failed due to unexpected error: {e}",
                 extra={
-                    'provider': 'local',
-                    'model': model_name or self.config.get('model_name', 'default'),
-                    'failure_type': 'unknown',
-                    'error_class': type(e).__name__,
-                    'ensemble_mode': self.ai_provider == 'ensemble'
-                }
+                    "provider": "local",
+                    "model": model_name or self.config.get("model_name", "default"),
+                    "failure_type": "unknown",
+                    "error_class": type(e).__name__,
+                    "ensemble_mode": self.ai_provider == "ensemble",
+                },
             )
             # Re-raise in ensemble mode for proper provider failure tracking
-            if self.ai_provider == 'ensemble':
+            if self.ai_provider == "ensemble":
                 raise
-            return build_fallback_decision(f"Local LLM unexpected error: {str(e)}, using fallback decision.")
+            return build_fallback_decision(
+                f"Local LLM unexpected error: {str(e)}, using fallback decision."
+            )
 
     async def _cli_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("CLI AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "CLI placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "CLI placeholder",
+            "amount": 0.0,
+        }
 
     async def _codex_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("Codex AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "Codex placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Codex placeholder",
+            "amount": 0.0,
+        }
 
     async def _gemini_ai_inference(self, prompt: str) -> Dict[str, Any]:
         logger.info("Gemini AI inference (placeholder)")
         await asyncio.sleep(0.01)
-        return {"action": "HOLD", "confidence": 50, "reasoning": "Gemini placeholder", "amount": 0.0}
+        return {
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Gemini placeholder",
+            "amount": 0.0,
+        }
 
-    def _is_valid_provider_response(self, decision: Dict[str, Any], provider: str) -> bool:
+    def _is_valid_provider_response(
+        self, decision: Dict[str, Any], provider: str
+    ) -> bool:
         """
         Validate that a provider response dict is well-formed.
 
@@ -875,23 +942,29 @@ Format response as a structured technical analysis demonstration.
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if 'action' not in decision or 'confidence' not in decision:
-            logger.warning(f"Provider {provider}: missing required keys 'action' or 'confidence'")
+        if "action" not in decision or "confidence" not in decision:
+            logger.warning(
+                f"Provider {provider}: missing required keys 'action' or 'confidence'"
+            )
             return False
 
-        if decision.get('action') not in ['BUY', 'SELL', 'HOLD']:
-            logger.warning(f"Provider {provider}: invalid action '{decision.get('action')}'")
+        if decision.get("action") not in ["BUY", "SELL", "HOLD"]:
+            logger.warning(
+                f"Provider {provider}: invalid action '{decision.get('action')}'"
+            )
             return False
 
-        conf = decision.get('confidence')
+        conf = decision.get("confidence")
         if not isinstance(conf, (int, float)):
             logger.warning(f"Provider {provider}: confidence is not numeric")
             return False
         if not (0 <= conf <= 100):
-            logger.warning(f"Provider {provider}: Confidence {conf} out of range [0, 100]")
+            logger.warning(
+                f"Provider {provider}: Confidence {conf} out of range [0, 100]"
+            )
             return False
 
-        if 'reasoning' in decision and not decision['reasoning'].strip():
+        if "reasoning" in decision and not decision["reasoning"].strip():
             logger.warning(f"Provider {provider}: reasoning is empty")
             return False
         return True
@@ -907,17 +980,14 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
         """
-        if action == 'BUY':
-            return 'LONG'
-        elif action == 'SELL':
-            return 'SHORT'
+        if action == "BUY":
+            return "LONG"
+        elif action == "SELL":
+            return "SHORT"
         return None
 
     def _select_relevant_balance(
-        self,
-        balance: Dict[str, float],
-        asset_pair: str,
-        asset_type: str
+        self, balance: Dict[str, float], asset_pair: str, asset_type: str
     ) -> tuple:
         """
         Select platform-specific balance based on asset type.
@@ -931,13 +1001,15 @@ Format response as a structured technical analysis demonstration.
             Tuple of (relevant_balance, balance_source, is_crypto, is_forex)
         """
         # Delegating to the market analyzer
-        return self.market_analyzer._select_relevant_balance(balance, asset_pair, asset_type)
+        return self.market_analyzer._select_relevant_balance(
+            balance, asset_pair, asset_type
+        )
 
     def _has_existing_position(
         self,
         asset_pair: str,
         portfolio: Optional[Dict],
-        monitoring_context: Optional[Dict]
+        monitoring_context: Optional[Dict],
     ) -> bool:
         """
         Check if there's an existing position in portfolio or active trades.
@@ -951,7 +1023,9 @@ Format response as a structured technical analysis demonstration.
             True if existing position found, False otherwise
         """
         # Delegating to the market analyzer
-        return self.market_analyzer._has_existing_position(asset_pair, portfolio, monitoring_context)
+        return self.market_analyzer._has_existing_position(
+            asset_pair, portfolio, monitoring_context
+        )
 
     def _calculate_position_sizing_params(
         self,
@@ -961,7 +1035,7 @@ Format response as a structured technical analysis demonstration.
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool
+        signal_only_default: bool,
     ) -> Dict[str, Any]:
         """
         Calculate all position sizing parameters.
@@ -985,15 +1059,17 @@ Format response as a structured technical analysis demonstration.
         """
         # Delegating to the position sizing calculator
         return self.position_sizing_calc.calculate_position_sizing_params(
-            context, current_price, action, has_existing_position,
-            relevant_balance, balance_source, signal_only_default
+            context,
+            current_price,
+            action,
+            has_existing_position,
+            relevant_balance,
+            balance_source,
+            signal_only_default,
         )
 
     def _create_decision(
-        self,
-        asset_pair: str,
-        context: Dict[str, Any],
-        ai_response: Dict[str, Any]
+        self, asset_pair: str, context: Dict[str, Any], ai_response: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Create structured decision object.
@@ -1007,20 +1083,21 @@ Format response as a structured technical analysis demonstration.
             Structured decision
         """
         # Extract basic decision parameters
-        balance = context.get('balance', {})
-        action = ai_response.get('action', 'HOLD')
-        asset_type = context['market_data'].get('type', 'unknown')
+        balance = context.get("balance", {})
+        action = ai_response.get("action", "HOLD")
+        asset_type = context["market_data"].get("type", "unknown")
 
         # Select relevant balance based on asset type
-        relevant_balance, balance_source, is_crypto, is_forex = self._select_relevant_balance(
-            balance, asset_pair, asset_type
-        )
+        (
+            relevant_balance,
+            balance_source,
+            is_crypto,
+            is_forex,
+        ) = self._select_relevant_balance(balance, asset_pair, asset_type)
 
         # Check for existing position
         has_existing_position = self._has_existing_position(
-            asset_pair,
-            context.get('portfolio'),
-            context.get('monitoring_context')
+            asset_pair, context.get("portfolio"), context.get("monitoring_context")
         )
 
         # Calculate position sizing parameters
@@ -1028,12 +1105,12 @@ Format response as a structured technical analysis demonstration.
         signal_only_default = self.config.get('signal_only_default', False)
         sizing_params = self._calculate_position_sizing_params(
             context=context,
-            current_price=context['market_data'].get('close', 0),
+            current_price=context["market_data"].get("close", 0),
             action=action,
             has_existing_position=has_existing_position,
             relevant_balance=relevant_balance,
             balance_source=balance_source,
-            signal_only_default=signal_only_default
+            signal_only_default=signal_only_default,
         )
 
         # Delegating to the decision validator
@@ -1050,8 +1127,8 @@ Format response as a structured technical analysis demonstration.
         )
 
         # Update the AI provider and model name from the AI manager
-        decision['ai_provider'] = self.ai_manager.ai_provider
-        decision['model_name'] = self.ai_manager.model_name
+        decision["ai_provider"] = self.ai_manager.ai_provider
+        decision["model_name"] = self.ai_manager.model_name
 
         return decision
 
@@ -1062,7 +1139,7 @@ Format response as a structured technical analysis demonstration.
         default_percentage: float = 0.02,
         atr_multiplier: float = 2.0,
         min_percentage: float = 0.01,
-        max_percentage: float = 0.05
+        max_percentage: float = 0.05,
     ) -> float:
         """
         Calculate dynamic stop-loss percentage based on market volatility (ATR).
@@ -1080,8 +1157,12 @@ Format response as a structured technical analysis demonstration.
         """
         # Delegating to the position sizing calculator
         return self.position_sizing_calc.calculate_dynamic_stop_loss(
-            current_price, context, default_percentage,
-            atr_multiplier, min_percentage, max_percentage
+            current_price,
+            context,
+            default_percentage,
+            atr_multiplier,
+            min_percentage,
+            max_percentage,
         )
 
     def calculate_position_size(
@@ -1089,7 +1170,7 @@ Format response as a structured technical analysis demonstration.
         account_balance: float,
         risk_percentage: float = 0.01,
         entry_price: float = 0,
-        stop_loss_percentage: float = 0.02
+        stop_loss_percentage: float = 0.02,
     ) -> float:
         """
         Calculate appropriate position size based on risk management.
@@ -1116,7 +1197,9 @@ Format response as a structured technical analysis demonstration.
             monitoring_provider: MonitoringContextProvider instance
         """
         self.monitoring_provider = monitoring_provider
-        self.market_analyzer.monitoring_provider = monitoring_provider  # Also update the analyzer
+        self.market_analyzer.monitoring_provider = (
+            monitoring_provider  # Also update the analyzer
+        )
         logger.info("Monitoring context provider attached to decision engine")
 
     async def generate_decision(
@@ -1126,7 +1209,7 @@ Format response as a structured technical analysis demonstration.
         balance: Dict[str, float],
         portfolio: Optional[Dict[str, Any]] = None,
         memory_context: Optional[Dict[str, Any]] = None,
-        monitoring_context: Optional[Dict[str, Any]] = None
+        monitoring_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Generate a trading decision based on market data and balances.
@@ -1157,15 +1240,13 @@ Format response as a structured technical analysis demonstration.
         # Parameter takes precedence (for backtesting)
         if monitoring_context is None and self.monitoring_provider:
             try:
-                monitoring_context = (
-                    self.monitoring_provider.get_monitoring_context(
-                        asset_pair=asset_pair
-                    )
+                monitoring_context = self.monitoring_provider.get_monitoring_context(
+                    asset_pair=asset_pair
                 )
                 # Handle active_positions as either list or dict
-                active_pos = monitoring_context.get('active_positions', [])
+                active_pos = monitoring_context.get("active_positions", [])
                 if isinstance(active_pos, dict):
-                    num_positions = len(active_pos.get('futures', []))
+                    num_positions = len(active_pos.get("futures", []))
                 elif isinstance(active_pos, list):
                     num_positions = len(active_pos)
                 else:
@@ -1174,7 +1255,7 @@ Format response as a structured technical analysis demonstration.
                 logger.info(
                     "Monitoring context loaded: %d active positions, %d slots",
                     num_positions,
-                    monitoring_context.get('slots_available', 0)
+                    monitoring_context.get("slots_available", 0),
                 )
             except Exception as e:
                 logger.warning("Could not load monitoring context: %s", e)
@@ -1188,7 +1269,7 @@ Format response as a structured technical analysis demonstration.
             balance,
             portfolio,
             memory_context,
-            monitoring_context
+            monitoring_context,
         )
 
         # Retrieve semantic memory
@@ -1196,10 +1277,12 @@ Format response as a structured technical analysis demonstration.
             query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
             try:
                 similar = self.vector_memory.find_similar(query, top_k=3)
-                context['semantic_memory'] = similar
+                context["semantic_memory"] = similar
             except Exception as e:
-                logger.error(f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}")
-                context['semantic_memory'] = []
+                logger.error(
+                    f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}"
+                )
+                context["semantic_memory"] = []
 
         # Generate AI prompt
         prompt = self._create_ai_prompt(context)
@@ -1208,15 +1291,17 @@ Format response as a structured technical analysis demonstration.
         prompt = self._compress_context_window(prompt, max_tokens=3000)
 
         # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
-        ai_response = await self._query_ai(prompt, asset_pair=asset_pair, market_data=market_data)
+        ai_response = await self._query_ai(
+            prompt, asset_pair=asset_pair, market_data=market_data
+        )
 
         # Validate AI response action to ensure it's one of the allowed values
-        if ai_response.get('action') not in ['BUY', 'SELL', 'HOLD']:
+        if ai_response.get("action") not in ["BUY", "SELL", "HOLD"]:
             logger.warning(
                 f"AI provider returned an invalid action: "
                 f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
             )
-            ai_response['action'] = 'HOLD'
+            ai_response["action"] = "HOLD"
 
         # Create structured decision object
         decision = self._create_decision(asset_pair, context, ai_response)
@@ -1230,7 +1315,7 @@ Format response as a structured technical analysis demonstration.
         balance: Dict[str, float],
         portfolio: Optional[Dict[str, Any]] = None,
         memory_context: Optional[Dict[str, Any]] = None,
-        monitoring_context: Optional[Dict[str, Any]] = None
+        monitoring_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Create context for decision making.
@@ -1253,7 +1338,7 @@ Format response as a structured technical analysis demonstration.
             balance,
             portfolio,
             memory_context,
-            monitoring_context
+            monitoring_context,
         )
 
     def _should_include_semantic_memory(self) -> bool:
@@ -1284,11 +1369,13 @@ Format response as a structured technical analysis demonstration.
                 break
 
             # Extract key fields from memory with truncation
-            asset = memory.get('asset_pair', 'N/A')
-            action = memory.get('action', 'N/A')
-            outcome = memory.get('outcome', 'N/A')
-            confidence = memory.get('confidence', 0)
-            reasoning = str(memory.get('reasoning', ''))[:200]  # Truncate reasoning to 200 chars
+            asset = memory.get("asset_pair", "N/A")
+            action = memory.get("action", "N/A")
+            outcome = memory.get("outcome", "N/A")
+            confidence = memory.get("confidence", 0)
+            reasoning = str(memory.get("reasoning", ""))[
+                :200
+            ]  # Truncate reasoning to 200 chars
 
             formatted_memory = (
                 f"Pattern #{i+1}: {asset} | Action: {action} | "
@@ -1407,3 +1494,88 @@ Format response as a structured technical analysis demonstration.
                 # Truncate to approximately max_tokens
                 truncate_at = max_tokens * 4
                 return prompt[:truncate_at] + "... [TRUNCATED FOR LENGTH]"
+
+        if len(tokens) <= max_tokens:
+            return prompt
+
+        # If we have too many tokens, we'll intelligently compress
+        # by truncating less critical sections first
+        lines = prompt.split("\n")
+
+        # Identify sections to compress
+        compressed_lines = []
+        current_token_count = 0
+
+        # Keep essential sections like the main instruction and asset info
+        essential_parts = [
+            "Asset Pair:",
+            "TASK:",
+            "ANALYSIS OUTPUT REQUIRED:",
+            "ACCOUNT BALANCE:",
+        ]
+
+        for line in lines:
+            # Check if this is an essential part
+            is_essential = any(essential in line for essential in essential_parts)
+
+            # Temporary tokenization to estimate this line's tokens
+            line_tokens = len(encoding.encode(line))
+
+            # If adding this line would exceed the limit
+            if current_token_count + line_tokens > max_tokens and not is_essential:
+                # Skip less critical information
+                continue
+            elif current_token_count + line_tokens > max_tokens * 0.95:  # 95% of max
+                # If we're near the limit, stop adding unless it's essential
+                if is_essential:
+                    compressed_lines.append(line)
+                    current_token_count += line_tokens
+                else:
+                    break
+            else:
+                compressed_lines.append(line)
+                current_token_count += line_tokens
+
+        compressed_prompt = "\n".join(compressed_lines)
+
+        # If still too long, perform more aggressive compression
+        if current_token_count > max_tokens:
+            # Additional strategy: truncate long data sections
+            sections = compressed_prompt.split("===")
+            main_sections = []
+            temp_prompt = ""
+
+            for section in sections:
+                temp_prompt += section + "==="  # Add back separator
+                temp_tokens = len(encoding.encode(temp_prompt))
+
+                if temp_tokens > max_tokens:
+                    # Try to compress this section by removing some content
+                    lines_in_section = section.split("\n")
+                    compressed_section = []
+                    section_token_count = 0
+
+                    for line in lines_in_section:
+                        line_tokens = len(encoding.encode(line))
+
+                        if (
+                            section_token_count + line_tokens
+                            <= max_tokens - current_token_count
+                        ):
+                            compressed_section.append(line)
+                            section_token_count += line_tokens
+                        else:
+                            # Add a truncation note if needed
+                            compressed_section.append(
+                                "... [SECTION TRUNCATED FOR LENGTH]"
+                            )
+                            break
+                    main_sections.append("\n".join(compressed_section))
+                    break
+                else:
+                    main_sections.append(section)
+                    current_token_count = temp_tokens
+
+            compressed_prompt = "===".join(main_sections)
+
+        return compressed_prompt

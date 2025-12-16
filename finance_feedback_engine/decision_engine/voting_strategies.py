@@ -4,15 +4,15 @@ Voting strategies for ensemble decision aggregation.
 Implements various voting methods for combining AI provider decisions.
 """
 
-from typing import Dict, List, Any, Tuple, Optional
-import numpy as np
-from collections import Counter
-import logging
-from pathlib import Path
 import json
+import logging
+from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class VotingStrategies:
     - Stacking ensemble
     """
 
-    def __init__(self, voting_strategy: str = 'weighted'):
+    def __init__(self, voting_strategy: str = "weighted"):
         """
         Initialize voting strategies handler.
 
@@ -36,7 +36,7 @@ class VotingStrategies:
         self.meta_learner = None
         self.meta_feature_scaler = None
 
-        if self.voting_strategy == 'stacking':
+        if self.voting_strategy == "stacking":
             self._initialize_meta_learner()
 
     def _initialize_meta_learner(self):
@@ -50,38 +50,52 @@ class VotingStrategies:
         self.meta_learner = LogisticRegression()
         self.meta_feature_scaler = StandardScaler()
 
-        model_path = Path(__file__).parent / 'meta_learner_model.json'
+        model_path = Path(__file__).parent / "meta_learner_model.json"
 
         if model_path.exists():
             try:
-                with open(model_path, 'r') as f:
+                with open(model_path, "r") as f:
                     model_data = json.load(f)
 
                 # Validate required keys
-                required_keys = ['classes', 'coef', 'intercept', 'scaler_mean', 'scaler_scale']
+                required_keys = [
+                    "classes",
+                    "coef",
+                    "intercept",
+                    "scaler_mean",
+                    "scaler_scale",
+                ]
                 missing_keys = [k for k in required_keys if k not in model_data]
                 if missing_keys:
                     raise KeyError(f"Missing required keys: {missing_keys}")
 
-                self.meta_learner.classes_ = np.array(model_data['classes'])
-                self.meta_learner.coef_ = np.array(model_data['coef'])
-                self.meta_learner.intercept_ = np.array(model_data['intercept'])
+                self.meta_learner.classes_ = np.array(model_data["classes"])
+                self.meta_learner.coef_ = np.array(model_data["coef"])
+                self.meta_learner.intercept_ = np.array(model_data["intercept"])
 
                 # Validate shapes
                 expected_n_features = 5
                 n_classes = len(self.meta_learner.classes_)
                 if self.meta_learner.coef_.shape != (n_classes, expected_n_features):
-                    raise ValueError(f"Invalid coef shape: expected ({n_classes}, {expected_n_features}), got {self.meta_learner.coef_.shape}")
+                    raise ValueError(
+                        f"Invalid coef shape: expected ({n_classes}, {expected_n_features}), got {self.meta_learner.coef_.shape}"
+                    )
                 if self.meta_learner.intercept_.shape != (n_classes,):
-                    raise ValueError(f"Invalid intercept shape: expected ({n_classes},), got {self.meta_learner.intercept_.shape}")
+                    raise ValueError(
+                        f"Invalid intercept shape: expected ({n_classes},), got {self.meta_learner.intercept_.shape}"
+                    )
 
-                self.meta_feature_scaler.mean_ = np.array(model_data['scaler_mean'])
-                self.meta_feature_scaler.scale_ = np.array(model_data['scaler_scale'])
+                self.meta_feature_scaler.mean_ = np.array(model_data["scaler_mean"])
+                self.meta_feature_scaler.scale_ = np.array(model_data["scaler_scale"])
 
                 if self.meta_feature_scaler.mean_.shape != (expected_n_features,):
-                    raise ValueError(f"Invalid scaler_mean shape: expected ({expected_n_features},), got {self.meta_feature_scaler.mean_.shape}")
+                    raise ValueError(
+                        f"Invalid scaler_mean shape: expected ({expected_n_features},), got {self.meta_feature_scaler.mean_.shape}"
+                    )
                 if self.meta_feature_scaler.scale_.shape != (expected_n_features,):
-                    raise ValueError(f"Invalid scaler_scale shape: expected ({expected_n_features},), got {self.meta_feature_scaler.scale_.shape}")
+                    raise ValueError(
+                        f"Invalid scaler_scale shape: expected ({expected_n_features},), got {self.meta_feature_scaler.scale_.shape}"
+                    )
 
                 logger.info(f"Meta-learner loaded from {model_path}")
                 return
@@ -93,16 +107,20 @@ class VotingStrategies:
 
         # Fallback to mock-trained parameters if file doesn't exist or is invalid
         logger.info("Using mock-trained parameters for meta-learner.")
-        self.meta_learner.classes_ = np.array(['BUY', 'HOLD', 'SELL'])
-        self.meta_learner.coef_ = np.array([
-            [2.0, -1.0, -1.0, 0.8, -0.5],
-            [-1.0, -1.0, 2.0, -0.2, 0.8],
-            [-1.0, 2.0, -1.0, 0.8, -0.5],
-        ])
+        self.meta_learner.classes_ = np.array(["BUY", "HOLD", "SELL"])
+        self.meta_learner.coef_ = np.array(
+            [
+                [2.0, -1.0, -1.0, 0.8, -0.5],
+                [-1.0, -1.0, 2.0, -0.2, 0.8],
+                [-1.0, 2.0, -1.0, 0.8, -0.5],
+            ]
+        )
         self.meta_learner.intercept_ = np.array([0.0, 0.0, 0.0])
         self.meta_feature_scaler.mean_ = np.array([0.4, 0.4, 0.2, 75.0, 10.0])
         self.meta_feature_scaler.scale_ = np.array([0.3, 0.3, 0.2, 10.0, 5.0])
-        logger.info("Meta-learner initialized with mock-trained parameters for updated features.")
+        logger.info(
+            "Meta-learner initialized with mock-trained parameters for updated features."
+        )
 
     def apply_voting_strategy(
         self,
@@ -112,7 +130,7 @@ class VotingStrategies:
         reasonings: List[str],
         amounts: List[float],
         base_weights: Optional[Dict[str, float]] = None,
-        adjusted_weights: Optional[Dict[str, float]] = None
+        adjusted_weights: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         """
         Apply the configured voting strategy to make a final decision.
@@ -132,16 +150,20 @@ class VotingStrategies:
         base_weights = base_weights or {}
         adjusted_weights = adjusted_weights or {}
 
-        if self.voting_strategy == 'weighted':
+        if self.voting_strategy == "weighted":
             return self._weighted_voting(
-                providers, actions, confidences, reasonings, amounts,
-                adjusted_weights if adjusted_weights is not None else base_weights
+                providers,
+                actions,
+                confidences,
+                reasonings,
+                amounts,
+                adjusted_weights if adjusted_weights is not None else base_weights,
             )
-        elif self.voting_strategy == 'majority':
+        elif self.voting_strategy == "majority":
             return self._majority_voting(
                 providers, actions, confidences, reasonings, amounts
             )
-        elif self.voting_strategy == 'stacking':
+        elif self.voting_strategy == "stacking":
             return self._stacking_ensemble(
                 providers, actions, confidences, reasonings, amounts
             )
@@ -155,7 +177,7 @@ class VotingStrategies:
         confidences: List[int],
         reasonings: List[str],
         amounts: List[float],
-        weights: Dict[str, float]
+        weights: Dict[str, float],
     ) -> Dict[str, Any]:
         """
         Weighted voting based on provider weights and confidences.
@@ -220,7 +242,7 @@ class VotingStrategies:
             )
 
         # Validate actions
-        VALID_ACTIONS = {'BUY', 'SELL', 'HOLD'}
+        VALID_ACTIONS = {"BUY", "SELL", "HOLD"}
         for i, action in enumerate(actions):
             if action not in VALID_ACTIONS:
                 raise ValueError(
@@ -235,9 +257,7 @@ class VotingStrategies:
         norm_confidences = np.array(validated_confidences) / 100.0
 
         # Get provider weights
-        weight_values = np.array([
-            weights.get(p, 1.0) for p in providers
-        ])
+        weight_values = np.array([weights.get(p, 1.0) for p in providers])
 
         # Combine weights with confidences for voting power
         voting_power = weight_values * norm_confidences
@@ -247,7 +267,8 @@ class VotingStrategies:
         if total_voting_power == 0:
             logger.warning(
                 "All voting power is zero (weights=%s, confidences=%s), using equal weights",
-                weight_values.tolist(), validated_confidences
+                weight_values.tolist(),
+                validated_confidences,
             )
             voting_power = np.ones(len(providers))
             total_voting_power = voting_power.sum()
@@ -263,7 +284,7 @@ class VotingStrategies:
         voting_power = voting_power / total_voting_power
 
         # Vote for each action
-        action_votes = {'BUY': 0.0, 'SELL': 0.0, 'HOLD': 0.0}
+        action_votes = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
         for action, power in zip(actions, voting_power):
             action_votes[action] += power
 
@@ -274,16 +295,13 @@ class VotingStrategies:
         # Winner's vote share * average confidence of supporters
         winner_power = action_votes[final_action]
         supporter_confidences = [
-            conf for act, conf in zip(actions, confidences)
-            if act == final_action
+            conf for act, conf in zip(actions, confidences) if act == final_action
         ]
 
         if supporter_confidences:
             base_confidence = np.mean(supporter_confidences)
             # Boost if strong agreement, penalize if weak
-            ensemble_confidence = int(
-                base_confidence * (0.8 + 0.4 * winner_power)
-            )
+            ensemble_confidence = int(base_confidence * (0.8 + 0.4 * winner_power))
         else:
             ensemble_confidence = 50
 
@@ -299,15 +317,15 @@ class VotingStrategies:
         final_amount = float(np.average(amounts, weights=voting_power))
 
         return {
-            'action': final_action,
-            'confidence': int(ensemble_confidence),
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'action_votes': action_votes,
-            'voting_power': {
+            "action": final_action,
+            "confidence": int(ensemble_confidence),
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "action_votes": action_votes,
+            "voting_power": {
                 provider: float(power)
                 for provider, power in zip(providers, voting_power)
-            }
+            },
         }
 
     def _majority_voting(
@@ -316,7 +334,7 @@ class VotingStrategies:
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
     ) -> Dict[str, Any]:
         """Simple majority voting (each provider gets one vote)."""
         action_counts = Counter(actions)
@@ -324,24 +342,43 @@ class VotingStrategies:
 
         # Average confidence of supporters
         supporter_confidences = [
-            conf for act, conf in zip(actions, confidences)
-            if act == final_action
+            conf for act, conf in zip(actions, confidences) if act == final_action
         ]
+        final_confidence = (
+            int(sum(supporter_confidences) / len(supporter_confidences))
+            if supporter_confidences
+            else 50
+        )
+
+        # Combine reasonings from all providers
+        combined_reasoning = " | ".join(
+            [f"{prov}: {reason}" for prov, reason in zip(providers, reasonings)]
+        )
+
+        # Average amount from supporters
+        supporter_amounts = [
+            amt for act, amt in zip(actions, amounts) if act == final_action
+        ]
+        final_amount = (
+            sum(supporter_amounts) / len(supporter_amounts)
+            if supporter_amounts
+            else 0.0
+        )
 
         return {
-            'action': final_action,
-            'confidence': int(np.mean(supporter_confidences)) if supporter_confidences else 50,
-            'reasoning': self._aggregate_reasoning(providers, actions, reasonings, final_action),
-            'amount': float(np.mean(amounts)) if amounts else 0.0
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": f"Majority vote ({action_counts[final_action]}/{len(actions)} providers). {combined_reasoning}",
+            "recommended_position_size": final_amount,
         }
 
-    def _stacking_ensemble(
+    def _stacking_voting(
         self,
         providers: List[str],
         actions: List[str],
         confidences: List[int],
         reasonings: List[str],
-        amounts: List[float]
+        amounts: List[float],
     ) -> Dict[str, Any]:
         """
         Stacking ensemble with a trained meta-learner model.
@@ -355,21 +392,23 @@ class VotingStrategies:
                 "Falling back to weighted voting."
             )
             # For fallback, we need base weights which we don't have in this method
-            return self._majority_voting(providers, actions, confidences, reasonings, amounts)
+            return self._majority_voting(
+                providers, actions, confidences, reasonings, amounts
+            )
 
         # Generate meta-features
-        meta_features = self._generate_meta_features(
-            actions, confidences, amounts
-        )
+        meta_features = self._generate_meta_features(actions, confidences, amounts)
 
         # Create feature vector in the correct order
-        feature_vector = np.array([
-            meta_features['buy_ratio'],
-            meta_features['sell_ratio'],
-            meta_features['hold_ratio'],
-            meta_features['avg_confidence'],
-            meta_features['confidence_std']
-        ]).reshape(1, -1)
+        feature_vector = np.array(
+            [
+                meta_features["buy_ratio"],
+                meta_features["sell_ratio"],
+                meta_features["hold_ratio"],
+                meta_features["avg_confidence"],
+                meta_features["confidence_std"],
+            ]
+        ).reshape(1, -1)
 
         # Scale the features
         scaled_features = self.meta_feature_scaler.transform(feature_vector)
@@ -386,47 +425,52 @@ class VotingStrategies:
             providers, actions, reasonings, final_action
         )
 
-        final_amount = meta_features['avg_amount']
+        final_amount = meta_features["avg_amount"]
 
         return {
-            'action': final_action,
-            'confidence': final_confidence,
-            'reasoning': final_reasoning,
-            'amount': final_amount,
-            'meta_features': meta_features,
-            'stacking_probabilities': dict(zip(self.meta_learner.classes_, probabilities))
+            "action": final_action,
+            "confidence": final_confidence,
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "meta_features": meta_features,
+            "stacking_probabilities": dict(
+                zip(self.meta_learner.classes_, probabilities)
+            ),
         }
 
     def _generate_meta_features(
-        self,
-        actions: List[str],
-        confidences: List[int],
-        amounts: List[float]
+        self, actions: List[str], confidences: List[int], amounts: List[float]
     ) -> Dict[str, Any]:
         """Generate meta-features from base model predictions."""
         num_providers = len(actions)
         if num_providers == 0:
             return {
-                'buy_ratio': 0.0, 'sell_ratio': 0.0, 'hold_ratio': 0.0,
-                'avg_confidence': 0.0, 'confidence_std': 0.0,
-                'min_confidence': 0, 'max_confidence': 0,
-                'avg_amount': 0.0, 'amount_std': 0.0,
-                'num_providers': 0, 'action_diversity': 0
+                "buy_ratio": 0.0,
+                "sell_ratio": 0.0,
+                "hold_ratio": 0.0,
+                "avg_confidence": 0.0,
+                "confidence_std": 0.0,
+                "min_confidence": 0,
+                "max_confidence": 0,
+                "avg_amount": 0.0,
+                "amount_std": 0.0,
+                "num_providers": 0,
+                "action_diversity": 0,
             }
         action_counts = Counter(actions)
 
         return {
-            'buy_ratio': action_counts.get('BUY', 0) / num_providers,
-            'sell_ratio': action_counts.get('SELL', 0) / num_providers,
-            'hold_ratio': action_counts.get('HOLD', 0) / num_providers,
-            'avg_confidence': float(np.mean(confidences)),
-            'confidence_std': float(np.std(confidences)),
-            'min_confidence': min(confidences) if confidences else 0,
-            'max_confidence': max(confidences) if confidences else 0,
-            'avg_amount': float(np.mean(amounts)),
-            'amount_std': float(np.std(amounts)),
-            'num_providers': num_providers,
-            'action_diversity': len(action_counts)
+            "buy_ratio": action_counts.get("BUY", 0) / num_providers,
+            "sell_ratio": action_counts.get("SELL", 0) / num_providers,
+            "hold_ratio": action_counts.get("HOLD", 0) / num_providers,
+            "avg_confidence": float(np.mean(confidences)),
+            "confidence_std": float(np.std(confidences)),
+            "min_confidence": min(confidences) if confidences else 0,
+            "max_confidence": max(confidences) if confidences else 0,
+            "avg_amount": float(np.mean(amounts)),
+            "amount_std": float(np.std(amounts)),
+            "num_providers": num_providers,
+            "action_diversity": len(action_counts),
         }
 
     def _aggregate_reasoning(
@@ -434,36 +478,30 @@ class VotingStrategies:
         providers: List[str],
         actions: List[str],
         reasonings: List[str],
-        final_action: str
+        final_action: str,
     ) -> str:
         """Aggregate reasoning from providers supporting final action."""
         # Collect reasoning from supporters
         supporter_reasoning = [
             f"[{provider}]: {reasoning[:150]}"
-            for provider, action, reasoning
-            in zip(providers, actions, reasonings)
+            for provider, action, reasoning in zip(providers, actions, reasonings)
             if action == final_action
         ]
 
         # Collect dissenting opinions for transparency
         dissenting_reasoning = [
             f"[{provider} dissents -> {action}]: {reasoning[:100]}"
-            for provider, action, reasoning
-            in zip(providers, actions, reasonings)
+            for provider, action, reasoning in zip(providers, actions, reasonings)
             if action != final_action
         ]
 
         parts = [
             f"ENSEMBLE DECISION ({len(supporter_reasoning)} supporting):",
             "",
-            *supporter_reasoning
+            *supporter_reasoning,
         ]
 
         if dissenting_reasoning:
-            parts.extend([
-                "",
-                "Dissenting views:",
-                *dissenting_reasoning
-            ])
+            parts.extend(["", "Dissenting views:", *dissenting_reasoning])
 
         return "\n".join(parts)

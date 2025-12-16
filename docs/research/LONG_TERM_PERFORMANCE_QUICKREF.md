@@ -77,7 +77,7 @@ LONG-TERM PERFORMANCE (90 days):
   Profit Factor: 2.10
   ROI: 12.5%
   Recent Momentum: improving
-  
+
 PERFORMANCE GUIDANCE:
 ✓ Long-term performance is strong.
 ✓ Performance momentum is IMPROVING.
@@ -107,7 +107,7 @@ PERFORMANCE GUIDANCE:
 ## Performance Momentum
 
 - **Improving**: Recent performance 10%+ better than early period
-- **Declining**: Recent performance 10%+ worse than early period  
+- **Declining**: Recent performance 10%+ worse than early period
 - **Stable**: Performance relatively consistent
 
 ## Benefits

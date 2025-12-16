@@ -1,92 +1,107 @@
-[tool.black]
-line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
 
-[tool.isort]
-profile = "black"
-line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
-python_classes = ["Test*"]
-asyncio_mode = "auto"
-addopts = """
-    --cov=finance_feedback_engine
-    --cov-report=html
-    --cov-report=xml
-    --cov-report=term-missing
-    -v
-    --strict-markers
-"""
-# TODO: Coverage threshold restored to 70% per project standards (see .github/copilot-instructions.md).
-# If tests fail due to insufficient coverage, add tests rather than lowering the threshold.
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
+[project]
+name = "finance-feedback-engine-2.0"
+version = "2.0.0"
+description = "A sophisticated Python-based trading system designed to provide validation and feedback for financial data processing"
+readme = "README.md"
+authors = [{name = "Three Rivers Tech", email = "dev@threerivers.tech"}]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
-filterwarnings = [
-    "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning",
-    "ignore::UserWarning",
-    "ignore::DeprecationWarning",
+dependencies = [
+    # Core dependencies would be listed here
 ]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
 warn_unused_ignores = true
-warn_no_return = true
-follow_imports = "normal"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+show_error_codes = true
+mypy_path = ["finance_feedback_engine"]
+
+[[tool.mypy.overrides]]
+module = [
+    "coinbase_advanced.*",
+    "oandapyV20.*",
+    "oandapyV20.*.*",
+    "alpha_vantage.*",
+    "yfinance.*",
+    "numpy.*",
+    "pandas.*",
+    "requests.*",
+    "flask.*",
+    "rich.*",
+    "click.*",
+    "pyngrok.*",
+    "redis.*",
+    "apscheduler.*",
+    "sqlalchemy.*",
+    "pydantic.*",
+    "tqdm.*",
+    "matplotlib.*",
+]
 ignore_missing_imports = true
 
-[tool.coverage.run]
-source = ["finance_feedback_engine"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "*/__pycache__/*",
-    "*/site-packages/*",
+[tool.pylint.MASTER]
+ignore-paths = ["^build/", "^dist/", "^.*\\.egg-info/"]
+load-plugins = ["pylint.extensions.docparams"]
+
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-instance-attributes",
+    "too-many-locals",
+    "too-many-statements",
+    "too-many-lines",
+    "duplicate-code",
+    "fixme",
+    "c-extension-no-member",
+    "too-many-branches",
+    "too-many-return-statements",
+    "too-many-nested-blocks",
 ]
 
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
+[tool.pylint.FORMAT]
+max-line-length = 120
 
-[tool.bandit]
-exclude_dirs = ["tests", "build", "dist"]
-skips = ["B101", "B601"]
+[tool.pylint.TYPECHECK]
+ignored-modules = [
+    "coinbase_advanced",
+    "oandapyV20",
+    "alpha_vantage",
+    "yfinance",
+    "numpy",
+    "pandas",
+    "requests",
+    "flask",
+    "rich",
+    "click",
+    "pyngrok",
+    "redis",
+    "apscheduler",
+    "sqlalchemy",
+    "pydantic",
+    "tqdm",
+    "matplotlib",
+]

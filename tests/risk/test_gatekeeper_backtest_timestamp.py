@@ -1,6 +1,8 @@
 """Test RiskGatekeeper timestamp parsing in backtest vs live mode."""
-import pytest
+
 import datetime
+
+import pytest
 
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
@@ -81,7 +83,9 @@ def test_live_mode_falls_back_on_invalid_timestamp():
         # Should NOT be a timestamp parsing error in live mode
         # Only fail if the error is related to timestamp parsing
         if "timestamp" in str(e).lower() or "parse" in str(e).lower():
-            pytest.fail(f"Live mode should not raise on timestamp parse errors, got: {e}")
+            pytest.fail(
+                f"Live mode should not raise on timestamp parse errors, got: {e}"
+            )
         # Other validation errors are acceptable - just verify it's a ValueError
         raise
 
@@ -120,7 +124,9 @@ def test_backtest_mode_accepts_valid_iso_timestamp():
         assert isinstance(is_valid, bool)
     except ValueError as e:
         if "timestamp" in str(e).lower() or "parse" in str(e).lower():
-            pytest.fail(f"Should not raise timestamp parsing error for valid ISO format: {e}")
+            pytest.fail(
+                f"Should not raise timestamp parsing error for valid ISO format: {e}"
+            )
         # Other validation errors are acceptable
         raise
 
@@ -160,6 +166,8 @@ def test_backtest_mode_accepts_valid_unix_timestamp():
         assert isinstance(is_valid, bool)
     except ValueError as e:
         if "timestamp" in str(e).lower() or "parse" in str(e).lower():
-            pytest.fail(f"Should not raise timestamp parsing error for valid Unix timestamp: {e}")
+            pytest.fail(
+                f"Should not raise timestamp parsing error for valid Unix timestamp: {e}"
+            )
         # Other validation errors are acceptable
         raise

@@ -1,7 +1,7 @@
 # Example Configuration for Oanda Forex Trading
 #
 # ⚠️  NOTE: This is a STANDALONE example config for testing Oanda in isolation.
-# 
+#
 # For production use, integrate Oanda into your main config files:
 # - config/config.yaml (template with all platforms)
 # - config/config.local.yaml (your actual credentials)
@@ -38,13 +38,13 @@ trading_platform: "oanda"
 platform_credentials:
   # Your Oanda Personal Access Token (from account settings)
   api_key: "YOUR_OANDA_API_KEY"
-  
+
   # Your Oanda account ID (format: 001-XXX-XXXXXXX-XXX)
   account_id: "YOUR_OANDA_ACCOUNT_ID"
-  
+
   # Environment: 'practice' for demo trading, 'live' for real money
   environment: "practice"
-  
+
   # Optional: Custom base URL (auto-detected based on environment)
   # base_url: "https://api-fxpractice.oanda.com"
 
@@ -52,10 +52,10 @@ platform_credentials:
 decision_engine:
   # AI provider: local | cli | codex | qwen | ensemble
   ai_provider: "local"  # Uses free Llama-3.2-3B via Ollama
-  
+
   # Model name (provider-specific)
   model_name: "llama3.2:3b-instruct-fp16"
-  
+
   # Minimum confidence threshold for executing trades (0-1)
   decision_threshold: 0.75
 
@@ -110,4 +110,3 @@ persistence:
 # - Exotic pairs: USD_TRY, USD_ZAR, etc.
 #
 # NOTE: Asset pairs must use Oanda format with underscore (e.g., EUR_USD not EURUSD)
-

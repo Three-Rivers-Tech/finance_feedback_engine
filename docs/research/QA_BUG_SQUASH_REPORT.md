@@ -152,7 +152,7 @@ Suggestion: Increase the date range or reduce window sizes.
 ```bash
 $ python main.py monte-carlo BTCUSD --start-date 2024-01-01 --end-date 2024-01-10 --simulations 5
 
-Monte Carlo Simulation Results   
+Monte Carlo Simulation Results
 ┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
 ┃ Metric              ┃     Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
@@ -240,7 +240,7 @@ if decision.get('signal_only'):
 
 **Backtest Success:**
 ```
-AI-Driven Backtest Summary     
+AI-Driven Backtest Summary
 ┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
 ┃ Metric              ┃     Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
@@ -279,7 +279,7 @@ Suggestion: Increase the date range or reduce window sizes.
 
 **Monte-Carlo Results:**
 ```
-Monte Carlo Simulation Results   
+Monte Carlo Simulation Results
 ┏━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┓
 ┃ Metric              ┃     Value ┃
 ┡━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━┩
@@ -419,8 +419,8 @@ The Finance Feedback Engine 2.0 CLI is now **production-ready** with:
 
 ---
 
-**Report Generated:** December 5, 2025  
-**QA Engineer:** AI Coding Agent  
-**Commands Evaluated:** 22 / 22  
-**Test Coverage:** Core + Advanced features  
+**Report Generated:** December 5, 2025
+**QA Engineer:** AI Coding Agent
+**Commands Evaluated:** 22 / 22
+**Test Coverage:** Core + Advanced features
 **Production Readiness:** ✅ APPROVED

@@ -9,6 +9,7 @@ Usage:
   python qa_test_harness.py [--output QA_RESULTS.json] [--verbose] [--command COMMAND] [--asset ASSET]
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -16,7 +17,6 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
-import argparse
 
 
 class CLITestResult:
@@ -249,9 +249,7 @@ class CLITestHarness:
         if summary["by_severity"]:
             print("\nBy Severity:")
             for severity, stats in summary["by_severity"].items():
-                print(
-                    f"  {severity}: {stats['passed']}/{stats['total']} passed"
-                )
+                print(f"  {severity}: {stats['passed']}/{stats['total']} passed")
 
         if summary["deviation_details"]:
             print(f"\n⚠ Deviations Found: {summary['deviations_found']}")
@@ -436,9 +434,7 @@ def main():
         default="qa_results.json",
         help="Output JSON file for results (default: qa_results.json)",
     )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Verbose output"
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     parser.add_argument(
         "--command",
         help="Run only specific command (e.g., 'analyze')",
@@ -470,7 +466,9 @@ def main():
 
     # Execute tests
     for command, cmd_args, flags, expected, severity in test_cases:
-        should_pass = "fail" not in expected.lower() and "invalid" not in expected.lower()
+        should_pass = (
+            "fail" not in expected.lower() and "invalid" not in expected.lower()
+        )
         result = harness.test_command(
             command, cmd_args, flags, expected, severity, should_pass=should_pass
         )

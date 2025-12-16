@@ -1,15 +1,15 @@
-import pandas as pd
-from datetime import datetime
-from datetime import timezone
-from typing import Optional, Union
-import logging
-import numpy as np
-from pathlib import Path
 import asyncio
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional, Union
 
-from .alpha_vantage_provider import AlphaVantageProvider
-from ..utils.financial_data_validator import FinancialDataValidator
+import numpy as np
+import pandas as pd
+
 from ..persistence.timeseries_data_store import TimeSeriesDataStore
+from ..utils.financial_data_validator import FinancialDataValidator
+from .alpha_vantage_provider import AlphaVantageProvider
 
 logger = logging.getLogger(__name__)
 
@@ -60,12 +60,20 @@ class HistoricalDataProvider:
         # Initialize FinancialDataValidator and TimeSeriesDataStore
         self.validator = FinancialDataValidator()
         self.data_store = TimeSeriesDataStore(
-            storage_path=str(self.cache_dir) if self.cache_dir else "data/historical_cache"
+            storage_path=(
+                str(self.cache_dir) if self.cache_dir else "data/historical_cache"
+            )
         )
-        logger.info("✅ HistoricalDataProvider initialized with validator and data store")
+        logger.info(
+            "✅ HistoricalDataProvider initialized with validator and data store"
+        )
 
     def _fetch_raw_data(
-        self, asset_pair: str, start_date: datetime, end_date: datetime, timeframe: str = '1h'
+        self,
+        asset_pair: str,
+        start_date: datetime,
+        end_date: datetime,
+        timeframe: str = "1h",
     ) -> pd.DataFrame:
         """
         Fetch real historical OHLC data via Alpha Vantage provider.
@@ -78,7 +86,10 @@ class HistoricalDataProvider:
         try:
             start_str = start_date.strftime("%Y-%m-%d")
             end_str = end_date.strftime("%Y-%m-%d")
-            cache_file = self.cache_dir / f"{asset_pair}_{timeframe}_{start_str}_{end_str}.parquet"
+            cache_file = (
+                self.cache_dir
+                / f"{asset_pair}_{timeframe}_{start_str}_{end_str}.parquet"
+            )
             if cache_file.exists():
                 df = pd.read_parquet(cache_file)
                 # Ensure datetime index
@@ -155,7 +166,7 @@ class HistoricalDataProvider:
         asset_pair: str,
         start_date: Union[str, datetime],
         end_date: Union[str, datetime],
-        timeframe: str = '1h',
+        timeframe: str = "1h",
     ) -> pd.DataFrame:
         """
         Retrieves historical data for a given asset pair and date range.
@@ -185,7 +196,9 @@ class HistoricalDataProvider:
             end_date = end_date.replace(tzinfo=timezone.utc)
 
         # Check data_store for cached data first
-        cached_data = self.data_store.load_dataframe(asset_pair, start_date, end_date, timeframe)
+        cached_data = self.data_store.load_dataframe(
+            asset_pair, start_date, end_date, timeframe
+        )
         if cached_data is not None and not cached_data.empty:
             logger.info(
                 f"✅ Loaded {len(cached_data)} candles for {asset_pair} ({timeframe}) from data store cache."
@@ -205,8 +218,8 @@ class HistoricalDataProvider:
         # Note: Validator checks for price columns; OHLC data has open/high/low/close
         # We'll validate 'close' as the price column
         validation_df = raw_data.copy()
-        if 'close' in validation_df.columns:
-            validation_df['price'] = validation_df['close']
+        if "close" in validation_df.columns:
+            validation_df["price"] = validation_df["close"]
 
         validation_errors = self.validator.validate_dataframe(validation_df)
         if validation_errors:
@@ -236,7 +249,9 @@ class HistoricalDataProvider:
 
         # Persist fetched data to data_store
         try:
-            self.data_store.save_dataframe(asset_pair, raw_data, start_date, end_date, timeframe)
+            self.data_store.save_dataframe(
+                asset_pair, raw_data, start_date, end_date, timeframe
+            )
         except Exception as e:
             logger.warning(f"⚠️ Failed to persist data to data store: {e}")
 
@@ -245,7 +260,7 @@ class HistoricalDataProvider:
         )
         return raw_data
 
-    def add_returns(self, df: pd.DataFrame, column: str = 'close') -> pd.DataFrame:
+    def add_returns(self, df: pd.DataFrame, column: str = "close") -> pd.DataFrame:
         """
         Add return calculations to the DataFrame.
 
@@ -257,7 +272,7 @@ class HistoricalDataProvider:
             DataFrame with added 'returns' column
         """
         df_copy = df.copy()
-        df_copy['returns'] = df_copy[column].pct_change()
+        df_copy["returns"] = df_copy[column].pct_change()
         return df_copy
 
     def resample_data(self, df: pd.DataFrame, new_frequency: str) -> pd.DataFrame:
@@ -276,11 +291,11 @@ class HistoricalDataProvider:
 
         # Use OHLCV aggregation rules for resampling
         agg_dict = {
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
         }
         # Only include columns that exist in the dataframe
         existing_cols = {k: v for k, v in agg_dict.items() if k in df.columns}
@@ -288,7 +303,7 @@ class HistoricalDataProvider:
         # Preserve other numeric columns with 'last' aggregation
         for col in df.select_dtypes(include=[np.number]).columns:
             if col not in existing_cols:
-                existing_cols[col] = 'last'
+                existing_cols[col] = "last"
 
         resampled = df.resample(new_frequency).agg(existing_cols)
         return resampled
@@ -309,12 +324,12 @@ class HistoricalDataProvider:
         df_copy = df.copy()
 
         # Simple moving averages
-        df_copy['sma_10'] = df_copy['close'].rolling(window=10).mean()
-        df_copy['sma_20'] = df_copy['close'].rolling(window=20).mean()
+        df_copy["sma_10"] = df_copy["close"].rolling(window=10).mean()
+        df_copy["sma_20"] = df_copy["close"].rolling(window=20).mean()
 
         # Price-based indicators
-        df_copy['high_low_pct'] = (df_copy['high'] - df_copy['low']) / df_copy['close']
-        df_copy['price_change'] = df_copy['close'] - df_copy['open']
+        df_copy["high_low_pct"] = (df_copy["high"] - df_copy["low"]) / df_copy["close"]
+        df_copy["price_change"] = df_copy["close"] - df_copy["open"]
 
         return df_copy
 
@@ -323,8 +338,8 @@ class HistoricalDataProvider:
         asset_pair: str,
         start_date: Union[str, datetime],
         end_date: Union[str, datetime],
-        timeframe: str = '1h',
-        transformations: list = None
+        timeframe: str = "1h",
+        transformations: list = None,
     ) -> pd.DataFrame:
         """
         Retrieves historical data with optional transformations applied.
@@ -342,26 +357,30 @@ class HistoricalDataProvider:
         """
         if transformations:
             # Apply resample first to avoid losing computed columns
-            resample_transforms = [t for t in transformations if t.startswith('resample_')]
-            other_transforms = [t for t in transformations if not t.startswith('resample_')]
+            resample_transforms = [
+                t for t in transformations if t.startswith("resample_")
+            ]
+            other_transforms = [
+                t for t in transformations if not t.startswith("resample_")
+            ]
             ordered_transforms = resample_transforms + other_transforms
 
             for transform in ordered_transforms:
-                if transform == 'returns':
+                if transform == "returns":
                     df = self.add_returns(df)
-                elif transform == 'indicators':
+                elif transform == "indicators":
                     df = self.calculate_technical_indicators(df)
-                elif transform.startswith('resample_'):
+                elif transform.startswith("resample_"):
                     # Extract frequency from transform name, e.g., 'resample_4H'
-                    freq = transform.replace('resample_', '')
+                    freq = transform.replace("resample_", "")
                     df = self.resample_data(df, freq)
-                if transform == 'returns':
+                if transform == "returns":
                     df = self.add_returns(df)
-                elif transform == 'indicators':
+                elif transform == "indicators":
                     df = self.calculate_technical_indicators(df)
-                elif transform.startswith('resample_'):
+                elif transform.startswith("resample_"):
                     # Extract frequency from transform name, e.g., 'resample_4H'
-                    freq = transform.replace('resample_', '')
+                    freq = transform.replace("resample_", "")
                     df = self.resample_data(df, freq)
 
         return df

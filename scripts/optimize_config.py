@@ -2,8 +2,8 @@
 """Optimize agent configuration using Optuna Bayesian optimization."""
 
 import asyncio
-import sys
 import json
+import sys
 from pathlib import Path
 
 # Add parent directory to path
@@ -30,7 +30,7 @@ async def main():
 
     # Load base configuration
     try:
-        config = load_config('config/config.yaml')
+        config = load_config("config/config.yaml")
         print("✓ Base configuration loaded")
     except Exception as e:
         print(f"✗ Failed to load configuration: {e}")
@@ -43,8 +43,10 @@ async def main():
     n_trials = input("  Number of trials [50]: ").strip()
     n_trials = int(n_trials) if n_trials else 50
 
-    optimize_for = input("  Optimize for (sharpe_ratio/total_return/profit_factor/win_rate) [sharpe_ratio]: ").strip()
-    optimize_for = optimize_for if optimize_for else 'sharpe_ratio'
+    optimize_for = input(
+        "  Optimize for (sharpe_ratio/total_return/profit_factor/win_rate) [sharpe_ratio]: "
+    ).strip()
+    optimize_for = optimize_for if optimize_for else "sharpe_ratio"
 
     timeout = input("  Timeout in seconds (blank = no timeout): ").strip()
     timeout = int(timeout) if timeout else None
@@ -60,7 +62,7 @@ async def main():
     print()
 
     confirm = input("Continue? [y/N]: ").strip().lower()
-    if confirm != 'y':
+    if confirm != "y":
         print("Aborted.")
         return 0
 
@@ -72,9 +74,7 @@ async def main():
 
     try:
         result = await optimizer.optimize(
-            n_trials=n_trials,
-            timeout=timeout,
-            optimize_for=optimize_for
+            n_trials=n_trials, timeout=timeout, optimize_for=optimize_for
         )
 
         # Display results
@@ -86,35 +86,36 @@ async def main():
         print(f"  Trials completed: {result['n_trials']}")
 
         print("\n  Best parameters:")
-        for param, value in result['best_params'].items():
+        for param, value in result["best_params"].items():
             if isinstance(value, float):
                 print(f"    {param}: {value:.4f}")
             else:
                 print(f"    {param}: {value}")
 
         # Save best config
-        output_dir = Path('data/optimization')
+        output_dir = Path("data/optimization")
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        config_file = output_dir / 'optimized_config.yaml'
-        result_file = output_dir / 'optimization_result.json'
+        config_file = output_dir / "optimized_config.yaml"
+        result_file = output_dir / "optimization_result.json"
 
         # Save YAML config
         import yaml
-        with open(config_file, 'w') as f:
-            yaml.dump(result['best_config'], f, default_flow_style=False)
+
+        with open(config_file, "w") as f:
+            yaml.dump(result["best_config"], f, default_flow_style=False)
 
         # Save JSON result
-        with open(result_file, 'w') as f:
+        with open(result_file, "w") as f:
             json.dump(result, f, indent=2, default=str)
 
         print(f"\n  💾 Optimized config saved to: {config_file}")
         print(f"  💾 Full results saved to: {result_file}")
 
         # Show improvement
-        if 'optimization_history' in result and len(result['optimization_history']) > 0:
-            first_score = result['optimization_history'][0]['score']
-            best_score = result['best_score']
+        if "optimization_history" in result and len(result["optimization_history"]) > 0:
+            first_score = result["optimization_history"][0]["score"]
+            best_score = result["best_score"]
             improvement = ((best_score - first_score) / abs(first_score)) * 100
 
             print(f"\n  📈 Improvement from first trial: {improvement:+.1f}%")
@@ -137,10 +138,11 @@ async def main():
     except Exception as e:
         print(f"\n\n✗ Optimization failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

@@ -8,7 +8,7 @@ We've completely redesigned backtest output formatting for **clarity, profession
 
 ## Key Improvements
 
-### 1. **Visual Organization** 
+### 1. **Visual Organization**
 - **Before:** Long vertical list of metrics in a single table
 - **After:** Organized sections with icons, proper spacing, and visual hierarchy
 
@@ -193,9 +193,9 @@ Both now produce **clean, professional output** ready for analysis or reporting.
 
 ## Benefits
 
-✅ **Clarity** - Organized information hierarchy  
-✅ **Professionalism** - Report-ready formatting  
-✅ **Accessibility** - Color-coded for quick parsing  
-✅ **Completeness** - All metrics visible at a glance  
-✅ **Reusability** - Functions can be used elsewhere  
-✅ **Maintainability** - Single source of truth for formatting  
+✅ **Clarity** - Organized information hierarchy
+✅ **Professionalism** - Report-ready formatting
+✅ **Accessibility** - Color-coded for quick parsing
+✅ **Completeness** - All metrics visible at a glance
+✅ **Reusability** - Functions can be used elsewhere
+✅ **Maintainability** - Single source of truth for formatting

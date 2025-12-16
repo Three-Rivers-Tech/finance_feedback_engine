@@ -1,7 +1,9 @@
 """
 Quick test to verify SHORT position support in backtester.
 """
+
 from datetime import datetime
+
 from finance_feedback_engine.backtesting.backtester import Position
 
 
@@ -11,7 +13,6 @@ def test_short_position():
 
     # Simulate platform margin info (typical values)
     maintenance_margin_pct = 0.5  # 50% maintenance margin
-
 
     print("\n📊 Testing liquidation price calculation:")
 
@@ -48,7 +49,7 @@ def test_short_position():
         stop_loss_price=49000.0,
         take_profit_price=52500.0,
         side="LONG",
-        liquidation_price=long_liq
+        liquidation_price=long_liq,
     )
 
     # Price rises to 51000 (profit for LONG)
@@ -66,13 +67,15 @@ def test_short_position():
         stop_loss_price=51000.0,  # Reversed: stop loss is ABOVE entry
         take_profit_price=47500.0,  # Reversed: take profit is BELOW entry
         side="SHORT",
-        liquidation_price=short_liq
+        liquidation_price=short_liq,
     )
 
     # Price drops to 49000 (profit for SHORT)
     current_price_down = 49000.0
     # For SHORT: (entry - current) * abs(units)
-    short_pnl = (short_position.entry_price - current_price_down) * abs(short_position.units)
+    short_pnl = (short_position.entry_price - current_price_down) * abs(
+        short_position.units
+    )
     print(f"\n  SHORT: Entry ${entry_price:,.2f} → Current ${current_price_down:,.2f}")
     print(f"    P&L: ${short_pnl:,.2f} (✓ profit when price drops)")
 
@@ -80,11 +83,17 @@ def test_short_position():
     print("\n🎯 Testing reversed stop-loss/take-profit for SHORT:")
     print(f"  SHORT Entry: ${short_position.entry_price:,.2f}")
     print(f"  Stop-loss (loss if price rises): ${short_position.stop_loss_price:,.2f}")
-    print(f"  Take-profit (profit if price drops): ${short_position.take_profit_price:,.2f}")
+    print(
+        f"  Take-profit (profit if price drops): ${short_position.take_profit_price:,.2f}"
+    )
 
     # Verify stop-loss is above entry for SHORT
-    assert short_position.stop_loss_price > short_position.entry_price, "SHORT stop-loss should be ABOVE entry"
-    assert short_position.take_profit_price < short_position.entry_price, "SHORT take-profit should be BELOW entry"
+    assert (
+        short_position.stop_loss_price > short_position.entry_price
+    ), "SHORT stop-loss should be ABOVE entry"
+    assert (
+        short_position.take_profit_price < short_position.entry_price
+    ), "SHORT take-profit should be BELOW entry"
 
     print("\n✅ All SHORT position calculations working correctly!")
     print("\n📝 Key features verified:")

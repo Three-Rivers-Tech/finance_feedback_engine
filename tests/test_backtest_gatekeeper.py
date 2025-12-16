@@ -1,6 +1,6 @@
 """Test that RiskGatekeeper blocks trades after drawdown is exceeded."""
-import datetime
 
+import datetime
 
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
@@ -8,7 +8,7 @@ from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 def test_risk_gatekeeper_blocks_after_drawdown():
     """
     Verify RiskGatekeeper blocks trades when portfolio drawdown exceeds limit.
-    
+
     Setup: Create a decision and monitoring context where portfolio has dropped 10%.
     Gatekeeper configured with 5% max drawdown.
     Expected: validate_trade returns False with drawdown message.
@@ -43,15 +43,18 @@ def test_risk_gatekeeper_blocks_after_drawdown():
     is_approved, reason = gatekeeper.validate_trade(decision, context)
 
     # Assert: Trade should be rejected
-    assert not is_approved, f"Expected trade to be rejected but got approved. Reason: {reason}"
-    assert "drawdown" in reason.lower() or "exceeded" in reason.lower(), \
-        f"Expected drawdown-related message but got: {reason}"
+    assert (
+        not is_approved
+    ), f"Expected trade to be rejected but got approved. Reason: {reason}"
+    assert (
+        "drawdown" in reason.lower() or "exceeded" in reason.lower()
+    ), f"Expected drawdown-related message but got: {reason}"
 
 
 def test_risk_gatekeeper_allows_within_limit():
     """
     Verify RiskGatekeeper allows trades when portfolio drawdown is within limit.
-    
+
     Setup: Portfolio down 3%, gatekeeper limit 5%.
     Expected: Trade approved.
     """
@@ -79,4 +82,6 @@ def test_risk_gatekeeper_allows_within_limit():
     is_approved, reason = gatekeeper.validate_trade(decision, context)
 
     # Assert: Trade should be approved
-    assert is_approved, f"Expected trade to be approved but got rejected. Reason: {reason}"
+    assert (
+        is_approved
+    ), f"Expected trade to be approved but got rejected. Reason: {reason}"

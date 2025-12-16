@@ -10,9 +10,9 @@ Features:
 """
 
 import logging
-from pathlib import Path
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
@@ -48,6 +48,7 @@ class DeltaLakeManager:
         """Check if PySpark is installed."""
         try:
             import pyspark
+
             return True
         except ImportError:
             return False
@@ -55,21 +56,31 @@ class DeltaLakeManager:
     def _init_spark(self):
         """Initialize Spark session with Delta Lake support."""
         try:
-            from pyspark.sql import SparkSession
             from delta import configure_spark_with_delta_pip
+            from pyspark.sql import SparkSession
 
-            builder = (SparkSession.builder
-                .appName("FinanceFeedbackEngine-DeltaLake")
-                .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-                .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-                .config("spark.databricks.delta.retentionDurationCheck.enabled", "false")  # Allow vacuum < 7 days
+            builder = (
+                SparkSession.builder.appName("FinanceFeedbackEngine-DeltaLake")
+                .config(
+                    "spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension"
+                )
+                .config(
+                    "spark.sql.catalog.spark_catalog",
+                    "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+                )
+                .config(
+                    "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+                )  # Allow vacuum < 7 days
             )
 
             # Add S3 config if using AWS
-            if self.storage_path.startswith('s3://'):
-                builder = builder \
-                    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-                    .config("spark.hadoop.fs.s3a.aws.credentials.provider", "com.amazonaws.auth.DefaultAWSCredentialsProviderChain")
+            if self.storage_path.startswith("s3://"):
+                builder = builder.config(
+                    "spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem"
+                ).config(
+                    "spark.hadoop.fs.s3a.aws.credentials.provider",
+                    "com.amazonaws.auth.DefaultAWSCredentialsProviderChain",
+                )
 
             self.spark = configure_spark_with_delta_pip(builder).getOrCreate()
             self.spark.sparkContext.setLogLevel("WARN")
@@ -85,7 +96,7 @@ class DeltaLakeManager:
         df: pd.DataFrame,
         table_name: str,
         partition_columns: Optional[List[str]] = None,
-        mode: str = 'append'
+        mode: str = "append",
     ):
         """
         Create or update a Delta table.
@@ -136,7 +147,7 @@ class DeltaLakeManager:
         filename = f"data_{timestamp}.parquet"
         filepath = table_dir / filename
 
-        df.to_parquet(filepath, index=False, engine='pyarrow')
+        df.to_parquet(filepath, index=False, engine="pyarrow")
 
         logger.info(f"Saved Parquet file: {filepath} (fallback mode)")
 
@@ -144,7 +155,7 @@ class DeltaLakeManager:
         self,
         table_name: str,
         as_of_timestamp: Optional[str] = None,
-        filters: Optional[List[str]] = None
+        filters: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """
         Read Delta table with optional time travel.
@@ -205,9 +216,7 @@ class DeltaLakeManager:
         return combined_df
 
     def optimize_table(
-        self,
-        table_name: str,
-        zorder_columns: Optional[List[str]] = None
+        self, table_name: str, zorder_columns: Optional[List[str]] = None
     ):
         """
         Optimize Delta table by compacting small files and Z-ordering.
@@ -243,9 +252,7 @@ class DeltaLakeManager:
             raise
 
     def vacuum_table(
-        self,
-        table_name: str,
-        retention_hours: int = 168  # 7 days default
+        self, table_name: str, retention_hours: int = 168  # 7 days default
     ):
         """
         Vacuum old versions from Delta table (free up storage).
@@ -283,7 +290,7 @@ class DeltaLakeManager:
         df: pd.DataFrame,
         table_name: str,
         merge_keys: List[str],
-        update_columns: Optional[List[str]] = None
+        update_columns: Optional[List[str]] = None,
     ):
         """
         Perform MERGE (upsert) operation on Delta table.
@@ -311,9 +318,9 @@ class DeltaLakeManager:
             delta_table = DeltaTable.forPath(self.spark, table_path)
 
             # Build merge condition
-            merge_condition = " AND ".join([
-                f"target.{key} = updates.{key}" for key in merge_keys
-            ])
+            merge_condition = " AND ".join(
+                [f"target.{key} = updates.{key}" for key in merge_keys]
+            )
 
             # Build update map
             if update_columns:
@@ -323,11 +330,9 @@ class DeltaLakeManager:
                 update_map = {col: f"updates.{col}" for col in df.columns}
 
             # Execute MERGE
-            (delta_table.alias("target")
-                .merge(
-                    updates_df.alias("updates"),
-                    merge_condition
-                )
+            (
+                delta_table.alias("target")
+                .merge(updates_df.alias("updates"), merge_condition)
                 .whenMatchedUpdate(set=update_map)
                 .whenNotMatchedInsertAll()
                 .execute()
@@ -364,9 +369,7 @@ class DeltaLakeManager:
             delta_table = DeltaTable.forPath(self.spark, table_path)
             history_df = delta_table.history().toPandas()
 
-            logger.info(
-                f"Table '{table_name}' has {len(history_df)} versions"
-            )
+            logger.info(f"Table '{table_name}' has {len(history_df)} versions")
             return history_df
 
         except Exception as e:

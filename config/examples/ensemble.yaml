@@ -16,7 +16,7 @@ platform_credentials:
 decision_engine:
   # Set to 'ensemble' to enable multi-provider mode
   ai_provider: "ensemble"  # Options: local, cli, codex, ensemble
-  
+
   model_name: "ensemble-v1"
   decision_threshold: 0.7
 
@@ -28,7 +28,7 @@ ensemble:
     - cli      # GitHub Copilot CLI
     - codex    # Codex CLI
     - qwen     # Qwen CLI (free, requires Node.js v20+ and OAuth)
-  
+
   # Provider weights (must sum to 1.0)
   # These are initial weights - they adapt based on performance
   provider_weights:
@@ -36,22 +36,22 @@ ensemble:
     cli: 0.25    # 25% weight (GitHub Copilot)
     codex: 0.25  # 25% weight (Codex CLI)
     qwen: 0.25   # 25% weight (Qwen CLI - free)
-  
+
   # Voting strategy
   # Options:
   #   - "weighted": Confidence-weighted voting (recommended)
   #   - "majority": Simple majority vote
   #   - "stacking": Meta-learning ensemble with feature generation
   voting_strategy: "weighted"
-  
+
   # Agreement threshold (0.0 - 1.0)
   # Minimum consensus required for high-confidence decisions
   agreement_threshold: 0.6
-  
+
   # Adaptive learning
   # If true, weights update based on provider accuracy over time
   adaptive_learning: true
-  
+
   # Learning rate for weight updates (0.0 - 1.0)
   # Higher = faster adaptation, Lower = more stable
   learning_rate: 0.1

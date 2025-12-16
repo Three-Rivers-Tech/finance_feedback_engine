@@ -2,9 +2,10 @@
 CLI command tests using the real engine for realistic integration testing.
 """
 
-from click.testing import CliRunner
-from finance_feedback_engine.cli.main import cli
 import pytest
+from click.testing import CliRunner
+
+from finance_feedback_engine.cli.main import cli
 
 
 def test_analyze_command_success():

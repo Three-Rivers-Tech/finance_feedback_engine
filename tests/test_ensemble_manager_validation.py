@@ -15,9 +15,7 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
             }
         }
         manager = EnsembleDecisionManager(config)
-        adjusted = manager._adjust_weights_for_active_providers(
-            ["local", "cli"], []
-        )
+        adjusted = manager._adjust_weights_for_active_providers(["local", "cli"], [])
 
         self.assertAlmostEqual(sum(adjusted.values()), 1.0)
         self.assertAlmostEqual(adjusted["local"], 0.5)
@@ -31,26 +29,20 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
             "confidence": 90,
             "reasoning": "Momentum strong, buying.",
         }
-        self.assertTrue(
-            manager._is_valid_provider_response(valid_decision, "local")
-        )
+        self.assertTrue(manager._is_valid_provider_response(valid_decision, "local"))
 
         # Empty reasoning is now allowed (validation is more lenient)
         empty_reasoning = {**valid_decision, "reasoning": "   "}
-        self.assertTrue(
-            manager._is_valid_provider_response(empty_reasoning, "local")
-        )
+        self.assertTrue(manager._is_valid_provider_response(empty_reasoning, "local"))
 
         invalid_action = {**valid_decision, "action": "SHORT"}
-        self.assertFalse(
-            manager._is_valid_provider_response(invalid_action, "local")
-        )
+        self.assertFalse(manager._is_valid_provider_response(invalid_action, "local"))
 
     def test_local_models_config_reading(self):
         config = {
             "decision_engine": {
                 "local_models": ["llama3.2:3b", "mistral:7b"],
-                "local_priority": "soft"
+                "local_priority": "soft",
             }
         }
         engine = DecisionEngine(config)
@@ -88,15 +80,17 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
                 "debate_providers": {
                     "bull": "gemini",
                     "bear": "qwen",
-                    "judge": "local"
-                }
+                    "judge": "local",
+                },
             }
         }
 
         with self.assertRaises(ValueError) as context:
             EnsembleDecisionManager(config_invalid)
 
-        self.assertIn("debate providers are not in enabled_providers", str(context.exception))
+        self.assertIn(
+            "debate providers are not in enabled_providers", str(context.exception)
+        )
         self.assertIn("gemini", str(context.exception))
         self.assertIn("qwen", str(context.exception))
 
@@ -108,8 +102,8 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
                 "debate_providers": {
                     "bull": "gemini",
                     "bear": "qwen",
-                    "judge": "local"
-                }
+                    "judge": "local",
+                },
             }
         }
 
@@ -148,7 +142,13 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
         config = {
             "ensemble": {
                 "enabled_providers": ["local", "cli", "codex", "qwen", "gemini"],
-                "provider_weights": {"local": 0.2, "cli": 0.2, "codex": 0.2, "qwen": 0.2, "gemini": 0.2},
+                "provider_weights": {
+                    "local": 0.2,
+                    "cli": 0.2,
+                    "codex": 0.2,
+                    "qwen": 0.2,
+                    "gemini": 0.2,
+                },
                 "local_dominance_target": 0.6,
             }
         }
@@ -197,9 +197,9 @@ class EnsembleSafetyChecksTest(unittest.TestCase):
         weights = manager._calculate_robust_weights(active)
 
         # Only cloud, should be equal: 1/3 each
-        self.assertAlmostEqual(weights["cli"], 1/3, places=3)
-        self.assertAlmostEqual(weights["codex"], 1/3, places=3)
-        self.assertAlmostEqual(weights["gemini"], 1/3, places=3)
+        self.assertAlmostEqual(weights["cli"], 1 / 3, places=3)
+        self.assertAlmostEqual(weights["codex"], 1 / 3, places=3)
+        self.assertAlmostEqual(weights["gemini"], 1 / 3, places=3)
         self.assertAlmostEqual(sum(weights.values()), 1.0, places=3)
 
     def test_calculate_robust_weights_empty(self):

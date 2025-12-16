@@ -12,10 +12,10 @@ trading_platform: "coinbase_advanced"
 platform_credentials:
   api_key: "YOUR_COINBASE_API_KEY"
   api_secret: "YOUR_COINBASE_API_SECRET"
-  
+
   # Optional: Use sandbox for testing (default: false for production)
   use_sandbox: false
-  
+
   # Note: passphrase is for legacy API only (not needed for Advanced Trade)
   # passphrase: "YOUR_PASSPHRASE"
 
@@ -23,10 +23,10 @@ platform_credentials:
 decision_engine:
   # AI provider for signals
   ai_provider: "ensemble"  # Use ensemble for best signals
-  
+
   # Model configuration
   model_name: "default"
-  
+
   # Confidence threshold for actions
   decision_threshold: 0.7
 
@@ -51,7 +51,7 @@ persistence:
 # Portfolio Tracking Notes:
 # =========================
 # This configuration enables SIGNAL-ONLY mode with real portfolio tracking:
-# 
+#
 # Features:
 # - Real-time portfolio balances from Coinbase
 # - Holdings breakdown with USD values and allocations
@@ -69,6 +69,6 @@ persistence:
 #
 # The AI will consider:
 # - Your existing positions
-# - Current allocation percentages  
+# - Current allocation percentages
 # - Portfolio diversification
 # - Risk exposure across assets

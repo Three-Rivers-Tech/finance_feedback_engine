@@ -14,7 +14,7 @@ platform_credentials:
   api_key: "YOUR_COINBASE_API_KEY"
   api_secret: "YOUR_COINBASE_API_SECRET"
   passphrase: "YOUR_COINBASE_PASSPHRASE"  # optional
-  
+
   # For Oanda
   # api_key: "YOUR_OANDA_API_KEY"
   # account_id: "YOUR_OANDA_ACCOUNT_ID"
@@ -37,10 +37,10 @@ decision_engine:
   #       relevant fields are used for each provider; others are ignored.
   # Model name for local provider (Ollama)
   model_name: "llama3.2:3b-instruct-fp16"  # Default: auto-downloads on first use
-  
+
   # Decision confidence threshold (0.0 - 1.0)
   decision_threshold: 0.7
-  
+
   # Custom prompt template (optional)
 
 # Backtesting Configuration (optional)
@@ -88,7 +88,7 @@ agent:
   # or losses <= -kill_switch_loss_pct (portfolio_stop_loss_percentage)
   kill_switch_gain_pct: 0.05  # Corresponds to portfolio_take_profit_percentage
   kill_switch_loss_pct: 0.02  # Corresponds to portfolio_stop_loss_percentage
-  
+
   # Initial balance for portfolio P/L calculations (e.g., if starting with a specific capital)
   initial_balance: 10000.0
 
@@ -112,5 +112,3 @@ telegram:
   enabled: false
   bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
   chat_id: "YOUR_TELEGRAM_CHAT_ID"
-
-

@@ -1,7 +1,7 @@
 # Dependency Clarification Summary
 
-**Date:** December 4, 2024  
-**Issue:** Architectural shift to web service not clearly documented  
+**Date:** December 4, 2024
+**Issue:** Architectural shift to web service not clearly documented
 **Resolution:** Comprehensive documentation + dependency reorganization
 
 ---
@@ -47,26 +47,26 @@
 ### 3. Key Clarifications
 
 #### Why FastAPI?
-**Purpose:** REST API + webhook endpoints for Telegram bot integration  
-**When Used:** Only if `telegram.enabled: true` in config  
+**Purpose:** REST API + webhook endpoints for Telegram bot integration
+**When Used:** Only if `telegram.enabled: true` in config
 **CLI Impact:** None - CLI mode continues to work independently
 
 #### Why Uvicorn?
-**Purpose:** ASGI server to run FastAPI application  
-**When Used:** Only when starting web service (`uvicorn finance_feedback_engine.api.app:app`)  
+**Purpose:** ASGI server to run FastAPI application
+**When Used:** Only when starting web service (`uvicorn finance_feedback_engine.api.app:app`)
 **CLI Impact:** None - installs but doesn't run unless explicitly started
 
 #### Why Redis?
-**Purpose:** Persistent approval queue (survives server restarts)  
-**Version:** `>=5.0.0,<8.0.0` (tested with 6.2-7.2)  
-**When Used:** Only for Telegram approval workflow  
-**Auto-Setup:** `finance_feedback_engine/integrations/redis_manager.py` (53% coverage)  
+**Purpose:** Persistent approval queue (survives server restarts)
+**Version:** `>=5.0.0,<8.0.0` (tested with 6.2-7.2)
+**When Used:** Only for Telegram approval workflow
+**Auto-Setup:** `finance_feedback_engine/integrations/redis_manager.py` (53% coverage)
 **CLI Impact:** None - optional dependency
 
 #### Why pyngrok?
-**Purpose:** Expose localhost to internet for webhook testing  
-**Environment:** **Development only** (moved to `requirements-dev.txt`)  
-**Production:** Use proper HTTPS domain (e.g., AWS/Heroku with Let's Encrypt)  
+**Purpose:** Expose localhost to internet for webhook testing
+**Environment:** **Development only** (moved to `requirements-dev.txt`)
+**Production:** Use proper HTTPS domain (e.g., AWS/Heroku with Let's Encrypt)
 **Justification:** Free tier sufficient for local testing, not suitable for production
 
 ---
@@ -148,7 +148,7 @@ For users who want Telegram approvals:
 
 ### Example Production Stack
 ```
-Client (Telegram) 
+Client (Telegram)
   → HTTPS (TLS cert via Let's Encrypt)
   → Nginx (reverse proxy)
   → Uvicorn (4 workers)

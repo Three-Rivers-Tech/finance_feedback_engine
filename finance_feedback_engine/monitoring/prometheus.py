@@ -11,7 +11,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 try:
-    from prometheus_client import Counter, Histogram, Gauge, Summary, generate_latest
+    from prometheus_client import Counter, Gauge, Histogram, Summary, generate_latest
+
     _PROM_AVAILABLE = True
 except ImportError:  # pragma: no cover - exercised in tests without dependency
     _PROM_AVAILABLE = False
@@ -35,59 +36,55 @@ logger.debug("Prometheus available: %s", _PROM_AVAILABLE)
 
 # Decision latency by provider
 decision_latency_seconds = Histogram(
-    'ffe_decision_latency_seconds',
-    'Time to generate a trading decision',
-    ['provider', 'asset_pair']
+    "ffe_decision_latency_seconds",
+    "Time to generate a trading decision",
+    ["provider", "asset_pair"],
 )
 
 # Provider request success/failure rates
 provider_requests_total = Counter(
-    'ffe_provider_requests_total',
-    'Total provider requests',
-    ['provider', 'status']  # status: success, failure, timeout
+    "ffe_provider_requests_total",
+    "Total provider requests",
+    ["provider", "status"],  # status: success, failure, timeout
 )
 
 # Trade P&L distribution (per asset_pair, Summary without trade_id)
 # Summary supports observations of negative and positive values, suitable for P&L.
 trade_pnl_dollars_summary = Summary(
-    'ffe_trade_pnl_dollars_summary',
-    'Observed per-trade profit/loss in dollars (distribution) per asset pair',
-    ['asset_pair']
+    "ffe_trade_pnl_dollars_summary",
+    "Observed per-trade profit/loss in dollars (distribution) per asset pair",
+    ["asset_pair"],
 )
 
 # Circuit breaker state
 circuit_breaker_state = Gauge(
-    'ffe_circuit_breaker_state',
-    'Circuit breaker state (0=closed, 1=open, 2=half-open)',
-    ['service']  # service: alpha_vantage, oanda, coinbase
+    "ffe_circuit_breaker_state",
+    "Circuit breaker state (0=closed, 1=open, 2=half-open)",
+    ["service"],  # service: alpha_vantage, oanda, coinbase
 )
 
 # Portfolio value gauge
 portfolio_value_dollars = Gauge(
-    'ffe_portfolio_value_dollars',
-    'Total portfolio value in dollars',
-    ['platform']
+    "ffe_portfolio_value_dollars", "Total portfolio value in dollars", ["platform"]
 )
 
 # Active trades gauge
 active_trades_total = Gauge(
-    'ffe_active_trades_total',
-    'Number of currently active trades',
-    ['platform']
+    "ffe_active_trades_total", "Number of currently active trades", ["platform"]
 )
 
 # Agent state gauge
 agent_state = Gauge(
-    'ffe_agent_state',
-    'Current OODA loop state (0=IDLE, 1=LEARNING, 2=PERCEPTION, 3=REASONING, 4=RISK_CHECK, 5=EXECUTION)',
-    []
+    "ffe_agent_state",
+    "Current OODA loop state (0=IDLE, 1=LEARNING, 2=PERCEPTION, 3=REASONING, 4=RISK_CHECK, 5=EXECUTION)",
+    [],
 )
 
 # Decision confidence
 decision_confidence = Gauge(
-    'ffe_decision_confidence',
-    'Latest decision confidence percentage',
-    ['asset_pair', 'action']
+    "ffe_decision_confidence",
+    "Latest decision confidence percentage",
+    ["asset_pair", "action"],
 )
 
 
@@ -102,13 +99,15 @@ def generate_metrics() -> str:
     if not _PROM_AVAILABLE:
         # Minimal stub keeps endpoint alive for environments without prometheus_client
         return "# metrics_unavailable\nffe_metrics_available 0\n"
-    return generate_latest().decode('utf-8')
+    return generate_latest().decode("utf-8")
 
 
 def record_decision_latency(provider: str, asset_pair: str, duration_seconds: float):
     """Record decision latency metric."""
     try:
-        decision_latency_seconds.labels(provider=provider, asset_pair=asset_pair).observe(duration_seconds)
+        decision_latency_seconds.labels(
+            provider=provider, asset_pair=asset_pair
+        ).observe(duration_seconds)
     except Exception as e:
         logger.error(f"Error recording decision latency: {e}")
 

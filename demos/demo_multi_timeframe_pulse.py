@@ -12,21 +12,31 @@ Shows A/B comparison: trading with vs without multi-timeframe analysis.
 
 
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
-from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
-from finance_feedback_engine.data_providers.timeframe_aggregator import TimeframeAggregator
-from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
-from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
-from finance_feedback_engine.monitoring.context_provider import MonitoringContextProvider
 from finance_feedback_engine.backtesting.advanced_backtester import AdvancedBacktester
+from finance_feedback_engine.data_providers.alpha_vantage_provider import (
+    AlphaVantageProvider,
+)
+from finance_feedback_engine.data_providers.historical_data_provider import (
+    HistoricalDataProvider,
+)
+from finance_feedback_engine.data_providers.timeframe_aggregator import (
+    TimeframeAggregator,
+)
+from finance_feedback_engine.data_providers.unified_data_provider import (
+    UnifiedDataProvider,
+)
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
+from finance_feedback_engine.monitoring.context_provider import (
+    MonitoringContextProvider,
+)
+from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.trading_platforms.mock_platform import MockPlatform
 
 
@@ -51,10 +61,9 @@ def demo_live_pulse_workflow():
     print_separator("DEMO 1: LIVE TRADING PULSE WORKFLOW")
 
     # Setup providers
-    av_provider = AlphaVantageProvider(api_key='demo')
+    av_provider = AlphaVantageProvider(api_key="demo")
     unified_provider = UnifiedDataProvider(
-        primary_provider=av_provider,
-        fallback_providers=[]
+        primary_provider=av_provider, fallback_providers=[]
     )
 
     aggregator = TimeframeAggregator()
@@ -65,12 +74,11 @@ def demo_live_pulse_workflow():
         platform=mock_platform,
         unified_data_provider=unified_provider,
         timeframe_aggregator=aggregator,
-        pulse_interval=300  # 5-minute refresh
+        pulse_interval=300,  # 5-minute refresh
     )
 
     context_provider = MonitoringContextProvider(
-        platform=mock_platform,
-        trade_monitor=trade_monitor
+        platform=mock_platform, trade_monitor=trade_monitor
     )
 
     print("\n[Step 1] Fetching multi-timeframe data...")
@@ -79,28 +87,32 @@ def demo_live_pulse_workflow():
     # Aggregate all timeframes
     multi_tf_data = unified_provider.aggregate_all_timeframes(
         asset_pair=asset_pair,
-        timeframes=['1m', '5m', '15m', '1h', '4h', 'daily'],
-        candles_per_timeframe=100
+        timeframes=["1m", "5m", "15m", "1h", "4h", "daily"],
+        candles_per_timeframe=100,
     )
 
     print(f"✓ Fetched {len(multi_tf_data['data'])} timeframes")
-    print(f"  Available: {', '.join(multi_tf_data['metadata']['available_timeframes'])}")
+    print(
+        f"  Available: {', '.join(multi_tf_data['metadata']['available_timeframes'])}"
+    )
     print(f"  Cache Hit Rate: {multi_tf_data['metadata']['cache_hit_rate']:.1%}")
 
     print("\n[Step 2] Computing technical indicators...")
     pulse = {}
-    for tf, tf_data in multi_tf_data['data'].items():
-        candles = tf_data['candles']
+    for tf, tf_data in multi_tf_data["data"].items():
+        candles = tf_data["candles"]
         if len(candles) >= 50:  # Minimum for accurate indicators
             indicators = aggregator._detect_trend(candles, period=14)
             pulse[tf] = indicators
-            print(f"  ✓ {tf:5s}: {indicators['trend']:10s} (RSI={indicators['rsi']:.1f}, ADX={indicators['adx']['adx']:.1f})")
+            print(
+                f"  ✓ {tf:5s}: {indicators['trend']:10s} (RSI={indicators['rsi']:.1f}, ADX={indicators['adx']['adx']:.1f})"
+            )
 
     print("\n[Step 3] Formatting for LLM...")
     pulse_context = {
-        'timestamp': datetime.now().timestamp(),
-        'age_seconds': 30,
-        'timeframes': pulse
+        "timestamp": datetime.now().timestamp(),
+        "age_seconds": 30,
+        "timeframes": pulse,
     }
 
     formatted_pulse = context_provider._format_pulse_summary(pulse_context)
@@ -108,9 +120,9 @@ def demo_live_pulse_workflow():
 
     print("\n[Step 4] Integration into Decision Engine...")
     monitoring_context = {
-        'multi_timeframe_pulse': pulse_context,
-        'has_monitoring_data': True,
-        'timestamp': datetime.now().isoformat() + 'Z'
+        "multi_timeframe_pulse": pulse_context,
+        "has_monitoring_data": True,
+        "timestamp": datetime.now().isoformat() + "Z",
     }
 
     formatted_prompt = context_provider.format_for_ai_prompt(monitoring_context)
@@ -135,12 +147,11 @@ def demo_backtest_pulse_workflow():
     print_separator("DEMO 2: BACKTESTING PULSE WORKFLOW")
 
     # Setup providers
-    av_provider = AlphaVantageProvider(api_key='demo')
+    av_provider = AlphaVantageProvider(api_key="demo")
     hist_provider = HistoricalDataProvider(av_provider)
 
     unified_provider = UnifiedDataProvider(
-        primary_provider=av_provider,
-        fallback_providers=[]
+        primary_provider=av_provider, fallback_providers=[]
     )
 
     aggregator = TimeframeAggregator()
@@ -148,8 +159,7 @@ def demo_backtest_pulse_workflow():
 
     # Setup decision engine
     decision_engine = DecisionEngine(
-        platform=mock_platform,
-        config={'signal_only_default': False}
+        platform=mock_platform, config={"signal_only_default": False}
     )
 
     # Setup backtester with pulse support
@@ -157,7 +167,7 @@ def demo_backtest_pulse_workflow():
         historical_data_provider=hist_provider,
         initial_balance=10000,
         unified_data_provider=unified_provider,
-        timeframe_aggregator=aggregator
+        timeframe_aggregator=aggregator,
     )
 
     print("\n[Step 1] Running backtest WITHOUT pulse (baseline)...")
@@ -165,16 +175,18 @@ def demo_backtest_pulse_workflow():
 
     try:
         result_baseline = backtester.run_backtest(
-            asset_pair='BTCUSD',
+            asset_pair="BTCUSD",
             start_date=datetime.now() - timedelta(days=30),
             end_date=datetime.now(),
             decision_engine=decision_engine,
-            inject_pulse=False  # Disable multi-timeframe
+            inject_pulse=False,  # Disable multi-timeframe
         )
 
         print("  ✓ Baseline Results:")
         print(f"    Final Value: ${result_baseline['metrics']['final_value']:,.2f}")
-        print(f"    Total Return: {result_baseline['metrics']['total_return_pct']:.2f}%")
+        print(
+            f"    Total Return: {result_baseline['metrics']['total_return_pct']:.2f}%"
+        )
         print(f"    Trades: {result_baseline['metrics']['total_trades']}")
 
     except Exception as e:
@@ -186,11 +198,11 @@ def demo_backtest_pulse_workflow():
 
     try:
         result_pulse = backtester.run_backtest(
-            asset_pair='BTCUSD',
+            asset_pair="BTCUSD",
             start_date=datetime.now() - timedelta(days=30),
             end_date=datetime.now(),
             decision_engine=decision_engine,
-            inject_pulse=True  # Enable multi-timeframe
+            inject_pulse=True,  # Enable multi-timeframe
         )
 
         print("  ✓ Enhanced Results:")
@@ -206,13 +218,12 @@ def demo_backtest_pulse_workflow():
     print("  Showing how pulse is computed at a specific historical timestamp")
 
     # Demonstrate historical pulse computation
-    import pandas as pd
     import numpy as np
-
+    import pandas as pd
 
     # Create synthetic historical data (200 1-minute candles) with valid OHLC constraints
     current_time = datetime.now()
-    timestamps = [current_time - timedelta(minutes=200-i) for i in range(200)]
+    timestamps = [current_time - timedelta(minutes=200 - i) for i in range(200)]
 
     base_price = 50000
     price_changes = np.cumsum(np.random.randn(200) * 50)  # Random walk
@@ -225,14 +236,16 @@ def demo_backtest_pulse_workflow():
     high_prices = np.maximum(open_prices, close_prices) + np.abs(noise_high)
     low_prices = np.minimum(open_prices, close_prices) - np.abs(noise_low)
 
-    historical_data = pd.DataFrame({
-        'timestamp': timestamps,
-        'open': open_prices,
-        'high': high_prices,
-        'low': low_prices,
-        'close': close_prices,
-        'volume': np.abs(1000 + np.random.randn(200) * 100)
-    })
+    historical_data = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": open_prices,
+            "high": high_prices,
+            "low": low_prices,
+            "close": close_prices,
+            "volume": np.abs(1000 + np.random.randn(200) * 100),
+        }
+    )
 
     # Compute pulse at timestamp 150 (using data from 0-150, not 151-200)
     target_timestamp = timestamps[150]
@@ -244,9 +257,9 @@ def demo_backtest_pulse_workflow():
     # Simulate pulse computation
     try:
         pulse = backtester._compute_historical_pulse(
-            asset_pair='BTCUSD',
+            asset_pair="BTCUSD",
             current_timestamp=target_timestamp,
-            historical_data=historical_data[:151]  # Only data up to timestamp
+            historical_data=historical_data[:151],  # Only data up to timestamp
         )
 
         if pulse:
@@ -255,8 +268,8 @@ def demo_backtest_pulse_workflow():
             print(f"    Age: {pulse['age_seconds']} seconds")
 
             # Show sample indicator
-            if '5m' in pulse['timeframes']:
-                tf_5m = pulse['timeframes']['5m']
+            if "5m" in pulse["timeframes"]:
+                tf_5m = pulse["timeframes"]["5m"]
                 print(f"    5m Trend: {tf_5m['trend']}")
                 print(f"    5m RSI: {tf_5m['rsi']:.1f}")
                 print(f"    5m Signal Strength: {tf_5m['signal_strength']}/100")
@@ -269,17 +282,27 @@ def demo_backtest_pulse_workflow():
     print("\n[Step 4] A/B Comparison Summary...")
 
     if result_baseline and result_pulse:
-        improvement = result_pulse['metrics']['total_return_pct'] - result_baseline['metrics']['total_return_pct']
+        improvement = (
+            result_pulse["metrics"]["total_return_pct"]
+            - result_baseline["metrics"]["total_return_pct"]
+        )
         print(f"  Return Improvement: {improvement:+.2f}%")
 
-        if 'sharpe_ratio' in result_pulse['metrics']:
-            sharpe_improvement = result_pulse['metrics']['sharpe_ratio'] - result_baseline['metrics']['sharpe_ratio']
+        if "sharpe_ratio" in result_pulse["metrics"]:
+            sharpe_improvement = (
+                result_pulse["metrics"]["sharpe_ratio"]
+                - result_baseline["metrics"]["sharpe_ratio"]
+            )
             print(f"  Sharpe Improvement: {sharpe_improvement:+.2f}")
 
         print(f"\n  {'Baseline (No Pulse)':<30} vs {'Enhanced (With Pulse)'}")
         print(f"  {'-' * 65}")
-        print(f"  Trades: {result_baseline['metrics']['total_trades']:<20} vs {result_pulse['metrics']['total_trades']}")
-        print(f"  Return: {result_baseline['metrics']['total_return_pct']:>6.2f}%{' ' * 14} vs {result_pulse['metrics']['total_return_pct']:>6.2f}%")
+        print(
+            f"  Trades: {result_baseline['metrics']['total_trades']:<20} vs {result_pulse['metrics']['total_trades']}"
+        )
+        print(
+            f"  Return: {result_baseline['metrics']['total_return_pct']:>6.2f}%{' ' * 14} vs {result_pulse['metrics']['total_return_pct']:>6.2f}%"
+        )
     else:
         print("  ⚠ Full comparison requires live data connection")
         print("  Run with real API credentials to see complete A/B results")
@@ -299,7 +322,8 @@ def demo_pulse_integration_summary():
     """
     print_separator("DEMO 3: PULSE INTEGRATION SUMMARY")
 
-    print("""
+    print(
+        """
     MULTI-TIMEFRAME PULSE DATA FLOW
     ================================
 
@@ -355,7 +379,8 @@ def demo_pulse_integration_summary():
     3. Adjust indicator periods in config.yaml
     4. Monitor pulse age and cache hit rate
     5. Iterate based on your strategy
-    """)
+    """
+    )
 
 
 def main():
@@ -398,9 +423,10 @@ def main():
     except Exception as e:
         print(f"\n\n❌ Demo error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

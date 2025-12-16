@@ -1,6 +1,7 @@
 import asyncio
-import time
 import threading
+import time
+
 
 class RateLimiter:
     """
@@ -14,11 +15,10 @@ class RateLimiter:
     protected by a single threading.Lock to prevent race conditions between
     sync and async methods.
     """
+
     def __init__(self, tokens_per_second: float, max_tokens: int):
         if tokens_per_second <= 0 or max_tokens <= 0:
-            raise ValueError(
-                "Both tokens_per_second and max_tokens must be positive."
-            )
+            raise ValueError("Both tokens_per_second and max_tokens must be positive.")
 
         self.tokens_per_second = tokens_per_second
         self.max_tokens = max_tokens
@@ -84,6 +84,7 @@ if __name__ == "__main__":
     async def make_async_requests():
         tasks = []
         for i in range(5):
+
             async def request_func(req_num):
                 start_time = time.monotonic()
                 await limiter_async.wait_for_token_async()

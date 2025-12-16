@@ -379,10 +379,10 @@ python main.py auth test-key
 
 The placeholder authentication that "just accepts any key" has been replaced with:
 
-✅ **Secure** - Constant-time comparison, rate limiting, audit logging  
-✅ **Production-ready** - SQLite DB, graceful fallback, comprehensive CLI  
-✅ **Observable** - All attempts logged with IP/user agent  
-✅ **Configurable** - Config-based or environment variable setup  
-✅ **Documented** - Extensive guide with examples and troubleshooting  
+✅ **Secure** - Constant-time comparison, rate limiting, audit logging
+✅ **Production-ready** - SQLite DB, graceful fallback, comprehensive CLI
+✅ **Observable** - All attempts logged with IP/user agent
+✅ **Configurable** - Config-based or environment variable setup
+✅ **Documented** - Extensive guide with examples and troubleshooting
 
 The system is ready for production deployment. Configure your API keys and integrate with your authentication provider as needed.

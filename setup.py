@@ -1,7 +1,8 @@
 """Setup configuration for Finance Feedback Engine."""
 
-from setuptools import setup, find_packages
 from pathlib import Path
+
+from setuptools import find_packages, setup
 
 # Read README
 readme_file = Path(__file__).parent / "README.md"
@@ -12,9 +13,9 @@ requirements_file = Path(__file__).parent / "requirements.txt"
 requirements = []
 if requirements_file.exists():
     requirements = [
-        line.strip() 
+        line.strip()
         for line in requirements_file.read_text().splitlines()
-        if line.strip() and not line.startswith('#')
+        if line.strip() and not line.startswith("#")
     ]
 
 setup(
@@ -29,8 +30,8 @@ setup(
     install_requires=requirements,
     python_requires=">=3.8",
     entry_points={
-        'console_scripts': [
-            'ffe=finance_feedback_engine.cli.main:cli',
+        "console_scripts": [
+            "ffe=finance_feedback_engine.cli.main:cli",
         ],
     },
     classifiers=[

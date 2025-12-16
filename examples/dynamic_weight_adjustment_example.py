@@ -6,18 +6,17 @@ failures by dynamically adjusting weights to maintain decision quality.
 """
 
 import logging
+
 from finance_feedback_engine.core import FinanceFeedbackEngine
 
 # Configure verbose logging to see weight adjustments
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s:%(name)s:%(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 
 print("\n" + "=" * 70)
 print("Dynamic Weight Adjustment Example")
 print("=" * 70)
-print("""
+print(
+    """
 When using ensemble mode, the system queries multiple AI providers (local,
 Copilot CLI, Codex CLI, Qwen CLI) and combines their decisions using
 weighted voting.
@@ -34,37 +33,32 @@ configuration problems), the ensemble manager automatically:
 
 This ensures robust decision-making even when some AI services are
 unavailable.
-""")
+"""
+)
 
 # Example configuration with ensemble enabled
 config = {
-    'alpha_vantage_api_key': 'demo',  # Use demo key for testing
-    'trading_platform': 'coinbase',
-    'platform_credentials': {
-        'api_key': 'demo',
-        'api_secret': 'demo'
+    "alpha_vantage_api_key": "demo",  # Use demo key for testing
+    "trading_platform": "coinbase",
+    "platform_credentials": {"api_key": "demo", "api_secret": "demo"},
+    "decision_engine": {
+        "ai_provider": "ensemble",  # Enable ensemble mode
+        "decision_threshold": 0.7,
     },
-    'decision_engine': {
-        'ai_provider': 'ensemble',  # Enable ensemble mode
-        'decision_threshold': 0.7
-    },
-    'ensemble': {
-        'enabled_providers': ['local', 'cli', 'codex', 'qwen'],
-        'provider_weights': {
-            'local': 0.40,   # Higher weight for local (always available)
-            'cli': 0.20,     # Lower weights for CLI tools (may fail)
-            'codex': 0.20,
-            'qwen': 0.20
+    "ensemble": {
+        "enabled_providers": ["local", "cli", "codex", "qwen"],
+        "provider_weights": {
+            "local": 0.40,  # Higher weight for local (always available)
+            "cli": 0.20,  # Lower weights for CLI tools (may fail)
+            "codex": 0.20,
+            "qwen": 0.20,
         },
-        'voting_strategy': 'weighted',
-        'agreement_threshold': 0.6,
-        'adaptive_learning': True,
-        'learning_rate': 0.1
+        "voting_strategy": "weighted",
+        "agreement_threshold": 0.6,
+        "adaptive_learning": True,
+        "learning_rate": 0.1,
     },
-    'persistence': {
-        'storage_path': 'data/decisions',
-        'max_decisions': 100
-    }
+    "persistence": {"storage_path": "data/decisions", "max_decisions": 100},
 }
 
 # Initialize the engine
@@ -82,51 +76,51 @@ print()
 print("Analyzing BTCUSD...")
 try:
     decision = engine.analyze_asset(
-        'BTCUSD',
+        "BTCUSD",
         include_sentiment=False,  # Skip to avoid API rate limits
-        include_macro=False
+        include_macro=False,
     )
-    
+
     print("\n" + "=" * 70)
     print("DECISION RESULT")
     print("=" * 70)
     print(f"Action: {decision['action']}")
     print(f"Confidence: {decision['confidence']}%")
     print(f"AI Provider: {decision['ai_provider']}")
-    
+
     # Show ensemble metadata
-    if 'ensemble_metadata' in decision:
-        meta = decision['ensemble_metadata']
+    if "ensemble_metadata" in decision:
+        meta = decision["ensemble_metadata"]
         print("\nEnsemble Metadata:")
         print(f"  Providers used: {meta.get('providers_used', [])}")
         print(f"  Providers failed: {meta.get('providers_failed', [])}")
-        
-        if meta.get('weight_adjustment_applied'):
+
+        if meta.get("weight_adjustment_applied"):
             print("\n  ⚠️  Weight adjustment was applied!")
             print("  Original weights:")
-            for p, w in meta.get('original_weights', {}).items():
+            for p, w in meta.get("original_weights", {}).items():
                 print(f"    {p}: {w:.3f}")
             print("  Adjusted weights (renormalized):")
-            for p, w in meta.get('adjusted_weights', {}).items():
+            for p, w in meta.get("adjusted_weights", {}).items():
                 print(f"    {p}: {w:.3f}")
-            
+
             # Verify sum
-            total = sum(meta.get('adjusted_weights', {}).values())
+            total = sum(meta.get("adjusted_weights", {}).values())
             print(f"  Sum of adjusted weights: {total:.6f} (should be 1.0)")
         else:
             print("\n  ✓ All providers responded successfully")
             print("  Weights used:")
-            for p, w in meta.get('adjusted_weights', {}).items():
+            for p, w in meta.get("adjusted_weights", {}).items():
                 print(f"    {p}: {w:.3f}")
-        
+
         print(f"\n  Agreement score: {meta.get('agreement_score', 0):.2f}")
         print(f"  Confidence variance: {meta.get('confidence_variance', 0):.2f}")
-        
-        if meta.get('all_providers_failed'):
+
+        if meta.get("all_providers_failed"):
             print("\n  ⚠️  ALL PROVIDERS FAILED - Using rule-based fallback")
-    
+
     print("\n" + "=" * 70)
-    
+
 except Exception as e:
     print(f"\nError during analysis: {e}")
     logging.exception("Analysis failed")
@@ -134,7 +128,8 @@ except Exception as e:
 print("\n" + "=" * 70)
 print("Key Takeaways:")
 print("=" * 70)
-print("""
+print(
+    """
 1. The ensemble system is resilient to provider failures
 2. Weights are automatically renormalized when providers fail
 3. Decision metadata shows which providers succeeded/failed
@@ -148,4 +143,5 @@ Best Practices:
 - Enable adaptive learning to improve weights over time
 - Monitor ensemble_metadata to track provider health
 - Consider provider redundancy in your configuration
-""")
+"""
+)

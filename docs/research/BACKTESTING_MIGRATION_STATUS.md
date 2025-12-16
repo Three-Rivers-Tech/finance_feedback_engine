@@ -29,7 +29,7 @@
 
 ### Problem
 The AdvancedBacktester hangs when using real DecisionEngine because:
-1. DecisionEngine defaults to `ai_provider='ensemble'` 
+1. DecisionEngine defaults to `ai_provider='ensemble'`
 2. Ensemble mode queries multiple AI providers (local, CLI, codex, qwen)
 3. Each provider can take 10-30+ seconds to respond
 4. Some providers may be unavailable/hanging indefinitely
@@ -37,7 +37,7 @@ The AdvancedBacktester hangs when using real DecisionEngine because:
 ### Root Cause
 The `generate_decision()` method is synchronous but calls AI providers that can:
 - Query local Ollama models (slow, 10-30s per call)
-- Execute CLI tools (GitHub Copilot, Codex, Qwen) 
+- Execute CLI tools (GitHub Copilot, Codex, Qwen)
 - Make network requests
 - Hang if providers are misconfigured/unavailable
 
@@ -64,7 +64,7 @@ if self.ai_provider == 'mock':
     return self._mock_ai_inference(prompt)
 ```
 
-Then use: `python main.py backtest BTCUSD --start 2024-01-01 --end 2024-02-01`  
+Then use: `python main.py backtest BTCUSD --start 2024-01-01 --end 2024-02-01`
 With config: `decision_engine.ai_provider: mock`
 
 #### Option B: Make DecisionEngine Async-Safe
@@ -198,6 +198,6 @@ python main.py backtest-batch --assets BTCUSD,ETHUSD,SOLUSD -s 2024-01-01 -e 202
 
 **Estimated Time to Production-Ready:** 4-8 hours
 - Mock provider: 30 mins
-- Testing: 1 hour  
+- Testing: 1 hour
 - Documentation: 1 hour
 - Additional features: 2-6 hours

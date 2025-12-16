@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Dict, Tuple
 import logging
+from typing import Dict, Tuple
 
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
@@ -30,7 +30,7 @@ class RiskGatekeeper:
         max_correlated_assets: int = 2,
         max_var_pct: float = 0.05,  # 5% max daily VaR
         var_confidence: float = 0.95,
-        is_backtest: bool = False
+        is_backtest: bool = False,
     ):
         """
         Initialize risk gatekeeper.
@@ -91,29 +91,29 @@ class RiskGatekeeper:
             - needs_override: True if decision was modified
             - modified_decision: Updated decision dict (or original if no changes)
         """
-        action = decision.get('action', 'HOLD')
-        market_data = decision.get('market_data', {})
-        market_status = market_data.get('market_status', {})
-        data_freshness = market_data.get('data_freshness', {})
+        action = decision.get("action", "HOLD")
+        market_data = decision.get("market_data", {})
+        market_status = market_data.get("market_status", {})
+        data_freshness = market_data.get("data_freshness", {})
 
         needs_override = False
         modified_decision = decision.copy()
-        reasoning = decision.get('reasoning', '')
+        reasoning = decision.get("reasoning", "")
 
         # Rule 1: Block trades when market is closed
-        is_open = market_status.get('is_open', True)
-        asset_type = market_data.get('asset_type', market_data.get('type', 'crypto'))
+        is_open = market_status.get("is_open", True)
+        asset_type = market_data.get("asset_type", market_data.get("type", "crypto"))
 
         # Crypto markets are 24/7, so only enforce for forex/stocks
-        if not is_open and asset_type != 'crypto' and action in ['BUY', 'SELL']:
+        if not is_open and asset_type != "crypto" and action in ["BUY", "SELL"]:
             logger.warning(
                 f"[GATEKEEPER] Market is CLOSED for {asset_type}. "
                 f"Overriding {action} → HOLD. Session: {market_status.get('session', 'Unknown')}"
             )
-            modified_decision['action'] = 'HOLD'
-            modified_decision['suggested_amount'] = 0
-            modified_decision['recommended_position_size'] = None
-            modified_decision['reasoning'] = (
+            modified_decision["action"] = "HOLD"
+            modified_decision["suggested_amount"] = 0
+            modified_decision["recommended_position_size"] = None
+            modified_decision["reasoning"] = (
                 f"{reasoning}\n\n[BLOCKED BY GATEKEEPER: Market is Closed - "
                 f"{market_status.get('session', 'Unknown')} session. "
                 f"Cannot execute {action} orders when market is not open.]"
@@ -121,25 +121,27 @@ class RiskGatekeeper:
             needs_override = True
 
         # Rule 2: Block trades when data is stale (skip in backtest mode)
-        is_fresh = data_freshness.get('is_fresh', True)
-        freshness_msg = data_freshness.get('message', '')
+        is_fresh = data_freshness.get("is_fresh", True)
+        freshness_msg = data_freshness.get("message", "")
 
-        if not self.is_backtest and not is_fresh and action in ['BUY', 'SELL']:
-            age_str = data_freshness.get('age_minutes', 'Unknown age')
+        if not self.is_backtest and not is_fresh and action in ["BUY", "SELL"]:
+            age_str = data_freshness.get("age_minutes", "Unknown age")
             logger.error(
                 f"[GATEKEEPER] Data is STALE ({age_str}). "
                 f"Overriding {action} → HOLD. {freshness_msg}"
             )
-            modified_decision['action'] = 'HOLD'
-            modified_decision['suggested_amount'] = 0
-            modified_decision['recommended_position_size'] = None
+            modified_decision["action"] = "HOLD"
+            modified_decision["suggested_amount"] = 0
+            modified_decision["recommended_position_size"] = None
 
             # Append gatekeeper block message
             gatekeeper_msg = (
                 f"\n\n[BLOCKED BY GATEKEEPER: Data is Stale - {age_str}. "
                 f"{freshness_msg} Trading on outdated data is prohibited.]"
             )
-            modified_decision['reasoning'] = f"{modified_decision.get('reasoning', reasoning)}{gatekeeper_msg}"
+            modified_decision["reasoning"] = (
+                f"{modified_decision.get('reasoning', reasoning)}{gatekeeper_msg}"
+            )
             needs_override = True
 
         if needs_override:
@@ -197,7 +199,9 @@ class RiskGatekeeper:
         # This provides additional validation using context data
         asset_pair = decision.get("asset_pair", "")
         asset_type = context.get("asset_type", "crypto")
-        timestamp = context.get("timestamp")  # Unix timestamp or ISO string (for backtesting)
+        timestamp = context.get(
+            "timestamp"
+        )  # Unix timestamp or ISO string (for backtesting)
 
         if timestamp:
             # Convert ISO string to Unix timestamp if needed
@@ -205,7 +209,10 @@ class RiskGatekeeper:
                 if isinstance(timestamp, str):
                     # Handle ISO format string: "2025-01-01T12:30:45.123456"
                     import datetime as _dt
-                    dt_obj = _dt.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+
+                    dt_obj = _dt.datetime.fromisoformat(
+                        timestamp.replace("Z", "+00:00")
+                    )
                     unix_timestamp = int(dt_obj.timestamp())
                 else:
                     # Already a Unix timestamp
@@ -223,7 +230,9 @@ class RiskGatekeeper:
                         f"timestamp={timestamp}, error={e}. Backtest requires valid timestamps."
                     ) from e
                 # In live mode, fall back to current market status
-                logger.warning(f"Could not parse timestamp {timestamp}: {e}. Using live market status.")
+                logger.warning(
+                    f"Could not parse timestamp {timestamp}: {e}. Using live market status."
+                )
                 market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
         else:
             market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
@@ -249,9 +258,7 @@ class RiskGatekeeper:
 
             try:
                 is_fresh, age_str, freshness_msg = validate_data_freshness(
-                    market_data_timestamp,
-                    asset_type=asset_type,
-                    timeframe=timeframe
+                    market_data_timestamp, asset_type=asset_type, timeframe=timeframe
                 )
 
                 if not is_fresh:
@@ -291,7 +298,11 @@ class RiskGatekeeper:
         volatility = decision.get("volatility", 0.0)
         # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
         raw_confidence = decision.get("confidence", 0)
-        if isinstance(raw_confidence, bool) or not isinstance(raw_confidence, (int, float)) or not 0 <= raw_confidence <= 100:
+        if (
+            isinstance(raw_confidence, bool)
+            or not isinstance(raw_confidence, (int, float))
+            or not 0 <= raw_confidence <= 100
+        ):
             logger.warning(
                 f"Invalid confidence value: {raw_confidence}. Expected integer 0-100. Defaulting to 0."
             )
@@ -308,11 +319,7 @@ class RiskGatekeeper:
         logger.info("Trade approved by RiskGatekeeper")
         return True, "Trade approved"
 
-    def _validate_correlation(
-        self,
-        decision: Dict,
-        context: Dict
-    ) -> Tuple[bool, str]:
+    def _validate_correlation(self, decision: Dict, context: Dict) -> Tuple[bool, str]:
         """
         Validate per-platform correlation constraints.
 
@@ -334,7 +341,9 @@ class RiskGatekeeper:
             platform = decision.get("platform", "").lower()
 
             # Determine which platform to check
-            if "coinbase" in platform or decision.get("asset_pair", "").startswith("BTC"):
+            if "coinbase" in platform or decision.get("asset_pair", "").startswith(
+                "BTC"
+            ):
                 platform_analysis = correlation_analysis.get("coinbase", {})
             elif "oanda" in platform or "_" in decision.get("asset_pair", ""):
                 platform_analysis = correlation_analysis.get("oanda", {})
@@ -366,11 +375,7 @@ class RiskGatekeeper:
 
         return True, "Correlation check passed"
 
-    def _validate_var(
-        self,
-        decision: Dict,
-        context: Dict
-    ) -> Tuple[bool, str]:
+    def _validate_var(self, decision: Dict, context: Dict) -> Tuple[bool, str]:
         """
         Validate combined portfolio VaR constraint.
 

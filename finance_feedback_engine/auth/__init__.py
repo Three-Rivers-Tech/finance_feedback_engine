@@ -8,6 +8,6 @@ Provides secure API key management with:
 - Database persistence
 """
 
-from .auth_manager import AuthManager, AuthAttempt, RateLimiter
+from .auth_manager import AuthAttempt, AuthManager, RateLimiter
 
 __all__ = ["AuthManager", "AuthAttempt", "RateLimiter"]

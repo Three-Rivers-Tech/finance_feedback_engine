@@ -8,11 +8,14 @@ This script tests:
 Before the fix, this script would fail with AttributeError.
 After the fix, it should pass all tests.
 """
+
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from click.testing import CliRunner
+
 from finance_feedback_engine.cli.main import cli
-from unittest.mock import patch, MagicMock, AsyncMock
-from datetime import datetime
 
 
 class TestBacktestCriticalBugs:
@@ -30,13 +33,15 @@ class TestBacktestCriticalBugs:
         # Test with end date before start date (INVALID)
         result = runner.invoke(
             cli,
-            ['backtest', 'BTCUSD', '--start', '2024-03-01', '--end', '2024-01-01'],
-            catch_exceptions=False
+            ["backtest", "BTCUSD", "--start", "2024-03-01", "--end", "2024-01-01"],
+            catch_exceptions=False,
         )
 
         # Should fail with clear error message
         assert result.exit_code != 0
-        assert "Invalid date range" in result.output or "must be before" in result.output
+        assert (
+            "Invalid date range" in result.output or "must be before" in result.output
+        )
 
     def test_backtest_date_validation_accepts_valid_range(self):
         """
@@ -44,20 +49,22 @@ class TestBacktestCriticalBugs:
         """
         runner = CliRunner()
 
-        with patch('finance_feedback_engine.cli.main.FinanceFeedbackEngine') as mock_engine_class:
+        with patch(
+            "finance_feedback_engine.cli.main.FinanceFeedbackEngine"
+        ) as mock_engine_class:
             mock_engine = MagicMock()
             mock_backtester = MagicMock()
 
             # Mock the backtest results
             mock_backtester.run_backtest.return_value = {
-                'metrics': {
-                    'total_return': 0.05,
-                    'sharpe_ratio': 1.2,
-                    'max_drawdown': 0.03,
-                    'win_rate': 0.55,
-                    'total_trades': 10
+                "metrics": {
+                    "total_return": 0.05,
+                    "sharpe_ratio": 1.2,
+                    "max_drawdown": 0.03,
+                    "win_rate": 0.55,
+                    "total_trades": 10,
                 },
-                'trades': []
+                "trades": [],
             }
             mock_backtester.run.return_value = mock_backtester.run_backtest.return_value
 
@@ -66,12 +73,22 @@ class TestBacktestCriticalBugs:
             mock_engine_class.return_value = mock_engine
 
             # Mock Backtester class
-            with patch('finance_feedback_engine.cli.main.Backtester', return_value=mock_backtester):
+            with patch(
+                "finance_feedback_engine.cli.main.Backtester",
+                return_value=mock_backtester,
+            ):
                 # Test with valid date range
                 result = runner.invoke(
                     cli,
-                    ['backtest', 'BTCUSD', '--start', '2024-01-01', '--end', '2024-01-31'],
-                    obj={'config': {}}
+                    [
+                        "backtest",
+                        "BTCUSD",
+                        "--start",
+                        "2024-01-01",
+                        "--end",
+                        "2024-01-31",
+                    ],
+                    obj={"config": {}},
                 )
 
                 # Should succeed (exit code 0 or execute without date validation error)
@@ -86,8 +103,8 @@ class TestBacktestCriticalBugs:
         # Test with invalid date format
         result = runner.invoke(
             cli,
-            ['backtest', 'BTCUSD', '--start', 'invalid-date', '--end', '2024-01-31'],
-            catch_exceptions=False
+            ["backtest", "BTCUSD", "--start", "invalid-date", "--end", "2024-01-31"],
+            catch_exceptions=False,
         )
 
         # Should fail with format error
@@ -101,22 +118,20 @@ class TestBacktestCriticalBugs:
         Before fix: backtester.py passed active_positions as [] (list), causing AttributeError.
         After fix: backtester.py passes {'futures': [], 'spot': []} (dict).
         """
-        from finance_feedback_engine.decision_engine.engine import DecisionEngine
         from finance_feedback_engine.backtesting.backtester import Backtester
-        from finance_feedback_engine.data_providers.historical_data_provider import HistoricalDataProvider
+        from finance_feedback_engine.data_providers.historical_data_provider import (
+            HistoricalDataProvider,
+        )
+        from finance_feedback_engine.decision_engine.engine import DecisionEngine
 
         # Create minimal config
         config = {
-            'ensemble': {
-                'enabled_providers': ['local'],
-                'provider_weights': {'local': 1.0},
-                'debate_mode': False
+            "ensemble": {
+                "enabled_providers": ["local"],
+                "provider_weights": {"local": 1.0},
+                "debate_mode": False,
             },
-            'ai_providers': {
-                'local': {
-                    'model': 'mock'
-                }
-            }
+            "ai_providers": {"local": {"model": "mock"}},
         }
 
         # Mock data provider
@@ -127,43 +142,47 @@ class TestBacktestCriticalBugs:
 
         # Test case 1: monitoring_context with dict format (correct format)
         market_data = {
-            'current_price': 50000.0,
-            'open': 49000.0,
-            'high': 51000.0,
-            'low': 48000.0,
-            'close': 50000.0,
-            'volume': 1000.0,
-            'timestamp': datetime.now().isoformat()
+            "current_price": 50000.0,
+            "open": 49000.0,
+            "high": 51000.0,
+            "low": 48000.0,
+            "close": 50000.0,
+            "volume": 1000.0,
+            "timestamp": datetime.now().isoformat(),
         }
 
-        balance = {'total': 10000.0, 'available': 10000.0}
+        balance = {"total": 10000.0, "available": 10000.0}
 
         # This should NOT raise AttributeError
-        with patch.object(decision_engine, '_query_ai', new_callable=AsyncMock) as mock_query:
+        with patch.object(
+            decision_engine, "_query_ai", new_callable=AsyncMock
+        ) as mock_query:
             mock_query.return_value = {
-                'action': 'HOLD',
-                'confidence': 70,
-                'reasoning': 'Test decision'
+                "action": "HOLD",
+                "confidence": 70,
+                "reasoning": "Test decision",
             }
 
             decision = await decision_engine.generate_decision(
-                asset_pair='BTCUSD',
+                asset_pair="BTCUSD",
                 market_data=market_data,
                 balance=balance,
-                portfolio={'holdings': []},
+                portfolio={"holdings": []},
                 memory_context=None,
-                monitoring_context={'active_positions': {'futures': [], 'spot': []}, 'slots_available': 5}
+                monitoring_context={
+                    "active_positions": {"futures": [], "spot": []},
+                    "slots_available": 5,
+                },
             )
 
             # Should succeed without AttributeError
             assert decision is not None
-            assert 'action' in decision
+            assert "action" in decision
 
         # Test case 2: Verify backtester now uses correct format
         # This would have failed before the fix at backtester.py:554
         backtester = Backtester(
-            historical_data_provider=mock_data_provider,
-            initial_balance=10000.0
+            historical_data_provider=mock_data_provider, initial_balance=10000.0
         )
 
         # Verify the backtester's monitoring_context would use dict format
@@ -180,22 +199,24 @@ class TestBacktestIntegration:
         """
         runner = CliRunner()
 
-        with patch('finance_feedback_engine.cli.main.FinanceFeedbackEngine') as mock_engine_class:
+        with patch(
+            "finance_feedback_engine.cli.main.FinanceFeedbackEngine"
+        ) as mock_engine_class:
             mock_engine = MagicMock()
             mock_backtester = MagicMock()
 
             # Mock successful backtest
             mock_backtester.run_backtest.return_value = {
-                'metrics': {
-                    'total_return': 0.05,
-                    'sharpe_ratio': 1.2,
-                    'max_drawdown': 0.03,
-                    'win_rate': 0.55,
-                    'total_trades': 10,
-                    'avg_trade_return': 0.005,
-                    'profit_factor': 1.5
+                "metrics": {
+                    "total_return": 0.05,
+                    "sharpe_ratio": 1.2,
+                    "max_drawdown": 0.03,
+                    "win_rate": 0.55,
+                    "total_trades": 10,
+                    "avg_trade_return": 0.005,
+                    "profit_factor": 1.5,
                 },
-                'trades': []
+                "trades": [],
             }
             mock_backtester.run.return_value = mock_backtester.run_backtest.return_value
 
@@ -203,11 +224,21 @@ class TestBacktestIntegration:
             mock_engine.decision_engine = MagicMock()
             mock_engine_class.return_value = mock_engine
 
-            with patch('finance_feedback_engine.cli.main.Backtester', return_value=mock_backtester):
+            with patch(
+                "finance_feedback_engine.cli.main.Backtester",
+                return_value=mock_backtester,
+            ):
                 result = runner.invoke(
                     cli,
-                    ['backtest', 'BTCUSD', '--start', '2024-01-01', '--end', '2024-01-31'],
-                    obj={'config': {'advanced_backtesting': {}}}
+                    [
+                        "backtest",
+                        "BTCUSD",
+                        "--start",
+                        "2024-01-01",
+                        "--end",
+                        "2024-01-31",
+                    ],
+                    obj={"config": {"advanced_backtesting": {}}},
                 )
 
                 # Should not crash
@@ -232,30 +263,28 @@ class TestBacktestStaleDataHandling:
 
         # Create decision with old (stale) data embedded in market_data
         decision = {
-            'action': 'BUY',
-            'asset_pair': 'BTCUSD',
-            'confidence': 80,
-            'reasoning': 'Test buy signal',
-            'market_data': {
-                'asset_type': 'crypto',
-                'market_status': {
-                    'is_open': True,
-                    'session': 'regular'
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "confidence": 80,
+            "reasoning": "Test buy signal",
+            "market_data": {
+                "asset_type": "crypto",
+                "market_status": {"is_open": True, "session": "regular"},
+                "data_freshness": {
+                    "is_fresh": False,  # Intentionally stale
+                    "message": "Data is 24 hours old",
+                    "age_minutes": 1440,
                 },
-                'data_freshness': {
-                    'is_fresh': False,  # Intentionally stale
-                    'message': 'Data is 24 hours old',
-                    'age_minutes': 1440
-                }
-            }
+            },
         }
 
         # This should NOT override the decision in backtest mode
         needs_override, modified = gatekeeper.check_market_hours(decision)
 
         # Should allow the trade (no override needed for stale data in backtest mode)
-        assert not needs_override or modified['action'] == 'BUY', \
-            f"Backtest mode should allow stale data, but got action={modified.get('action')}"
+        assert (
+            not needs_override or modified["action"] == "BUY"
+        ), f"Backtest mode should allow stale data, but got action={modified.get('action')}"
 
     def test_risk_gatekeeper_blocks_stale_data_in_live_mode(self):
         """
@@ -270,22 +299,19 @@ class TestBacktestStaleDataHandling:
 
         # Create decision with old (stale) data embedded in market_data
         decision = {
-            'action': 'BUY',
-            'asset_pair': 'BTCUSD',
-            'confidence': 80,
-            'reasoning': 'Test buy signal',
-            'market_data': {
-                'asset_type': 'crypto',
-                'market_status': {
-                    'is_open': True,
-                    'session': 'regular'
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "confidence": 80,
+            "reasoning": "Test buy signal",
+            "market_data": {
+                "asset_type": "crypto",
+                "market_status": {"is_open": True, "session": "regular"},
+                "data_freshness": {
+                    "is_fresh": False,  # Intentionally stale
+                    "message": "Data is 24 hours old",
+                    "age_minutes": 1440,
                 },
-                'data_freshness': {
-                    'is_fresh': False,  # Intentionally stale
-                    'message': 'Data is 24 hours old',
-                    'age_minutes': 1440
-                }
-            }
+            },
         }
 
         # This SHOULD override the decision in live mode
@@ -293,10 +319,11 @@ class TestBacktestStaleDataHandling:
 
         # Should block the trade and force HOLD
         assert needs_override, "Live mode should override stale data decisions"
-        assert modified['action'] == 'HOLD', \
-            f"Expected HOLD for stale data in live mode, got {modified['action']}"
+        assert (
+            modified["action"] == "HOLD"
+        ), f"Expected HOLD for stale data in live mode, got {modified['action']}"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Run tests
-    pytest.main([__file__, '-v', '-s'])
+    pytest.main([__file__, "-v", "-s"])

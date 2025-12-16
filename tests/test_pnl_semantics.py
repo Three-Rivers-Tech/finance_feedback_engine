@@ -10,19 +10,20 @@ When total_trades=0, realized_pnl must be 0 and unrealized_pnl must equal total_
 """
 
 import json
-import pytest
 from pathlib import Path
 
+import pytest
 
 RESULTS_FILE = Path("data/backtest_results/full_year_summary_20251208_150530.json")
+
 
 @pytest.fixture
 def backtest_results():
     """Load backtest results JSON, skip if not found."""
     if not RESULTS_FILE.exists():
         pytest.skip(f"Results file not found: {RESULTS_FILE}")
-    
-    with open(RESULTS_FILE, 'r') as f:
+
+    with open(RESULTS_FILE, "r") as f:
         return json.load(f)
 
 
@@ -45,11 +46,13 @@ def test_pnl_consistency_zero_trades(backtest_results):
 
     # Verify consistency
     if annual_total_trades == 0:
-        assert annual_realized_pnl == 0, \
-            f"When total_trades=0, realized_pnl must be 0, got {annual_realized_pnl}"
-        assert abs(annual_unrealized_pnl - annual_total_pnl) < 0.01, \
-            f"When total_trades=0, unrealized_pnl must equal total_pnl. " \
+        assert (
+            annual_realized_pnl == 0
+        ), f"When total_trades=0, realized_pnl must be 0, got {annual_realized_pnl}"
+        assert abs(annual_unrealized_pnl - annual_total_pnl) < 0.01, (
+            f"When total_trades=0, unrealized_pnl must equal total_pnl. "
             f"unrealized={annual_unrealized_pnl}, total={annual_total_pnl}"
+        )
 
     # Test quarterly level
     for q in results.get("quarterly_breakdown", []):
@@ -61,11 +64,13 @@ def test_pnl_consistency_zero_trades(backtest_results):
 
         # Verify consistency
         if q_total_trades == 0:
-            assert q_realized_pnl == 0, \
-                f"{q_name}: When total_trades=0, realized_pnl must be 0, got {q_realized_pnl}"
-            assert abs(q_unrealized_pnl - q_total_pnl) < 0.01, \
-                f"{q_name}: When total_trades=0, unrealized_pnl must equal total_pnl. " \
+            assert (
+                q_realized_pnl == 0
+            ), f"{q_name}: When total_trades=0, realized_pnl must be 0, got {q_realized_pnl}"
+            assert abs(q_unrealized_pnl - q_total_pnl) < 0.01, (
+                f"{q_name}: When total_trades=0, unrealized_pnl must equal total_pnl. "
                 f"unrealized={q_unrealized_pnl}, total={q_total_pnl}"
+            )
 
 
 def test_pnl_summation(backtest_results):
@@ -91,17 +96,20 @@ def test_pnl_summation(backtest_results):
     # Allow small floating point differences
     tolerance = 0.1
 
-    assert abs(quarterly_realized_sum - annual_realized_pnl) < tolerance, \
-        f"Quarterly realized_pnl sum ({quarterly_realized_sum}) " \
+    assert abs(quarterly_realized_sum - annual_realized_pnl) < tolerance, (
+        f"Quarterly realized_pnl sum ({quarterly_realized_sum}) "
         f"does not match annual ({annual_realized_pnl})"
+    )
 
-    assert abs(quarterly_unrealized_sum - annual_unrealized_pnl) < tolerance, \
-        f"Quarterly unrealized_pnl sum ({quarterly_unrealized_sum}) " \
+    assert abs(quarterly_unrealized_sum - annual_unrealized_pnl) < tolerance, (
+        f"Quarterly unrealized_pnl sum ({quarterly_unrealized_sum}) "
         f"does not match annual ({annual_unrealized_pnl})"
+    )
 
-    assert abs(quarterly_total_sum - annual_total_pnl) < tolerance, \
-        f"Quarterly total_pnl sum ({quarterly_total_sum}) " \
+    assert abs(quarterly_total_sum - annual_total_pnl) < tolerance, (
+        f"Quarterly total_pnl sum ({quarterly_total_sum}) "
         f"does not match annual ({annual_total_pnl})"
+    )
 
 
 def test_win_rate_consistency(backtest_results):
@@ -112,14 +120,16 @@ def test_win_rate_consistency(backtest_results):
 
     # Annual level
     if results.get("total_trades", 0) == 0:
-        assert results.get("overall_win_rate", 0) == 0, \
-            f"When total_trades=0, win_rate must be 0, got {results.get('overall_win_rate')}"
+        assert (
+            results.get("overall_win_rate", 0) == 0
+        ), f"When total_trades=0, win_rate must be 0, got {results.get('overall_win_rate')}"
 
     # Quarterly level
     for q in results.get("quarterly_breakdown", []):
         if q.get("total_trades", 0) == 0:
-            assert q.get("win_rate", 0) == 0, \
-                f"{q.get('quarter')}: When total_trades=0, win_rate must be 0, got {q.get('win_rate')}"
+            assert (
+                q.get("win_rate", 0) == 0
+            ), f"{q.get('quarter')}: When total_trades=0, win_rate must be 0, got {q.get('win_rate')}"
 
 
 if __name__ == "__main__":
