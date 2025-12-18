@@ -1,9 +1,11 @@
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict
 
 import yaml
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,8 @@ def load_config(config_path: str) -> Dict[str, Any]:
     will raise a ValueError.
 
     Implementation Notes:
+    - **Environment Loading:** Automatically loads .env file from project root
+      using load_dotenv(override=False) to respect existing environment variables.
     - **Security:** Always use `yaml.safe_load()` to prevent arbitrary code
       execution from untrusted YAML sources. This is critical in financial
       applications.
@@ -48,6 +52,17 @@ def load_config(config_path: str) -> Dict[str, Any]:
         yaml.YAMLError: If there is an error parsing the YAML file.
         ValueError: If a required environment variable is not set.
     """
+    # Load .env file from project root (auto-detect)
+    # override=False ensures existing env vars take precedence
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=False)
+        logger.debug(f"Loaded environment variables from {env_path}")
+    else:
+        # Try loading from current working directory as fallback
+        load_dotenv(override=False)
+        logger.debug("Attempted to load .env from current directory")
+
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
@@ -57,6 +72,10 @@ def load_config(config_path: str) -> Dict[str, Any]:
     # Enhanced regex to find ${ENV_VAR_NAME} patterns with optional default values
     # Pattern: ${ENV_VAR_NAME:default_value} or ${ENV_VAR_NAME}
     env_var_pattern = re.compile(r"\$\{([^}]+)\}")
+
+    # Track which env vars are being used (for debugging)
+    used_env_vars = set()
+    defaulted_env_vars = set()
 
     def resolve_env_vars(data: Any) -> Any:
         if isinstance(data, dict):
@@ -73,6 +92,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
                     env_var_name, default_value = full_match.split(":", 1)
                     env_var_value = os.getenv(env_var_name.strip())
                     if env_var_value is None:
+                        defaulted_env_vars.add(env_var_name.strip())
                         # Log a warning for using default values (as they might contain sensitive info)
                         if (
                             "key" in env_var_name.lower()
@@ -83,6 +103,7 @@ def load_config(config_path: str) -> Dict[str, Any]:
                                 f"Using default value for sensitive environment variable '{env_var_name.strip()}'"
                             )
                         return default_value.strip()
+                    used_env_vars.add(env_var_name.strip())
                     return env_var_value.strip()
                 else:
                     env_var_name = full_match.strip()
@@ -90,14 +111,23 @@ def load_config(config_path: str) -> Dict[str, Any]:
                     if env_var_value is None:
                         raise ValueError(
                             f"Environment variable '{env_var_name}' required by configuration "
-                            f"'{config_path}' is not set. Please set it."
+                            f"'{config_path}' is not set. Please set it in .env or export it."
                         )
+                    used_env_vars.add(env_var_name)
                     return env_var_value.strip()
 
             return env_var_pattern.sub(replace_env_var, data)
         return data
 
-    return resolve_env_vars(config)
+    resolved_config = resolve_env_vars(config)
+
+    # Log summary of env var usage
+    if used_env_vars:
+        logger.debug(f"Loaded {len(used_env_vars)} environment variables from .env")
+    if defaulted_env_vars:
+        logger.info(f"Using defaults for {len(defaulted_env_vars)} environment variables")
+
+    return resolved_config
 
 
 # Example Usage (for demonstration within this stub)

@@ -198,41 +198,35 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
 
-            # Get spot balances for USD and USDC
+            # Get portfolio balances (CDP API - bracket notation)
             try:
-                accounts_response = client.get_accounts()
-                accounts_list = getattr(accounts_response, "accounts", [])
+                portfolios_response = client.get_portfolios()
+                portfolios = portfolios_response.portfolios
 
-                for account in accounts_list:
-                    # Use attribute access for Coinbase Account objects
-                    currency = getattr(account, "currency", "")
-                    if currency in ["USD", "USDC"]:
-                        account_id = getattr(account, "id", "")
-                        truncated_id = account_id[-4:] if account_id else "N/A"
-                        available_balance = getattr(account, "available_balance", None)
-                        available_balance_value = (
-                            getattr(available_balance, "value", "N/A")
-                            if available_balance
-                            else "N/A"
-                        )
-                        logger.debug(
-                            "Inspecting spot account for %s: id=...%s, available_balance=%s",
-                            currency,
-                            truncated_id,
-                            available_balance_value,
-                        )
-                        if available_balance:
-                            balance_value = float(
-                                getattr(available_balance, "value", 0)
-                            )
+                if portfolios:
+                    portfolio_uuid = portfolios[0]['uuid']
+                    breakdown = client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
+                    breakdown_data = breakdown['breakdown']  # Object supports bracket notation
 
-                            if balance_value > 0:
-                                balances[f"SPOT_{currency}"] = balance_value
-                                logger.info(
-                                    "Spot %s balance: $%.2f", currency, balance_value
-                                )
+                    # Get total cash
+                    portfolio_balances = breakdown_data['portfolio_balances']
+                    total_cash = float(portfolio_balances['total_cash_equivalent_balance']['value'])
+
+                    if total_cash > 0:
+                        balances['TOTAL_USD'] = total_cash
+                        logger.info("Portfolio total cash: $%.2f", total_cash)
+
+                    # Get spot USD/USDC
+                    spot_positions = breakdown_data['spot_positions']
+                    for position in spot_positions:
+                        asset = position['asset']
+                        if asset in ['USD', 'USDC']:
+                            available_fiat = float(position['available_to_trade_fiat'])
+                            if available_fiat > 0:
+                                balances[f"SPOT_{asset}"] = available_fiat
+                                logger.info("Spot %s: $%.2f", asset, available_fiat)
             except Exception as e:
-                logger.warning("Could not fetch spot balances: %s", e)
+                logger.warning("Could not fetch portfolio balances: %s", e)
 
             return balances
 
@@ -270,38 +264,43 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         try:
             client = self._get_client()
 
-            # Get futures balance and summary
+            # Get portfolio breakdown (CDP API - bracket notation)
+            portfolios_response = client.get_portfolios()
+            portfolios = portfolios_response.portfolios
+
+            if not portfolios:
+                logger.warning("No portfolios found")
+                return {}
+
+            portfolio_uuid = portfolios[0]['uuid']
+            breakdown = client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
+            breakdown_data = breakdown['breakdown']  # Object supports bracket notation
+
+            # Get futures/perp summary
             futures_positions = []
             futures_summary = {}
             futures_value = 0.0
 
             try:
-                futures_response = client.get_futures_balance_summary()
-                balance_summary = getattr(futures_response, "balance_summary", None)
+                portfolio_balances = breakdown_data['portfolio_balances']
+                futures_value = float(portfolio_balances['total_futures_balance']['value'])
+                futures_unrealized_pnl = float(portfolio_balances['futures_unrealized_pnl']['value'])
+                perp_unrealized_pnl = float(portfolio_balances['perp_unrealized_pnl']['value'])
 
-                if balance_summary:
-                    # balance_summary supports dict-style access
-                    total_usd_balance = balance_summary["total_usd_balance"]
-                    unrealized_pnl = balance_summary["unrealized_pnl"]
-                    daily_pnl = balance_summary["daily_realized_pnl"]
-                    buying_power = balance_summary["futures_buying_power"]
-                    initial_margin = balance_summary["initial_margin"]
-
-                    futures_value = float(total_usd_balance.get("value", 0))
-
+                if futures_value > 0 or futures_unrealized_pnl != 0 or perp_unrealized_pnl != 0:
                     futures_summary = {
                         "total_balance_usd": futures_value,
-                        "unrealized_pnl": float(unrealized_pnl.get("value", 0)),
-                        "daily_realized_pnl": float(daily_pnl.get("value", 0)),
-                        "buying_power": float(buying_power.get("value", 0)),
-                        "initial_margin": float(initial_margin.get("value", 0)),
+                        "unrealized_pnl": futures_unrealized_pnl + perp_unrealized_pnl,
+                        "daily_realized_pnl": 0.0,
+                        "buying_power": 0.0,
+                        "initial_margin": 0.0,
                     }
-
                     logger.info("Futures account balance: $%.2f", futures_value)
 
-                # Get individual futures positions (long/short)
-                positions_response = client.list_futures_positions()
-                positions_list = getattr(positions_response, "positions", [])
+                # Get individual futures and perp positions
+                futures_positions_data = breakdown_data['futures_positions']
+                perp_positions_data = breakdown_data['perp_positions']
+                positions_list = futures_positions_data + perp_positions_data
 
                 # Default leverage assumption for Coinbase perpetuals when
                 # API does not provide an explicit leverage field. This is
@@ -396,35 +395,27 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 logger.error("Error fetching futures data: %s", e)
                 raise
 
-            # Get spot USD/USDC balances
+            # Get spot USD/USDC from portfolio breakdown
             holdings = []
             spot_value = 0.0
 
             try:
-                accounts_response = client.get_accounts()
-                accounts_list = getattr(accounts_response, "accounts", [])
+                spot_positions = breakdown_data['spot_positions']
 
-                for account in accounts_list:
-                    # Use attribute access for Coinbase Account objects
-                    currency = getattr(account, "currency", "")
-                    if currency in ["USD", "USDC"]:
-                        available_balance = getattr(account, "available_balance", None)
-                        if available_balance:
-                            balance_value = float(
-                                getattr(available_balance, "value", 0)
-                            )
+                for position in spot_positions:
+                    asset = position['asset']
+                    if asset in ['USD', 'USDC']:
+                        available_fiat = float(position['available_to_trade_fiat'])
 
-                            if balance_value > 0:
-                                holdings.append(
-                                    {
-                                        "asset": currency,
-                                        "amount": balance_value,
-                                        "value_usd": balance_value,
-                                        "allocation_pct": 0.0,  # Calculate below
-                                    }
-                                )
-                                spot_value += balance_value
-                                logger.info("Spot %s: $%.2f", currency, balance_value)
+                        if available_fiat > 0:
+                            holdings.append({
+                                'asset': asset,
+                                'amount': available_fiat,
+                                'value_usd': available_fiat,
+                                'allocation_pct': 0.0,  # Calculate below
+                            })
+                            spot_value += available_fiat
+                            logger.info("Spot %s: $%.2f", asset, available_fiat)
             except Exception as e:
                 logger.warning("Could not fetch spot balances: %s", e)
 
