@@ -48,8 +48,9 @@ class TestTelegramApprovalBot:
             "use_redis": False,
         }
 
-        with patch("telegram.Bot"), patch(
-            "finance_feedback_engine.integrations.tunnel_manager.TunnelManager"
+        with (
+            patch("telegram.Bot"),
+            patch("finance_feedback_engine.integrations.tunnel_manager.TunnelManager"),
         ):
             bot = TelegramApprovalBot(config)
 

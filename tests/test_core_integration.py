@@ -47,7 +47,8 @@ def engine_with_mock_config(tmp_path, monkeypatch):
 class TestCoreAnalysisWorkflow:
     """Test the complete analysis workflow."""
 
-    def test_analyze_asset_creates_decision(self, engine_with_mock_config):
+    @pytest.mark.asyncio
+    async def test_analyze_asset_creates_decision(self, engine_with_mock_config):
         """Test that analyze_asset creates a valid decision with all required fields."""
         # Mock the data provider to return market data
         mock_data = {
@@ -72,7 +73,7 @@ class TestCoreAnalysisWorkflow:
                 }
             ),
         ):
-            decision = engine_with_mock_config.analyze_asset("BTCUSD")
+            decision = await engine_with_mock_config.analyze_asset_async("BTCUSD")
 
             # Verify decision structure
             assert decision is not None

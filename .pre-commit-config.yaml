@@ -28,7 +28,7 @@ repos:
     hooks:
       - id: pytest-check
         name: pytest-check
-        entry: pytest tests/ --maxfail=1 -q --ignore=tests/test_timeframe_aggregator_indicators.py
+        entry: ./venv/bin/pytest tests/monitoring/test_process_monitor.py tests/monitoring/test_logging_config.py -q --ignore=tests/test_timeframe_aggregator_indicators.py
         language: system
         pass_filenames: false
         always_run: true

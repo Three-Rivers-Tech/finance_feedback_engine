@@ -48,12 +48,15 @@ async def test_analyze_asset(mock_engine):
     # Mock the decision generation to avoid AI/network calls (must be AsyncMock)
     mock_gen = AsyncMock(return_value={"action": "HOLD", "confidence": 50})
 
-    with patch.object(
-        mock_engine.data_provider,
-        "get_comprehensive_market_data",
-        side_effect=mock_market_data,
-    ), patch.object(mock_engine.decision_engine, "generate_decision", mock_gen):
-        decision = await mock_engine.analyze_asset("BTCUSD")
+    with (
+        patch.object(
+            mock_engine.data_provider,
+            "get_comprehensive_market_data",
+            side_effect=mock_market_data,
+        ),
+        patch.object(mock_engine.decision_engine, "generate_decision", mock_gen),
+    ):
+        decision = await mock_engine.analyze_asset_async("BTCUSD")
         assert decision is not None
         assert "action" in decision
         mock_gen.assert_called_once()

@@ -100,6 +100,8 @@ class ConfigValidator:
         "api_key": r'(?i)(api[_-]?key|apikey)\s*[:=]\s*["\']?([a-zA-Z0-9\-_]{20,})["\']?',
         "secret": r'(?i)(secret|password|passwd|pwd)\s*[:=]\s*["\']?([a-zA-Z0-9\-_@#$%^&*]{8,})["\']?',
         "token": r'(?i)(token|auth[_-]?token)\s*[:=]\s*["\']?([a-zA-Z0-9\-_]{20,})["\']?',
+        "telegram_token": r'(?i)(telegram[_-]?token|bot[_-]?token)\s*[:=]\s*["\']?(\d+:[A-Za-z0-9_-]{35})["\']?',
+        "telegram_token_alt": r"\b\d+:[A-Za-z0-9_-]{35}\b",  # Telegram token pattern: digits:35chars
         "private_key": r"(?i)(BEGIN\s+(?:RSA|EC|OPENSSH)\s+PRIVATE\s+KEY)",
         "aws_access": r'(?i)(aws[_-]?access[_-]?key[_-]?id)\s*[:=]\s*["\']?(AKIA[0-9A-Z]{16})["\']?',
         "bearer_token": r"(?i)Bearer\s+[a-zA-Z0-9\-_\.]{20,}",

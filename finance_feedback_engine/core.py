@@ -1,5 +1,6 @@
 """Core Finance Feedback Engine module."""
 
+import asyncio
 import logging
 import os
 import socket
@@ -21,6 +22,7 @@ from .exceptions import (
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .persistence.decision_store import DecisionStore
 from .trading_platforms.platform_factory import PlatformFactory
+from .utils.cache_metrics import CacheMetrics
 from .utils.failure_logger import log_quorum_failure
 from .utils.model_installer import ensure_models_installed
 
@@ -55,6 +57,12 @@ class FinanceFeedbackEngine:
         """
         self.config = config
 
+        # Portfolio caching infrastructure (Phase 2 optimization)
+        self._portfolio_cache = None
+        self._portfolio_cache_time = None
+        self._portfolio_cache_ttl = 60  # 60 seconds
+        self._cache_metrics = CacheMetrics()  # Track cache performance
+
         # Ensure Ollama models are installed (one-time setup)
         try:
             logger.info("Checking Ollama model installation...")
@@ -75,7 +83,11 @@ class FinanceFeedbackEngine:
         api_key = os.environ.get("ALPHA_VANTAGE_API_KEY") or config.get(
             "alpha_vantage_api_key"
         )
-        self.data_provider = AlphaVantageProvider(api_key=api_key, config=config)
+        # Detect if running in backtest mode (default: False for live trading safety)
+        is_backtest = config.get("is_backtest", False)
+        self.data_provider = AlphaVantageProvider(
+            api_key=api_key, config=config, is_backtest=is_backtest
+        )
 
         # Initialize historical data provider for backtesting
         self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
@@ -399,24 +411,47 @@ class FinanceFeedbackEngine:
             "AI will have full awareness of active positions/trades"
         )
 
-    async def analyze_asset(
+    def analyze_asset(
         self,
         asset_pair: str,
         include_sentiment: bool = True,
         include_macro: bool = False,
         use_memory_context: bool = True,
     ) -> Dict[str, Any]:
-        """Analyze an asset and generate trading decision.
+        """Analyze an asset and generate a trading decision (sync API).
 
-        Args:
-            asset_pair: Asset pair to analyze (e.g., 'BTCUSD', 'EURUSD')
-            include_sentiment: Include news sentiment analysis (default: True)
-            include_macro: Include macroeconomic indicators (default: False)
-            use_memory_context: Include portfolio memory context (default: True)
+        The engine internally performs async I/O (e.g. data-provider calls). For
+        synchronous callers, this method runs the async implementation in an
+        event loop and returns the resolved decision dict.
 
-        Returns:
-            Dictionary containing analysis results and decision
+        If you are already in an async context (event loop running), call
+        [`FinanceFeedbackEngine.analyze_asset_async()`](finance_feedback_engine/core.py:450).
         """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(
+                self.analyze_asset_async(
+                    asset_pair=asset_pair,
+                    include_sentiment=include_sentiment,
+                    include_macro=include_macro,
+                    use_memory_context=use_memory_context,
+                )
+            )
+
+        raise RuntimeError(
+            "FinanceFeedbackEngine.analyze_asset() cannot be called when an event loop is running. "
+            "Use await FinanceFeedbackEngine.analyze_asset_async(...) instead."
+        )
+
+    async def analyze_asset_async(
+        self,
+        asset_pair: str,
+        include_sentiment: bool = True,
+        include_macro: bool = False,
+        use_memory_context: bool = True,
+    ) -> Dict[str, Any]:
+        """Analyze an asset and generate trading decision (async API)."""
         from .utils.validation import standardize_asset_pair
 
         # Standardize asset pair input (uppercase, remove separators)
@@ -432,11 +467,11 @@ class FinanceFeedbackEngine:
         # Get current balance from trading platform
         balance = self.trading_platform.get_balance()
 
-        # Get portfolio breakdown if platform supports it
+        # Get portfolio breakdown with caching (Phase 2 optimization)
         portfolio = None
         if hasattr(self.trading_platform, "get_portfolio_breakdown"):
             try:
-                portfolio = self.trading_platform.get_portfolio_breakdown()
+                portfolio = self.get_portfolio_breakdown()
                 logger.info(
                     "Portfolio loaded: $%.2f across %d assets",
                     portfolio.get("total_value_usd", 0),
@@ -564,6 +599,45 @@ class FinanceFeedbackEngine:
             logger.error(f"Error querying Delta Lake: {e}")
             return None
 
+    def get_portfolio_breakdown(self, force_refresh: bool = False) -> Dict[str, Any]:
+        """
+        Get portfolio breakdown with 60-second caching (Phase 2 optimization).
+
+        Args:
+            force_refresh: Bypass cache and fetch fresh data
+
+        Returns:
+            Portfolio breakdown dict with caching metadata
+        """
+        # Check cache validity
+        if not force_refresh and self._portfolio_cache is not None:
+            cache_age = (datetime.now() - self._portfolio_cache_time).total_seconds()
+            if cache_age < self._portfolio_cache_ttl:
+                logger.debug(f"Portfolio cache hit (age: {cache_age:.1f}s)")
+                self._cache_metrics.record_hit("portfolio")
+                return {
+                    **self._portfolio_cache,
+                    "_cached": True,
+                    "_cache_age_seconds": cache_age,
+                }
+
+        # Fetch fresh data
+        logger.debug("Portfolio cache miss - fetching fresh data")
+        self._cache_metrics.record_miss("portfolio")
+        portfolio = self.trading_platform.get_portfolio_breakdown()
+
+        # Update cache
+        self._portfolio_cache = portfolio
+        self._portfolio_cache_time = datetime.now()
+
+        return {**portfolio, "_cached": False, "_cache_age_seconds": 0}
+
+    def invalidate_portfolio_cache(self):
+        """Invalidate portfolio cache (call after trades execute)."""
+        self._portfolio_cache = None
+        self._portfolio_cache_time = None
+        logger.debug("Portfolio cache invalidated")
+
     def get_balance(self) -> Dict[str, float]:
         """
         Get current balance from trading platform.
@@ -655,6 +729,9 @@ class FinanceFeedbackEngine:
         decision["execution_time"] = datetime.utcnow().isoformat()
         decision["execution_result"] = result
         self.decision_store.update_decision(decision)
+
+        # Invalidate portfolio cache after trade execution (Phase 2 optimization)
+        self.invalidate_portfolio_cache()
 
         return result
 
@@ -1019,3 +1096,16 @@ class FinanceFeedbackEngine:
         """Async context manager exit - cleanup resources."""
         await self.close()
         return False
+
+    def get_cache_metrics(self) -> Dict[str, Any]:
+        """
+        Get cache performance metrics (Phase 2 optimization).
+
+        Returns:
+            Dictionary with cache performance data
+        """
+        return self._cache_metrics.get_summary()
+
+    def log_cache_performance(self) -> None:
+        """Log cache performance summary (Phase 2 optimization)."""
+        self._cache_metrics.log_summary()

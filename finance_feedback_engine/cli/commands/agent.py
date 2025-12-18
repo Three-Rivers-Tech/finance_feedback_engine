@@ -16,6 +16,7 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
@@ -296,6 +297,156 @@ async def _run_live_dashboard(engine, agent):
             await asyncio.sleep(5.0)
 
 
+def _display_agent_configuration_summary(
+    config, take_profit, stop_loss, asset_pairs_override=None
+):
+    """Display comprehensive agent configuration summary before startup."""
+    console.print("\n")
+    console.print(
+        Panel.fit(
+            "[bold cyan]🤖 Trading Agent Configuration Summary[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    # Execution Mode Section
+    console.print("\n[bold]Execution Mode:[/bold]")
+    autonomous_enabled = (
+        config.get("agent", {}).get("autonomous", {}).get("enabled", False)
+    )
+
+    if autonomous_enabled:
+        console.print("  [green]✓ Autonomous Trading: ENABLED[/green]")
+        console.print("    [dim]Agent will execute trades automatically[/dim]")
+    else:
+        console.print("  [yellow]⚠ Autonomous Trading: DISABLED[/yellow]")
+        console.print("    [dim]Agent will generate signals for manual approval[/dim]")
+
+    # Notification Channels Section
+    console.print("\n[bold]Notification Channels:[/bold]")
+    telegram_config = config.get("telegram", {})
+    telegram_enabled = telegram_config.get("enabled", False)
+    telegram_configured = (
+        telegram_enabled
+        and telegram_config.get("bot_token")
+        and telegram_config.get("chat_id")
+    )
+
+    webhook_config = config.get("webhook", {})
+    webhook_enabled = webhook_config.get("enabled", False)
+    webhook_configured = webhook_enabled and webhook_config.get("url")
+
+    if telegram_configured:
+        console.print("  [green]✓ Telegram: CONFIGURED[/green]")
+    elif not autonomous_enabled:
+        console.print("  [red]✗ Telegram: NOT CONFIGURED[/red]")
+    else:
+        console.print(
+            "  [dim]○ Telegram: Not configured (optional in autonomous mode)[/dim]"
+        )
+
+    if webhook_configured:
+        console.print("  [green]✓ Webhook: CONFIGURED[/green]")
+    elif not autonomous_enabled:
+        console.print("  [red]✗ Webhook: NOT CONFIGURED[/red]")
+    else:
+        console.print(
+            "  [dim]○ Webhook: Not configured (optional in autonomous mode)[/dim]"
+        )
+
+    # Trading Parameters Section
+    console.print("\n[bold]Trading Parameters:[/bold]")
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Parameter", style="cyan")
+    table.add_column("Value", style="white")
+
+    # Asset pairs
+    if asset_pairs_override:
+        asset_pairs_display = ", ".join(asset_pairs_override)
+        source = "(CLI override)"
+    else:
+        agent_config = config.get("agent", {})
+        asset_pairs_display = ", ".join(agent_config.get("asset_pairs", []))
+        source = "(from config)"
+
+    table.add_row("Asset Pairs", f"{asset_pairs_display} {source}")
+    table.add_row("Take Profit", f"{take_profit:.2%}")
+    table.add_row("Stop Loss", f"{stop_loss:.2%}")
+
+    # Platform - handle both string and dict formats for trading_platform
+    platform_config = config.get("trading_platform", "unknown")
+    if isinstance(platform_config, dict):
+        platform = platform_config.get("name", "unknown")
+    elif isinstance(platform_config, str):
+        platform = platform_config
+    else:
+        platform = "unknown"
+    table.add_row("Platform", platform.title())
+
+    # Max daily trades
+    max_trades = config.get("agent", {}).get("max_daily_trades", "unlimited")
+    table.add_row("Max Daily Trades", str(max_trades))
+
+    console.print(table)
+
+    # Validation Status
+    console.print("\n[bold]Validation Status:[/bold]")
+    if autonomous_enabled or telegram_configured or webhook_configured:
+        console.print("  [green]✓ Configuration is valid[/green]")
+        if not autonomous_enabled:
+            console.print(
+                "  [yellow]ℹ Running in SIGNAL-ONLY mode (manual approval required)[/yellow]"
+            )
+    else:
+        console.print("  [red]✗ Configuration is INVALID[/red]")
+        console.print(
+            "  [yellow]Either autonomous trading OR notification channels must be configured[/yellow]"
+        )
+
+    console.print()
+
+
+def _confirm_agent_startup(
+    config, take_profit, stop_loss, asset_pairs_override=None, skip_confirmation=False
+):
+    """
+    Display configuration and prompt for confirmation before starting agent.
+
+    Returns:
+        bool: True if user confirms, False if user cancels
+    """
+    # Display configuration summary
+    _display_agent_configuration_summary(
+        config, take_profit, stop_loss, asset_pairs_override
+    )
+
+    # Skip confirmation if --yes flag is set
+    if skip_confirmation:
+        console.print("[dim]Skipping confirmation (--yes flag set)[/dim]\n")
+        return True
+
+    # Prompt user for confirmation
+    console.print(
+        "[bold yellow]⚠ The agent will start trading with the above configuration.[/bold yellow]"
+    )
+
+    try:
+        confirmed = click.confirm(
+            "\nDo you want to start the trading agent?", default=False
+        )
+
+        if not confirmed:
+            console.print("\n[yellow]Agent startup cancelled by user.[/yellow]")
+            return False
+
+        console.print("\n[green]✓ Starting agent...[/green]\n")
+        return True
+
+    except (KeyboardInterrupt, click.Abort):
+        console.print("\n\n[yellow]Agent startup cancelled.[/yellow]")
+        return False
+
+
 @click.command(name="run-agent")
 @click.option(
     "--max-drawdown",
@@ -333,9 +484,16 @@ async def _run_live_dashboard(engine, agent):
     type=str,
     help='Comma-separated list of asset pairs to trade (e.g., "BTCUSD,ETHUSD,EURUSD"). Overrides config file.',
 )
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    default=False,
+    help="Skip confirmation prompt and start agent immediately (for automation)",
+)
 @click.pass_context
 def run_agent(
-    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs
+    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs, yes
 ):
     """Starts the autonomous trading agent."""
     if 1 <= take_profit <= 100:
@@ -382,8 +540,16 @@ def run_agent(
             f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}"
         )
 
+    # Display configuration and confirm startup
+    config = ctx.obj["config"]
+    parsed_asset_pairs_for_display = parsed_asset_pairs if parsed_asset_pairs else None
+    if not _confirm_agent_startup(
+        config, take_profit, stop_loss, parsed_asset_pairs_for_display, yes
+    ):
+        # User cancelled or configuration invalid
+        return
+
     try:
-        config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
         agent = _initialize_agent(
             config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs

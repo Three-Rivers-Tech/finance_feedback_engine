@@ -190,133 +190,131 @@ class PositionSizingCalculator:
                     sizing_stop_loss_percentage * 100,
                 )
 
-            # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
-            # Determine if this should be signal-only mode based on balance or config
-            signal_only = signal_only_default or not has_valid_balance
+            return result
 
-            # HOLD without position: no sizing needed
-            if action == "HOLD" and not has_existing_position:
-                logger.info("HOLD without existing position - no position sizing shown")
-                result["signal_only"] = False
-                return result
+        # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
+        # Determine if this should be signal-only mode based on balance or config
+        signal_only = signal_only_default or not has_valid_balance
 
-            # Determine minimum order size based on asset type (must be set unconditionally)
-            is_crypto = (
-                context.get("market_data", {}).get("type") == "crypto"
-                or "BTC" in context["asset_pair"]
-                or "ETH" in context["asset_pair"]
+        # HOLD without position: no sizing needed, but preserve signal_only flag
+        if action == "HOLD" and not has_existing_position:
+            logger.info("HOLD without existing position - no position sizing shown")
+            result["signal_only"] = signal_only
+            return result
+
+        # Determine minimum order size based on asset type (must be set unconditionally)
+        is_crypto = (
+            context.get("market_data", {}).get("type") == "crypto"
+            or "BTC" in context["asset_pair"]
+            or "ETH" in context["asset_pair"]
+        )
+        is_forex = (
+            "_" in context["asset_pair"]
+            or context.get("market_data", {}).get("type") == "forex"
+        )
+
+        if is_crypto:
+            min_order_size = MIN_ORDER_SIZE_CRYPTO
+        elif is_forex:
+            min_order_size = MIN_ORDER_SIZE_FOREX
+        else:
+            min_order_size = MIN_ORDER_SIZE_DEFAULT
+
+        # Calculate minimum viable position size based on platform minimum
+        # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
+        # This ensures we can execute the smallest possible trade
+        if current_price > 0 and not signal_only:
+            # Calculate minimum position size in units
+            min_position_size = min_order_size / current_price
+
+            # Use the minimum as the recommended size (when not in signal-only mode)
+            recommended_position_size = min_position_size
+
+            logger.info(
+                "Zero/low balance detected - using minimum order size: $%.2f USD notional = %.6f units @ $%.2f",
+                min_order_size,
+                recommended_position_size,
+                current_price,
             )
-            is_forex = (
-                "_" in context["asset_pair"]
-                or context.get("market_data", {}).get("type") == "forex"
-            )
-
-            if is_crypto:
-                min_order_size = MIN_ORDER_SIZE_CRYPTO
-            elif is_forex:
-                min_order_size = MIN_ORDER_SIZE_FOREX
-            else:
-                min_order_size = MIN_ORDER_SIZE_DEFAULT
-
-            # Calculate minimum viable position size based on platform minimum
-            # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
-            # This ensures we can execute the smallest possible trade
-            if current_price > 0 and not signal_only:
-                # Calculate minimum position size in units
-                min_position_size = min_order_size / current_price
-
-                # Use the minimum as the recommended size (when not in signal-only mode)
-                recommended_position_size = min_position_size
-
-                logger.info(
-                    "Zero/low balance detected - using minimum order size: $%.2f USD notional = %.6f units @ $%.2f",
-                    min_order_size,
-                    recommended_position_size,
-                    current_price,
-                )
-            else:
-                # Fallback to signal-only with standard calculation if price is unavailable
-                default_balance = 10000.0
-                if use_kelly_criterion and self.kelly_calculator:
-                    # Use Kelly with default parameters
-                    kelly_params = self._get_default_kelly_parameters()
-                    recommended_position_size, kelly_details = (
-                        self.kelly_calculator.calculate_position_size(
-                            account_balance=default_balance,
-                            win_rate=kelly_params["win_rate"],
-                            avg_win=kelly_params["avg_win"],
-                            avg_loss=kelly_params["avg_loss"],
-                            current_price=current_price if current_price > 0 else 1,
-                            payoff_ratio=kelly_params["payoff_ratio"],
-                        )
-                    )
-                    result["kelly_details"] = kelly_details
-                else:
-                    recommended_position_size = self.calculate_position_size(
+        else:
+            # Signal-only mode (or missing price): provide sizing recommendation for human approval.
+            default_balance = 10000.0
+            if use_kelly_criterion and self.kelly_calculator:
+                # Use Kelly with default parameters
+                kelly_params = self._get_default_kelly_parameters()
+                recommended_position_size, kelly_details = (
+                    self.kelly_calculator.calculate_position_size(
                         account_balance=default_balance,
-                        risk_percentage=risk_percentage,
-                        entry_price=current_price if current_price > 0 else 1,
-                        stop_loss_percentage=sizing_stop_loss_percentage,
+                        win_rate=kelly_params["win_rate"],
+                        avg_win=kelly_params["avg_win"],
+                        avg_loss=kelly_params["avg_loss"],
+                        current_price=current_price if current_price > 0 else 1,
+                        payoff_ratio=kelly_params["payoff_ratio"],
                     )
+                )
+                result["kelly_details"] = kelly_details
+            else:
+                recommended_position_size = self.calculate_position_size(
+                    account_balance=default_balance,
+                    risk_percentage=risk_percentage,
+                    entry_price=current_price if current_price > 0 else 1,
+                    stop_loss_percentage=sizing_stop_loss_percentage,
+                )
+
+            if current_price <= 0:
                 logger.warning(
                     "Current price unavailable - using default balance $%.2f for sizing recommendation",
                     default_balance,
                 )
 
-                if signal_only:
-                    logger.info(
-                        "Signal-only mode enabled - no position sizing calculated (balance_valid: %s, signal_only_default: %s)",
-                        has_valid_balance,
-                        signal_only_default,
-                    )
-
-            # Calculate stop loss price (only if position size exists and not signal-only)
-            if (
-                current_price > 0
-                and sizing_stop_loss_percentage > 0
-                and not signal_only
-            ):
-                stop_loss_price = (
-                    current_price * (1 - sizing_stop_loss_percentage)
-                    if action == "BUY"
-                    else current_price * (1 + sizing_stop_loss_percentage)
-                )
-            else:
-                stop_loss_price = None
-
-            result.update(
-                {
-                    "recommended_position_size": recommended_position_size,
-                    "stop_loss_price": stop_loss_price,
-                    "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
-                    "risk_percentage": risk_percentage,
-                    "signal_only": signal_only,
-                }
-            )
-
-            # Log appropriate message
             if signal_only:
-                if not has_valid_balance:
-                    logger.info(
-                        "Signal-only mode: No valid balance - no position sizing"
-                    )
-                elif signal_only_default:
-                    logger.info(
-                        "Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing"
-                    )
-            elif not has_valid_balance:
-                logger.warning(
-                    "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
-                    balance_source,
-                    recommended_position_size,
-                    min_order_size,
+                logger.info(
+                    "Signal-only mode enabled (balance_valid: %s, signal_only_default: %s)",
+                    has_valid_balance,
+                    signal_only_default,
                 )
-            else:
-                logger.warning(
-                    "Portfolio data unavailable - using minimum order size: %.6f units ($%.2f USD notional)",
-                    recommended_position_size,
-                    min_order_size,
+
+        # Calculate stop loss price (only if position size exists and not signal-only)
+        if current_price > 0 and sizing_stop_loss_percentage > 0 and not signal_only:
+            stop_loss_price = (
+                current_price * (1 - sizing_stop_loss_percentage)
+                if action == "BUY"
+                else current_price * (1 + sizing_stop_loss_percentage)
+            )
+        else:
+            stop_loss_price = None
+
+        result.update(
+            {
+                "recommended_position_size": recommended_position_size,
+                "stop_loss_price": stop_loss_price,
+                "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
+                "risk_percentage": risk_percentage,
+                "signal_only": signal_only,
+            }
+        )
+
+        # Log appropriate message
+        if signal_only:
+            if not has_valid_balance:
+                logger.info("Signal-only mode: No valid balance - no position sizing")
+            elif signal_only_default:
+                logger.info(
+                    "Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing"
                 )
+        elif not has_valid_balance:
+            logger.warning(
+                "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
+                balance_source,
+                recommended_position_size,
+                min_order_size,
+            )
+        else:
+            logger.warning(
+                "Portfolio data unavailable - using minimum order size: %.6f units ($%.2f USD notional)",
+                recommended_position_size,
+                min_order_size,
+            )
 
         return result
 

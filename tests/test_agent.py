@@ -31,7 +31,15 @@ def mock_trading_platform():
 
 @pytest.fixture
 def agent_config():
-    return TradingAgentConfig()
+    config = TradingAgentConfig(
+        correlation_threshold=0.7,
+        max_correlated_assets=2,
+        max_var_pct=0.05,
+        var_confidence=0.95,
+    )
+    # Enable autonomous mode to bypass signal-only validation checks
+    config.autonomous.enabled = True
+    return config
 
 
 @pytest.fixture
@@ -101,7 +109,7 @@ async def test_run_agent_command():
                 new_callable=AsyncMock,
             ):
                 result = runner.invoke(
-                    run_agent, ["--autonomous"], obj={"config": test_config}
+                    run_agent, ["--autonomous", "--yes"], obj={"config": test_config}
                 )
 
                 # Conditional assertions based on exit code
