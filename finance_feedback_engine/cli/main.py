@@ -432,7 +432,10 @@ def load_tiered_config() -> dict:
     3. Environment variables (highest overall precedence)
     """
     import logging
-    from finance_feedback_engine.utils.config_loader import load_config as load_config_with_env
+
+    from finance_feedback_engine.utils.config_loader import (
+        load_config as load_config_with_env,
+    )
 
     logger = logging.getLogger(__name__)
 
@@ -470,7 +473,9 @@ def load_config(config_path: str) -> dict:
 
     Uses the proper config_loader which handles .env loading and ${VAR} substitution.
     """
-    from finance_feedback_engine.utils.config_loader import load_config as load_config_with_env
+    from finance_feedback_engine.utils.config_loader import (
+        load_config as load_config_with_env,
+    )
 
     path = Path(config_path)
 

@@ -4,8 +4,9 @@ Patch script to update Coinbase platform to use CDP API (portfolio-based).
 This replaces the old accounts/futures API with the new portfolio API.
 """
 
+
 def create_patch():
-    return '''
+    return """
 --- a/finance_feedback_engine/trading_platforms/coinbase_platform.py
 +++ b/finance_feedback_engine/trading_platforms/coinbase_platform.py
 @@ -200,35 +200,31 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
@@ -72,8 +73,9 @@ def create_patch():
              except Exception as e:
 -                logger.warning("Could not fetch spot balances: %s", e)
 +                logger.warning("Could not fetch portfolio balances: %s", e)
-'''
+"""
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("This is a reference patch. Apply manually to coinbase_platform.py")
     print(create_patch())

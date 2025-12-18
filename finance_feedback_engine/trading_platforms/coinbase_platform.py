@@ -204,24 +204,30 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 portfolios = portfolios_response.portfolios
 
                 if portfolios:
-                    portfolio_uuid = portfolios[0]['uuid']
-                    breakdown = client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
-                    breakdown_data = breakdown['breakdown']  # Object supports bracket notation
+                    portfolio_uuid = portfolios[0]["uuid"]
+                    breakdown = client.get_portfolio_breakdown(
+                        portfolio_uuid=portfolio_uuid
+                    )
+                    breakdown_data = breakdown[
+                        "breakdown"
+                    ]  # Object supports bracket notation
 
                     # Get total cash
-                    portfolio_balances = breakdown_data['portfolio_balances']
-                    total_cash = float(portfolio_balances['total_cash_equivalent_balance']['value'])
+                    portfolio_balances = breakdown_data["portfolio_balances"]
+                    total_cash = float(
+                        portfolio_balances["total_cash_equivalent_balance"]["value"]
+                    )
 
                     if total_cash > 0:
-                        balances['TOTAL_USD'] = total_cash
+                        balances["TOTAL_USD"] = total_cash
                         logger.info("Portfolio total cash: $%.2f", total_cash)
 
                     # Get spot USD/USDC
-                    spot_positions = breakdown_data['spot_positions']
+                    spot_positions = breakdown_data["spot_positions"]
                     for position in spot_positions:
-                        asset = position['asset']
-                        if asset in ['USD', 'USDC']:
-                            available_fiat = float(position['available_to_trade_fiat'])
+                        asset = position["asset"]
+                        if asset in ["USD", "USDC"]:
+                            available_fiat = float(position["available_to_trade_fiat"])
                             if available_fiat > 0:
                                 balances[f"SPOT_{asset}"] = available_fiat
                                 logger.info("Spot %s: $%.2f", asset, available_fiat)
@@ -272,9 +278,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 logger.warning("No portfolios found")
                 return {}
 
-            portfolio_uuid = portfolios[0]['uuid']
+            portfolio_uuid = portfolios[0]["uuid"]
             breakdown = client.get_portfolio_breakdown(portfolio_uuid=portfolio_uuid)
-            breakdown_data = breakdown['breakdown']  # Object supports bracket notation
+            breakdown_data = breakdown["breakdown"]  # Object supports bracket notation
 
             # Get futures/perp summary
             futures_positions = []
@@ -282,12 +288,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             futures_value = 0.0
 
             try:
-                portfolio_balances = breakdown_data['portfolio_balances']
-                futures_value = float(portfolio_balances['total_futures_balance']['value'])
-                futures_unrealized_pnl = float(portfolio_balances['futures_unrealized_pnl']['value'])
-                perp_unrealized_pnl = float(portfolio_balances['perp_unrealized_pnl']['value'])
+                portfolio_balances = breakdown_data["portfolio_balances"]
+                futures_value = float(
+                    portfolio_balances["total_futures_balance"]["value"]
+                )
+                futures_unrealized_pnl = float(
+                    portfolio_balances["futures_unrealized_pnl"]["value"]
+                )
+                perp_unrealized_pnl = float(
+                    portfolio_balances["perp_unrealized_pnl"]["value"]
+                )
 
-                if futures_value > 0 or futures_unrealized_pnl != 0 or perp_unrealized_pnl != 0:
+                if (
+                    futures_value > 0
+                    or futures_unrealized_pnl != 0
+                    or perp_unrealized_pnl != 0
+                ):
                     futures_summary = {
                         "total_balance_usd": futures_value,
                         "unrealized_pnl": futures_unrealized_pnl + perp_unrealized_pnl,
@@ -298,8 +314,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     logger.info("Futures account balance: $%.2f", futures_value)
 
                 # Get individual futures and perp positions
-                futures_positions_data = breakdown_data['futures_positions']
-                perp_positions_data = breakdown_data['perp_positions']
+                futures_positions_data = breakdown_data["futures_positions"]
+                perp_positions_data = breakdown_data["perp_positions"]
                 positions_list = futures_positions_data + perp_positions_data
 
                 # Default leverage assumption for Coinbase perpetuals when
@@ -400,20 +416,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             spot_value = 0.0
 
             try:
-                spot_positions = breakdown_data['spot_positions']
+                spot_positions = breakdown_data["spot_positions"]
 
                 for position in spot_positions:
-                    asset = position['asset']
-                    if asset in ['USD', 'USDC']:
-                        available_fiat = float(position['available_to_trade_fiat'])
+                    asset = position["asset"]
+                    if asset in ["USD", "USDC"]:
+                        available_fiat = float(position["available_to_trade_fiat"])
 
                         if available_fiat > 0:
-                            holdings.append({
-                                'asset': asset,
-                                'amount': available_fiat,
-                                'value_usd': available_fiat,
-                                'allocation_pct': 0.0,  # Calculate below
-                            })
+                            holdings.append(
+                                {
+                                    "asset": asset,
+                                    "amount": available_fiat,
+                                    "value_usd": available_fiat,
+                                    "allocation_pct": 0.0,  # Calculate below
+                                }
+                            )
                             spot_value += available_fiat
                             logger.info("Spot %s: $%.2f", asset, available_fiat)
             except Exception as e:

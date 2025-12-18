@@ -280,32 +280,32 @@ class ConfigValidator:
 
         # Pattern for old-style placeholders (UPPERCASE with no ${} wrapper)
         # But exclude YAML structural keywords and proper env var references
-        old_placeholder_pattern = re.compile(r':\s+([A-Z][A-Z_0-9]+)\s*$')
+        old_placeholder_pattern = re.compile(r":\s+([A-Z][A-Z_0-9]+)\s*$")
 
         # Expected subsystem prefixes for hierarchical naming
         valid_prefixes = {
-            'ALPHA_VANTAGE_',
-            'TRADING_PLATFORM',
-            'COINBASE_',
-            'OANDA_',
-            'DECISION_ENGINE_',
-            'ENSEMBLE_',
-            'TWO_PHASE_',
-            'MONITORING_',
-            'PERSISTENCE_',
-            'PORTFOLIO_MEMORY_',
-            'TELEGRAM_',
-            'BACKTESTING_',
-            'SAFETY_',
-            'CIRCUIT_BREAKER_',
-            'SIGNAL_ONLY_',
-            'LOGGING_',
-            'AGENT_',
-            'API_AUTH_',
-            'API_TIMEOUT_',
-            'BENCHMARK_',
-            'REFACTORING_',
-            'OPTIMIZATION_',
+            "ALPHA_VANTAGE_",
+            "TRADING_PLATFORM",
+            "COINBASE_",
+            "OANDA_",
+            "DECISION_ENGINE_",
+            "ENSEMBLE_",
+            "TWO_PHASE_",
+            "MONITORING_",
+            "PERSISTENCE_",
+            "PORTFOLIO_MEMORY_",
+            "TELEGRAM_",
+            "BACKTESTING_",
+            "SAFETY_",
+            "CIRCUIT_BREAKER_",
+            "SIGNAL_ONLY_",
+            "LOGGING_",
+            "AGENT_",
+            "API_AUTH_",
+            "API_TIMEOUT_",
+            "BENCHMARK_",
+            "REFACTORING_",
+            "OPTIMIZATION_",
         }
 
         for line_num, line in enumerate(lines, 1):
@@ -318,21 +318,28 @@ class ConfigValidator:
             if old_match:
                 placeholder = old_match.group(1)
                 # Ignore safe YAML values like "true", "false", "INFO", "balanced"
-                if placeholder not in {'TRUE', 'FALSE', 'INFO', 'DEBUG', 'WARNING', 'ERROR'}:
+                if placeholder not in {
+                    "TRUE",
+                    "FALSE",
+                    "INFO",
+                    "DEBUG",
+                    "WARNING",
+                    "ERROR",
+                }:
                     result.add_issue(
                         Severity.HIGH,
                         "old_placeholder_pattern",
                         f"Old-style placeholder detected: '{placeholder}' (should use ${{ENV_VAR}} syntax)",
                         config_path,
                         line_num,
-                        f"Replace with: ${{{placeholder}}} or use proper hierarchical naming from .env.example"
+                        f"Replace with: ${{{placeholder}}} or use proper hierarchical naming from .env.example",
                     )
 
             # Check env var references for proper naming (inside ${...})
-            env_var_refs = re.findall(r'\$\{([^}]+)\}', line)
+            env_var_refs = re.findall(r"\$\{([^}]+)\}", line)
             for env_var in env_var_refs:
                 # Extract base name (without :default syntax)
-                base_name = env_var.split(':')[0].strip()
+                base_name = env_var.split(":")[0].strip()
 
                 # Check if it has a valid subsystem prefix
                 has_valid_prefix = any(
@@ -346,7 +353,7 @@ class ConfigValidator:
                         f"Environment variable '{base_name}' lacks subsystem prefix",
                         config_path,
                         line_num,
-                        f"Use hierarchical naming (e.g., SUBSYSTEM_{base_name}) to avoid collisions. See .env.example for naming conventions."
+                        f"Use hierarchical naming (e.g., SUBSYSTEM_{base_name}) to avoid collisions. See .env.example for naming conventions.",
                     )
 
     def _check_schema(self, config: Dict, config_path: str, result: ValidationResult):
