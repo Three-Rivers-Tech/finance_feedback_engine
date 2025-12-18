@@ -125,7 +125,9 @@ def load_config(config_path: str) -> Dict[str, Any]:
     if used_env_vars:
         logger.debug(f"Loaded {len(used_env_vars)} environment variables from .env")
     if defaulted_env_vars:
-        logger.info(f"Using defaults for {len(defaulted_env_vars)} environment variables")
+        logger.info(
+            f"Using defaults for {len(defaulted_env_vars)} environment variables"
+        )
 
     return resolved_config
 

@@ -17,12 +17,19 @@ from finance_feedback_engine.monitoring import (
 
 
 @pytest.fixture
-def mock_engine_with_monitoring():
+async def mock_engine_with_monitoring():
     """Fixture for an engine initialized with a mock test config."""
     with open("config/config.test.mock.yaml", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     engine = FinanceFeedbackEngine(config)
-    return engine
+
+    yield engine
+
+    # Cleanup async resources
+    try:
+        await engine.close()
+    except Exception:
+        pass
 
 
 # --- Test 1: Monitoring Context Creation ---

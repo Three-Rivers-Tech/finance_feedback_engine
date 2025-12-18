@@ -12,8 +12,8 @@ from finance_feedback_engine import FinanceFeedbackEngine
 
 
 @pytest.fixture
-def engine_with_mock_config(tmp_path, monkeypatch):
-    """Create engine with test configuration."""
+async def engine_with_mock_config(tmp_path, monkeypatch):
+    """Create engine with test configuration and ensure proper cleanup."""
     # Set API key via environment variable
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "demo")
 
@@ -41,7 +41,14 @@ def engine_with_mock_config(tmp_path, monkeypatch):
     }
 
     engine = FinanceFeedbackEngine(config)
-    return engine
+
+    yield engine
+
+    # Cleanup: Close async resources like aiohttp sessions
+    try:
+        await engine.close()
+    except Exception:
+        pass  # Ignore cleanup errors
 
 
 class TestCoreAnalysisWorkflow:
