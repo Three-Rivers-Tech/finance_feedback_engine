@@ -8,7 +8,7 @@ from finance_feedback_engine import FinanceFeedbackEngine
 
 
 @pytest.fixture
-def mock_engine():
+async def mock_engine():
     """Fixture to create a FinanceFeedbackEngine with a mocked platform."""
     config = {
         "alpha_vantage_api_key": "demo",
@@ -20,7 +20,14 @@ def mock_engine():
         "persistence": {"storage_path": "/tmp/test_decisions"},
     }
     engine = FinanceFeedbackEngine(config)
-    return engine
+
+    yield engine
+
+    # Cleanup async resources
+    try:
+        await engine.close()
+    except Exception:
+        pass
 
 
 def test_engine_initialization(mock_engine):

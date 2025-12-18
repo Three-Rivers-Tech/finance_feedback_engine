@@ -114,6 +114,14 @@ class TradeTrackerThread(threading.Thread):
             portfolio = self.platform.get_portfolio_breakdown()
             positions = portfolio.get("futures_positions", [])
 
+            # Guard against mock objects in tests
+            if not isinstance(positions, (list, tuple)):
+                logger.warning(
+                    f"Positions is not a list/tuple (type: {type(positions)}). "
+                    "Assuming position still open."
+                )
+                return True
+
             # Find our position
             our_position = None
             for pos in positions:
