@@ -86,9 +86,10 @@ class TestTelegramBot:
             TelegramApprovalBot,
         )
 
-        with patch("telegram.InlineKeyboardButton") as mock_button, patch(
-            "telegram.InlineKeyboardMarkup"
-        ) as mock_markup:
+        with (
+            patch("telegram.InlineKeyboardButton") as mock_button,
+            patch("telegram.InlineKeyboardMarkup") as mock_markup,
+        ):
             bot = TelegramApprovalBot(telegram_config)
             keyboard = bot.create_approval_keyboard("test_decision_123")
 

@@ -41,6 +41,7 @@ logs/
 *.db
 *.sqlite
 *.sqlite3
+qdrant_storage/
 
 # Trading data (not versioned)
 data/decisions/

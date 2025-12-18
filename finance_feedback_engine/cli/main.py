@@ -325,14 +325,41 @@ def _check_dependencies() -> tuple:
 
 
 def setup_logging(verbose: bool = False, config: dict = None):
-    """Setup logging configuration.
+    """Setup logging configuration with structured logging support.
 
     Args:
         verbose: If True, override config and use DEBUG level
-        config: Configuration dict containing ('logging', 'level') key
+        config: Configuration dict containing logging settings
 
     Priority: --verbose flag > config value > INFO default
+
+    This function now supports both legacy and structured logging modes:
+    - If config['logging']['structured']['enabled'] is True, uses structured JSON logging
+    - Otherwise, falls back to traditional text logging
     """
+    # Try to use structured logging if available and enabled
+    if config and config.get("logging", {}).get("structured", {}).get("enabled", False):
+        try:
+            from finance_feedback_engine.monitoring.logging_config import (
+                setup_structured_logging,
+            )
+
+            setup_structured_logging(config, verbose=verbose)
+            logger = logging.getLogger(__name__)
+            logger.debug("Structured logging initialized successfully")
+            return
+        except ImportError as e:
+            # Fall back to basic logging if structured logging module is not available
+            logging.warning(
+                f"Structured logging module not available: {e}, falling back to basic logging"
+            )
+        except Exception as e:
+            # Fall back to basic logging if there's any error in structured logging setup
+            logging.warning(
+                f"Error setting up structured logging: {e}, falling back to basic logging"
+            )
+
+    # Legacy logging setup (backward compatible)
     # Map string level names to logging constants
     LEVEL_MAP = {
         "DEBUG": logging.DEBUG,
@@ -717,14 +744,17 @@ def config_editor(ctx, output):
         _set_nested(updated_config, keys, val)
         return val
 
-    def prompt_bool(label, keys):
+    def prompt_bool(label, keys, default=None):
         cur_val = current(keys, False)
         if isinstance(cur_val, str):
             default_val = cur_val.lower() == "true"
         else:
             default_val = bool(cur_val)
+        if default is not None:
+            default_val = default
         val = click.confirm(label, default=default_val, show_default=True)
         _set_nested(updated_config, keys, val)
+        return val
 
     try:
         console.print("\n[bold cyan]Config Editor[/bold cyan]")
@@ -783,6 +813,46 @@ def config_editor(ctx, output):
         console.print("\n[bold]Autonomous agent[/bold]")
         prompt_bool("Enable autonomous trading?", ("agent", "autonomous", "enabled"))
 
+        # Telegram notifications setup
+        console.print("\n[bold cyan]📱 Telegram Notifications[/bold cyan]")
+        console.print(
+            "[dim]Telegram is used for manual trade approval when autonomous trading is disabled[/dim]"
+        )
+
+        # Check if autonomous trading was just disabled
+        autonomous_enabled = _get_nested(
+            updated_config, ("agent", "autonomous", "enabled"), False
+        )
+
+        # Prompt for Telegram - make it clear it's required if autonomous is off
+        if not autonomous_enabled:
+            console.print(
+                "[yellow]⚠️  Autonomous trading is disabled - Telegram notifications are REQUIRED[/yellow]"
+            )
+            telegram_enabled = prompt_bool(
+                "Enable Telegram notifications?", ("telegram", "enabled")
+            )
+        else:
+            telegram_enabled = prompt_bool(
+                "Enable Telegram notifications? (optional)", ("telegram", "enabled")
+            )
+
+        if telegram_enabled:
+            console.print("\n[bold]Telegram Bot Setup Instructions:[/bold]")
+            console.print("1. Open Telegram and message @BotFather")
+            console.print("2. Send /newbot and follow instructions to create a bot")
+            console.print("3. Copy the bot token provided by @BotFather")
+            console.print("4. Message @userinfobot to get your chat_id")
+            console.print("5. Start a conversation with your new bot\n")
+
+            prompt_text(
+                "Bot token (from @BotFather)", ("telegram", "bot_token"), secret=True
+            )
+            prompt_text("Chat ID (from @userinfobot)", ("telegram", "chat_id"))
+        else:
+            # If they said no to Telegram, set it to disabled explicitly
+            _set_nested(updated_config, ("telegram", "enabled"), False)
+
         # Logging
         console.print("\n[bold]Logging[/bold]")
         prompt_choice(
@@ -790,6 +860,51 @@ def config_editor(ctx, output):
             ("logging", "level"),
             ["INFO", "DEBUG", "WARNING", "ERROR"],
         )
+
+        # Validate: autonomous trading OR Telegram must be configured
+        console.print("\n[bold cyan]🔍 Validating Configuration...[/bold cyan]")
+
+        autonomous_enabled = _get_nested(
+            updated_config, ("agent", "autonomous", "enabled"), False
+        )
+        telegram_enabled = _get_nested(updated_config, ("telegram", "enabled"), False)
+        telegram_has_token = bool(
+            _get_nested(updated_config, ("telegram", "bot_token"))
+        )
+        telegram_has_chat_id = bool(
+            _get_nested(updated_config, ("telegram", "chat_id"))
+        )
+        telegram_configured = (
+            telegram_enabled and telegram_has_token and telegram_has_chat_id
+        )
+
+        if not autonomous_enabled and not telegram_configured:
+            console.print("\n[bold red]❌ Configuration Error[/bold red]")
+            console.print(
+                "[yellow]You must configure at least ONE of the following:[/yellow]"
+            )
+            console.print(
+                "  1. [bold]Autonomous trading[/bold] (for fully automated execution)"
+            )
+            console.print(
+                "  2. [bold]Telegram notifications[/bold] (for manual approval of signals)"
+            )
+            console.print("\n[yellow]Current status:[/yellow]")
+            console.print(
+                f"  • Autonomous trading: [red]{'✓ Enabled' if autonomous_enabled else '✗ Disabled'}[/red]"
+            )
+            console.print(
+                f"  • Telegram configured: [red]{'✓ Yes' if telegram_configured else '✗ No'}[/red]"
+            )
+            console.print(
+                "\n[dim]The agent cannot run without either autonomous trading or notification channels.[/dim]"
+            )
+
+            raise click.ClickException(
+                "Configuration incomplete: Enable autonomous trading or configure Telegram notifications."
+            )
+
+        console.print("[green]✓ Configuration validated successfully[/green]")
 
         # Write config
         target_path.parent.mkdir(parents=True, exist_ok=True)

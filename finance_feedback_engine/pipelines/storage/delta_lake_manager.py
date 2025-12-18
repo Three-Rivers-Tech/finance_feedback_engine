@@ -10,7 +10,7 @@ Features:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -142,7 +142,7 @@ class DeltaLakeManager:
         table_dir = Path(self.storage_path) / table_name
         table_dir.mkdir(parents=True, exist_ok=True)
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"data_{timestamp}.parquet"
         filepath = table_dir / filename
 

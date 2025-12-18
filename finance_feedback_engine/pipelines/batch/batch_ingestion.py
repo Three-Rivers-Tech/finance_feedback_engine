@@ -12,7 +12,7 @@ Supports:
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -70,7 +70,7 @@ class DeadLetterQueue:
 
     def save(self, records: List[Dict[str, Any]], error: str, context: Dict[str, Any]):
         """Save failed records with error context."""
-        timestamp = datetime.utcnow().isoformat().replace(":", "-")
+        timestamp = datetime.now(timezone.utc).isoformat().replace(":", "-")
         filename = f"dlq_{timestamp}_{uuid.uuid4().hex[:8]}.json"
         filepath = self.storage_path / filename
 
@@ -371,7 +371,7 @@ class BatchDataIngester:
         """Add metadata columns for lineage tracking."""
         df = df.copy()
         df["source_provider"] = provider
-        df["_extracted_at"] = datetime.utcnow()
+        df["_extracted_at"] = datetime.now(timezone.utc)
         df["_ingestion_id"] = str(uuid.uuid4())
 
         # Check for mock data flag
@@ -420,7 +420,7 @@ class BatchDataIngester:
         self.dlq.save(
             records=records,
             error=error,
-            context={"timestamp": datetime.utcnow().isoformat()},
+            context={"timestamp": datetime.now(timezone.utc).isoformat()},
         )
 
 

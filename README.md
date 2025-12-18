@@ -134,7 +134,7 @@ graph TB
 ## 📋 Requirements
 
 ### Core Requirements
-- Python 3.8+
+- Python 3.10+
 - Alpha Vantage API key (premium recommended)
 - Trading platform credentials (Coinbase, Oanda, etc.)
 
@@ -156,11 +156,11 @@ git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0.git
 cd finance_feedback_engine-2.0
 ```
 
-### 2. Install dependencies
+### 2. Install dependencies (pyproject is the source of truth)
 
-```bash
-pip install -r requirements.txt
-```
+- Runtime: `pip install .`
+- Dev/Test: `pip install ".[dev]"`
+- Data pipeline (optional): `pip install ".[pipeline]"`
 
 **Note on Technical Indicators (pandas-ta):**
 The multi-timeframe pulse system uses **pandas-ta** for technical analysis:
@@ -169,10 +169,7 @@ The multi-timeframe pulse system uses **pandas-ta** for technical analysis:
 - ✅ **No System Dependencies** - No need for C libraries or build tools
 - ✅ **Easy Deployment** - Simpler installation on cloud/Docker
 
-This is automatically installed via `requirements.txt` but can be installed separately:
-```bash
-pip install pandas-ta>=0.4.71b0
-```
+`pip install .` will pull the correct pandas-ta variant for your Python version automatically.
 
 Or install in development mode:
 

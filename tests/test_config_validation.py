@@ -84,7 +84,7 @@ class TestConfigValidator:
         assert not result.valid
         critical_issues = result.get_critical_issues()
         assert len(critical_issues) > 0
-        assert any("exposed_secret" in issue.rule for issue in critical_issues)
+        assert any("hardcoded_api_key" in issue.rule for issue in critical_issues)
 
         Path(config_path).unlink()
 
@@ -109,9 +109,9 @@ HivifD80tC+SSkajuOQ6zA0LS4AKBKsy+w==
         critical_issues = result.get_critical_issues()
         assert len(critical_issues) > 0
         assert any(
-            "private_key" in issue.secret_type.lower()
+            "private_key" in issue.rule.lower()
+            or "private_key" in issue.message.lower()
             for issue in critical_issues
-            if hasattr(issue, "secret_type")
         )
 
         Path(config_path).unlink()

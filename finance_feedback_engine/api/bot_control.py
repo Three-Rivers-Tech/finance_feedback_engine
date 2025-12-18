@@ -18,7 +18,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from ..agent.config import TradingAgentConfig
 from ..agent.trading_loop_agent import TradingLoopAgent
@@ -100,7 +100,7 @@ class ManualTradeRequest(BaseModel):
     stop_loss: Optional[float] = Field(None, description="Stop loss price")
     take_profit: Optional[float] = Field(None, description="Take profit price")
 
-    @validator("action")
+    @field_validator("action")
     @classmethod
     def validate_action(cls, v: str) -> str:
         if v.upper() not in ["BUY", "SELL", "LONG", "SHORT"]:
@@ -117,7 +117,7 @@ class ConfigUpdateRequest(BaseModel):
     max_concurrent_trades: Optional[int] = Field(None, ge=1, le=10)
     provider_weights: Optional[Dict[str, float]] = None
 
-    @validator("provider_weights")
+    @field_validator("provider_weights")
     @classmethod
     def validate_weights(
         cls, v: Optional[Dict[str, float]]
