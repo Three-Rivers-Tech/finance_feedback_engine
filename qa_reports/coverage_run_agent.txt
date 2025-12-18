@@ -1,0 +1,231 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.11, pytest-9.0.1, pluggy-1.6.0
+rootdir: /home/cmp6510/finance_feedback_engine-2.0
+configfile: pytest.ini
+plugins: anyio-4.12.0, asyncio-1.3.0, cov-7.0.0, mock-3.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 0 items / 3 errors
+
+==================================== ERRORS ====================================
+_____________________ ERROR collecting tests/test_agent.py _____________________
+tests/test_agent.py:5: in <module>
+    from finance_feedback_engine.agent.config import TradingAgentConfig
+finance_feedback_engine/__init__.py:11: in <module>
+    from .core import FinanceFeedbackEngine
+finance_feedback_engine/core.py:14: in <module>
+    from .decision_engine.engine import DecisionEngine
+finance_feedback_engine/decision_engine/__init__.py:3: in <module>
+    from .ai_decision_manager import AIDecisionManager
+finance_feedback_engine/decision_engine/ai_decision_manager.py:8: in <module>
+    from .ensemble_manager import EnsembleDecisionManager
+finance_feedback_engine/decision_engine/ensemble_manager.py:22: in <module>
+    from .voting_strategies import VotingStrategies
+finance_feedback_engine/decision_engine/voting_strategies.py:14: in <module>
+    from sklearn.linear_model import LogisticRegression
+.venv/lib/python3.13/site-packages/sklearn/__init__.py:73: in <module>
+    from .base import clone  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/sklearn/base.py:19: in <module>
+    from .utils._metadata_requests import _MetadataRequester, _routing_enabled
+.venv/lib/python3.13/site-packages/sklearn/utils/__init__.py:9: in <module>
+    from ._chunking import gen_batches, gen_even_slices
+.venv/lib/python3.13/site-packages/sklearn/utils/_chunking.py:11: in <module>
+    from ._param_validation import Interval, validate_params
+.venv/lib/python3.13/site-packages/sklearn/utils/_param_validation.py:17: in <module>
+    from .validation import _is_arraylike_not_scalar
+.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:21: in <module>
+    from ..utils._array_api import _asarray_with_order, _is_numpy_namespace, get_namespace
+.venv/lib/python3.13/site-packages/sklearn/utils/_array_api.py:20: in <module>
+    from .fixes import parse_version
+.venv/lib/python3.13/site-packages/sklearn/utils/fixes.py:16: in <module>
+    import scipy.stats
+.venv/lib/python3.13/site-packages/scipy/stats/__init__.py:654: in <module>
+    from ._new_distributions import Normal, Uniform, Binomial
+.venv/lib/python3.13/site-packages/scipy/stats/_new_distributions.py:452: in <module>
+    _module[dist_name].__doc__ = _combine_docs(_module[dist_name])
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1333: in _combine_docs
+    doc[field] = [_generate_example(dist_family)]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1490: in _generate_example
+    {X.entropy()}
+     ^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1088: in filtered
+    res = f(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2299: in entropy
+    return self._entropy_dispatch(method=method, **self._parameters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1152: in wrapped
+    return method(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2325: in _entropy_quadrature
+    return -self._quadrature(integrand, params=params)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2097: in _quadrature
+    res = nsum(f, a, b, args=args, log=log, tolerances=dict(rtol=rtol)).sum
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/integrate/_tanhsinh.py:1156: in nsum
+    tmp = eim._initialize(f, (a,), args, complex_ok=False, xp=xp)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/_elementwise_iterative_method.py:89: in _initialize
+    xs = [xp.asarray(x, dtype=xat) for x in xs]  # use copy=False when implemented
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/array_api_compat/numpy/_aliases.py:113: in asarray
+    return np.array(obj, copy=copy, dtype=dtype, **kwargs)  # pyright: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/numpy/_globals.py:95: in __bool__
+    raise ValueError(f"{self} is neither True nor False.")
+E   ValueError: _CopyMode.IF_NEEDED is neither True nor False.
+______________ ERROR collecting tests/test_trading_loop_agent.py _______________
+tests/test_trading_loop_agent.py:7: in <module>
+    from finance_feedback_engine.agent.config import TradingAgentConfig
+finance_feedback_engine/__init__.py:11: in <module>
+    from .core import FinanceFeedbackEngine
+finance_feedback_engine/core.py:14: in <module>
+    from .decision_engine.engine import DecisionEngine
+finance_feedback_engine/decision_engine/__init__.py:3: in <module>
+    from .ai_decision_manager import AIDecisionManager
+finance_feedback_engine/decision_engine/ai_decision_manager.py:8: in <module>
+    from .ensemble_manager import EnsembleDecisionManager
+finance_feedback_engine/decision_engine/ensemble_manager.py:22: in <module>
+    from .voting_strategies import VotingStrategies
+finance_feedback_engine/decision_engine/voting_strategies.py:14: in <module>
+    from sklearn.linear_model import LogisticRegression
+.venv/lib/python3.13/site-packages/sklearn/__init__.py:73: in <module>
+    from .base import clone  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/sklearn/base.py:20: in <module>
+    from .utils._missing import is_scalar_nan
+.venv/lib/python3.13/site-packages/sklearn/utils/__init__.py:9: in <module>
+    from ._chunking import gen_batches, gen_even_slices
+.venv/lib/python3.13/site-packages/sklearn/utils/_chunking.py:11: in <module>
+    from ._param_validation import Interval, validate_params
+.venv/lib/python3.13/site-packages/sklearn/utils/_param_validation.py:17: in <module>
+    from .validation import _is_arraylike_not_scalar
+.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:21: in <module>
+    from ..utils._array_api import _asarray_with_order, _is_numpy_namespace, get_namespace
+.venv/lib/python3.13/site-packages/sklearn/utils/_array_api.py:20: in <module>
+    from .fixes import parse_version
+.venv/lib/python3.13/site-packages/sklearn/utils/fixes.py:16: in <module>
+    import scipy.stats
+.venv/lib/python3.13/site-packages/scipy/stats/__init__.py:654: in <module>
+    from ._new_distributions import Normal, Uniform, Binomial
+.venv/lib/python3.13/site-packages/scipy/stats/_new_distributions.py:452: in <module>
+    _module[dist_name].__doc__ = _combine_docs(_module[dist_name])
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1333: in _combine_docs
+    doc[field] = [_generate_example(dist_family)]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1490: in _generate_example
+    {X.entropy()}
+     ^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1088: in filtered
+    res = f(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2299: in entropy
+    return self._entropy_dispatch(method=method, **self._parameters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1152: in wrapped
+    return method(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2325: in _entropy_quadrature
+    return -self._quadrature(integrand, params=params)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2097: in _quadrature
+    res = nsum(f, a, b, args=args, log=log, tolerances=dict(rtol=rtol)).sum
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/integrate/_tanhsinh.py:1156: in nsum
+    tmp = eim._initialize(f, (a,), args, complex_ok=False, xp=xp)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/_elementwise_iterative_method.py:89: in _initialize
+    xs = [xp.asarray(x, dtype=xat) for x in xs]  # use copy=False when implemented
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/array_api_compat/numpy/_aliases.py:113: in asarray
+    return np.array(obj, copy=copy, dtype=dtype, **kwargs)  # pyright: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/numpy/_globals.py:95: in __bool__
+    raise ValueError(f"{self} is neither True nor False.")
+E   ValueError: _CopyMode.IF_NEEDED is neither True nor False.
+_______ ERROR collecting tests/cli/test_agent_signal_only_validation.py ________
+tests/cli/test_agent_signal_only_validation.py:7: in <module>
+    from finance_feedback_engine.agent.config import (
+finance_feedback_engine/__init__.py:11: in <module>
+    from .core import FinanceFeedbackEngine
+finance_feedback_engine/core.py:14: in <module>
+    from .decision_engine.engine import DecisionEngine
+finance_feedback_engine/decision_engine/__init__.py:3: in <module>
+    from .ai_decision_manager import AIDecisionManager
+finance_feedback_engine/decision_engine/ai_decision_manager.py:8: in <module>
+    from .ensemble_manager import EnsembleDecisionManager
+finance_feedback_engine/decision_engine/ensemble_manager.py:22: in <module>
+    from .voting_strategies import VotingStrategies
+finance_feedback_engine/decision_engine/voting_strategies.py:14: in <module>
+    from sklearn.linear_model import LogisticRegression
+.venv/lib/python3.13/site-packages/sklearn/__init__.py:73: in <module>
+    from .base import clone  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/sklearn/base.py:20: in <module>
+    from .utils._missing import is_scalar_nan
+.venv/lib/python3.13/site-packages/sklearn/utils/__init__.py:9: in <module>
+    from ._chunking import gen_batches, gen_even_slices
+.venv/lib/python3.13/site-packages/sklearn/utils/_chunking.py:11: in <module>
+    from ._param_validation import Interval, validate_params
+.venv/lib/python3.13/site-packages/sklearn/utils/_param_validation.py:17: in <module>
+    from .validation import _is_arraylike_not_scalar
+.venv/lib/python3.13/site-packages/sklearn/utils/validation.py:21: in <module>
+    from ..utils._array_api import _asarray_with_order, _is_numpy_namespace, get_namespace
+.venv/lib/python3.13/site-packages/sklearn/utils/_array_api.py:20: in <module>
+    from .fixes import parse_version
+.venv/lib/python3.13/site-packages/sklearn/utils/fixes.py:16: in <module>
+    import scipy.stats
+.venv/lib/python3.13/site-packages/scipy/stats/__init__.py:654: in <module>
+    from ._new_distributions import Normal, Uniform, Binomial
+.venv/lib/python3.13/site-packages/scipy/stats/_new_distributions.py:452: in <module>
+    _module[dist_name].__doc__ = _combine_docs(_module[dist_name])
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1333: in _combine_docs
+    doc[field] = [_generate_example(dist_family)]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1490: in _generate_example
+    {X.entropy()}
+     ^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1088: in filtered
+    res = f(self, *args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2299: in entropy
+    return self._entropy_dispatch(method=method, **self._parameters)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:1152: in wrapped
+    return method(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2325: in _entropy_quadrature
+    return -self._quadrature(integrand, params=params)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/stats/_distribution_infrastructure.py:2097: in _quadrature
+    res = nsum(f, a, b, args=args, log=log, tolerances=dict(rtol=rtol)).sum
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/integrate/_tanhsinh.py:1156: in nsum
+    tmp = eim._initialize(f, (a,), args, complex_ok=False, xp=xp)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/_elementwise_iterative_method.py:89: in _initialize
+    xs = [xp.asarray(x, dtype=xat) for x in xs]  # use copy=False when implemented
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/scipy/_lib/array_api_compat/numpy/_aliases.py:113: in asarray
+    return np.array(obj, copy=copy, dtype=dtype, **kwargs)  # pyright: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/numpy/_globals.py:95: in __bool__
+    raise ValueError(f"{self} is neither True nor False.")
+E   ValueError: _CopyMode.IF_NEEDED is neither True nor False.
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/pandas/__init__.py:14
+  /home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pandas/__init__.py:14: UserWarning: The NumPy module was reloaded (imported a second time). This can in some cases result in small but subtle issues and is discouraged.
+    __import__(_dependency)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_agent.py - ValueError: _CopyMode.IF_NEEDED is neither True n...
+ERROR tests/test_trading_loop_agent.py - ValueError: _CopyMode.IF_NEEDED is n...
+ERROR tests/cli/test_agent_signal_only_validation.py - ValueError: _CopyMode....
+!!!!!!!!!!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!!!!!!!!!!!
+========================= 1 warning, 3 errors in 4.25s =========================

@@ -1,0 +1,98 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.11, pytest-9.0.1, pluggy-1.6.0
+rootdir: /home/cmp6510/finance_feedback_engine-2.0
+configfile: pytest.ini
+plugins: anyio-4.12.0, asyncio-1.3.0, cov-7.0.0, mock-3.15.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1050 items / 1 deselected / 1049 selected
+
+finance_feedback_engine/agent/test_config.py .....                       [  0%]
+test_asset_type_normalization.py .                                       [  0%]
+test_atomic_writes.py ..                                                 [  0%]
+test_ensemble_kelly_implementation.py ...                                [  1%]
+test_rate_limiter.py .                                                   [  1%]
+test_short_positions.py .                                                [  1%]
+test_stale_data_fix.py ...                                               [  1%]
+test_telegram_live.py .                                                  [  1%]
+tests/cli/test_agent_signal_only_validation.py ....                      [  2%]
+tests/data_providers/test_mock_live_provider.py ........................ [  4%]
+.........                                                                [  5%]
+tests/integration/test_basic_integration.py .                            [  5%]
+tests/integration/test_pipeline_integration.py Fs.F                      [  5%]
+tests/monitoring/test_logging_config.py ........................         [  7%]
+tests/monitoring/test_process_monitor.py ...................s.......     [ 10%]
+tests/risk/test_gatekeeper_backtest_timestamp.py ....                    [ 10%]
+tests/risk/test_gatekeeper_data_freshness.py ........                    [ 11%]
+tests/risk/test_gatekeeper_market_schedule.py .........                  [ 12%]
+tests/test_agent.py ..                                                   [ 12%]
+tests/test_agent_config.py ..................                            [ 14%]
+tests/test_agent_kill_switch_scenarios.py .....                          [ 14%]
+tests/test_api.py ....                                                   [ 15%]
+tests/test_api_client_base.py ........ss.s....                           [ 16%]
+tests/test_api_endpoints.py .......................                      [ 18%]
+tests/test_asset_classifier.py .............                             [ 20%]
+tests/test_asset_pair_validation.py .......                              [ 20%]
+tests/test_asset_pair_validation_enhanced.py ....                        [ 21%]
+tests/test_asset_type_validation.py ............                         [ 22%]
+tests/test_backtest_gatekeeper.py ..                                     [ 22%]
+tests/test_backtest_mode.py sssssss                                      [ 23%]
+tests/test_circuit_breaker.py ...................                        [ 25%]
+tests/test_cli_approval_flows.py .........ss.                            [ 26%]
+tests/test_cli_asset_pairs_override.py ......                            [ 26%]
+tests/test_cli_commands.py F.F                                           [ 27%]
+tests/test_cli_commands_comprehensive.py ........................        [ 29%]
+tests/test_cli_smoke.py ...........ss..                                  [ 30%]
+tests/test_coinbase_platform.py .                                        [ 30%]
+tests/test_config_editor_telegram_validation.py .........                [ 31%]
+tests/test_config_validation.py ...................                      [ 33%]
+tests/test_core_integration.py .--- Logging error ---
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/logging/__init__.py", line 1154, in emit
+    stream.write(msg + self.terminator)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/bin/pytest", line 7, in <module>
+    sys.exit(console_main())
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 221, in console_main
+    code = main()
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py", line 197, in main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/main.py", line 365, in pytest_cmdline_main
+    return wrap_session(config, _main)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/main.py", line 318, in wrap_session
+    session.exitstatus = doit(config, session) or 0
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/main.py", line 372, in _main
+    config.hook.pytest_runtestloop(session=session)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/main.py", line 396, in pytest_runtestloop
+    item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 118, in pytest_runtest_protocol
+    runtestprotocol(item, nextitem=nextitem)
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/_pytest/runner.py", line 147, in runtestprotocol
+    item.funcargs = None  # type: ignore[attr-defined]
+  File "/home/cmp6510/finance_feedback_engine-2.0/.venv/lib/python3.13/site-packages/aiohttp/client.py", line 461, in __del__
+    self._loop.call_exception_handler(context)
+  File "/usr/lib/python3.13/asyncio/base_events.py", line 1907, in call_exception_handler
+    self.default_exception_handler(context)
+  File "/usr/lib/python3.13/asyncio/base_events.py", line 1879, in default_exception_handler
+    logger.error('\n'.join(log_lines), exc_info=exc_info)
+Message: 'Unclosed client session\nclient_session: <aiohttp.client.ClientSession object at 0x7fbc1f4f0910>'
+Arguments: ()
