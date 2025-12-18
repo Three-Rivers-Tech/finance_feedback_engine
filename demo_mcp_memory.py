@@ -32,48 +32,48 @@ tools = [
     {
         "name": "create_entities",
         "description": "Create multiple new entities in the knowledge graph",
-        "example": "Create entities for people, organizations, or events"
+        "example": "Create entities for people, organizations, or events",
     },
     {
         "name": "create_relations",
         "description": "Create relationships between entities",
-        "example": "Link a person to their employer or connect related events"
+        "example": "Link a person to their employer or connect related events",
     },
     {
         "name": "add_observations",
         "description": "Add facts/observations to existing entities",
-        "example": "Add skills, preferences, or other details about an entity"
+        "example": "Add skills, preferences, or other details about an entity",
     },
     {
         "name": "delete_entities",
         "description": "Remove entities and their relations",
-        "example": "Clean up outdated or incorrect entities"
+        "example": "Clean up outdated or incorrect entities",
     },
     {
         "name": "delete_observations",
         "description": "Remove specific observations from entities",
-        "example": "Remove outdated facts about an entity"
+        "example": "Remove outdated facts about an entity",
     },
     {
         "name": "delete_relations",
         "description": "Remove specific relations from the graph",
-        "example": "Remove a connection between two entities"
+        "example": "Remove a connection between two entities",
     },
     {
         "name": "read_graph",
         "description": "Read the entire knowledge graph",
-        "example": "Get a complete view of all entities and relations"
+        "example": "Get a complete view of all entities and relations",
     },
     {
         "name": "search_nodes",
         "description": "Search for nodes based on a query",
-        "example": "Find entities by name, type, or observation content"
+        "example": "Find entities by name, type, or observation content",
     },
     {
         "name": "open_nodes",
         "description": "Retrieve specific nodes by name",
-        "example": "Get detailed information about specific entities"
-    }
+        "example": "Get detailed information about specific entities",
+    },
 ]
 
 for i, tool in enumerate(tools, 1):

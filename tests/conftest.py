@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import sys
@@ -11,6 +12,143 @@ from click.testing import CliRunner
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+# --- Logging Configuration Fixture ---
+# This fixture ensures all logging handlers are properly cleaned up after tests
+# to prevent "I/O operation on closed file" errors.
+
+@pytest.fixture(scope="session", autouse=True)
+def configure_test_logging():
+    """
+    Configure pytest logging to use caplog instead of file handlers.
+
+    Prevents "I/O operation on closed file" errors by avoiding file-based
+    log handlers that can get closed unexpectedly during test teardown.
+    """
+    # Get root logger
+    root_logger = logging.getLogger()
+
+    # Remove any existing file handlers
+    for handler in root_logger.handlers[:]:
+        if isinstance(handler, (logging.FileHandler, logging.StreamHandler)):
+            # Close and remove the handler
+            handler.close()
+            root_logger.removeHandler(handler)
+
+    # Set root logger to WARNING to minimize noise in test output
+    root_logger.setLevel(logging.WARNING)
+
+    yield
+
+    # Cleanup after tests: ensure all handlers are removed
+    for handler in root_logger.handlers[:]:
+        handler.close()
+        root_logger.removeHandler(handler)
+
+
+# --- Async Fixtures for Resource Cleanup ---
+
+
+@pytest.fixture
+async def alpha_vantage_provider():
+    """
+    Provides an AlphaVantageProvider with proper async cleanup.
+
+    This fixture ensures that aiohttp sessions are properly closed after tests,
+    preventing "Unclosed client session" warnings.
+
+    Uses async context manager pattern for guaranteed cleanup.
+    """
+    from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
+
+    provider = AlphaVantageProvider(
+        api_key="test_api_key_12345",
+        is_backtest=True  # Allow mock data in tests
+    )
+
+    yield provider
+
+    # Cleanup: Close the session if it exists
+    # Use try/except to ensure cleanup even if provider.close() fails
+    try:
+        await provider.close()
+    except Exception:
+        pass
+
+
+@pytest.fixture
+def coinbase_provider():
+    """
+    Provides a Coinbase data provider (synchronous - no async cleanup needed).
+    """
+    from finance_feedback_engine.data_providers.coinbase_data import CoinbaseDataProvider
+
+    # CoinbaseDataProvider uses requests (sync), not aiohttp
+    provider = CoinbaseDataProvider(
+        credentials={"api_key": "test_key", "api_secret": "test_secret"}
+    )
+
+    yield provider
+
+    # No async cleanup needed - uses requests library
+
+
+@pytest.fixture
+def oanda_provider():
+    """
+    Provides an Oanda data provider (synchronous - no async cleanup needed).
+    """
+    from finance_feedback_engine.data_providers.oanda_data import OandaDataProvider
+
+    # OandaDataProvider uses requests (sync), not aiohttp
+    provider = OandaDataProvider(
+        credentials={
+            "access_token": "test_oanda_token",
+            "account_id": "test_account_123",
+            "environment": "practice"
+        }
+    )
+
+    yield provider
+
+    # No async cleanup needed - uses requests library
+
+
+@pytest.fixture
+async def unified_data_provider():
+    """
+    Provides a UnifiedDataProvider with proper async cleanup.
+
+    Uses async context manager pattern and ensures all child provider
+    sessions are properly closed.
+    """
+    from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
+
+    config = {
+        "alpha_vantage_api_key": "test_av_key",
+        "platform_credentials": {
+            "coinbase": {
+                "api_key": "test_cb_key",
+                "api_secret": "test_cb_secret"
+            },
+            "oanda": {
+                "api_key": "test_oanda_key",
+                "account_id": "test_account"
+            }
+        }
+    }
+
+    provider = UnifiedDataProvider(config=config)
+
+    yield provider
+
+    # Cleanup: Close all provider sessions with error handling
+    try:
+        if hasattr(provider, 'alpha_vantage') and hasattr(provider.alpha_vantage, 'close'):
+            await provider.alpha_vantage.close()
+    except Exception:
+        pass
 
 
 # --- Fixtures for CLI Testing ---
@@ -41,7 +179,7 @@ def test_config_path():
 
 
 @pytest.fixture(scope="function")
-def mock_engine(test_config_path):
+async def mock_engine(test_config_path):
     """
     Provides a FinanceFeedbackEngine instance with test configuration.
 
@@ -50,13 +188,25 @@ def mock_engine(test_config_path):
 
     Returns:
         FinanceFeedbackEngine: Engine initialized with mock config
+
+    Note:
+        This is now an async fixture to properly cleanup async resources
+        like aiohttp sessions in data providers.
     """
     from finance_feedback_engine import FinanceFeedbackEngine
 
     with open(test_config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    return FinanceFeedbackEngine(config)
+    engine = FinanceFeedbackEngine(config)
+
+    yield engine
+
+    # Cleanup: Close async resources
+    try:
+        await engine.close()
+    except Exception:
+        pass  # Ignore cleanup errors
 
 
 @pytest.fixture(scope="function")

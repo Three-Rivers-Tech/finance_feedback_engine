@@ -133,11 +133,40 @@ Based on test results, prioritize these:
   # scripts/test_clean_install.sh
   #!/bin/bash
   set -e
+  
+  # Use environment variable REPO_URL or default to official repo
+  REPO_URL="${REPO_URL:-https://github.com/Three-Rivers-Tech/finance_feedback_engine.git}"
+  
   TEMP_DIR=$(mktemp -d)
-  cd $TEMP_DIR
-  git clone <repo-url> .
-  ./scripts/setup_dev_env.sh
-  pytest -m "not slow" -v
+  echo "📁 Created temporary directory: $TEMP_DIR"
+  
+  cd "$TEMP_DIR"
+  
+  # Clone repository with error handling
+  echo "📥 Cloning repository from: $REPO_URL"
+  if ! git clone "$REPO_URL" .; then
+    echo "❌ ERROR: Git clone failed. Check REPO_URL or network connectivity."
+    rm -rf "$TEMP_DIR"
+    exit 1
+  fi
+  echo "✅ Repository cloned successfully"
+  
+  # Run setup with error handling
+  if ! ./scripts/setup_dev_env.sh; then
+    echo "❌ ERROR: setup_dev_env.sh failed."
+    rm -rf "$TEMP_DIR"
+    exit 1
+  fi
+  
+  # Run tests with error handling
+  if ! pytest -m "not slow" -v; then
+    echo "❌ ERROR: pytest failed."
+    rm -rf "$TEMP_DIR"
+    exit 1
+  fi
+  
+  # Cleanup on success
+  rm -rf "$TEMP_DIR"
   echo "✅ Clean install test passed!"
   ```
 

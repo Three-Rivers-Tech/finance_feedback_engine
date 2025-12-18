@@ -10,13 +10,21 @@ class TestAlphaVantageProvider:
     """Test AlphaVantageProvider functionality."""
 
     @pytest.fixture
-    def provider(self):
-        """Create AlphaVantageProvider instance."""
+    async def provider(self):
+        """Create AlphaVantageProvider instance with proper cleanup."""
         from finance_feedback_engine.data_providers.alpha_vantage_provider import (
             AlphaVantageProvider,
         )
 
-        return AlphaVantageProvider(api_key="test_key")
+        provider_instance = AlphaVantageProvider(api_key="test_key")
+
+        yield provider_instance
+
+        # Cleanup: Close async resources
+        try:
+            await provider_instance.close()
+        except Exception:
+            pass
 
     def test_initialization(self, provider):
         """Test provider initializes with API key."""

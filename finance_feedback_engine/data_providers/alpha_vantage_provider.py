@@ -150,6 +150,15 @@ class AlphaVantageProvider:
             self._context_count -= 1
         if self._context_count == 0:
             await self.close()
+
+    def __del__(self):
+        """Cleanup on garbage collection - warn if session not closed."""
+        if self.session and self._owned_session:
+            # Cannot await in __del__, but we can warn
+            logger.warning(
+                "AlphaVantageProvider session not properly closed. "
+                "Use 'await provider.close()' or 'async with provider:' pattern."
+            )
         return False
 
     async def _async_request(
