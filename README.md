@@ -179,20 +179,41 @@ pip install -e .
 
 ### 3. Configure the engine
 
-Copy the example configuration and edit with your credentials:
+**Quick Setup (Recommended):**
+```bash
+# Copy .env template and fill in your API keys
+cp .env.example .env
+nano .env  # or vim, code, etc.
+```
 
+The `.env` file is now the **single source of truth** for all configuration. Edit it with your:
+- Alpha Vantage API key
+- Trading platform credentials (Coinbase/Oanda)
+- AI provider settings (optional)
+- Telegram tokens (optional)
+
+**Alternative:** For advanced users, you can create `config/config.local.yaml` with environment variable references:
 ```bash
 cp config/config.yaml config/config.local.yaml
 ```
 
 ### Configuration Loading Hierarchy
 
-**Precedence:** Environment Variables > `config.local.yaml` > `config/config.yaml` (defaults)
+**Precedence:** Environment Variables (`.env`) > `config.local.yaml` > `config/config.yaml` (defaults)
 
 ```mermaid
 flowchart TD
     START([Configuration Loading Starts])
+    DOTENV[Load .env File First]
     ENV{Environment Variables Set?}
+    LOCAL{config.local.yaml Exists?}
+    BASE[config/config.yaml Base Defaults]
+    MERGE[Merge Configuration Precedence: ENV > LOCAL > BASE]
+    VALIDATE[Validate Required Keys API keys, credentials]
+    RESULT([Final Config Object])
+    
+    START --> DOTENV
+    DOTENV --> ENV
     LOCAL{config.local.yaml Exists?}
     BASE[config/config.yaml Base Defaults]
     MERGE[Merge Configuration Precedence: ENV > LOCAL > BASE]

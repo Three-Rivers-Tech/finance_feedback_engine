@@ -432,6 +432,7 @@ def load_tiered_config() -> dict:
     3. Environment variables (highest overall precedence)
     """
     import logging
+    from finance_feedback_engine.utils.config_loader import load_config as load_config_with_env
 
     logger = logging.getLogger(__name__)
 
@@ -441,14 +442,12 @@ def load_tiered_config() -> dict:
     # Prefer local config as the primary file so local values take precedence.
     # Start with local (if present) then fill missing values from base config.
     config = {}
-    # 1. Load local config first (preferred)
+    # 1. Load local config first (preferred) - this now handles .env loading and ${VAR} substitution
     if local_config_path.exists():
-        with open(local_config_path, "r", encoding="utf-8") as f:
-            local_config = yaml.safe_load(f)
-            if local_config:
-                config.update(local_config)
+        config = load_config_with_env(str(local_config_path))
 
     # 2. Load base config and fill missing keys from it
+    # Base config uses plain placeholder strings, not ${VAR} syntax, so use raw YAML loading
     if base_config_path.exists():
         with open(base_config_path, "r", encoding="utf-8") as f:
             base_config = yaml.safe_load(f)
@@ -457,35 +456,8 @@ def load_tiered_config() -> dict:
     else:
         logger.warning(f"Base config file not found: {base_config_path}")
 
-    # 3. Apply environment variables
-    env_var_mappings = {
-        "ALPHA_VANTAGE_API_KEY": ("alpha_vantage_api_key",),
-        "COINBASE_API_KEY": ("trading_platform", "coinbase", "api_key"),
-        "COINBASE_API_SECRET": ("trading_platform", "coinbase", "api_secret"),
-        "COINBASE_PASSPHRASE": ("trading_platform", "coinbase", "passphrase"),
-        "OANDA_API_KEY": ("trading_platform", "oanda", "api_key"),
-        "OANDA_ACCOUNT_ID": ("trading_platform", "oanda", "account_id"),
-        # Boolean conversion needed
-        "OANDA_LIVE": ("trading_platform", "oanda", "live"),
-        "GEMINI_API_KEY": ("decision_engine", "gemini", "api_key"),
-        "GEMINI_MODEL_NAME": ("decision_engine", "gemini", "model_name"),
-        # Add more as needed
-    }
-
-    for env_var, config_path_keys in env_var_mappings.items():
-        value = os.getenv(env_var)
-        if value is not None:
-            # Handle boolean conversion for specific keys
-            if env_var == "OANDA_LIVE":
-                value = value.lower() == "true"
-
-            current_level = config
-            for i, key in enumerate(config_path_keys):
-                # Last key
-                if i == len(config_path_keys) - 1:
-                    current_level[key] = value
-                else:
-                    current_level = current_level.setdefault(key, {})
+    # Environment variables are already handled by load_config_with_env via .env file
+    # No need for manual env var mapping anymore
 
     return config
 
@@ -495,29 +467,29 @@ def load_config(config_path: str) -> dict:
     Load a specific configuration from file.
     This function is for loading explicitly specified config files, not for the
     tiered loading process.
+
+    Uses the proper config_loader which handles .env loading and ${VAR} substitution.
     """
+    from finance_feedback_engine.utils.config_loader import load_config as load_config_with_env
+
     path = Path(config_path)
 
     if not path.exists():
         raise click.ClickException(f"Configuration file not found: {config_path}")
 
-    with open(path, "r", encoding="utf-8") as f:
-        if path.suffix in [".yaml", ".yml"]:
-            config = yaml.safe_load(f)
-            if config is None:
-                raise click.ClickException(
-                    f"Configuration file {config_path} is empty or " f"invalid YAML"
-                )
-            return config
-        elif path.suffix == ".json":
+    if path.suffix in [".yaml", ".yml"]:
+        # Use the proper config loader that handles environment variables
+        return load_config_with_env(config_path)
+    elif path.suffix == ".json":
+        with open(path, "r", encoding="utf-8") as f:
             config = json.load(f)
             if config is None:
                 raise click.ClickException(
-                    f"Configuration file {config_path} is empty or " f"invalid JSON"
+                    f"Configuration file {config_path} is empty or invalid JSON"
                 )
             return config
-        else:
-            raise click.ClickException(f"Unsupported config format: {path.suffix}")
+    else:
+        raise click.ClickException(f"Unsupported config format: {path.suffix}")
 
 
 def _get_nested(config: dict, keys: tuple, default=None):
