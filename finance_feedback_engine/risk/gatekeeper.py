@@ -238,11 +238,22 @@ class RiskGatekeeper:
             market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
 
         if not market_status["is_open"]:
-            logger.warning(
-                f"Market closed for {asset_pair} ({asset_type}). "
-                f"Session: {market_status['session']}"
-            )
-            return False, f"Market closed ({market_status['session']})"
+            # For this project we treat forex as tradable even during the
+            # Friday-close/Sunday-reopen window (with reduced-liquidity warnings),
+            # so the legacy schedule check must not hard-block forex decisions.
+            #
+            # Stocks (and other non-crypto assets) should still be blocked here.
+            if (asset_type or "").lower() == "forex":
+                logger.info(
+                    f"Forex schedule indicates closed for {asset_pair}, but not blocking. "
+                    f"Session: {market_status['session']}"
+                )
+            else:
+                logger.warning(
+                    f"Market closed for {asset_pair} ({asset_type}). "
+                    f"Session: {market_status['session']}"
+                )
+                return False, f"Market closed ({market_status['session']})"
 
         if market_status["warning"]:
             logger.info(f"Market warning for {asset_pair}: {market_status['warning']}")

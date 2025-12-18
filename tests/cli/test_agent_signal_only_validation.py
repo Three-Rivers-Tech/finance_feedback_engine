@@ -17,17 +17,23 @@ class TestSignalOnlyModeValidation:
     def test_supports_signal_only_mode_returns_true_when_methods_exist(self):
         """Agent with required methods should support signal-only mode."""
         config = TradingAgentConfig(
-            autonomous=AutonomousAgentConfig(enabled=False), asset_pairs=["BTCUSD"]
+            autonomous=AutonomousAgentConfig(enabled=False),
+            asset_pairs=["BTCUSD"],
         )
 
         with patch("finance_feedback_engine.agent.trading_loop_agent.RiskGatekeeper"):
-            agent = TradingLoopAgent(
-                config=config,
-                engine=Mock(),
-                trade_monitor=Mock(),
-                portfolio_memory=Mock(),
-                trading_platform=Mock(),
-            )
+            with patch.object(
+                TradingLoopAgent,
+                "_validate_notification_config",
+                return_value=(True, []),
+            ):
+                agent = TradingLoopAgent(
+                    config=config,
+                    engine=Mock(),
+                    trade_monitor=Mock(),
+                    portfolio_memory=Mock(),
+                    trading_platform=Mock(),
+                )
 
         assert agent.supports_signal_only_mode() is True
 

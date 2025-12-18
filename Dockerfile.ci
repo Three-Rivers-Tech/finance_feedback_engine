@@ -12,13 +12,12 @@ RUN pacman -Syu --noconfirm && \
 # Set working directory
 WORKDIR /workspace
 
-# Copy requirements files
-COPY requirements.txt requirements-dev.txt ./
+# Copy project files
+COPY . .
 
-# Install Python dependencies
+# Install Python dependencies from pyproject.toml (runtime + dev extras)
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -r requirements-dev.txt
+    pip install --no-cache-dir ".[dev]"
 
 # Create necessary directories
 RUN mkdir -p /workspace/data/decisions_test /workspace/data/test_metrics
