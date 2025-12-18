@@ -220,6 +220,7 @@ class ConfigValidator:
         self._check_environment_rules(config, config_path, result)
         self._check_best_practices(config, config_path, result)
         self._check_logging_configuration(config, config_path, result)
+        self._check_env_var_naming(config_path, content, result)
 
         return result
 
@@ -263,6 +264,90 @@ class ConfigValidator:
                             line_num,
                             "Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values",
                         )
+
+    def _check_env_var_naming(
+        self, config_path: str, content: str, result: ValidationResult
+    ):
+        """
+        Check for proper environment variable naming conventions.
+
+        Validates:
+        - Environment variables use hierarchical subsystem prefixes
+        - No old-style placeholder patterns (bare UPPERCASE_NAMES without ${})
+        - Proper ${ENV_VAR} syntax is used
+        """
+        lines = content.split("\n")
+
+        # Pattern for old-style placeholders (UPPERCASE with no ${} wrapper)
+        # But exclude YAML structural keywords and proper env var references
+        old_placeholder_pattern = re.compile(r':\s+([A-Z][A-Z_0-9]+)\s*$')
+
+        # Expected subsystem prefixes for hierarchical naming
+        valid_prefixes = {
+            'ALPHA_VANTAGE_',
+            'TRADING_PLATFORM',
+            'COINBASE_',
+            'OANDA_',
+            'DECISION_ENGINE_',
+            'ENSEMBLE_',
+            'TWO_PHASE_',
+            'MONITORING_',
+            'PERSISTENCE_',
+            'PORTFOLIO_MEMORY_',
+            'TELEGRAM_',
+            'BACKTESTING_',
+            'SAFETY_',
+            'CIRCUIT_BREAKER_',
+            'SIGNAL_ONLY_',
+            'LOGGING_',
+            'AGENT_',
+            'API_AUTH_',
+            'API_TIMEOUT_',
+            'BENCHMARK_',
+            'REFACTORING_',
+            'OPTIMIZATION_',
+        }
+
+        for line_num, line in enumerate(lines, 1):
+            # Skip comments and empty lines
+            if line.strip().startswith("#") or not line.strip():
+                continue
+
+            # Check for old-style placeholders (e.g., "autonomous_execution: AUTO_EXC")
+            old_match = old_placeholder_pattern.search(line)
+            if old_match:
+                placeholder = old_match.group(1)
+                # Ignore safe YAML values like "true", "false", "INFO", "balanced"
+                if placeholder not in {'TRUE', 'FALSE', 'INFO', 'DEBUG', 'WARNING', 'ERROR'}:
+                    result.add_issue(
+                        Severity.HIGH,
+                        "old_placeholder_pattern",
+                        f"Old-style placeholder detected: '{placeholder}' (should use ${{ENV_VAR}} syntax)",
+                        config_path,
+                        line_num,
+                        f"Replace with: ${{{placeholder}}} or use proper hierarchical naming from .env.example"
+                    )
+
+            # Check env var references for proper naming (inside ${...})
+            env_var_refs = re.findall(r'\$\{([^}]+)\}', line)
+            for env_var in env_var_refs:
+                # Extract base name (without :default syntax)
+                base_name = env_var.split(':')[0].strip()
+
+                # Check if it has a valid subsystem prefix
+                has_valid_prefix = any(
+                    base_name.startswith(prefix) for prefix in valid_prefixes
+                )
+
+                if not has_valid_prefix:
+                    result.add_issue(
+                        Severity.MEDIUM,
+                        "missing_subsystem_prefix",
+                        f"Environment variable '{base_name}' lacks subsystem prefix",
+                        config_path,
+                        line_num,
+                        f"Use hierarchical naming (e.g., SUBSYSTEM_{base_name}) to avoid collisions. See .env.example for naming conventions."
+                    )
 
     def _check_schema(self, config: Dict, config_path: str, result: ValidationResult):
         """Validate configuration schema"""
