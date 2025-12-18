@@ -70,7 +70,17 @@ class VectorMemory:
         # Load existing index if available
         self._load_index()
 
-        logger.info(f"VectorMemory initialized with {len(self.vectors)} stored vectors")
+        # Handle empty state gracefully
+        if len(self.vectors) == 0:
+            logger.info(
+                "VectorMemory initialized with empty store (expected on first run)"
+            )
+            self.cold_start_mode = True
+        else:
+            logger.info(
+                f"VectorMemory initialized with {len(self.vectors)} stored vectors"
+            )
+            self.cold_start_mode = False
 
     def get_embedding(self, text: str) -> Optional[np.ndarray]:
         """
@@ -155,7 +165,7 @@ class VectorMemory:
             List of tuples: (id, similarity_score, metadata)
         """
         if not self.vectors:
-            logger.warning("No vectors in store")
+            logger.debug("Vector store empty, returning no results (cold start mode)")
             return []
 
         # Validate top_k

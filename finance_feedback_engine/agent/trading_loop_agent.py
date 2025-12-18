@@ -109,6 +109,21 @@ class TradingLoopAgent:
         # Property for dashboard to track if stop was requested
         self.stop_requested = False
 
+        # Validate notification delivery path on startup
+        notification_valid, notification_errors = self._validate_notification_config()
+        if not notification_valid:
+            error_msg = (
+                "Cannot start agent in signal-only mode without valid notification delivery.\n"
+                f"Configuration errors: {', '.join(notification_errors)}\n"
+                "Please either:\n"
+                "1. Configure Telegram notifications (telegram.enabled=true, bot_token, chat_id)\n"
+                "2. Enable autonomous mode (autonomous.enabled=true)\n"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        logger.info("✓ Notification delivery validated: Telegram configured")
+
         # State machine handler map
         self.state_handlers = {
             AgentState.IDLE: self.handle_idle_state,
@@ -144,6 +159,47 @@ class TradingLoopAgent:
         # All requirements met
         return True
 
+    def _validate_notification_config(self) -> tuple[bool, list[str]]:
+        """
+        Validate notification delivery configuration on startup.
+
+        Returns:
+            (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Check if signal-only mode is enabled
+        autonomous_enabled = getattr(self.config, "autonomous", None)
+        if autonomous_enabled and hasattr(autonomous_enabled, "enabled"):
+            autonomous_enabled = autonomous_enabled.enabled
+        else:
+            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
+
+        if autonomous_enabled:
+            return True, []  # Autonomous mode doesn't need notifications
+
+        # Validate Telegram configuration
+        telegram_config = getattr(self.config, "telegram", None)
+        if not telegram_config:
+            errors.append("Telegram config missing")
+            return False, errors
+
+        telegram_enabled = telegram_config.get("enabled", False)
+        telegram_token = telegram_config.get("bot_token")
+        telegram_chat_id = telegram_config.get("chat_id")
+
+        if not telegram_enabled:
+            errors.append("Telegram not enabled")
+        if not telegram_token:
+            errors.append("Telegram bot_token missing")
+        if not telegram_chat_id:
+            errors.append("Telegram chat_id missing")
+
+        if errors:
+            return False, errors
+
+        return True, []
+
     async def _recover_existing_positions(self):
         """
         Recover existing open positions from the trading platform on startup.
@@ -169,8 +225,8 @@ class TradingLoopAgent:
         base_delay = 2.0
         for attempt in range(self._max_startup_retries):
             try:
-                # Query platform for current portfolio state
-                portfolio = self.trading_platform.get_portfolio_breakdown()
+                # Query platform for current portfolio state (use cached method from engine)
+                portfolio = self.engine.get_portfolio_breakdown()
 
                 # Extract positions based on platform type
                 positions = []
@@ -209,6 +265,12 @@ class TradingLoopAgent:
                             for pos in platform_data["positions"]:
                                 units = pos.get("units", 0)
                                 if units and float(units) != 0:
+                                    # Extract entry_price from Oanda position data
+                                    entry_price = pos.get("entry_price", 0)
+                                    if not entry_price:
+                                        # Fallback to current_price if available
+                                        entry_price = pos.get("current_price", 0)
+
                                     positions.append(
                                         {
                                             "platform": f"{platform_name}_forex",
@@ -217,8 +279,10 @@ class TradingLoopAgent:
                                             ),
                                             "side": pos.get("position_type", "UNKNOWN"),
                                             "size": abs(float(units)),
-                                            "entry_price": 0,  # Oanda doesn't provide avg entry in summary
-                                            "current_price": 0,
+                                            "entry_price": entry_price,
+                                            "current_price": pos.get(
+                                                "current_price", 0
+                                            ),
                                             "unrealized_pnl": pos.get(
                                                 "unrealized_pl", 0
                                             ),
@@ -251,14 +315,20 @@ class TradingLoopAgent:
                         for pos in portfolio["positions"]:
                             units = pos.get("units", 0)
                             if units and float(units) != 0:
+                                # Extract entry_price from Oanda position data
+                                entry_price = pos.get("entry_price", 0)
+                                if not entry_price:
+                                    # Fallback to current_price if available
+                                    entry_price = pos.get("current_price", 0)
+
                                 positions.append(
                                     {
                                         "platform": "oanda",
                                         "product_id": pos.get("instrument", "UNKNOWN"),
                                         "side": pos.get("position_type", "UNKNOWN"),
                                         "size": abs(float(units)),
-                                        "entry_price": 0,
-                                        "current_price": 0,
+                                        "entry_price": entry_price,
+                                        "current_price": pos.get("current_price", 0),
                                         "unrealized_pnl": pos.get("unrealized_pl", 0),
                                         "leverage": 1,
                                     }
@@ -1280,6 +1350,15 @@ class TradingLoopAgent:
         # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
             return True
+
+        # Re-validate notification config before proceeding to execution
+        notification_valid, errors = self._validate_notification_config()
+        if not notification_valid:
+            logger.error(
+                f"Notification delivery unavailable: {', '.join(errors)}. "
+                f"Cannot proceed with signal-only decision for {decision.get('asset_pair')}"
+            )
+            return False
 
         # If autonomous is disabled, check if we have Telegram configured for signal-only mode
         telegram_config = (

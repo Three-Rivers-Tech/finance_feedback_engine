@@ -1104,8 +1104,14 @@ Format response as a structured technical analysis demonstration.
         )
 
         # Calculate position sizing parameters
-        # Check configuration for signal_only_default setting - it's in the main config, not nested
-        signal_only_default = self.config.get("signal_only_default", False)
+        # Prefer decision_engine.signal_only_default (used across the codebase/tests),
+        # fall back to top-level for backward compatibility.
+        decision_cfg = self.config.get("decision_engine", {})
+        signal_only_default = bool(
+            decision_cfg.get(
+                "signal_only_default", self.config.get("signal_only_default", False)
+            )
+        )
         sizing_params = self._calculate_position_sizing_params(
             context=context,
             current_price=context["market_data"].get("close", 0),

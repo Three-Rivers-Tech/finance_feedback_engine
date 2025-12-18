@@ -375,6 +375,50 @@ logging:
   # Optional: Log file path (if omitted, logs to console only)
   # file: "logs/finance_engine.log"
 
+  # ============================================
+  # Extended Structured Logging Configuration
+  # ============================================
+  # Provides JSON-formatted logs with correlation IDs, PII redaction, and retention
+  structured:
+    enabled: true
+    format: json  # Options: "json" or "text"
+    correlation_ids: true
+    pii_redaction: true
+
+  # File output configuration
+  file:
+    enabled: true
+    base_path: "logs"
+    rotation:
+      max_bytes: 10485760  # 10MB
+      backup_count: 30
+
+    # Separate files by log level
+    handlers:
+      - name: "all"
+        level: "DEBUG"
+        filename: "ffe_all.log"
+      - name: "error"
+        level: "ERROR"
+        filename: "ffe_errors.log"
+      - name: "audit"
+        level: "INFO"
+        filename: "ffe_audit.log"
+
+  # Retention policies (days)
+  retention:
+    hot_tier: 7    # Keep in active log directory
+    warm_tier: 30  # Compress and move to archive
+    cold_tier: 365 # Final retention before deletion
+
+  # PII redaction patterns (regex)
+  # Customize these patterns to match your sensitive data formats
+  # Note: Patterns are applied by the PIIRedactionFilter in logging_config.py
+  pii_patterns: []
+  # Example custom patterns (uncomment and modify as needed):
+  # - pattern: 'custom_pattern_here'
+  #   replacement: '***REDACTED***'
+
 # ============================================
 # Trading Agent (Risk Gatekeeper)
 # ============================================

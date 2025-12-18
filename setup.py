@@ -4,19 +4,29 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
-# Read README
+try:  # Python 3.11+
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 fallback (tomli optional)
+    tomllib = None
+
+
+def load_metadata():
+    """Load project metadata from pyproject.toml to avoid duplicating dependency lists."""
+
+    pyproject_path = Path(__file__).parent / "pyproject.toml"
+    if tomllib and pyproject_path.exists():
+        data = tomllib.loads(pyproject_path.read_text())
+        project = data.get("project", {})
+        dependencies = project.get("dependencies", [])
+        optional = project.get("optional-dependencies", {})
+        return dependencies, optional
+    return [], {}
+
+
 readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text() if readme_file.exists() else ""
 
-# Read requirements
-requirements_file = Path(__file__).parent / "requirements.txt"
-requirements = []
-if requirements_file.exists():
-    requirements = [
-        line.strip()
-        for line in requirements_file.read_text().splitlines()
-        if line.strip() and not line.startswith("#")
-    ]
+install_requires, extras_require = load_metadata()
 
 setup(
     name="finance-feedback-engine",
@@ -27,8 +37,9 @@ setup(
     author="Three Rivers Tech",
     license="Apache License 2.0",
     packages=find_packages(),
-    install_requires=requirements,
-    python_requires=">=3.8",
+    install_requires=install_requires,
+    extras_require=extras_require,
+    python_requires=">=3.10",
     entry_points={
         "console_scripts": [
             "ffe=finance_feedback_engine.cli.main:cli",
@@ -39,10 +50,9 @@ setup(
         "Intended Audience :: Financial and Insurance Industry",
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Topic :: Office/Business :: Financial :: Investment",
     ],
     keywords="finance trading ai automation portfolio cryptocurrency forex",
