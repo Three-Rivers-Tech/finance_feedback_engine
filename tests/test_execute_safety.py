@@ -19,6 +19,7 @@ def make_config(storage_path: str = "data/decisions_test"):
     }
 
 
+@pytest.mark.external_service
 def test_invalid_decision_blocks_execution(tmp_path, monkeypatch):
     cfg = make_config(storage_path=str(tmp_path / "decisions"))
     engine = FinanceFeedbackEngine(cfg)

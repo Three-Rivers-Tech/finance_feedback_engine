@@ -11,75 +11,54 @@ from finance_feedback_engine.trading_platforms.coinbase_platform import (
 
 @pytest.fixture
 def mock_coinbase_client():
-    """Provides a mock Coinbase RESTClient."""
+    """Provides a mock Coinbase RESTClient using CDP API format."""
     client = MagicMock()
 
-    # Mock futures balance summary response
-    futures_summary_response = MagicMock()
-    type(futures_summary_response).balance_summary = PropertyMock(
-        return_value={
-            "total_usd_balance": {"value": "10000.0"},
-            "unrealized_pnl": {"value": "500.0"},
-            "daily_realized_pnl": {"value": "100.0"},
-            "futures_buying_power": {"value": "20000.0"},
-            "initial_margin": {"value": "2000.0"},
+    # Mock get_portfolios response (CDP API)
+    portfolios_response = MagicMock()
+    portfolios_response.portfolios = [
+        {"uuid": "test-portfolio-uuid", "name": "Default Portfolio"}
+    ]
+    client.get_portfolios.return_value = portfolios_response
+
+    # Mock get_portfolio_breakdown response (CDP API)
+    breakdown_response = {
+        "breakdown": {
+            "portfolio_balances": {
+                "total_futures_balance": {"value": "10000.0"},
+                "futures_unrealized_pnl": {"value": "400.0"},
+                "perp_unrealized_pnl": {"value": "100.0"},
+            },
+            "futures_positions": [
+                {
+                    "product_id": "BTC-USD-PERP",
+                    "side": "LONG",
+                    "number_of_contracts": "1.5",
+                    "avg_entry_price": "50000.0",
+                    "current_price": "51000.0",
+                    "unrealized_pnl": "750.0",
+                    "daily_realized_pnl": "50.0",
+                    "leverage": "10.0",
+                }
+            ],
+            "perp_positions": [],
+            "spot_positions": [
+                {
+                    "asset": "USD",
+                    "available_to_trade_fiat": "500.0",
+                },
+                {
+                    "asset": "USDC",
+                    "available_to_trade_fiat": "1500.0",
+                },
+                {
+                    "asset": "BTC",
+                    "available_to_trade_fiat": "0.0",  # Non-USD/USDC ignored
+                },
+            ],
         }
-    )
-    client.get_futures_balance_summary.return_value = futures_summary_response
-
-    # Mock futures positions response
-    futures_positions_response = MagicMock()
-    type(futures_positions_response).positions = PropertyMock(
-        return_value=[
-            {
-                "product_id": "BTC-USD-PERP",
-                "side": "LONG",
-                "number_of_contracts": "1.5",
-                "avg_entry_price": "50000.0",
-                "current_price": "51000.0",
-                "unrealized_pnl": "750.0",
-                "daily_realized_pnl": "50.0",
-                "leverage": "10.0",
-            }
-        ]
-    )
-    client.list_futures_positions.return_value = futures_positions_response
-
-    # Mock spot accounts response
-    spot_accounts_response = MagicMock()
-
-    # Create mock account objects with attributes instead of dict keys
-    usd_account = MagicMock()
-    type(usd_account).currency = PropertyMock(return_value="USD")
-    type(usd_account).id = PropertyMock(return_value="usd-account-id")
-    available_balance_usd = MagicMock()
-    type(available_balance_usd).value = PropertyMock(return_value="500.0")
-    type(usd_account).available_balance = PropertyMock(
-        return_value=available_balance_usd
-    )
-
-    usdc_account = MagicMock()
-    type(usdc_account).currency = PropertyMock(return_value="USDC")
-    type(usdc_account).id = PropertyMock(return_value="usdc-account-id")
-    available_balance_usdc = MagicMock()
-    type(available_balance_usdc).value = PropertyMock(return_value="1500.0")
-    type(usdc_account).available_balance = PropertyMock(
-        return_value=available_balance_usdc
-    )
-
-    btc_account = MagicMock()
-    type(btc_account).currency = PropertyMock(return_value="BTC")
-    type(btc_account).id = PropertyMock(return_value="btc-account-id")
-    available_balance_btc = MagicMock()
-    type(available_balance_btc).value = PropertyMock(return_value="0.1")
-    type(btc_account).available_balance = PropertyMock(
-        return_value=available_balance_btc
-    )
-
-    type(spot_accounts_response).accounts = PropertyMock(
-        return_value=[usd_account, usdc_account, btc_account]
-    )
-    client.get_accounts.return_value = spot_accounts_response
+    }
+    client.get_portfolio_breakdown.return_value = breakdown_response
 
     return client
 
@@ -94,6 +73,7 @@ def coinbase_platform(mock_coinbase_client):
     return platform
 
 
+@pytest.mark.external_service
 def test_get_portfolio_breakdown_total_value(coinbase_platform):
     """
     Tests that get_portfolio_breakdown correctly calculates total_value_usd.

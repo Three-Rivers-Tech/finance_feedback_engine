@@ -82,6 +82,7 @@ def mock_unified_platform(mock_coinbase_platform, mock_oanda_platform):
 # --- Tests for get_active_positions methods ---
 
 
+@pytest.mark.external_service
 def test_coinbase_get_active_positions_returns_expected_format(mock_coinbase_platform):
     """Test Coinbase get_active_positions returns data in expected format."""
     positions = mock_coinbase_platform.get_active_positions()

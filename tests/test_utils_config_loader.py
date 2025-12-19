@@ -8,6 +8,7 @@ import yaml
 from finance_feedback_engine.utils.config_loader import load_config
 
 
+@pytest.mark.external_service
 class TestConfigLoader:
     """Test suite for config loading functionality."""
 

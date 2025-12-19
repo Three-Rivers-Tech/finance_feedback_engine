@@ -1,3 +1,5 @@
+import pytest
+
 """Tests for utils.cost_tracker module."""
 
 from finance_feedback_engine.utils.cost_tracker import (
@@ -7,6 +9,7 @@ from finance_feedback_engine.utils.cost_tracker import (
 )
 
 
+@pytest.mark.external_service
 class TestCostTracker:
     """Test suite for CostTracker class."""
 

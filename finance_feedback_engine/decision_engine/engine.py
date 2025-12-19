@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import pytz
 
@@ -600,6 +600,69 @@ Format response as a structured technical analysis demonstration.
         """
         # Delegating to the AI manager
         return await self.ai_manager.query_ai(prompt, asset_pair, market_data)
+
+    def _resolve_veto_threshold(self, context: Dict[str, Any]) -> float:
+        """
+        Resolve the veto threshold using config defaults and adaptive memory context.
+        """
+        decision_cfg = self.config.get("decision_engine", {})
+        base_threshold = float(decision_cfg.get("veto_threshold", 0.6))
+
+        # Adaptive threshold from portfolio memory context (if provided)
+        memory_context = context.get("memory_context") or {}
+        if isinstance(memory_context, dict):
+            adaptive_threshold = memory_context.get("veto_threshold_recommendation")
+            if isinstance(adaptive_threshold, (int, float)):
+                base_threshold = adaptive_threshold
+
+        # Clamp to sane bounds
+        return max(0.1, min(0.9, base_threshold))
+
+    def _apply_veto_logic(
+        self, ai_response: Dict[str, Any], context: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+        """
+        Apply optional veto logic before returning the final AI response.
+
+        Veto metadata is added when the sentiment_veto feature flag is enabled and
+        the provider supplies either a boolean veto signal or a veto_score above
+        the configured/adaptive threshold.
+
+        Returns a tuple of (possibly adjusted response, veto_metadata or None).
+        """
+        features_cfg = self.config.get("features", {})
+        if not features_cfg.get("sentiment_veto"):
+            return ai_response, None
+
+        veto_score = ai_response.get("veto_score")
+        veto_flag = bool(ai_response.get("veto"))
+
+        if veto_score is None and not veto_flag:
+            return ai_response, None
+
+        threshold = self._resolve_veto_threshold(context)
+        applied = veto_flag or (
+            isinstance(veto_score, (int, float)) and veto_score >= threshold
+        )
+
+        veto_metadata = {
+            "applied": applied,
+            "score": veto_score,
+            "threshold": threshold,
+            "source": ai_response.get("veto_source", "sentiment"),
+            "reason": ai_response.get("veto_reason"),
+        }
+
+        if not applied:
+            return ai_response, veto_metadata
+
+        adjusted_response = dict(ai_response)
+        adjusted_response["action"] = "HOLD"
+        adjusted_response["confidence"] = 0
+        if not adjusted_response.get("reasoning"):
+            adjusted_response["reasoning"] = "Veto applied due to high risk signal"
+
+        return adjusted_response, veto_metadata
 
     async def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -1303,6 +1366,11 @@ Format response as a structured technical analysis demonstration.
         ai_response = await self._query_ai(
             prompt, asset_pair=asset_pair, market_data=market_data
         )
+
+        # Apply optional veto logic before final decision creation
+        ai_response, veto_metadata = self._apply_veto_logic(ai_response, context)
+        if veto_metadata:
+            ai_response["veto_metadata"] = veto_metadata
 
         # Validate AI response action to ensure it's one of the allowed values
         if ai_response.get("action") not in ["BUY", "SELL", "HOLD"]:
