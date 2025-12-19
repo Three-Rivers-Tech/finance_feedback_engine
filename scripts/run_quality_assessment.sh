@@ -78,7 +78,9 @@ echo ""
 
 echo "🧪 Step 6: Testing run-agent from clean environment..."
 echo "Creating temporary virtual environment..."
-TEMP_VENV=$(mktemp -d)/test_venv
+TEMP_DIR=$(mktemp -d)
+TEMP_VENV="$TEMP_DIR/test_venv"
+trap 'rm -rf "$TEMP_DIR"' EXIT
 python -m venv "$TEMP_VENV"
 source "$TEMP_VENV/bin/activate"
 
@@ -86,18 +88,23 @@ echo "Installing package..."
 pip install -q --upgrade pip
 pip install -q -e . > "$OUTPUT_DIR/clean_install.log" 2>&1 || true
 
-echo "Testing run-agent --help..."
-python main.py run-agent --help > "$OUTPUT_DIR/run_agent_help.txt" 2>&1 && echo "✅ run-agent --help works" || echo "❌ run-agent --help failed"
+echo "Testing run-agent --help via installed entry..."
+# Prefer installed console script; fallback to module invocation
+if command -v ffe >/dev/null 2>&1; then
+    ffe run-agent --help > "$OUTPUT_DIR/run_agent_help.txt" 2>&1 && echo "✅ run-agent --help works" || echo "❌ run-agent --help failed"
+else
+    python -m finance_feedback_engine.cli.main run-agent --help > "$OUTPUT_DIR/run_agent_help.txt" 2>&1 && echo "✅ run-agent --help works" || echo "❌ run-agent --help failed"
+fi
 
 deactivate
-rm -rf "$TEMP_VENV"
+rm -rf "$TEMP_DIR"
 echo ""
 
 echo "📋 Step 7: Checking for flaky tests..."
 echo "Running fast tests 3 times to detect flakes..."
 for i in 1 2 3; do
     echo "Run $i/3..."
-    pytest -m "not slow" -x --tb=line -q > "$OUTPUT_DIR/flaky_test_run_$i.txt" 2>&1 || true
+    pytest -m "not slow" --tb=line -q > "$OUTPUT_DIR/flaky_test_run_$i.txt" 2>&1 || true
 done
 
 echo "Comparing results..."

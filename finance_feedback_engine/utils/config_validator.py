@@ -285,7 +285,7 @@ class ConfigValidator:
         # Expected subsystem prefixes for hierarchical naming
         valid_prefixes = {
             "ALPHA_VANTAGE_",
-            "TRADING_PLATFORM",
+            "TRADING_PLATFORM_",
             "COINBASE_",
             "OANDA_",
             "DECISION_ENGINE_",
