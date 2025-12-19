@@ -1,3 +1,5 @@
+import pytest
+
 """Integration test for MockTradingPlatform with TradingLoopAgent."""
 
 from datetime import datetime, timezone
@@ -6,6 +8,7 @@ from finance_feedback_engine.trading_platforms.mock_platform import MockTradingP
 from finance_feedback_engine.trading_platforms.platform_factory import PlatformFactory
 
 
+@pytest.mark.external_service
 class TestMockPlatformIntegration:
     """Integration tests for MockTradingPlatform."""
 

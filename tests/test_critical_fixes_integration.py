@@ -30,6 +30,7 @@ from finance_feedback_engine.trading_platforms.unified_platform import (
 # ============================================================================
 
 
+@pytest.mark.external_service
 class TestAlphaVantageSessionManagement:
     """Test that Alpha Vantage provider maintains session correctly."""
 

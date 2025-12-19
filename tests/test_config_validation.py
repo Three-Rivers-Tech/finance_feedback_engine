@@ -22,6 +22,7 @@ from finance_feedback_engine.utils.config_validator import (
 )
 
 
+@pytest.mark.external_service
 class TestConfigValidator:
     """Test suite for ConfigValidator"""
 

@@ -27,6 +27,7 @@ def decision_engine():
     return DecisionEngine(config)
 
 
+@pytest.mark.external_service
 class TestDeterminePositionType:
     """Tests for _determine_position_type static method."""
 

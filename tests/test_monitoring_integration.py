@@ -35,6 +35,7 @@ async def mock_engine_with_monitoring():
 
 
 # --- Test 1: Monitoring Context Creation ---
+@pytest.mark.external_service
 def test_monitoring_context_creation(mock_engine_with_monitoring):
     """Test that MonitoringContextProvider can be instantiated properly."""
     engine = mock_engine_with_monitoring

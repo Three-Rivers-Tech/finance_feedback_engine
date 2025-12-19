@@ -30,6 +30,7 @@ async def mock_engine():
         pass
 
 
+@pytest.mark.external_service
 def test_engine_initialization(mock_engine):
     """Test that the engine initializes successfully."""
     assert mock_engine is not None

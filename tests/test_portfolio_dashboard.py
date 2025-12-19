@@ -1,3 +1,5 @@
+import pytest
+
 """Tests for dashboard.portfolio_dashboard module."""
 
 from unittest.mock import Mock, patch
@@ -8,6 +10,7 @@ from finance_feedback_engine.dashboard.portfolio_dashboard import (
 )
 
 
+@pytest.mark.external_service
 class TestPortfolioDashboardAggregator:
     """Test PortfolioDashboardAggregator class."""
 

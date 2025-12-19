@@ -20,6 +20,7 @@ def risk_gatekeeper():
     )
 
 
+@pytest.mark.external_service
 class TestRiskGatekeeperInitialization:
     """Tests for RiskGatekeeper initialization."""
 

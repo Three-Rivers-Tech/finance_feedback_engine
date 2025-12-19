@@ -252,5 +252,36 @@ class TestProviderPerformanceTracking:
         assert "local" in data["provider_performance"]
 
 
+class TestVetoMetrics:
+    """Test veto metric tracking and persistence helpers."""
+
+    def test_veto_metrics_updated_on_loss(self, memory_engine):
+        decision = {
+            "decision_id": "veto_1",
+            "asset_pair": "ETHUSD",
+            "action": "BUY",
+            "entry_price": 100.0,
+            "position_size": 1.0,
+            "confidence": 70,
+            "timestamp": "2024-12-04T10:00:00Z",
+            "veto_metadata": {
+                "applied": True,
+                "score": 0.75,
+                "threshold": 0.6,
+                "source": "sentiment",
+                "reason": "negative news",
+            },
+        }
+
+        outcome = memory_engine.record_trade_outcome(decision, exit_price=50.0)
+
+        stats = memory_engine.veto_metrics
+        assert stats["total"] == 1
+        assert stats["applied"] == 1
+        assert stats["correct"] == 1
+        assert outcome.veto_applied is True
+        assert outcome.veto_correct is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -56,6 +56,7 @@ def mock_candles():
     ]
 
 
+@pytest.mark.external_service
 class TestUnifiedDataProviderAggregation:
     """Tests for aggregate_all_timeframes method."""
 

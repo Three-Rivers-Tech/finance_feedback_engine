@@ -13,6 +13,8 @@ Tests:
 import logging
 import time
 
+import pytest
+
 from finance_feedback_engine.decision_engine.decision_validation import (
     validate_decision_comprehensive,
 )
@@ -30,6 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.external_service
 def test_retry_logic():
     """Test exponential backoff retry mechanism."""
     print("\n" + "=" * 60)

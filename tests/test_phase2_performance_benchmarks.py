@@ -25,6 +25,7 @@ def _ollama_available() -> bool:
     return shutil.which("ollama") is not None
 
 
+@pytest.mark.external_service
 class TestPortfolioCachingPerformance:
     """Test portfolio breakdown caching performance improvements."""
 

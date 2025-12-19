@@ -10,6 +10,7 @@ from finance_feedback_engine.trading_platforms.unified_platform import (
 )
 
 
+@pytest.mark.external_service
 class TestUnifiedPlatformRouting:
     """Test asset pair routing in UnifiedTradingPlatform."""
 

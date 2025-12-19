@@ -65,6 +65,7 @@ def coinbase_platform(coinbase_credentials):
 # =============================================================================
 
 
+@pytest.mark.external_service
 class TestCoinbaseConnectionErrors:
     """Tests for Coinbase platform connection error handling."""
 

@@ -7,6 +7,7 @@ import pytest
 from finance_feedback_engine.data_providers.mock_live_provider import MockLiveProvider
 
 
+@pytest.mark.external_service
 class TestMockLiveProvider:
     """Test suite for MockLiveProvider."""
 

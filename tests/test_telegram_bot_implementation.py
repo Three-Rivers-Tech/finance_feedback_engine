@@ -34,6 +34,7 @@ def sample_decision():
 
 
 @pytest.mark.asyncio
+@pytest.mark.external_service
 class TestTelegramBot:
     """Test suite for TelegramApprovalBot."""
 

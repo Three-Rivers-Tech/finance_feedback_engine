@@ -15,6 +15,7 @@ from finance_feedback_engine.pipelines.storage.delta_lake_manager import (
 )
 
 
+@pytest.mark.external_service
 class TestPipelineIntegration:
     """Integration tests for data pipeline modules."""
 

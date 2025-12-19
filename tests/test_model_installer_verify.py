@@ -2,6 +2,8 @@ import json
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from finance_feedback_engine.utils.model_installer import ModelInstaller
 
 
@@ -12,6 +14,7 @@ def _completed_proc(stdout: str = "", stderr: str = "", returncode: int = 0):
     return cp
 
 
+@pytest.mark.external_service
 def test_verify_model_success():
     mi = ModelInstaller(data_dir="data")
     # First call: ollama list --format json (returns empty)
