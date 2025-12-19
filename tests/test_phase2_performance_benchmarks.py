@@ -8,10 +8,21 @@ Tests validate that performance targets are met:
 - LLM connection reuse rate >95%
 """
 
+import shutil
 import time
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+
+
+def _ollama_available() -> bool:
+    """
+    Check if Ollama is available in the test environment.
+
+    Returns:
+        True if Ollama command is accessible, False otherwise.
+    """
+    return shutil.which("ollama") is not None
 
 
 class TestPortfolioCachingPerformance:
@@ -155,37 +166,41 @@ class TestDataProviderCachingPerformance:
 
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=True)
 
-        # Mock the get_historical_data method
-        with patch.object(
-            provider, "get_historical_data", new_callable=AsyncMock
-        ) as mock_hist:
-            mock_hist.return_value = [
-                {
-                    "date": "2024-01-01",
-                    "open": 100,
-                    "high": 105,
-                    "low": 95,
-                    "close": 102,
-                },
-                {
-                    "date": "2024-01-02",
-                    "open": 102,
-                    "high": 108,
-                    "low": 100,
-                    "close": 106,
-                },
-            ]
+        try:
+            # Mock the get_historical_data method
+            with patch.object(
+                provider, "get_historical_data", new_callable=AsyncMock
+            ) as mock_hist:
+                mock_hist.return_value = [
+                    {
+                        "date": "2024-01-01",
+                        "open": 100,
+                        "high": 105,
+                        "low": 95,
+                        "close": 102,
+                    },
+                    {
+                        "date": "2024-01-02",
+                        "open": 102,
+                        "high": 108,
+                        "low": 100,
+                        "close": 106,
+                    },
+                ]
 
-            # First call - cache miss
-            result1 = await provider.get_market_regime("BTCUSD")
-            assert mock_hist.call_count == 1
+                # First call - cache miss
+                result1 = await provider.get_market_regime("BTCUSD")
+                assert mock_hist.call_count == 1
 
-            # Second call - cache hit (within 300s TTL)
-            result2 = await provider.get_market_regime("BTCUSD")
-            assert mock_hist.call_count == 1  # No additional call
+                # Second call - cache hit (within 300s TTL)
+                result2 = await provider.get_market_regime("BTCUSD")
+                assert mock_hist.call_count == 1  # No additional call
 
-            # Verify results are consistent
-            assert result1 == result2
+                # Verify results are consistent
+                assert result1 == result2
+        finally:
+            # Ensure aiohttp ClientSession is properly closed
+            await provider.close()
 
     @pytest.mark.asyncio
     async def test_sentiment_caching(self):
@@ -196,24 +211,32 @@ class TestDataProviderCachingPerformance:
 
         provider = AlphaVantageProvider(api_key="test_key")
 
-        # Mock _async_request to avoid actual API calls
-        with patch.object(
-            provider, "_async_request", new_callable=AsyncMock
-        ) as mock_req:
-            mock_req.return_value = {"feed": []}
+        try:
+            # Mock _async_request to avoid actual API calls
+            with patch.object(
+                provider, "_async_request", new_callable=AsyncMock
+            ) as mock_req:
+                mock_req.return_value = {"feed": []}
 
-            # First call - cache miss
-            await provider.get_news_sentiment("BTCUSD")
-            assert mock_req.call_count == 1
+                # First call - cache miss
+                await provider.get_news_sentiment("BTCUSD")
+                assert mock_req.call_count == 1
 
-            # Second call - cache hit
-            await provider.get_news_sentiment("BTCUSD")
-            assert mock_req.call_count == 1  # No additional call
+                # Second call - cache hit
+                await provider.get_news_sentiment("BTCUSD")
+                assert mock_req.call_count == 1  # No additional call
+        finally:
+            # Ensure aiohttp ClientSession is properly closed
+            await provider.close()
 
 
 class TestLLMConnectionPooling:
     """Test LLM connection pooling performance."""
 
+    @pytest.mark.skipif(
+        not _ollama_available(),
+        reason="Ollama service not available in test environment",
+    )
     def test_singleton_pattern(self):
         """Verify LocalLLMProvider uses singleton pattern."""
         from finance_feedback_engine.decision_engine.local_llm_provider import (
@@ -232,6 +255,10 @@ class TestLLMConnectionPooling:
             # Verify they are the same instance (singleton)
             assert provider1 is provider2
 
+    @pytest.mark.skipif(
+        not _ollama_available(),
+        reason="Ollama service not available in test environment",
+    )
     def test_connection_health_check(self):
         """Verify LLM connection health check works."""
         from finance_feedback_engine.decision_engine.local_llm_provider import (
@@ -249,6 +276,10 @@ class TestLLMConnectionPooling:
 
             assert provider.check_connection_health() is True
 
+    @pytest.mark.skipif(
+        not _ollama_available(),
+        reason="Ollama service not available in test environment",
+    )
     def test_connection_stats(self):
         """Verify connection statistics are tracked."""
         from finance_feedback_engine.decision_engine.local_llm_provider import (

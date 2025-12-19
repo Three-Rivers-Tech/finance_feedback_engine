@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 # This fixture ensures all logging handlers are properly cleaned up after tests
 # to prevent "I/O operation on closed file" errors.
 
+
 @pytest.fixture(scope="session", autouse=True)
 def configure_test_logging():
     """
@@ -60,11 +61,12 @@ async def alpha_vantage_provider():
 
     Uses async context manager pattern for guaranteed cleanup.
     """
-    from finance_feedback_engine.data_providers.alpha_vantage_provider import AlphaVantageProvider
+    from finance_feedback_engine.data_providers.alpha_vantage_provider import (
+        AlphaVantageProvider,
+    )
 
     provider = AlphaVantageProvider(
-        api_key="test_api_key_12345",
-        is_backtest=True  # Allow mock data in tests
+        api_key="test_api_key_12345", is_backtest=True  # Allow mock data in tests
     )
 
     yield provider
@@ -82,7 +84,9 @@ def coinbase_provider():
     """
     Provides a Coinbase data provider (synchronous - no async cleanup needed).
     """
-    from finance_feedback_engine.data_providers.coinbase_data import CoinbaseDataProvider
+    from finance_feedback_engine.data_providers.coinbase_data import (
+        CoinbaseDataProvider,
+    )
 
     # CoinbaseDataProvider uses requests (sync), not aiohttp
     provider = CoinbaseDataProvider(
@@ -106,7 +110,7 @@ def oanda_provider():
         credentials={
             "access_token": "test_oanda_token",
             "account_id": "test_account_123",
-            "environment": "practice"
+            "environment": "practice",
         }
     )
 
@@ -123,20 +127,16 @@ async def unified_data_provider():
     Uses async context manager pattern and ensures all child provider
     sessions are properly closed.
     """
-    from finance_feedback_engine.data_providers.unified_data_provider import UnifiedDataProvider
+    from finance_feedback_engine.data_providers.unified_data_provider import (
+        UnifiedDataProvider,
+    )
 
     config = {
         "alpha_vantage_api_key": "test_av_key",
         "platform_credentials": {
-            "coinbase": {
-                "api_key": "test_cb_key",
-                "api_secret": "test_cb_secret"
-            },
-            "oanda": {
-                "api_key": "test_oanda_key",
-                "account_id": "test_account"
-            }
-        }
+            "coinbase": {"api_key": "test_cb_key", "api_secret": "test_cb_secret"},
+            "oanda": {"api_key": "test_oanda_key", "account_id": "test_account"},
+        },
     }
 
     provider = UnifiedDataProvider(config=config)
@@ -145,7 +145,9 @@ async def unified_data_provider():
 
     # Cleanup: Close all provider sessions with error handling
     try:
-        if hasattr(provider, 'alpha_vantage') and hasattr(provider.alpha_vantage, 'close'):
+        if hasattr(provider, "alpha_vantage") and hasattr(
+            provider.alpha_vantage, "close"
+        ):
             await provider.alpha_vantage.close()
     except Exception:
         pass
