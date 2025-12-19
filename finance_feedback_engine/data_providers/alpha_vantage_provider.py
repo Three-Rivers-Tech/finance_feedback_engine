@@ -154,11 +154,16 @@ class AlphaVantageProvider:
     def __del__(self):
         """Cleanup on garbage collection - warn if session not closed."""
         if self.session and self._owned_session:
-            # Cannot await in __del__, but we can warn
-            logger.warning(
-                "AlphaVantageProvider session not properly closed. "
-                "Use 'await provider.close()' or 'async with provider:' pattern."
-            )
+            try:
+                if not self.session.closed:
+                    # Cannot await in __del__, but we can warn
+                    logger.warning(
+                        "AlphaVantageProvider session not properly closed. "
+                        "Use 'await provider.close()' or 'async with provider:' pattern."
+                    )
+            except Exception:
+                # Logging may be shut down during interpreter exit; ignore
+                pass
         return False
 
     async def _async_request(
