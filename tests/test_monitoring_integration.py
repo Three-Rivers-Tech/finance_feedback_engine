@@ -21,6 +21,8 @@ async def mock_engine_with_monitoring():
     """Fixture for an engine initialized with a mock test config."""
     with open("config/config.test.mock.yaml", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+    # Force backtest/testing mode so the AlphaVantage provider uses mock data
+    config["is_backtest"] = True
     engine = FinanceFeedbackEngine(config)
 
     yield engine
@@ -101,8 +103,10 @@ def test_decision_generation_with_monitoring(mock_engine_with_monitoring):
     market_data = asyncio.run(engine.data_provider.get_market_data("BTCUSD"))
     balance = engine.get_balance()
 
-    decision = engine.decision_engine.generate_decision(
-        asset_pair="BTCUSD", market_data=market_data, balance=balance
+    decision = asyncio.run(
+        engine.decision_engine.generate_decision(
+            asset_pair="BTCUSD", market_data=market_data, balance=balance
+        )
     )
 
     assert isinstance(decision, dict), "Decision should be a dictionary"

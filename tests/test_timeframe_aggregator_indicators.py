@@ -1,8 +1,15 @@
 """Tests for TimeframeAggregator indicator calculations."""
 
+import sys
 from unittest.mock import Mock
 
 import pytest
+
+# Skip entire test module if pandas_ta is not available
+pandas_ta = pytest.importorskip(
+    "pandas_ta",
+    reason="pandas_ta not installed in test environment",
+)
 
 from finance_feedback_engine.data_providers.timeframe_aggregator import (
     TimeframeAggregator,
