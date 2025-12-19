@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 # Target CLI group
@@ -22,6 +23,7 @@ def _mock_engine_for_analyze():
     return engine
 
 
+@pytest.mark.external_service
 def test_analyze_command_default_and_with_provider():
     runner = CliRunner()
 

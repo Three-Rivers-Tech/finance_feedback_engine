@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 
+@pytest.mark.external_service
 class TestAlphaVantageProvider:
     """Test AlphaVantageProvider functionality."""
 
@@ -16,7 +17,7 @@ class TestAlphaVantageProvider:
             AlphaVantageProvider,
         )
 
-        provider_instance = AlphaVantageProvider(api_key="test_key")
+        provider_instance = AlphaVantageProvider(api_key="test_key", is_backtest=True)
 
         yield provider_instance
 
@@ -31,8 +32,9 @@ class TestAlphaVantageProvider:
         assert provider.api_key == "test_key"
         assert hasattr(provider, "circuit_breaker")
 
+    @pytest.mark.asyncio
     @patch("requests.get")
-    def test_get_market_data_success(self, mock_get, provider):
+    async def test_get_market_data_success(self, mock_get, provider):
         """Test successful market data retrieval."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -49,15 +51,16 @@ class TestAlphaVantageProvider:
         }
         mock_get.return_value = mock_response
 
-        data = asyncio.run(provider.get_market_data("AAPL"))
+        data = await provider.get_market_data("AAPL")
 
         assert data is not None
         assert "open" in data
         assert "close" in data
         assert float(data["close"]) == 103.00
 
+    @pytest.mark.asyncio
     @patch("requests.get")
-    def test_get_market_data_rate_limit(self, mock_get, provider):
+    async def test_get_market_data_rate_limit(self, mock_get, provider):
         """Test rate limiting handling."""
         mock_response = Mock()
         mock_response.status_code = 200
@@ -65,25 +68,27 @@ class TestAlphaVantageProvider:
         mock_get.return_value = mock_response
 
         with pytest.raises(Exception):
-            asyncio.run(provider.get_market_data("AAPL"))
+            await provider.get_market_data("AAPL")
 
+    @pytest.mark.asyncio
     @patch("requests.get")
-    def test_circuit_breaker_opens_on_failures(self, mock_get, provider):
+    async def test_circuit_breaker_opens_on_failures(self, mock_get, provider):
         """Test circuit breaker opens after repeated failures."""
         mock_get.side_effect = Exception("API error")
 
         # Trigger multiple failures
         for _ in range(5):
             try:
-                asyncio.run(provider.get_market_data("AAPL"))
+                await provider.get_market_data("AAPL")
             except Exception:
                 pass
 
         # Circuit breaker should be open
         assert provider.circuit_breaker.state.name in ["OPEN", "HALF_OPEN"]
 
+    @pytest.mark.asyncio
     @patch("requests.get")
-    def test_get_comprehensive_market_data(self, mock_get, provider):
+    async def test_get_comprehensive_market_data(self, mock_get, provider):
         """Test comprehensive data aggregation."""
         # Mock multiple API responses
         mock_response_market = Mock()
@@ -102,7 +107,7 @@ class TestAlphaVantageProvider:
 
         mock_get.return_value = mock_response_market
 
-        data = asyncio.run(provider.get_comprehensive_market_data("AAPL"))
+        data = await provider.get_comprehensive_market_data("AAPL")
 
         assert data is not None
         # Check for either market_data key or direct price keys

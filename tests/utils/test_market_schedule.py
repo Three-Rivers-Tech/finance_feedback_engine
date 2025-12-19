@@ -1,5 +1,6 @@
 import datetime as dt
 
+import pytest
 import pytz
 
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
@@ -14,6 +15,7 @@ def _to_unix(utc_dt: dt.datetime) -> int:
     return int(utc_dt.timestamp())
 
 
+@pytest.mark.external_service
 def test_forex_friday_boundary_stays_open():
     open_dt = _to_utc(dt.datetime(2024, 5, 10, 16, 59), MarketSchedule.NY_TZ)
     status_open = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=open_dt)

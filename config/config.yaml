@@ -93,6 +93,36 @@ providers:
 # - View aggregated portfolio: python main.py portfolio (uses dashboard aggregator)
 # - Balances shown separately per platform in 'balance' command
 
+# ============================================
+# Feature Flags (Incremental Rollout)
+# ============================================
+# CRITICAL: All new features start as FALSE (disabled by default)
+# Enable features one at a time after thorough testing
+# See TDD_WORKFLOW.md for rollout protocol
+features:
+  # Phase 1: Quick Wins (Week 1)
+  enhanced_slippage_model: false      # Realistic slippage with market hours & volume impact
+  thompson_sampling_weights: false    # Auto-optimize ensemble weights via Thompson Sampling
+  optuna_hyperparameter_search: false # Bayesian hyperparameter grid search with backtester
+
+  # Phase 2: Medium-Term (Weeks 2-4)
+  sentiment_veto: false               # Multi-LLM sentiment validation system
+  paper_trading_mode: false           # Live data, simulated execution
+  visual_reports: false               # Plotly/Matplotlib backtest visualizations
+
+  # Phase 3: Advanced ML (Weeks 5-10)
+  rl_agent: false                     # Reinforcement Learning (PPO) decision agent
+  multi_agent_system: false           # Specialized agents (technical/fundamental/sentiment/risk/execution)
+
+  # Phase 4: Infrastructure (Weeks 11-12)
+  parallel_backtesting: false         # Multi-process hyperparameter optimization
+  limit_stop_orders: false            # Advanced order types beyond market orders
+
+# Backtesting Configuration (Enhanced Slippage Feature)
+backtesting:
+  slippage_model: "basic"  # Options: "basic" (legacy 1bp fixed) or "realistic" (tiered with liquidity)
+  fee_model: "simple"      # Options: "simple" (0.1% flat) or "tiered" (maker/taker differentiation)
+
 # Decision Engine Configuration
 decision_engine:
   # AI Provider Options:
@@ -117,6 +147,9 @@ decision_engine:
   # Decision confidence threshold (0.0 - 1.0)
   # Only execute trades above this confidence level
   decision_threshold: 0.7
+
+  # Veto configuration (used when features.sentiment_veto is enabled)
+  veto_threshold: 0.6
 
   # Custom prompt template (optional)
   # prompt_template: "path/to/custom_prompt.txt"

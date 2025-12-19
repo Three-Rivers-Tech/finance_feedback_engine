@@ -34,6 +34,7 @@ def mock_alpha_vantage():
         yield mock
 
 
+@pytest.mark.external_service
 class TestHistoricalDataProvider:
     """Test suite for HistoricalDataProvider."""
 

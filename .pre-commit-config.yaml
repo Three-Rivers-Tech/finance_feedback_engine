@@ -23,12 +23,24 @@ repos:
       - id: mypy
         additional_dependencies: [types-requests, types-pyyaml]
         args: ["--ignore-missing-imports"]
+        stages: [pre-commit]
 
   - repo: local
     hooks:
-      - id: pytest-check
-        name: pytest-check
-        entry: ./.venv/bin/pytest tests/monitoring/test_process_monitor.py tests/monitoring/test_logging_config.py -q --ignore=tests/test_timeframe_aggregator_indicators.py
+      - id: pytest-fast
+        name: pytest-fast (unit tests, no external services)
+        entry: ./.venv/bin/pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=70
         language: system
         pass_filenames: false
         always_run: true
+        stages: [pre-commit]
+        # Optional: bypass with SKIP=pytest-fast (see PRE_COMMIT_BYPASS_LOG.md)
+
+      - id: log-bypass
+        name: log-bypass (track SKIP=pre-commit usage)
+        entry: python scripts/log_bypass_to_github.py
+        language: system
+        pass_filenames: false
+        always_run: false
+        stages: [pre-commit]
+        # Only runs if SKIP env var was used for specific hooks

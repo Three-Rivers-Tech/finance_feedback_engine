@@ -15,6 +15,7 @@ from finance_feedback_engine.cli.commands.trading import balance, execute
 from finance_feedback_engine.cli.main import cli, dashboard, positions, status
 
 
+@pytest.mark.external_service
 class TestCLISmoke:
     """Smoke tests for CLI commands to ensure they don't crash."""
 

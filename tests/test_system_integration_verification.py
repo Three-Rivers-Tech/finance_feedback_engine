@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 
+@pytest.mark.external_service
 class TestTelegramBotIntegration:
     """Verify Telegram bot integration loop is closed."""
 

@@ -59,6 +59,14 @@ class TradeOutcome:
     hit_stop_loss: bool = False
     hit_take_profit: bool = False
 
+    # Veto metadata
+    veto_applied: bool = False
+    veto_score: Optional[float] = None
+    veto_threshold: Optional[float] = None
+    veto_source: Optional[str] = None
+    veto_reason: Optional[str] = None
+    veto_correct: Optional[bool] = None
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
@@ -164,6 +172,9 @@ class PortfolioMemoryEngine:
             }
         )
 
+        # Veto performance tracking
+        self.veto_metrics: Dict[str, Any] = self._init_veto_metrics()
+
         # Load existing memory
         self._load_memory()
 
@@ -178,6 +189,18 @@ class PortfolioMemoryEngine:
     # ===================================================================
     # Trade Outcome Recording
     # ===================================================================
+
+    def _init_veto_metrics(self) -> Dict[str, Any]:
+        """Create default veto metrics structure."""
+        return {
+            "total": 0,
+            "applied": 0,
+            "correct": 0,
+            "incorrect": 0,
+            "by_source": {},
+            "last_score": None,
+            "last_threshold": None,
+        }
 
     def record_trade_outcome(
         self,
@@ -225,6 +248,14 @@ class PortfolioMemoryEngine:
         ensemble_providers = ensemble_metadata.get("providers_used")
         confidence = decision.get("confidence", 50)
 
+        # Veto metadata (optional)
+        veto_metadata = decision.get("veto_metadata", {})
+        veto_applied = bool(veto_metadata.get("applied", False))
+        veto_score = veto_metadata.get("score")
+        veto_threshold = veto_metadata.get("threshold")
+        veto_source = veto_metadata.get("source")
+        veto_reason = veto_metadata.get("reason")
+
         # Market context
         market_data = decision.get("market_data", {})
         sentiment_data = market_data.get("sentiment", {})
@@ -259,6 +290,8 @@ class PortfolioMemoryEngine:
             holding_hours = None
 
         # Create outcome record
+        was_profitable = pnl > 0
+        veto_correct = self._evaluate_veto_outcome(veto_applied, was_profitable)
         outcome = TradeOutcome(
             decision_id=decision_id,
             asset_pair=asset_pair,
@@ -277,9 +310,15 @@ class PortfolioMemoryEngine:
             market_sentiment=market_sentiment,
             volatility=volatility,
             price_trend=price_trend,
-            was_profitable=pnl > 0,
+            was_profitable=was_profitable,
             hit_stop_loss=hit_stop_loss,
             hit_take_profit=hit_take_profit,
+            veto_applied=veto_applied,
+            veto_score=veto_score,
+            veto_threshold=veto_threshold,
+            veto_source=veto_source,
+            veto_reason=veto_reason,
+            veto_correct=veto_correct,
         )
 
         # Only update memory state if not in read-only mode
@@ -289,6 +328,10 @@ class PortfolioMemoryEngine:
 
             # Update provider performance
             self._update_provider_performance(outcome, decision)
+
+            # Update veto performance metrics
+            if veto_metadata:
+                self._update_veto_metrics(veto_metadata, veto_correct)
 
             # Add to experience buffer
             self.experience_buffer.append(outcome)
@@ -320,6 +363,10 @@ class PortfolioMemoryEngine:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
         # Prepare data for serialization
+        by_source = {
+            src: dict(stats)
+            for src, stats in self.veto_metrics.get("by_source", {}).items()
+        }
         data = {
             "version": "1.0",
             "saved_at": datetime.now().isoformat(),
@@ -328,6 +375,10 @@ class PortfolioMemoryEngine:
             "experience_buffer": [
                 outcome.to_dict() for outcome in self.experience_buffer
             ],
+            "veto_metrics": {
+                **self.veto_metrics,
+                "by_source": by_source,
+            },
         }
 
         # Atomic write: write to temp file, then rename
@@ -397,6 +448,12 @@ class PortfolioMemoryEngine:
 
             # Restore provider performance
             instance.provider_performance = data.get("provider_performance", {})
+
+            # Restore veto metrics (backward compatible)
+            veto_metrics = data.get("veto_metrics") or instance._init_veto_metrics()
+            if "by_source" not in veto_metrics:
+                veto_metrics["by_source"] = {}
+            instance.veto_metrics = veto_metrics
 
             # Restore experience buffer
             for exp_dict in data.get("experience_buffer", []):
@@ -471,6 +528,125 @@ class PortfolioMemoryEngine:
                 if outcome.was_profitable:
                     strat_stats["winning_trades"] += 1
                 strat_stats["total_pnl"] += outcome.realized_pnl or 0
+
+        # Trigger Thompson Sampling weight update callback if registered
+        self._trigger_thompson_sampling_update(outcome, decision)
+
+    def _trigger_thompson_sampling_update(
+        self, outcome: TradeOutcome, decision: Dict[str, Any]
+    ) -> None:
+        """
+        Trigger Thompson Sampling weight optimizer update if registered.
+
+        This is called after recording trade outcomes to update provider
+        weights based on the outcome (win/loss).
+
+        The callback is set by the engine when Thompson Sampling is enabled.
+
+        Args:
+            outcome: The trade outcome that was just recorded
+            decision: The original decision dict
+        """
+        callback = getattr(self, "_thompson_sampling_callback", None)
+        if callback is None:
+            return
+
+        try:
+            # Determine which provider to credit
+            ensemble_metadata = decision.get("ensemble_metadata", {})
+            provider_decisions = ensemble_metadata.get("provider_decisions", {})
+
+            # Get market regime for regime-aware updates
+            market_data = decision.get("market_data", {})
+            regime = market_data.get("regime", "trending")
+
+            # Update weights for each ensemble provider based on whether
+            # their individual decision matched the final action and outcome
+            if outcome.ensemble_providers:
+                for provider in outcome.ensemble_providers:
+                    provider_decision = provider_decisions.get(provider, {})
+                    provider_action = provider_decision.get("action")
+
+                    # Provider "wins" if its action matched final action and trade was profitable
+                    # OR if its action differed and trade was unprofitable (it was right to disagree)
+                    final_action = outcome.action
+                    trade_won = outcome.was_profitable
+
+                    if provider_action == final_action:
+                        # Provider agreed with ensemble, outcome determines win/loss
+                        provider_won = trade_won
+                    else:
+                        # Provider disagreed - it was "right" if trade was unprofitable
+                        provider_won = not trade_won
+
+                    callback(provider=provider, won=provider_won, regime=regime)
+
+            # Also update for primary provider if not ensemble
+            elif outcome.ai_provider and outcome.ai_provider != "ensemble":
+                callback(
+                    provider=outcome.ai_provider,
+                    won=outcome.was_profitable,
+                    regime=regime,
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to trigger Thompson Sampling update: {e}")
+
+    @staticmethod
+    def _evaluate_veto_outcome(
+        veto_applied: bool, was_profitable: Optional[bool]
+    ) -> Optional[bool]:
+        """
+        Determine whether a veto decision was correct based on trade outcome.
+
+        - If veto applied, it is correct when the trade would have been unprofitable.
+        - If veto not applied, it is correct when the trade was profitable.
+        """
+        if was_profitable is None:
+            return None
+        return (not was_profitable) if veto_applied else bool(was_profitable)
+
+    def _update_veto_metrics(
+        self, veto_metadata: Dict[str, Any], veto_correct: Optional[bool]
+    ) -> None:
+        """Update veto performance counters for adaptive tuning."""
+        stats = self.veto_metrics
+        stats["total"] += 1
+        if veto_metadata.get("applied"):
+            stats["applied"] += 1
+        if veto_correct is True:
+            stats["correct"] += 1
+        elif veto_correct is False:
+            stats["incorrect"] += 1
+
+        stats["last_score"] = veto_metadata.get("score")
+        stats["last_threshold"] = veto_metadata.get("threshold")
+
+        source = veto_metadata.get("source", "unknown")
+        source_stats = stats["by_source"].setdefault(
+            source,
+            {"total": 0, "applied": 0, "correct": 0, "incorrect": 0},
+        )
+        source_stats["total"] += 1
+        if veto_metadata.get("applied"):
+            source_stats["applied"] += 1
+        if veto_correct is True:
+            source_stats["correct"] += 1
+        elif veto_correct is False:
+            source_stats["incorrect"] += 1
+
+    def register_thompson_sampling_callback(self, callback: callable) -> None:
+        """
+        Register a callback function for Thompson Sampling weight updates.
+
+        The callback will be called after each trade outcome is recorded
+        with (provider, won, regime) arguments.
+
+        Args:
+            callback: Function with signature (provider: str, won: bool, regime: str) -> None
+        """
+        self._thompson_sampling_callback = callback
+        logger.info("Thompson Sampling callback registered with portfolio memory")
 
     def _update_regime_performance(self, outcome: TradeOutcome) -> None:
         """Track performance in different market regimes."""
@@ -662,6 +838,26 @@ class PortfolioMemoryEngine:
                     }
 
         return stats
+
+    def get_veto_threshold_recommendation(self, base_threshold: float = 0.6) -> float:
+        """Return an adaptive veto threshold based on historical accuracy."""
+        stats = self.veto_metrics
+        total = stats.get("total", 0)
+        if total < 5:
+            return base_threshold
+
+        correct = stats.get("correct", 0)
+        accuracy = correct / total if total > 0 else 0
+
+        # Simple banded adjustment: boost threshold when accuracy is low, relax when high
+        if accuracy >= 0.6:
+            adjusted = base_threshold - 0.05
+        elif accuracy <= 0.4:
+            adjusted = base_threshold + 0.05
+        else:
+            adjusted = base_threshold
+
+        return float(max(0.1, min(0.9, adjusted)))
 
     def _calculate_max_drawdown(self, equity_curve: List[float]) -> float:
         """Calculate maximum drawdown from equity curve."""
@@ -1003,6 +1199,11 @@ class PortfolioMemoryEngine:
             "current_streak": {"type": streak_type, "count": streak_count},
             "long_term_performance": long_term_performance,
         }
+
+        context["veto_metrics"] = dict(self.veto_metrics)
+        context["veto_threshold_recommendation"] = (
+            self.get_veto_threshold_recommendation()
+        )
 
         # Add asset-specific context
         if asset_pair:

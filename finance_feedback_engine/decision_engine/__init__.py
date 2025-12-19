@@ -5,6 +5,7 @@ from .decision_validator import DecisionValidator
 from .engine import DecisionEngine
 from .market_analysis import MarketAnalysisContext
 from .position_sizing import PositionSizingCalculator
+from .thompson_sampling import ThompsonSamplingWeightOptimizer
 
 __all__ = [
     "DecisionEngine",
@@ -12,4 +13,5 @@ __all__ = [
     "MarketAnalysisContext",
     "DecisionValidator",
     "PositionSizingCalculator",
+    "ThompsonSamplingWeightOptimizer",
 ]
