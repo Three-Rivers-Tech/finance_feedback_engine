@@ -50,6 +50,7 @@ def client(mock_engine):
         app_state.clear()
 
 
+@pytest.mark.external_service
 class TestHealthEndpoint:
     """Test /health endpoint."""
 

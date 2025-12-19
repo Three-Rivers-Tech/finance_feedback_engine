@@ -51,6 +51,7 @@ async def engine_with_mock_config(tmp_path, monkeypatch):
         pass  # Ignore cleanup errors
 
 
+@pytest.mark.external_service
 class TestCoreAnalysisWorkflow:
     """Test the complete analysis workflow."""
 

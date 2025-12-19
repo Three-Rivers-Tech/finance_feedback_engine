@@ -155,6 +155,18 @@ class EnsembleDecisionManager:
         self.meta_learner = self.voting_strategies.meta_learner
         self.meta_feature_scaler = self.voting_strategies.meta_feature_scaler
 
+        # Initialize Thompson Sampling weight optimizer if feature enabled
+        self.weight_optimizer = None
+        if self._is_feature_enabled("thompson_sampling_weights"):
+            from .thompson_sampling import ThompsonSamplingWeightOptimizer
+
+            self.weight_optimizer = ThompsonSamplingWeightOptimizer(
+                providers=self.enabled_providers
+            )
+            logger.info(
+                "Thompson Sampling weight optimizer enabled for dynamic weight adaptation"
+            )
+
         logger.info(
             f"Local-First Ensemble initialized. Target Local Dominance: {self.local_dominance_target:.0%}"
         )
@@ -180,6 +192,19 @@ class EnsembleDecisionManager:
         """
         name_lower = name.lower()
         return any(keyword.lower() in name_lower for keyword in self.local_keywords)
+
+    def _is_feature_enabled(self, feature_name: str) -> bool:
+        """
+        Check if a feature flag is enabled in config.
+
+        Args:
+            feature_name: Name of the feature flag to check
+
+        Returns:
+            True if the feature is enabled, False otherwise
+        """
+        features = self.config.get("features", {})
+        return features.get(feature_name, False)
 
     def _calculate_robust_weights(
         self, active_providers: List[str]

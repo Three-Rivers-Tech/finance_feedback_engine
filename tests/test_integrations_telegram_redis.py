@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 
+@pytest.mark.external_service
 class TestTelegramApprovalBot:
     """Test TelegramApprovalBot functionality."""
 

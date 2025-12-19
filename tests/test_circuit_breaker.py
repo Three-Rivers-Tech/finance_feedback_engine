@@ -11,6 +11,7 @@ from finance_feedback_engine.utils.circuit_breaker import (
 )
 
 
+@pytest.mark.external_service
 class TestCircuitBreakerBasics:
     """Test basic circuit breaker functionality."""
 

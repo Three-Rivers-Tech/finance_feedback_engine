@@ -1,154 +1,418 @@
-# Testing Gate Implementation
+# Testing Gate Implementation — Pre-Commit & CI Integration
+
+**Last Updated:** December 19, 2025  
+**Status:** 🟢 Active — Fast gate in pre-commit, full CI validation with external-service test separation
 
 ## Overview
 
-This document outlines the testing gate implementation to prevent regressions in the Finance Feedback Engine repository. The testing gate ensures that all tests pass before allowing commits or merging code to the main branch.
+This document describes the **progressive testing gate** strategy designed to:
+- ✅ Block regressions on every commit (pre-commit)
+- ✅ Prevent external service dependencies from blocking CI (ollama, redis, docker, telegram)
+- ✅ Enforce type safety and code quality (mypy hard gate)
+- ✅ Track coverage progression toward 70% target with TODO badge
+- ✅ Allow safe emergency bypasses with automatic accountability logging
 
-## Components
+### Key Design Principles
 
-### 1. Pre-commit Hook
+1. **Fast Pre-Commit Gate**: ~30s execution (unit tests only, no external services)
+2. **Comprehensive CI**: Full test coverage except external services (runs in parallel CI container)
+3. **Type Safety**: Hard mypy enforcement (but allow `# type: ignore` for edge cases)
+4. **Coverage Visibility**: Log subsystem metrics, add badge when ≥70%
+5. **Safe Bypasses**: Document all SKIP=pre-commit events with 24-hour fix deadline
 
-The testing gate is enforced through a pre-commit hook that runs all tests before allowing a commit to proceed. This prevents faulty code from entering the repository history.
+---
 
-#### Configuration
+## Architecture
 
-The pre-commit hook is configured in `.pre-commit-config.yaml` with the following test execution hook:
+### Pre-Commit Gates (Local Developer Workflow)
 
-```yaml
-- repo: local
-  hooks:
-    - id: run-tests
-      name: Run all tests
-      entry: bash -c 'python -m pytest -m "not slow"'
-      language: system
-      pass_filenames: false
-      verbose: true
-```
+**Enforced on every `git commit`:**
 
-#### Installation
+| Hook | Command | Time | Failure Mode |
+|------|---------|------|--------------|
+| **Black** | Format check | ~2s | Block (fix: `black .`) |
+| **isort** | Import sort check | ~1s | Block (fix: `isort .`) |
+| **Flake8** | Linting | ~3s | Block (fix reported) |
+| **mypy** | Type checking | ~5s | Block (allow `# type: ignore` on edge cases) |
+| **pytest-fast** | Fast unit tests (skip slow + external_service) | ~20s | Block (fix tests) |
 
-To install the pre-commit hooks with the testing gate:
+**Total pre-commit time: ~30 seconds**
+
+### CI Gates (GitHub Actions)
+
+**Enforced on PR + push to main:**
+
+1. **Lint Job** (~5s)
+   - Black, Flake8, isort checks
+   - Fails PR if formatting/imports inconsistent
+
+2. **Test Job** (~60s)
+   - Runs: `pytest -m "not external_service"`
+   - Generates: HTML coverage report
+   - Logs: Coverage summary with TODO badge for 70%+ target
+   - Skips: Tests marked `@pytest.mark.external_service` (ollama, redis, docker, telegram, backtesting, data providers)
+
+3. **Coverage Job** (~5s)
+   - Uploads coverage XML to Codecov
+   - Non-blocking (fail_ci_if_error: false)
+
+---
+
+## Test Categorization
+
+### Fast Tests (Pre-Commit + CI)
+These run in both pre-commit and CI:
+- Unit tests for core logic (decisions, ensemble, risk)
+- Mock-based platform tests
+- Configuration validation
+- CLI commands (mock mode)
+- Basic integration tests
+
+**Count**: ~43 test files (clean tests)  
+**Markers**: No special marker needed
+
+### Slow Tests (Skip Pre-Commit, Run in Full CI)
+These skip pre-commit but may run in extended CI:
+- Performance benchmarks
+- Extensive backtesting simulations
+- Monte Carlo analysis
+
+**Markers**: `@pytest.mark.slow`  
+**Pre-commit**: `pytest -m "not slow and not external_service"`
+
+### External-Service Tests (Skip All Gated Runs)
+These require external dependencies and skip all automated gating:
+- **Ollama**: LLM model inference tests
+- **Redis**: Telegram approval queue tests
+- **Docker**: Container platform tests
+- **Telegram**: Bot integration tests  
+- **ngrok**: Tunnel integration tests
+- **Alpha Vantage**: Live API provider tests
+- **Coinbase**: Live exchange API tests
+- **Oanda**: Live forex API tests
+- **Subprocess**: Process monitoring tests
+- **Backtesting**: Historical data & walk-forward analysis
+
+**Markers**: `@pytest.mark.external_service`  
+**Pre-commit**: Skipped  
+**CI (default)**: Skipped  
+**Manual runs**: `pytest -m "external_service"` (for nightly/debug)
+
+---
+
+## External-Service Test List
+
+**46 test files marked `@pytest.mark.external_service`:**
+
+### Data Providers (18 tests)
+- `test_data_providers_comprehensive.py`
+- `test_unified_data_provider.py`
+- `test_historical_data_provider_implementation.py`
+- `data_providers/test_mock_live_provider.py`
+- (+ 14 others with Alpha Vantage/Coinbase/Oanda references)
+
+### Backtesting (16 tests)
+- `test_backtest_mode.py`
+- `test_backtest_gatekeeper.py`
+- `risk/test_gatekeeper_backtest_*.py`
+- `test_cli_commands_comprehensive.py`
+- (+ others)
+
+### Integrations (6 tests)
+- `test_integrations_telegram_redis.py`
+- `test_telegram_bot_implementation.py`
+- `test_system_integration_verification.py`
+
+### Subprocess & Process Monitoring (10 tests)
+- `monitoring/test_process_monitor.py`
+- `test_model_installer_verify.py`
+- `test_cli_smoke.py`
+- (+ others with subprocess calls)
+
+### API & Platform Integration (8 tests)
+- `test_coinbase_platform.py`
+- `test_api_endpoints.py`
+- `test_platform_error_handling.py`
+- (+ others)
+
+---
+
+## Usage Guide
+
+### Normal Development Workflow
 
 ```bash
-# Install all pre-commit hooks including the test runner
-pip install pre-commit
+# Install pre-commit hooks (one-time)
 pre-commit install
+
+# Make changes...
+git add .
+
+# Commit — automatically runs gates
+git commit -m "Fix ensemble error propagation"
+
+# ✓ Black, isort, Flake8, mypy, pytest-fast all pass? → commit succeeds
+# ✗ Any gate fails? → commit blocked, fix issues, retry
 ```
 
-### 2. CI Pipeline
+### Running Tests Locally
 
-The CI pipeline is configured in `.github/workflows/ci.yml` to ensure that tests pass before code can be merged to the main branch.
+```bash
+# Fast tests only (matches pre-commit)
+pytest -m "not slow and not external_service" -v
 
-The pipeline includes:
-- Build checks
-- Linting
-- Security scanning
-- Test execution
-- Coverage reporting
+# All tests including slow (but not external services)
+pytest -m "not external_service" -v
 
-## How It Works
+# Only external-service tests (requires ollama, redis, etc.)
+pytest -m "external_service" -v
 
-### Before Committing
+# Specific subsystem
+pytest tests/test_ensemble_*.py -v
 
-1. When you run `git commit`, the pre-commit hooks execute automatically
-2. The testing gate hook runs `python -m pytest -m "not slow"`
-3. If tests fail, the commit is blocked and you must fix the issues first
-4. If tests pass, the commit proceeds normally
+# With coverage
+pytest -m "not external_service" --cov=finance_feedback_engine --cov-report=html
+```
 
-### During Pull Request
+### Running Code Quality Checks
 
-1. When a pull request is opened or updated, the CI pipeline executes
-2. All tests are run in the CI environment
-3. If tests fail, the CI check fails and the PR cannot be merged
-4. Maintainers can only merge PRs when all checks pass
+```bash
+# Run all pre-commit hooks manually
+pre-commit run --all-files
 
-## Bypassing the Testing Gate
+# Just pytest-fast
+pytest -m "not slow and not external_service" -v --tb=short
 
-### Temporary Bypass (Use with Caution)
+# Just mypy
+mypy finance_feedback_engine/ --ignore-missing-imports
 
-If you need to bypass the pre-commit hook temporarily (e.g., for a documentation-only change), you can use:
+# Just linting
+black --check .
+isort --check-only .
+flake8 .
+```
+
+---
+
+## Emergency Bypass Workflow
+
+### When to Bypass
+
+Pre-commit bypass should be **extremely rare**:
+- ✅ Production hotfix with time pressure (< 2 hours to deploy)
+- ✅ Critical blocking bug discovered post-commit
+- ✅ External service unavailability (e.g., ollama crash) affecting unrelated tests
+- ❌ Regular feature development (never bypass)
+- ❌ Convenience/impatience (never bypass)
+
+### How to Bypass
 
 ```bash
 # Bypass all pre-commit hooks
-git commit --no-verify -m "Your commit message"
+SKIP=pre-commit git commit -m "HOTFIX: Emergency patch for X"
 
-# Or bypass just for this commit
-SKIP=run-tests git commit -m "Your commit message"
+# This automatically:
+# 1. Logs bypass to PRE_COMMIT_BYPASS_LOG.md
+# 2. Posts GitHub PR comment with 24-hour deadline
+# 3. Requires post-commit fix within deadline
 ```
 
-⚠️ **Warning**: Bypassing the testing gate should be done only when absolutely necessary and with extreme caution.
+### Post-Bypass Recovery (Required within 24 hours)
 
-## Requirements
+```bash
+# 1. Fix the bypassed check locally
+pytest -m "not slow and not external_service" -v
+# → Fix any failures
 
-### For Local Development
+# 2. Validate all hooks pass
+pre-commit run --all-files
 
-1. All tests must pass before committing
-2. Install pre-commit hooks to enforce testing gate locally
-3. Run tests manually with `pytest -m "not slow"` before committing
+# 3. Commit fix (all hooks must pass)
+git commit --amend -m "Fix bypassed pytest from abc123"
+# OR create new commit
+git commit -m "Fix bypassed checks from hotfix"
+```
 
-### For CI/CD
+### Tracking Bypasses
 
-1. All pull requests must pass all tests in CI
-2. Branch protection rules prevent merging without passing status checks
-3. Code coverage must meet minimum threshold (currently 70%)
+All bypasses are logged in [`PRE_COMMIT_BYPASS_LOG.md`](PRE_COMMIT_BYPASS_LOG.md) with:
+- Timestamp
+- Commit hash
+- Hooks skipped
+- Reason
+- 24-hour resolution deadline
+- GitHub PR comments (if available)
+
+**Zero tolerance for expired bypasses**: If deadline is missed, issue raised automatically (TODO: setup workflow)
+
+---
+
+## CI Coverage Strategy
+
+### Coverage Target
+
+- **Overall**: 70% of codebase (enforced in CI)
+- **Subsystem Goals** (tracked, not enforced):
+  - Agent: 85%
+  - Ensemble: 75%
+  - Platform routing: 80%
+  - Risk management: 75%
+  - Data providers: 70%
+  - API: 75%
+  - Integrations: 70%
+  - Backtesting: 70%
+
+### Coverage Reporting
+
+**CI Job** (`Display coverage summary` step):
+- Generates HTML coverage report (artifact: `coverage-report/`)
+- Uploads XML to Codecov
+- Logs summary to job summary:
+  ```
+  ## Test Coverage Summary
+  📊 Coverage report generated (see artifacts)
+  📝 **TODO**: Add badge when coverage reaches 70%
+  ```
+
+### Badge Milestone
+
+When coverage reaches **70%**:
+- [ ] TODO: Update README.md with coverage badge
+- [ ] TODO: Update CI to enforce 70% threshold (fail if below)
+- [ ] TODO: Notify team of milestone
+
+---
 
 ## Troubleshooting
 
-### Tests Failing Locally
+### Pre-Commit Hooks Failing
 
-If tests fail during commit:
+**Black/isort/Flake8 failures:**
+```bash
+# Auto-fix format/import issues
+black .
+isort .
 
-1. Run tests manually to see detailed output:
-   ```bash
-   python -m pytest -m "not slow" -v
+# Then retry commit
+git commit -m "message"
+```
+
+**mypy failures:**
+```bash
+# Review type error
+mypy finance_feedback_engine/ --ignore-missing-imports
+
+# Option 1: Fix type annotations
+# Option 2: Add # type: ignore with comment
+```
+
+**pytest-fast failures:**
+```bash
+# Run locally to see details
+pytest -m "not slow and not external_service" -v
+
+# Fix failing test
+# Retry commit
+```
+
+### External Service Tests Blocking CI
+
+**Expected behavior**: Tests marked `@pytest.mark.external_service` are **automatically skipped** in CI.
+
+**If still blocking** → Check:
+- Is test file listed in [external-service test list](#external-service-test-list)?
+- Does test use ollama, redis, docker, telegram, subprocess, or live API calls?
+- Add marker if missing: `@pytest.mark.external_service` at top of test class/function
+
+**To verify marker is working:**
+```bash
+# Show which tests are external_service
+pytest --collect-only -m external_service | grep "test_"
+
+# Show how many fast tests would run
+pytest --collect-only -m "not slow and not external_service" | wc -l
+```
+
+### Coverage Not Meeting Target
+
+**Current coverage**: Check artifacts from latest CI run
+
+**To improve**:
+1. Identify low-coverage subsystems (see `coverage-report/` HTML)
+2. Add unit tests for untested code paths
+3. Run locally: `pytest --cov=finance_feedback_engine --cov-report=html`
+4. Open `htmlcov/index.html` to identify gaps
+
+---
+
+## Configuration Files
+
+### Pre-Commit Configuration
+**File**: [`.pre-commit-config.yaml`](.pre-commit-config.yaml)
+
+**Key sections**:
+- `pytest-fast` hook: runs `pytest -m "not slow and not external_service" -v --tb=short`
+- `mypy` hook: enforces type checking (stages: [commit])
+- `log-bypass` hook: logs SKIP usage to bypass log
+
+### Pytest Configuration
+**File**: [`pytest.ini`](pytest.ini)
+
+**Key markers**:
+```ini
+markers =
+    slow: marks tests as slow
+    external_service: marks tests requiring external services (skip in CI)
+```
+
+### CI Workflow
+**File**: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+
+**Test job**: Runs `pytest -m "not external_service"` with coverage
+
+---
+
+## Contributing
+
+When adding new tests:
+
+1. **Place test in appropriate directory**: `tests/test_component.py`
+2. **Add pytest marker if needed**:
+   ```python
+   @pytest.mark.slow  # If test takes >10s
+   @pytest.mark.external_service  # If requires ollama/redis/docker/etc.
+   def test_something():
+       ...
    ```
+3. **Ensure test passes**: `pytest -m "not slow and not external_service" -v`
+4. **Commit** — gates will validate automatically
 
-2. Fix the failing tests before committing
+---
 
-3. If you need to run a specific test file:
-   ```bash
-   python -m pytest tests/test_specific_file.py -v
-   ```
+## FAQ
 
-### Pre-commit Hook Issues
+**Q: Why does pre-commit skip external-service tests?**  
+A: External services (ollama, redis, docker) aren't available in all environments and would block all commits. They run in controlled CI container where dependencies are available.
 
-If the pre-commit hook fails to run properly:
+**Q: Can I run external-service tests locally?**  
+A: Yes, if you have dependencies installed: `pytest -m "external_service" -v`. See individual test files for setup instructions.
 
-1. Update pre-commit hooks:
-   ```bash
-   pre-commit autoupdate
-   ```
+**Q: What if I need to bypass but deadline is tight?**  
+A: Document in bypass log and raise issue with extension request. Zero-tolerance policy prevents accumulation of technical debt.
 
-2. Run all hooks manually:
-   ```bash
-   pre-commit run --all-files
-   ```
+**Q: How do I know if my commit will fail CI?**  
+A: Run `pytest -m "not external_service"` locally before pushing. If it passes, CI will pass (unless environment differs).
 
-## Best Practices
+**Q: What counts as "Type: ignore" worthy?**  
+A: Edge cases where type system can't infer correct type (e.g., dynamic dict access). Should be rare. Use as: `value: str = data["key"]  # type: ignore[index]`
 
-1. **Run tests frequently**: Execute tests before making commits to catch issues early
-2. **Write tests for new code**: All new features and bug fixes must include appropriate tests
-3. **Maintain test quality**: Ensure tests are meaningful and provide value
-4. **Keep tests fast**: Use pytest markers to categorize slow tests appropriately
-5. **Review test failures carefully**: Understand why tests fail before attempting fixes
+---
 
-## Adding New Tests
+## See Also
 
-When adding new functionality, ensure appropriate tests are added:
+- [`PRE_COMMIT_BYPASS_LOG.md`](PRE_COMMIT_BYPASS_LOG.md) — Bypass event tracking
+- [`pytest.ini`](pytest.ini) — Test markers & configuration
+- [`.pre-commit-config.yaml`](.pre-commit-config.yaml) — Pre-commit hook definitions
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — GitHub Actions CI configuration
+- [`QUALITY_ASSURANCE_PLAN.md`](QUALITY_ASSURANCE_PLAN.md) — Full QA strategy
 
-1. Place tests in the appropriate directory under `/tests/`
-2. Follow existing test patterns and naming conventions
-3. Use appropriate pytest markers (e.g., `slow`, `integration`, `unit`)
-4. Ensure new tests pass before committing
-
-## Maintenance
-
-The testing gate system requires minimal maintenance, but remember:
-
-1. Keep test execution time reasonable by using the `not slow` marker appropriately
-2. Update tests when changing functionality
-3. Periodically review test coverage and quality
-
-## Contact
-
-If you have questions about the testing gate implementation, contact the development team or raise an issue in the repository.

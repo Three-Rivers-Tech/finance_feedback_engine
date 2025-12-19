@@ -218,6 +218,186 @@ class Backtester:
             f"Initialized Backtester with initial balance: ${initial_balance:.2f}, leverage: {self.platform_leverage}x, timeframe: {timeframe}"
         )
 
+    # ============================================
+    # Enhanced Slippage & Commission Modeling (Phase 1.1)
+    # ============================================
+    # Feature Flag: features.enhanced_slippage_model (default: false)
+    # Config Options:
+    # - backtesting.slippage_model: "basic" or "realistic"
+    # - backtesting.fee_model: "simple" or "tiered"
+    # ============================================
+
+    def _is_enhanced_slippage_enabled(self) -> bool:
+        """
+        Check if enhanced slippage model is enabled via feature flag.
+
+        The enhanced slippage model provides more realistic slippage calculations
+        based on asset type, trade size, and market hours.
+
+        Returns:
+            bool: True if enhanced slippage is enabled, False for basic (legacy) mode.
+
+        Feature Flag:
+            features.enhanced_slippage_model: bool (default: false)
+
+        Example:
+            >>> backtester._is_enhanced_slippage_enabled()
+            False  # Default: basic slippage
+
+            >>> config = {"features": {"enhanced_slippage_model": True}}
+            >>> backtester = Backtester(config=config)
+            >>> backtester._is_enhanced_slippage_enabled()
+            True  # Enhanced slippage enabled
+        """
+        features = self.config.get("features", {})
+        return features.get("enhanced_slippage_model", False)
+
+    def _calculate_realistic_slippage(
+        self, asset_pair: str, size: float, timestamp: datetime
+    ) -> float:
+        """
+        Calculate realistic slippage based on asset type, size, and market hours.
+
+        This method provides a more accurate slippage model than the basic fixed
+        percentage, accounting for:
+        - Asset type (major crypto, major forex, exotic pairs, altcoins)
+        - Trade size (small, medium, large volume impact)
+        - Market hours (low liquidity hours have higher slippage)
+
+        Args:
+            asset_pair: The trading pair (e.g., "BTCUSD", "EURUSD", "USDMXN")
+            size: Trade size in USD (use absolute value for shorts)
+            timestamp: Trade execution timestamp (UTC)
+
+        Returns:
+            float: Slippage as a decimal (e.g., 0.0002 = 2 basis points = 0.02%)
+
+        Slippage Tiers:
+            - Major Crypto (BTC, ETH): 2 bps base
+            - Major Forex (EUR, GBP, JPY, USD pairs): 1 bp base
+            - Exotic Pairs / Altcoins: 5 bps base
+
+        Volume Impact:
+            - Small (<1000 USD): +0.5 bps
+            - Medium (1000-10000 USD): +1 bp
+            - Large (>10000 USD): +3 bps
+
+        Low Liquidity Hours (UTC):
+            - Hours 0-2, 20-23: 1.5x multiplier
+
+        Example:
+            >>> slippage = backtester._calculate_realistic_slippage(
+            ...     "BTCUSD", 500, timestamp
+            ... )
+            >>> slippage  # ~0.00025 (2.5 bps for major crypto, small size)
+        """
+        # Handle zero or negative size
+        abs_size = abs(size)
+        if abs_size == 0:
+            return 0.0
+
+        # Determine base slippage by asset type
+        asset_upper = asset_pair.upper()
+
+        # Major crypto pairs (2 bps)
+        major_crypto = ["BTCUSD", "BTCUSDT", "ETHUSD", "ETHUSDT"]
+        # Major forex pairs (1 bp) - most liquid currency pairs
+        major_forex = [
+            "EURUSD",
+            "GBPUSD",
+            "USDJPY",
+            "USDCHF",
+            "AUDUSD",
+            "USDCAD",
+            "NZDUSD",
+            # Cross pairs
+            "EURGBP",
+            "EURJPY",
+            "GBPJPY",
+        ]
+
+        if asset_upper in major_crypto:
+            base_slippage = 0.0002  # 2 bps
+        elif asset_upper in major_forex:
+            base_slippage = 0.0001  # 1 bp
+        else:
+            # Exotic pairs, altcoins, other assets
+            base_slippage = 0.0005  # 5 bps
+
+        # Calculate volume impact
+        if abs_size < 1000:
+            volume_impact = 0.00005  # 0.5 bps for small trades
+        elif abs_size < 10000:
+            volume_impact = 0.0001  # 1 bp for medium trades
+        else:
+            volume_impact = 0.0003  # 3 bps for large trades
+
+        # Calculate total slippage before liquidity adjustment
+        total_slippage = base_slippage + volume_impact
+
+        # Apply low liquidity hours multiplier (1.5x)
+        hour = timestamp.hour
+        low_liquidity_hours = [0, 1, 2, 20, 21, 22, 23]
+        if hour in low_liquidity_hours:
+            total_slippage *= 1.5
+
+        return total_slippage
+
+    def _calculate_fees(
+        self, platform: str, size: float, is_maker: bool = False
+    ) -> float:
+        """
+        Calculate trading fees with maker/taker differentiation.
+
+        This method provides a tiered fee model that accounts for different
+        exchange fee structures and maker/taker pricing.
+
+        Args:
+            platform: Trading platform name (e.g., "coinbase", "oanda")
+            size: Trade size in USD (used for size-based fee tiers, not yet implemented)
+            is_maker: True for maker (limit) orders, False for taker (market) orders
+
+        Returns:
+            float: Fee as a decimal (e.g., 0.004 = 0.4%)
+
+        Fee Tiers by Platform:
+            - Coinbase Taker: 0.4%
+            - Coinbase Maker: 0.25%
+            - Oanda (spread-based): ~0.1%
+            - Default: 0.1%
+
+        Example:
+            >>> fee = backtester._calculate_fees("coinbase", 1000.0, is_maker=False)
+            >>> fee  # 0.004 (0.4% taker fee)
+
+            >>> fee = backtester._calculate_fees("coinbase", 1000.0, is_maker=True)
+            >>> fee  # 0.0025 (0.25% maker fee)
+
+        Reference:
+            Plan Phase 1.1: /home/cmp6510/.claude/plans/declarative-sprouting-balloon.md
+        """
+        # Handle zero size
+        if size == 0:
+            return 0.0
+
+        platform_lower = platform.lower()
+
+        if platform_lower in ["coinbase", "coinbase_advanced"]:
+            # Coinbase Advanced tiered fees
+            # Standard tier (< $100k/month volume)
+            if is_maker:
+                return 0.0025  # 0.25% maker fee
+            else:
+                return 0.004  # 0.4% taker fee
+
+        elif platform_lower == "oanda":
+            # Oanda uses spread-based pricing, approximated as 0.1%
+            return 0.001  # 0.1%
+
+        else:
+            # Default fee for unknown platforms
+            return 0.001  # 0.1%
+
     def _execute_trade(
         self,
         current_balance: float,

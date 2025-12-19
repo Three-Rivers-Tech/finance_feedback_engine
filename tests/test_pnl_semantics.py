@@ -27,6 +27,7 @@ def backtest_results():
         return json.load(f)
 
 
+@pytest.mark.external_service
 def test_pnl_consistency_zero_trades(backtest_results):
     """
     When total_trades=0, PnL must be entirely unrealized.

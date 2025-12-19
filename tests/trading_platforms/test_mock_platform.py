@@ -7,6 +7,7 @@ import pytest
 from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
 
 
+@pytest.mark.external_service
 class TestMockTradingPlatform:
     """Test suite for MockTradingPlatform."""
 

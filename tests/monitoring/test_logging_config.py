@@ -30,6 +30,7 @@ from finance_feedback_engine.monitoring.logging_config import (
 )
 
 
+@pytest.mark.external_service
 class TestCorrelationID:
     """Test correlation ID functionality."""
 

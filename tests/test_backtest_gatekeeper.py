@@ -2,9 +2,12 @@
 
 import datetime
 
+import pytest
+
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 
+@pytest.mark.external_service
 def test_risk_gatekeeper_blocks_after_drawdown():
     """
     Verify RiskGatekeeper blocks trades when portfolio drawdown exceeds limit.

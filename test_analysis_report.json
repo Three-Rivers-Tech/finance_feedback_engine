@@ -1,0 +1,637 @@
+{
+  "timestamp": "2025-12-19T11:26:10.854389",
+  "summary": {
+    "total": 89,
+    "passed": 0,
+    "failed": 89,
+    "crashed": 0,
+    "resource_leaks": 0
+  },
+  "crash_tests": [],
+  "resource_leak_tests": [],
+  "details": [
+    {
+      "test": "tests/cli/test_agent_signal_only_validation.py",
+      "status": "failed",
+      "duration": 0.9118211269378662,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/conftest.py",
+      "status": "failed",
+      "duration": 0.896742582321167,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/data_providers/test_mock_live_provider.py",
+      "status": "failed",
+      "duration": 1.0305304527282715,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/integration/test_basic_integration.py",
+      "status": "failed",
+      "duration": 1.0149133205413818,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/integration/test_pipeline_integration.py",
+      "status": "failed",
+      "duration": 1.0805730819702148,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/monitoring/test_logging_config.py",
+      "status": "failed",
+      "duration": 1.123948574066162,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/monitoring/test_process_monitor.py",
+      "status": "failed",
+      "duration": 1.073317527770996,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/risk/test_gatekeeper_backtest_timestamp.py",
+      "status": "failed",
+      "duration": 1.0343365669250488,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/risk/test_gatekeeper_data_freshness.py",
+      "status": "failed",
+      "duration": 0.9282610416412354,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/risk/test_gatekeeper_market_schedule.py",
+      "status": "failed",
+      "duration": 0.9954533576965332,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_agent.py",
+      "status": "failed",
+      "duration": 0.9064996242523193,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_agent_config.py",
+      "status": "failed",
+      "duration": 1.0615603923797607,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_agent_kill_switch_scenarios.py",
+      "status": "failed",
+      "duration": 1.1520295143127441,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_api.py",
+      "status": "failed",
+      "duration": 0.9031455516815186,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_api_client_base.py",
+      "status": "failed",
+      "duration": 0.8099789619445801,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_api_endpoints.py",
+      "status": "failed",
+      "duration": 0.7463390827178955,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_asset_classifier.py",
+      "status": "failed",
+      "duration": 0.913898229598999,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_asset_pair_validation.py",
+      "status": "failed",
+      "duration": 0.9152178764343262,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_asset_pair_validation_enhanced.py",
+      "status": "failed",
+      "duration": 0.779304027557373,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_asset_type_validation.py",
+      "status": "failed",
+      "duration": 0.9534158706665039,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_backtest_gatekeeper.py",
+      "status": "failed",
+      "duration": 0.8783044815063477,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_backtest_mode.py",
+      "status": "failed",
+      "duration": 0.941307544708252,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_circuit_breaker.py",
+      "status": "failed",
+      "duration": 0.8940079212188721,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_cli_approval_flows.py",
+      "status": "failed",
+      "duration": 0.9286038875579834,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_cli_asset_pairs_override.py",
+      "status": "failed",
+      "duration": 0.8581147193908691,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_cli_commands.py",
+      "status": "failed",
+      "duration": 0.8987693786621094,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_cli_commands_comprehensive.py",
+      "status": "failed",
+      "duration": 0.7733128070831299,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_cli_smoke.py",
+      "status": "failed",
+      "duration": 0.7565023899078369,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_coinbase_platform.py",
+      "status": "failed",
+      "duration": 0.7657604217529297,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_config_editor_telegram_validation.py",
+      "status": "failed",
+      "duration": 0.7896206378936768,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_config_validation.py",
+      "status": "failed",
+      "duration": 0.8105051517486572,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_core_integration.py",
+      "status": "failed",
+      "duration": 0.7975485324859619,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_critical_fixes_integration.py",
+      "status": "failed",
+      "duration": 0.9205262660980225,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_data_providers_comprehensive.py",
+      "status": "failed",
+      "duration": 0.8527932167053223,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_decision_engine.py",
+      "status": "failed",
+      "duration": 0.6950352191925049,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_decision_engine_comprehensive.py",
+      "status": "failed",
+      "duration": 0.7916092872619629,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_decision_engine_helpers.py",
+      "status": "failed",
+      "duration": 0.8877606391906738,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_decision_engine_logic.py",
+      "status": "failed",
+      "duration": 0.8107600212097168,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_decision_store.py",
+      "status": "failed",
+      "duration": 0.8859505653381348,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_dynamic_weights.py",
+      "status": "failed",
+      "duration": 0.8799691200256348,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_dynamic_weights_injection.py",
+      "status": "failed",
+      "duration": 0.788689374923706,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_e2e_workflow.py",
+      "status": "failed",
+      "duration": 0.7547497749328613,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_ensemble_error_propagation.py",
+      "status": "failed",
+      "duration": 0.8086342811584473,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_ensemble_error_scenarios.py",
+      "status": "failed",
+      "duration": 0.764718770980835,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_ensemble_fallback.py",
+      "status": "failed",
+      "duration": 0.7675652503967285,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_ensemble_manager_validation.py",
+      "status": "failed",
+      "duration": 0.7596416473388672,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_ensemble_tiers.py",
+      "status": "failed",
+      "duration": 0.7553727626800537,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_execute_safety.py",
+      "status": "failed",
+      "duration": 0.8345410823822021,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_feedback_analyzer.py",
+      "status": "failed",
+      "duration": 0.7564418315887451,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_gemini_provider.py",
+      "status": "failed",
+      "duration": 0.7424676418304443,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_historical_data_provider_implementation.py",
+      "status": "failed",
+      "duration": 0.8584873676300049,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_integrations_telegram_redis.py",
+      "status": "failed",
+      "duration": 0.8734142780303955,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_long_term_performance.py",
+      "status": "failed",
+      "duration": 0.9650712013244629,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_model_installer_verify.py",
+      "status": "failed",
+      "duration": 0.9160683155059814,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_model_performance_monitor.py",
+      "status": "failed",
+      "duration": 0.710364818572998,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_monitoring_integration.py",
+      "status": "failed",
+      "duration": 0.7617056369781494,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_numpy_compatibility.py",
+      "status": "failed",
+      "duration": 0.8576345443725586,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_orchestrator_kill_switch.py",
+      "status": "failed",
+      "duration": 0.8399875164031982,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_phase1_integration.py",
+      "status": "failed",
+      "duration": 0.8574531078338623,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_phase1_robustness.py",
+      "status": "failed",
+      "duration": 0.762596607208252,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_phase2_performance_benchmarks.py",
+      "status": "failed",
+      "duration": 0.7780210971832275,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_platform_error_handling.py",
+      "status": "failed",
+      "duration": 0.8604769706726074,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_pnl_semantics.py",
+      "status": "failed",
+      "duration": 0.7373075485229492,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_portfolio_dashboard.py",
+      "status": "failed",
+      "duration": 0.7430920600891113,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_portfolio_memory_persistence.py",
+      "status": "failed",
+      "duration": 0.658334493637085,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_positions_cli.py",
+      "status": "failed",
+      "duration": 0.9092245101928711,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_provider_tiers.py",
+      "status": "failed",
+      "duration": 0.7917518615722656,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_pulse_integration.py",
+      "status": "failed",
+      "duration": 0.876763105392456,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_qwen_provider.py",
+      "status": "failed",
+      "duration": 0.7804961204528809,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_risk_context_fields.py",
+      "status": "failed",
+      "duration": 0.7680113315582275,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_risk_gatekeeper_comprehensive.py",
+      "status": "failed",
+      "duration": 0.7694952487945557,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_signal_only_mode.py",
+      "status": "failed",
+      "duration": 0.806293249130249,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_system_integration_verification.py",
+      "status": "failed",
+      "duration": 0.7810537815093994,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_telegram_bot_implementation.py",
+      "status": "failed",
+      "duration": 0.774181604385376,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_timeframe_aggregator_indicators.py",
+      "status": "failed",
+      "duration": 0.7916603088378906,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_timeseries_data_store.py",
+      "status": "failed",
+      "duration": 0.7537391185760498,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_trade_monitor.py",
+      "status": "failed",
+      "duration": 0.7628335952758789,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_trade_tracker.py",
+      "status": "failed",
+      "duration": 0.7631292343139648,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_trading_loop_agent.py",
+      "status": "failed",
+      "duration": 0.7972729206085205,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_two_phase_wiring.py",
+      "status": "failed",
+      "duration": 0.8806757926940918,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_unified_data_provider.py",
+      "status": "failed",
+      "duration": 0.916949987411499,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_utils_config_loader.py",
+      "status": "failed",
+      "duration": 0.9187591075897217,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_utils_cost_tracker.py",
+      "status": "failed",
+      "duration": 0.7558462619781494,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/test_utils_financial_data_validator.py",
+      "status": "failed",
+      "duration": 0.8415813446044922,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/trading_platforms/test_mock_platform.py",
+      "status": "failed",
+      "duration": 0.7919430732727051,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/trading_platforms/test_mock_platform_integration.py",
+      "status": "failed",
+      "duration": 0.7560203075408936,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/trading_platforms/test_unified_platform_routing.py",
+      "status": "failed",
+      "duration": 0.7402539253234863,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/utils/test_data_freshness.py",
+      "status": "failed",
+      "duration": 0.8156211376190186,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "test": "tests/utils/test_market_schedule.py",
+      "status": "failed",
+      "duration": 0.718787670135498,
+      "errors": [],
+      "warnings": []
+    }
+  ]
+}

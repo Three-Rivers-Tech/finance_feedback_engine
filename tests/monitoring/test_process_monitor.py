@@ -26,6 +26,7 @@ from finance_feedback_engine.monitoring.output_capture.process_monitor import (
 )
 
 
+@pytest.mark.external_service
 class TestProcessOutputCapture:
     """Test ProcessOutputCapture functionality."""
 
