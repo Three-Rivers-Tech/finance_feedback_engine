@@ -362,10 +362,10 @@ graph TD
 
     subgraph "Example: Weight Adjustment"
         direction LR
-        ORIG[Original Weights\nlocal: 0.25, cli: 0.25,\ncodex: 0.25, qwen: 0.25]
+        ORIG[Original Weights\nlocal=0.25, cli=0.25,\ncodex=0.25, qwen=0.25]
         FAIL[cli FAILED]
         ACTIVE[Active Sum = 0.75\n3/4 providers]
-        ADJ[Adjusted Weights\nlocal: 0.333 (0.25/0.75)\ncodex: 0.333\nqwen: 0.333]
+        ADJ[Adjusted Weights\nlocal=0.333 from 0.25/0.75\ncodex=0.333\nqwen=0.333]
 
         ORIG --> FAIL
         FAIL --> ACTIVE
