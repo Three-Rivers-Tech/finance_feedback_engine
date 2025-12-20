@@ -393,7 +393,7 @@ graph TD
 
     AGG_RESULT{Aggregated Result} --> CONFIDENCE[Confidence Adjustment]
 
-    CONFIDENCE --> QUORUM{Local Provider Quorum Met? (min 3)}
+    CONFIDENCE --> QUORUM{Local Provider Quorum Met?}
     QUORUM -- Yes --> META[Attach Ensemble Metadata]
     QUORUM -- No --> PENALTY[Apply 30% Confidence Penalty]
     PENALTY --> META
