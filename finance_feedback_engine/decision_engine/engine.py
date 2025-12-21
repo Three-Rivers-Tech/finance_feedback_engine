@@ -121,9 +121,13 @@ class DecisionEngine:
 
         # Convert legacy percentage format (>1) to decimal (e.g., 2.0 -> 0.02)
         if self.portfolio_stop_loss_percentage > 1:
-            self.portfolio_stop_loss_percentage = self.portfolio_stop_loss_percentage / 100
+            self.portfolio_stop_loss_percentage = (
+                self.portfolio_stop_loss_percentage / 100
+            )
         if self.portfolio_take_profit_percentage > 1:
-            self.portfolio_take_profit_percentage = self.portfolio_take_profit_percentage / 100
+            self.portfolio_take_profit_percentage = (
+                self.portfolio_take_profit_percentage / 100
+            )
 
         # Validate local_models
         if not isinstance(self.local_models, list):
