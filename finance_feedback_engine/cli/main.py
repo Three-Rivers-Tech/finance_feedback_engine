@@ -65,16 +65,21 @@ def _validate_config_on_startup(config_path: str, environment: str = "developmen
     Validate configuration file before engine initialization.
 
     Args:
-        config_path: Path to configuration file
+        config_path: Path to configuration file or "tiered" for tiered loading
         environment: Runtime environment (production, staging, development, test)
 
     Raises:
         click.ClickException: If validation fails with critical/high severity issues
     """
     from finance_feedback_engine.utils.config_validator import (
-        validate_config_file,
         print_validation_results,
+        validate_config_file,
     )
+
+    # Skip validation for tiered loading (no single file to validate)
+    # Tiered loading validates at load time
+    if config_path == "tiered":
+        return
 
     result = validate_config_file(config_path, environment)
 
@@ -88,9 +93,7 @@ def _validate_config_on_startup(config_path: str, environment: str = "developmen
 
     # If there are warnings, show them but allow startup
     if result.issues:
-        console.print(
-            "[yellow]Configuration validation passed with warnings:[/yellow]"
-        )
+        console.print("[yellow]Configuration validation passed with warnings:[/yellow]")
         print_validation_results(result, verbose=False)
 
 
