@@ -196,7 +196,7 @@ ignored-modules = [
 
 [tool.bandit]
 exclude_dirs = ["tests", "examples", "scripts", "experiments"]
-skips = ["B101"]  # Skip assert_used in test files
+skips = ["B101"]  # Allow assert statements in production code for invariant checking
 
 [tool.pydocstyle]
 convention = "google"
