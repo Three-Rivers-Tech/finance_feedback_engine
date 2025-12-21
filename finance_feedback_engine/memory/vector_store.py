@@ -217,17 +217,19 @@ class VectorMemory:
         """
         try:
             # Convert numpy arrays to lists for JSON serialization
-            vectors_list = [vec.tolist() for vec in self.vectors] if self.vectors else []
+            vectors_list = (
+                [vec.tolist() for vec in self.vectors] if self.vectors else []
+            )
 
             data = {
                 "version": "2.0",
                 "vectors": vectors_list,
                 "metadata": self.metadata,
-                "ids": self.ids
+                "ids": self.ids,
             }
 
             # Change file extension to .json
-            json_path = self.storage_path.with_suffix('.json')
+            json_path = self.storage_path.with_suffix(".json")
 
             with open(json_path, "w") as f:
                 json.dump(data, f, indent=2)
@@ -242,7 +244,7 @@ class VectorMemory:
     def _load_index(self) -> None:
         """Load vector index from disk if it exists (supports both .pkl and .json formats)."""
         # Try JSON format first (.json extension)
-        json_path = self.storage_path.with_suffix('.json')
+        json_path = self.storage_path.with_suffix(".json")
 
         if json_path.exists():
             try:
@@ -256,7 +258,9 @@ class VectorMemory:
                 self.ids = data.get("ids", [])
 
                 version = data.get("version", "unknown")
-                logger.info(f"Loaded {len(self.vectors)} vectors from {json_path} (version: {version})")
+                logger.info(
+                    f"Loaded {len(self.vectors)} vectors from {json_path} (version: {version})"
+                )
                 return
 
             except Exception as e:
@@ -291,7 +295,9 @@ class VectorMemory:
                                 "__builtin__",
                                 "builtins",
                             ):
-                                return getattr(__import__(module, fromlist=[name]), name)
+                                return getattr(
+                                    __import__(module, fromlist=[name]), name
+                                )
                             # Prevent loading from unsafe modules that could execute arbitrary code
                             raise pickle.UnpicklingError(
                                 f"Global '{module}.{name}' is forbidden"
@@ -304,7 +310,9 @@ class VectorMemory:
                 self.metadata = data.get("metadata", {})
                 self.ids = data.get("ids", [])
 
-                logger.info(f"Loaded {len(self.vectors)} vectors from {self.storage_path}")
+                logger.info(
+                    f"Loaded {len(self.vectors)} vectors from {self.storage_path}"
+                )
                 logger.warning(
                     "Pickle format loaded successfully. The data will be saved in JSON format on next save."
                 )
