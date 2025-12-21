@@ -12,9 +12,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
-
-import numpy as np
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +38,15 @@ class PickleToJsonMigrator:
                 if (parent / "pyproject.toml").exists() or (
                     parent / "setup.py"
                 ).exists():
+                if (parent / "pyproject.toml").exists() or (
+                    parent / "setup.py"
+                ).exists():
                     root_dir = parent
                     break
+
+        # Find all pickle files recursively
+        pickle_files = list(root_dir.rglob("*.pkl")) + list(root_dir.rglob("*.pickle"))
+
         # Filter to only data-related pickle files (exclude third-party caches)
         data_pickles = [
             p
