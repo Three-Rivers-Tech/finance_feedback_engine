@@ -94,9 +94,7 @@ def _validate_config_on_startup(config_path: str, environment: str = "developmen
     try:
         result = validate_config_file(config_path, environment)
     except Exception as e:
-        raise click.ClickException(
-            f"Configuration validation error: {e}"
-        )
+        raise click.ClickException(f"Configuration validation error: {e}")
 
     # If there are critical or high severity errors, fail startup
     if result.has_errors():
@@ -601,8 +599,7 @@ def cli(ctx, config, verbose, interactive):
 
     # Validate configuration before proceeding
     _validate_config_on_startup(
-        ctx.obj.get("config_path"),
-        final_config.get("environment", "development")
+        ctx.obj.get("config_path"), final_config.get("environment", "development")
     )
 
     # Setup logging with config and verbose flag
