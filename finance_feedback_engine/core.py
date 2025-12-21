@@ -5,6 +5,7 @@ import logging
 import os
 import socket
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pandas as pd
@@ -21,6 +22,7 @@ from .exceptions import (
 )
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .persistence.decision_store import DecisionStore
+from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
 from .utils.cache_metrics import CacheMetrics
 from .utils.failure_logger import log_quorum_failure
@@ -55,6 +57,10 @@ class FinanceFeedbackEngine:
                 - decision_engine: Decision engine configuration
                 - persistence: Persistence configuration
         """
+        # Run security validation at startup (warns on plaintext credentials)
+        config_path = Path(__file__).parent.parent / "config" / "config.yaml"
+        validate_at_startup(config_path, raise_on_error=False)
+
         self.config = config
 
         # Portfolio caching infrastructure (Phase 2 optimization)
