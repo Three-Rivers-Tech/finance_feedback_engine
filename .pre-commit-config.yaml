@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: pytest-fast
         name: pytest-fast (unit tests, no external services)
-        entry: ./.venv/bin/pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=43
+        entry: pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=43
         language: system
         pass_filenames: false
         always_run: true
