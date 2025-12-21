@@ -21,7 +21,7 @@ class AIDecisionManager:
     def __init__(self, config: Dict[str, Any], backtest_mode: bool = False):
         self.config = config
         self.backtest_mode = backtest_mode
-        
+
         # Support both nested and flat config structures for backward compatibility
         decision_config = config.get("decision_engine", config)
         self.ai_provider = decision_config.get("ai_provider", "local")
