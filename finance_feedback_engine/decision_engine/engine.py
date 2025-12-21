@@ -191,6 +191,11 @@ class DecisionEngine:
         """Get the ensemble manager from the AI manager."""
         return self.ai_manager.ensemble_manager
 
+    @ensemble_manager.setter
+    def ensemble_manager(self, value):
+        """Set the ensemble manager on the AI manager."""
+        self.ai_manager.ensemble_manager = value
+
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage. Delegates to market analyzer."""
         return self.market_analyzer._calculate_price_change(market_data)
