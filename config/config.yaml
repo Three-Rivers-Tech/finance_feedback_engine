@@ -304,6 +304,28 @@ monitoring:
     performance:
       lookback_hours: 24
 
+# Error Tracking Configuration
+# Centralized error tracking with Sentry integration and logging fallback
+# PHASE 2.1: Production readiness - monitor errors in production
+error_tracking:
+  # Enable error tracking (set to true in production)
+  enabled: false
+
+  # Backend: 'sentry' (cloud), 'logging' (local), or 'file' (local)
+  backend: "logging"
+
+  # Sentry DSN for remote error tracking (production only)
+  # Set via SENTRY_DSN environment variable
+  sentry_dsn: "${SENTRY_DSN:}"
+
+  # Performance trace sample rate (0.0 = none, 1.0 = all requests)
+  # Lower in production to reduce overhead (recommended: 0.1)
+  traces_sample_rate: 0.1
+
+  # Environment name (for Sentry tagging)
+  # Auto-detected from FFE_ENVIRONMENT, defaults to development
+  environment: "${FFE_ENVIRONMENT:development}"
+
 # Persistence Configuration
 persistence:
   # Path to store trading decisions
