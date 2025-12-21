@@ -123,9 +123,7 @@ class ErrorTracker:
         if self.backend == "sentry" and self.sentry_client:
             self._send_to_sentry(error, context, level)
 
-    def _log_error(
-        self, error: Exception, context: Dict[str, Any], level: str
-    ) -> None:
+    def _log_error(self, error: Exception, context: Dict[str, Any], level: str) -> None:
         """Log error to local logging system with structured context."""
         log_level = getattr(logging, level.upper(), logging.ERROR)
 
@@ -163,25 +161,58 @@ class ErrorTracker:
 
         # Create a deep copy to avoid mutating original
         import copy
+
         sanitized = copy.deepcopy(context)
 
         # List of sensitive keys to redact (case-insensitive matching)
         sensitive_keys = {
-            'email', 'mail', 'e_mail',
-            'ssn', 'social_security', 'social_security_number',
-            'phone', 'phone_number', 'mobile', 'telephone',
-            'user_id', 'userid', 'username', 'user_name',
-            'account_id', 'accountid', 'account_number',
-            'token', 'access_token', 'refresh_token', 'bearer_token',
-            'api_key', 'apikey', 'api_secret',
-            'password', 'passwd', 'pwd', 'pass',
-            'secret', 'secret_key', 'client_secret',
-            'auth', 'authorization', 'auth_token',
-            'credit_card', 'creditcard', 'card_number',
-            'cvv', 'cvc', 'card_security_code',
-            'passport', 'passport_number',
-            'drivers_license', 'driver_license', 'license_number',
-            'oanda_account_id', 'coinbase_api_key'
+            "email",
+            "mail",
+            "e_mail",
+            "ssn",
+            "social_security",
+            "social_security_number",
+            "phone",
+            "phone_number",
+            "mobile",
+            "telephone",
+            "user_id",
+            "userid",
+            "username",
+            "user_name",
+            "account_id",
+            "accountid",
+            "account_number",
+            "token",
+            "access_token",
+            "refresh_token",
+            "bearer_token",
+            "api_key",
+            "apikey",
+            "api_secret",
+            "password",
+            "passwd",
+            "pwd",
+            "pass",
+            "secret",
+            "secret_key",
+            "client_secret",
+            "auth",
+            "authorization",
+            "auth_token",
+            "credit_card",
+            "creditcard",
+            "card_number",
+            "cvv",
+            "cvc",
+            "card_security_code",
+            "passport",
+            "passport_number",
+            "drivers_license",
+            "driver_license",
+            "license_number",
+            "oanda_account_id",
+            "coinbase_api_key",
         }
 
         def redact_recursive(obj: Any, depth: int = 0) -> Any:
@@ -192,8 +223,11 @@ class ErrorTracker:
 
             if isinstance(obj, dict):
                 return {
-                    k: "***REDACTED***" if k.lower().replace('-', '_') in sensitive_keys
-                    else redact_recursive(v, depth + 1)
+                    k: (
+                        "***REDACTED***"
+                        if k.lower().replace("-", "_") in sensitive_keys
+                        else redact_recursive(v, depth + 1)
+                    )
                     for k, v in obj.items()
                 }
             elif isinstance(obj, (list, tuple)):
@@ -294,7 +328,9 @@ class ErrorTracker:
                     scope.set_context("custom_context", sanitized_context)
 
                     # Set level
-                    scope.level = level if level in ["error", "warning", "info"] else "info"
+                    scope.level = (
+                        level if level in ["error", "warning", "info"] else "info"
+                    )
 
                     # Capture message
                     self.sentry_client.capture_message(message)
