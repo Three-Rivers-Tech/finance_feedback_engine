@@ -6,9 +6,9 @@ Uses Ollama embeddings and cosine similarity for intelligent memory retrieval.
 
 import concurrent.futures
 import io
+import json
 import logging
 import os
-import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -210,18 +210,29 @@ class VectorMemory:
 
     def save_index(self) -> bool:
         """
-        Save the vector index to disk.
+        Save the vector index to disk using JSON format.
 
         Returns:
             True if successfully saved, False otherwise
         """
         try:
-            data = {"vectors": self.vectors, "metadata": self.metadata, "ids": self.ids}
+            # Convert numpy arrays to lists for JSON serialization
+            vectors_list = [vec.tolist() for vec in self.vectors] if self.vectors else []
 
-            with open(self.storage_path, "wb") as f:
-                pickle.dump(data, f)
+            data = {
+                "version": "2.0",
+                "vectors": vectors_list,
+                "metadata": self.metadata,
+                "ids": self.ids
+            }
 
-            logger.info(f"Saved {len(self.vectors)} vectors to {self.storage_path}")
+            # Change file extension to .json
+            json_path = self.storage_path.with_suffix('.json')
+
+            with open(json_path, "w") as f:
+                json.dump(data, f, indent=2)
+
+            logger.info(f"Saved {len(self.vectors)} vectors to {json_path}")
             return True
 
         except Exception as e:
@@ -229,45 +240,81 @@ class VectorMemory:
             return False
 
     def _load_index(self) -> None:
-        """Load vector index from disk if it exists."""
-        if not self.storage_path.exists():
-            logger.info("No existing vector index found")
+        """Load vector index from disk if it exists (supports both .pkl and .json formats)."""
+        # Try JSON format first (.json extension)
+        json_path = self.storage_path.with_suffix('.json')
+
+        if json_path.exists():
+            try:
+                with open(json_path, "r") as f:
+                    data = json.load(f)
+
+                # Convert lists back to numpy arrays
+                vectors_list = data.get("vectors", [])
+                self.vectors = [np.array(vec) for vec in vectors_list]
+                self.metadata = data.get("metadata", {})
+                self.ids = data.get("ids", [])
+
+                version = data.get("version", "unknown")
+                logger.info(f"Loaded {len(self.vectors)} vectors from {json_path} (version: {version})")
+                return
+
+            except Exception as e:
+                logger.error(f"Failed to load JSON index: {e}")
+                # Reset to empty state
+                self.vectors = []
+                self.metadata = {}
+                self.ids = []
+                return
+
+        # Fall back to legacy pickle format (.pkl extension) if JSON not found
+        if self.storage_path.exists():
+            logger.warning(
+                f"Loading legacy pickle format from {self.storage_path}. "
+                "This format is deprecated. Consider migrating to JSON format."
+            )
+            try:
+                import pickle
+
+                with open(self.storage_path, "rb") as f:
+                    # Read the raw data
+                    raw_data = f.read()
+
+                    # Use a restricted unpickler to prevent arbitrary code execution
+                    class RestrictedUnpickler(pickle.Unpickler):
+                        def find_class(self, module, name):
+                            # Only allow safe classes from these modules
+                            if module in (
+                                "numpy",
+                                "collections",
+                                "numpy.core.multiarray",
+                                "__builtin__",
+                                "builtins",
+                            ):
+                                return getattr(__import__(module, fromlist=[name]), name)
+                            # Prevent loading from unsafe modules that could execute arbitrary code
+                            raise pickle.UnpicklingError(
+                                f"Global '{module}.{name}' is forbidden"
+                            )
+
+                    # Use a BytesIO object to pass data to the restricted unpickler
+                    data = RestrictedUnpickler(io.BytesIO(raw_data)).load()
+
+                self.vectors = data.get("vectors", [])
+                self.metadata = data.get("metadata", {})
+                self.ids = data.get("ids", [])
+
+                logger.info(f"Loaded {len(self.vectors)} vectors from {self.storage_path}")
+                logger.warning(
+                    "Pickle format loaded successfully. The data will be saved in JSON format on next save."
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to load pickle index: {e}")
+                # Reset to empty state
+                self.vectors = []
+                self.metadata = {}
+                self.ids = []
             return
 
-        try:
-            with open(self.storage_path, "rb") as f:
-                # Read the raw data
-                raw_data = f.read()
-
-                # Use a restricted unpickler to prevent arbitrary code execution
-                class RestrictedUnpickler(pickle.Unpickler):
-                    def find_class(self, module, name):
-                        # Only allow safe classes from these modules
-                        if module in (
-                            "numpy",
-                            "collections",
-                            "numpy.core.multiarray",
-                            "__builtin__",
-                            "builtins",
-                        ):
-                            return getattr(__import__(module, fromlist=[name]), name)
-                        # Prevent loading from unsafe modules that could execute arbitrary code
-                        raise pickle.UnpicklingError(
-                            f"Global '{module}.{name}' is forbidden"
-                        )
-
-                # Use a BytesIO object to pass data to the restricted unpickler
-                data = RestrictedUnpickler(io.BytesIO(raw_data)).load()
-
-            self.vectors = data.get("vectors", [])
-            self.metadata = data.get("metadata", {})
-            self.ids = data.get("ids", [])
-
-            logger.info(f"Loaded {len(self.vectors)} vectors from {self.storage_path}")
-
-        except Exception as e:
-            logger.error(f"Failed to load index: {e}")
-            # Reset to empty state
-            self.vectors = []
-            self.metadata = {}
-            self.ids = []
+        logger.info("No existing vector index found")
