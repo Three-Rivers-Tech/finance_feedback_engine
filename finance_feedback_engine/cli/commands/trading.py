@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.utils.environment import get_environment_name
 
 console = Console()
 
@@ -18,6 +19,14 @@ def balance(ctx):
     """Show current account balances."""
     try:
         config = ctx.obj["config"]
+
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
+
         engine = FinanceFeedbackEngine(config)
 
         balances = engine.get_balance()
@@ -44,6 +53,14 @@ def execute(ctx, decision_id):
     """Execute a trading decision."""
     try:
         config = ctx.obj["config"]
+
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
+
         engine = FinanceFeedbackEngine(config)
 
         # If no decision_id provided, show recent decisions and let user select

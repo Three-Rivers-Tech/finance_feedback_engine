@@ -16,6 +16,7 @@ from finance_feedback_engine.backtesting.backtester import Backtester
 from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
 from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
 from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.utils.environment import get_environment_name
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 console = Console()
@@ -148,6 +149,13 @@ def backtest(
             if take_profit_percentage is not None
             else ab_config.get("take_profit_percentage", 0.05)
         )
+
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
 
         engine = FinanceFeedbackEngine(config)
 
@@ -343,6 +351,13 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
     try:
         config = ctx.obj["config"]
 
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
+
         # Avoid mutating shared config in ctx.obj: make a shallow copy
         new_config = dict(config)
         # Ensure nested dict exists and is a shallow copy to avoid mutating original
@@ -491,6 +506,13 @@ def monte_carlo(
 
     try:
         config = ctx.obj["config"]
+
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
 
         # Avoid mutating shared config in ctx.obj: make a shallow copy
         new_config = dict(config)

@@ -14,6 +14,7 @@ from rich.table import Table
 
 from finance_feedback_engine.cli.formatters.pulse_formatter import display_pulse_data
 from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.utils.environment import get_environment_name
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 console = Console()
@@ -42,6 +43,13 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         asset_pair = standardize_asset_pair(asset_pair)
 
         config = ctx.obj["config"]
+
+        # Validate configuration before engine initialization
+        from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        environment = get_environment_name()
+        _validate_config_on_startup(config_path, environment)
 
         # Override provider if specified
         if provider:

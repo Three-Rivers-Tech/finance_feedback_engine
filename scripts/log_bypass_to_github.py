@@ -20,11 +20,126 @@ Environment variables:
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
+
+# Allowed policy categories based on project guidelines
+ALLOWED_POLICY_KEYWORDS = (
+    "hotfix",
+    "critical bug",
+    "external service",
+    "service outage",
+    "ollama down",
+)
+
+
+def evaluate_policy_compliance(reason: str) -> str:
+    """Return a policy compliance string based on the bypass reason.
+
+    The log header restricts bypasses to production hotfixes, critical bugs,
+    or external service outages. Planned work (e.g., phase commits, CI changes)
+    is non-compliant.
+
+    Args:
+        reason: Free-text reason provided for bypass
+
+    Returns:
+        A formatted compliance line for the log: "**Policy Compliance**: ..."
+    """
+    r_lower = (reason or "").lower()
+    compliant = any(k in r_lower for k in ALLOWED_POLICY_KEYWORDS)
+
+    if compliant:
+        return (
+            "**Policy Compliance**: Compliant — permitted category (production hotfix, "
+            "critical bug, or external service outage)."
+        )
+
+    # Heuristics to detect planned work or CI-only changes
+    planned_indicators = (
+        "phase ",
+        "workflow",
+        "ci ",
+        "configuration",
+        "planned",
+        "feature",
+        "test suite",
+    )
+    if any(p in r_lower for p in planned_indicators):
+        return (
+            "**Policy Compliance**: Non-compliant — planned work/CI change; bypass not permitted. "
+            "Action: open `bypass-extension-request` issue and remediate tests; do not bypass for planned work."
+        )
+
+    # Default to non-compliant if not matching allowed categories
+    return (
+        "**Policy Compliance**: Non-compliant — does not match permitted categories (hotfix, critical bug, "
+        "external outage)."
+    )
+
+
 from pathlib import Path
+
+
+def check_recent_duplicate(
+    log_path: Path, commit_hash: str, window_minutes: int = 5
+) -> bool:
+    """
+    Check if a bypass for the same commit was logged recently.
+
+    Args:
+        log_path: Path to the bypass log file
+        commit_hash: Current commit hash to check
+        window_minutes: Time window in minutes to consider duplicates (default: 5)
+
+    Returns:
+        True if a duplicate entry exists within the time window, False otherwise
+    """
+    if not log_path.exists():
+        return False
+
+    try:
+        with open(log_path, "r") as f:
+            content = f.read()
+
+        # Find all entries for this commit
+        commit_pattern = rf"\*\*Commit\*\*: {re.escape(commit_hash)}"
+        matches = list(re.finditer(commit_pattern, content))
+
+        if not matches:
+            return False
+
+        # Check timestamps of matching entries
+        current_time = datetime.now()
+        timestamp_pattern = r"\*\*Bypass Timestamp\*\*: ([\d\-T:.]+)"
+
+        for match in matches:
+            # Look backwards from the commit match to find the timestamp
+            section_start = max(0, match.start() - 500)
+            section = content[section_start : match.end()]
+
+            timestamp_match = re.search(timestamp_pattern, section)
+            if timestamp_match:
+                try:
+                    entry_time = datetime.fromisoformat(timestamp_match.group(1))
+                    time_diff = (current_time - entry_time).total_seconds() / 60
+
+                    if time_diff < window_minutes:
+                        print(
+                            f"ℹ️  Duplicate bypass for commit {commit_hash} detected within {time_diff:.1f} minutes - skipping"
+                        )
+                        return True
+                except ValueError:
+                    # If timestamp parsing fails, continue checking other entries
+                    continue
+
+        return False
+    except Exception as e:
+        print(f"⚠️  Error checking for duplicates: {e}")
+        return False
 
 
 def log_to_file(message: str) -> None:
@@ -106,11 +221,20 @@ def main():
     except:
         commit_hash = "unknown"
 
+    # Check for recent duplicates
+    log_path = Path("PRE_COMMIT_BYPASS_LOG.md")
+    if check_recent_duplicate(log_path, commit_hash):
+        print("✓ Bypass already logged for this commit (within 5 minutes)")
+        return
+
     # Format messages
+    compliance_line = evaluate_policy_compliance(args.reason)
+
     file_entry = f"""**Bypass Timestamp**: {timestamp.isoformat()}
 **Commit**: {commit_hash}
 **Hooks Skipped**: {args.hooks}
 **Reason**: {args.reason}
+{compliance_line}
 **Fix Deadline**: {deadline.isoformat()}
 
 ---"""
@@ -121,6 +245,7 @@ def main():
 - **Commit**: `{commit_hash}`
 - **Hooks Skipped**: `{args.hooks}`
 - **Reason**: {args.reason}
+ - **Policy Compliance**: {evaluate_policy_compliance(args.reason).split(': ', 1)[1]}
 
 🚨 **Action Required**: Post-commit fix deadline is **{deadline.strftime('%Y-%m-%d %H:%M:%S UTC')}** (24 hours from bypass)
 
