@@ -115,6 +115,7 @@ If bypass deadline will be missed:
 **Commit**: 52cc958
 **Hooks Skipped**: pytest-fast,mypy
 **Reason**: Phase 1.4 commit with test suite fixes - 75 pre-existing test failures unrelated to Phase 1.4 changes
+**Policy Compliance**: Non-compliant — planned feature work; bypass not permitted under policy (allowed: production hotfix, critical bug, external service outage). Action: open `bypass-extension-request` issue and remediate test suite; do not bypass for scheduled commits.
 **Fix Deadline**: 2025-12-21T23:08:41.842114
 
 ---
@@ -124,6 +125,17 @@ If bypass deadline will be missed:
 **Commit**: 377df4f
 **Hooks Skipped**: pytest-fast,mypy
 **Reason**: Phase 1.5 complete - CI workflow change only (no code changes). Pre-existing test failures unrelated to CI configuration
+**Policy Compliance**: Non-compliant — planned CI/workflow change; bypass not permitted under policy (allowed: production hotfix, critical bug, external service outage). Action: open `bypass-extension-request` issue and remediate failing tests; do not bypass for planned work.
 **Fix Deadline**: 2025-12-21T23:15:42.104286
+
+---
+
+## 2025-12-20T23:45:17.651245
+**Bypass Timestamp**: 2025-12-20T23:45:17.648588
+**Commit**: d8cd8f7
+**Hooks Skipped**: pytest-fast,mypy
+**Reason**: Emergency bypass
+**Policy Compliance**: Non-compliant — does not match permitted categories (hotfix, critical bug, external outage).
+**Fix Deadline**: 2025-12-21T23:45:17.648588
 
 ---
