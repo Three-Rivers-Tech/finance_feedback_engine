@@ -116,6 +116,14 @@ disallow_untyped_decorators = false
 show_error_codes = true
 mypy_path = ["finance_feedback_engine"]
 
+# Exclude directories that cause module conflicts
+exclude = [
+    "experiments/",
+    "build/",
+    "dist/",
+    ".*\\.egg-info/"
+]
+
 [[tool.mypy.overrides]]
 module = [
     "coinbase_advanced.*",
