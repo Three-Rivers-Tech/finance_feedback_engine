@@ -194,6 +194,10 @@ ignored-modules = [
     "matplotlib",
 ]
 
+[tool.bandit]
+exclude_dirs = ["tests", "examples", "scripts", "experiments"]
+skips = ["B101"]  # Skip assert_used in test files
+
 [tool.pydocstyle]
 convention = "google"
 add-ignore = ["D401", "D107"]  # Imperative mood, __init__ docstrings
