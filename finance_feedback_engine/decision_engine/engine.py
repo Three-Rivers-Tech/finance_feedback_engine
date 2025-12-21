@@ -119,6 +119,12 @@ class DecisionEngine:
             "portfolio_take_profit_percentage", 0.05
         )
 
+        # Convert legacy percentage format (>1) to decimal (e.g., 2.0 -> 0.02)
+        if self.portfolio_stop_loss_percentage > 1:
+            self.portfolio_stop_loss_percentage = self.portfolio_stop_loss_percentage / 100
+        if self.portfolio_take_profit_percentage > 1:
+            self.portfolio_take_profit_percentage = self.portfolio_take_profit_percentage / 100
+
         # Validate local_models
         if not isinstance(self.local_models, list):
             raise ValueError(
@@ -167,6 +173,31 @@ class DecisionEngine:
         logger.info(
             f"Decision engine initialized with provider: {self.ai_manager.ai_provider}"
         )
+
+    @property
+    def ai_provider(self):
+        """Get the AI provider from the AI manager."""
+        return self.ai_manager.ai_provider
+
+    @property
+    def decision_threshold(self):
+        """Get decision threshold from config. Supports flat and nested config structures."""
+        # Try nested structure first, then flat structure for backward compatibility
+        decision_config = self.config.get("decision_engine", self.config)
+        return decision_config.get("decision_threshold", 0.6)
+
+    @property
+    def ensemble_manager(self):
+        """Get the ensemble manager from the AI manager."""
+        return self.ai_manager.ensemble_manager
+
+    def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
+        """Calculate price change percentage. Delegates to market analyzer."""
+        return self.market_analyzer._calculate_price_change(market_data)
+
+    def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
+        """Calculate volatility. Delegates to market analyzer."""
+        return self.market_analyzer._calculate_volatility(market_data)
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -1101,7 +1132,7 @@ Format response as a structured technical analysis demonstration.
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool,
+        signal_only_default: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculate all position sizing parameters.
