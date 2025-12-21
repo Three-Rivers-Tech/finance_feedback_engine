@@ -21,6 +21,7 @@ from .exceptions import (
     TradingError,
 )
 from .memory.portfolio_memory import PortfolioMemoryEngine
+from .monitoring.error_tracking import ErrorTracker
 from .persistence.decision_store import DecisionStore
 from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
@@ -62,6 +63,9 @@ class FinanceFeedbackEngine:
         validate_at_startup(config_path, raise_on_error=False)
 
         self.config = config
+
+        # Initialize error tracking (Phase 2.1)
+        self.error_tracker = ErrorTracker(config.get("error_tracking", {}))
 
         # Portfolio caching infrastructure (Phase 2 optimization)
         self._portfolio_cache = None
@@ -557,6 +561,20 @@ class FinanceFeedbackEngine:
                     "error_message": str(e),
                 },
             }
+        except Exception as e:
+            # Capture unexpected exceptions for error tracking
+            self.error_tracker.capture_exception(
+                e,
+                {
+                    "asset_pair": asset_pair,
+                    "module": "core",
+                    "operation": "analyze_asset",
+                    "include_sentiment": include_sentiment,
+                    "include_macro": include_macro,
+                },
+            )
+            # Re-raise to preserve existing error handling behavior
+            raise
 
         # Persist decision
         self.decision_store.save_decision(decision)
