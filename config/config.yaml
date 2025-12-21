@@ -2,7 +2,8 @@
 
 # Alpha Vantage API Configuration
 # Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
-alpha_vantage_api_key: "YOUR_ALPHA_VANTAGE_API_KEY"
+# Load from environment variable: ALPHA_VANTAGE_API_KEY
+alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
 
 # Trading Platform Configuration
 # Options: 'coinbase', 'coinbase_advanced', 'oanda', 'mock', 'unified'
@@ -24,10 +25,11 @@ platform_credentials:
   # Option 1: Coinbase Advanced (Crypto Futures)
   # ============================================
   # Get your API keys from: https://www.coinbase.com/settings/api
-  api_key: "YOUR_COINBASE_API_KEY"
-  api_secret: "YOUR_COINBASE_API_SECRET"
+  # Load from environment variables: COINBASE_API_KEY, COINBASE_API_SECRET
+  api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
+  api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
   use_sandbox: false  # true for testing, false for production
-  # passphrase: "YOUR_PASSPHRASE"  # optional, for legacy API only
+  # passphrase: "${COINBASE_PASSPHRASE}"  # optional, for legacy API only
 
   # ============================================
   # Option 2: Oanda (Forex Trading)
@@ -36,10 +38,11 @@ platform_credentials:
   # 1. Create account (practice or live)
   # 2. Generate Personal Access Token
   # 3. Find account ID in dashboard (format: 001-XXX-XXXXXXX-XXX)
+  # Load from environment variables: OANDA_API_TOKEN, OANDA_ACCOUNT_ID
   # Uncomment below if using Oanda:
   #
-  # api_key: "YOUR_OANDA_API_TOKEN"
-  # account_id: "YOUR_OANDA_ACCOUNT_ID"
+  # api_key: "${OANDA_API_TOKEN:YOUR_OANDA_API_TOKEN}"
+  # account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
   # environment: "practice"  # 'practice' for demo, 'live' for real money
 
   # ============================================
@@ -300,6 +303,28 @@ monitoring:
     # Performance panel settings
     performance:
       lookback_hours: 24
+
+# Error Tracking Configuration
+# Centralized error tracking with Sentry integration and logging fallback
+# PHASE 2.1: Production readiness - monitor errors in production
+error_tracking:
+  # Enable error tracking (set to true in production)
+  enabled: false
+
+  # Backend: 'sentry' (cloud), 'logging' (local), or 'file' (local)
+  backend: "logging"
+
+  # Sentry DSN for remote error tracking (production only)
+  # Set via SENTRY_DSN environment variable
+  sentry_dsn: "${SENTRY_DSN:}"
+
+  # Performance trace sample rate (0.0 = none, 1.0 = all requests)
+  # Lower in production to reduce overhead (recommended: 0.1)
+  traces_sample_rate: 0.1
+
+  # Environment name (for Sentry tagging)
+  # Auto-detected from FFE_ENVIRONMENT, defaults to development
+  environment: "${FFE_ENVIRONMENT:development}"
 
 # Persistence Configuration
 persistence:

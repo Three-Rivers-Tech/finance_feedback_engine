@@ -48,7 +48,7 @@ jobs:
           SAFETY_EXIT=0
           safety check --full-report || SAFETY_EXIT=$?
           echo "exit_code=$SAFETY_EXIT" >> $GITHUB_OUTPUT
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Run pip-audit
         id: pip-audit
@@ -59,7 +59,7 @@ jobs:
           PIP_AUDIT_EXIT=0
           pip-audit --requirement requirements.txt || PIP_AUDIT_EXIT=$?
           echo "exit_code=$PIP_AUDIT_EXIT" >> $GITHUB_OUTPUT
-        continue-on-error: true
+        continue-on-error: false
 
       - name: Upload vulnerability reports
         uses: actions/upload-artifact@v4
@@ -130,7 +130,7 @@ jobs:
           bandit -r finance_feedback_engine/ \
                  -f json \
                  -o bandit-report.json \
-                 -c pyproject.toml || true
+                 -c pyproject.toml
           bandit -r finance_feedback_engine/ \
                  -f screen \
                  -c pyproject.toml
@@ -193,7 +193,7 @@ jobs:
         uses: anchore/scan-action@v3
         with:
           image: finance-feedback-engine:scan
-          fail-build: false
+          fail-build: true
           severity-cutoff: high
           output-format: sarif
 
