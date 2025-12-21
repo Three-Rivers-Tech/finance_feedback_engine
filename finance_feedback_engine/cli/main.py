@@ -60,6 +60,40 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+def _validate_config_on_startup(config_path: str, environment: str = "development"):
+    """
+    Validate configuration file before engine initialization.
+
+    Args:
+        config_path: Path to configuration file
+        environment: Runtime environment (production, staging, development, test)
+
+    Raises:
+        click.ClickException: If validation fails with critical/high severity issues
+    """
+    from finance_feedback_engine.utils.config_validator import (
+        validate_config_file,
+        print_validation_results,
+    )
+
+    result = validate_config_file(config_path, environment)
+
+    # If there are critical or high severity errors, fail startup
+    if result.has_errors():
+        console.print("[bold red]Configuration validation failed![/bold red]")
+        print_validation_results(result, verbose=True)
+        raise click.ClickException(
+            "Invalid configuration detected. Fix errors above and retry."
+        )
+
+    # If there are warnings, show them but allow startup
+    if result.issues:
+        console.print(
+            "[yellow]Configuration validation passed with warnings:[/yellow]"
+        )
+        print_validation_results(result, verbose=False)
+
+
 def _display_pulse_data(engine, asset_pair: str):
     """Display multi-timeframe pulse technical analysis data.
 
