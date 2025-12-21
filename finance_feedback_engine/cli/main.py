@@ -59,13 +59,16 @@ from finance_feedback_engine.monitoring.metrics import inc, init_metrics
 console = Console()
 logger = logging.getLogger(__name__)
 
+# Config mode constant
+CONFIG_MODE_TIERED = "tiered"
+
 
 def _validate_config_on_startup(config_path: str, environment: str = "development"):
     """
     Validate configuration file before engine initialization.
 
     Args:
-        config_path: Path to configuration file or "tiered" for tiered loading
+        config_path: Path to configuration file or CONFIG_MODE_TIERED for tiered loading
         environment: Runtime environment (production, staging, development, test)
 
     Raises:
@@ -76,12 +79,24 @@ def _validate_config_on_startup(config_path: str, environment: str = "developmen
         validate_config_file,
     )
 
+    # Validate environment argument
+    ALLOWED_ENVIRONMENTS = ("production", "staging", "development", "test")
+    if environment not in ALLOWED_ENVIRONMENTS:
+        raise click.ClickException(
+            f"Invalid environment '{environment}'. Must be one of: {', '.join(ALLOWED_ENVIRONMENTS)}"
+        )
+
     # Skip validation for tiered loading (no single file to validate)
     # Tiered loading validates at load time
-    if config_path == "tiered":
+    if config_path == CONFIG_MODE_TIERED:
         return
 
-    result = validate_config_file(config_path, environment)
+    try:
+        result = validate_config_file(config_path, environment)
+    except Exception as e:
+        raise click.ClickException(
+            f"Configuration validation error: {e}"
+        )
 
     # If there are critical or high severity errors, fail startup
     if result.has_errors():
@@ -578,11 +593,17 @@ def cli(ctx, config, verbose, interactive):
         final_config = load_tiered_config()
         # Indicate that tiered loading was used, might not have a single path
         # Set a placeholder
-        ctx.obj["config_path"] = "tiered"
+        ctx.obj["config_path"] = CONFIG_MODE_TIERED
 
     # Store the final config
     ctx.obj["config"] = final_config
     ctx.obj["verbose"] = verbose
+
+    # Validate configuration before proceeding
+    _validate_config_on_startup(
+        ctx.obj.get("config_path"),
+        final_config.get("environment", "development")
+    )
 
     # Setup logging with config and verbose flag
     # Verbose flag takes priority over config setting

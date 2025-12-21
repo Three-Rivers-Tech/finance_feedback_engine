@@ -20,11 +20,66 @@ Environment variables:
 
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
+
+
+def check_recent_duplicate(log_path: Path, commit_hash: str, window_minutes: int = 5) -> bool:
+    """
+    Check if a bypass for the same commit was logged recently.
+
+    Args:
+        log_path: Path to the bypass log file
+        commit_hash: Current commit hash to check
+        window_minutes: Time window in minutes to consider duplicates (default: 5)
+
+    Returns:
+        True if a duplicate entry exists within the time window, False otherwise
+    """
+    if not log_path.exists():
+        return False
+
+    try:
+        with open(log_path, "r") as f:
+            content = f.read()
+
+        # Find all entries for this commit
+        commit_pattern = rf'\*\*Commit\*\*: {re.escape(commit_hash)}'
+        matches = list(re.finditer(commit_pattern, content))
+
+        if not matches:
+            return False
+
+        # Check timestamps of matching entries
+        current_time = datetime.now()
+        timestamp_pattern = r'\*\*Bypass Timestamp\*\*: ([\d\-T:.]+)'
+
+        for match in matches:
+            # Look backwards from the commit match to find the timestamp
+            section_start = max(0, match.start() - 500)
+            section = content[section_start:match.end()]
+
+            timestamp_match = re.search(timestamp_pattern, section)
+            if timestamp_match:
+                try:
+                    entry_time = datetime.fromisoformat(timestamp_match.group(1))
+                    time_diff = (current_time - entry_time).total_seconds() / 60
+
+                    if time_diff < window_minutes:
+                        print(f"ℹ️  Duplicate bypass for commit {commit_hash} detected within {time_diff:.1f} minutes - skipping")
+                        return True
+                except ValueError:
+                    # If timestamp parsing fails, continue checking other entries
+                    continue
+
+        return False
+    except Exception as e:
+        print(f"⚠️  Error checking for duplicates: {e}")
+        return False
 
 
 def log_to_file(message: str) -> None:
@@ -105,6 +160,12 @@ def main():
         )
     except:
         commit_hash = "unknown"
+
+    # Check for recent duplicates
+    log_path = Path("PRE_COMMIT_BYPASS_LOG.md")
+    if check_recent_duplicate(log_path, commit_hash):
+        print("✓ Bypass already logged for this commit (within 5 minutes)")
+        return
 
     # Format messages
     file_entry = f"""**Bypass Timestamp**: {timestamp.isoformat()}

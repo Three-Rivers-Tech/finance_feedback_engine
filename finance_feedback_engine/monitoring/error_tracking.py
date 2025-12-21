@@ -11,6 +11,11 @@ import logging
 import sys
 from typing import Any, Dict, Optional
 
+try:
+    from finance_feedback_engine.monitoring.logging_config import PIIRedactionFilter
+except ImportError:
+    PIIRedactionFilter = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +37,7 @@ class ErrorTracker:
         self.enabled = self.config.get("enabled", False)
         self.backend = self.config.get("backend", "logging")
         self.sentry_client = None
+        self.pii_redactor = PIIRedactionFilter() if PIIRedactionFilter else None
 
         if self.enabled and self.backend == "sentry":
             self._init_sentry()
@@ -123,17 +129,82 @@ class ErrorTracker:
         """Log error to local logging system with structured context."""
         log_level = getattr(logging, level.upper(), logging.ERROR)
 
+        # Sanitize context to prevent PII leakage in logs
+        sanitized_context = self._sanitize_context(context)
+
         # Build structured log message
         error_type = type(error).__name__
         error_message = str(error)
 
-        context_str = ", ".join(f"{k}={v}" for k, v in context.items())
+        context_str = ", ".join(f"{k}={v}" for k, v in sanitized_context.items())
 
         log_message = f"{error_type}: {error_message}"
         if context_str:
             log_message += f" | Context: {context_str}"
 
-        logger.log(log_level, log_message, exc_info=True, extra=context)
+        logger.log(log_level, log_message, exc_info=True, extra=sanitized_context)
+
+    def _sanitize_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Sanitize context dictionary to remove PII before logging/sending to Sentry.
+
+        Creates a copy of the context and redacts sensitive fields including:
+        - email, ssn, phone, user_id, username, account_id
+        - token, api_key, password, secret, auth, authorization
+        - credit_card, cvv, social_security, passport, drivers_license
+
+        Args:
+            context: Original context dictionary
+
+        Returns:
+            Sanitized copy with PII redacted
+        """
+        if not context:
+            return {}
+
+        # Create a deep copy to avoid mutating original
+        import copy
+        sanitized = copy.deepcopy(context)
+
+        # List of sensitive keys to redact (case-insensitive matching)
+        sensitive_keys = {
+            'email', 'mail', 'e_mail',
+            'ssn', 'social_security', 'social_security_number',
+            'phone', 'phone_number', 'mobile', 'telephone',
+            'user_id', 'userid', 'username', 'user_name',
+            'account_id', 'accountid', 'account_number',
+            'token', 'access_token', 'refresh_token', 'bearer_token',
+            'api_key', 'apikey', 'api_secret',
+            'password', 'passwd', 'pwd', 'pass',
+            'secret', 'secret_key', 'client_secret',
+            'auth', 'authorization', 'auth_token',
+            'credit_card', 'creditcard', 'card_number',
+            'cvv', 'cvc', 'card_security_code',
+            'passport', 'passport_number',
+            'drivers_license', 'driver_license', 'license_number',
+            'oanda_account_id', 'coinbase_api_key'
+        }
+
+        def redact_recursive(obj: Any, depth: int = 0) -> Any:
+            """Recursively redact sensitive values in nested structures."""
+            # Prevent infinite recursion
+            if depth > 10:
+                return "[DEPTH_LIMIT_EXCEEDED]"
+
+            if isinstance(obj, dict):
+                return {
+                    k: "***REDACTED***" if k.lower().replace('-', '_') in sensitive_keys
+                    else redact_recursive(v, depth + 1)
+                    for k, v in obj.items()
+                }
+            elif isinstance(obj, (list, tuple)):
+                return type(obj)(redact_recursive(item, depth + 1) for item in obj)
+            elif isinstance(obj, str) and self.pii_redactor:
+                # Use existing PII redaction filter for string values
+                return self.pii_redactor.redact(obj)
+            else:
+                return obj
+
+        return redact_recursive(sanitized)
 
     def _send_to_sentry(
         self, error: Exception, context: Dict[str, Any], level: str
@@ -146,15 +217,18 @@ class ErrorTracker:
             # Set Sentry level
             sentry_level = level if level in ["error", "warning", "info"] else "error"
 
+            # Sanitize context to prevent PII leaks
+            sanitized_context = self._sanitize_context(context)
+
             # Add context as tags (for filtering) and extras (for details)
             with self.sentry_client.push_scope() as scope:
-                # Tags for filtering in Sentry UI
+                # Tags for filtering in Sentry UI (use original for non-sensitive fields)
                 for key in ["asset_pair", "module", "operation", "platform"]:
                     if key in context:
                         scope.set_tag(key, context[key])
 
-                # Extra context for details
-                scope.set_context("custom_context", context)
+                # Extra context for details (use sanitized copy)
+                scope.set_context("custom_context", sanitized_context)
 
                 # Set level
                 scope.level = sentry_level
@@ -192,26 +266,32 @@ class ErrorTracker:
 
         context = context or {}
 
+        # Sanitize context to prevent PII leakage in logs
+        sanitized_context = self._sanitize_context(context)
+
         # Log locally
         log_level = getattr(logging, level.upper(), logging.INFO)
-        context_str = ", ".join(f"{k}={v}" for k, v in context.items())
+        context_str = ", ".join(f"{k}={v}" for k, v in sanitized_context.items())
         log_message = message
         if context_str:
             log_message += f" | Context: {context_str}"
 
-        logger.log(log_level, log_message, extra=context)
+        logger.log(log_level, log_message, extra=sanitized_context)
 
         # Send to Sentry if configured
         if self.backend == "sentry" and self.sentry_client:
             try:
+                # Sanitize context to prevent PII leaks
+                sanitized_context = self._sanitize_context(context)
+
                 with self.sentry_client.push_scope() as scope:
-                    # Add tags
+                    # Add tags (use original for non-sensitive fields)
                     for key in ["asset_pair", "module", "operation", "platform"]:
                         if key in context:
                             scope.set_tag(key, context[key])
 
-                    # Add extra context
-                    scope.set_context("custom_context", context)
+                    # Add extra context (use sanitized copy)
+                    scope.set_context("custom_context", sanitized_context)
 
                     # Set level
                     scope.level = level if level in ["error", "warning", "info"] else "info"
