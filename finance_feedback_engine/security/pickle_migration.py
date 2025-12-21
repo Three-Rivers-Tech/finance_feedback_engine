@@ -34,15 +34,23 @@ class PickleToJsonMigrator:
             List of pickle file paths found
         """
         if root_dir is None:
-            root_dir = Path(__file__).parent.parent.parent
-
-        pickle_files = []
-        for pattern in ["**/*.pkl", "**/*.pickle"]:
-            pickle_files.extend(root_dir.glob(pattern))
-
+            # Look for common project root markers
+            current = Path(__file__).resolve()
+            for parent in current.parents:
+                if (parent / "pyproject.toml").exists() or (parent / "setup.py").exists():
+                    root_dir = parent
+                    break
         # Filter to only data-related pickle files (exclude third-party caches)
         data_pickles = [
             p
+            for p in pickle_files
+            if any(
+                x in str(p) for x in ["data/", "memory/", "vectors", "store", "cache"]
+            )
+            and not any(
+                x in str(p) for x in ["__pycache__", "site-packages"]
+            )
+        ]
             for p in pickle_files
             if any(
                 x in str(p) for x in ["data/", "memory/", "vectors", "store", "cache"]
@@ -74,17 +82,13 @@ class PickleToJsonMigrator:
     @staticmethod
     def verify_json_output(json_path: Path) -> bool:
         """
-        Verify JSON file is valid and readable.
-
-        Args:
-            json_path: Path to JSON file
-
-        Returns:
-            True if valid JSON, False otherwise
-        """
         try:
             with open(json_path, "r") as f:
                 data = json.load(f)
+            return True
+        except (json.JSONDecodeError, IOError) as e:
+            logger.error(f"Failed to read/parse JSON: {e}")
+            return False
             # Verify it has expected structure
             if not isinstance(data, dict):
                 logger.error(f"JSON root is not dict: {type(data)}")

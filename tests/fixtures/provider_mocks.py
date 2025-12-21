@@ -32,7 +32,8 @@ def create_alpha_vantage_mock_response(
     # Forex pairs are specifically: EURUSD, GBPUSD, JPYUSD, etc (currency pairs)
     # Stocks are: AAPL, GOOGL, MSFT (single symbol)
     is_forex = (
-        asset_pair.upper() in ["EURUSD", "GBPUSD", "JPYUSD", "CHFUSD", "CADUSD", "AUDUSD", "NZDUSD"]
+        asset_pair.upper()
+        in ["EURUSD", "GBPUSD", "JPYUSD", "CHFUSD", "CADUSD", "AUDUSD", "NZDUSD"]
         or "/" in asset_pair
         or len(asset_pair) > 5
     )
@@ -111,7 +112,9 @@ def create_invalid_api_key_response() -> Dict[str, Any]:
     Returns:
         Dictionary matching invalid API key format
     """
-    return {"Error Message": "Invalid API call. Please check the function used or the parameters used."}
+    return {
+        "Error Message": "Invalid API call. Please check the function used or the parameters used."
+    }
 
 
 async def mock_aiohttp_get(
@@ -194,9 +197,7 @@ def create_mock_aiohttp_response(
     mock_response.json = AsyncMock(return_value=json_data)
 
     if raise_on_status:
-        mock_response.raise_for_status = MagicMock(
-            side_effect=Exception("HTTP Error")
-        )
+        mock_response.raise_for_status = MagicMock(side_effect=Exception("HTTP Error"))
     else:
         mock_response.raise_for_status = MagicMock()
 
