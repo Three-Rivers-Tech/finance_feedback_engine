@@ -21,8 +21,11 @@ class AIDecisionManager:
     def __init__(self, config: Dict[str, Any], backtest_mode: bool = False):
         self.config = config
         self.backtest_mode = backtest_mode
-        self.ai_provider = config.get("decision_engine", {}).get("ai_provider", "local")
-        self.model_name = config.get("decision_engine", {}).get("model_name", "default")
+        
+        # Support both nested and flat config structures for backward compatibility
+        decision_config = config.get("decision_engine", config)
+        self.ai_provider = decision_config.get("ai_provider", "local")
+        self.model_name = decision_config.get("model_name", "default")
 
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None

@@ -98,7 +98,7 @@ pipeline = [
 ]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.12"
 
 # NOTE: Pre-commit runs mypy across a wide portion of the repo (including tests,
 # scripts, and examples). Strict typing across the entire tree is not currently
