@@ -4,8 +4,9 @@ The provider uses aiohttp ClientSession internally, but the simplest way to mock
 is to patch the _async_request method directly, which is called by all API methods.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from tests.fixtures.provider_mocks import (
     create_alpha_vantage_mock_response,
@@ -122,7 +123,9 @@ class TestAlphaVantageProviderFixed:
             data = await provider.get_market_data("AAPL")
 
             # Verify all required fields present
-            assert all(key in data for key in ["open", "high", "low", "close", "volume"])
+            assert all(
+                key in data for key in ["open", "high", "low", "close", "volume"]
+            )
             # Verify correct close price
             assert float(data["close"]) == 103.00
             # Verify price relationships
