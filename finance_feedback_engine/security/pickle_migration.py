@@ -42,18 +42,14 @@ class PickleToJsonMigrator:
 
         # Filter to only data-related pickle files (exclude third-party caches)
         data_pickles = [
-            p for p in pickle_files
-            if any(x in str(p) for x in [
-                "data/",
-                "memory/",
-                "vectors",
-                "store",
-                "cache"
-            ]) and not any(x in str(p) for x in [
-                "__pycache__",
-                ".pytest_cache",
-                "site-packages"
-            ])
+            p
+            for p in pickle_files
+            if any(
+                x in str(p) for x in ["data/", "memory/", "vectors", "store", "cache"]
+            )
+            and not any(
+                x in str(p) for x in ["__pycache__", ".pytest_cache", "site-packages"]
+            )
         ]
 
         return data_pickles
@@ -100,8 +96,7 @@ class PickleToJsonMigrator:
 
     @staticmethod
     def create_migration_report(
-        pickle_files: list[Path],
-        migrations: Dict[str, Dict[str, Any]]
+        pickle_files: list[Path], migrations: Dict[str, Dict[str, Any]]
     ) -> str:
         """
         Create a human-readable migration report.
@@ -127,21 +122,23 @@ class PickleToJsonMigrator:
             status = migrations.get(str(pkl_file), {}).get("status", "PENDING")
             report_lines.append(f"  [{status}] {pkl_file}")
 
-        report_lines.extend([
-            "",
-            "Migration Status Summary:",
-            f"  SUCCESS: {sum(1 for m in migrations.values() if m.get('status') == 'SUCCESS')}",
-            f"  FAILED: {sum(1 for m in migrations.values() if m.get('status') == 'FAILED')}",
-            f"  PENDING: {len(pickle_files) - len(migrations)}",
-            "",
-            "Next Steps:",
-            "  1. Review migration report above",
-            "  2. Run: python main.py migrate-pickle-to-json",
-            "  3. Verify: python main.py verify-migration",
-            "  4. Backup: rm <pickle_files> (after verification)",
-            "  5. Test: Run full test suite",
-            "=" * 70,
-        ])
+        report_lines.extend(
+            [
+                "",
+                "Migration Status Summary:",
+                f"  SUCCESS: {sum(1 for m in migrations.values() if m.get('status') == 'SUCCESS')}",
+                f"  FAILED: {sum(1 for m in migrations.values() if m.get('status') == 'FAILED')}",
+                f"  PENDING: {len(pickle_files) - len(migrations)}",
+                "",
+                "Next Steps:",
+                "  1. Review migration report above",
+                "  2. Run: python main.py migrate-pickle-to-json",
+                "  3. Verify: python main.py verify-migration",
+                "  4. Backup: rm <pickle_files> (after verification)",
+                "  5. Test: Run full test suite",
+                "=" * 70,
+            ]
+        )
 
         return "\n".join(report_lines)
 

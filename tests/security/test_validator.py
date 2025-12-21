@@ -7,7 +7,10 @@ from tempfile import NamedTemporaryFile
 import pytest
 import yaml
 
-from finance_feedback_engine.security.validator import SecurityValidator, validate_at_startup
+from finance_feedback_engine.security.validator import (
+    SecurityValidator,
+    validate_at_startup,
+)
 
 
 class TestSecurityValidator:
@@ -19,7 +22,7 @@ class TestSecurityValidator:
         config = {
             "platform_credentials": {
                 "api_key": "sk_live_12345abcdef",  # Real-looking key
-                "api_secret": "secret123"
+                "api_secret": "secret123",
             }
         }
 
@@ -42,7 +45,7 @@ class TestSecurityValidator:
         config = {
             "platform_credentials": {
                 "api_key": "YOUR_COINBASE_API_KEY",
-                "api_secret": "YOUR_COINBASE_API_SECRET"
+                "api_secret": "YOUR_COINBASE_API_SECRET",
             }
         }
 
@@ -65,7 +68,7 @@ class TestSecurityValidator:
         config = {
             "platform_credentials": {
                 "api_key": "${COINBASE_API_KEY}",
-                "api_secret": "${COINBASE_API_SECRET}"
+                "api_secret": "${COINBASE_API_SECRET}",
             }
         }
 
@@ -91,7 +94,9 @@ class TestSecurityValidator:
 
             # Should have warnings about missing keys
             assert len(validator.warnings) > 0
-            assert any("ALPHA_VANTAGE_API_KEY" in warning for warning in validator.warnings)
+            assert any(
+                "ALPHA_VANTAGE_API_KEY" in warning for warning in validator.warnings
+            )
         finally:
             # Restore old key
             if old_key:
@@ -104,8 +109,8 @@ class TestSecurityValidator:
             "alpha_vantage_api_key": "${ALPHA_VANTAGE_API_KEY}",
             "platform_credentials": {
                 "api_key": "${COINBASE_API_KEY}",
-                "api_secret": "${COINBASE_API_SECRET}"
-            }
+                "api_secret": "${COINBASE_API_SECRET}",
+            },
         }
 
         with open(config_file, "w") as f:
@@ -155,7 +160,7 @@ class TestSecurityValidator:
             {"api_secret": "secret123"},
             {"password": "mypassword"},
             {"token": "tok_123"},
-            {"passphrase": "phrase123"}
+            {"passphrase": "phrase123"},
         ]
 
         for config in test_cases:
