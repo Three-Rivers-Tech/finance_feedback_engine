@@ -23,6 +23,7 @@ from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+from finance_feedback_engine.utils.environment import get_environment_name
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -548,6 +549,13 @@ def run_agent(
     ):
         # User cancelled or configuration invalid
         return
+
+    # Validate configuration before engine initialization
+    from finance_feedback_engine.cli.main import _validate_config_on_startup
+
+    config_path = ctx.obj.get("config_path", "config/config.yaml")
+    environment = get_environment_name()
+    _validate_config_on_startup(config_path, environment)
 
     try:
         engine = FinanceFeedbackEngine(config)
