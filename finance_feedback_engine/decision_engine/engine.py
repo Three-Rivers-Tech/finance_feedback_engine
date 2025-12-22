@@ -209,12 +209,30 @@ class DecisionEngine:
 
     @property
     def ensemble_manager(self):
-        """Get the ensemble manager from the AI manager."""
+        """
+        Get the ensemble manager currently used by the AI manager.
+
+        Note:
+            This is a delegated view of ``self.ai_manager.ensemble_manager``.
+            Accessing or mutating this property will directly interact with the
+            underlying ``ai_manager`` instance rather than a separate copy on
+            ``DecisionEngine`` itself.
+        """
         return self.ai_manager.ensemble_manager
 
     @ensemble_manager.setter
     def ensemble_manager(self, value):
-        """Set the ensemble manager on the AI manager."""
+        """
+        Set the ensemble manager on the underlying AI manager.
+
+        Warning:
+            This setter directly updates ``self.ai_manager.ensemble_manager``.
+            As a result, any code that also holds a reference to the same
+            ``ai_manager`` will observe this change. This tight coupling is
+            intentional (e.g. for testing and configuration wiring), but it
+            means that ``engine.ensemble_manager = X`` has the side effect of
+            mutating shared internal state.
+        """
         self.ai_manager.ensemble_manager = value
 
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
