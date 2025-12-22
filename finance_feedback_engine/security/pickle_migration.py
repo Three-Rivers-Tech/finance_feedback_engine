@@ -37,20 +37,14 @@ class PickleToJsonMigrator:
             # Look for common project root markers
             current = Path(__file__).resolve()
             for parent in current.parents:
-                if (parent / "pyproject.toml").exists() or (parent / "setup.py").exists():
+                if (parent / "pyproject.toml").exists() or (
+                    parent / "setup.py"
+                ).exists():
                     root_dir = parent
                     break
         # Filter to only data-related pickle files (exclude third-party caches)
         data_pickles = [
             p
-            for p in pickle_files
-            if any(
-                x in str(p) for x in ["data/", "memory/", "vectors", "store", "cache"]
-            )
-            and not any(
-                x in str(p) for x in ["__pycache__", "site-packages"]
-            )
-        ]
             for p in pickle_files
             if any(
                 x in str(p) for x in ["data/", "memory/", "vectors", "store", "cache"]
@@ -81,14 +75,10 @@ class PickleToJsonMigrator:
 
     @staticmethod
     def verify_json_output(json_path: Path) -> bool:
-        """
+        """Verify that JSON file is valid and readable."""
         try:
             with open(json_path, "r") as f:
                 data = json.load(f)
-            return True
-        except (json.JSONDecodeError, IOError) as e:
-            logger.error(f"Failed to read/parse JSON: {e}")
-            return False
             # Verify it has expected structure
             if not isinstance(data, dict):
                 logger.error(f"JSON root is not dict: {type(data)}")
@@ -160,13 +150,13 @@ PICKLE TO JSON MIGRATION INSTRUCTIONS
 
 VULNERABILITY: CRT-2 (CVSS 9.8)
 Issue: pickle.load() can execute arbitrary code on malicious data
-Risk: File access → arbitrary code execution → account compromise
+Risk: File access -> arbitrary code execution -> account compromise
 
 MIGRATION PLAN:
 1. Find all .pkl and .pickle files: grep -r "\\.pkl" data/
 2. For each file:
    a. Load with restricted unpickler (already in vector_store.py)
-   b. Convert data to JSON-serializable format (numpy → lists)
+   b. Convert data to JSON-serializable format (numpy -> lists)
    c. Save as .json with _version field for tracking
    d. Verify JSON is valid and readable
    e. Keep .pkl as backup until verification complete
@@ -176,10 +166,10 @@ MIGRATION PLAN:
 6. Test with existing pickle data
 
 STATUS: In the vector_store.py:
-- ✅ RestrictedUnpickler already implemented (safe loading)
-- ✅ JSON save_index() already implemented
-- ✅ JSON load preference already implemented
-- ⏳ Migration script needed for existing files
+- [DONE] RestrictedUnpickler already implemented (safe loading)
+- [DONE] JSON save_index() already implemented
+- [DONE] JSON load preference already implemented
+- [TODO] Migration script needed for existing files
 
 TESTING:
 - Load existing .pkl file
