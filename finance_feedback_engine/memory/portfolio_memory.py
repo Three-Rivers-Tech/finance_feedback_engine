@@ -446,8 +446,18 @@ class PortfolioMemoryEngine:
                 outcome = TradeOutcome(**trade_dict)
                 instance.trade_outcomes.append(outcome)
 
-            # Restore provider performance
-            instance.provider_performance = data.get("provider_performance", {})
+            # Restore provider performance (convert to defaultdict)
+            loaded_perf = data.get("provider_performance", {})
+            instance.provider_performance = defaultdict(
+                lambda: {
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "total_pnl": 0.0,
+                    "confidence_calibration": [],
+                }
+            )
+            for provider, stats in loaded_perf.items():
+                instance.provider_performance[provider] = stats
 
             # Restore veto metrics (backward compatible)
             veto_metrics = data.get("veto_metrics") or instance._init_veto_metrics()

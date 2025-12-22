@@ -119,6 +119,33 @@ class DecisionEngine:
             "portfolio_take_profit_percentage", 0.05
         )
 
+        # Convert legacy percentage format (>=1.0) to decimal (e.g., 2.0 -> 0.02).
+        # This allows configs like "2" for 2%, while standard format is a decimal fraction (0.02).
+        if self.portfolio_stop_loss_percentage >= 1.0:
+            original_value = self.portfolio_stop_loss_percentage
+            self.portfolio_stop_loss_percentage = (
+                self.portfolio_stop_loss_percentage / 100
+            )
+            logger.warning(
+                "DecisionEngine: portfolio_stop_loss_percentage=%s interpreted as legacy "
+                "percentage format; converted to decimal fraction=%s. "
+                "To avoid this warning, configure a value between 0 and 1.",
+                original_value,
+                self.portfolio_stop_loss_percentage,
+            )
+        if self.portfolio_take_profit_percentage >= 1.0:
+            original_value = self.portfolio_take_profit_percentage
+            self.portfolio_take_profit_percentage = (
+                self.portfolio_take_profit_percentage / 100
+            )
+            logger.warning(
+                "DecisionEngine: portfolio_take_profit_percentage=%s interpreted as legacy "
+                "percentage format; converted to decimal fraction=%s. "
+                "To avoid this warning, configure a value between 0 and 1.",
+                original_value,
+                self.portfolio_take_profit_percentage,
+            )
+
         # Validate local_models
         if not isinstance(self.local_models, list):
             raise ValueError(
@@ -167,6 +194,74 @@ class DecisionEngine:
         logger.info(
             f"Decision engine initialized with provider: {self.ai_manager.ai_provider}"
         )
+
+    @property
+    def ai_provider(self):
+        """Get the AI provider from the AI manager."""
+        return self.ai_manager.ai_provider
+
+    @property
+    def decision_threshold(self):
+        """Get decision threshold from config. Supports flat and nested config structures."""
+        # Try nested structure first, then flat structure for backward compatibility
+        decision_config = self.config.get("decision_engine", self.config)
+        return decision_config.get("decision_threshold", 0.6)
+
+    @property
+    def ensemble_manager(self):
+        """
+        Get the ensemble manager currently used by the AI manager.
+
+        Note:
+            This is a delegated view of ``self.ai_manager.ensemble_manager``.
+            Accessing or mutating this property will directly interact with the
+            underlying ``ai_manager`` instance rather than a separate copy on
+            ``DecisionEngine`` itself.
+        """
+        return self.ai_manager.ensemble_manager
+
+    @ensemble_manager.setter
+    def ensemble_manager(self, value):
+        """
+        Set the ensemble manager on the underlying AI manager.
+
+        Warning:
+            This setter directly updates ``self.ai_manager.ensemble_manager``.
+            As a result, any code that also holds a reference to the same
+            ``ai_manager`` will observe this change. This tight coupling is
+            intentional (e.g. for testing and configuration wiring), but it
+            means that ``engine.ensemble_manager = X`` has the side effect of
+            mutating shared internal state.
+        """
+        self.ai_manager.ensemble_manager = value
+
+    def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
+        """Calculate price change percentage. Delegates to market analyzer."""
+        if getattr(self, "market_analyzer", None) is None:
+            raise RuntimeError(
+                "market_analyzer is not initialized on DecisionEngine; "
+                "_calculate_price_change cannot be called without it."
+            )
+        try:
+            return self.market_analyzer._calculate_price_change(market_data)
+        except Exception as exc:  # pragma: no cover - defensive wrapper
+            raise RuntimeError(
+                "Failed to calculate price change via market_analyzer."
+            ) from exc
+
+    def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
+        """Calculate volatility. Delegates to market analyzer."""
+        if getattr(self, "market_analyzer", None) is None:
+            raise RuntimeError(
+                "market_analyzer is not initialized on DecisionEngine; "
+                "_calculate_volatility cannot be called without it."
+            )
+        try:
+            return self.market_analyzer._calculate_volatility(market_data)
+        except Exception as exc:  # pragma: no cover - defensive wrapper
+            raise RuntimeError(
+                "Failed to calculate volatility via market_analyzer."
+            ) from exc
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
@@ -1101,7 +1196,7 @@ Format response as a structured technical analysis demonstration.
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool,
+        signal_only_default: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculate all position sizing parameters.
