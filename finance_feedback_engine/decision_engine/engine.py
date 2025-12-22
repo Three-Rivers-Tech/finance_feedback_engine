@@ -237,11 +237,31 @@ class DecisionEngine:
 
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage. Delegates to market analyzer."""
-        return self.market_analyzer._calculate_price_change(market_data)
+        if getattr(self, "market_analyzer", None) is None:
+            raise RuntimeError(
+                "market_analyzer is not initialized on DecisionEngine; "
+                "_calculate_price_change cannot be called without it."
+            )
+        try:
+            return self.market_analyzer._calculate_price_change(market_data)
+        except Exception as exc:  # pragma: no cover - defensive wrapper
+            raise RuntimeError(
+                "Failed to calculate price change via market_analyzer."
+            ) from exc
 
     def _calculate_volatility(self, market_data: Dict[str, Any]) -> float:
         """Calculate volatility. Delegates to market analyzer."""
-        return self.market_analyzer._calculate_volatility(market_data)
+        if getattr(self, "market_analyzer", None) is None:
+            raise RuntimeError(
+                "market_analyzer is not initialized on DecisionEngine; "
+                "_calculate_volatility cannot be called without it."
+            )
+        try:
+            return self.market_analyzer._calculate_volatility(market_data)
+        except Exception as exc:  # pragma: no cover - defensive wrapper
+            raise RuntimeError(
+                "Failed to calculate volatility via market_analyzer."
+            ) from exc
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
