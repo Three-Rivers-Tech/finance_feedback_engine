@@ -119,14 +119,31 @@ class DecisionEngine:
             "portfolio_take_profit_percentage", 0.05
         )
 
-        # Convert legacy percentage format (>1) to decimal (e.g., 2.0 -> 0.02)
-        if self.portfolio_stop_loss_percentage > 1:
+        # Convert legacy percentage format (>=1.0) to decimal (e.g., 2.0 -> 0.02).
+        # This allows configs like "2" for 2%, while standard format is a decimal fraction (0.02).
+        if self.portfolio_stop_loss_percentage >= 1.0:
+            original_value = self.portfolio_stop_loss_percentage
             self.portfolio_stop_loss_percentage = (
                 self.portfolio_stop_loss_percentage / 100
             )
-        if self.portfolio_take_profit_percentage > 1:
+            logger.warning(
+                "DecisionEngine: portfolio_stop_loss_percentage=%s interpreted as legacy "
+                "percentage format; converted to decimal fraction=%s. "
+                "To avoid this warning, configure a value between 0 and 1.",
+                original_value,
+                self.portfolio_stop_loss_percentage,
+            )
+        if self.portfolio_take_profit_percentage >= 1.0:
+            original_value = self.portfolio_take_profit_percentage
             self.portfolio_take_profit_percentage = (
                 self.portfolio_take_profit_percentage / 100
+            )
+            logger.warning(
+                "DecisionEngine: portfolio_take_profit_percentage=%s interpreted as legacy "
+                "percentage format; converted to decimal fraction=%s. "
+                "To avoid this warning, configure a value between 0 and 1.",
+                original_value,
+                self.portfolio_take_profit_percentage,
             )
 
         # Validate local_models
