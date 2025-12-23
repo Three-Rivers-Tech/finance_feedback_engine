@@ -8,7 +8,6 @@ This module provides a unified interface for error tracking that:
 """
 
 import logging
-import sys
 from typing import Any, Dict, Optional
 
 try:

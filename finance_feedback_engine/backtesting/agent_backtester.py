@@ -95,7 +95,7 @@ class AgentModeBacktester(Backtester):
         Raises:
             SimulatedDataFetchError: If simulated failure occurs
         """
-        # Simulate random data fetch failures
+        # Simulate random data fetch failures (not for security purposes)
         if random.random() < self.data_fetch_failure_rate:
             raise SimulatedDataFetchError(
                 f"Simulated network failure (attempt {attempt + 1})"

@@ -7,7 +7,6 @@ and configuration management across different runtime environments.
 
 import os
 from enum import Enum
-from typing import Optional
 
 
 class Environment(Enum):
