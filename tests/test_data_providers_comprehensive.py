@@ -47,11 +47,13 @@ class TestAlphaVantageProvider:
                 }
             }
         }
-        
+
         # We need to patch the method on the instance
-        with patch.object(provider, '_make_http_request', new_callable=AsyncMock) as mock_request:
+        with patch.object(
+            provider, "_make_http_request", new_callable=AsyncMock
+        ) as mock_request:
             mock_request.return_value = mock_data
-            
+
             data = await provider.get_market_data("AAPL")
 
             assert data is not None
@@ -63,8 +65,10 @@ class TestAlphaVantageProvider:
     async def test_get_market_data_rate_limit(self, provider):
         """Test rate limiting handling."""
         mock_data = {"Note": "API call frequency limit reached"}
-        
-        with patch.object(provider, '_make_http_request', new_callable=AsyncMock) as mock_request:
+
+        with patch.object(
+            provider, "_make_http_request", new_callable=AsyncMock
+        ) as mock_request:
             mock_request.return_value = mock_data
 
             with pytest.raises(Exception):
@@ -75,8 +79,10 @@ class TestAlphaVantageProvider:
         """Test circuit breaker opens after repeated failures."""
         # Ensure we are not in backtest mode for this test to allow exceptions to propagate
         provider.is_backtest = False
-        
-        with patch.object(provider, '_make_http_request', new_callable=AsyncMock) as mock_request:
+
+        with patch.object(
+            provider, "_make_http_request", new_callable=AsyncMock
+        ) as mock_request:
             mock_request.side_effect = Exception("API error")
 
             # Trigger multiple failures
@@ -104,7 +110,9 @@ class TestAlphaVantageProvider:
             }
         }
 
-        with patch.object(provider, '_make_http_request', new_callable=AsyncMock) as mock_request:
+        with patch.object(
+            provider, "_make_http_request", new_callable=AsyncMock
+        ) as mock_request:
             # Return same data for all calls (market, sentiment, etc.)
             mock_request.return_value = mock_data
 
@@ -258,7 +266,9 @@ class TestUnifiedDataProvider:
         provider.oanda = Mock()
 
         # Mock responses
-        provider.alpha_vantage.get_candles = Mock(return_value=([{"close": 150.0}], "alpha_vantage"))
+        provider.alpha_vantage.get_candles = Mock(
+            return_value=([{"close": 150.0}], "alpha_vantage")
+        )
         provider.coinbase.get_candles.return_value = ([{"close": 50000.0}], "coinbase")
         provider.oanda.get_candles.return_value = ([{"close": 1.05}], "oanda")
 
@@ -294,7 +304,7 @@ class TestUnifiedDataProvider:
         """Test fallback when primary provider fails."""
         provider.alpha_vantage = Mock()
         provider.alpha_vantage.get_candles = Mock(side_effect=Exception("API Error"))
-        
+
         provider.coinbase = Mock()
         provider.coinbase.get_candles.return_value = ([{"close": 150.0}], "coinbase")
 
@@ -328,16 +338,19 @@ class TestHistoricalDataProvider:
         """Test fetching historical data (mocking internals)."""
         # Mock _fetch_raw_data to avoid complexity of inner provider mocking
         import pandas as pd
-        
-        mock_df = pd.DataFrame({
-            "open": [100.0],
-            "high": [105.0],
-            "low": [99.0],
-            "close": [103.0],
-            "volume": [1000]
-        }, index=pd.DatetimeIndex(["2024-01-01"], name="timestamp"))
-        
-        with patch.object(provider, '_fetch_raw_data', return_value=mock_df):
+
+        mock_df = pd.DataFrame(
+            {
+                "open": [100.0],
+                "high": [105.0],
+                "low": [99.0],
+                "close": [103.0],
+                "volume": [1000],
+            },
+            index=pd.DatetimeIndex(["2024-01-01"], name="timestamp"),
+        )
+
+        with patch.object(provider, "_fetch_raw_data", return_value=mock_df):
             data = provider.get_historical_data(
                 "AAPL", start_date="2024-01-01", end_date="2024-12-01"
             )
