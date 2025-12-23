@@ -187,10 +187,6 @@ nano .env  # or vim, code, etc.
 ```
 
 The `.env` file is now the **single source of truth** for all configuration. Edit it with your:
-- Alpha Vantage API key
-- Trading platform credentials (Coinbase/Oanda)
-- AI provider settings (optional)
-- Telegram tokens (optional)
 
 **Alternative:** For advanced users, you can create `config/config.local.yaml` with environment variable references:
 ```bash
@@ -944,10 +940,6 @@ Notes:
 ### Live Trade Monitoring 🆕
 
 **Note**: Monitor commands are gated for safety. To use manual CLI commands, set `monitoring.manual_cli: true` in your config (not recommended for production).
-
-**Recommended Approach**: Use the integrated monitoring context that auto-starts via `config.monitoring.enabled: true` and provides real-time position awareness to the AI decision engine. Alternatively, use the multi-platform dashboard for portfolio aggregation.
-
-**Legacy Manual Commands** (requires `monitoring.manual_cli: true`):
 
 ```bash
 python main.py monitor start

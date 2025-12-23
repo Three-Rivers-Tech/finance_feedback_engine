@@ -59,7 +59,7 @@ class TestAlphaVantageProviderFixed:
             "_async_request",
             new_callable=AsyncMock,
             return_value=create_crypto_intraday_mock_response(
-                asset_pair="BTCUSD", close_price=45000.00
+                asset_pair="BTCUSD", close_price=45000.00, timeframe="Daily"
             ),
         ):
             data = await provider.get_market_data("BTCUSD")

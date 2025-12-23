@@ -50,7 +50,7 @@ class TestAlphaVantageProvider:
 
         # We need to patch the method on the instance
         with patch.object(
-            provider, "_make_http_request", new_callable=AsyncMock
+            provider, "_async_request", new_callable=AsyncMock
         ) as mock_request:
             mock_request.return_value = mock_data
 
@@ -67,7 +67,7 @@ class TestAlphaVantageProvider:
         mock_data = {"Note": "API call frequency limit reached"}
 
         with patch.object(
-            provider, "_make_http_request", new_callable=AsyncMock
+            provider, "_async_request", new_callable=AsyncMock
         ) as mock_request:
             mock_request.return_value = mock_data
 
@@ -81,7 +81,7 @@ class TestAlphaVantageProvider:
         provider.is_backtest = False
 
         with patch.object(
-            provider, "_make_http_request", new_callable=AsyncMock
+            provider, "_async_request", new_callable=AsyncMock
         ) as mock_request:
             mock_request.side_effect = Exception("API error")
 
@@ -111,7 +111,7 @@ class TestAlphaVantageProvider:
         }
 
         with patch.object(
-            provider, "_make_http_request", new_callable=AsyncMock
+            provider, "_async_request", new_callable=AsyncMock
         ) as mock_request:
             # Return same data for all calls (market, sentiment, etc.)
             mock_request.return_value = mock_data
@@ -265,12 +265,12 @@ class TestUnifiedDataProvider:
         provider.coinbase = Mock()
         provider.oanda = Mock()
 
-        # Mock responses
+        # Mock responses (sub-providers return just the candles list, not tuples)
         provider.alpha_vantage.get_candles = Mock(
-            return_value=([{"close": 150.0}], "alpha_vantage")
+            return_value=[{"close": 150.0}]
         )
-        provider.coinbase.get_candles.return_value = ([{"close": 50000.0}], "coinbase")
-        provider.oanda.get_candles.return_value = ([{"close": 1.05}], "oanda")
+        provider.coinbase.get_candles.return_value = [{"close": 50000.0}]
+        provider.oanda.get_candles.return_value = [{"close": 1.05}]
 
         # Test stock routing (defaults to Alpha Vantage)
         candles, source = provider.get_candles("AAPL")
@@ -281,7 +281,7 @@ class TestUnifiedDataProvider:
     def test_get_crypto_data_routes_to_coinbase(self, provider):
         """Test crypto requests route to Coinbase."""
         provider.coinbase = Mock()
-        provider.coinbase.get_candles.return_value = ([{"close": 50000.0}], "coinbase")
+        provider.coinbase.get_candles.return_value = [{"close": 50000.0}]
         provider.alpha_vantage = None
 
         candles, source = provider.get_candles("BTC-USD")
@@ -292,7 +292,7 @@ class TestUnifiedDataProvider:
     def test_get_forex_data_routes_to_oanda(self, provider):
         """Test forex requests route to Oanda."""
         provider.oanda = Mock()
-        provider.oanda.get_candles.return_value = ([{"close": 1.05}], "oanda")
+        provider.oanda.get_candles.return_value = [{"close": 1.05}]
         provider.alpha_vantage = None
 
         candles, source = provider.get_candles("EUR_USD")
@@ -306,7 +306,7 @@ class TestUnifiedDataProvider:
         provider.alpha_vantage.get_candles = Mock(side_effect=Exception("API Error"))
 
         provider.coinbase = Mock()
-        provider.coinbase.get_candles.return_value = ([{"close": 150.0}], "coinbase")
+        provider.coinbase.get_candles.return_value = [{"close": 150.0}]
 
         # AAPL -> Not crypto/forex -> Try all. AV fails -> Coinbase.
         candles, source = provider.get_candles("AAPL")

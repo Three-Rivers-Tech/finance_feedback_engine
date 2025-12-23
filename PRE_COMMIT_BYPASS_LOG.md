@@ -189,3 +189,23 @@ If bypass deadline will be missed:
 **Fix Deadline**: 2025-12-23T20:02:49.107877
 
 ---
+
+## 2025-12-22T21:23:25.035637
+**Bypass Timestamp**: 2025-12-22T21:23:25.031362
+**Commit**: 10cc2c4
+**Hooks Skipped**: pytest-fast,mypy
+**Reason**: Emergency bypass
+**Policy Compliance**: Non-compliant — does not match permitted categories (hotfix, critical bug, external outage).
+**Fix Deadline**: 2025-12-23T21:23:25.031362
+
+---
+
+## 2025-12-22T21:29:28.445554
+**Bypass Timestamp**: 2025-12-22T21:29:28.441244
+**Commit**: 10cc2c4
+**Hooks Skipped**: pytest-fast,mypy
+**Reason**: Emergency bypass
+**Policy Compliance**: Non-compliant — does not match permitted categories (hotfix, critical bug, external outage).
+**Fix Deadline**: 2025-12-23T21:29:28.441244
+
+---
