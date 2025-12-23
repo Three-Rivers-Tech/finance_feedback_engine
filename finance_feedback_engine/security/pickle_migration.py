@@ -38,9 +38,6 @@ class PickleToJsonMigrator:
                 if (parent / "pyproject.toml").exists() or (
                     parent / "setup.py"
                 ).exists():
-                if (parent / "pyproject.toml").exists() or (
-                    parent / "setup.py"
-                ).exists():
                     root_dir = parent
                     break
 

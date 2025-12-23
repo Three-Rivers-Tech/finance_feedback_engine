@@ -237,11 +237,23 @@ class TestFallbackTiers:
     @pytest.mark.asyncio
     async def test_fallback_to_majority(self, ensemble_manager):
         """Test fallback to majority voting when weighted fails."""
-        # Force weighted voting to fail by mocking
+        # Force weighted voting to fail by mocking the first call to apply_voting_strategy
+        original_apply = ensemble_manager.voting_strategies.apply_voting_strategy
+        call_count = [0]
+
+        def mock_apply_first_fail(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # First call (weighted) fails
+                raise ValueError("Weighted failed")
+            else:
+                # Subsequent calls (majority fallback) succeed
+                return original_apply(*args, **kwargs)
+
         with patch.object(
-            ensemble_manager,
-            "_weighted_voting",
-            side_effect=ValueError("Weighted failed"),
+            ensemble_manager.voting_strategies,
+            "apply_voting_strategy",
+            side_effect=mock_apply_first_fail,
         ):
             decisions = {
                 "local": {
@@ -267,71 +279,75 @@ class TestFallbackTiers:
     async def test_fallback_to_average(self, ensemble_manager):
         """Test fallback to simple averaging when majority fails."""
         # Force both weighted and majority to fail
+        original_apply = ensemble_manager.voting_strategies.apply_voting_strategy
+        call_count = [0]
+
+        def mock_apply_two_fails(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                # First two calls (weighted, majority) fail
+                raise ValueError("Primary and majority failed")
+            else:
+                # Third call (average fallback) succeeds
+                return original_apply(*args, **kwargs)
+
         with patch.object(
-            ensemble_manager,
-            "_weighted_voting",
-            side_effect=ValueError("Weighted failed"),
+            ensemble_manager.voting_strategies,
+            "apply_voting_strategy",
+            side_effect=mock_apply_two_fails,
         ):
-            with patch.object(
-                ensemble_manager,
-                "_majority_voting",
-                side_effect=ValueError("Majority failed"),
-            ):
-                decisions = {
-                    "local": {
-                        "action": "BUY",
-                        "confidence": 80,
-                        "reasoning": "Test1",
-                        "amount": 0.05,
-                    },
-                    "cli": {
-                        "action": "SELL",
-                        "confidence": 75,
-                        "reasoning": "Test2",
-                        "amount": 0.03,
-                    },
-                }
+            decisions = {
+                "local": {
+                    "action": "BUY",
+                    "confidence": 80,
+                    "reasoning": "Test1",
+                    "amount": 0.05,
+                },
+                "cli": {
+                    "action": "SELL",
+                    "confidence": 75,
+                    "reasoning": "Test2",
+                    "amount": 0.03,
+                },
+            }
 
-                result = await ensemble_manager.aggregate_decisions(decisions)
+            result = await ensemble_manager.aggregate_decisions(decisions)
 
-                # Should fallback to simple average
-                assert (
-                    result["ensemble_metadata"]["fallback_tier"] == "average_fallback"
-                )
+            # Should fallback to simple average
+            assert (
+                result["ensemble_metadata"]["fallback_tier"] == "average_fallback"
+            )
 
     @pytest.mark.asyncio
     async def test_fallback_to_single_provider(self, ensemble_manager):
         """Test fallback to single provider when all ensemble methods fail."""
         # Force all ensemble methods to fail
+        def mock_apply_all_fail(*args, **kwargs):
+            raise ValueError("All voting strategies failed")
+
         with patch.object(
-            ensemble_manager, "_weighted_voting", side_effect=ValueError("Failed")
+            ensemble_manager.voting_strategies,
+            "apply_voting_strategy",
+            side_effect=mock_apply_all_fail,
         ):
-            with patch.object(
-                ensemble_manager, "_majority_voting", side_effect=ValueError("Failed")
-            ):
-                with patch.object(
-                    ensemble_manager,
-                    "_simple_average",
-                    side_effect=ValueError("Failed"),
-                ):
-                    decisions = {
-                        "local": {
-                            "action": "BUY",
-                            "confidence": 80,
-                            "reasoning": "Test1",
-                            "amount": 0.05,
-                        }
-                    }
+            decisions = {
+                "local": {
+                    "action": "BUY",
+                    "confidence": 80,
+                    "reasoning": "Test1",
+                    "amount": 0.05,
+                }
+            }
 
-                    result = await ensemble_manager.aggregate_decisions(decisions)
+            result = await ensemble_manager.aggregate_decisions(decisions)
 
-                    # Should use single provider fallback
-                    assert (
-                        result["ensemble_metadata"]["fallback_tier"]
-                        == "single_provider"
-                    )
-                    assert result["fallback_used"] is True
-                    assert result["fallback_provider"] == "local"
+            # Should use single provider fallback
+            assert (
+                result["ensemble_metadata"]["fallback_tier"]
+                == "single_provider"
+            )
+            assert result["fallback_used"] is True
+            assert result["fallback_provider"] == "local"
 
 
 # ===== Provider Failure Tests =====

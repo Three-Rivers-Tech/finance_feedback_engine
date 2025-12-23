@@ -159,7 +159,7 @@ class OandaDataProvider:
             self.rate_limiter.wait_for_token()
 
             # Call circuit breaker protected request
-            candles = self.circuit_breaker.call(
+            candles = self.circuit_breaker.call_sync(
                 self._fetch_candles_from_api, instrument, oanda_granularity, limit
             )
 
