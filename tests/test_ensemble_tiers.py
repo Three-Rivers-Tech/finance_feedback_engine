@@ -314,13 +314,12 @@ class TestFallbackTiers:
             result = await ensemble_manager.aggregate_decisions(decisions)
 
             # Should fallback to simple average
-            assert (
-                result["ensemble_metadata"]["fallback_tier"] == "average_fallback"
-            )
+            assert result["ensemble_metadata"]["fallback_tier"] == "average_fallback"
 
     @pytest.mark.asyncio
     async def test_fallback_to_single_provider(self, ensemble_manager):
         """Test fallback to single provider when all ensemble methods fail."""
+
         # Force all ensemble methods to fail
         def mock_apply_all_fail(*args, **kwargs):
             raise ValueError("All voting strategies failed")
@@ -342,10 +341,7 @@ class TestFallbackTiers:
             result = await ensemble_manager.aggregate_decisions(decisions)
 
             # Should use single provider fallback
-            assert (
-                result["ensemble_metadata"]["fallback_tier"]
-                == "single_provider"
-            )
+            assert result["ensemble_metadata"]["fallback_tier"] == "single_provider"
             assert result["fallback_used"] is True
             assert result["fallback_provider"] == "local"
 
