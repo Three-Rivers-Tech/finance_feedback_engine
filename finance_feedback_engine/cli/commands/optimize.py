@@ -122,7 +122,7 @@ def optimize(
     # Standardize asset pair
     asset_pair = standardize_asset_pair(asset_pair)
 
-    console.print(f"\n[bold cyan]Starting Hyperparameter Optimization[/bold cyan]")
+    console.print("\n[bold cyan]Starting Hyperparameter Optimization[/bold cyan]")
     console.print(f"Asset Pair: [yellow]{asset_pair}[/yellow]")
     console.print(
         f"Date Range: [yellow]{start_date}[/yellow] to [yellow]{end_date}[/yellow]"
@@ -245,7 +245,7 @@ def optimize(
         if use_mlflow:
             mlflow.log_artifact(str(results_file))
             mlflow.log_artifact(str(config_file))
-            console.print(f"[green]✓[/green] Artifacts logged to MLflow")
+            console.print("[green]✓[/green] Artifacts logged to MLflow")
 
     except Exception as e:
         console.print(f"\n[yellow]⚠ Warning: Could not save results:[/yellow] {e}")
@@ -256,10 +256,10 @@ def optimize(
     console.print(
         f"2. Test with backtest: [yellow]python main.py backtest {asset_pair} --start {start_date} --end {end_date}[/yellow]"
     )
-    console.print(f"3. Update config.yaml with best parameters")
+    console.print("3. Update config.yaml with best parameters")
     if use_mlflow:
         console.print(
-            f"4. View MLflow UI: [yellow]mlflow ui[/yellow] (then visit http://localhost:5000)"
+            "4. View MLflow UI: [yellow]mlflow ui[/yellow] (then visit http://localhost:5000)"
         )
 
 
@@ -317,7 +317,7 @@ def _display_optimization_results(study, multi_objective):
         console.print(table)
 
     # Summary stats
-    console.print(f"\n[bold]Summary:[/bold]")
+    console.print("\n[bold]Summary:[/bold]")
     console.print(f"  Total Trials: {len(study.trials)}")
     console.print(
         f"  Complete: {len([t for t in study.trials if t.state.name == 'COMPLETE'])}"
