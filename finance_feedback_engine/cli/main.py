@@ -43,6 +43,7 @@ from finance_feedback_engine.cli.commands.memory import (
 from finance_feedback_engine.cli.commands.memory import (
     prune_memory as prune_memory_command,
 )
+from finance_feedback_engine.cli.commands.optimize import optimize as optimize_command
 from finance_feedback_engine.cli.commands.trading import balance as balance_command
 from finance_feedback_engine.cli.commands.trading import execute as execute_command
 from finance_feedback_engine.cli.interactive import start_interactive_session
@@ -2019,6 +2020,7 @@ cli.add_command(backtest_command, name="backtest")
 cli.add_command(portfolio_backtest_command, name="portfolio-backtest")
 cli.add_command(walk_forward_command, name="walk-forward")
 cli.add_command(monte_carlo_command, name="monte-carlo")
+cli.add_command(optimize_command, name="optimize")
 cli.add_command(learning_report_command, name="learning-report")
 cli.add_command(prune_memory_command, name="prune-memory")
 cli.add_command(run_agent_command, name="run-agent")

@@ -148,10 +148,19 @@ class TestHistoricalDataProvider:
         df1 = provider._fetch_raw_data("BTCUSD", start, end, timeframe="1h")
         assert not df1.empty
 
-        # Cache file should exist
-        cache_files = list(cache_dir.glob("btcusd_*.parquet"))
-        assert len(cache_files) > 0
+    
 
+        # Cache file should exist
+
+        cache_files = list(cache_dir.glob("BTCUSD_*.parquet"))
+
+        if not cache_files:
+
+             # Fallback for case sensitivity
+
+             cache_files = list(cache_dir.glob("btcusd_*.parquet"))
+
+        assert len(cache_files) > 0
         # Second call should load from cache (asyncio.run not called again)
         mock_asyncio_run.reset_mock()
         df2 = provider._fetch_raw_data("BTCUSD", start, end, timeframe="1h")

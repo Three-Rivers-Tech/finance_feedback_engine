@@ -153,7 +153,12 @@ class AlphaVantageProvider:
 
     def __del__(self):
         """Cleanup on garbage collection - warn if session not closed."""
-        if self.session and self._owned_session:
+        if (
+            hasattr(self, "session")
+            and self.session
+            and hasattr(self, "_owned_session")
+            and self._owned_session
+        ):
             try:
                 if not self.session.closed:
                     # Cannot await in __del__, but we can warn

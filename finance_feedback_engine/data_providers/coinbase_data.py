@@ -154,7 +154,7 @@ class CoinbaseDataProvider:
             self.rate_limiter.wait_for_token()
 
             # Call circuit breaker protected request
-            candles = self.circuit_breaker.call(
+            candles = self.circuit_breaker.call_sync(
                 self._fetch_candles_from_api,
                 product_id,
                 start_time,

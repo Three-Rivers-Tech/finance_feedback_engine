@@ -103,7 +103,7 @@ class TestCoinbaseConnectionErrors:
         mock_coinbase_client.get_futures_balance_summary.side_effect = Timeout(
             "Request timeout"
         )
-        mock_coinbase_client.get_accounts.side_effect = Timeout("Request timeout")
+        mock_coinbase_client.get_portfolios.side_effect = Timeout("Request timeout")
 
         # Should not raise - catches exception and logs warning
         result = coinbase_platform.get_balance()
@@ -118,7 +118,7 @@ class TestCoinbaseConnectionErrors:
         mock_coinbase_client.get_futures_balance_summary.side_effect = ConnectionError(
             "Network unreachable"
         )
-        mock_coinbase_client.get_accounts.side_effect = ConnectionError(
+        mock_coinbase_client.get_portfolios.side_effect = ConnectionError(
             "Network unreachable"
         )
 
