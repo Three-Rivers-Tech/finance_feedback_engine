@@ -7,6 +7,7 @@ Monte Carlo simulations, and portfolio backtesting.
 import json
 import logging
 from datetime import datetime
+import copy
 
 import click
 from rich.console import Console
@@ -109,7 +110,10 @@ def backtest(
             )
 
         asset_pair = standardize_asset_pair(asset_pair)
-        config = ctx.obj["config"]
+        # Copy config and mark as backtest to prevent live init/monitoring
+        base_config = ctx.obj["config"]
+        config = copy.deepcopy(base_config)
+        config["is_backtest"] = True
 
         console.print(
             f"[bold blue]Running AI-Driven Backtest for {asset_pair} {start}→{end}[/bold blue]"

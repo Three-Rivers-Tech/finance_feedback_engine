@@ -1,5 +1,17 @@
 # Finance Feedback Engine 2.0 Configuration
 
+# ============================================================================
+# CONFIGURATION LOADING PRIORITY (highest to lowest):
+# 1. Environment variables (from .env or shell)
+# 2. config/config.local.yaml (if exists, deprecated - use .env instead)
+# 3. config/config.yaml (defaults - this file)
+#
+# RECOMMENDED: Use .env file instead of config.local.yaml
+# - Copy .env.example to .env
+# - Fill in your API keys and settings in .env
+# - .env is automatically git-ignored
+# ============================================================================
+
 # Alpha Vantage API Configuration
 # Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
 # Load from environment variable: ALPHA_VANTAGE_API_KEY
