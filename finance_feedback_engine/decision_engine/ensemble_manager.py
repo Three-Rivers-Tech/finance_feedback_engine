@@ -401,6 +401,9 @@ class EnsembleDecisionManager:
             "local_quorum_met": local_quorum_met,
             "min_local_providers": self.min_local_providers,
             "quorum_penalty_applied": quorum_penalty_applied,
+            "vote_summary": self.voting_strategies.summarize_actions_confidences(
+                actions, confidences, amounts
+            ),
         }
 
         # Add confidence adjustment factor if it was applied

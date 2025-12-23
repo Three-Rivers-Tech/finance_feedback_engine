@@ -702,6 +702,58 @@ class VotingStrategies:
             "action_diversity": len(action_counts),
         }
 
+    def summarize_actions_confidences(
+        self,
+        actions: List[str],
+        confidences: List[int],
+        amounts: List[float],
+    ) -> Dict[str, Any]:
+        """
+        Produce a concise summary of votes, ratios, and averages for metadata.
+
+        Returns:
+            Dict with keys:
+            - counts: per-action counts
+            - ratios: per-action ratios (0..1)
+            - avg_confidence: average confidence across providers
+            - confidence_std: standard deviation of confidences
+            - avg_amount: average suggested amount
+            - amount_std: standard deviation of amounts
+        """
+        num = len(actions)
+        counts = Counter(actions)
+
+        # Avoid division by zero for empty inputs
+        if num == 0:
+            return {
+                "counts": {"BUY": 0, "SELL": 0, "HOLD": 0},
+                "ratios": {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0},
+                "avg_confidence": 0.0,
+                "confidence_std": 0.0,
+                "avg_amount": 0.0,
+                "amount_std": 0.0,
+            }
+
+        ratios = {
+            "BUY": counts.get("BUY", 0) / num,
+            "SELL": counts.get("SELL", 0) / num,
+            "HOLD": counts.get("HOLD", 0) / num,
+        }
+
+        avg_conf = float(np.mean(confidences)) if confidences else 0.0
+        conf_std = float(np.std(confidences)) if confidences else 0.0
+        avg_amt = float(np.mean(amounts)) if amounts else 0.0
+        amt_std = float(np.std(amounts)) if amounts else 0.0
+
+        return {
+            "counts": dict(counts),
+            "ratios": ratios,
+            "avg_confidence": avg_conf,
+            "confidence_std": conf_std,
+            "avg_amount": avg_amt,
+            "amount_std": amt_std,
+        }
+
     def _aggregate_reasoning(
         self,
         providers: List[str],
