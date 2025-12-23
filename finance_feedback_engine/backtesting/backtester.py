@@ -705,13 +705,31 @@ class Backtester:
         else:  # Default to fixed fraction
             return current_balance * self.risk_per_trade
 
+    @staticmethod
+    def _get_periods_per_year(timeframe: str) -> int:
+        """Map timeframe strings to periods-per-year for annualization."""
+        periods_per_year = {
+            "1min": 365 * 24 * 60,
+            "5min": 365 * 24 * 12,
+            "15min": 365 * 24 * 4,
+            "30min": 365 * 24 * 2,
+            "1h": 365 * 24,
+            "4h": 365 * 6,
+            "1d": 252,
+            "daily": 252,
+            "weekly": 52,
+            "monthly": 12,
+        }
+        return periods_per_year.get(timeframe.lower(), 252)
+
     def _calculate_performance_metrics(
         self,
         trades_history: List[Dict[str, Any]],
         equity_curve: List[float],
         initial_balance: float,
-        num_trading_days: int,
-        timeframe: str = "daily",  # Add timeframe parameter
+        timeframe: str,
+        duration_years: float,
+        periods_per_year: int,
     ) -> Dict[str, Any]:
         """
         Calculates comprehensive performance metrics from the backtest results.
@@ -726,40 +744,22 @@ class Backtester:
         metrics["total_return_pct"] = total_return * 100
 
         # Annualized Return - adjust for actual frequency
-        if num_trading_days > 0:
-            # Define periods per year based on timeframe
-            periods_per_year = {
-                "1min": 365
-                * 24
-                * 60,  # 525,600 minutes per year (assuming 24/7 trading)
-                "5min": 365 * 24 * 12,  # 105,120 periods per year
-                "15min": 365 * 24 * 4,  # 35,040 periods per year
-                "1h": 365 * 24,  # 8,760 hours per year
-                "4h": 365 * 6,  # 2,190 4-hour periods per year
-                "daily": 252,  # 252 trading days per year (traditional)
-                "weekly": 52,  # 52 weeks per year
-                "monthly": 12,  # 12 months per year
-            }
+        years = duration_years if duration_years and duration_years > 0 else 0
+        if years <= 0 and periods_per_year > 0:
+            years = (len(equity_curve) - 1) / periods_per_year
 
-            # Default to daily if timeframe is not recognized
-            freq_periods_per_year = periods_per_year.get(timeframe.lower(), 252)
-
-            # Calculate the time period in years based on actual data points and frequency
-            years = len(equity_curve) / freq_periods_per_year
-
-            if years > 0:
-                metrics["annualized_return_pct"] = (
-                    (1 + total_return) ** (1 / years) - 1
-                ) * 100
-            else:
-                metrics["annualized_return_pct"] = 0.0
+        if years and years > 0:
+            metrics["annualized_return_pct"] = (
+                (1 + total_return) ** (1 / years) - 1
+            ) * 100
         else:
             metrics["annualized_return_pct"] = 0.0
 
-        # Volatility (Annualized Standard Deviation of Daily Returns)
+        # Volatility (Annualized Standard Deviation of returns at timeframe frequency)
         returns = equity_series.pct_change().dropna()
         if not returns.empty:
-            annualized_volatility = returns.std() * np.sqrt(252)  # Assuming daily data
+            scale = np.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+            annualized_volatility = returns.std() * scale
             metrics["annualized_volatility"] = annualized_volatility
 
             # Sharpe Ratio: (Return - Risk-Free Rate) / Volatility
@@ -889,10 +889,14 @@ class Backtester:
         # - With multi-timeframe pulse (1m, 5m, 15m, 1h, 4h, 1d simultaneously)
         mock_provider.initialize_pulse_mode(base_timeframe=self.timeframe)
 
+        # Import AutonomousAgentConfig for proper config structure
+        from ..agent.config import AutonomousAgentConfig
+
         # Create agent config for backtesting
         agent_config = TradingAgentConfig(
             asset_pairs=[asset_pair_std],
-            autonomous_execution=True,
+            autonomous_execution=True,  # Legacy support
+            autonomous=AutonomousAgentConfig(enabled=True),  # Proper structure
             max_daily_trades=999,  # No limit for backtesting
             min_confidence_threshold=0.0,  # Accept all signals
             analysis_frequency_seconds=0,  # Immediate execution
@@ -1112,9 +1116,9 @@ class Backtester:
 
         for trade in trades_history:
             if trade.get("success", False):
-                # Update running balance based on trade P&L
+                # Update running balance based on trade P&L and fees
                 pnl = trade.get("pnl_value", 0) or trade.get("realized_pnl", 0) or 0
-                fee = trade.get("fee_amount", 0)
+                fee = trade.get("fee_amount") or trade.get("fee") or 0
                 running_balance += pnl - fee
                 equity_curve.append(running_balance)
 
@@ -1123,13 +1127,29 @@ class Backtester:
             equity_curve.append(final_balance)
 
         # Calculate basic performance metrics
-        num_trading_days = len(data) if not data.empty else 0
+        num_periods = max(len(equity_curve) - 1, 1)
+        periods_per_year = self._get_periods_per_year(self.timeframe)
+
+        # Derive duration in years from dates (fallback to periods-based if parsing fails)
+        duration_years = None
+        try:
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+            seconds_per_year = 365.0 * 24 * 60 * 60
+            duration_years = max(
+                (end_dt - start_dt).total_seconds() / seconds_per_year,
+                num_periods / periods_per_year if periods_per_year > 0 else 0,
+            )
+        except Exception:
+            duration_years = num_periods / periods_per_year if periods_per_year > 0 else 0
+
         calculated_metrics = self._calculate_performance_metrics(
             trades_history,
             equity_curve,
             self.initial_balance,
-            num_trading_days,
             self.timeframe,
+            duration_years,
+            periods_per_year,
         )
 
         # Calculate enhanced risk metrics using the new risk analyzer
@@ -1140,7 +1160,7 @@ class Backtester:
 
         # Calculate total fees from trades
         total_fees = sum(
-            trade.get("fee", 0)
+            (trade.get("fee_amount") or trade.get("fee") or 0)
             for trade in trades_history
             if trade.get("success", False)
         )

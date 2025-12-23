@@ -64,37 +64,64 @@ def create_alpha_vantage_mock_response(
 def create_crypto_intraday_mock_response(
     asset_pair: str = "BTCUSD",
     close_price: float = 45000.00,
-    timeframe: str = "5min",
+    timeframe: str = "Daily",
 ) -> Dict[str, Any]:
     """Create a realistic crypto intraday AlphaVantage response.
 
     Args:
         asset_pair: Crypto pair (e.g., 'BTCUSD', 'ETHUSDT')
         close_price: Close price
-        timeframe: Timeframe ('5min', '15min', '60min', etc.)
+        timeframe: Timeframe ('Daily' for digital currency daily format)
 
     Returns:
         Dictionary matching AlphaVantage intraday response format
     """
-    time_key = f"Time Series ({timeframe})"
-    return {
-        time_key: {
-            "2024-12-04 16:00": {
-                "1. open": str(close_price * 0.99),
-                "2. high": str(close_price * 1.01),
-                "3. low": str(close_price * 0.98),
-                "4. close": str(close_price),
-                "5. volume": "100",
-            },
-            "2024-12-04 15:55": {
-                "1. open": str(close_price * 0.98),
-                "2. high": str(close_price * 1.005),
-                "3. low": str(close_price * 0.97),
-                "4. close": str(close_price * 0.995),
-                "5. volume": "95",
-            },
+    # Use correct format for crypto daily data for AlphaVantage API
+    time_key = (
+        "Time Series (Digital Currency Daily)"
+        if timeframe == "Daily"
+        else f"Time Series ({timeframe})"
+    )
+
+    if timeframe == "Daily":
+        return {
+            time_key: {
+                "2024-12-04": {
+                    "1a. open (USD)": str(close_price * 0.99),
+                    "2a. high (USD)": str(close_price * 1.01),
+                    "3a. low (USD)": str(close_price * 0.98),
+                    "4a. close (USD)": str(close_price),
+                    "5. volume": str(int(close_price * 1000)),
+                },
+                "2024-12-03": {
+                    "1a. open (USD)": str(close_price * 0.98),
+                    "2a. high (USD)": str(close_price * 1.005),
+                    "3a. low (USD)": str(close_price * 0.97),
+                    "4a. close (USD)": str(close_price * 0.995),
+                    "5. volume": str(int(close_price * 950)),
+                },
+            }
         }
-    }
+    else:
+        # Previous format for intraday (not used for crypto daily)
+        return {
+            time_key: {
+                "2024-12-04 16:00": {
+                    "1. open": str(close_price * 0.99),
+                    "2. high": str(close_price * 1.01),
+                    "3. low": str(close_price * 0.98),
+                    "4. close": str(close_price),
+                    "5. volume": "100",
+                },
+                "2024-12-04 15:55": {
+                    "1. open": str(close_price * 0.98),
+                    "2. high": str(close_price * 1.005),
+                    "3. low": str(close_price * 0.97),
+                    "4. close": str(close_price * 0.995),
+                    "5. volume": "95",
+                },
+            }
+        }
 
 
 def create_rate_limit_error_response() -> Dict[str, Any]:

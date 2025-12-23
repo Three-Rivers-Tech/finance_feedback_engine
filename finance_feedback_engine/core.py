@@ -102,7 +102,7 @@ class FinanceFeedbackEngine:
         # Initialize historical data provider for backtesting
         self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
 
-        # Initialize trading platform
+        # Initialize trading platform (skip in backtest mode)
         platform_name = config.get("trading_platform", "coinbase")
 
         # Initialize Delta Lake integration (if enabled)
@@ -125,8 +125,8 @@ class FinanceFeedbackEngine:
             self.delta_lake = None
             logger.debug("Delta Lake integration disabled")
 
-        # Handle unified/multi-platform mode
-        if platform_name.lower() == "unified":
+        # Handle unified/multi-platform mode (skip if backtesting)
+        if not is_backtest and platform_name.lower() == "unified":
             # Convert platforms list to unified credentials format
             platforms_list = config.get("platforms", [])
             if not platforms_list:
@@ -199,20 +199,25 @@ class FinanceFeedbackEngine:
             # Single platform mode (legacy)
             platform_credentials = config.get("platform_credentials", {})
 
-        try:
-            self.trading_platform = PlatformFactory.create_platform(
-                platform_name, platform_credentials, config
-            )
-        except (ValueError, KeyError, TypeError) as e:
-            logger.error(
-                f"Failed to create trading platform {platform_name}: {e}", exc_info=True
-            )
-            raise ConfigurationError(f"Platform configuration error: {e}") from e
-        except Exception as e:
-            logger.error(
-                f"Failed to create trading platform {platform_name}: {e}", exc_info=True
-            )
-            raise ConfigurationError(f"Platform configuration error: {e}") from e
+        if not is_backtest:
+            try:
+                self.trading_platform = PlatformFactory.create_platform(
+                    platform_name, platform_credentials, config
+                )
+            except (ValueError, KeyError, TypeError) as e:
+                logger.error(
+                    f"Failed to create trading platform {platform_name}: {e}", exc_info=True
+                )
+                raise ConfigurationError(f"Platform configuration error: {e}") from e
+            except Exception as e:
+                logger.error(
+                    f"Failed to create trading platform {platform_name}: {e}", exc_info=True
+                )
+                raise ConfigurationError(f"Platform configuration error: {e}") from e
+        else:
+            # Backtest mode: do not initialize a live trading platform
+            self.trading_platform = None
+            logger.info("Backtest mode detected: skipping live trading platform initialization")
 
         # Initialize decision engine
         self.decision_engine = DecisionEngine(config, self.data_provider)
@@ -275,12 +280,18 @@ class FinanceFeedbackEngine:
             "pulse_interval_seconds", 300
         )
 
-        # Auto-enable monitoring integration if enabled in config
-        if self._monitoring_enabled:
-            self._auto_enable_monitoring()
-        # Optionally start internal TradeMonitor (no direct CLI control)
-        if self._auto_start_monitor_flag:
-            self._auto_start_trade_monitor()
+        # In backtest mode, force-disable monitoring and trade monitor startup
+        if is_backtest:
+            self._monitoring_enabled = False
+            self._auto_start_monitor_flag = False
+            logger.info("Backtest mode: monitoring integration and TradeMonitor auto-start are disabled")
+        else:
+            # Auto-enable monitoring integration if enabled in config
+            if self._monitoring_enabled:
+                self._auto_enable_monitoring()
+            # Optionally start internal TradeMonitor (no direct CLI control)
+            if self._auto_start_monitor_flag:
+                self._auto_start_trade_monitor()
 
         # Backtester (lazy init holder)
         self._backtester: Optional["Backtester"] = None
