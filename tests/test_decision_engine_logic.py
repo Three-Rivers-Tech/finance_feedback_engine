@@ -172,19 +172,25 @@ class TestMarketAnalysisHelpers:
     def test_calculate_price_change_positive(self, decision_engine):
         """Test price change calculation with positive change."""
         market_data = {"open": 50000.0, "close": 51000.0}
-        price_change = decision_engine.market_analyzer._calculate_price_change(market_data)
+        price_change = decision_engine.market_analyzer._calculate_price_change(
+            market_data
+        )
         assert price_change == pytest.approx(2.0, rel=1e-6)  # 2% increase
 
     def test_calculate_price_change_negative(self, decision_engine):
         """Test price change calculation with negative change."""
         market_data = {"open": 50000.0, "close": 49000.0}
-        price_change = decision_engine.market_analyzer._calculate_price_change(market_data)
+        price_change = decision_engine.market_analyzer._calculate_price_change(
+            market_data
+        )
         assert price_change == pytest.approx(-2.0, rel=1e-6)  # 2% decrease
 
     def test_calculate_price_change_zero_open(self, decision_engine):
         """Test price change with zero open price."""
         market_data = {"open": 0.0, "close": 50000.0}
-        price_change = decision_engine.market_analyzer._calculate_price_change(market_data)
+        price_change = decision_engine.market_analyzer._calculate_price_change(
+            market_data
+        )
         assert price_change == 0.0
 
     def test_calculate_volatility(self, decision_engine):
