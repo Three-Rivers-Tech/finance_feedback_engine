@@ -111,7 +111,7 @@ class TradeMonitor:
         # --- Multi-timeframe market pulse state ---
         self.unified_data_provider = unified_data_provider
         self.timeframe_aggregator = timeframe_aggregator
-        self.pulse_interval = pulse_interval
+        self.pulse_interval = int(pulse_interval)
         self._last_pulse_time = time.time()
         # Cache: asset_pair -> (analysis_dict, timestamp)
         self._multi_timeframe_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..auth import AuthManager
 from ..core import FinanceFeedbackEngine
+from ..utils.config_loader import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,9 @@ def load_tiered_config() -> dict:
     # 1. Load local config first (preferred)
     if local_config_path.exists():
         try:
-            with open(local_config_path, "r", encoding="utf-8") as f:
-                local_config = yaml.safe_load(f)
-                if local_config:
-                    config.update(local_config)
+            local_config = load_config(str(local_config_path))
+            if local_config:
+                config.update(local_config)
         except (OSError, IOError) as e:
             raise RuntimeError(
                 f"Error loading local config from {local_config_path}: {e}"
@@ -51,13 +51,12 @@ def load_tiered_config() -> dict:
     # 2. Load base config and fill missing keys
     if base_config_path.exists():
         try:
-            with open(base_config_path, "r", encoding="utf-8") as f:
-                base_config = yaml.safe_load(f)
-                if base_config:
-                    # Fill missing keys from base config
-                    for key, value in base_config.items():
-                        if key not in config:
-                            config[key] = value
+            base_config = load_config(str(base_config_path))
+            if base_config:
+                # Fill missing keys from base config
+                for key, value in base_config.items():
+                    if key not in config:
+                        config[key] = value
         except (OSError, IOError) as e:
             raise RuntimeError(
                 f"Error loading base config from {base_config_path}: {e}"

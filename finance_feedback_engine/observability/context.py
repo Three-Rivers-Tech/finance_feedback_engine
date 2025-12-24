@@ -116,7 +116,7 @@ def get_trace_headers() -> Dict[str, str]:
     }
 
     # Only construct traceparent if span context is valid
-    if span_context.is_valid():
+    if span_context.is_valid:
         # W3C Trace Context format: traceparent: 00-trace_id-span_id-trace_flags
         trace_id_hex = format(span_context.trace_id, "032x")
         span_id_hex = format(span_context.span_id, "016x")

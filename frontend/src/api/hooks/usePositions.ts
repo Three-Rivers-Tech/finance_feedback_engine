@@ -7,7 +7,9 @@ export function usePositions(enabled: boolean = true) {
   return usePolling<Position[]>(
     async () => {
       const response = await apiClient.get('/api/v1/bot/positions');
-      return response.data;
+      // API returns { positions: Position[], count: number, total_value: ..., timestamp: ... }
+      // Extract the positions array
+      return response.data.positions || [];
     },
     POLL_INTERVALS.CRITICAL,
     enabled

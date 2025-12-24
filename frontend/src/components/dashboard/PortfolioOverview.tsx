@@ -14,7 +14,7 @@ export const PortfolioOverview: React.FC = () => {
   }
 
   const totalPnL = positions?.reduce((sum, pos) => sum + pos.unrealized_pnl, 0) || 0;
-  const totalPnLPct = portfolio?.balance.total
+  const totalPnLPct = portfolio?.balance?.total
     ? (totalPnL / portfolio.balance.total) * 100
     : 0;
 
@@ -22,7 +22,7 @@ export const PortfolioOverview: React.FC = () => {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <MetricCard
         label="Portfolio Value"
-        value={formatCurrency(portfolio?.balance.total || 0, portfolio?.balance.currency)}
+        value={formatCurrency(portfolio?.balance?.total || 0, portfolio?.balance?.currency)}
         status="neutral"
       />
       <MetricCard

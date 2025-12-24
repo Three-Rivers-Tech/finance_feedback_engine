@@ -11,7 +11,8 @@ const apiClient = axios.create({
 
 // Request interceptor - add auth header
 apiClient.interceptors.request.use((config) => {
-  const apiKey = localStorage.getItem('api_key');
+  // Try localStorage first, then environment variable
+  const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
   if (apiKey && config.headers) {
     config.headers.Authorization = `Bearer ${apiKey}`;
   }
