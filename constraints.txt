@@ -1,0 +1,15 @@
+# Security constraints file
+# This file pins minimum versions of packages to avoid known vulnerabilities
+# It should be used during security scans and CI/CD pipelines
+
+# Pin twisted to avoid CVE-2024-41671 and PYSEC-2024-75
+# Even though it's not a direct dependency, this ensures if it becomes
+# a transitive dependency, we get a safe version
+twisted>=24.7.0rc1
+
+# Ensure we have secure versions of common dependencies
+certifi>=2024.7.4
+urllib3>=2.3.0
+requests>=2.32.3
+cryptography>=42.0.0
+jinja2>=3.1.6
