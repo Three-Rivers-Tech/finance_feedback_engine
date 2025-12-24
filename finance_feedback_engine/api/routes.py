@@ -452,13 +452,10 @@ async def create_decision(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Invalid decision format",
-    except Exception as e:
-        logger.error(f"Error processing alert webhook: {e}")
-        # Return generic error per OWASP (don't leak details)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Webhook processing failed"
-        )
+            )
+
+        return DecisionResponse(
+            decision_id=decision["decision_id"],
             asset_pair=decision["asset_pair"],
             action=decision["action"],
             confidence=decision["confidence"],
@@ -512,33 +509,17 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
     status_data = {"balance": None, "active_positions": 0, "platform": None}
 
     try:
-        # Get balance from platform
-        if hasattr(engine, "platform"):
-            balance_info = engine.platform.get_balance()
-            try:
-                from .health_checks import _safe_json
+        # Get balance from trading platform
+        if hasattr(engine, "trading_platform") and engine.trading_platform:
+            balance_info = engine.trading_platform.get_balance()
+            status_data["balance"] = balance_info
+            status_data["platform"] = engine.trading_platform.__class__.__name__
 
-        if not hasattr(submit_trace, "_trace_counts"):
-            submit_trace._trace_counts = defaultdict(list)
-            submit_trace._trace_lock = asyncio.Lock()
+        return status_data
 
-        async with submit_trace._trace_lock:
-            current_time = time.time()
-            # Clean old entries (older than 60 seconds)
-            submit_trace._trace_counts[user_id] = [
-                t for t in submit_trace._trace_counts[user_id] if current_time - t < 60
-            ]
-
-            # Check if user exceeded limit
-            if len(submit_trace._trace_counts[user_id]) >= 10:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded",
-                )
-
-            submit_trace._trace_counts[user_id].append(current_time)
-
-    return status_data
+    except Exception as e:
+        logger.error(f"Error retrieving portfolio status: {e}")
+        return status_data
 
 
 # Alert webhook (from Prometheus Alertmanager)
