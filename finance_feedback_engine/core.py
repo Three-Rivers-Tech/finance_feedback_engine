@@ -626,12 +626,16 @@ class FinanceFeedbackEngine:
 
         # Record metrics: decision created
         action = decision.get("action", "UNKNOWN")
+        # Determine asset type from market data or use heuristic
+        crypto_symbols = {"BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "LTC", "AVAX", "DOT", "MATIC"}
         asset_type = (
-            "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+            "crypto" if any(sym in asset_pair for sym in crypto_symbols) else "forex"
         )
-        self._metrics["ffe_decisions_created_total"].add(
-            1, {"action": action, "asset_type": asset_type, "asset_pair": asset_pair}
-        )
+        # Consider removing asset_pair label to avoid high cardinality
+        if self._metrics:
+            self._metrics["ffe_decisions_created_total"].add(
+                1, {"action": action, "asset_type": asset_type}
+            )
 
         return decision
 

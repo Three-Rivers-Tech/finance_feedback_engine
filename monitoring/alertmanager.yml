@@ -56,24 +56,27 @@ receivers:
     webhook_configs:
       - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
-        headers:
-          severity: 'critical'
+        http_config:
+          headers:
+            severity: 'critical'
 
   - name: 'warning-alerts'
     # Route warning alerts to Telegram via app webhook
     webhook_configs:
       - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
-        headers:
-          severity: 'warning'
+        http_config:
+          headers:
+            severity: 'warning'
 
   - name: 'info-alerts'
     # Route info alerts to Telegram via app webhook
     webhook_configs:
       - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
-        headers:
-          severity: 'info'
+        http_config:
+          headers:
+            severity: 'info'
 
 # Inhibition rules
 inhibit_rules:

@@ -119,7 +119,7 @@ npm run dev
 **Access Points:**
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
-- Grafana: http://localhost:3001 (admin/admin)
+- Grafana: http://localhost:3001 ⚠️ **Default credentials: admin/admin** — Change immediately before shared/production use (see [Grafana Admin docs](https://grafana.com/docs/grafana/latest/manage-users/server-admin/)), or set via provisioning in `docker-compose.yml`: `GF_SECURITY_ADMIN_PASSWORD=<new_password>`
 - Prometheus: http://localhost:9090
 
 ## Project Structure

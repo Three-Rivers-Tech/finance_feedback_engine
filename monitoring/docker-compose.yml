@@ -37,16 +37,19 @@ services:
     restart: unless-stopped
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.76.0
     container_name: ffe-jaeger
     ports:
       - "16686:16686"  # Jaeger UI
-      - "6831:6831/udp"  # Jaeger agent gRPC
+      - "6831:6831/udp"  # Jaeger agent Thrift compact
       - "14268:14268"  # Jaeger collector HTTP
     environment:
       - MEMORY_MAX_TRACES=10000
       - COLLECTOR_OTLP_ENABLED=true
-      - SPAN_STORAGE_TYPE=memory
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_EPHEMERAL=false
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
     volumes:
       - jaeger-data:/badger
     restart: unless-stopped

@@ -172,9 +172,11 @@ groups:
       # Provider error rate high
       - alert: HighProviderErrorRate
         expr: |
-          sum(rate(ffe_ensemble_provider_failures_total[5m]))
-            /
-          sum(rate(ffe_ensemble_provider_requests_total[5m]))
+          (
+            sum(rate(ffe_ensemble_provider_failures_total[5m]))
+              /
+            clamp_min(sum(rate(ffe_ensemble_provider_requests_total[5m])), 1e-6)
+          ) and on() (sum(rate(ffe_ensemble_provider_requests_total[5m])) > 0.01)
             > 0.2
         for: 5m
         labels:
@@ -182,15 +184,18 @@ groups:
           component: ai_provider
         annotations:
           summary: "Provider error rate exceeds 20%"
-          description: "Provider error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+          description: "Provider error rate is {{ $value | humanizePercentage }} (threshold: 20%). Alert only fires with meaningful request traffic."
 
       # Decision execution gap
       - alert: DecisionExecutionGap
         expr: |
-          (rate(ffe_decisions_created_total[5m]) - rate(ffe_decisions_executed_total[5m]))
+          (
+            (rate(ffe_decisions_created_total[5m]) - rate(ffe_decisions_executed_total[5m]))
             /
           rate(ffe_decisions_created_total[5m])
-            > 0.1
+          ) > 0.1
+          and
+          rate(ffe_decisions_created_total[5m]) > 0
         for: 10m
         labels:
           severity: warning
@@ -201,7 +206,14 @@ groups:
 
       # API error threshold
       - alert: APIResponseErrors
-        expr: sum(rate(ffe_api_response_errors_total[5m])) > 0.05
+        expr: |
+          (
+            sum(rate(ffe_api_response_errors_total[5m]))
+              /
+            sum(rate(ffe_api_requests_total[5m]))
+          ) > 0.05
+          and
+          sum(rate(ffe_api_requests_total[5m])) > 0
         for: 5m
         labels:
           severity: warning
@@ -215,21 +227,23 @@ groups:
     rules:
       # Unrealized loss threshold
       - alert: UnrealizedLossThreshold
-        expr: ffe_unrealized_pnl_dollars < (ffe_portfolio_value_usd * -0.1)
+        expr: ffe_unrealized_pnl_dollars < (ffe_portfolio_value_dollars * -0.1)
         for: 10m
         labels:
           severity: critical
           component: risk_management
         annotations:
           summary: "Unrealized loss exceeds 10% of portfolio"
-          description: "Unrealized P&L: ${{ $value }} (portfolio: ${{ with query \"ffe_portfolio_value_usd\" | first | value }})"
+          description: "Unrealized P&L: ${{ $value }} (10% threshold breached)"
 
       # Win rate collapse
       - alert: WinRateCollapse
         expr: |
-          sum(increase(ffe_trades_won[1h]))
-            /
-          sum(increase(ffe_trades_executed_total[1h]))
+          (
+            sum(increase(ffe_trades_won[1h]))
+              /
+            clamp_min(sum(increase(ffe_trades_executed_total[1h])), 1)
+          ) and on() (sum(increase(ffe_trades_executed_total[1h])) > 0)
             < 0.3
         for: 2h
         labels:
@@ -237,7 +251,7 @@ groups:
           component: trading_performance
         annotations:
           summary: "Win rate below 30%"
-          description: "Win rate is {{ $value | humanizePercentage }} (1-hour window, threshold: 30%)"
+          description: "Win rate is {{ $value | humanizePercentage }} (1-hour window, threshold: 30%). Alert only fires when trades are executed."
 
       # Unrealized loss per position
       - alert: LargeUnrealizedLossPerPosition

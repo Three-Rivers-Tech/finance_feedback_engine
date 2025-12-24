@@ -110,7 +110,7 @@ def init_tracer(config: dict) -> None:
 
         exporter = ConsoleSpanExporter()
         processor = SimpleSpanProcessor(exporter)
-        logger.info("Initialized console span exporter (sample_rate=1.0 for console)")
+        logger.info(f"Initialized console span exporter (sample_rate={sample_rate})")
 
     provider.add_span_processor(processor)
 
