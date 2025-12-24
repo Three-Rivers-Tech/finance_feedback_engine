@@ -87,15 +87,40 @@ A **production-grade, full-stack web application** integrating:
 
 ### Full Stack Startup
 
+#### Backend Setup (First Time Only)
+
 ```bash
-# 1. Start Observability (Grafana + Prometheus)
+# 1. Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 2. Install Python dependencies
+pip install -r requirements.txt
+
+# 3. Setup environment variables
+cp .env.example .env
+# Edit .env and confirm required vars: ALPHA_VANTAGE_API_KEY, COINBASE_*, OANDA_*, etc.
+
+# 4. Run database migrations (if applicable)
+# For this project, check: alembic upgrade head (or python manage.py migrate for Django)
+# Migration scripts location: see `finance_feedback_engine/persistence/` or `alembic/` directory
+
+# 5. Load seed/fixture data (if applicable)
+# Run any seed scripts: python scripts/load_fixtures.py or similar
+# Check `data/` or `scripts/` directories for available seed data
+```
+
+#### Full Stack Startup
+
+```bash
+# 1. Start Observability (Grafana + Prometheus) (Terminal 1)
 docker-compose up -d
 
-# 2. Start Backend API (Terminal 1)
+# 2. Start Backend API (Terminal 2)
 source .venv/bin/activate
 uvicorn finance_feedback_engine.api.app:app --reload --port 8000
 
-# 3. Start Frontend (Terminal 2)
+# 3. Start Frontend (Terminal 3)
 cd frontend
 npm run dev
 ```
@@ -103,7 +128,7 @@ npm run dev
 **Access Points:**
 - **Frontend**: http://localhost:5173
 - **Backend API Docs**: http://localhost:8000/docs
-- **Grafana**: http://localhost:3001 (admin/admin)
+- **Grafana**: http://localhost:3001
 - **Prometheus**: http://localhost:9090
 
 ### Quick Health Check
@@ -114,6 +139,30 @@ curl http://localhost:8000/health        # Backend
 curl http://localhost:9090/-/healthy     # Prometheus
 curl http://localhost:3001/api/health    # Grafana
 ```
+
+### 🔐 Security Configuration
+
+**Grafana First-Time Setup:**
+1. Access Grafana at http://localhost:3001
+2. Log in with default credentials (displayed in console output)
+3. **Change admin password immediately** on first login (Admin > User Profile > Change Password)
+4. For production deployments, set credentials via environment variables in `docker-compose.yml`:
+   ```yaml
+   environment:
+     - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+   ```
+5. Create `.env` file with secure credentials and source it before `docker-compose up`
+
+**Security Checklist:**
+- [ ] Change Grafana admin password (do NOT use defaults in production)
+- [ ] Rotate all API keys (ALPHA_VANTAGE, Coinbase, Oanda) — store in `.env`, never in code
+- [ ] Enable HTTPS/TLS for API and Grafana (use nginx reverse proxy or AWS ALB in production)
+- [ ] Use secret management system (AWS Secrets Manager, HashiCorp Vault) for deployments
+- [ ] Restrict Docker network access: set `docker-compose` services to internal network only
+- [ ] Configure Grafana OAuth2/SAML for team deployments (see Grafana docs: Configuration > Auth)
+- [ ] Enable audit logging: set `GF_LOG_LEVEL=debug` and review logs regularly
+- [ ] Review and tighten database permissions (if using external DB instead of SQLite)
 
 ---
 
@@ -198,6 +247,38 @@ curl -X POST http://localhost:8000/api/v1/optimization/experiment \
   }'
 ```
 
+---
+
+### 🔐 API Key Management
+
+**Obtaining an API Key:**
+- **Development**: Authentication is disabled by default in local development mode. However, if `api_auth.enable_fallback_to_config` is `true`, you can define test keys in `config/config.local.yaml` under `api_keys` section.
+- **Production**: Set the `ALERT_WEBHOOK_SECRET` environment variable to a strong random string (32+ bytes). This token is used for webhook authentication and rate-limited API access.
+- **No Admin Endpoint Yet**: Currently, keys are managed via environment variables or config files. A future `/api/v1/admin/create-key` endpoint is planned.
+
+**Storing API Keys Securely:**
+| Environment | Storage Method | Details |
+|---|---|---|
+| **Local Dev** | `.env` file | Create a `.env` in project root; list as `ALERT_WEBHOOK_SECRET=your_test_key_here`. Never commit `.env` to git. |
+| **Production** | Secrets Manager | Use AWS Secrets Manager, HashiCorp Vault, or your cloud provider's secrets service. Inject into app via environment variables. |
+| **CI/CD** | GitHub Actions / GitLab CI Secrets | Set `ALERT_WEBHOOK_SECRET` in your CI/CD platform's secure variables. The app reads it at startup. |
+
+**Authentication Enforcement:**
+- **Development** (`DEBUG=true` or `ENVIRONMENT=dev`): Authentication optional. `/health` endpoint requires no key. Protected endpoints (e.g., `/api/v1/optimization/experiment`) allow requests with or without a key.
+- **Production** (`ENVIRONMENT=prod`): All protected endpoints require a valid Bearer token in the `Authorization` header. Set `ALERT_WEBHOOK_SECRET` before deployment; requests without a valid token are rejected with 401 Unauthorized.
+- **Toggling Auth**: To disable auth entirely (not recommended), either leave `ALERT_WEBHOOK_SECRET` unset or set a debugging flag in config.
+
+**Example with .env (Local Development):**
+```bash
+# .env (git-ignored)
+ALERT_WEBHOOK_SECRET=dev_test_key_12345
+
+# Usage in curl:
+curl -X POST http://localhost:8000/api/v1/optimization/experiment \
+  -H "Authorization: Bearer dev_test_key_12345" \
+  -d '{...}'
+```
+
 ### Results Storage
 
 All experiments are saved to:
@@ -215,6 +296,68 @@ Results include:
 ---
 
 ## 🔧 Configuration
+
+### Alpha Vantage API Key Setup
+
+**Getting Your API Key:**
+1. Go to [https://www.alphavantage.co/support/#api-key](https://www.alphavantage.co/support/#api-key)
+2. Enter your email and click **GET FREE API KEY**
+3. Check your email for the API key (confirmation link provided)
+4. Free tier: 5 requests/minute, 500 daily limit; Pro tier available for higher volumes
+
+**Setting the Environment Variable:**
+
+**Option A: Local Development with `.env` (Recommended)**
+```bash
+# .env (create in project root if not exists)
+ALPHA_VANTAGE_API_KEY=your_actual_api_key_here
+```
+The app automatically loads from `.env` on startup.
+
+**Option B: Export in Shell**
+```bash
+export ALPHA_VANTAGE_API_KEY=your_actual_api_key_here
+python main.py analyze BTCUSD  # Now uses the key
+```
+
+**Option C: Production/Deployment**
+```bash
+# Set in CI/CD secrets, Docker env, or cloud secrets manager
+# Example for Docker:
+docker run -e ALPHA_VANTAGE_API_KEY=your_key finance-feedback-engine:latest
+
+# Example for Kubernetes:
+kubectl set env deployment/finance ALPHA_VANTAGE_API_KEY=your_key
+```
+
+**Validation: Test Your API Key**
+```bash
+# Option 1: Via CLI command
+python main.py analyze BTCUSD --show-pulse
+
+# Option 2: Via curl to the health-check that uses Alpha Vantage
+curl http://localhost:8000/api/v1/status
+
+# Option 3: Direct Alpha Vantage test
+curl "https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=BTCUSD&interval=5min&apikey=YOUR_KEY" | jq '.Note'
+# Should NOT show rate limit errors; shows quote data on success
+```
+
+**Troubleshooting Alpha Vantage:**
+- Missing key: App defaults to `YOUR_ALPHA_VANTAGE_API_KEY` (demo mode)
+- Rate limited: "Thank you for using Alpha Vantage! Our standard API call frequency..." → wait 60s or upgrade to Pro
+- Invalid key: "Invalid API key" → double-check key spelling and that it's from the right account
+- Check current key in logs: `python main.py --debug 2>&1 | grep -i "alpha\|vantage"`
+
+**Storing Secrets Safely:**
+| Environment | Method | Notes |
+|---|---|---|
+| Local Dev | `.env` file (git-ignored) | Never commit; add to `.gitignore` |
+| Production | Secrets Manager (AWS/Vault/etc) | Rotate keys regularly; audit access logs |
+| Docker | `--env-file` or `docker run -e` | Do not hardcode in Dockerfile |
+| CI/CD | GitHub Actions / GitLab CI secrets | Use platform's encrypted variable storage |
+
+---
 
 ### Environment Variables
 
@@ -317,6 +460,39 @@ mkdir -p data/optimization
 # Verify date range has historical data
 # (Alpha Vantage must have data for those dates)
 ```
+
+### Alpha Vantage API Issues
+
+**Symptom**: "API Error: Thank you for using Alpha Vantage" or analysis returns no data
+
+```bash
+# 1. Verify the key is set
+echo $ALPHA_VANTAGE_API_KEY
+# Should print your key, not "YOUR_ALPHA_VANTAGE_API_KEY"
+
+# 2. Check key is in .env (if using local development)
+cat .env | grep ALPHA_VANTAGE_API_KEY
+
+# 3. Test the key directly
+curl "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=BTCUSD&apikey=$ALPHA_VANTAGE_API_KEY" | jq '.price'
+# Should return a price, not an error
+
+# 4. If rate limited, wait 60s and retry
+# Free tier: 5 requests/min, 500 daily
+
+# 5. Check app logs for detailed error
+python main.py analyze BTCUSD --debug 2>&1 | grep -A5 "alpha\|vantage"
+```
+
+**Common Solutions:**
+| Issue | Solution |
+|---|---|
+| **Key not set** | Add `ALPHA_VANTAGE_API_KEY=your_key` to `.env` and restart app |
+| **Rate limited** | Upgrade to Pro tier or wait 60s for free tier to reset |
+| **Invalid key** | Get a new one at [alphavantage.co](https://www.alphavantage.co/support/#api-key) |
+| **Wrong format** | Verify no extra spaces: `ALPHA_VANTAGE_API_KEY=abc123` not `ALPHA_VANTAGE_API_KEY= abc123` |
+
+See [Alpha Vantage API Key Setup](#alpha-vantage-api-key-setup) section for full setup instructions.
 
 ---
 

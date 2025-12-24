@@ -18,13 +18,24 @@ export const Optimization: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const handleRunExperiment = async () => {
+    // Validate inputs
+    const pairs = assetPairs.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    if (pairs.length === 0) {
+      setError('Please enter at least one asset pair');
+      return;
+    }
+    if (startDate >= endDate) {
+      setError('Start date must be before end date');
+      return;
+    }
+
     setIsRunning(true);
     setError(null);
     setResult(null);
 
     try {
       const request: ExperimentRequest = {
-        asset_pairs: assetPairs.split(',').map(p => p.trim()),
+        asset_pairs: pairs,
         start_date: startDate,
         end_date: endDate,
         n_trials: nTrials,
@@ -51,7 +62,7 @@ export const Optimization: React.FC = () => {
         <h2 className="text-lg font-mono font-bold text-accent-cyan mb-4 uppercase">
           Run Experiment
         </h2>
-        
+
         <div className="space-y-4">
           <div>
             <label className="block text-sm text-text-secondary mb-2 font-mono">
@@ -161,7 +172,7 @@ export const Optimization: React.FC = () => {
           <h2 className="text-lg font-mono font-bold text-accent-cyan mb-4 uppercase">
             Experiment Results
           </h2>
-          
+
           <div className="mb-4 pb-4 border-b-3 border-border-primary">
             <p className="text-sm text-text-secondary font-mono">
               Experiment ID: <span className="text-text-primary">{result.experiment_id}</span>
@@ -178,7 +189,7 @@ export const Optimization: React.FC = () => {
             {result.results.map((assetResult) => (
               <div key={assetResult.asset_pair} className="border-l-3 border-accent-cyan pl-4">
                 <h3 className="text-lg font-mono font-bold mb-3">{assetResult.asset_pair}</h3>
-                
+
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <p className="text-xs text-text-secondary mb-1">Best Sharpe Ratio</p>

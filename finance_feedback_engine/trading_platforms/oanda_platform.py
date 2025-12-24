@@ -84,11 +84,16 @@ class OandaPlatform(BaseTradingPlatform):
                 self._client = API(
                     access_token=self.api_key, environment=self.environment
                 )
-
                 # Inject correlation ID headers if client has requests session
                 if hasattr(self._client, "session"):
-                    trace_headers = get_trace_headers()
-                    self._client.session.headers.update(trace_headers)
+                    try:
+                        trace_headers = get_trace_headers()
+                        if trace_headers:
+                            self._client.session.headers.update(trace_headers)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to inject trace headers into Oanda client: %s", e
+                        )
 
                 logger.info("Oanda API client initialized")
             except ImportError:
