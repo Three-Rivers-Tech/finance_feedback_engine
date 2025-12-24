@@ -99,6 +99,7 @@ class TradeMonitor:
             {}
         )  # Maps asset_pair -> (decision_id, timestamp)
         self._expected_trades_lock = threading.Lock()
+        self._credential_error_logged = False  # Suppress repeated credential warnings
 
         # Control
         self._stop_event = threading.Event()
@@ -340,6 +341,28 @@ class TradeMonitor:
         """Query platform for open positions and detect new trades."""
         try:
             portfolio = self.platform.get_portfolio_breakdown()
+        except ValueError as e:
+            # Credential/configuration errors (e.g., invalid PEM file, missing API keys)
+            if (
+                "PEM" in str(e)
+                or "API key" in str(e)
+                or "credentials" in str(e).lower()
+            ):
+                if not self._credential_error_logged:
+                    logger.warning(
+                        "⚠️  Platform credentials not configured - monitoring disabled. "
+                        "Set valid credentials to enable live trade detection."
+                    )
+                    self._credential_error_logged = True
+                return
+            raise
+        except Exception as e:
+            if not self._credential_error_logged:
+                logger.error(f"Error detecting new trades: {e}")
+                self._credential_error_logged = True
+            return
+
+        try:
             positions = portfolio.get("futures_positions", [])
 
             for position in positions:

@@ -21,7 +21,6 @@ Environment variables:
 import json
 import os
 import re
-import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse

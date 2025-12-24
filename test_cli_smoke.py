@@ -3,8 +3,6 @@
 
 import subprocess
 import sys
-import json
-from pathlib import Path
 
 def run_cmd(cmd, timeout=30):
     """Run a CLI command and return stdout."""

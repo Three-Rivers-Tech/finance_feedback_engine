@@ -1,9 +1,9 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { Dashboard } from './pages/Dashboard';
 import { AgentControl } from './pages/AgentControl';
 import { Analytics } from './pages/Analytics';
+import { Optimization } from './pages/Optimization';
 
 function App() {
   return (
@@ -13,6 +13,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="agent" element={<AgentControl />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="optimization" element={<Optimization />} />
         </Route>
       </Routes>
     </BrowserRouter>

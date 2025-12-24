@@ -7,6 +7,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
+from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +59,18 @@ def init_tracer(config: dict) -> None:
         }
     )
 
-    # Create tracer provider with batch processor
-    provider = TracerProvider(resource=resource)
+    # Create parent-based sampler: respects parent span decision,
+    # uses TraceIdRatioBased for root spans (deterministic, 10% default)
+    sampler = ParentBasedTraceIdRatio(sample_rate)
+
+    # Create tracer provider with parent-based sampler
+    provider = TracerProvider(resource=resource, sampler=sampler)
 
     # Add exporter based on backend
     if backend == "jaeger":
         try:
             from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+
             jaeger_config = tracing_config.get("jaeger", {})
             agent_host = jaeger_config.get("agent_host", "localhost")
             agent_port = jaeger_config.get("agent_port", 6831)
@@ -77,11 +83,15 @@ def init_tracer(config: dict) -> None:
         except ImportError:
             logger.warning("Jaeger exporter not installed; falling back to console")
             from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
             exporter = ConsoleSpanExporter()
             processor = SimpleSpanProcessor(exporter)
     elif backend == "tempo":
         try:
-            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                OTLPSpanExporter,
+            )
+
             otlp_config = tracing_config.get("otlp", {})
             endpoint = otlp_config.get("endpoint", "http://localhost:4317")
             exporter = OTLPSpanExporter(endpoint=endpoint)
@@ -92,10 +102,12 @@ def init_tracer(config: dict) -> None:
         except ImportError:
             logger.warning("OTLP exporter not installed; falling back to console")
             from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
             exporter = ConsoleSpanExporter()
             processor = SimpleSpanProcessor(exporter)
     else:  # console
         from opentelemetry.sdk.trace.export import ConsoleSpanExporter
+
         exporter = ConsoleSpanExporter()
         processor = SimpleSpanProcessor(exporter)
         logger.info("Initialized console span exporter (sample_rate=1.0 for console)")

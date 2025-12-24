@@ -60,7 +60,7 @@ def init_metrics_from_config(config: dict) -> None:
         _meter_provider = provider
         _meter_initialized = True
 
-        logger.info(f"Metrics initialized with Prometheus reader")
+        logger.info("Metrics initialized with Prometheus reader")
     except Exception as e:
         logger.error(f"Failed to initialize metrics: {e}; falling back to noop", exc_info=True)
         metrics.set_meter_provider(MeterProvider())

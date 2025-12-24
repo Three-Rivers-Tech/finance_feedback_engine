@@ -3,10 +3,8 @@
 Provides proper mocking for aiohttp-based providers (AlphaVantage, etc.)
 """
 
-import json
-from datetime import datetime
 from typing import Any, Dict, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 
 def create_alpha_vantage_mock_response(

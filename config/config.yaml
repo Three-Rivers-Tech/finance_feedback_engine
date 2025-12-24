@@ -709,14 +709,14 @@ api_keys:
 observability:
   # Tracing Configuration
   tracing:
-    enabled: false                           # Enable OpenTelemetry tracing
-    backend: console                         # Options: jaeger, tempo, console
-    sample_rate: 0.1                         # Fraction of traces to sample (0.0-1.0)
+    enabled: true                            # Enable OpenTelemetry tracing (disabled for local dev)
+    backend: jaeger                          # Options: jaeger, tempo, console
+    sample_rate: 0.1                         # Fraction of traces to sample (10% deterministic)
     jaeger:
       agent_host: localhost
-      agent_port: 6831
+      agent_port: 6831                       # Jaeger agent gRPC port
     otlp:
-      endpoint: "http://localhost:4317"      # OTLP gRPC endpoint for Tempo
+      endpoint: "http://localhost:4317"      # OTLP gRPC endpoint for Tempo (alternative)
 
   # Logging Configuration
   logging:

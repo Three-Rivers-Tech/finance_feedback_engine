@@ -1,6 +1,6 @@
 import { usePolling } from './usePolling';
 import apiClient from '../client';
-import { Decision } from '../types';
+import type { Decision } from '../types';
 import { POLL_INTERVALS } from '../../utils/constants';
 
 export function useDecisions(limit: number = 10, enabled: boolean = true) {

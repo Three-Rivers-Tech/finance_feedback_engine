@@ -1,6 +1,6 @@
 """Regression tests ensuring veto and Thompson sampling coexist in ensemble mode."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 

@@ -155,3 +155,205 @@ groups:
         annotations:
           summary: "Negative P&L trend detected"
           description: "Cumulative P&L has been negative for 4+ hours"
+  - name: error_and_risk_alerts
+    interval: 30s
+    rules:
+      # Risk blocks too frequent
+      - alert: RiskGatekeeperBlockedTrades
+        expr: increase(ffe_risk_blocks_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "Risk gatekeeper blocking trades frequently"
+          description: "{{ $value }} trades blocked in last 5m due to risk constraints"
+
+      # Provider error rate high
+      - alert: HighProviderErrorRate
+        expr: |
+          sum(rate(ffe_ensemble_provider_failures_total[5m]))
+            /
+          sum(rate(ffe_ensemble_provider_requests_total[5m]))
+            > 0.2
+        for: 5m
+        labels:
+          severity: critical
+          component: ai_provider
+        annotations:
+          summary: "Provider error rate exceeds 20%"
+          description: "Provider error rate is {{ $value | humanizePercentage }} (threshold: 20%)"
+
+      # Decision execution gap
+      - alert: DecisionExecutionGap
+        expr: |
+          (rate(ffe_decisions_created_total[5m]) - rate(ffe_decisions_executed_total[5m]))
+            /
+          rate(ffe_decisions_created_total[5m])
+            > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: execution
+        annotations:
+          summary: "Decision execution rate lagging creation"
+          description: "{{ $value | humanizePercentage }} of decisions not executed within expected time"
+
+      # API error threshold
+      - alert: APIResponseErrors
+        expr: sum(rate(ffe_api_response_errors_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High API error rate"
+          description: "API error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+  - name: pnl_and_performance_alerts
+    interval: 30s
+    rules:
+      # Unrealized loss threshold
+      - alert: UnrealizedLossThreshold
+        expr: ffe_unrealized_pnl_dollars < (ffe_portfolio_value_usd * -0.1)
+        for: 10m
+        labels:
+          severity: critical
+          component: risk_management
+        annotations:
+          summary: "Unrealized loss exceeds 10% of portfolio"
+          description: "Unrealized P&L: ${{ $value }} (portfolio: ${{ with query \"ffe_portfolio_value_usd\" | first | value }})"
+
+      # Win rate collapse
+      - alert: WinRateCollapse
+        expr: |
+          sum(increase(ffe_trades_won[1h]))
+            /
+          sum(increase(ffe_trades_executed_total[1h]))
+            < 0.3
+        for: 2h
+        labels:
+          severity: warning
+          component: trading_performance
+        annotations:
+          summary: "Win rate below 30%"
+          description: "Win rate is {{ $value | humanizePercentage }} (1-hour window, threshold: 30%)"
+
+      # Unrealized loss per position
+      - alert: LargeUnrealizedLossPerPosition
+        expr: ffe_unrealized_pnl_dollars_per_position < -500
+        for: 10m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "Single position unrealized loss exceeds $500"
+          description: "Position {{ $labels.asset_pair }} unrealized loss: ${{ $value }}"
+
+  - name: agent_state_alerts
+    interval: 30s
+    rules:
+      # Agent state stuck
+      - alert: AgentStateUnchanged
+        expr: (time() - ffe_agent_last_state_change_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: agent
+        annotations:
+          summary: "Agent state unchanged for 5+ minutes"
+          description: "Agent stuck in state: {{ $labels.agent_state }} for {{ $value | humanizeDuration }}"
+
+      # High active position count
+      - alert: HighActivePositionCount
+        expr: ffe_active_positions > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "Excessive number of open positions"
+          description: "{{ $value }} active positions (threshold: 10). Check for diversification risk."
+
+      # Decision-execution ratio anomaly
+      - alert: DecisionCreationAnomaly
+        expr: rate(ffe_decisions_created_total[5m]) > 2
+        for: 5m
+        labels:
+          severity: info
+          component: monitoring
+        annotations:
+          summary: "High decision creation rate"
+          description: "Creating {{ $value }} decisions/sec (potential runaway)"
+
+  - name: data_quality_alerts
+    interval: 30s
+    rules:
+      # Stale market data
+      - alert: StaleMarketData
+        expr: (time() - ffe_market_data_last_updated_seconds) > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: data_quality
+        annotations:
+          summary: "Market data is stale (>5 minutes)"
+          description: "Last data update: {{ $value | humanizeDuration }} ago"
+
+      # High provider latency
+      - alert: HighProviderLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(ffe_ensemble_provider_latency_seconds_bucket[5m])) by (le, provider)) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: ai_provider
+        annotations:
+          summary: "Provider latency high (p95 > 5s)"
+          description: "Provider {{ $labels.provider }} p95 latency: {{ $value }}s"
+
+      # Data gaps
+      - alert: MarketDataGapDetected
+        expr: increase(ffe_market_data_gaps_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: data_quality
+        annotations:
+          summary: "Market data gaps detected"
+          description: "{{ $value }} data gaps in last 5 minutes"
+
+  - name: risk_threshold_alerts
+    interval: 30s
+    rules:
+      # VaR limit approaching
+      - alert: VaRLimitApproach
+        expr: (ffe_var_utilization_ratio) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "VaR utilization approaching limit (>80%)"
+          description: "VaR utilization: {{ $value | humanizePercentage }} (threshold: 80%)"
+
+      # Portfolio concentration high
+      - alert: HighPortfolioConcentration
+        expr: max(ffe_asset_concentration_ratio) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          component: risk_management
+        annotations:
+          summary: "Portfolio concentration exceeds 30%"
+          description: "Asset {{ $labels.asset_pair }} concentration: {{ $value | humanizePercentage }}"
+
+      # Correlation warning
+      - alert: HighPortfolioCorrelation
+        expr: ffe_portfolio_correlation_average > 0.7
+        for: 5m
+        labels:
+          severity: info
+          component: risk_management
+        annotations:
+          summary: "Average portfolio correlation high"
+          description: "Average correlation between positions: {{ $value }} (threshold: 0.7)"

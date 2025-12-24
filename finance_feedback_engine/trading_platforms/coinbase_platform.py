@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from requests.exceptions import RequestException
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
+from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 self._client = RESTClient(
                     api_key=self.api_key, api_secret=self.api_secret
                 )
+
+                # Inject correlation ID headers if client has session
+                if hasattr(self._client, "session"):
+                    trace_headers = get_trace_headers()
+                    self._client.session.headers.update(trace_headers)
+
                 logger.info("Coinbase REST client initialized with CDP API format")
             except ImportError:
                 logger.warning(

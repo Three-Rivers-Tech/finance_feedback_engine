@@ -2,7 +2,6 @@
 
 import logging
 import pytest
-from unittest.mock import patch, MagicMock
 
 from finance_feedback_engine.observability import init_tracer, get_tracer
 from finance_feedback_engine.observability.metrics import init_metrics_from_config, get_meter, create_counters
