@@ -5,7 +5,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from opentelemetry import trace
-from opentelemetry.trace import Tracer
+from opentelemetry.trace import Tracer, TraceFlags
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,25 @@ def with_span(
     return tracer.start_as_current_span(span_name, attributes=attrs)
 
 
+import contextvars
+import uuid
+from typing import Any, Dict, Optional
+
+_correlation_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "correlation_id", default=None
+)
+
+
+def set_correlation_id(correlation_id: str) -> None:
+    """Set correlation ID for the current context (e.g., from incoming request header)."""
+    _correlation_id_var.set(correlation_id)
+
+
+def clear_correlation_id() -> None:
+    """Clear correlation ID for the current context."""
+    _correlation_id_var.set(None)
+
+
 def get_correlation_id() -> str:
     """
     Get or create correlation ID for request tracing.
@@ -74,9 +93,11 @@ def get_correlation_id() -> str:
     Returns:
         Unique correlation ID (UUID) for the current request/trace
     """
-    if not hasattr(_correlation_storage, "correlation_id"):
-        _correlation_storage.correlation_id = str(uuid.uuid4())
-    return _correlation_storage.correlation_id
+    correlation_id = _correlation_id_var.get()
+    if correlation_id is None:
+        correlation_id = str(uuid.uuid4())
+        _correlation_id_var.set(correlation_id)
+    return correlation_id
 
 
 def get_trace_headers() -> Dict[str, str]:
@@ -84,19 +105,24 @@ def get_trace_headers() -> Dict[str, str]:
     Get HTTP headers for trace context propagation to external services.
 
     Returns:
-        Dict with X-Correlation-ID and W3C traceparent headers for HTTP requests
+        Dict with X-Correlation-ID and optional W3C traceparent header for HTTP requests.
+        traceparent is only included if a valid span context is active.
     """
     correlation_id = get_correlation_id()
     span_context = trace.get_current_span().get_span_context()
 
-    # W3C Trace Context format: traceparent: 00-trace_id-span_id-trace_flags
-    trace_id_hex = format(span_context.trace_id, "032x")
-    span_id_hex = format(span_context.span_id, "016x")
-    # trace_flags is a byte - check bit 0 for sampled status
-    sampled = "01" if (span_context.trace_flags & 0x01) else "00"
-    traceparent = f"00-{trace_id_hex}-{span_id_hex}-{sampled}"
-
-    return {
+    headers = {
         "X-Correlation-ID": correlation_id,
-        "traceparent": traceparent,
     }
+
+    # Only construct traceparent if span context is valid
+    if span_context.is_valid():
+        # W3C Trace Context format: traceparent: 00-trace_id-span_id-trace_flags
+        trace_id_hex = format(span_context.trace_id, "032x")
+        span_id_hex = format(span_context.span_id, "016x")
+        # Check if sampled flag is set using OpenTelemetry TraceFlags enum
+        sampled = "01" if (span_context.trace_flags & TraceFlags.SAMPLED) else "00"
+        traceparent = f"00-{trace_id_hex}-{span_id_hex}-{sampled}"
+        headers["traceparent"] = traceparent
+
+    return headers
