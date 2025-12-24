@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Tuple
 
+from finance_feedback_engine.observability.metrics import create_counters, get_meter
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
 
@@ -49,6 +50,10 @@ class RiskGatekeeper:
         self.max_var_pct = max_var_pct
         self.var_confidence = var_confidence
         self.is_backtest = is_backtest
+
+        # Initialize Prometheus metrics
+        self._meter = get_meter(__name__)
+        self._metrics = create_counters(self._meter)
 
         logger.info(
             f"RiskGatekeeper initialized: max_drawdown={max_drawdown_pct*100}%, "
@@ -290,6 +295,14 @@ class RiskGatekeeper:
                 f"Max drawdown exceeded: {total_pnl*100:.2f}% "
                 f"(limit: {-self.max_drawdown_pct*100:.2f}%)"
             )
+            # Record risk block metric
+            asset_pair = decision.get("asset_pair", "UNKNOWN")
+            asset_type = (
+                "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+            )
+            self._metrics["ffe_risk_blocks_total"].add(
+                1, {"reason": "max_drawdown", "asset_type": asset_type}
+            )
             return False, f"Max drawdown exceeded ({total_pnl*100:.2f}%)"
 
         # 3. Per-Platform Correlation Check (Enhanced)
@@ -366,6 +379,16 @@ class RiskGatekeeper:
             warning = platform_analysis.get("concentration_warning")
             if warning:
                 logger.warning(f"Correlation warning: {warning}")
+                # Record correlation block metric
+                asset_pair = decision.get("asset_pair", "UNKNOWN")
+                asset_type = (
+                    "crypto"
+                    if any(x in asset_pair for x in ["BTC", "ETH"])
+                    else "forex"
+                )
+                self._metrics["ffe_risk_blocks_total"].add(
+                    1, {"reason": "correlation", "asset_type": asset_type}
+                )
                 return False, f"Correlation limit exceeded: {warning}"
 
         else:
@@ -411,6 +434,14 @@ class RiskGatekeeper:
             logger.warning(
                 f"Portfolio VaR exceeded: {var_pct*100:.2f}% "
                 f"(limit: {self.max_var_pct*100:.2f}% @ {self.var_confidence*100}% confidence)"
+            )
+            # Record VaR block metric
+            asset_pair = decision.get("asset_pair", "UNKNOWN")
+            asset_type = (
+                "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+            )
+            self._metrics["ffe_risk_blocks_total"].add(
+                1, {"reason": "var_limit", "asset_type": asset_type}
             )
             return False, (
                 f"Portfolio VaR limit exceeded: {var_pct*100:.2f}% "

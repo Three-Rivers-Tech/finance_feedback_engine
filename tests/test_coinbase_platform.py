@@ -1,6 +1,6 @@
 """Tests for the Coinbase Advanced trading platform integration."""
 
-from unittest.mock import MagicMock, PropertyMock
+from unittest.mock import MagicMock
 
 import pytest
 

@@ -9,14 +9,13 @@ Tests cover:
 - Agent process monitoring
 """
 
-import logging
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -370,7 +369,6 @@ class TestIntegration:
     def test_full_workflow_monitoring(self):
         """Test monitoring a full workflow."""
         from finance_feedback_engine.monitoring.logging_config import (
-            CorrelationContext,
             get_correlation_id,
             setup_structured_logging,
         )

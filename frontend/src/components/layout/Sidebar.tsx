@@ -5,6 +5,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: '▣' },
   { path: '/agent', label: 'Agent Control', icon: '⚙' },
   { path: '/analytics', label: 'Analytics', icon: '📊' },
+  { path: '/optimization', label: 'Optimization', icon: '🔬' },
 ];
 
 export const Sidebar: React.FC = () => {

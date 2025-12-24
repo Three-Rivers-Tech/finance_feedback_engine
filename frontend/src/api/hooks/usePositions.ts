@@ -1,6 +1,6 @@
 import { usePolling } from './usePolling';
 import apiClient from '../client';
-import { Position } from '../types';
+import type { Position } from '../types';
 import { POLL_INTERVALS } from '../../utils/constants';
 
 export function usePositions(enabled: boolean = true) {

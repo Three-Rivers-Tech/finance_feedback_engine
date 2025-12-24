@@ -22,6 +22,7 @@ from .exceptions import (
 )
 from .memory.portfolio_memory import PortfolioMemoryEngine
 from .monitoring.error_tracking import ErrorTracker
+from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
 from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
@@ -204,20 +205,46 @@ class FinanceFeedbackEngine:
                 self.trading_platform = PlatformFactory.create_platform(
                     platform_name, platform_credentials, config
                 )
-            except (ValueError, KeyError, TypeError) as e:
-                logger.error(
-                    f"Failed to create trading platform {platform_name}: {e}", exc_info=True
+                logger.info(
+                    f"✅ Trading platform '{platform_name}' initialized successfully"
                 )
-                raise ConfigurationError(f"Platform configuration error: {e}") from e
+            except (ValueError, KeyError, TypeError) as e:
+                error_msg = str(e).lower()
+                if (
+                    "pem" in error_msg
+                    or "credential" in error_msg
+                    or "api key" in error_msg
+                ):
+                    logger.warning(
+                        f"⚠️  Platform credentials incomplete or invalid: {e}\n"
+                        f"💡 Trading and monitoring features will be limited.\n"
+                        f"   Set valid credentials via environment variables or config/config.local.yaml"
+                    )
+                    # Use mock platform as fallback for analysis-only mode
+                    from .trading_platforms.mock_platform import MockTradingPlatform
+
+                    self.trading_platform = MockTradingPlatform({})
+                    logger.info("📊 Running in analysis-only mode (mock platform)")
+                else:
+                    logger.error(
+                        f"Failed to create trading platform {platform_name}: {e}",
+                        exc_info=True,
+                    )
+                    raise ConfigurationError(
+                        f"Platform configuration error: {e}"
+                    ) from e
             except Exception as e:
                 logger.error(
-                    f"Failed to create trading platform {platform_name}: {e}", exc_info=True
+                    f"Failed to create trading platform {platform_name}: {e}",
+                    exc_info=True,
                 )
                 raise ConfigurationError(f"Platform configuration error: {e}") from e
         else:
             # Backtest mode: do not initialize a live trading platform
             self.trading_platform = None
-            logger.info("Backtest mode detected: skipping live trading platform initialization")
+            logger.info(
+                "Backtest mode detected: skipping live trading platform initialization"
+            )
 
         # Initialize decision engine
         self.decision_engine = DecisionEngine(config, self.data_provider)
@@ -225,6 +252,11 @@ class FinanceFeedbackEngine:
         # Initialize persistence
         persistence_config = config.get("persistence", {})
         self.decision_store = DecisionStore(persistence_config)
+
+        # Initialize Prometheus metrics
+        self._meter = get_meter(__name__)
+        self._metrics = create_counters(self._meter)
+        logger.info("Prometheus metrics initialized")
 
         # Initialize portfolio memory engine
         memory_enabled = config.get("portfolio_memory", {}).get("enabled", False)
@@ -284,7 +316,9 @@ class FinanceFeedbackEngine:
         if is_backtest:
             self._monitoring_enabled = False
             self._auto_start_monitor_flag = False
-            logger.info("Backtest mode: monitoring integration and TradeMonitor auto-start are disabled")
+            logger.info(
+                "Backtest mode: monitoring integration and TradeMonitor auto-start are disabled"
+            )
         else:
             # Auto-enable monitoring integration if enabled in config
             if self._monitoring_enabled:
@@ -589,6 +623,15 @@ class FinanceFeedbackEngine:
 
         # Persist decision
         self.decision_store.save_decision(decision)
+
+        # Record metrics: decision created
+        action = decision.get("action", "UNKNOWN")
+        asset_type = (
+            "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+        )
+        self._metrics["ffe_decisions_created_total"].add(
+            1, {"action": action, "asset_type": asset_type, "asset_pair": asset_pair}
+        )
 
         return decision
 

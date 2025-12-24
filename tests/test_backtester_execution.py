@@ -13,14 +13,11 @@ Tests cover:
 Target: 40% coverage of 1,451 LOC backtester.py
 """
 
-import json
-import os
 import shutil
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 import pandas as pd
@@ -31,7 +28,6 @@ from finance_feedback_engine.backtesting.decision_cache import DecisionCache
 from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
 from finance_feedback_engine.backtesting.monte_carlo import (
     MonteCarloSimulator,
-    generate_learning_validation_metrics,
 )
 
 
