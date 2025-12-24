@@ -1,6 +1,12 @@
 """API routes for Finance Feedback Engine."""
 
+import asyncio
+import hashlib
+import hmac
 import logging
+import os
+import secrets
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -10,6 +16,284 @@ from ..core import FinanceFeedbackEngine
 from .dependencies import get_engine
 
 logger = logging.getLogger(__name__)
+
+
+def _pseudonymize_user_id(user_id: str) -> str:
+    """
+    Pseudonymize user_id using HMAC-SHA256 for privacy compliance.
+
+    Creates a non-reversible pseudonymous identifier from user_id using a
+    server-side secret. This ensures user_id values are not stored or logged
+    in plain text, supporting GDPR/privacy requirements.
+
+    The secret is read from TRACE_USER_SECRET environment variable and should be:
+    - At least 32 bytes of cryptographic random data
+    - Stored in a secure secret manager (e.g., AWS Secrets Manager, Vault)
+    - Rotated periodically per security policy
+    - Never committed to version control
+
+    Args:
+        user_id: The original user identifier (email, username, etc.)
+
+    Returns:
+        Hex-encoded HMAC-SHA256 hash of the user_id (64 characters)
+
+    Note:
+        - Pseudonymized IDs are logged in trace spans and rate limit tracking
+        - Trace retention: 1 hour in-memory cache (see _trace_cache_ttl)
+        - For data deletion requests, clear _trace_cache entries manually
+        - Update privacy documentation when modifying this function
+    """
+    # Get secret from environment (fallback for dev/test only)
+    secret = os.environ.get(
+        "TRACE_USER_SECRET",
+        "dev-only-secret-change-in-production",  # Default for local dev
+    )
+
+    if secret == "dev-only-secret-change-in-production":
+        logger.warning(
+            "Using default TRACE_USER_SECRET. Set environment variable in production."
+        )
+
+    # Create HMAC-SHA256 hash
+    h = hmac.new(
+        secret.encode("utf-8"),
+        user_id.encode("utf-8"),
+        hashlib.sha256,
+    )
+    return h.hexdigest()
+
+
+def _validate_webhook_token(request: Request) -> bool:
+    """
+    Validate webhook authentication token using constant-time comparison.
+
+    Checks for authentication token in headers:
+    1. X-Webhook-Token header (preferred for webhooks)
+    2. Authorization: Bearer <token> header (alternative)
+
+    Compares against ALERT_WEBHOOK_SECRET environment variable using
+    secrets.compare_digest() to prevent timing attacks.
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        True if token is valid, False otherwise
+
+    Security:
+        - Uses constant-time comparison to prevent timing attacks
+        - Logs authentication failures for security monitoring
+        - Secret should be at least 32 bytes of random data
+        - Rotate secret if compromised via environment variable update
+    """
+    # Get expected secret from environment
+    expected_secret = os.environ.get("ALERT_WEBHOOK_SECRET", "")
+
+    if not expected_secret:
+        logger.error(
+            "ALERT_WEBHOOK_SECRET not configured. Webhook authentication disabled. "
+            "Set environment variable for production."
+        )
+        return False
+
+    # Extract token from headers (try X-Webhook-Token first, then Bearer token)
+    provided_token = request.headers.get("x-webhook-token", "")
+
+    if not provided_token:
+        # Try Authorization: Bearer <token>
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            provided_token = auth_header[7:]
+
+    if not provided_token:
+        logger.warning(
+            f"Webhook authentication failed: missing token (from {request.client.host if request.client else 'unknown'})"
+        )
+        return False
+
+    # Constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(provided_token, expected_secret):
+        logger.warning(
+            f"Webhook authentication failed: invalid token (from {request.client.host if request.client else 'unknown'})"
+        )
+        return False
+
+    return True
+
+
+def _validate_webhook_ip(request: Request) -> bool:
+    """
+    Validate webhook source IP against allowlist (optional additional security).
+
+    Checks if request originates from an allowed IP address based on
+    ALERT_WEBHOOK_ALLOWED_IPS environment variable (comma-separated list).
+
+    Args:
+        request: FastAPI Request object
+
+    Returns:
+        True if IP validation passes or allowlist is not configured
+        False if IP is blocked
+
+    Configuration:
+        Set ALERT_WEBHOOK_ALLOWED_IPS="127.0.0.1,10.0.0.0/8,192.168.1.100"
+        Supports individual IPs; CIDR notation support can be added if needed.
+    """
+    allowed_ips_str = os.environ.get("ALERT_WEBHOOK_ALLOWED_IPS", "")
+
+    # If no allowlist configured, skip IP validation
+    if not allowed_ips_str:
+        return True
+
+    allowed_ips = [ip.strip() for ip in allowed_ips_str.split(",") if ip.strip()]
+
+    if not allowed_ips:
+        return True
+
+    # Get client IP
+    client_ip = request.client.host if request.client else None
+
+    if not client_ip:
+        logger.warning("Webhook request has no client IP - rejecting")
+        return False
+
+    # Check if IP is in allowlist
+    if client_ip not in allowed_ips:
+        logger.warning(
+            f"Webhook request from unauthorized IP: {client_ip}. "
+            f"Allowed IPs: {', '.join(allowed_ips)}"
+        )
+        return False
+
+    return True
+
+
+def _validate_jwt_token(token: str) -> str:
+    """
+    Validate JWT token and extract user_id from claims.
+
+    Performs comprehensive JWT validation:
+    1. Signature verification using configured secret/public key
+    2. Expiry check (exp claim)
+    3. Issuer validation (iss claim)
+    4. Audience validation (aud claim)
+    5. Algorithm validation (prevents algorithm confusion attacks)
+
+    Args:
+        token: JWT token string from Authorization header
+
+    Returns:
+        user_id extracted from token's 'sub' (subject) claim
+
+    Raises:
+        HTTPException: 401 if token is invalid, expired, or missing claims
+
+    Configuration (via environment variables):
+        JWT_SECRET_KEY: Secret key for HS256/HS512 algorithms
+        JWT_PUBLIC_KEY: Public key for RS256/ES256 algorithms (optional)
+        JWT_ALGORITHM: Algorithm to use (default: HS256)
+        JWT_ISSUER: Expected issuer claim (iss)
+        JWT_AUDIENCE: Expected audience claim (aud)
+
+    Security:
+        - Uses python-jose for industry-standard JWT validation
+        - Enforces algorithm allowlist (prevents 'none' algorithm attack)
+        - Validates all critical claims (exp, iss, aud)
+        - Fails closed: any validation error returns 401
+    """
+    try:
+        from jose import JWTError, jwt
+    except ImportError:
+        logger.error(
+            "python-jose not installed. JWT validation disabled. "
+            "Install with: pip install python-jose[cryptography]"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="JWT validation unavailable",
+        )
+
+    # Get JWT configuration from environment
+    secret_key = os.environ.get("JWT_SECRET_KEY", "")
+    public_key = os.environ.get("JWT_PUBLIC_KEY", "")  # For RS256/ES256
+    algorithm = os.environ.get("JWT_ALGORITHM", "HS256")
+    expected_issuer = os.environ.get("JWT_ISSUER", "")
+    expected_audience = os.environ.get("JWT_AUDIENCE", "")
+
+    # Validate configuration
+    if not secret_key and not public_key:
+        logger.error(
+            "JWT_SECRET_KEY or JWT_PUBLIC_KEY not configured. "
+            "Set environment variable for production."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication not configured",
+        )
+
+    # Use appropriate key based on algorithm
+    verification_key = public_key if algorithm.startswith(("RS", "ES")) else secret_key
+
+    # Algorithm allowlist (prevent 'none' algorithm attack)
+    allowed_algorithms = ["HS256", "HS512", "RS256", "RS512", "ES256", "ES512"]
+    if algorithm not in allowed_algorithms:
+        logger.error(f"Invalid JWT_ALGORITHM configured: {algorithm}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication configuration",
+        )
+
+    try:
+        # Decode and validate JWT
+        payload = jwt.decode(
+            token,
+            verification_key,
+            algorithms=[algorithm],  # Explicit algorithm (prevents confusion attacks)
+            issuer=expected_issuer if expected_issuer else None,
+            audience=expected_audience if expected_audience else None,
+            options={
+                "verify_signature": True,
+                "verify_exp": True,  # Enforce expiry
+                "verify_iss": bool(expected_issuer),
+                "verify_aud": bool(expected_audience),
+                "require_exp": True,  # Require expiry claim
+            },
+        )
+
+        # Extract user_id from 'sub' (subject) claim
+        user_id = payload.get("sub")
+        if not user_id:
+            logger.warning("JWT token missing 'sub' claim")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: missing user identifier",
+            )
+
+        return user_id
+
+    except JWTError as e:
+        # Log specific JWT validation failures
+        error_type = type(e).__name__
+        logger.warning(f"JWT validation failed: {error_type} - {str(e)}")
+
+        # Return user-friendly error without leaking details
+        if "expired" in str(e).lower():
+            detail = "Token expired"
+        elif "signature" in str(e).lower():
+            detail = "Invalid token signature"
+        elif "issuer" in str(e).lower():
+            detail = "Invalid token issuer"
+        elif "audience" in str(e).lower():
+            detail = "Invalid token audience"
+        else:
+            detail = "Invalid authentication token"
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=detail,
+        )
+
 
 # Create routers
 health_router = APIRouter()
@@ -168,10 +452,13 @@ async def create_decision(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Invalid decision format",
-            )
-
-        return DecisionResponse(
-            decision_id=decision["decision_id"],
+    except Exception as e:
+        logger.error(f"Error processing alert webhook: {e}")
+        # Return generic error per OWASP (don't leak details)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook processing failed"
+        )
             asset_pair=decision["asset_pair"],
             action=decision["action"],
             confidence=decision["confidence"],
@@ -231,25 +518,25 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             try:
                 from .health_checks import _safe_json
 
-                balance_info = _safe_json(balance_info)
-            except Exception:
-                balance_info = balance_info
-            status_data["balance"] = balance_info
-            engine_config = getattr(engine, "config", {})
-            status_data["platform"] = (
-                engine_config.get("trading_platform", "unknown")
-                if isinstance(engine_config, dict)
-                else "unknown"
-            )
+        if not hasattr(submit_trace, "_trace_counts"):
+            submit_trace._trace_counts = defaultdict(list)
+            submit_trace._trace_lock = asyncio.Lock()
 
-            # Get portfolio breakdown if available
-            if hasattr(engine.platform, "get_portfolio_breakdown"):
-                breakdown = engine.platform.get_portfolio_breakdown() or {}
-                positions = breakdown.get("positions", [])
-                status_data["active_positions"] = len(positions)
-    except Exception as e:
-        logger.error(f"Failed to get portfolio status: {e}")
-        status_data["error"] = str(e)
+        async with submit_trace._trace_lock:
+            current_time = time.time()
+            # Clean old entries (older than 60 seconds)
+            submit_trace._trace_counts[user_id] = [
+                t for t in submit_trace._trace_counts[user_id] if current_time - t < 60
+            ]
+
+            # Check if user exceeded limit
+            if len(submit_trace._trace_counts[user_id]) >= 10:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded",
+                )
+
+            submit_trace._trace_counts[user_id].append(current_time)
 
     return status_data
 
@@ -282,11 +569,58 @@ async def handle_alert_webhook(payload: AlertmanagerWebhook, request: Request):
 
     Formats alerts and sends via Telegram botfather bot.
     Routes to /api/alerts/webhook from Prometheus Alertmanager.
+
+    Security:
+        - Requires valid webhook token in X-Webhook-Token or Authorization header
+        - Optional IP allowlist via ALERT_WEBHOOK_ALLOWED_IPS
+        - Returns 401/403 for authentication failures
     """
     try:
+        # Fail fast: validate IP allowlist first (if configured)
+        if not _validate_webhook_ip(request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="IP address not allowed",
+            )
+
+        # Validate webhook authentication token (required)
+        if not _validate_webhook_token(request):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing or invalid webhook token",
+            )
+
         # Get severity from headers if available
         severity = request.headers.get("severity", "warning").upper()
 
+        # Initialize TelegramBot once before loop (reuse existing global bot if available)
+        bot = None
+        try:
+            from ..integrations import telegram_bot as integrations_bot
+
+            global telegram_bot
+            if telegram_bot is None:
+                telegram_bot = getattr(integrations_bot, "telegram_bot", None)
+
+            # Use global bot if available, otherwise attempt to create with proper config
+            if telegram_bot is not None:
+                bot = telegram_bot
+                logger.debug("Using existing Telegram bot instance for alerts")
+            else:
+                # Fallback: create bot with config from environment/settings
+                from ..integrations.telegram_bot import TelegramBot
+
+                # TelegramBot reads config from config/telegram.yaml or env vars
+                bot = TelegramBot({})  # Empty dict triggers config loading from files
+                logger.debug("Created new Telegram bot instance for alerts")
+
+        except Exception as e:
+            logger.warning(
+                f"Telegram bot not available for alerts: {e}. Alerts will be logged only."
+            )
+
+        # Process each alert
+        alerts_sent = 0
         for alert in payload.alerts:
             severity = alert.labels.get("severity", severity).upper()
             component = alert.labels.get("component", "unknown")
@@ -311,18 +645,23 @@ async def handle_alert_webhook(payload: AlertmanagerWebhook, request: Request):
                 f"📝 {description}"
             )
 
-            # Send via Telegram if bot available
-            try:
-                from ..integrations.telegram_bot import TelegramBot
+            # Send via Telegram if bot is available
+            if bot is not None:
+                try:
+                    await bot.send_alert(message)
+                    alerts_sent += 1
+                    logger.info(f"Alert sent to Telegram: {alertname}")
+                except Exception as e:
+                    logger.warning(f"Failed to send alert to Telegram: {alertname} - {e}")
+            else:
+                # Log alert when Telegram is unavailable
+                logger.info(f"Alert (Telegram unavailable): {alertname} - {message}")
 
-                config = {}
-                bot = TelegramBot(config)
-                await bot.send_alert(message)
-                logger.info(f"Alert sent to Telegram: {alertname}")
-            except Exception as e:
-                logger.warning(f"Failed to send alert to Telegram: {e}")
-
-        return {"status": "ok", "alerts_processed": len(payload.alerts)}
+        return {
+            "status": "ok",
+            "alerts_processed": len(payload.alerts),
+            "alerts_sent": alerts_sent,
+        }
 
     except Exception as e:
         logger.error(f"Error processing alert webhook: {e}")
@@ -357,6 +696,42 @@ class TraceSpan(BaseModel):
 # In-memory trace cache (LRU with 1-hour TTL)
 _trace_cache: Dict[str, List[Dict[str, Any]]] = {}
 _trace_cache_ttl: Dict[str, int] = {}
+_trace_cache_lock = asyncio.Lock()
+_TRACE_TTL_SECONDS = 3600  # 1 hour
+_MAX_CACHE_ENTRIES = 1000  # Prevent unbounded growth
+
+
+async def _cleanup_expired_traces():
+    """
+    Remove traces older than TTL and enforce max cache size.
+
+    This function performs two cleanup operations:
+    1. Removes traces older than _TRACE_TTL_SECONDS (1 hour)
+    2. If cache exceeds _MAX_CACHE_ENTRIES, removes oldest entries (FIFO)
+
+    Thread-safe: Uses _trace_cache_lock to prevent race conditions.
+    Called at the start of each submit_trace request to maintain cache health.
+    """
+    current_time = int(time.time())
+    async with _trace_cache_lock:
+        # Remove expired traces
+        expired_keys = [
+            k
+            for k, ttl in _trace_cache_ttl.items()
+            if current_time - ttl > _TRACE_TTL_SECONDS
+        ]
+        for key in expired_keys:
+            _trace_cache.pop(key, None)
+            _trace_cache_ttl.pop(key, None)
+
+        # Enforce max cache size (remove oldest entries if needed)
+        if len(_trace_cache) > _MAX_CACHE_ENTRIES:
+            # Sort by TTL (oldest first) and remove excess
+            sorted_keys = sorted(_trace_cache_ttl.items(), key=lambda x: x[1])
+            excess_count = len(_trace_cache) - _MAX_CACHE_ENTRIES
+            for key, _ in sorted_keys[:excess_count]:
+                _trace_cache.pop(key, None)
+                _trace_cache_ttl.pop(key, None)
 
 
 @traces_router.post("/api/traces")
@@ -372,21 +747,25 @@ async def submit_trace(
     Rate limited to 10 requests/minute per user.
     """
     try:
-        # Get authorization header
+        # Get and validate authorization header
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Bearer "):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing or invalid authorization",
+                detail="Missing or invalid authorization header",
             )
 
         token = auth_header[7:]  # Remove "Bearer "
 
-        # Validate JWT token (simplified - in production use proper JWT validation)
-        # This assumes token validation is done elsewhere via middleware
-        user_id = request.headers.get("x-user-id", "unknown")
+        # Validate JWT and extract user_id from token claims (not from headers)
+        # This replaces the insecure x-user-id header trust
+        raw_user_id = _validate_jwt_token(token)
 
-        # Check rate limit (10 spans/minute per user)
+        # Pseudonymize user_id for privacy compliance (GDPR/data protection)
+        # Raw user_id is NOT stored or logged - only the non-reversible hash
+        user_id_pseudonym = _pseudonymize_user_id(raw_user_id)
+
+        # Check rate limit (10 spans/minute per pseudonymized user)
         import time
         from collections import defaultdict
 
@@ -397,18 +776,18 @@ async def submit_trace(
         with submit_trace._trace_lock:
             current_time = time.time()
             # Clean old entries (older than 60 seconds)
-            submit_trace._trace_counts[user_id] = [
-                t for t in submit_trace._trace_counts[user_id] if current_time - t < 60
+            submit_trace._trace_counts[user_id_pseudonym] = [
+                t for t in submit_trace._trace_counts[user_id_pseudonym] if current_time - t < 60
             ]
 
             # Check if user exceeded limit
-            if len(submit_trace._trace_counts[user_id]) >= 10:
+            if len(submit_trace._trace_counts[user_id_pseudonym]) >= 10:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Rate limit exceeded",
                 )
 
-            submit_trace._trace_counts[user_id].append(current_time)
+            submit_trace._trace_counts[user_id_pseudonym].append(current_time)
 
         # Validate span data (JSON schema-like check)
         if not span.trace_id or not span.span_id or not span.name:
@@ -417,10 +796,39 @@ async def submit_trace(
                 detail="Invalid span data",
             )
 
-        # Store span in cache
-        cache_key = span.trace_id
-        if cache_key not in _trace_cache:
-            _trace_cache[cache_key] = []
+        # Cleanup expired traces periodically (maintains cache health)
+        await _cleanup_expired_traces()
+
+        # Validate timestamps and calculate duration with safety checks
+        malformed_timestamp = False
+        try:
+            # Ensure timestamps are numeric
+            start_time = float(span.start_time)
+            end_time = float(span.end_time)
+
+            # Calculate duration, ensuring non-negative value
+            raw_duration = end_time - start_time
+            duration_ms = max(0, raw_duration)
+
+            # Log warning if timestamps are malformed (end < start)
+            if raw_duration < 0:
+                malformed_timestamp = True
+                logger.warning(
+                    f"Malformed span timestamps: end_time < start_time "
+                    f"(span_id={span.span_id}, trace_id={span.trace_id}, "
+                    f"start={start_time}, end={end_time}, negative_duration={raw_duration}ms). "
+                    f"Duration clamped to 0."
+                )
+        except (ValueError, TypeError) as e:
+            # Non-numeric timestamps - set duration to 0 and flag
+            duration_ms = 0
+            malformed_timestamp = True
+            logger.warning(
+                f"Non-numeric span timestamps: {e} "
+                f"(span_id={span.span_id}, trace_id={span.trace_id}, "
+                f"start_time={span.start_time}, end_time={span.end_time}). "
+                f"Duration set to 0."
+            )
 
         span_dict = {
             "trace_id": span.trace_id,
@@ -429,17 +837,28 @@ async def submit_trace(
             "name": span.name,
             "start_time": span.start_time,
             "end_time": span.end_time,
-            "duration_ms": span.end_time - span.start_time,
+            "duration_ms": duration_ms,
             "attributes": {attr.key: attr.value for attr in (span.attributes or [])},
             "status": span.status,
-            "submitted_by": user_id,
+            "submitted_by": user_id_pseudonym,  # Privacy: store pseudonymized ID only
+            "malformed_timestamp": malformed_timestamp,  # Flag for debugging
         }
 
-        _trace_cache[cache_key].append(span_dict)
+        # Thread-safe cache access with TTL tracking
+        cache_key = span.trace_id
+        current_time = int(time.time())
+        async with _trace_cache_lock:
+            if cache_key not in _trace_cache:
+                _trace_cache[cache_key] = []
+                _trace_cache_ttl[cache_key] = current_time
+            _trace_cache[cache_key].append(span_dict)
+            # Update TTL on new activity for this trace
+            _trace_cache_ttl[cache_key] = current_time
 
-        # Log for debugging
+        # Log for debugging (pseudonymized ID only - first 12 chars for readability)
         logger.info(
-            f"Trace submitted: {span.name} (trace_id={span.trace_id}, duration={span_dict['duration_ms']}ms)"
+            f"Trace submitted: {span.name} (trace_id={span.trace_id}, "
+            f"duration={span_dict['duration_ms']}ms, user={user_id_pseudonym[:12]}...)"
         )
 
         return {

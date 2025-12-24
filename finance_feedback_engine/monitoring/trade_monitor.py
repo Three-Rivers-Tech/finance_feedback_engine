@@ -100,6 +100,7 @@ class TradeMonitor:
         )  # Maps asset_pair -> (decision_id, timestamp)
         self._expected_trades_lock = threading.Lock()
         self._credential_error_logged = False  # Suppress repeated credential warnings
+        self._general_error_logged = False  # Suppress repeated general errors
 
         # Control
         self._stop_event = threading.Event()
@@ -357,10 +358,18 @@ class TradeMonitor:
                 return
             raise
         except Exception as e:
-            if not self._credential_error_logged:
+            # Do not swallow re-raised ValueError
+            if isinstance(e, ValueError):
+                raise
+            # Handle other exceptions with separate flag
+            if not self._general_error_logged:
                 logger.error(f"Error detecting new trades: {e}")
-                self._credential_error_logged = True
+                self._general_error_logged = True
             return
+
+        # Reset error flags on successful operation
+        self._credential_error_logged = False
+        self._general_error_logged = False
 
         try:
             positions = portfolio.get("futures_positions", [])
@@ -409,6 +418,10 @@ class TradeMonitor:
 
         except Exception as e:
             logger.error(f"Error detecting new trades: {e}", exc_info=True)
+        else:
+            # Reset error flags after successful trade detection
+            self._credential_error_logged = False
+            self._general_error_logged = False
 
     def _cleanup_completed_trackers(self):
         """Remove trackers for completed trades."""

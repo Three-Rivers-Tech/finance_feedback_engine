@@ -26,6 +26,17 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     - Active long/short positions
     - Unrealized/realized PnL
     - Buying power and margin requirements
+
+    **TRACING STRATEGY**:
+    - Client initialization: Defensively injects trace headers (correlation ID, traceparent)
+      with full validation of client.session.headers before mutation.
+    - Per-request headers: Call _inject_trace_headers_per_request() before API calls for
+      fresh correlation IDs. For truly per-request tracing without manual calls, consider:
+      1. Using requests.hooks={'response': callback} if Coinbase client exposes the session
+      2. Creating a custom session subclass with per-request header injection
+      3. Wrapping all API calls with @contextmanager to auto-inject headers
+    - Fallback: If session.headers lacks update() method, headers are set individually.
+    - Error handling: All header injection failures are logged but non-fatal.
     """
 
     def __init__(
@@ -81,10 +92,41 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     api_key=self.api_key, api_secret=self.api_secret
                 )
 
-                # Inject correlation ID headers if client has session
-                if hasattr(self._client, "session"):
+                # Inject correlation ID headers defensively
+                try:
                     trace_headers = get_trace_headers()
-                    self._client.session.headers.update(trace_headers)
+                    if not isinstance(trace_headers, dict) or not trace_headers:
+                        logger.debug("Trace headers invalid or empty, skipping injection")
+                    elif hasattr(self._client, "session") and hasattr(
+                        self._client.session, "headers"
+                    ):
+                        session_headers = self._client.session.headers
+                        # Check if headers is dict-like with update method or is a dict
+                        if hasattr(session_headers, "update"):
+                            try:
+                                session_headers.update(trace_headers)
+                            except TypeError as e:
+                                logger.warning(
+                                    f"Failed to update session headers with trace context: {e}"
+                                )
+                        else:
+                            # Fallback: set headers individually if update not available
+                            for key, value in trace_headers.items():
+                                try:
+                                    session_headers[key] = value
+                                except TypeError as e:
+                                    logger.warning(
+                                        f"Failed to set header {key}: {e}"
+                                    )
+                    else:
+                        logger.debug(
+                            "Client session or headers attribute not found, "
+                            "correlation headers not injected"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Unexpected error injecting trace headers: {e}", exc_info=True
+                    )
 
                 logger.info("Coinbase REST client initialized with CDP API format")
             except ImportError:
@@ -163,6 +205,47 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             # but let validation errors (empty input) propagate
             logger.error("Unexpected error formatting product_id: %s", e)
             return asset_pair
+
+    def _inject_trace_headers_per_request(self) -> None:
+        """
+        Inject trace headers (correlation ID, traceparent) before each request.
+
+        This ensures each request gets a fresh correlation context and should be called
+        before making API requests to maintain per-request tracing.
+
+        Note: For persistent per-request hooks, consider using requests hooks
+        (e.g., response = session.request(..., hooks={'response': callback}))
+        or middleware if available in the Coinbase client.
+        """
+        try:
+            trace_headers = get_trace_headers()
+            if not isinstance(trace_headers, dict) or not trace_headers:
+                return
+            if not hasattr(self._client, "session") or not hasattr(
+                self._client.session, "headers"
+            ):
+                return
+            session_headers = self._client.session.headers
+            if hasattr(session_headers, "update"):
+                try:
+                    session_headers.update(trace_headers)
+                except TypeError as e:
+                    logger.warning(
+                        f"Failed to update session headers with trace context: {e}"
+                    )
+            else:
+                # Fallback: set headers individually
+                for key, value in trace_headers.items():
+                    try:
+                        session_headers[key] = value
+                    except TypeError as e:
+                        logger.debug(
+                            f"Failed to set header {key}: {e}"
+                        )
+        except Exception as e:
+            logger.debug(
+                f"Error injecting per-request trace headers: {e}", exc_info=True
+            )
 
     def get_balance(self) -> Dict[str, float]:
         """

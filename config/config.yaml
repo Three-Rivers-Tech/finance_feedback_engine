@@ -706,15 +706,32 @@ api_keys:
 # ============================================================================
 # OBSERVABILITY (TRACING, LOGGING, METRICS)
 # ============================================================================
+# NOTE: Tracing is disabled by default for local development.
+# To enable in local dev:
+#   1. Set enabled: true below, OR
+#   2. Set environment variable: TRACING_ENABLED=true
+#
+# For Jaeger backend (staging/production):
+#   - Run Jaeger locally: docker run -d -p 6831:6831/udp -p 16686:16686 jaegertracing/all-in-one
+#   - Then set backend: jaeger and enabled: true
+#   - Access UI: http://localhost:16686
+#
+# For Console backend (local testing):
+#   - No additional infrastructure needed
+#   - Traces printed to stdout
+#   - Set backend: console and enabled: true
+#
 observability:
   # Tracing Configuration
+  # Can be overridden via TRACING_ENABLED environment variable
   tracing:
-    enabled: true                            # Enable OpenTelemetry tracing (disabled for local dev)
-    backend: jaeger                          # Options: jaeger, tempo, console
+    enabled: false                           # Set to true or use TRACING_ENABLED=true env var to enable
+    backend: console                         # Options: console (local), jaeger (requires infrastructure), tempo
     sample_rate: 0.1                         # Fraction of traces to sample (10% deterministic)
     jaeger:
       agent_host: localhost
-      agent_port: 6831                       # Jaeger agent gRPC port
+      agent_port: 6831                       # Jaeger agent UDP port (Thrift compact)
+                                             # Requires: docker run -d -p 6831:6831/udp jaegertracing/all-in-one
     otlp:
       endpoint: "http://localhost:4317"      # OTLP gRPC endpoint for Tempo (alternative)
 
