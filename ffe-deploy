@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+"""
+Finance Feedback Engine - Deployment Orchestrator
+
+A comprehensive, production-ready deployment tool built with TDD,
+distributed tracing, and structured logging.
+
+Features:
+- Automated Docker-based deployment
+- Multi-environment support (dev/staging/production)
+- Health checking and verification
+- Beautiful terminal UI with Rich
+- Comprehensive error handling
+- Distributed tracing
+- Structured JSON logging
+
+Usage:
+    ffe-deploy deploy production
+    ffe-deploy validate staging
+    ffe-deploy status
+    ffe-deploy help-guide
+"""
+
+import sys
+
+from finance_feedback_engine.deployment.cli import cli
+
+if __name__ == "__main__":
+    sys.exit(cli())

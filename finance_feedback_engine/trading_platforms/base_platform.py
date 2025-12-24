@@ -22,6 +22,11 @@ class PositionInfo(PositionInfoRequired, total=False):
     platform: str
     leverage: float
     position_type: str
+    contracts: float  # Number of contracts (unsigned, for futures)
+    product_id: Optional[str]  # Coinbase product ID
+    side: str  # LONG or SHORT
+    unrealized_pnl: float  # Unrealized P&L
+    daily_pnl: float  # Daily realized P&L
 
 
 PositionsResponse = Dict[str, List[PositionInfo]]

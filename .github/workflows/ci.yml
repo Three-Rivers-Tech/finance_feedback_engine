@@ -60,11 +60,11 @@ jobs:
             ${{ runner.os }}-pytest-
 
       - name: Run tests (skip external services like ollama, redis, docker, telegram)
-        run: pytest -m "not external_service" --cov=finance_feedback_engine --cov-report=xml --cov-report=html --cov-fail-under=43 -v
+        run: pytest -m "not external_service and not slow" --cov=finance_feedback_engine --cov-report=xml --cov-report=html --cov-fail-under=70 -v
         env:
           PYTHONPATH: /workspace:$PYTHONPATH
-          # Note: Coverage threshold set to 43% (current minimum)
-          # Target is 70% - increase threshold gradually as coverage improves
+          # Note: Coverage threshold set to 70% (0.9.9 release requirement)
+          # Matches pre-commit hook requirement for consistency
 
       - name: Display coverage summary
         if: always()

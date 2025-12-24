@@ -1,0 +1,128 @@
+name: Deploy to Environments
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  # ===========================================================================
+  # Deploy to Staging (Automatic on main push)
+  # ===========================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: http://${{ secrets.STAGING_HOST }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            cd /opt/finance-feedback-engine || exit 1
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+            echo "🔄 Restarting services..."
+            ./scripts/deploy.sh staging restart
+            echo "✅ Staging deployment complete"
+
+      - name: Health check
+        run: |
+          echo "⏳ Waiting for services to stabilize..."
+          sleep 30
+          echo "🏥 Performing health check..."
+          curl -f http://${{ secrets.STAGING_HOST }}:8000/health || exit 1
+          echo "✅ Health check passed"
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Staging deployment successful!"
+          echo "Environment: staging"
+          echo "Host: ${{ secrets.STAGING_HOST }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+  # ===========================================================================
+  # Deploy to Production (Manual approval required)
+  # ===========================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: http://${{ secrets.PROD_HOST }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create pre-deployment backup
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /opt/finance-feedback-engine || exit 1
+            echo "💾 Creating backup..."
+            ./scripts/backup.sh
+            echo "✅ Backup created"
+
+      - name: Deploy to production server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            cd /opt/finance-feedback-engine || exit 1
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+            echo "🏗️  Building images..."
+            ./scripts/build.sh production
+            echo "🔄 Restarting services..."
+            ./scripts/deploy.sh production restart
+            echo "✅ Production deployment complete"
+
+      - name: Health check
+        run: |
+          echo "⏳ Waiting for services to stabilize..."
+          sleep 30
+          echo "🏥 Performing health check..."
+          curl -f http://${{ secrets.PROD_HOST }}:8000/health || exit 1
+          echo "✅ Health check passed"
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Production deployment successful!"
+          echo "Environment: production"
+          echo "Host: ${{ secrets.PROD_HOST }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+      - name: Create deployment tag
+        if: success()
+        run: |
+          TAG_NAME="deploy-prod-$(date +%Y%m%d-%H%M%S)"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME || true
+          echo "📌 Created deployment tag: $TAG_NAME"

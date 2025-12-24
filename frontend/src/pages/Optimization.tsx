@@ -5,6 +5,7 @@ import { Spinner } from '../components/common/Spinner';
 import apiClient, { handleApiError } from '../api/client';
 import type { ExperimentRequest, ExperimentResponse } from '../api/types';
 import { formatPercent, formatDate } from '../services/formatters';
+import { useAgentStatus } from '../api/hooks/useAgentStatus';
 
 export const Optimization: React.FC = () => {
   const [assetPairs, setAssetPairs] = useState('BTCUSD,ETHUSD');
@@ -16,6 +17,8 @@ export const Optimization: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<ExperimentResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { data: agentStatus } = useAgentStatus();
+  const agentIsRunning = agentStatus?.state === 'running';
 
   const handleRunExperiment = async () => {
     // Validate inputs
@@ -148,9 +151,17 @@ export const Optimization: React.FC = () => {
             </div>
           )}
 
+          {agentIsRunning && (
+            <div className="p-4 bg-accent-yellow bg-opacity-20 border-3 border-accent-yellow mb-2">
+              <p className="text-xs text-accent-yellow font-mono">
+                Trading agent is currently running. Stop the agent to run optimization.
+              </p>
+            </div>
+          )}
+
           <Button
             onClick={handleRunExperiment}
-            disabled={isRunning}
+            disabled={isRunning || agentIsRunning}
             className="w-full"
           >
             {isRunning ? 'Running Experiment...' : 'Run Experiment'}

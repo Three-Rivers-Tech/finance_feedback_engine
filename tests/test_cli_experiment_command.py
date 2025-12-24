@@ -17,7 +17,9 @@ def test_experiment_command_writes_json_and_csv_outputs():
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        with patch("finance_feedback_engine.cli.main.load_tiered_config", return_value={}):
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ):
             with patch(
                 "finance_feedback_engine.cli.commands.experiment.OptunaOptimizer.optimize",
                 return_value=_FakeStudy(),

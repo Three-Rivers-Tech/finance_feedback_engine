@@ -5,7 +5,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from opentelemetry import trace
-from opentelemetry.trace import Tracer, TraceFlags
+from opentelemetry.trace import TraceFlags, Tracer
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,6 @@ def with_span(
 
 
 import contextvars
-import uuid
 from typing import Any, Dict, Optional
 
 _correlation_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(

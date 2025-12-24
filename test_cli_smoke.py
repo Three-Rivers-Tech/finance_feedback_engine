@@ -4,6 +4,7 @@
 import subprocess
 import sys
 
+
 def run_cmd(cmd, timeout=30):
     """Run a CLI command and return stdout."""
     try:
@@ -13,13 +14,14 @@ def run_cmd(cmd, timeout=30):
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd="/home/cmp6510/finance_feedback_engine-2.0"
+            cwd="/home/cmp6510/finance_feedback_engine-2.0",
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
         return -1, "", f"Command timed out after {timeout}s"
     except Exception as e:
         return -1, "", str(e)
+
 
 def test_command(name, cmd, check_exit=0, check_output=None):
     """Test a single CLI command."""
@@ -44,31 +46,62 @@ def test_command(name, cmd, check_exit=0, check_output=None):
 
     return success
 
+
 def main():
     """Run all CLI smoke tests."""
     tests = [
         # Help and status
         ("CLI Help", "python main.py --help", 0, "Finance Feedback Engine"),
         ("Status Command", "python main.py status", 0, "Engine initialized"),
-        ("Balance Command Help", "python main.py balance --help", 0, "Show current account balances"),
-        ("Positions Help", "python main.py positions --help", 0, "Display active trading positions"),
+        (
+            "Balance Command Help",
+            "python main.py balance --help",
+            0,
+            "Show current account balances",
+        ),
+        (
+            "Positions Help",
+            "python main.py positions --help",
+            0,
+            "Display active trading positions",
+        ),
         ("History Help", "python main.py history --help", 0, "Show decision history"),
-
         # Config and validation
-        ("Config Editor Help", "python main.py config-editor --help", 0, "Interactive helper"),
-
+        (
+            "Config Editor Help",
+            "python main.py config-editor --help",
+            0,
+            "Interactive helper",
+        ),
         # Agent commands
-        ("Run Agent Help", "python main.py run-agent --help", 0, "Starts the autonomous trading agent"),
-
+        (
+            "Run Agent Help",
+            "python main.py run-agent --help",
+            0,
+            "Starts the autonomous trading agent",
+        ),
         # Backtest commands
-        ("Backtest Help", "python main.py backtest --help", 0, "Run AI-driven backtest"),
-        ("Walk-Forward Help", "python main.py walk-forward --help", 0, "Run walk-forward"),
+        (
+            "Backtest Help",
+            "python main.py backtest --help",
+            0,
+            "Run AI-driven backtest",
+        ),
+        (
+            "Walk-Forward Help",
+            "python main.py walk-forward --help",
+            0,
+            "Run walk-forward",
+        ),
         ("Monte-Carlo Help", "python main.py monte-carlo --help", 0, "Run Monte Carlo"),
-
         # API command
         ("Monitor Help", "python main.py monitor --help", 0, "Live trade monitoring"),
-        ("Dashboard Help", "python main.py dashboard --help", 0, "Show unified dashboard"),
-
+        (
+            "Dashboard Help",
+            "python main.py dashboard --help",
+            0,
+            "Show unified dashboard",
+        ),
         # Analyze command
         ("Analyze Help", "python main.py analyze --help", 0, "Analyze an asset pair"),
     ]
@@ -87,6 +120,7 @@ def main():
     print(f"{'='*60}\n")
 
     return 0 if failed == 0 else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

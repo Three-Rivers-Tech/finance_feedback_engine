@@ -6,12 +6,31 @@ import { Badge } from '../common/Badge';
 import { formatCurrency, formatPercent } from '../../services/formatters';
 
 export const PositionsTable: React.FC = () => {
-  const { data: positions, isLoading } = usePositions();
+  const { data: positions, isLoading, error } = usePositions();
 
   if (isLoading) {
     return (
       <Card>
         <Spinner />
+      </Card>
+    );
+  }
+
+  if (error) {
+    // Check if it's an auth error
+    const isAuthError = error.message?.includes('401') || error.message?.includes('Unauthorized');
+    return (
+      <Card>
+        <div className="text-center p-4">
+          <p className="text-accent-yellow font-mono mb-2">
+            {isAuthError ? '🔐 Authentication Required' : '⚠️ Error Loading Positions'}
+          </p>
+          <p className="text-text-secondary text-sm font-mono">
+            {isAuthError
+              ? 'API key required. Set VITE_API_KEY in frontend/.env file.'
+              : error.message}
+          </p>
+        </div>
       </Card>
     );
   }

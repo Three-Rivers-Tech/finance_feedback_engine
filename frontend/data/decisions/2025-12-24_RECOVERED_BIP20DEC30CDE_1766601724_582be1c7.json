@@ -1,0 +1,25 @@
+{
+  "id": "RECOVERED_BIP20DEC30CDE_1766601724_582be1c7",
+  "asset_pair": "BIP20DEC30CDE",
+  "action": "HOLD",
+  "confidence": 50,
+  "timestamp": "2025-12-24T18:42:04.267404",
+  "entry_price": 87305.0,
+  "recommended_position_size": 0.01,
+  "position_size": 0.01,
+  "signal_only": true,
+  "ai_provider": "recovery",
+  "reasoning": "Position recovered from coinbase_futures platform on startup",
+  "metadata": {
+    "recovery_source": "platform_startup",
+    "platform": "coinbase_futures",
+    "original_product_id": "BIP-20DEC30-CDE",
+    "side": "FUTURES_POSITION_SIDE_LONG",
+    "original_unrealized_pnl": 0.9,
+    "leverage": 10.0,
+    "entry_price_status": "known",
+    "current_price": 87395.0,
+    "avg_entry_price": null,
+    "averagePrice": null
+  }
+}

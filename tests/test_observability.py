@@ -1,11 +1,20 @@
 """Tests for observability (tracing, logging, metrics) integration."""
 
 import logging
+
 import pytest
 
-from finance_feedback_engine.observability import init_tracer, get_tracer
-from finance_feedback_engine.observability.metrics import init_metrics_from_config, get_meter, create_counters
-from finance_feedback_engine.observability.context import OTelContextFilter, get_current_span_attributes, with_span
+from finance_feedback_engine.observability import get_tracer, init_tracer
+from finance_feedback_engine.observability.context import (
+    OTelContextFilter,
+    get_current_span_attributes,
+    with_span,
+)
+from finance_feedback_engine.observability.metrics import (
+    create_counters,
+    get_meter,
+    init_metrics_from_config,
+)
 
 
 class TestTracerInitialization:

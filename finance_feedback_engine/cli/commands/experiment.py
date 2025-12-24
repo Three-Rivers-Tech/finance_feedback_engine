@@ -189,15 +189,25 @@ def experiment(
                 if multi_objective:
                     best_trial = study.best_trials[0] if study.best_trials else None
                     best_sharpe = (
-                        float(best_trial.values[0]) if best_trial and best_trial.values else None
+                        float(best_trial.values[0])
+                        if best_trial and best_trial.values
+                        else None
                     )
                     best_neg_dd = (
-                        float(best_trial.values[1]) if best_trial and best_trial.values else None
+                        float(best_trial.values[1])
+                        if best_trial and best_trial.values
+                        else None
                     )
-                    best_drawdown_pct = (-best_neg_dd) if best_neg_dd is not None else None
+                    best_drawdown_pct = (
+                        (-best_neg_dd) if best_neg_dd is not None else None
+                    )
                     best_params = best_trial.params if best_trial else {}
                 else:
-                    best_sharpe = float(study.best_value) if study.best_value is not None else None
+                    best_sharpe = (
+                        float(study.best_value)
+                        if study.best_value is not None
+                        else None
+                    )
                     best_drawdown_pct = None
                     best_params = dict(study.best_params or {})
 
@@ -234,7 +244,9 @@ def experiment(
                 console.print(
                     f"[green]✓[/green] {asset_pair}: best_sharpe={best_sharpe}"
                     + (
-                        f", drawdown_pct={best_drawdown_pct}" if best_drawdown_pct is not None else ""
+                        f", drawdown_pct={best_drawdown_pct}"
+                        if best_drawdown_pct is not None
+                        else ""
                     )
                 )
 

@@ -25,11 +25,8 @@ import pytest
 
 from finance_feedback_engine.backtesting.backtester import Backtester, Position
 from finance_feedback_engine.backtesting.decision_cache import DecisionCache
+from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
 from finance_feedback_engine.backtesting.walk_forward import WalkForwardAnalyzer
-from finance_feedback_engine.backtesting.monte_carlo import (
-    MonteCarloSimulator,
-)
-
 
 # ============================================
 # Fixtures
@@ -43,14 +40,16 @@ def mock_historical_provider():
 
     # Generate sample historical data (30 days of hourly candles)
     dates = pd.date_range("2024-01-01", periods=720, freq="1h")
-    data = pd.DataFrame({
-        "timestamp": dates,
-        "open": 50000 + np.random.randn(720) * 100,
-        "high": 50100 + np.random.randn(720) * 100,
-        "low": 49900 + np.random.randn(720) * 100,
-        "close": 50000 + np.random.randn(720) * 100,
-        "volume": 1000 + np.random.randn(720) * 50,
-    })
+    data = pd.DataFrame(
+        {
+            "timestamp": dates,
+            "open": 50000 + np.random.randn(720) * 100,
+            "high": 50100 + np.random.randn(720) * 100,
+            "low": 49900 + np.random.randn(720) * 100,
+            "close": 50000 + np.random.randn(720) * 100,
+            "volume": 1000 + np.random.randn(720) * 50,
+        }
+    )
 
     provider.get_historical_data.return_value = data
     return provider
@@ -155,10 +154,12 @@ class TestBacktesterInitialization:
 
         # Decision cache should be initialized (not None)
         assert backtester.decision_cache is not None
-        assert hasattr(backtester.decision_cache, 'get')
-        assert hasattr(backtester.decision_cache, 'put')
+        assert hasattr(backtester.decision_cache, "get")
+        assert hasattr(backtester.decision_cache, "put")
 
-    def test_portfolio_memory_enabled_isolated_mode(self, mock_historical_provider, temp_memory_dir):
+    def test_portfolio_memory_enabled_isolated_mode(
+        self, mock_historical_provider, temp_memory_dir
+    ):
         """Test backtester with isolated portfolio memory (backtest-only storage)."""
         config = {"persistence": {"storage_path": "data"}}
 
@@ -174,7 +175,7 @@ class TestBacktesterInitialization:
         # Memory engine should be initialized (not None)
         assert backtester.memory_engine is not None
         # Verify it's the correct type
-        assert backtester.memory_engine.__class__.__name__ == 'PortfolioMemoryEngine'
+        assert backtester.memory_engine.__class__.__name__ == "PortfolioMemoryEngine"
 
     def test_platform_margin_fetching(self, mock_historical_provider):
         """Test fetching leverage and maintenance margin from platform."""
@@ -195,7 +196,9 @@ class TestBacktesterInitialization:
         assert backtester.maintenance_margin_pct == 0.25
         mock_platform.get_account_info.assert_called_once()
 
-    def test_platform_margin_fetch_failure_uses_defaults(self, mock_historical_provider):
+    def test_platform_margin_fetch_failure_uses_defaults(
+        self, mock_historical_provider
+    ):
         """Test that platform margin fetch failure falls back to defaults."""
         mock_platform = MagicMock()
         mock_platform.get_account_info.side_effect = Exception("API error")
@@ -566,11 +569,11 @@ class TestPerformanceMetrics:
 
         # Mock trades with P&L
         trades = [
-            {"pnl_value": 100.0},   # Win
-            {"pnl_value": -50.0},   # Loss
-            {"pnl_value": 200.0},   # Win
-            {"pnl_value": -30.0},   # Loss
-            {"pnl_value": 150.0},   # Win
+            {"pnl_value": 100.0},  # Win
+            {"pnl_value": -50.0},  # Loss
+            {"pnl_value": 200.0},  # Win
+            {"pnl_value": -30.0},  # Loss
+            {"pnl_value": 150.0},  # Win
         ]
 
         # Mock equity curve
@@ -621,8 +624,9 @@ class TestPerformanceMetrics:
             trades_history=[],
             equity_curve=equity_curve,
             initial_balance=10000.0,
-            num_trading_days=100,
             timeframe="daily",
+            duration_years=100 / 252,
+            periods_per_year=252,
         )
 
         # Should have positive Sharpe ratio
@@ -645,8 +649,9 @@ class TestPerformanceMetrics:
             trades_history=[],
             equity_curve=equity_curve,
             initial_balance=10000.0,
-            num_trading_days=7,
             timeframe="daily",
+            duration_years=7 / 252,
+            periods_per_year=252,
         )
 
         # Max drawdown should be negative (from 12000 to 9000 = -25%)

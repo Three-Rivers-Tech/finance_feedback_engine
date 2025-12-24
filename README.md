@@ -1195,5 +1195,224 @@ pytest -k "ensemble"
 
 Tests run automatically on every commit via GitHub Actions. See [`.github/workflows/`](.github/workflows/) for CI configuration.
 
-For deployment setup and environment configuration, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+---
+
+## 🚀 Deployment
+
+The Finance Feedback Engine 2.0 is production-ready with full Docker support, automated CI/CD, and comprehensive monitoring.
+
+### Quick Start (Production Deployment)
+
+**Prerequisites:**
+- Docker 20.10+
+- Docker Compose 2.0+
+- 4GB RAM minimum, 8GB recommended
+- 20GB disk space
+
+**1. Initial Setup**
+
+```bash
+# Clone the repository
+git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0.git
+cd finance_feedback_engine-2.0
+
+# Create production environment file
+cp .env.production.example .env.production
+nano .env.production
+```
+
+**2. Build Docker Images**
+
+```bash
+docker compose --env-file .env.production build
+```
+
+**3. Deploy Services**
+
+```bash
+docker compose --env-file .env.production up -d
+```
+
+**4. Access Services**
+
+- **Frontend (Web UI)**: http://localhost:80
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **Prometheus Metrics**: http://localhost:9090
+- **Grafana Dashboards**: http://localhost:3001 (admin/admin)
+
+### Environment Management
+
+The system supports three deployment environments:
+
+| Environment | Purpose | Trading Platform | Logging | Monitoring |
+|-------------|---------|------------------|---------|------------|
+| **Development** | Local dev with hot reload | Mock (simulated) | DEBUG | Disabled |
+| **Staging** | Testing with sandbox APIs | Sandbox/Practice | DEBUG | Enabled |
+| **Production** | Live trading | Live APIs | INFO | Enabled |
+
+**Switch environments:**
+
+```bash
+# Development (hot reload)
+docker-compose -f docker-compose.dev.yml up
+
+# Staging/Production (both use docker-compose.yml; swap env file)
+docker compose --env-file .env.staging up -d
+docker compose --env-file .env.production up -d
+```
+
+### Deployment Commands
+
+```bash
+# Start/stop/restart
+docker compose --env-file .env.production up -d
+docker compose --env-file .env.production down
+docker compose --env-file .env.production restart
+
+# View logs
+docker compose --env-file .env.production logs -f
+
+# Check status
+docker compose --env-file .env.production ps
+```
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     DOCKER DEPLOYMENT                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐       │
+│  │   Frontend   │   │   Backend    │   │  Monitoring  │       │
+│  │   (Nginx)    │───│  (FastAPI)   │───│    Stack     │       │
+│  │              │   │              │   │              │       │
+│  │   Port: 80   │   │  Port: 8000  │   │ Prometheus   │       │
+│  │              │   │              │   │ Grafana      │       │
+│  └──────────────┘   │  - Uvicorn   │   └──────────────┘       │
+│                     │  - SQLite    │                           │
+│                     │  - JSON data │                           │
+│                     └──────────────┘                           │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │            PERSISTENT VOLUMES                            │  │
+│  │  - ffe-data: SQLite DB, JSON decisions, cache           │  │
+│  │  - ffe-logs: Application logs                           │  │
+│  │  - prometheus-data: Metrics time-series                 │  │
+│  │  - grafana-data: Dashboard configs                      │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### CI/CD Automation
+
+**Automated Workflows:**
+
+- **Build & Test**: Automatically builds Docker images on every push to `main` or `develop`
+- **Security Scanning**: Trivy scans for vulnerabilities in all images
+- **Multi-Architecture**: Builds for `linux/amd64` (add `linux/arm64` if needed)
+- **Container Registry**: Images pushed to GitHub Container Registry (ghcr.io)
+
+**Deployment Pipeline:**
+
+- **Staging**: Auto-deploys on every push to `main`
+- **Production**: Manual approval required via GitHub Actions
+
+### Monitoring & Observability
+
+**Built-in Monitoring:**
+
+- **Prometheus**: Metrics collection at `/metrics` endpoint
+- **Grafana**: Pre-configured dashboards for trading metrics
+- **Health Checks**: All services have health endpoints
+- **OpenTelemetry**: Distributed tracing support
+- **Structured Logging**: JSON logs for production
+
+**Key Metrics Tracked:**
+
+- API request rates and response times
+- Trading decision latency
+- Error rates and circuit breaker status
+- Portfolio performance metrics
+- System resource utilization
+
+### Security Best Practices
+
+**Container Security:**
+- All containers run as non-root users
+- Multi-stage builds minimize attack surface
+- Regular security scanning with Trivy
+- No secrets in images
+
+**API Security:**
+- Rate limiting (100 requests/60s by default)
+- JWT authentication for API endpoints
+- CORS configuration for production
+- Environment-based secret management
+
+**Data Security:**
+- `.env` files excluded from git (600 permissions)
+- SQLite database with proper file permissions
+- Backups encrypted and rotated (7-day retention)
+
+### Troubleshooting
+
+**Services won't start:**
+```bash
+# Check logs
+docker compose --env-file .env.production logs -f
+
+# Verify environment file
+cat .env.production
+
+# Rebuild images
+docker compose --env-file .env.production build --no-cache
+```
+
+**Database issues:**
+```bash
+# Reset database
+rm data/auth.db
+touch data/auth.db
+docker compose --env-file .env.production restart
+```
+
+**Performance issues:**
+```bash
+# Check resource usage
+docker stats
+
+# View Grafana dashboards
+open http://localhost:3001
+```
+
+### Advanced Configuration
+
+**Custom Ports:**
+
+Edit `.env.production`:
+```bash
+BACKEND_PORT=8000
+FRONTEND_PORT=80
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3001
+```
+
+**Enable Redis (Optional):**
+
+```bash
+# Start with Redis profile
+docker-compose --profile full up -d
+```
+
+**SSL/TLS Setup:**
+
+1. Place certificates in `certs/` directory
+2. Update `docker/nginx.conf` with SSL configuration
+3. Restart frontend service
+
+---
+
+For comprehensive deployment documentation, troubleshooting guides, and production best practices, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 

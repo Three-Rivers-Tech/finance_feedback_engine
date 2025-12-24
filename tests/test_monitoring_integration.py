@@ -19,11 +19,24 @@ from finance_feedback_engine.monitoring import (
 @pytest.fixture
 async def mock_engine_with_monitoring():
     """Fixture for an engine initialized with a mock test config."""
+    from unittest.mock import MagicMock
+
     with open("config/config.test.mock.yaml", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     # Force backtest/testing mode so the AlphaVantage provider uses mock data
     config["is_backtest"] = True
+    # Ensure mock platform is created for monitoring tests
+    config["trading_platform"] = "mock"
     engine = FinanceFeedbackEngine(config)
+
+    # Inject mock platform if None (backtest mode sometimes skips it)
+    if engine.trading_platform is None:
+        mock_platform = MagicMock()
+        mock_platform.get_balance.return_value = {"USD": 10000.0}
+        mock_platform.get_portfolio_breakdown.return_value = {
+            "total_value_usd": 10000.0
+        }
+        engine.trading_platform = mock_platform
 
     yield engine
 

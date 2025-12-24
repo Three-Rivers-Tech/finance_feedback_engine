@@ -24,8 +24,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
+      // Don't reload - this causes infinite loop!
+      // Instead, mark as unauthenticated and continue
       localStorage.removeItem('api_key');
-      window.location.reload();
+      console.warn('API authentication failed - API key required or invalid');
+      // Let the error propagate so components can handle gracefully
     }
     return Promise.reject(error);
   }
