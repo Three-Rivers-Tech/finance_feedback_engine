@@ -16,6 +16,17 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+def _resolve_project_path(file_path: str) -> Path:
+    """Resolve a path safely within the current project."""
+    base = Path.cwd().resolve()
+    resolved = Path(file_path).expanduser().resolve()
+    if base not in resolved.parents and resolved != base:
+        raise ValueError(f"Path must be inside the project directory: {resolved}")
+    if not resolved.is_file():
+        raise FileNotFoundError(f"Results file not found: {resolved}")
+    return resolved
+
+
 class RegressionError(Exception):
     """Raised when performance degrades beyond acceptable threshold"""
 
@@ -24,11 +35,8 @@ class RegressionError(Exception):
 
 def load_results(file_path: str) -> Dict[str, Any]:
     """Load backtest results from JSON file"""
-    path = Path(file_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Results file not found: {file_path}")
-
-    with open(path, "r") as f:
+    path = _resolve_project_path(file_path)
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
