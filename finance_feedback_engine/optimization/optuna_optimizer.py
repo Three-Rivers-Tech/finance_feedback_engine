@@ -1,6 +1,7 @@
 """Optuna hyperparameter optimization for trading strategy."""
 
 import logging
+from datetime import datetime
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -125,11 +126,19 @@ class OptunaOptimizer:
 
         # Run backtest with trial config
         results = self._run_backtest(trial_config)
-        sharpe = results.get("sharpe_ratio", 0.0)
+        metrics = (results or {}).get("metrics", {}) if isinstance(results, dict) else {}
+
+        sharpe = float(metrics.get("sharpe_ratio", -10.0) or -10.0)
+
         if self.multi_objective:
-            # Minimize drawdown (negate for minimization)
-            drawdown = results.get("max_drawdown", 1.0)
-            return sharpe, -drawdown
+            # Backtester reports max_drawdown_pct as a negative percentage (e.g., -12.3).
+            # Optimize for *smaller* drawdown magnitude by maximizing negative abs(drawdown_pct).
+            drawdown_pct = metrics.get("max_drawdown_pct", 100.0)
+            try:
+                drawdown_pct_abs = abs(float(drawdown_pct))
+            except (TypeError, ValueError):
+                drawdown_pct_abs = 100.0
+            return sharpe, -drawdown_pct_abs
 
         return sharpe
 
@@ -143,24 +152,77 @@ class OptunaOptimizer:
         Returns:
             Dict with backtest results (sharpe_ratio, total_return, etc.)
         """
-        from finance_feedback_engine.backtesting.backtester import Backtester
+        import asyncio
 
+        from finance_feedback_engine.backtesting.backtester import Backtester
+        from finance_feedback_engine.core import FinanceFeedbackEngine
+
+        # Avoid mutating caller config; ensure backtest mode for all dependencies.
+        config = deepcopy(config or {})
+        config["is_backtest"] = True
+
+        # Mirror CLI backtest defaults when present.
+        ab = (config or {}).get("advanced_backtesting", {}) or {}
+        initial_balance = float(ab.get("initial_balance", 10000.0))
+        fee_percentage = float(ab.get("fee_percentage", 0.001))
+        slippage_percentage = float(ab.get("slippage_percentage", 0.0001))
+        commission_per_trade = float(ab.get("commission_per_trade", 0.0))
+        stop_loss_percentage = float(ab.get("stop_loss_percentage", 0.02))
+        take_profit_percentage = float(ab.get("take_profit_percentage", 0.05))
+        timeframe = str(ab.get("timeframe", "1h")).lower()
+
+        # If decision_engine overrides are present, prefer them.
+        decision_engine_cfg = (config or {}).get("decision_engine", {}) or {}
+        if isinstance(decision_engine_cfg, dict):
+            if "stop_loss_percentage" in decision_engine_cfg:
+                stop_loss_percentage = float(decision_engine_cfg["stop_loss_percentage"])
+            risk_per_trade = float(decision_engine_cfg.get("risk_per_trade", 0.02))
+        else:
+            risk_per_trade = 0.02
+
+        engine: Optional[FinanceFeedbackEngine] = None
         try:
-            backtester = Backtester(config)
-            results = backtester.run(
+            engine = FinanceFeedbackEngine(config)
+
+            backtester = Backtester(
+                historical_data_provider=engine.historical_data_provider,
+                initial_balance=initial_balance,
+                fee_percentage=fee_percentage,
+                slippage_percentage=slippage_percentage,
+                commission_per_trade=commission_per_trade,
+                stop_loss_percentage=stop_loss_percentage,
+                take_profit_percentage=take_profit_percentage,
+                timeframe=timeframe,
+                risk_per_trade=risk_per_trade,
+            )
+
+            results = backtester.run_backtest(
                 asset_pair=self.asset_pair,
                 start_date=self.start_date,
                 end_date=self.end_date,
+                decision_engine=engine.decision_engine,
             )
             return results
         except Exception as e:
             logger.error(f"Backtest failed: {e}")
-            # Return poor performance on failure
             return {
-                "sharpe_ratio": -10.0,
-                "total_return": -1.0,
-                "max_drawdown": 1.0,
+                "metrics": {
+                    "sharpe_ratio": -10.0,
+                    "max_drawdown_pct": -100.0,
+                },
+                "trades": [],
             }
+        finally:
+            if engine is not None:
+                try:
+                    asyncio.run(engine.close())
+                except RuntimeError:
+                    # If already in an event loop, best-effort schedule cleanup.
+                    try:
+                        loop = asyncio.get_event_loop()
+                        loop.create_task(engine.close())
+                    except Exception:
+                        pass
 
     def optimize(
         self,
@@ -168,6 +230,7 @@ class OptunaOptimizer:
         timeout: Optional[int] = None,
         show_progress: bool = True,
         study_name: Optional[str] = None,
+        seed: Optional[int] = None,
     ) -> optuna.Study:
         """
         Run optimization.
@@ -182,16 +245,19 @@ class OptunaOptimizer:
             Optuna Study object with results
         """
         # Create study
+        sampler = optuna.samplers.TPESampler(seed=seed) if seed is not None else None
         if self.multi_objective:
             directions = ["maximize", "maximize"]  # Sharpe, -drawdown
             study = optuna.create_study(
                 directions=directions,
                 study_name=study_name or f"optuna_{self.asset_pair}",
+                sampler=sampler,
             )
         else:
             study = optuna.create_study(
                 direction="maximize",
                 study_name=study_name or f"optuna_{self.asset_pair}",
+                sampler=sampler,
             )
 
         # Optimize

@@ -7,13 +7,18 @@ import queue
 import time
 from enum import Enum, auto
 
+from opentelemetry import trace, metrics
+
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+from finance_feedback_engine.observability.context import with_span
 
 logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+meter = metrics.get_meter(__name__)
 
 
 class AgentState(Enum):
@@ -228,37 +233,74 @@ class TradingLoopAgent:
                 # Query platform for current portfolio state (use cached method from engine)
                 portfolio = self.engine.get_portfolio_breakdown()
 
+                logger.info(f"Portfolio breakdown keys: {list(portfolio.keys())}")
+
                 # Extract positions based on platform type
                 positions = []
 
                 # Check if this is UnifiedTradingPlatform (has platform_breakdowns)
                 if "platform_breakdowns" in portfolio:
+                    logger.info(f"Using unified platform breakdown with {len(portfolio['platform_breakdowns'])} platforms")
                     for platform_name, platform_data in portfolio[
                         "platform_breakdowns"
                     ].items():
+                        logger.info(f"Processing platform: {platform_name}, keys: {list(platform_data.keys())}")
                         # Coinbase futures positions
                         if "futures_positions" in platform_data:
-                            for pos in platform_data["futures_positions"]:
-                                contracts = pos.get("contracts", 0)
+                            fps = platform_data['futures_positions']
+                            logger.info(f"{platform_name} has {len(fps)} futures_positions: {fps}")
+                            logger.debug(f"Processing {len(fps)} futures positions from {platform_name}")
+                            for idx, pos in enumerate(platform_data["futures_positions"]):
+                                # Handle both dict and PositionInfo objects
+                                contracts = pos.get("contracts", 0) if isinstance(pos, dict) else getattr(pos, "contracts", 0)
+                                units = pos.get("units", 0) if isinstance(pos, dict) else getattr(pos, "units", 0)
+
+                                # Use units if contracts is zero (units can be negative for SHORT)
                                 if contracts and float(contracts) != 0:
+                                    size = abs(float(contracts))
+                                else:
+                                    size = abs(float(units))
+
+                                logger.debug(f"{platform_name} position {idx}: contracts={contracts}, units={units}, size={size}")
+
+                                # Position is active if it has non-zero size OR has unrealized P&L
+                                unrealized_pnl = pos.get("unrealized_pnl", 0) if isinstance(pos, dict) else getattr(pos, "unrealized_pnl", 0)
+                                has_pnl = unrealized_pnl and float(unrealized_pnl) != 0
+
+                                # If size is reported as 0 but has P&L, infer size from P&L and price
+                                if size == 0 and has_pnl:
+                                    entry_price_val = pos.get("entry_price", 0) if isinstance(pos, dict) else getattr(pos, "entry_price", 0)
+                                    current_price_val = pos.get("current_price", 0) if isinstance(pos, dict) else getattr(pos, "current_price", 0)
+                                    if entry_price_val and current_price_val:
+                                        # Estimate size from P&L: size = PnL / (current - entry)
+                                        price_diff = float(current_price_val) - float(entry_price_val)
+                                        if abs(price_diff) > 0.01:
+                                            size = abs(float(unrealized_pnl) / price_diff)
+                                            logger.info(f"Inferred size {size} from P&L for {platform_name} position")
+
+                                if size != 0 or has_pnl:
+                                    product_id = pos.get("product_id", "UNKNOWN") if isinstance(pos, dict) else getattr(pos, "product_id", "UNKNOWN")
+                                    side = pos.get("side", "UNKNOWN") if isinstance(pos, dict) else getattr(pos, "side", "UNKNOWN")
+                                    entry_price = pos.get("entry_price", 0) if isinstance(pos, dict) else getattr(pos, "entry_price", 0)
+                                    current_price = pos.get("current_price", 0) if isinstance(pos, dict) else getattr(pos, "current_price", 0)
+                                    leverage = pos.get("leverage", 1) if isinstance(pos, dict) else getattr(pos, "leverage", 1)
+
+                                    logger.info(f"Recovered {platform_name} futures position: {product_id} {side} size={size}")
+
                                     positions.append(
                                         {
                                             "platform": f"{platform_name}_futures",
-                                            "product_id": pos.get(
-                                                "product_id", "UNKNOWN"
-                                            ),
-                                            "side": pos.get("side", "UNKNOWN"),
-                                            "size": float(contracts),
-                                            "entry_price": pos.get("entry_price", 0),
-                                            "current_price": pos.get(
-                                                "current_price", 0
-                                            ),
-                                            "unrealized_pnl": pos.get(
-                                                "unrealized_pnl", 0
-                                            ),
-                                            "leverage": pos.get("leverage", 1),
+                                            "product_id": product_id,
+                                            "side": side,
+                                            "size": size,
+                                            "entry_price": entry_price,
+                                            "current_price": current_price,
+                                            "unrealized_pnl": unrealized_pnl,
+                                            "leverage": leverage,
                                         }
                                     )
+                                else:
+                                    logger.debug(f"Skipping {platform_name} position {idx} with zero size")
 
                         # Oanda forex positions
                         if "positions" in platform_data:
@@ -289,50 +331,6 @@ class TradingLoopAgent:
                                             "leverage": 1,
                                         }
                                     )
-
-                # Direct platform access (non-unified)
-                else:
-                    # Coinbase Advanced: futures_positions
-                    if "futures_positions" in portfolio:
-                        for pos in portfolio["futures_positions"]:
-                            contracts = pos.get("contracts", 0)
-                            if contracts and float(contracts) != 0:
-                                positions.append(
-                                    {
-                                        "platform": "coinbase",
-                                        "product_id": pos.get("product_id", "UNKNOWN"),
-                                        "side": pos.get("side", "UNKNOWN"),
-                                        "size": float(contracts),
-                                        "entry_price": pos.get("entry_price", 0),
-                                        "current_price": pos.get("current_price", 0),
-                                        "unrealized_pnl": pos.get("unrealized_pnl", 0),
-                                        "leverage": pos.get("leverage", 1),
-                                    }
-                                )
-
-                    # Oanda: positions
-                    if "positions" in portfolio:
-                        for pos in portfolio["positions"]:
-                            units = pos.get("units", 0)
-                            if units and float(units) != 0:
-                                # Extract entry_price from Oanda position data
-                                entry_price = pos.get("entry_price", 0)
-                                if not entry_price:
-                                    # Fallback to current_price if available
-                                    entry_price = pos.get("current_price", 0)
-
-                                positions.append(
-                                    {
-                                        "platform": "oanda",
-                                        "product_id": pos.get("instrument", "UNKNOWN"),
-                                        "side": pos.get("position_type", "UNKNOWN"),
-                                        "size": abs(float(units)),
-                                        "entry_price": entry_price,
-                                        "current_price": pos.get("current_price", 0),
-                                        "unrealized_pnl": pos.get("unrealized_pl", 0),
-                                        "leverage": 1,
-                                    }
-                                )
 
                 logger.info(f"Found {len(positions)} open position(s) on platform")
 
@@ -504,43 +502,45 @@ class TradingLoopAgent:
         This method handles initialization (position recovery) and then enters
         a continuous loop that calls process_cycle() followed by a sleep interval.
         """
-        logger.info("Starting autonomous trading agent...")
-        self.is_running = True
-        self._start_time = time.time()  # For uptime tracking
+        with tracer.start_as_current_span("agent.ooda.run") as span:
+            span.set_attribute("agent.started", True)
+            logger.info("Starting autonomous trading agent...")
+            self.is_running = True
+            self._start_time = time.time()  # For uptime tracking
 
-        # Block until position recovery completes
-        try:
-            await asyncio.wait_for(
-                self._recover_existing_positions(), timeout=60.0  # 60 second timeout
-            )
-        except asyncio.TimeoutError:
-            logger.error(
-                "Position recovery timed out after 60 seconds. "
-                "Starting agent with empty position state."
-            )
-            self._startup_complete.set()
-
-        # Main loop: process cycles with sleep intervals
-        while self.is_running:
+            # Block until position recovery completes
             try:
-                # Execute one complete OODA cycle
-                cycle_successful = await self.process_cycle()
+                await asyncio.wait_for(
+                    self._recover_existing_positions(), timeout=60.0  # 60 second timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Position recovery timed out after 60 seconds. "
+                    "Starting agent with empty position state."
+                )
+                self._startup_complete.set()
 
-                if not cycle_successful:
-                    logger.warning("Cycle execution failed, backing off before retry")
+            # Main loop: process cycles with sleep intervals
+            while self.is_running:
+                try:
+                    # Execute one complete OODA cycle
+                    cycle_successful = await self.process_cycle()
+
+                    if not cycle_successful:
+                        logger.warning("Cycle execution failed, backing off before retry")
+                        await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
+                    else:
+                        # Increment cycle counter for dashboard
+                        self._cycle_count += 1
+                        # Normal sleep between analysis cycles
+                        await asyncio.sleep(self.config.analysis_frequency_seconds)
+
+                except asyncio.CancelledError:
+                    logger.info("Trading loop cancelled.")
+                    break
+                except Exception as e:
+                    logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
                     await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
-                else:
-                    # Increment cycle counter for dashboard
-                    self._cycle_count += 1
-                    # Normal sleep between analysis cycles
-                    await asyncio.sleep(self.config.analysis_frequency_seconds)
-
-            except asyncio.CancelledError:
-                logger.info("Trading loop cancelled.")
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
-                await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
 
     async def _transition_to(self, new_state: AgentState):
         """Helper method to handle state transitions with logging."""
@@ -605,10 +605,11 @@ class TradingLoopAgent:
         so this state simply logs and returns, allowing the cycle to complete.
         The next cycle will start from LEARNING state after the external sleep.
         """
-        logger.info("State: IDLE - Cycle complete, waiting for next interval...")
-        # Note: Sleep is handled externally in run() or by backtester
-        # This state just marks the end of the cycle
-        await self._transition_to(AgentState.LEARNING)
+        with tracer.start_as_current_span("agent.ooda.idle"):
+            logger.info("State: IDLE - Cycle complete, waiting for next interval...")
+            # Note: Sleep is handled externally in run() or by backtester
+            # This state just marks the end of the cycle
+            await self._transition_to(AgentState.LEARNING)
 
     async def handle_perception_state(self):
         """
@@ -758,7 +759,7 @@ class TradingLoopAgent:
 
                 # Wrap the analysis with a timeout to prevent blocking
                 decision = await asyncio.wait_for(
-                    self.engine.analyze_asset(asset_pair),
+                    self.engine.analyze_asset_async(asset_pair),
                     timeout=60,  # Timeout after 60 seconds
                 )
 
@@ -1410,24 +1411,28 @@ class TradingLoopAgent:
             max_iterations = 10  # Prevent infinite loops in one cycle
             iterations = 0
 
-            while (
-                self.state != AgentState.IDLE
-                and iterations < max_iterations
-                and self.is_running
-            ):
-                handler = self.state_handlers.get(self.state)
-                if handler:
-                    await handler()
-                else:
-                    logger.error(f"No handler found for state {self.state}")
-                    return False
-                iterations += 1
+            with tracer.start_as_current_span("agent.ooda.cycle") as cycle_span:
+                while (
+                    self.state != AgentState.IDLE
+                    and iterations < max_iterations
+                    and self.is_running
+                ):
+                    handler = self.state_handlers.get(self.state)
+                    if handler:
+                        cycle_span.add_event("state_handler_start", {"state": self.state.name})
+                        await handler()
+                        cycle_span.add_event("state_handler_end", {"state": self.state.name})
+                    else:
+                        logger.error(f"No handler found for state {self.state}")
+                        return False
+                    iterations += 1
 
-            if iterations >= max_iterations:
-                logger.warning(
-                    "process_cycle exceeded max iterations, possible infinite loop"
-                )
-                return False
+                cycle_span.set_attribute("iterations", iterations)
+                if iterations >= max_iterations:
+                    logger.warning(
+                        "process_cycle exceeded max iterations, possible infinite loop"
+                    )
+                    return False
 
             return True
 
