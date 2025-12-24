@@ -12,11 +12,14 @@ def mock_backtester():
     """Mock backtester for optimization tests."""
     backtester = Mock()
     backtester.run.return_value = {
-        "sharpe_ratio": 1.5,
-        "total_return": 0.25,
-        "max_drawdown": 0.10,
-        "win_rate": 0.55,
-        "total_trades": 50,
+        "metrics": {
+            "sharpe_ratio": 1.5,
+            "max_drawdown_pct": -10.0,
+            "net_return_pct": 25.0,
+            "win_rate": 55.0,
+            "total_trades": 50,
+        },
+        "trades": [],
     }
     return backtester
 
@@ -102,7 +105,7 @@ class TestOptunaOptimizer:
         trial.suggest_categorical.return_value = "weighted"
 
         with patch.object(
-            optimizer, "_run_backtest", return_value={"sharpe_ratio": 1.5}
+            optimizer, "_run_backtest", return_value={"metrics": {"sharpe_ratio": 1.5}, "trades": []}
         ):
             optimizer.objective(trial)
 

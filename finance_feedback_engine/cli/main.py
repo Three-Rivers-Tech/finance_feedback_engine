@@ -43,6 +43,9 @@ from finance_feedback_engine.cli.commands.memory import (
 from finance_feedback_engine.cli.commands.memory import (
     prune_memory as prune_memory_command,
 )
+from finance_feedback_engine.cli.commands.experiment import (
+    experiment as experiment_command,
+)
 from finance_feedback_engine.cli.commands.optimize import optimize as optimize_command
 from finance_feedback_engine.cli.commands.trading import balance as balance_command
 from finance_feedback_engine.cli.commands.trading import execute as execute_command
@@ -399,16 +402,9 @@ def setup_logging(verbose: bool = False, config: dict = None):
             logger = logging.getLogger(__name__)
             logger.debug("Structured logging initialized successfully")
             return
-        except ImportError as e:
-            # Fall back to basic logging if structured logging module is not available
-            logging.warning(
-                f"Structured logging module not available: {e}, falling back to basic logging"
-            )
-        except Exception as e:
-            # Fall back to basic logging if there's any error in structured logging setup
-            logging.warning(
-                f"Error setting up structured logging: {e}, falling back to basic logging"
-            )
+        except (ImportError, ValueError, TypeError) as e:
+            # Fall back to basic logging if structured logging module is not available or has errors
+            pass  # Continue to basic logging setup below
 
     # Legacy logging setup (backward compatible)
     # Map string level names to logging constants
@@ -447,7 +443,15 @@ def setup_logging(verbose: bool = False, config: dict = None):
     )
 
     # Also set the root logger level explicitly
-    logging.getLogger().setLevel(level)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    # Attach OTel trace context filter if tracing is enabled
+    try:
+        from finance_feedback_engine.observability.context import OTelContextFilter
+        root_logger.addFilter(OTelContextFilter())
+    except Exception:
+        pass  # OTel optional
 
 
 def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
@@ -575,9 +579,11 @@ def _set_nested(config: dict, keys: tuple, value):
     help="Path to a specific config file (overrides tiered loading)",
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
+@click.option("--trace/--no-trace", default=False, help="Enable OpenTelemetry tracing")
+@click.option("--otlp-endpoint", default=None, help="OTLP exporter endpoint (e.g., http://localhost:4317)")
 @click.option("--interactive", "-i", is_flag=True, help="Start in interactive mode")
 @click.pass_context
-def cli(ctx, config, verbose, interactive):
+def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
     """Finance Feedback Engine 2.0 - AI-powered trading decision tool."""
     ctx.ensure_object(dict)
 
@@ -594,6 +600,18 @@ def cli(ctx, config, verbose, interactive):
         # Set a placeholder
         ctx.obj["config_path"] = CONFIG_MODE_TIERED
 
+    # Override tracing settings from CLI flags
+    if trace:
+        if "observability" not in final_config:
+            final_config["observability"] = {}
+        if "tracing" not in final_config["observability"]:
+            final_config["observability"]["tracing"] = {}
+        final_config["observability"]["tracing"]["enabled"] = True
+        if otlp_endpoint:
+            if "otlp" not in final_config["observability"]["tracing"]:
+                final_config["observability"]["tracing"]["otlp"] = {}
+            final_config["observability"]["tracing"]["otlp"]["endpoint"] = otlp_endpoint
+
     # Store the final config
     ctx.obj["config"] = final_config
     ctx.obj["verbose"] = verbose
@@ -606,6 +624,13 @@ def cli(ctx, config, verbose, interactive):
     # Setup logging with config and verbose flag
     # Verbose flag takes priority over config setting
     setup_logging(verbose=verbose, config=final_config)
+
+    # Initialize tracing early (safe no-op if disabled)
+    try:
+        from finance_feedback_engine.observability import init_tracer
+        init_tracer(final_config.get("observability", {}))
+    except Exception as e:
+        logger.warning(f"Failed to initialize tracing: {e}")
 
     # Initialize metrics early (safe no-op if prometheus_client missing)
     try:
@@ -2020,6 +2045,7 @@ cli.add_command(backtest_command, name="backtest")
 cli.add_command(portfolio_backtest_command, name="portfolio-backtest")
 cli.add_command(walk_forward_command, name="walk-forward")
 cli.add_command(monte_carlo_command, name="monte-carlo")
+cli.add_command(experiment_command, name="experiment")
 cli.add_command(optimize_command, name="optimize")
 cli.add_command(learning_report_command, name="learning-report")
 cli.add_command(prune_memory_command, name="prune-memory")

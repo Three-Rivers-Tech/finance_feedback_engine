@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 logger = logging.getLogger(__name__)
+try:
+    from opentelemetry import trace
+    tracer = trace.get_tracer(__name__)
+except ImportError:
+    tracer = None
 
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
 from .debate_manager import DebateManager
@@ -306,6 +311,16 @@ class EnsembleDecisionManager:
             len(failed_providers) / total_providers if total_providers > 0 else 0
         )
 
+        if tracer:
+            span_cm = tracer.start_as_current_span(
+                "ensemble.aggregate",
+                attributes={
+                    "active_providers": active_providers,
+                    "failed_providers": len(failed_providers or []),
+                    "total_providers": total_providers,
+                },
+            )
+            span_cm.__enter__()
         logger.info(
             f"Aggregating {active_providers} provider decisions "
             f"({len(failed_providers)} failed, "
@@ -321,11 +336,24 @@ class EnsembleDecisionManager:
 
         for provider, decision in provider_decisions.items():
             if provider in self.enabled_providers:
-                actions.append(decision.get("action", "HOLD"))
-                confidences.append(decision.get("confidence", 50))
+                action = decision.get("action", "HOLD")
+                confidence = decision.get("confidence", 50)
+                actions.append(action)
+                confidences.append(confidence)
                 reasonings.append(decision.get("reasoning", ""))
                 amounts.append(decision.get("amount", 0))
                 provider_names.append(provider)
+                # Emit event for this provider's decision
+                if tracer:
+                    cur = trace.get_current_span()
+                    cur.add_event(
+                        "provider_decision",
+                        attributes={
+                            "provider": provider,
+                            "action": action,
+                            "confidence": int(confidence),
+                        },
+                    )
 
         # Graceful single-provider fallback: if none matched enabled list but we
         # have at least one provider_decision, use the first as a minimal ensemble.
@@ -432,6 +460,12 @@ class EnsembleDecisionManager:
             f"{final_decision['ensemble_metadata']['agreement_score']:.2f}"
         )
 
+        if tracer:
+            cur = trace.get_current_span()
+            cur.set_attribute("ensemble.fallback_tier", fallback_tier)
+            cur.set_attribute("ensemble.agreement_score", float(ensemble_metadata["agreement_score"]))
+            cur.set_attribute("ensemble.confidence", int(final_decision.get("confidence", 0)))
+            span_cm.__exit__(None, None, None)
         return final_decision
 
     async def aggregate_decisions_two_phase(
@@ -501,9 +535,18 @@ class EnsembleDecisionManager:
         phase1_failed = phase1_result["failed_providers"]
 
         # Aggregate Phase 1 decisions
-        phase1_decision = await self.aggregate_decisions(
-            provider_decisions=phase1_decisions, failed_providers=phase1_failed
-        )
+        if tracer:
+            with tracer.start_as_current_span(
+                "ensemble.phase1",
+                attributes={"num_providers": len(phase1_decisions)},
+            ):
+                phase1_decision = await self.aggregate_decisions(
+                    provider_decisions=phase1_decisions, failed_providers=phase1_failed
+                )
+        else:
+            phase1_decision = await self.aggregate_decisions(
+                provider_decisions=phase1_decisions, failed_providers=phase1_failed
+            )
 
         phase1_action = phase1_decision["action"]
         phase1_confidence = phase1_decision["confidence"]
@@ -585,9 +628,21 @@ class EnsembleDecisionManager:
             f"Merging Phase 1 ({len(phase1_decisions)}) + Phase 2 ({len(phase2_decisions)}) decisions"
         )
 
-        final_decision = await self.aggregate_decisions(
-            provider_decisions=all_decisions, failed_providers=all_failed
-        )
+        if tracer:
+            with tracer.start_as_current_span(
+                "ensemble.phase2_merge",
+                attributes={
+                    "phase1_providers": len(phase1_decisions),
+                    "phase2_providers": len(phase2_decisions),
+                },
+            ):
+                final_decision = await self.aggregate_decisions(
+                    provider_decisions=all_decisions, failed_providers=all_failed
+                )
+        else:
+            final_decision = await self.aggregate_decisions(
+                provider_decisions=all_decisions, failed_providers=all_failed
+            )
 
         # Check if Phase 2 changed the decision
         decision_changed = final_decision["action"] != phase1_action

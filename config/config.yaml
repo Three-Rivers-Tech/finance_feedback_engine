@@ -702,3 +702,38 @@ api_keys:
   # Placeholder - override in config.local.yaml or environment
   # Example: "service-key": "sk_live_xxxxxxxxxxxxxxxx"
   {}
+
+# ============================================================================
+# OBSERVABILITY (TRACING, LOGGING, METRICS)
+# ============================================================================
+observability:
+  # Tracing Configuration
+  tracing:
+    enabled: false                           # Enable OpenTelemetry tracing
+    backend: console                         # Options: jaeger, tempo, console
+    sample_rate: 0.1                         # Fraction of traces to sample (0.0-1.0)
+    jaeger:
+      agent_host: localhost
+      agent_port: 6831
+    otlp:
+      endpoint: "http://localhost:4317"      # OTLP gRPC endpoint for Tempo
+
+  # Logging Configuration
+  logging:
+    level: INFO                              # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: json                             # Options: json, text
+    file_enabled: true                       # Enable file logging
+    file_base_path: logs                     # Directory for log files
+
+  # Metrics Configuration
+  metrics:
+    enabled: true                            # Enable Prometheus metrics
+    prometheus_port: 8000                    # Port for Prometheus exporter
+
+# ============================================================================
+# SERVICE METADATA
+# ============================================================================
+service:
+  name: finance_feedback_engine
+  version: "2.0.0"
+  environment: development

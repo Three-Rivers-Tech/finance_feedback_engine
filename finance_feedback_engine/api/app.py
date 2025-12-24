@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
     """
     Manage application lifespan (startup and shutdown).
 
-    Startup: Initialize FinanceFeedbackEngine, AuthManager, and Telegram bot
+    Startup: Initialize FinanceFeedbackEngine, AuthManager, Telegram bot, and tracing
     Shutdown: Cleanup resources
     """
     logger.info("🚀 Starting Finance Feedback Engine API...")
@@ -89,6 +89,27 @@ async def lifespan(app: FastAPI):
     try:
         # Load configuration from tiered config files
         config = load_tiered_config()
+
+        # Initialize tracing and metrics
+        try:
+            from finance_feedback_engine.observability import (
+                init_tracer,
+                init_metrics_from_config,
+            )
+            init_tracer(config.get("observability", {}))
+            init_metrics_from_config(config.get("observability", {}))
+            logger.info("✅ Tracing and metrics initialized")
+
+            # Attach OTel trace context filter to root logger
+            try:
+                from finance_feedback_engine.observability.context import OTelContextFilter
+                import logging
+                logging.getLogger().addFilter(OTelContextFilter())
+                logger.info("✅ OTel context filter attached to logger")
+            except Exception:
+                pass  # OTel optional
+        except Exception as e:
+            logger.warning(f"Failed to initialize tracing/metrics: {e}")
 
         # Initialize the engine with loaded config
         engine = FinanceFeedbackEngine(config)
