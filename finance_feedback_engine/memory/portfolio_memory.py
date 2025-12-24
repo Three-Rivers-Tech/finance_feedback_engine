@@ -137,9 +137,9 @@ class PortfolioMemoryEngine:
         self.storage_path = Path(storage_path) / "memory"
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
-        self.max_memory_size = memory_config.get("max_memory_size", 1000)
-        self.learning_rate = memory_config.get("learning_rate", 0.1)
-        self.context_window = memory_config.get("context_window", 20)
+        self.max_memory_size = int(memory_config.get("max_memory_size", 1000))
+        self.learning_rate = float(memory_config.get("learning_rate", 0.1))
+        self.context_window = int(memory_config.get("context_window", 20))
 
         # Experience replay buffer: (decision, outcome) pairs
         self.experience_buffer: deque = deque(maxlen=self.max_memory_size)
