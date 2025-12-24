@@ -43,16 +43,19 @@ htmlcov/
 .tox/
 .nox/
 
-# Data
+# Data - exclude large JSON files but keep structure
 data/decisions/*.json
 data/benchmarks/*.json
 data/refactoring/*.json
 data/optimization/*.json
 data/logs/*.log
+data/cache/
+data/historical_cache/
 
-# Secrets
+# Secrets and environment files
 .env
-.env.local
+.env.*
+!.env.*.example
 config/config.local.yaml
 *.key
 *.pem
@@ -61,19 +64,17 @@ config/config.local.yaml
 .git/
 .gitignore
 
-# Documentation
-docs/
+# Documentation (keep deployment docs)
+docs/_build/
 *.md
 !README.md
+!docs/DEPLOYMENT.md
 
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
-# CI/CD
-.github/
-.gitlab-ci.yml
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
 
 # OS
 .DS_Store
@@ -83,9 +84,19 @@ Thumbs.db
 *.bak
 *.backup
 *.old
+backups/
 
 # Temporary
 *.tmp
 *.temp
 tmp/
 temp/
+
+# Docker volumes (if accidentally in project)
+prometheus-data/
+grafana-data/
+redis-data/
+
+# Logs
+logs/
+*.log

@@ -557,6 +557,23 @@ class FinanceFeedbackEngine:
                 memory_context.get("total_historical_trades", 0),
             )
 
+            # Add transaction cost analysis to memory context
+            # Calculate rolling 20-trade cost averages for AI awareness
+            try:
+                cost_stats = self.memory_engine.calculate_rolling_cost_averages(
+                    window=20, exclude_outlier_pct=0.10
+                )
+                memory_context["transaction_costs"] = cost_stats
+                if cost_stats.get("has_data"):
+                    logger.info(
+                        "Transaction costs: avg %.3f%% (from %d trades)",
+                        cost_stats.get("avg_total_cost_pct", 0),
+                        cost_stats.get("sample_size", 0),
+                    )
+            except Exception as e:
+                logger.warning(f"Could not calculate transaction costs: {e}")
+                memory_context["transaction_costs"] = {"has_data": False}
+
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         try:
             decision = await self.decision_engine.generate_decision(
@@ -627,7 +644,18 @@ class FinanceFeedbackEngine:
         # Record metrics: decision created
         action = decision.get("action", "UNKNOWN")
         # Determine asset type from market data or use heuristic
-        crypto_symbols = {"BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "LTC", "AVAX", "DOT", "MATIC"}
+        crypto_symbols = {
+            "BTC",
+            "ETH",
+            "SOL",
+            "DOGE",
+            "XRP",
+            "ADA",
+            "LTC",
+            "AVAX",
+            "DOT",
+            "MATIC",
+        }
         asset_type = (
             "crypto" if any(sym in asset_pair for sym in crypto_symbols) else "forex"
         )

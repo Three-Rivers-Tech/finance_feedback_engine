@@ -37,14 +37,16 @@ from finance_feedback_engine.cli.commands.backtest import (
 from finance_feedback_engine.cli.commands.backtest import (
     walk_forward as walk_forward_command,
 )
+from finance_feedback_engine.cli.commands.demo import demo as demo_command
+from finance_feedback_engine.cli.commands.experiment import (
+    experiment as experiment_command,
+)
+from finance_feedback_engine.cli.commands.frontend import frontend as frontend_command
 from finance_feedback_engine.cli.commands.memory import (
     learning_report as learning_report_command,
 )
 from finance_feedback_engine.cli.commands.memory import (
     prune_memory as prune_memory_command,
-)
-from finance_feedback_engine.cli.commands.experiment import (
-    experiment as experiment_command,
 )
 from finance_feedback_engine.cli.commands.optimize import optimize as optimize_command
 from finance_feedback_engine.cli.commands.trading import balance as balance_command
@@ -379,79 +381,86 @@ def _check_dependencies() -> tuple:
 
 
 def setup_logging(verbose: bool = False, config: dict = None):
-    """Setup logging configuration with structured logging support.
+    """Setup logging configuration with mandatory structured JSON logging.
+
+    v0.9.9 Change: Logging is now ALWAYS enabled with structured JSON format to data/logs/.
+    - --verbose increases detail level (DEBUG instead of INFO)
+    - --trace enables OpenTelemetry tracing (separate from logging)
 
     Args:
-        verbose: If True, override config and use DEBUG level
-        config: Configuration dict containing logging settings
+        verbose: If True, use DEBUG level; otherwise INFO (logging always enabled)
+        config: Configuration dict (optional, used for advanced settings)
 
-    Priority: --verbose flag > config value > INFO default
-
-    This function now supports both legacy and structured logging modes:
-    - If config['logging']['structured']['enabled'] is True, uses structured JSON logging
-    - Otherwise, falls back to traditional text logging
+    Structured logging benefits:
+    - Machine-parseable JSON format for log aggregation
+    - Consistent timestamps and trace context
+    - Automatic correlation with OpenTelemetry spans (if --trace enabled)
     """
-    # Try to use structured logging if available and enabled
-    if config and config.get("logging", {}).get("structured", {}).get("enabled", False):
-        try:
-            from finance_feedback_engine.monitoring.logging_config import (
-                setup_structured_logging,
-            )
+    import json
+    from datetime import datetime
+    from pathlib import Path
 
-            setup_structured_logging(config, verbose=verbose)
-            logger = logging.getLogger(__name__)
-            logger.debug("Structured logging initialized successfully")
-            return
-        except (ImportError, ValueError, TypeError):
-            # Fall back to basic logging if structured logging module is not available or has errors
-            pass  # Continue to basic logging setup below
+    # Create logs directory if it doesn't exist
+    log_dir = Path("data/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Legacy logging setup (backward compatible)
-    # Map string level names to logging constants
-    LEVEL_MAP = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
+    # Determine log level (--verbose overrides)
+    level = logging.DEBUG if verbose else logging.INFO
 
-    # Priority 1: --verbose flag overrides everything
-    if verbose:
-        level = logging.DEBUG
-    # Priority 2: Read from config
-    elif config and "logging" in config and "level" in config["logging"]:
-        config_level = config["logging"]["level"]
-        # Validate and map the config value
-        if isinstance(config_level, str) and config_level.upper() in LEVEL_MAP:
-            level = LEVEL_MAP[config_level.upper()]
-        else:
-            # Invalid config value, fall back to INFO
-            level = logging.INFO
-            logging.warning(
-                f"Invalid logging level '{config_level}' in config, using INFO"
-            )
-    # Priority 3: Default to INFO
-    else:
-        level = logging.INFO
+    # Create JSON handler for structured logging to file
+    log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}_ffe.log"
 
-    # Apply to root logger via basicConfig
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        force=True,  # Override any existing config
-    )
+    class JSONFormatter(logging.Formatter):
+        """Format logs as structured JSON."""
 
-    # Also set the root logger level explicitly
+        def format(self, record):
+            log_entry = {
+                "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+                "level": record.levelname,
+                "logger": record.name,
+                "message": record.getMessage(),
+                "module": record.module,
+                "function": record.funcName,
+                "line": record.lineno,
+            }
+            # Add exception info if present
+            if record.exc_info:
+                log_entry["exception"] = self.formatException(record.exc_info)
+            return json.dumps(log_entry, default=str)
+
+    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
-    # Attach OTel trace context filter if tracing is enabled
+    # Remove any existing handlers to avoid duplicates
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # File handler with JSON formatter
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(level)
+    file_handler.setFormatter(JSONFormatter())
+    root_logger.addHandler(file_handler)
+
+    # Console handler with readable format (not JSON)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    console_handler.setFormatter(logging.Formatter(console_format))
+    root_logger.addHandler(console_handler)
+
+    # Attach OTel trace context filter if available
     try:
         from finance_feedback_engine.observability.context import OTelContextFilter
+
         root_logger.addFilter(OTelContextFilter())
     except Exception:
         pass  # OTel optional
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"Logging initialized (level={logging.getLevelName(level)}, file={log_file})"
+    )
 
 
 def _deep_merge_dicts(d1: dict, d2: dict) -> dict:
@@ -580,7 +589,11 @@ def _set_nested(config: dict, keys: tuple, value):
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
 @click.option("--trace/--no-trace", default=False, help="Enable OpenTelemetry tracing")
-@click.option("--otlp-endpoint", default=None, help="OTLP exporter endpoint (e.g., http://localhost:4317)")
+@click.option(
+    "--otlp-endpoint",
+    default=None,
+    help="OTLP exporter endpoint (e.g., http://localhost:4317)",
+)
 @click.option("--interactive", "-i", is_flag=True, help="Start in interactive mode")
 @click.pass_context
 def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
@@ -628,6 +641,7 @@ def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
     # Initialize tracing early (safe no-op if disabled)
     try:
         from finance_feedback_engine.observability import init_tracer
+
         init_tracer(final_config.get("observability", {}))
     except Exception as e:
         logger.warning(f"Failed to initialize tracing: {e}")
@@ -2037,6 +2051,7 @@ def retrain_meta_learner(ctx, force):
 # ============================================
 
 # Register commands from modular command files
+cli.add_command(demo_command, name="demo")
 cli.add_command(analyze_command, name="analyze")
 cli.add_command(history_command, name="history")
 cli.add_command(balance_command, name="balance")
@@ -2051,6 +2066,7 @@ cli.add_command(learning_report_command, name="learning-report")
 cli.add_command(prune_memory_command, name="prune-memory")
 cli.add_command(run_agent_command, name="run-agent")
 cli.add_command(monitor_command, name="monitor")
+cli.add_command(frontend_command, name="frontend")
 
 
 if __name__ == "__main__":

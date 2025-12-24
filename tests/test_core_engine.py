@@ -190,6 +190,7 @@ class TestEngineInitialization:
         finally:
             # Cleanup
             import shutil
+
             if memory_path.exists():
                 memory_path.unlink()
             if memory_path.parent.exists() and not any(memory_path.parent.iterdir()):
@@ -213,7 +214,9 @@ class TestEngineInitialization:
         engine = FinanceFeedbackEngine(minimal_config)
         assert engine is not None
 
-    @pytest.mark.skip(reason="Implementation bug: core.py passes table_prefix but DeltaLakeManager doesn't accept it")
+    @pytest.mark.skip(
+        reason="Implementation bug: core.py passes table_prefix but DeltaLakeManager doesn't accept it"
+    )
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
     def test_delta_lake_integration_enabled(
@@ -276,9 +279,7 @@ class TestAnalyzeAssetWorkflow:
             "timestamp": datetime.now().isoformat(),
             "amount": 100.0,
         }
-        engine.decision_engine.generate_decision = AsyncMock(
-            return_value=mock_decision
-        )
+        engine.decision_engine.generate_decision = AsyncMock(return_value=mock_decision)
 
         # Execute
         result = await engine.analyze_asset_async("BTCUSD")
@@ -494,7 +495,9 @@ class TestPortfolioCaching:
 
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
-    def test_portfolio_cache_hit_within_ttl(self, mock_validate, mock_models, minimal_config):
+    def test_portfolio_cache_hit_within_ttl(
+        self, mock_validate, mock_models, minimal_config
+    ):
         """Test that cached portfolio is returned within TTL."""
         engine = FinanceFeedbackEngine(minimal_config)
 
@@ -515,7 +518,9 @@ class TestPortfolioCaching:
         assert result2["_cached"] is True
         assert "_cache_age_seconds" in result2
         assert result2["_cache_age_seconds"] < 60
-        assert engine.trading_platform.get_portfolio_breakdown.call_count == 1  # No additional call
+        assert (
+            engine.trading_platform.get_portfolio_breakdown.call_count == 1
+        )  # No additional call
 
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
@@ -589,7 +594,9 @@ class TestPlatformRouting:
         minimal_config["trading_platform"] = "unified"
         minimal_config.pop("platforms", None)  # Remove platforms list
 
-        with pytest.raises(ValueError, match="Unified platform mode requires 'platforms' list"):
+        with pytest.raises(
+            ValueError, match="Unified platform mode requires 'platforms' list"
+        ):
             engine = FinanceFeedbackEngine(minimal_config)
 
     @patch("finance_feedback_engine.core.ensure_models_installed")
@@ -617,7 +624,10 @@ class TestPlatformRouting:
             "invalid_format",  # Invalid - not a dict
             {"credentials": {"api_key": "test"}},  # Invalid - missing name
             {"name": "", "credentials": {"api_key": "test"}},  # Invalid - empty name
-            {"name": "oanda", "credentials": "invalid"},  # Invalid - credentials not dict
+            {
+                "name": "oanda",
+                "credentials": "invalid",
+            },  # Invalid - credentials not dict
         ]
 
         # Mock PlatformFactory to avoid actual platform creation
@@ -629,7 +639,10 @@ class TestPlatformRouting:
             engine = FinanceFeedbackEngine(minimal_config)
 
             # Verify warnings were logged for invalid configs
-            assert "Skipping invalid platform config" in caplog.text or "Skipping platform" in caplog.text
+            assert (
+                "Skipping invalid platform config" in caplog.text
+                or "Skipping platform" in caplog.text
+            )
 
 
 class TestDecisionPersistence:
@@ -656,9 +669,7 @@ class TestDecisionPersistence:
             "asset_pair": "BTCUSD",
             "timestamp": datetime.now().isoformat(),
         }
-        engine.decision_engine.generate_decision = AsyncMock(
-            return_value=mock_decision
-        )
+        engine.decision_engine.generate_decision = AsyncMock(return_value=mock_decision)
 
         # Mock decision store
         engine.decision_store.save_decision = Mock()
@@ -678,7 +689,9 @@ class TestSyncWrapper:
 
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
-    def test_analyze_asset_sync_wrapper(self, mock_validate, mock_models, minimal_config):
+    def test_analyze_asset_sync_wrapper(
+        self, mock_validate, mock_models, minimal_config
+    ):
         """Test that analyze_asset() calls analyze_asset_async()."""
         engine = FinanceFeedbackEngine(minimal_config)
 

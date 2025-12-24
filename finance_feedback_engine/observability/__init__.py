@@ -1,7 +1,7 @@
 """Observability module for tracing, metrics, and structured logging."""
 
-from .tracer import init_tracer, get_tracer
-from .metrics import init_metrics_from_config, get_meter
+from .metrics import get_meter, init_metrics_from_config
+from .tracer import get_tracer, init_tracer
 
 __all__ = [
     "init_tracer",

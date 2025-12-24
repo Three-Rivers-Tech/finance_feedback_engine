@@ -4,10 +4,10 @@ This module contains commands for running backtests, walk-forward analysis,
 Monte Carlo simulations, and portfolio backtesting.
 """
 
+import copy
 import json
 import logging
 from datetime import datetime
-import copy
 
 import click
 from rich.console import Console

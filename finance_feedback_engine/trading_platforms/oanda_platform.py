@@ -21,6 +21,10 @@ class OandaPlatform(BaseTradingPlatform):
     - Trade execution capabilities
     """
 
+    # Class-level cache for minimum trade sizes (TTL: 24 hours)
+    _min_trade_size_cache = {}
+    _cache_ttl_seconds = 86400  # 24 hours
+
     def __init__(
         self, credentials: Dict[str, Any], config: Optional[Dict[str, Any]] = None
     ):
@@ -100,12 +104,131 @@ class OandaPlatform(BaseTradingPlatform):
                 logger.warning(
                     "oandapyV20 not installed. " "Install with: pip install oandapyV20"
                 )
-                raise ValueError("Oanda library not available. " "Install oandapyV20")
+                raise ValueError(
+                    "oandapyV20 library not available. Install with: pip install oandapyV20"
+                )
             except Exception as e:
                 logger.error("Failed to initialize Oanda client: %s", e)
                 raise
 
         return self._client
+
+    def get_minimum_trade_size(self, asset_pair: str) -> float:
+        """
+        Get minimum trade size for a currency pair with 24-hour caching.
+
+        Queries Oanda API for instrument details (minimumTradeSize).
+        Cache is invalidated on failed order execution or after 24 hours.
+
+        Args:
+            asset_pair: Currency pair (e.g., 'EURUSD', 'GBPUSD')
+
+        Returns:
+            Minimum trade size in units of base currency, defaults to 1.0 if API fails
+        """
+        import time
+
+        cache_key = asset_pair
+        current_time = time.time()
+
+        # Check cache first
+        if cache_key in self._min_trade_size_cache:
+            cached_value, cached_time = self._min_trade_size_cache[cache_key]
+            if current_time - cached_time < self._cache_ttl_seconds:
+                logger.debug(
+                    f"Using cached minimum trade size for {asset_pair}: {cached_value} units"
+                )
+                return cached_value
+
+        # Query API for instrument details
+        try:
+            from oandapyV20.endpoints.instruments import InstrumentsCandles
+
+            client = self._get_client()
+
+            # Convert asset_pair to Oanda instrument format (e.g., EURUSD -> EUR_USD)
+            if "_" not in asset_pair:
+                # Assume format is like EURUSD -> EUR_USD
+                # Forex pairs are typically 6 characters (3+3)
+                if len(asset_pair) == 6:
+                    instrument = f"{asset_pair[:3]}_{asset_pair[3:]}"
+                elif len(asset_pair) == 7:  # Handle cases like XAUUSD
+                    instrument = f"{asset_pair[:3]}_{asset_pair[3:]}"
+                else:
+                    instrument = asset_pair  # Use as-is if format unclear
+            else:
+                instrument = asset_pair
+
+            # Oanda's Instruments endpoint can be tricky across library versions
+            # Use a simpler approach: query account instruments
+            try:
+                from oandapyV20.endpoints.accounts import AccountInstruments
+
+                logger.debug(f"Querying Oanda for minimum trade size: {instrument}")
+                request = AccountInstruments(
+                    accountID=self.account_id, params={"instruments": instrument}
+                )
+                response = client.request(request)
+
+                if "instruments" in response and len(response["instruments"]) > 0:
+                    instrument_data = response["instruments"][0]
+                    min_size = float(instrument_data.get("minimumTradeSize", 1.0))
+
+                    # Cache the result
+                    self._min_trade_size_cache[cache_key] = (min_size, current_time)
+                    logger.info(
+                        f"Minimum trade size for {asset_pair}: {min_size} units (cached for 24h)"
+                    )
+                    return min_size
+                else:
+                    logger.warning(
+                        f"Instrument details not found for {instrument}, using default 1.0 units"
+                    )
+                    fallback = 1.0
+                    self._min_trade_size_cache[cache_key] = (fallback, current_time)
+                    return fallback
+
+            except Exception as inner_e:
+                logger.warning(
+                    f"Error querying instrument details for {instrument}: {inner_e}"
+                )
+                # Fallback to 5% of balance
+                fallback = 1.0
+                self._min_trade_size_cache[cache_key] = (fallback, current_time)
+                return fallback
+
+        except ImportError:
+            logger.warning(
+                "oandapyV20 not installed, using default minimum trade size of 1.0 units"
+            )
+            fallback = 1.0
+            self._min_trade_size_cache[cache_key] = (fallback, current_time)
+            return fallback
+        except Exception as e:
+            logger.error(
+                f"Error querying minimum trade size for {asset_pair}: {e}",
+                exc_info=True,
+            )
+            fallback = 1.0
+            self._min_trade_size_cache[cache_key] = (fallback, current_time)
+            return fallback
+
+    def invalidate_minimum_trade_size_cache(self, asset_pair: str = None) -> None:
+        """
+        Invalidate minimum trade size cache.
+
+        Call this after a failed order execution to force cache refresh.
+
+        Args:
+            asset_pair: Specific asset pair to invalidate, or None to clear all
+        """
+        if asset_pair:
+            if asset_pair in self._min_trade_size_cache:
+                del self._min_trade_size_cache[asset_pair]
+                logger.debug(f"Invalidated minimum trade size cache for {asset_pair}")
+        else:
+            self._min_trade_size_cache.clear()
+            logger.debug("Cleared all minimum trade size cache entries")
 
     def get_balance(self) -> Dict[str, float]:
         """
@@ -128,30 +251,28 @@ class OandaPlatform(BaseTradingPlatform):
             request = AccountSummary(accountID=self.account_id)
             response = client.request(request)
 
-            if "account" in response:
-                account = response["account"]
+            account = response["account"]
 
-                # Get base currency balance
-                currency = account.get("currency", "USD")
-                balance = float(account.get("balance", 0))
+            # Get base currency balance
+            currency = account.get("currency", "USD")
+            balance = float(account.get("balance", 0))
 
-                if balance > 0:
-                    balances[currency] = balance
-                    logger.info("Oanda balance: %.2f %s", balance, currency)
+            if balance > 0:
+                balances[currency] = balance
+                logger.info("Oanda balance: %.2f %s", balance, currency)
 
             return balances
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. " "Install with: pip install oandapyV20"
+                "oandapyV20 library not installed. Install with: pip install oandapyV20"
             )
             raise ValueError(
-                "Oanda library required for real data. " "Please install oandapyV20"
+                "oandapyV20 library not available. Install with: pip install oandapyV20"
             )
         except Exception as e:
             logger.error("Error fetching Oanda balances: %s", e)
-            # Return empty dict on error to allow graceful degradation
-            return {}
+            raise
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """

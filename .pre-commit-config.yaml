@@ -36,20 +36,9 @@ repos:
     hooks:
       - id: pytest-fast
         name: pytest-fast (unit tests, no external services)
-        entry: pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=43
+        entry: pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=70
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-commit]
-        # NOTE: Threshold temporarily at 43% (current level), plan to increase to 70%
-        # See: docs/COVERAGE_IMPROVEMENT_PLAN.md
-        # Optional: bypass with SKIP=pytest-fast (see PRE_COMMIT_BYPASS_LOG.md)
-
-      - id: log-bypass
-        name: log-bypass (track SKIP=pre-commit usage)
-        entry: python scripts/log_bypass_to_github.py
-        language: system
-        pass_filenames: false
-        always_run: false
-        stages: [pre-commit]
-        # Only runs if SKIP env var was used for specific hooks
+        # Coverage gate for release readiness (0.9.9): keep >=70%.

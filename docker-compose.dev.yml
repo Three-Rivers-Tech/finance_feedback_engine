@@ -1,0 +1,112 @@
+# Finance Feedback Engine 2.0 - Development Docker Compose
+# Hot reload for both backend and frontend
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Backend API Service - Development with Hot Reload
+  # =============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder  # Use builder stage for development dependencies
+    container_name: ffe-backend-dev
+    command: uvicorn finance_feedback_engine.api.app:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env.dev
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=DEBUG
+      - MONITORING_ENABLED=false
+      - ENVIRONMENT=development
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source code for hot reload
+      - ./finance_feedback_engine:/app/finance_feedback_engine
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - ffe-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # Frontend Service - Development with Vite Hot Reload
+  # =============================================================================
+  frontend:
+    image: node:20-alpine
+    container_name: ffe-frontend-dev
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    ports:
+      - "5173:5173"  # Vite dev server
+    volumes:
+      # Mount source code for hot reload
+      - ./frontend:/app
+      - /app/node_modules  # Use container's node_modules
+    networks:
+      - ffe-network
+    depends_on:
+      - backend
+
+  # =============================================================================
+  # Prometheus - Optional for Development
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ffe-prometheus-dev
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data-dev:/prometheus
+    networks:
+      - ffe-network
+    profiles:
+      - monitoring
+
+  # =============================================================================
+  # Grafana - Optional for Development
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ffe-grafana-dev
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data-dev:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - ffe-network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+networks:
+  ffe-network:
+    driver: bridge
+
+volumes:
+  prometheus-data-dev:
+  grafana-data-dev:

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from finance_feedback_engine.optimization.optuna_optimizer import OptunaOptimizer
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 
+from .bot_control import is_agent_running
 from .dependencies import get_engine
 
 router = APIRouter(prefix="/api/v1/optimization", tags=["optimization"])
@@ -25,7 +26,9 @@ class ExperimentRequest(BaseModel):
         ..., min_length=1, description="At least one asset pair required"
     )
     start_date: str = Field(
-        ..., description="Start date in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$"
+        ...,
+        description="Start date in YYYY-MM-DD format",
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
     )
     end_date: str = Field(
         ..., description="End date in YYYY-MM-DD format", pattern=r"^\d{4}-\d{2}-\d{2}$"
@@ -72,6 +75,7 @@ class ExperimentRequest(BaseModel):
 
 class ParetoSolution(BaseModel):
     """A single solution on the Pareto front for multi-objective optimization."""
+
     sharpe_ratio: float
     drawdown_pct: float
     params: Dict[str, Any]
@@ -109,6 +113,14 @@ class ExperimentResponse(BaseModel):
 async def run_experiment(request: ExperimentRequest, engine=Depends(get_engine)):
     """Run an Optuna optimization experiment across multiple asset pairs."""
     try:
+        # Safety: prevent running optimization while agent is active
+        if is_agent_running():
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Trading agent is currently running. Stop the agent before starting an optimization experiment."
+                ),
+            )
         config = engine.config
         standardized_pairs = [standardize_asset_pair(p) for p in request.asset_pairs]
 
@@ -173,7 +185,9 @@ async def run_experiment(request: ExperimentRequest, engine=Depends(get_engine))
                     max_dd = max(s.drawdown_pct for s in pareto_front)
                     min_dd = min(s.drawdown_pct for s in pareto_front)
 
-                    sharpe_range = max_sharpe - min_sharpe if max_sharpe != min_sharpe else 1.0
+                    sharpe_range = (
+                        max_sharpe - min_sharpe if max_sharpe != min_sharpe else 1.0
+                    )
                     dd_range = max_dd - min_dd if max_dd != min_dd else 1.0
 
                     def distance_from_ideal(sol: ParetoSolution) -> float:

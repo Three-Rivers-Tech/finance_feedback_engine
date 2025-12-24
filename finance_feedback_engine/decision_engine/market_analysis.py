@@ -510,4 +510,21 @@ class MarketAnalysisContext:
             context["correlation_alerts"] = []
             context["correlation_summary"] = ""
 
+        # Add transaction cost context from portfolio memory
+        # This provides rolling 20-trade cost averages to help AI make cost-aware decisions
+        if memory_context and memory_context.get("has_history"):
+            try:
+                # We need access to the portfolio memory engine to get cost data
+                # This is passed via the memory_context which should have a reference
+                # For now, we'll check if portfolio memory can calculate costs
+
+                # Try to get cost averages if we have trade history
+                # The memory_context should ideally include cost information
+                # For now, we'll add a placeholder that can be populated by the core engine
+                cost_context = memory_context.get("transaction_costs")
+                if cost_context:
+                    context["transaction_cost_context"] = cost_context
+            except Exception as e:
+                logger.debug(f"Transaction cost context injection failed: {e}")
+
         return context

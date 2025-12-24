@@ -14,7 +14,8 @@ export const AgentControlPanel: React.FC = () => {
     setIsStarting(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/start');
+      // Send an empty JSON body so FastAPI validates defaults
+      await apiClient.post('/api/v1/bot/start', {});
       await refetch();
     } catch (err) {
       setError(handleApiError(err));

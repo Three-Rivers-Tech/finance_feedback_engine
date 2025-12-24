@@ -12,6 +12,7 @@ from finance_feedback_engine.memory.vector_store import VectorMemory
 logger = logging.getLogger(__name__)
 try:
     from opentelemetry import trace
+
     tracer = trace.get_tracer(__name__)
 except Exception:  # OpenTelemetry optional
     tracer = None
@@ -507,6 +508,12 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
             memory_text = self._format_memory_context(memory_context)
             market_info += f"\n{memory_text}\n"
 
+        # Add transaction cost context if available
+        cost_context = context.get("transaction_cost_context")
+        if cost_context and cost_context.get("has_data"):
+            cost_text = self._format_cost_context(cost_context)
+            market_info += f"\n{cost_text}\n"
+
         # Add live monitoring context if available
         monitoring_context = context.get("monitoring_context")
         if monitoring_context and monitoring_context.get("has_monitoring_data"):
@@ -677,6 +684,54 @@ Format response as a structured technical analysis demonstration.
             worst = long_term.get("worst_trade")
             if best is not None and worst is not None:
                 lines.append(f"  Best Trade: ${best:.2f} | Worst Trade: ${worst:.2f}")
+
+        lines.append("=" * 35)
+        return "\n".join(lines)
+
+    def _format_cost_context(self, cost_context: Dict[str, Any]) -> str:
+        """
+        Format transaction cost context for AI prompts.
+
+        Args:
+            cost_context: Cost metrics from portfolio memory
+
+        Returns:
+            Formatted cost context string
+        """
+        if not cost_context or not cost_context.get("has_data"):
+            return ""
+
+        sample_size = cost_context.get("sample_size", 0)
+        has_partial = cost_context.get("has_partial_window", False)
+
+        lines = [
+            "=== TRANSACTION COST ANALYSIS ===",
+            f"Data from last {sample_size} trades"
+            + (" (partial window)" if has_partial else ""),
+            "",
+            "Average Transaction Costs:",
+            f"  Total Cost: {cost_context.get('avg_total_cost_pct', 0):.3f}% of position value",
+            f"  - Slippage: {cost_context.get('avg_slippage_pct', 0):.3f}%",
+            f"  - Trading Fees: {cost_context.get('avg_fee_pct', 0):.3f}%",
+            f"  - Bid-Ask Spread: {cost_context.get('avg_spread_pct', 0):.3f}%",
+            "",
+            "Break-Even Requirement:",
+            f"  Price must move {cost_context.get('break_even_requirement', 0):.3f}% in your favor",
+            "  just to cover transaction costs before making any profit.",
+            "",
+            "Cost-Aware Decision Making:",
+            "  - Short-term trades (<1 day) need strong conviction to justify costs",
+            f"  - Minimum expected profit should exceed {cost_context.get('avg_total_cost_pct', 0) * 3:.2f}% (3x costs)",
+            "  - Consider holding period: longer holds amortize costs better",
+            "  - High-frequency trading erodes returns through cumulative costs",
+        ]
+
+        # Add outlier filtering info if available
+        outliers_filtered = cost_context.get("outliers_filtered", 0)
+        if outliers_filtered > 0:
+            lines.append(
+                f"  - Note: {outliers_filtered} outlier trades filtered for accuracy"
+            )
 
         lines.append("=" * 35)
         return "\n".join(lines)

@@ -1,5 +1,4 @@
 import pytest
-
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 

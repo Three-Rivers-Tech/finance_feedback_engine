@@ -65,7 +65,6 @@ def coinbase_platform(coinbase_credentials):
 # =============================================================================
 
 
-@pytest.mark.external_service
 class TestCoinbaseConnectionErrors:
     """Tests for Coinbase platform connection error handling."""
 
@@ -315,7 +314,7 @@ class TestCoinbasePortfolioBreakdown:
         )
 
         with pytest.raises(Exception):
-            platform.get_portfolio_breakdown()
+            coinbase_platform.get_portfolio_breakdown()
 
     def test_get_portfolio_breakdown_futures_error_continues_with_spot(
         self, coinbase_platform, mock_coinbase_client

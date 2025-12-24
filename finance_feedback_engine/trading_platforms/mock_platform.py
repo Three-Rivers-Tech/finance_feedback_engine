@@ -46,12 +46,10 @@ class MockTradingPlatform(BaseTradingPlatform):
 
         # Simulated error rate for tests (0.0 - 1.0)
         self._error_rate = float((credentials or {}).get("error_rate", 0.0))
-        if self._error_rate >= 1.0:
-            # Deterministic failure mode for tests
-            raise RuntimeError("Simulated platform error (error_rate >= 1.0)")
 
         # Initialize balances
         self._balance = initial_balance or {
+            "USD": 5000.0,
             "FUTURES_USD": 10000.0,
             "SPOT_USD": 5000.0,
             "SPOT_USDC": 3000.0,
@@ -125,8 +123,15 @@ class MockTradingPlatform(BaseTradingPlatform):
             - 'SPOT_USD': spot USD balance
             - 'SPOT_USDC': spot USDC balance
         """
+        if self._error_rate >= 1.0:
+            raise RuntimeError("Simulated platform error")
+
         logger.debug("MockPlatform.get_balance() called: %s", self._balance)
-        return self._balance.copy()
+        # Ensure a base currency key exists for callers/tests expecting it.
+        result = self._balance.copy()
+        if "USD" not in result:
+            result["USD"] = float(result.get("SPOT_USD", 0) or 0)
+        return result
 
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -157,6 +162,9 @@ class MockTradingPlatform(BaseTradingPlatform):
             }
         """
         start_time = time.time()
+
+        if self._error_rate >= 1.0:
+            raise RuntimeError("Simulated platform error")
 
         # Extract decision parameters
         action = decision.get("action", "").upper()

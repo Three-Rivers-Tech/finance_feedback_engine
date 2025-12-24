@@ -266,9 +266,7 @@ class TestUnifiedDataProvider:
         provider.oanda = Mock()
 
         # Mock responses (sub-providers return just the candles list, not tuples)
-        provider.alpha_vantage.get_candles = Mock(
-            return_value=[{"close": 150.0}]
-        )
+        provider.alpha_vantage.get_candles = Mock(return_value=[{"close": 150.0}])
         provider.coinbase.get_candles.return_value = [{"close": 50000.0}]
         provider.oanda.get_candles.return_value = [{"close": 1.05}]
 

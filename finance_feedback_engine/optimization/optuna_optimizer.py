@@ -125,7 +125,9 @@ class OptunaOptimizer:
 
         # Run backtest with trial config
         results = self._run_backtest(trial_config)
-        metrics = (results or {}).get("metrics", {}) if isinstance(results, dict) else {}
+        metrics = (
+            (results or {}).get("metrics", {}) if isinstance(results, dict) else {}
+        )
 
         sharpe = float(metrics.get("sharpe_ratio", -10.0) or -10.0)
 
@@ -174,7 +176,9 @@ class OptunaOptimizer:
         decision_engine_cfg = (config or {}).get("decision_engine", {}) or {}
         if isinstance(decision_engine_cfg, dict):
             if "stop_loss_percentage" in decision_engine_cfg:
-                stop_loss_percentage = float(decision_engine_cfg["stop_loss_percentage"])
+                stop_loss_percentage = float(
+                    decision_engine_cfg["stop_loss_percentage"]
+                )
             risk_per_trade = float(decision_engine_cfg.get("risk_per_trade", 0.02))
         else:
             risk_per_trade = 0.02
