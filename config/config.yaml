@@ -1,4 +1,5 @@
-# Finance Feedback Engine 2.0 Configuration
+# Finance Feedback Engine 0.9.9 Configuration
+# Last mile to 1.0 - Consolidated single-source configuration
 
 # ============================================================================
 # CONFIGURATION LOADING PRIORITY (highest to lowest):
@@ -10,6 +11,10 @@
 # - Copy .env.example to .env
 # - Fill in your API keys and settings in .env
 # - .env is automatically git-ignored
+#
+# NOTE (v0.9.9): All configuration is now consolidated here.
+# Separate config files (agent.yaml, telegram.yaml) have been merged
+# into this single source of truth. See 'agent:' and 'telegram:' sections below.
 # ============================================================================
 
 # Alpha Vantage API Configuration

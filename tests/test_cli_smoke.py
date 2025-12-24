@@ -7,7 +7,6 @@ from finance_feedback_engine.cli.commands.agent import monitor, run_agent
 from finance_feedback_engine.cli.main import cli
 
 
-@pytest.mark.external_service
 class TestCLISmoke:
     """Smoke tests for CLI commands to ensure they don't crash."""
 

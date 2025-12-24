@@ -1,4 +1,3 @@
-
 from finance_feedback_engine.decision_engine.ensemble_manager import (
     EnsembleDecisionManager,
 )
@@ -31,6 +30,7 @@ def test_vote_summary_present():
     }
 
     import asyncio
+
     result = asyncio.run(
         em.aggregate_decisions(provider_decisions, failed_providers=[])
     )

@@ -1141,7 +1141,9 @@ class Backtester:
                 num_periods / periods_per_year if periods_per_year > 0 else 0,
             )
         except Exception:
-            duration_years = num_periods / periods_per_year if periods_per_year > 0 else 0
+            duration_years = (
+                num_periods / periods_per_year if periods_per_year > 0 else 0
+            )
 
         calculated_metrics = self._calculate_performance_metrics(
             trades_history,

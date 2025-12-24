@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "finance-feedback-engine-2.0"
-version = "2.0.0"
+version = "0.9.9"
 description = "A sophisticated Python-based trading system designed to provide validation and feedback for financial data processing"
 readme = "README.md"
 authors = [{name = "Three Rivers Tech", email = "dev@threerivers.tech"}]

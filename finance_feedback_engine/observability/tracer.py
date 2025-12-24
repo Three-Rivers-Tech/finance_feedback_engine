@@ -28,7 +28,7 @@ def init_tracer(config: dict) -> None:
             - tracing.jaeger.agent_port: int (default 6831)
             - tracing.otlp.endpoint: str (default http://localhost:4317)
             - service.name: str (default finance_feedback_engine)
-            - service.version: str (default 2.0.0)
+            - service.version: str (default 0.9.9)
     """
     global _tracer_provider, _tracer_initialized
 
@@ -48,7 +48,7 @@ def init_tracer(config: dict) -> None:
     backend = tracing_config.get("backend", "console")
     sample_rate = tracing_config.get("sample_rate", 0.1)
     service_name = config.get("service", {}).get("name", "finance_feedback_engine")
-    service_version = config.get("service", {}).get("version", "2.0.0")
+    service_version = config.get("service", {}).get("version", "0.9.9")
 
     # Create resource
     resource = Resource.create(

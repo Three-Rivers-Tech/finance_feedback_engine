@@ -106,8 +106,7 @@ cp .env.example .env
 # Migration scripts location: see `finance_feedback_engine/persistence/` or `alembic/` directory
 
 # 5. Load seed/fixture data (if applicable)
-# Run any seed scripts: python scripts/load_fixtures.py or similar
-# Check `data/` or `scripts/` directories for available seed data
+# This repo does not require seed scripts for core functionality.
 ```
 
 #### Full Stack Startup

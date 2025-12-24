@@ -21,7 +21,7 @@ from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -66,6 +66,13 @@ class TradeOutcome:
     veto_source: Optional[str] = None
     veto_reason: Optional[str] = None
     veto_correct: Optional[bool] = None
+
+    # Transaction cost breakdown
+    slippage_cost: Optional[float] = None  # Cost due to slippage
+    fee_cost: Optional[float] = None  # Exchange/platform fees
+    spread_cost: Optional[float] = None  # Bid-ask spread cost
+    total_transaction_cost: Optional[float] = None  # Sum of all costs
+    cost_as_pct_of_position: Optional[float] = None  # Cost as % of position value
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -204,8 +211,8 @@ class PortfolioMemoryEngine:
 
     def record_trade_outcome(
         self,
-        decision: Dict[str, Any],
-        exit_price: float,
+        decision: Union[Dict[str, Any], "TradeOutcome"],
+        exit_price: Optional[float] = None,
         exit_timestamp: Optional[str] = None,
         hit_stop_loss: bool = False,
         hit_take_profit: bool = False,
@@ -214,8 +221,8 @@ class PortfolioMemoryEngine:
         Record the outcome of a completed trade.
 
         Args:
-            decision: Original decision dict with entry details
-            exit_price: Price at which position was closed
+            decision: Original decision dict with entry details OR a TradeOutcome object
+            exit_price: Price at which position was closed (required if decision is dict)
             exit_timestamp: When position was closed
             hit_stop_loss: Whether stop loss was triggered
             hit_take_profit: Whether take profit was triggered
@@ -223,6 +230,14 @@ class PortfolioMemoryEngine:
         Returns:
             TradeOutcome object with computed P&L
         """
+        # If already a TradeOutcome, just store it
+        if isinstance(decision, TradeOutcome):
+            outcome = decision
+            if not self._readonly:
+                self.trade_outcomes.append(outcome)
+                self._save_outcome(outcome)
+            return outcome
+
         # Skip recording if in read-only mode (walk-forward test windows)
         if self._readonly:
             logger.debug("Skipping trade outcome recording (read-only mode)")
@@ -1369,6 +1384,266 @@ class PortfolioMemoryEngine:
                     "win_rate": win_rate,
                 }
         return summary
+
+    # ===================================================================
+    # Transaction Cost Analysis
+    # ===================================================================
+
+    def calculate_rolling_cost_averages(
+        self, window: int = 20, exclude_outlier_pct: float = 0.10
+    ) -> Dict[str, Any]:
+        """
+        Calculate rolling average of transaction costs with outlier filtering.
+
+        Uses partial windows from trade #1, filtering top/bottom outliers based on
+        percentile-based trimming to normalize cost data.
+
+        Args:
+            window: Number of recent trades to analyze (default: 20)
+            exclude_outlier_pct: Percentage to trim from top/bottom (default: 0.10 = 10%)
+
+        Returns:
+            Dict with cost statistics:
+                - avg_slippage_pct: Average slippage as % of position
+                - avg_fee_pct: Average fees as % of position
+                - avg_total_cost_pct: Average total cost as % of position
+                - sample_size: Number of trades analyzed
+                - has_partial_window: True if less than window size available
+                - cost_breakdown: Detailed breakdown by cost type
+        """
+        # Filter trades with cost data
+        trades_with_costs = [
+            t
+            for t in self.trade_outcomes
+            if t.total_transaction_cost is not None
+            and t.cost_as_pct_of_position is not None
+        ]
+
+        if not trades_with_costs:
+            return {
+                "avg_slippage_pct": 0.0,
+                "avg_fee_pct": 0.0,
+                "avg_spread_pct": 0.0,
+                "avg_total_cost_pct": 0.0,
+                "sample_size": 0,
+                "has_partial_window": True,
+                "has_data": False,
+            }
+
+        # Use partial window if we don't have enough trades yet
+        recent_trades = (
+            trades_with_costs[-window:]
+            if len(trades_with_costs) >= window
+            else trades_with_costs
+        )
+        sample_size = len(recent_trades)
+        has_partial_window = sample_size < window
+
+        if sample_size == 0:
+            return {
+                "avg_slippage_pct": 0.0,
+                "avg_fee_pct": 0.0,
+                "avg_spread_pct": 0.0,
+                "avg_total_cost_pct": 0.0,
+                "sample_size": 0,
+                "has_partial_window": True,
+                "has_data": False,
+            }
+
+        # Extract cost percentages
+        cost_pcts = [
+            t.cost_as_pct_of_position
+            for t in recent_trades
+            if t.cost_as_pct_of_position is not None
+        ]
+        slippage_costs = [t.slippage_cost or 0.0 for t in recent_trades]
+        fee_costs = [t.fee_cost or 0.0 for t in recent_trades]
+        spread_costs = [t.spread_cost or 0.0 for t in recent_trades]
+        position_sizes = [
+            (
+                abs(t.position_size * t.entry_price)
+                if t.position_size and t.entry_price
+                else 1.0
+            )
+            for t in recent_trades
+        ]
+
+        # Filter outliers if we have enough data
+        if len(cost_pcts) >= 10 and exclude_outlier_pct > 0:
+            # Calculate percentiles
+            lower_pct = exclude_outlier_pct * 100
+            upper_pct = (1 - exclude_outlier_pct) * 100
+            lower_bound = np.percentile(cost_pcts, lower_pct)
+            upper_bound = np.percentile(cost_pcts, upper_pct)
+
+            # Filter trades within bounds
+            filtered_indices = [
+                i
+                for i, cost in enumerate(cost_pcts)
+                if lower_bound <= cost <= upper_bound
+            ]
+
+            if filtered_indices:
+                cost_pcts = [cost_pcts[i] for i in filtered_indices]
+                slippage_costs = [slippage_costs[i] for i in filtered_indices]
+                fee_costs = [fee_costs[i] for i in filtered_indices]
+                spread_costs = [spread_costs[i] for i in filtered_indices]
+                position_sizes = [position_sizes[i] for i in filtered_indices]
+
+        # Calculate averages
+        avg_total_cost_pct = float(np.mean(cost_pcts)) if cost_pcts else 0.0
+
+        # Calculate component percentages
+        avg_slippage_pct = 0.0
+        avg_fee_pct = 0.0
+        avg_spread_pct = 0.0
+
+        if position_sizes:
+            total_positions = sum(position_sizes)
+            if total_positions > 0:
+                avg_slippage_pct = sum(slippage_costs) / total_positions * 100
+                avg_fee_pct = sum(fee_costs) / total_positions * 100
+                avg_spread_pct = sum(spread_costs) / total_positions * 100
+
+        return {
+            "avg_slippage_pct": avg_slippage_pct,
+            "avg_fee_pct": avg_fee_pct,
+            "avg_spread_pct": avg_spread_pct,
+            "avg_total_cost_pct": avg_total_cost_pct,
+            "sample_size": len(cost_pcts),
+            "original_sample_size": sample_size,
+            "outliers_filtered": sample_size - len(cost_pcts),
+            "has_partial_window": has_partial_window,
+            "has_data": True,
+            "break_even_requirement": avg_total_cost_pct,  # Price must move this much to break even
+        }
+
+    # ===================================================================
+    # Kelly Criterion Activation
+    # ===================================================================
+
+    def check_kelly_activation_criteria(self, window: int = 50) -> Dict[str, Any]:
+        """
+        Check if Kelly Criterion should be activated based on profit factor stability.
+
+        Uses single rolling window analysis with PF >= 1.2 and std < 0.15 thresholds.
+        Only checks at 20-trade review intervals for consistency.
+
+        Args:
+            window: Rolling window size for analysis (default: 50 trades)
+
+        Returns:
+            Dict with activation status:
+                - should_activate: Boolean indicating if Kelly should be enabled
+                - current_pf: Current profit factor
+                - pf_std: Standard deviation of rolling profit factors
+                - trades_analyzed: Number of trades in analysis
+                - trades_needed: Trades needed if not ready
+                - confidence: Confidence level (low/medium/high)
+        """
+        if len(self.trade_outcomes) < window:
+            return {
+                "should_activate": False,
+                "reason": "insufficient_data",
+                "current_pf": 0.0,
+                "pf_std": 0.0,
+                "trades_analyzed": len(self.trade_outcomes),
+                "trades_needed": window - len(self.trade_outcomes),
+                "confidence": "low",
+            }
+
+        # Use the most recent window of trades
+        recent_trades = self.trade_outcomes[-window:]
+
+        # Calculate profit factor
+        winning_trades = [t for t in recent_trades if t.was_profitable]
+        losing_trades = [t for t in recent_trades if not t.was_profitable]
+
+        if not losing_trades:
+            # All wins - profit factor is infinite, but we need losses to validate
+            return {
+                "should_activate": False,
+                "reason": "no_losing_trades",
+                "current_pf": float("inf"),
+                "pf_std": 0.0,
+                "trades_analyzed": len(recent_trades),
+                "confidence": "low",
+            }
+
+        total_wins = sum(t.realized_pnl or 0 for t in winning_trades)
+        total_losses = sum(abs(t.realized_pnl or 0) for t in losing_trades)
+
+        if total_losses == 0:
+            current_pf = float("inf")
+        else:
+            current_pf = total_wins / total_losses
+
+        # Calculate rolling profit factors to assess stability
+        rolling_pfs = []
+        min_sub_window = 20  # Minimum trades for sub-window calculation
+
+        for i in range(min_sub_window, len(recent_trades) + 1):
+            subset = recent_trades[i - min_sub_window : i]
+            wins = [t for t in subset if t.was_profitable]
+            losses = [t for t in subset if not t.was_profitable]
+
+            if losses:
+                sub_wins = sum(t.realized_pnl or 0 for t in wins)
+                sub_losses = sum(abs(t.realized_pnl or 0) for t in losses)
+                if sub_losses > 0:
+                    rolling_pfs.append(sub_wins / sub_losses)
+
+        # Calculate stability (standard deviation)
+        if len(rolling_pfs) < 3:
+            pf_std = float("inf")
+        else:
+            pf_std = float(np.std(rolling_pfs))
+
+        # Check activation criteria
+        pf_threshold = 1.2
+        std_threshold = 0.15
+
+        should_activate = current_pf >= pf_threshold and pf_std < std_threshold
+
+        # Determine confidence
+        if current_pf >= 1.5 and pf_std < 0.10:
+            confidence = "high"
+        elif current_pf >= 1.2 and pf_std < 0.15:
+            confidence = "medium"
+        else:
+            confidence = "low"
+
+        result = {
+            "should_activate": should_activate,
+            "current_pf": current_pf,
+            "pf_std": pf_std,
+            "pf_threshold": pf_threshold,
+            "std_threshold": std_threshold,
+            "trades_analyzed": len(recent_trades),
+            "confidence": confidence,
+            "win_rate": (
+                len(winning_trades) / len(recent_trades) if recent_trades else 0
+            ),
+            "rolling_pf_count": len(rolling_pfs),
+        }
+
+        if should_activate:
+            result["reason"] = (
+                f"PF {current_pf:.2f} >= {pf_threshold}, std {pf_std:.3f} < {std_threshold}"
+            )
+            logger.info(f"Kelly Criterion activation criteria MET: {result['reason']}")
+        else:
+            reasons = []
+            if current_pf < pf_threshold:
+                reasons.append(f"PF {current_pf:.2f} < {pf_threshold}")
+            if pf_std >= std_threshold:
+                reasons.append(f"std {pf_std:.3f} >= {std_threshold}")
+            result["reason"] = "; ".join(reasons)
+            logger.debug(
+                f"Kelly Criterion activation criteria not met: {result['reason']}"
+            )
+
+        return result
 
     # ===================================================================
     # Persistence

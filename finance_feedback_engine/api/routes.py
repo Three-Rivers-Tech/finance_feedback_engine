@@ -506,14 +506,60 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
     Returns:
         Portfolio balance, active positions, recent performance
     """
-    status_data = {"balance": None, "active_positions": 0, "platform": None}
+    status_data = {
+        "balance": None,
+        "active_positions": 0,
+        "max_concurrent_trades": 2,
+        "platform": None,
+    }
 
     try:
-        # Get balance from trading platform
+        # Get balance and active positions from trading platform
         if hasattr(engine, "trading_platform") and engine.trading_platform:
             balance_info = engine.trading_platform.get_balance()
-            status_data["balance"] = balance_info
+            # Normalize balance to a canonical shape expected by frontend
+            total = None
+            try:
+                total = float(balance_info.get("total"))
+            except Exception:
+                pass
+            if total is None:
+                try:
+                    total = sum(
+                        float(v)
+                        for v in balance_info.values()
+                        if isinstance(v, (int, float))
+                    )
+                except Exception:
+                    total = 0.0
+            status_data["balance"] = {
+                "total": total,
+                "available": total,
+                "currency": "USD",
+            }
             status_data["platform"] = engine.trading_platform.__class__.__name__
+
+            # Active positions count via standardized interface
+            if hasattr(engine.trading_platform, "get_active_positions"):
+                try:
+                    positions_resp = engine.trading_platform.get_active_positions()
+                    positions_list = positions_resp.get("positions", [])
+                    status_data["active_positions"] = len(positions_list)
+                except Exception:
+                    status_data["active_positions"] = 0
+
+            # Get max concurrent trades from config or trade monitor
+            if hasattr(engine, "trade_monitor") and engine.trade_monitor:
+                from ..monitoring.trade_monitor import TradeMonitor
+
+                status_data["max_concurrent_trades"] = (
+                    TradeMonitor.MAX_CONCURRENT_TRADES
+                )
+            else:
+                # Fallback to config or default of 2
+                status_data["max_concurrent_trades"] = engine.config.get(
+                    "agent", {}
+                ).get("max_concurrent_trades", 2)
 
         return status_data
 
@@ -633,7 +679,9 @@ async def handle_alert_webhook(payload: AlertmanagerWebhook, request: Request):
                     alerts_sent += 1
                     logger.info(f"Alert sent to Telegram: {alertname}")
                 except Exception as e:
-                    logger.warning(f"Failed to send alert to Telegram: {alertname} - {e}")
+                    logger.warning(
+                        f"Failed to send alert to Telegram: {alertname} - {e}"
+                    )
             else:
                 # Log alert when Telegram is unavailable
                 logger.info(f"Alert (Telegram unavailable): {alertname} - {message}")
@@ -758,7 +806,9 @@ async def submit_trace(
             current_time = time.time()
             # Clean old entries (older than 60 seconds)
             submit_trace._trace_counts[user_id_pseudonym] = [
-                t for t in submit_trace._trace_counts[user_id_pseudonym] if current_time - t < 60
+                t
+                for t in submit_trace._trace_counts[user_id_pseudonym]
+                if current_time - t < 60
             ]
 
             # Check if user exceeded limit

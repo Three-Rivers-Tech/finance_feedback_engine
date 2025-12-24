@@ -16,6 +16,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 try:
     from opentelemetry import trace
+
     tracer = trace.get_tracer(__name__)
 except ImportError:
     tracer = None
@@ -463,8 +464,12 @@ class EnsembleDecisionManager:
         if tracer:
             cur = trace.get_current_span()
             cur.set_attribute("ensemble.fallback_tier", fallback_tier)
-            cur.set_attribute("ensemble.agreement_score", float(ensemble_metadata["agreement_score"]))
-            cur.set_attribute("ensemble.confidence", int(final_decision.get("confidence", 0)))
+            cur.set_attribute(
+                "ensemble.agreement_score", float(ensemble_metadata["agreement_score"])
+            )
+            cur.set_attribute(
+                "ensemble.confidence", int(final_decision.get("confidence", 0))
+            )
             span_cm.__exit__(None, None, None)
         return final_decision
 

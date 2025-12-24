@@ -103,7 +103,9 @@ class TestOptunaOptimizer:
         trial.suggest_categorical.return_value = "weighted"
 
         with patch.object(
-            optimizer, "_run_backtest", return_value={"metrics": {"sharpe_ratio": 1.5}, "trades": []}
+            optimizer,
+            "_run_backtest",
+            return_value={"metrics": {"sharpe_ratio": 1.5}, "trades": []},
         ):
             optimizer.objective(trial)
 

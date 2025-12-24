@@ -66,9 +66,7 @@ class TestHistoricalDataProvider:
         assert provider.validator is not None
         assert provider.data_store is not None
 
-    @patch(
-        "finance_feedback_engine.data_providers.historical_data_provider.asyncio.run"
-    )
+    @patch("asyncio.run")
     def test_fetch_raw_data(
         self, mock_asyncio_run, mock_alpha_vantage, tmp_path, sample_ohlcv_data
     ):
@@ -114,9 +112,7 @@ class TestHistoricalDataProvider:
         )
         assert isinstance(df.index, pd.DatetimeIndex)
 
-    @patch(
-        "finance_feedback_engine.data_providers.historical_data_provider.asyncio.run"
-    )
+    @patch("asyncio.run")
     def test_fetch_raw_data_caching(
         self, mock_asyncio_run, mock_alpha_vantage, tmp_path
     ):
@@ -499,9 +495,7 @@ class TestHistoricalDataProviderIntegration:
             api_key="test_api_key", cache_dir=str(cache_dir)
         )
 
-        with patch(
-            "finance_feedback_engine.data_providers.historical_data_provider.asyncio.run"
-        ) as mock_run:
+        with patch("asyncio.run") as mock_run:
             # Mock API response
             candles = [
                 {
@@ -539,9 +533,7 @@ class TestHistoricalDataProviderIntegration:
             api_key="test_api_key", cache_dir=str(cache_dir)
         )
 
-        with patch(
-            "finance_feedback_engine.data_providers.historical_data_provider.asyncio.run"
-        ) as mock_run:
+        with patch("asyncio.run") as mock_run:
             candles = [
                 {
                     "date": "2024-01-01T00:00:00Z",

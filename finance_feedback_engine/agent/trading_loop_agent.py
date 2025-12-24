@@ -7,7 +7,7 @@ import queue
 import time
 from enum import Enum, auto
 
-from opentelemetry import trace, metrics
+from opentelemetry import metrics, trace
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
@@ -106,12 +106,19 @@ class TradingLoopAgent:
         # Dashboard event queue for real-time updates
         import queue
 
-        self._dashboard_event_queue = queue.Queue(maxsize=100)
+        self._dashboard_event_queue = queue.Queue(
+            maxsize=100
+        )  # Dashboard event queue with reasonable limit
         self._cycle_count = 0
         self._start_time = None  # Will be set in run()
 
         # Property for dashboard to track if stop was requested
         self.stop_requested = False
+
+        # Batch review tracking (every 20 trades)
+        self._batch_review_counter = 0
+        self._kelly_activated = False
+        self._last_batch_review_time = None
 
         # Validate notification delivery path on startup
         notification_valid, notification_errors = self._validate_notification_config()
@@ -239,20 +246,38 @@ class TradingLoopAgent:
 
                 # Check if this is UnifiedTradingPlatform (has platform_breakdowns)
                 if "platform_breakdowns" in portfolio:
-                    logger.info(f"Using unified platform breakdown with {len(portfolio['platform_breakdowns'])} platforms")
+                    logger.info(
+                        f"Using unified platform breakdown with {len(portfolio['platform_breakdowns'])} platforms"
+                    )
                     for platform_name, platform_data in portfolio[
                         "platform_breakdowns"
                     ].items():
-                        logger.info(f"Processing platform: {platform_name}, keys: {list(platform_data.keys())}")
+                        logger.info(
+                            f"Processing platform: {platform_name}, keys: {list(platform_data.keys())}"
+                        )
                         # Coinbase futures positions
                         if "futures_positions" in platform_data:
-                            fps = platform_data['futures_positions']
-                            logger.info(f"{platform_name} has {len(fps)} futures_positions: {fps}")
-                            logger.debug(f"Processing {len(fps)} futures positions from {platform_name}")
-                            for idx, pos in enumerate(platform_data["futures_positions"]):
+                            fps = platform_data["futures_positions"]
+                            logger.info(
+                                f"{platform_name} has {len(fps)} futures_positions: {fps}"
+                            )
+                            logger.debug(
+                                f"Processing {len(fps)} futures positions from {platform_name}"
+                            )
+                            for idx, pos in enumerate(
+                                platform_data["futures_positions"]
+                            ):
                                 # Handle both dict and PositionInfo objects
-                                contracts = pos.get("contracts", 0) if isinstance(pos, dict) else getattr(pos, "contracts", 0)
-                                units = pos.get("units", 0) if isinstance(pos, dict) else getattr(pos, "units", 0)
+                                contracts = (
+                                    pos.get("contracts", 0)
+                                    if isinstance(pos, dict)
+                                    else getattr(pos, "contracts", 0)
+                                )
+                                units = (
+                                    pos.get("units", 0)
+                                    if isinstance(pos, dict)
+                                    else getattr(pos, "units", 0)
+                                )
 
                                 # Use units if contracts is zero (units can be negative for SHORT)
                                 if contracts and float(contracts) != 0:
@@ -260,31 +285,73 @@ class TradingLoopAgent:
                                 else:
                                     size = abs(float(units))
 
-                                logger.debug(f"{platform_name} position {idx}: contracts={contracts}, units={units}, size={size}")
+                                logger.debug(
+                                    f"{platform_name} position {idx}: contracts={contracts}, units={units}, size={size}"
+                                )
 
                                 # Position is active if it has non-zero size OR has unrealized P&L
-                                unrealized_pnl = pos.get("unrealized_pnl", 0) if isinstance(pos, dict) else getattr(pos, "unrealized_pnl", 0)
+                                unrealized_pnl = (
+                                    pos.get("unrealized_pnl", 0)
+                                    if isinstance(pos, dict)
+                                    else getattr(pos, "unrealized_pnl", 0)
+                                )
                                 has_pnl = unrealized_pnl and float(unrealized_pnl) != 0
 
                                 # If size is reported as 0 but has P&L, infer size from P&L and price
                                 if size == 0 and has_pnl:
-                                    entry_price_val = pos.get("entry_price", 0) if isinstance(pos, dict) else getattr(pos, "entry_price", 0)
-                                    current_price_val = pos.get("current_price", 0) if isinstance(pos, dict) else getattr(pos, "current_price", 0)
+                                    entry_price_val = (
+                                        pos.get("entry_price", 0)
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "entry_price", 0)
+                                    )
+                                    current_price_val = (
+                                        pos.get("current_price", 0)
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "current_price", 0)
+                                    )
                                     if entry_price_val and current_price_val:
                                         # Estimate size from P&L: size = PnL / (current - entry)
-                                        price_diff = float(current_price_val) - float(entry_price_val)
+                                        price_diff = float(current_price_val) - float(
+                                            entry_price_val
+                                        )
                                         if abs(price_diff) > 0.01:
-                                            size = abs(float(unrealized_pnl) / price_diff)
-                                            logger.info(f"Inferred size {size} from P&L for {platform_name} position")
+                                            size = abs(
+                                                float(unrealized_pnl) / price_diff
+                                            )
+                                            logger.info(
+                                                f"Inferred size {size} from P&L for {platform_name} position"
+                                            )
 
                                 if size != 0 or has_pnl:
-                                    product_id = pos.get("product_id", "UNKNOWN") if isinstance(pos, dict) else getattr(pos, "product_id", "UNKNOWN")
-                                    side = pos.get("side", "UNKNOWN") if isinstance(pos, dict) else getattr(pos, "side", "UNKNOWN")
-                                    entry_price = pos.get("entry_price", 0) if isinstance(pos, dict) else getattr(pos, "entry_price", 0)
-                                    current_price = pos.get("current_price", 0) if isinstance(pos, dict) else getattr(pos, "current_price", 0)
-                                    leverage = pos.get("leverage", 1) if isinstance(pos, dict) else getattr(pos, "leverage", 1)
+                                    product_id = (
+                                        pos.get("product_id", "UNKNOWN")
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "product_id", "UNKNOWN")
+                                    )
+                                    side = (
+                                        pos.get("side", "UNKNOWN")
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "side", "UNKNOWN")
+                                    )
+                                    entry_price = (
+                                        pos.get("entry_price", 0)
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "entry_price", 0)
+                                    )
+                                    current_price = (
+                                        pos.get("current_price", 0)
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "current_price", 0)
+                                    )
+                                    leverage = (
+                                        pos.get("leverage", 1)
+                                        if isinstance(pos, dict)
+                                        else getattr(pos, "leverage", 1)
+                                    )
 
-                                    logger.info(f"Recovered {platform_name} futures position: {product_id} {side} size={size}")
+                                    logger.info(
+                                        f"Recovered {platform_name} futures position: {product_id} {side} size={size}"
+                                    )
 
                                     positions.append(
                                         {
@@ -299,7 +366,9 @@ class TradingLoopAgent:
                                         }
                                     )
                                 else:
-                                    logger.debug(f"Skipping {platform_name} position {idx} with zero size")
+                                    logger.debug(
+                                        f"Skipping {platform_name} position {idx} with zero size"
+                                    )
 
                         # Oanda forex positions
                         if "positions" in platform_data:
@@ -510,7 +579,8 @@ class TradingLoopAgent:
             # Block until position recovery completes
             try:
                 await asyncio.wait_for(
-                    self._recover_existing_positions(), timeout=60.0  # 60 second timeout
+                    self._recover_existing_positions(),
+                    timeout=60.0,  # 60 second timeout
                 )
             except asyncio.TimeoutError:
                 logger.error(
@@ -526,7 +596,9 @@ class TradingLoopAgent:
                     cycle_successful = await self.process_cycle()
 
                     if not cycle_successful:
-                        logger.warning("Cycle execution failed, backing off before retry")
+                        logger.warning(
+                            "Cycle execution failed, backing off before retry"
+                        )
                         await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
                     else:
                         # Increment cycle counter for dashboard
@@ -590,8 +662,11 @@ class TradingLoopAgent:
             try:
                 self._dashboard_event_queue.put_nowait(event)
             except queue.Full:
-                # Queue is full - log and drop event
-                logger.warning("Dashboard event queue is full, dropping event")
+                # Queue is full - log with size info and drop event
+                queue_size = self._dashboard_event_queue.qsize()
+                logger.warning(
+                    f"Dashboard event queue is full ({queue_size} events), dropping event. Consider increasing maxsize or processing events faster."
+                )
             except Exception as e:
                 # Other exception during queue operation - log it
                 logger.warning(f"Failed to emit dashboard event: {e}")
@@ -711,7 +786,7 @@ class TradingLoopAgent:
         """
         logger.info("State: REASONING - Running DecisionEngine...")
 
-        MAX_RETRIES = 3
+        MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
 
         # --- Cleanup expired entries from rejection cache ---
         self._cleanup_rejected_cache()
@@ -756,10 +831,29 @@ class TradingLoopAgent:
             try:
                 logger.debug(f"Analyzing {asset_pair} (with timeout)...")
 
-                # Wrap the analysis with a timeout to prevent blocking
+                analyze_fn = getattr(self.engine, "analyze_asset", None)
+                analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
+
+                if callable(analyze_fn):
+                    analysis_result = analyze_fn(asset_pair)
+                elif callable(analyze_async_fn):
+                    analysis_result = analyze_async_fn(asset_pair)
+                else:
+                    raise AttributeError(
+                        "Engine must implement analyze_asset() or analyze_asset_async()"
+                    )
+
+                # Wrap with a timeout to prevent blocking
+                import inspect
+
+                if inspect.isawaitable(analysis_result):
+                    analysis_awaitable = analysis_result
+                else:
+                    analysis_awaitable = asyncio.sleep(0, result=analysis_result)
+
                 decision = await asyncio.wait_for(
-                    self.engine.analyze_asset_async(asset_pair),
-                    timeout=60,  # Timeout after 60 seconds
+                    analysis_awaitable,
+                    timeout=90,  # Timeout after 90 seconds
                 )
 
                 # Reset failure count and timestamp on success
@@ -1279,8 +1373,137 @@ class TradingLoopAgent:
                 f"Updated performance metrics: P&L=${realized_pnl:.2f}, Total=${self._performance_metrics['total_pnl']:.2f}"
             )
 
+            # Check if batch review should be triggered (every 20 trades)
+            self._batch_review_counter += 1
+            if self._batch_review_counter % 20 == 0:
+                self._perform_batch_review()
+
         except Exception as e:
             logger.error(f"Error updating performance metrics: {e}", exc_info=True)
+
+    def _perform_batch_review(self) -> None:
+        """
+        Perform batch review every 20 trades:
+        1. Recalculate rolling cost averages
+        2. Check Kelly activation criteria
+        3. Log performance trends and recommendations
+        """
+        import datetime
+
+        batch_number = self._batch_review_counter // 20
+        logger.info(f"\n{'='*60}")
+        logger.info(
+            f"BATCH REVIEW #{batch_number} (After {self._batch_review_counter} trades)"
+        )
+        logger.info(f"{'='*60}")
+
+        try:
+            # 1. Recalculate rolling cost averages
+            cost_stats = self.portfolio_memory.calculate_rolling_cost_averages(
+                window=20, exclude_outlier_pct=0.10
+            )
+
+            if cost_stats.get("has_data"):
+                logger.info(
+                    f"Transaction Costs (20-trade avg): {cost_stats.get('avg_total_cost_pct', 0):.3f}% per position"
+                )
+                logger.info(
+                    f"  - Slippage: {cost_stats.get('avg_slippage_pct', 0):.3f}%"
+                )
+                logger.info(f"  - Fees: {cost_stats.get('avg_fee_pct', 0):.3f}%")
+                logger.info(f"  - Spread: {cost_stats.get('avg_spread_pct', 0):.3f}%")
+                logger.info(
+                    f"  - Sample size: {cost_stats.get('sample_size', 0)} trades ({cost_stats.get('outliers_filtered', 0)} outliers filtered)"
+                )
+            else:
+                logger.info(
+                    "Transaction Costs: Insufficient data (<20 trades with cost info)"
+                )
+
+            # 2. Check Kelly activation criteria (requires 50+ trades)
+            if self._performance_metrics["total_trades"] >= 50:
+                kelly_check = self.portfolio_memory.check_kelly_activation_criteria(
+                    window=50
+                )
+
+                previous_status = self._kelly_activated
+                should_activate = kelly_check.get("should_activate_kelly", False)
+                self._kelly_activated = should_activate
+
+                logger.info(
+                    f"\nKelly Criterion Status: {'ACTIVATED' if should_activate else 'NOT ACTIVATED'}"
+                )
+                logger.info(
+                    f"  - Profit Factor: {kelly_check.get('avg_pf', 0):.3f} (threshold: 1.20)"
+                )
+                logger.info(
+                    f"  - PF Stability (std): {kelly_check.get('pf_std', 0):.3f} (threshold: 0.15)"
+                )
+                logger.info(f"  - Window: {kelly_check.get('actual_window', 0)} trades")
+
+                if should_activate and not previous_status:
+                    logger.info(
+                        "\n🎯 Kelly Criterion NEWLY ACTIVATED! Position sizing will use Quarter Kelly (0.25) with adaptive scaling to Half Kelly (0.5)."
+                    )
+                elif not should_activate and previous_status:
+                    logger.warning(
+                        "\n⚠️  Kelly Criterion DEACTIVATED due to instability. Reverting to 2% fixed risk."
+                    )
+
+                # Recommendation based on stability
+                if kelly_check.get("avg_pf", 0) >= 1.20:
+                    if kelly_check.get("pf_std", 1.0) < 0.10:
+                        logger.info(
+                            "Recommendation: Excellent stability. Consider scaling to Half Kelly (0.50)."
+                        )
+                    elif kelly_check.get("pf_std", 1.0) < 0.15:
+                        logger.info(
+                            "Recommendation: Good stability. Maintain Quarter Kelly (0.25)."
+                        )
+                    else:
+                        logger.info(
+                            "Recommendation: Borderline stability. Keep Quarter Kelly and monitor."
+                        )
+            else:
+                remaining_trades = 50 - self._performance_metrics["total_trades"]
+                logger.info(
+                    f"\nKelly Criterion Status: BOOTSTRAP PERIOD ({remaining_trades} trades until eligibility)"
+                )
+                logger.info(
+                    "  Using platform-specific fixed sizing until 50-trade threshold."
+                )
+
+            # 3. Performance trend analysis
+            win_rate = self._performance_metrics.get("win_rate", 0)
+            avg_win = self._performance_metrics.get("avg_win", 0)
+            avg_loss = self._performance_metrics.get("avg_loss", 0)
+            profit_factor = (
+                (avg_win * win_rate / 100) / (avg_loss * (1 - win_rate / 100))
+                if avg_loss > 0 and win_rate < 100
+                else float("inf")
+            )
+
+            logger.info("\nPerformance Summary:")
+            logger.info(
+                f"  - Total Trades: {self._performance_metrics['total_trades']}"
+            )
+            logger.info(f"  - Win Rate: {win_rate:.1f}%")
+            logger.info(
+                f"  - Profit Factor: {profit_factor:.2f}"
+                if profit_factor != float("inf")
+                else "  - Profit Factor: ∞ (no losses)"
+            )
+            logger.info(f"  - Total P&L: ${self._performance_metrics['total_pnl']:.2f}")
+            logger.info(
+                f"  - Current Streak: {self._performance_metrics['current_streak']}"
+            )
+
+            # Store batch review timestamp
+            self._last_batch_review_time = datetime.datetime.now()
+            logger.info(f"\n{'='*60}\n")
+
+        except Exception as e:
+            logger.error(f"Error during batch review: {e}", exc_info=True)
 
     def get_performance_summary(self) -> dict[str, any]:
         """
@@ -1418,9 +1641,13 @@ class TradingLoopAgent:
                 ):
                     handler = self.state_handlers.get(self.state)
                     if handler:
-                        cycle_span.add_event("state_handler_start", {"state": self.state.name})
+                        cycle_span.add_event(
+                            "state_handler_start", {"state": self.state.name}
+                        )
                         await handler()
-                        cycle_span.add_event("state_handler_end", {"state": self.state.name})
+                        cycle_span.add_event(
+                            "state_handler_end", {"state": self.state.name}
+                        )
                     else:
                         logger.error(f"No handler found for state {self.state}")
                         return False
