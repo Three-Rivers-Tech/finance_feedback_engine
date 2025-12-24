@@ -36,9 +36,9 @@ export const RecentDecisions: React.FC = () => {
         Recent AI Decisions
       </h2>
       <div className="space-y-4">
-        {decisions.map((decision) => (
+        {decisions.map((decision, index) => (
           <div
-            key={decision.decision_id}
+            key={decision.decision_id || `decision-${index}`}
             className="border-l-3 border-border-primary pl-4 hover:border-accent-cyan transition-colors"
           >
             <div className="flex items-start justify-between gap-4">

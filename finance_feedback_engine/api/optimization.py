@@ -1,5 +1,6 @@
 """API endpoints for Optuna optimization and experimentation."""
 
+import asyncio
 import json
 import logging
 import re
@@ -128,10 +129,6 @@ async def run_experiment(request: ExperimentRequest, engine=Depends(get_engine))
                 optimize_weights=request.optimize_weights,
                 multi_objective=request.multi_objective,
             )
-
-import asyncio
-
-# ... earlier in file ...
 
             study = await asyncio.to_thread(
                 optimizer.optimize,
