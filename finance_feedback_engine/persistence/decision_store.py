@@ -122,6 +122,22 @@ class DecisionStore:
         logger.info(f"Retrieved {len(decisions)} decisions")
         return decisions
 
+    def get_recent_decisions(
+        self, limit: int = 10, asset_pair: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Convenience wrapper for retrieving most recent decisions.
+
+        Args:
+            limit: Maximum number of decisions to return
+            asset_pair: Optional filter by asset pair
+
+        Returns:
+            List of decisions (most recent first)
+        """
+
+        return self.get_decisions(asset_pair=asset_pair, limit=limit)
+
     def update_decision(self, decision: Dict[str, Any]) -> None:
         """
         Update an existing decision.

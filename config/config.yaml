@@ -70,17 +70,17 @@ platform_credentials:
 # If present, these take precedence for unified data access.
 providers:
   alpha_vantage:
-    api_key: "${alpha_vantage_api_key}"
+    api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
   coinbase:
     credentials:
-      api_key: "${platform_credentials.api_key}"
-      api_secret: "${platform_credentials.api_secret}"
-      use_sandbox: ${platform_credentials.use_sandbox}
+      api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
+      api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
+      use_sandbox: false
   oanda:
     credentials:
-      api_key: "${platform_credentials.api_key}"
-      account_id: "${platform_credentials.account_id}"
-      environment: "${platform_credentials.environment}"
+      api_key: "${OANDA_API_KEY:YOUR_OANDA_API_KEY}"
+      account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
+      environment: "${OANDA_ENVIRONMENT:practice}"
 
 # ============================================
 # Multi-Platform Configuration (Advanced)
