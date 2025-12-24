@@ -1,12 +1,15 @@
 """Alpha Vantage data provider module."""
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 
+from ..observability.context import get_trace_headers
+from ..observability.metrics import create_histograms, get_meter
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from ..utils.rate_limiter import RateLimiter
 
@@ -81,6 +84,10 @@ class AlphaVantageProvider:
             expected_exception=aiohttp.ClientError,
             name="AlphaVantage-API",
         )
+
+        # Initialize Prometheus metrics
+        self._meter = get_meter(__name__)
+        self._metrics = create_histograms(self._meter)
 
         logger.info(
             "Alpha Vantage provider initialized with timeouts: "
@@ -232,12 +239,32 @@ class AlphaVantageProvider:
         # Initialize RetryClient bound to an existing session
         # CRITICAL FIX: Do NOT close RetryClient as it closes the underlying session
         client = RetryClient(client_session=self.session, retry_options=retry)
+
+        # Add correlation ID headers for distributed tracing
+        headers = get_trace_headers()
+
+        # Track API latency
+        start_time = time.time()
+
         try:
             async with client.get(
-                self.BASE_URL, params=params, timeout=timeout
+                self.BASE_URL, params=params, timeout=timeout, headers=headers
             ) as resp:
                 resp.raise_for_status()
-                return await resp.json()
+                result = await resp.json()
+
+                # Record latency metric
+                latency = time.time() - start_time
+                asset_type = (
+                    "crypto"
+                    if params.get("function", "").startswith("CRYPTO")
+                    else "forex"
+                )
+                self._metrics["ffe_provider_query_latency_seconds"].record(
+                    latency, {"provider": "alpha_vantage", "asset_type": asset_type}
+                )
+
+                return result
         finally:
             # DO NOT close the client - it would close our shared session
             # await client.close()  # REMOVED - this was closing the shared session

@@ -16,7 +16,6 @@ Tests designed to achieve >55% coverage of trading_loop_agent.py (1,445 LOC).
 
 import asyncio
 import datetime
-import queue
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest

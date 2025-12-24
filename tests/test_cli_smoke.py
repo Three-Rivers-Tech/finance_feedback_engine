@@ -4,15 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from finance_feedback_engine.cli.commands.agent import monitor, run_agent
-from finance_feedback_engine.cli.commands.analysis import analyze, history
-from finance_feedback_engine.cli.commands.backtest import (
-    backtest,
-    monte_carlo,
-    portfolio_backtest,
-    walk_forward,
-)
-from finance_feedback_engine.cli.commands.trading import balance, execute
-from finance_feedback_engine.cli.main import cli, dashboard, positions, status
+from finance_feedback_engine.cli.main import cli
 
 
 @pytest.mark.external_service

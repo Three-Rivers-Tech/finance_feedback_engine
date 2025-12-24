@@ -1,6 +1,5 @@
 """Tests for TimeframeAggregator indicator calculations."""
 
-import sys
 from unittest.mock import Mock
 
 import pytest

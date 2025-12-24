@@ -93,17 +93,22 @@ async def lifespan(app: FastAPI):
         # Initialize tracing and metrics
         try:
             from finance_feedback_engine.observability import (
-                init_tracer,
                 init_metrics_from_config,
+                init_tracer,
             )
+
             init_tracer(config.get("observability", {}))
             init_metrics_from_config(config.get("observability", {}))
             logger.info("✅ Tracing and metrics initialized")
 
             # Attach OTel trace context filter to root logger
             try:
-                from finance_feedback_engine.observability.context import OTelContextFilter
                 import logging
+
+                from finance_feedback_engine.observability.context import (
+                    OTelContextFilter,
+                )
+
                 logging.getLogger().addFilter(OTelContextFilter())
                 logger.info("✅ OTel context filter attached to logger")
             except Exception:
@@ -214,6 +219,8 @@ else:
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:5173",
     ]
 
 app.add_middleware(
@@ -233,6 +240,7 @@ app.add_middleware(
 )
 
 from .bot_control import bot_control_router
+from .optimization import router as optimization_router
 
 # Import and include routers
 from .routes import (
@@ -249,6 +257,7 @@ app.include_router(telegram_router, prefix="/webhook", tags=["telegram"])
 app.include_router(decisions_router, prefix="/api/v1", tags=["decisions"])
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
 app.include_router(bot_control_router, tags=["bot-control"])
+app.include_router(optimization_router, tags=["optimization"])
 
 
 @app.get("/")

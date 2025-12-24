@@ -3,6 +3,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
+from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,12 @@ class OandaPlatform(BaseTradingPlatform):
                 self._client = API(
                     access_token=self.api_key, environment=self.environment
                 )
+
+                # Inject correlation ID headers if client has requests session
+                if hasattr(self._client, "session"):
+                    trace_headers = get_trace_headers()
+                    self._client.session.headers.update(trace_headers)
+
                 logger.info("Oanda API client initialized")
             except ImportError:
                 logger.warning(

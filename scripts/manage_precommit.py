@@ -7,11 +7,9 @@ Helps gradually tighten pre-commit hooks without disrupting development.
 import argparse
 import shutil
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 
-import yaml
 
 
 class PreCommitManager:
@@ -226,7 +224,7 @@ class PreCommitManager:
             print("  cp .pre-commit-config-enhanced.yaml .pre-commit-config.yaml")
 
         else:
-            print(f"\n⚠️  Custom configuration detected")
+            print("\n⚠️  Custom configuration detected")
 
 
 def main():
