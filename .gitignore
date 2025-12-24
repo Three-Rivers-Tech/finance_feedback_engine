@@ -92,3 +92,7 @@ config/ray_auth.sh
 
 # Experimental code directory (not part of main codebase)
 experiments/
+
+# Docker volumes
+prometheus-data/
+grafana-data/

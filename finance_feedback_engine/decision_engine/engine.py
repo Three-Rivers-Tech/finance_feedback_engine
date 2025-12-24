@@ -10,6 +10,11 @@ import pytz
 from finance_feedback_engine.memory.vector_store import VectorMemory
 
 logger = logging.getLogger(__name__)
+try:
+    from opentelemetry import trace
+    tracer = trace.get_tracer(__name__)
+except Exception:  # OpenTelemetry optional
+    tracer = None
 
 
 class DecisionEngine:
@@ -971,9 +976,31 @@ Format response as a structured technical analysis demonstration.
             )
 
         # Aggregate results using ensemble manager
-        return await self.ensemble_manager.aggregate_decisions(
+        final = await self.ensemble_manager.aggregate_decisions(
             provider_decisions=provider_decisions, failed_providers=failed_providers
         )
+
+        # Enrich metadata with provider tracing details
+        try:
+            # Import inline to avoid circular dependencies
+            from .provider_tiers import is_ollama_model
+
+            queried = list(self.ensemble_manager.enabled_providers)
+            local_models_used = [
+                p
+                for p in provider_decisions.keys()
+                if p == "local" or is_ollama_model(p)
+            ]
+
+            meta = final.setdefault("ensemble_metadata", {})
+            meta["providers_queried"] = queried
+            # successful providers are already captured in providers_used, but add explicit alias
+            meta["providers_succeeded"] = list(provider_decisions.keys())
+            meta["local_models_used"] = local_models_used
+        except Exception as e:
+            logger.debug(f"Metadata enrichment failed: {e}")
+
+        return final
 
     async def _local_ai_inference(
         self, prompt: str, model_name: Optional[str] = None
@@ -1392,6 +1419,20 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Trading decision with recommendation
         """
+        # Root span for decision generation
+        if tracer:
+            span_cm = tracer.start_as_current_span(
+                "decision.generate",
+                attributes={
+                    "asset_pair": asset_pair,
+                    "portfolio_present": bool(portfolio),
+                    "memory_present": bool(memory_context),
+                },
+            )
+        else:
+            span_cm = None
+        if span_cm:
+            span_cm.__enter__()
         logger.info("Generating decision for %s", asset_pair)
 
         # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
@@ -1424,6 +1465,13 @@ Format response as a structured technical analysis demonstration.
                     num_positions,
                     monitoring_context.get("slots_available", 0),
                 )
+                if tracer:
+                    cur = trace.get_current_span()
+                    cur.set_attribute("monitor.active_positions", num_positions)
+                    cur.set_attribute(
+                        "monitor.slots_available",
+                        monitoring_context.get("slots_available", 0),
+                    )
             except Exception as e:
                 logger.warning("Could not load monitoring context: %s", e)
         elif monitoring_context:
@@ -1477,6 +1525,8 @@ Format response as a structured technical analysis demonstration.
 
         # Create structured decision object
         decision = self._create_decision(asset_pair, context, ai_response)
+        if span_cm:
+            span_cm.__exit__(None, None, None)
 
         return decision
 

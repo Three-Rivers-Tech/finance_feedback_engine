@@ -182,19 +182,38 @@ class ConfigValidator:
         """
         result = ValidationResult(valid=True)
 
-        # Check if file exists
-        if not Path(config_path).exists():
+        try:
+            resolved_path = Path(config_path).expanduser().resolve(strict=False)
+        except Exception as e:
             result.add_issue(
                 Severity.CRITICAL,
-                "file_not_found",
-                f"Configuration file not found: {config_path}",
+                "invalid_path",
+                f"Invalid configuration path: {config_path} ({e})",
                 config_path,
             )
             return result
 
+        if not resolved_path.is_file():
+            result.add_issue(
+                Severity.CRITICAL,
+                "file_not_found",
+                f"Configuration file not found: {resolved_path}",
+                str(resolved_path),
+            )
+            return result
+
+        # Optional: enforce YAML extension
+        if resolved_path.suffix not in {".yaml", ".yml"}:
+            result.add_issue(
+                Severity.HIGH,
+                "invalid_extension",
+                "Configuration file must be .yaml or .yml",
+                str(resolved_path),
+            )
+
         # Load and parse YAML
         try:
-            with open(config_path, "r") as f:
+            with open(resolved_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 config = yaml.safe_load(content)
         except yaml.YAMLError as e:
@@ -202,7 +221,7 @@ class ConfigValidator:
                 Severity.CRITICAL,
                 "yaml_parse_error",
                 f"Failed to parse YAML: {str(e)}",
-                config_path,
+                str(resolved_path),
             )
             return result
         except Exception as e:
@@ -210,17 +229,17 @@ class ConfigValidator:
                 Severity.CRITICAL,
                 "file_read_error",
                 f"Failed to read file: {str(e)}",
-                config_path,
+                str(resolved_path),
             )
             return result
 
         # Run validation checks
-        self._check_secrets(config_path, content, result)
-        self._check_schema(config, config_path, result)
-        self._check_environment_rules(config, config_path, result)
-        self._check_best_practices(config, config_path, result)
-        self._check_logging_configuration(config, config_path, result)
-        self._check_env_var_naming(config_path, content, result)
+        self._check_secrets(str(resolved_path), content, result)
+        self._check_schema(config, str(resolved_path), result)
+        self._check_environment_rules(config, str(resolved_path), result)
+        self._check_best_practices(config, str(resolved_path), result)
+        self._check_logging_configuration(config, str(resolved_path), result)
+        self._check_env_var_naming(str(resolved_path), content, result)
 
         return result
 

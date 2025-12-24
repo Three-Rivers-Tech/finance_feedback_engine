@@ -584,8 +584,9 @@ class TestPerformanceMetrics:
             trades_history=trades,
             equity_curve=equity_curve,
             initial_balance=10000.0,
-            num_trading_days=30,
             timeframe="1h",
+            duration_years=1.0,
+            periods_per_year=252,
         )
 
         # Check metrics

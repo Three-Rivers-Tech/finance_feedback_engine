@@ -24,6 +24,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from datetime import datetime, timedelta
 
 # Allowed policy categories based on project guidelines
@@ -157,6 +158,23 @@ def log_to_file(message: str) -> None:
         print(f"⚠️  Failed to log to file: {e}")
 
 
+def _build_github_comment_url(repo: str, pr_number: int) -> str:
+    """Construct a safe GitHub PR comment URL (HTTPS + api.github.com)."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo or ""):
+        raise ValueError("Invalid GitHub repository format")
+
+    if pr_number <= 0:
+        raise ValueError("Invalid PR number")
+
+    url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    parsed = urlparse(url)
+
+    if parsed.scheme != "https" or parsed.netloc != "api.github.com":
+        raise ValueError("Invalid GitHub API host")
+
+    return url
+
+
 def post_to_github(pr_number: int, comment: str) -> bool:
     """Post comment to GitHub PR."""
     token = os.getenv("GITHUB_TOKEN")
@@ -166,7 +184,11 @@ def post_to_github(pr_number: int, comment: str) -> bool:
         print("⚠️  GITHUB_TOKEN or GITHUB_REPOSITORY not set - skipping GitHub comment")
         return False
 
-    api_url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
+    try:
+        api_url = _build_github_comment_url(repo, pr_number)
+    except ValueError as exc:
+        print(f"⚠️  Skipping GitHub comment: {exc}")
+        return False
 
     data = json.dumps({"body": comment}).encode("utf-8")
 
@@ -256,9 +278,12 @@ Please resolve the bypassed checks before this deadline. See [`PRE_COMMIT_BYPASS
     log_to_file(file_entry)
 
     # Log to GitHub if running in Actions
-    pr_number = os.getenv("GITHUB_PR_NUMBER")
-    if pr_number:
-        post_to_github(int(pr_number), github_comment)
+    pr_number_env = os.getenv("GITHUB_PR_NUMBER")
+    if pr_number_env:
+        if pr_number_env.isdigit() and int(pr_number_env) > 0:
+            post_to_github(int(pr_number_env), github_comment)
+        else:
+            print("⚠️  Invalid GITHUB_PR_NUMBER; skipping GitHub comment")
     else:
         print("ℹ️  Not in GitHub PR context - skipping GitHub comment")
 
