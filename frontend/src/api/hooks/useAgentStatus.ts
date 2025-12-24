@@ -1,6 +1,6 @@
 import { usePolling } from './usePolling';
 import apiClient from '../client';
-import { AgentStatus } from '../types';
+import type { AgentStatus } from '../types';
 import { POLL_INTERVALS } from '../../utils/constants';
 
 export function useAgentStatus(enabled: boolean = true) {

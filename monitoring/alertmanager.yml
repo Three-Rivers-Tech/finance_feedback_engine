@@ -52,39 +52,28 @@ receivers:
       - url: 'http://localhost:5001/webhook'  # Optional webhook endpoint
 
   - name: 'critical-alerts'
-    # Example: Send critical alerts to Slack
-    # slack_configs:
-    #   - channel: '#trading-alerts'
-    #     title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
-    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
-
-    # Example: Send critical alerts via email
-    # email_configs:
-    #   - to: 'admin@yourdomain.com'
-    #     headers:
-    #       subject: '🚨 CRITICAL ALERT: {{ .GroupLabels.alertname }}'
-
-    # Webhook notification
+    # Route critical alerts to Telegram via app webhook
     webhook_configs:
-      - url: 'http://app:8000/api/v1/alerts/critical'
+      - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
+        headers:
+          severity: 'critical'
 
   - name: 'warning-alerts'
-    # Example: Send warnings to different Slack channel
-    # slack_configs:
-    #   - channel: '#trading-warnings'
-    #     title: '⚠️  WARNING: {{ .GroupLabels.alertname }}'
-    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
-
+    # Route warning alerts to Telegram via app webhook
     webhook_configs:
-      - url: 'http://app:8000/api/v1/alerts/warning'
+      - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
+        headers:
+          severity: 'warning'
 
   - name: 'info-alerts'
-    # Info alerts - just log
+    # Route info alerts to Telegram via app webhook
     webhook_configs:
-      - url: 'http://app:8000/api/v1/alerts/info'
+      - url: 'http://app:8000/api/alerts/webhook'
         send_resolved: true
+        headers:
+          severity: 'info'
 
 # Inhibition rules
 inhibit_rules:

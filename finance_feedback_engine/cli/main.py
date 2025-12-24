@@ -402,7 +402,7 @@ def setup_logging(verbose: bool = False, config: dict = None):
             logger = logging.getLogger(__name__)
             logger.debug("Structured logging initialized successfully")
             return
-        except (ImportError, ValueError, TypeError) as e:
+        except (ImportError, ValueError, TypeError):
             # Fall back to basic logging if structured logging module is not available or has errors
             pass  # Continue to basic logging setup below
 

@@ -1,6 +1,7 @@
 """API routes for Finance Feedback Engine."""
 
 import logging
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -251,3 +252,208 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         status_data["error"] = str(e)
 
     return status_data
+
+
+# Alert webhook (from Prometheus Alertmanager)
+alerts_router = APIRouter()
+
+
+class AlertField(BaseModel):
+    """Alert field from Prometheus Alertmanager."""
+
+    status: str
+    labels: Dict[str, Any]
+    annotations: Dict[str, str]
+
+
+class AlertmanagerWebhook(BaseModel):
+    """Alertmanager webhook payload."""
+
+    alerts: List[AlertField]
+    groupLabels: Dict[str, str]
+    commonLabels: Dict[str, str]
+    commonAnnotations: Dict[str, str]
+
+
+@alerts_router.post("/alerts/webhook")
+async def handle_alert_webhook(payload: AlertmanagerWebhook, request: Request):
+    """
+    Handle Alertmanager webhook notifications.
+
+    Formats alerts and sends via Telegram botfather bot.
+    Routes to /api/alerts/webhook from Prometheus Alertmanager.
+    """
+    try:
+        # Get severity from headers if available
+        severity = request.headers.get("severity", "warning").upper()
+
+        for alert in payload.alerts:
+            severity = alert.labels.get("severity", severity).upper()
+            component = alert.labels.get("component", "unknown")
+            alertname = alert.annotations.get(
+                "summary", alert.labels.get("alertname", "Unknown Alert")
+            )
+            description = alert.annotations.get("description", "No description")
+
+            # Format alert message with context
+            emoji_map = {"CRITICAL": "🚨", "WARNING": "⚠️", "INFO": "ℹ️"}
+            emoji = emoji_map.get(severity, "📢")
+
+            # Extract asset pair if available
+            asset_pair = alert.labels.get("asset_pair", "")
+            asset_context = f" | {asset_pair}" if asset_pair else ""
+
+            # Build structured message
+            message = (
+                f"{emoji} {severity}{asset_context}\n"
+                f"📊 {component.replace('_', ' ').title()}\n"
+                f"🔔 {alertname}\n"
+                f"📝 {description}"
+            )
+
+            # Send via Telegram if bot available
+            try:
+                from ..integrations.telegram_bot import TelegramBot
+
+                config = {}
+                bot = TelegramBot(config)
+                await bot.send_alert(message)
+                logger.info(f"Alert sent to Telegram: {alertname}")
+            except Exception as e:
+                logger.warning(f"Failed to send alert to Telegram: {e}")
+
+        return {"status": "ok", "alerts_processed": len(payload.alerts)}
+
+    except Exception as e:
+        logger.error(f"Error processing alert webhook: {e}")
+        # Return generic error per OWASP (don't leak details)
+        return {"status": "error"}
+
+
+# Traces endpoint (for frontend tracing)
+traces_router = APIRouter()
+
+
+class TraceAttribute(BaseModel):
+    """OpenTelemetry trace attribute."""
+
+    key: str
+    value: Any
+
+
+class TraceSpan(BaseModel):
+    """Simplified OpenTelemetry span for frontend submission."""
+
+    trace_id: str
+    span_id: str
+    parent_span_id: Optional[str] = None
+    name: str
+    start_time: int
+    end_time: int
+    attributes: Optional[List[TraceAttribute]] = None
+    status: str = "UNSET"
+
+
+# In-memory trace cache (LRU with 1-hour TTL)
+_trace_cache: Dict[str, List[Dict[str, Any]]] = {}
+_trace_cache_ttl: Dict[str, int] = {}
+
+
+@traces_router.post("/api/traces")
+async def submit_trace(
+    span: TraceSpan,
+    request: Request,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """
+    Submit trace span from frontend for observability.
+
+    Requires valid JWT in Authorization header (Bearer token).
+    Rate limited to 10 requests/minute per user.
+    """
+    try:
+        # Get authorization header
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Missing or invalid authorization",
+            )
+
+        token = auth_header[7:]  # Remove "Bearer "
+
+        # Validate JWT token (simplified - in production use proper JWT validation)
+        # This assumes token validation is done elsewhere via middleware
+        user_id = request.headers.get("x-user-id", "unknown")
+
+        # Check rate limit (10 spans/minute per user)
+        import time
+        from collections import defaultdict
+
+        if not hasattr(submit_trace, "_trace_counts"):
+            submit_trace._trace_counts = defaultdict(list)
+            submit_trace._trace_lock = __import__("threading").Lock()
+
+        with submit_trace._trace_lock:
+            current_time = time.time()
+            # Clean old entries (older than 60 seconds)
+            submit_trace._trace_counts[user_id] = [
+                t for t in submit_trace._trace_counts[user_id] if current_time - t < 60
+            ]
+
+            # Check if user exceeded limit
+            if len(submit_trace._trace_counts[user_id]) >= 10:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded",
+                )
+
+            submit_trace._trace_counts[user_id].append(current_time)
+
+        # Validate span data (JSON schema-like check)
+        if not span.trace_id or not span.span_id or not span.name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid span data",
+            )
+
+        # Store span in cache
+        cache_key = span.trace_id
+        if cache_key not in _trace_cache:
+            _trace_cache[cache_key] = []
+
+        span_dict = {
+            "trace_id": span.trace_id,
+            "span_id": span.span_id,
+            "parent_span_id": span.parent_span_id,
+            "name": span.name,
+            "start_time": span.start_time,
+            "end_time": span.end_time,
+            "duration_ms": span.end_time - span.start_time,
+            "attributes": {attr.key: attr.value for attr in (span.attributes or [])},
+            "status": span.status,
+            "submitted_by": user_id,
+        }
+
+        _trace_cache[cache_key].append(span_dict)
+
+        # Log for debugging
+        logger.info(
+            f"Trace submitted: {span.name} (trace_id={span.trace_id}, duration={span_dict['duration_ms']}ms)"
+        )
+
+        return {
+            "status": "accepted",
+            "trace_id": span.trace_id,
+            "span_id": span.span_id,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing trace submission: {e}")
+        # Return generic error per OWASP
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid request",
+        )

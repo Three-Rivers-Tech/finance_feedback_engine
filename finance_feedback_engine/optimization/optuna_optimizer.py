@@ -1,7 +1,6 @@
 """Optuna hyperparameter optimization for trading strategy."""
 
 import logging
-from datetime import datetime
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple, Union
 

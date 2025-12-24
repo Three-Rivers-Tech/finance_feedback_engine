@@ -77,3 +77,43 @@ export interface ApiError {
   detail: string;
   reference_id?: string;
 }
+
+// Optimization/Experiment Types
+export interface ExperimentRequest {
+  asset_pairs: string[];
+  start_date: string;
+  end_date: string;
+  n_trials?: number;
+  seed?: number | null;
+  optimize_weights?: boolean;
+  multi_objective?: boolean;
+}
+
+export interface ExperimentResult {
+  asset_pair: string;
+  best_sharpe_ratio: number | null;
+  best_drawdown_pct: number | null;
+  best_params: Record<string, any>;
+  n_trials: number;
+}
+
+export interface ExperimentResponse {
+  experiment_id: string;
+  created_at: string;
+  start_date: string;
+  end_date: string;
+  n_trials_per_asset: number;
+  seed: number | null;
+  optimize_weights: boolean;
+  multi_objective: boolean;
+  asset_pairs: string[];
+  results: ExperimentResult[];
+}
+
+export interface ExperimentSummary {
+  experiment_id: string;
+  created_at: string;
+  asset_pairs: string[];
+  n_trials: number;
+  results_count: number;
+}

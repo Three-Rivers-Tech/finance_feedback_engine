@@ -14,7 +14,6 @@ from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngin
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
-from finance_feedback_engine.observability.context import with_span
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)

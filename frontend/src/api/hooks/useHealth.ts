@@ -1,6 +1,6 @@
 import { usePolling } from './usePolling';
 import apiClient from '../client';
-import { HealthStatus } from '../types';
+import type { HealthStatus } from '../types';
 import { POLL_INTERVALS } from '../../utils/constants';
 
 export function useHealth(enabled: boolean = true) {

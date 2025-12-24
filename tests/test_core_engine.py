@@ -15,13 +15,11 @@ This test suite covers:
 Tests are designed to achieve >60% coverage of core.py without external dependencies.
 """
 
-import asyncio
 import json
-import os
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 

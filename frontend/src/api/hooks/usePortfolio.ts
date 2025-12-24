@@ -1,6 +1,6 @@
 import { usePolling } from './usePolling';
 import apiClient from '../client';
-import { PortfolioStatus } from '../types';
+import type { PortfolioStatus } from '../types';
 import { POLL_INTERVALS } from '../../utils/constants';
 
 export function usePortfolio(enabled: boolean = true) {
