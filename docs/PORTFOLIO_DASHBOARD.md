@@ -12,6 +12,10 @@ The Portfolio Dashboard feature aggregates portfolio metrics from multiple tradi
 - **Real-time Data**: Fetches live portfolio breakdowns from each platform
 - **Extensible Design**: Easy to add new metrics (risk, PnL, performance, etc.) in the future
 
+## Current Status
+
+The Portfolio Dashboard is fully functional and provides real-time insights into portfolio performance, facilitating better decision-making across multiple trading platforms.
+
 ## Architecture
 
 ### Components
@@ -36,9 +40,9 @@ The Portfolio Dashboard feature aggregates portfolio metrics from multiple tradi
 ### Data Flow
 
 ```
-Platform 1 (Coinbase)  ─┐
-Platform 2 (Oanda)     ─┤──> PortfolioDashboardAggregator ──> display_portfolio_dashboard()
-Platform N (Custom)    ─┘
+Platform 1 (Coinbase)  ──┐
+Platform 2 (Oanda)     ──┤ PortfolioDashboardAggregator ──> display_portfolio_dashboard()
+Platform N (Custom)    ──┘
 ```
 
 ## Usage

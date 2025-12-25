@@ -27,7 +27,8 @@ class TestAlphaVantageProvider:
         except Exception:
             pass
 
-    def test_initialization(self, provider):
+    @pytest.mark.asyncio
+    async def test_initialization(self, provider):
         """Test provider initializes with API key."""
         assert provider.api_key == "test_key"
         assert hasattr(provider, "circuit_breaker")
@@ -37,12 +38,12 @@ class TestAlphaVantageProvider:
         """Test successful market data retrieval."""
         # Mock _make_http_request directly to bypass aiohttp complexity
         mock_data = {
-            "Time Series (Daily)": {
+            "Time Series (Digital Currency Daily)": {
                 "2024-12-04": {
-                    "1. open": "100.00",
-                    "2. high": "105.00",
-                    "3. low": "99.00",
-                    "4. close": "103.00",
+                    "1a. open (USD)": "100.00",
+                    "2a. high (USD)": "105.00",
+                    "3a. low (USD)": "99.00",
+                    "4a. close (USD)": "103.00",
                     "5. volume": "1000000",
                 }
             }
@@ -54,7 +55,8 @@ class TestAlphaVantageProvider:
         ) as mock_request:
             mock_request.return_value = mock_data
 
-            data = await provider.get_market_data("AAPL")
+            # Use BTCUSD to trigger crypto data path (get_market_data checks for "BTC" or "ETH")
+            data = await provider.get_market_data("BTCUSD")
 
             assert data is not None
             assert "open" in data
@@ -64,6 +66,9 @@ class TestAlphaVantageProvider:
     @pytest.mark.asyncio
     async def test_get_market_data_rate_limit(self, provider):
         """Test rate limiting handling."""
+        # Disable backtest mode for this test to allow exceptions
+        provider.is_backtest = False
+
         mock_data = {"Note": "API call frequency limit reached"}
 
         with patch.object(
@@ -72,23 +77,26 @@ class TestAlphaVantageProvider:
             mock_request.return_value = mock_data
 
             with pytest.raises(Exception):
-                await provider.get_market_data("AAPL")
+                await provider.get_market_data("BTCUSD")
 
     @pytest.mark.asyncio
     async def test_circuit_breaker_opens_on_failures(self, provider):
         """Test circuit breaker opens after repeated failures."""
+        import aiohttp
+
         # Ensure we are not in backtest mode for this test to allow exceptions to propagate
         provider.is_backtest = False
 
         with patch.object(
             provider, "_async_request", new_callable=AsyncMock
         ) as mock_request:
-            mock_request.side_effect = Exception("API error")
+            # Raise aiohttp.ClientError instead of generic Exception
+            mock_request.side_effect = aiohttp.ClientError("API error")
 
-            # Trigger multiple failures
-            for _ in range(5):
+            # Trigger multiple failures (circuit opens at 5)
+            for _ in range(6):
                 try:
-                    await provider.get_market_data("AAPL")
+                    await provider.get_market_data("BTCUSD")
                 except Exception:
                     pass
 

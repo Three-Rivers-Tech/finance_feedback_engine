@@ -1,15 +1,14 @@
-```md
 <!-- Copilot instructions: Finance Feedback Engine 2.0 -->
 
 # Copilot Instructions — Finance Feedback Engine 2.0
 
 Concise, actionable guidance for AI coding agents. Focus on minimal, targeted edits. Reference concrete files, commands, and project-specific conventions.
 
-**Last Updated:** December 2025. Version: 2.0.0. Covers: 8 subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode), portfolio monitoring, web API, Telegram/Redis integrations, backtesting with decision caching.
+**Last Updated:** December 2025. Version: 0.9.9. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode), portfolio monitoring, web API, Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard.
 
 ## Big Picture Architecture
 
-Modular AI trading engine with 8 core subsystems in a training-first approach:
+Modular AI trading engine with 10+ core subsystems in a training-first approach:
 
 **Data Flow (Live Trading):**
 ```
@@ -26,7 +25,7 @@ Alpha Vantage (6 timeframes) + Sentiment
 
 **Entry Points:**
 - **Analysis**: `FinanceFeedbackEngine.analyze_asset(asset_pair)` — gathers data, queries AI (ensemble/debate), validates risk, persists decision
-- **Agentic Loop**: `TradingLoopAgent.run()` — state machine cycle with kill-switch, portfolio-level stop-loss/take-profit
+- **Agentic Loop**: `TradingLoopAgent.run()` — async state machine with kill-switch, portfolio-level stop-loss/take-profit
 - **Backtesting**: `python main.py backtest BTCUSD --start-date 2024-01-01` — trains AI on historical data, caches decisions (SQLite)
 - **CLI**: `python main.py analyze|execute|monitor|run-agent|backtest|walk-forward|monte-carlo|learning-report`
 
@@ -35,336 +34,341 @@ Alpha Vantage (6 timeframes) + Sentiment
 - **Debate Mode Standard**: Multi-provider structured debate (bullish/bearish advocates + judge) is default; `quicktest_mode` only allowed in testing
 - **Signal-Only Mode**: Automatic fallback when balance unavailable — provides signals without position sizing
 - **Unified Platform Mode**: Single interface for multi-asset trading (crypto + forex); platform routing by asset type
+- **Async-First Design**: Core trading loop uses async/await; aiohttp sessions properly managed; circuit breaker wraps async execute
+- **Observability Built-in**: OpenTelemetry metrics, error tracking, decision audit trail, performance attribution per provider
 
 ## Key Files & Responsibilities
 
 **Core Orchestration:**
-- `finance_feedback_engine/core.py`: Main engine; coordinates all subsystems; `analyze_asset()` entry point
-- `finance_feedback_engine/agent/trading_loop_agent.py`: Autonomous trading loop with state machine (IDLE, PERCEPTION, REASONING, RISK_CHECK, EXECUTION, LEARNING); kill-switch logic; position recovery on startup
+- `finance_feedback_engine/core.py`: Main engine; coordinates all subsystems; `analyze_asset()` entry point; model installation
+- `finance_feedback_engine/agent/trading_loop_agent.py`: Async autonomous trading loop; OODA state machine (IDLE, PERCEPTION, REASONING, RISK_CHECK, EXECUTION, LEARNING); kill-switch with cumulative gain/drawdown limits; position recovery on startup
 
-**Decision Engine:**
-- `finance_feedback_engine/decision_engine/engine.py`: LLM prompt builder; position sizing (1% risk / 2% stop-loss); signal-only mode detection
-- `finance_feedback_engine/decision_engine/ensemble_manager.py`: Weighted voting, debate mode, 4-tier fallback, dynamic weight recalculation
-- `finance_feedback_engine/decision_engine/decision_validation.py`: JSON schema validation for decisions
+**Decision Engine & Ensemble:**
+- `finance_feedback_engine/decision_engine/engine.py`: LLM prompt builder; position sizing (1% risk / 2% stop-loss); signal-only mode detection; provider fallback orchestration
+- `finance_feedback_engine/decision_engine/ensemble_manager.py`: Multi-provider voting (weighted/majority/stacking); debate mode conductor (bullish/bearish advocates + judge); 4-tier fallback; dynamic weight recalculation; metadata enrichment
+- `finance_feedback_engine/decision_engine/decision_validation.py`: Strict JSON schema validation for decisions; ensures confidence 0-100, required fields, metadata completeness
 
 **Data & Analysis:**
-- `finance_feedback_engine/data_providers/alpha_vantage_provider.py`: Multi-timeframe market data (1m/5m/15m/1h/4h/1d OHLCV) + sentiment via news API
-- `finance_feedback_engine/data_providers/unified_data_provider.py`: Aggregates pulse data (technical + regime context) for LLM prompts
-- `finance_feedback_engine/utils/market_regime_detector.py`: ADX/ATR-based classification (trending/ranging/volatile); feeds into decision confidence
-- `finance_feedback_engine/utils/timeframe_aggregator.py`: Computes 6-timeframe pulse (RSI/MACD/Bollinger/ADX/ATR per timeframe)
+- `finance_feedback_engine/data_providers/alpha_vantage_provider.py`: Multi-timeframe OHLCV (1m/5m/15m/1h/4h/1d) + sentiment via news API; async aiohttp; retry logic
+- `finance_feedback_engine/data_providers/unified_data_provider.py`: Aggregates pulse data (technical indicators + regime context) for LLM prompts; single entry point for data
+- `finance_feedback_engine/data_providers/historical_data_provider.py`: Backtesting data; historical cache; replay mode for decision cache
+- `finance_feedback_engine/utils/market_regime_detector.py`: ADX/ATR-based classification (trending/ranging/volatile); feeds into decision confidence decay factor
+- `finance_feedback_engine/utils/timeframe_aggregator.py`: Computes 6-timeframe pulse (RSI/MACD/Bollinger Bands/ADX/ATR per timeframe)
 
 **Trading Platforms:**
-- `finance_feedback_engine/trading_platforms/base_platform.py`: Abstract `BaseTradingPlatform`; all platforms inherit (async/sync support)
-- `finance_feedback_engine/trading_platforms/coinbase_platform.py`: Crypto futures on Coinbase (via CDP)
-- `finance_feedback_engine/trading_platforms/oanda_platform.py`: Forex on OANDA (v20 REST API)
-- `finance_feedback_engine/trading_platforms/unified_platform.py`: Router — detects asset type (BTC/ETH → Coinbase, EUR/USD → OANDA) and routes trade
-- `finance_feedback_engine/trading_platforms/platform_factory.py`: Factory; attaches circuit breaker wrapper (5 failures → 60s open)
-- `finance_feedback_engine/utils/circuit_breaker.py`: Fault tolerance layer; decorates execute methods; exponential backoff after reset
+- `finance_feedback_engine/trading_platforms/base_platform.py`: Abstract `BaseTradingPlatform`; standardizes interface (async & sync support); position tracking
+- `finance_feedback_engine/trading_platforms/coinbase_platform.py`: Crypto futures on Coinbase Advanced (via CDP SDK); spot balance queries
+- `finance_feedback_engine/trading_platforms/oanda_platform.py`: Forex on OANDA v20 REST API; leverage/margin support
+- `finance_feedback_engine/trading_platforms/unified_platform.py`: Auto-router — detects asset type (BTC/ETH/USDT → Coinbase, EUR/USD/GBP/USD → Oanda) and delegates; signal-only fallback
+- `finance_feedback_engine/trading_platforms/platform_factory.py`: Factory with circuit breaker attachment (5 failures → 60s cooldown)
+- `finance_feedback_engine/trading_platforms/mock_platform.py`: Synthetic data for testing; supports all standard methods
+- `finance_feedback_engine/utils/circuit_breaker.py`: Fault tolerance; decorates execute methods; exponential backoff after reset
 
-**Memory & Monitoring:**
-- `finance_feedback_engine/memory/portfolio_memory.py`: Experience replay (win/loss tracking), performance attribution by provider, regime-aware weight recommendations
-- `finance_feedback_engine/monitoring/trade_monitor.py`: Real-time P&L tracking; auto-detects trades from platform; max 2 concurrent (safety limit); feedback loop on close
-- `finance_feedback_engine/monitoring/context_provider.py`: Injects live position state into decision prompts for portfolio-aware reasoning
-- `finance_feedback_engine/persistence/decision_store.py`: Append-only JSON (`data/decisions/YYYY-MM-DD_<uuid>.json`); immutable audit trail
+**Memory & Learning:**
+- `finance_feedback_engine/memory/portfolio_memory.py`: Experience replay (win/loss tracking by asset & provider); performance attribution; regime-aware weight recommendations; ML-driven ensemble optimization
+- `finance_feedback_engine/learning/feedback_analyzer.py`: Post-trade outcome analysis; per-provider win rates; feeds ensemble weight recalculation
+- `finance_feedback_engine/monitoring/trade_monitor.py`: Async real-time P&L tracking; auto-detects trades from platform; max 2 concurrent (safety limit); feedback loop triggers on close
+- `finance_feedback_engine/monitoring/context_provider.py`: Injects live position state into decision prompts for portfolio-aware AI reasoning; concentration checks
+- `finance_feedback_engine/persistence/decision_store.py`: Append-only JSON (`data/decisions/YYYY-MM-DD_<uuid>.json`); immutable audit trail; retrieval by asset/date range
 
-**Risk & Learning:**
-- `finance_feedback_engine/risk/gatekeeper.py`: Multi-layer validation (drawdown %, portfolio VaR, per-asset concentration limits, correlation checks)
-- `finance_feedback_engine/risk/var_calculator.py`: Historical VaR (95% confidence, 252-day window) for position sizing validation
-- `finance_feedback_engine/risk/correlation_analyzer.py`: Prevents highly-correlated positions (threshold 0.7); blocks positions exceeding concentration limits
-- `finance_feedback_engine/learning/feedback_analyzer.py`: Post-trade outcome analysis; computes per-provider win rates; feeds weight recalculation
+**Risk Management:**
+- `finance_feedback_engine/risk/gatekeeper.py`: Multi-layer validation (max drawdown %, portfolio VaR, per-asset concentration ≤30%, correlation checks ≥0.7)
+- `finance_feedback_engine/risk/var_calculator.py`: Historical VaR (95% confidence, 252-day trailing window) for position sizing validation
+- `finance_feedback_engine/risk/correlation_analyzer.py`: Prevents highly-correlated positions (threshold 0.7); portfolio-level diversification logic
 
 **Web & Integrations:**
-- `finance_feedback_engine/api/app.py`: FastAPI server; enables `/analyze`, `/execute`, `/approvals` endpoints; CORS enabled by default
-- `finance_feedback_engine/api/routes.py`: REST endpoints with approval workflow support (sync mode: no approval, telegram mode: user-triggered)
-- `finance_feedback_engine/integrations/telegram_bot.py`: Telegram approval UI; buttons for approve/deny; persists state via Redis
-- `finance_feedback_engine/integrations/redis_manager.py`: Approval queue (FIFO list); survives restarts via Redis persistence
-- `finance_feedback_engine/dashboard/portfolio_dashboard.py`: Rich TUI for live monitoring (open positions, P&L, metrics)
+- `finance_feedback_engine/api/app.py`: FastAPI server; `/analyze`, `/execute`, `/approvals` endpoints; health check; CORS enabled by default
+- `finance_feedback_engine/api/routes.py`: REST routes with approval workflow support (sync mode: immediate, telegram mode: async approval)
+- `finance_feedback_engine/integrations/telegram_bot.py`: Telegram approval UI; approve/deny buttons; state persistence via Redis
+- `finance_feedback_engine/integrations/redis_manager.py`: Redis FIFO queue for approvals; survives restarts; auto-cleanup of stale entries
+- `finance_feedback_engine/dashboard/portfolio_dashboard.py`: Rich TUI for live monitoring (open positions, P&L, asset metrics, refresh/export shortcuts)
 
-**Backtesting & Learning:**
-- `finance_feedback_engine/backtesting/backtester.py`: Production backtester; integrates decision cache + memory; supports leverage/margin, shorts, realistic slippage
-- `finance_feedback_engine/backtesting/decision_cache.py`: SQLite cache (`data/backtest_cache.db`); avoids redundant AI queries during backtest replay
-- `finance_feedback_engine/backtesting/agent_backtester.py`: OODA state machine simulator for autonomous agent testing
-- `finance_feedback_engine/backtesting/walk_forward.py`: Train/test split detection; warns if future-looking bias detected
-- `finance_feedback_engine/backtesting/monte_carlo.py`: Path randomization; RL metrics (sample efficiency, regret bounds)
+**Backtesting & Optimization:**
+- `finance_feedback_engine/backtesting/backtester.py`: Production backtester; integrates decision cache + memory; supports leverage, shorts, realistic slippage; performance metrics (Sharpe, max DD, win%)
+- `finance_feedback_engine/backtesting/decision_cache.py`: SQLite cache (`data/backtest_cache.db`); avoids redundant AI queries during replay; fast historical simulation
+- `finance_feedback_engine/backtesting/agent_backtester.py`: OODA loop simulator for autonomous trading; state machine replay
+- `finance_feedback_engine/backtesting/walk_forward.py`: Train/test split detection; warns on future-looking bias; rolling window validation
+- `finance_feedback_engine/backtesting/monte_carlo.py`: Path randomization; stochastic simulation; RL metrics (sample efficiency, regret bounds)
+- `finance_feedback_engine/optimization/`: Parameter search (Optuna-based); cost-aware Kelly allocation; ensemble weight tuning
 
-**CLI & Config:**
-- `finance_feedback_engine/cli/main.py`: 20+ commands via Click; integrated config editor; supports interactive approval prompts
-- `config/config.yaml`: Default template; includes timeouts, platform credentials, ensemble weights, risk limits
-- `config/config.local.yaml`: User overrides (git-ignored); env vars override all
-- `config/config.backtest.yaml`: Backtest preset (debate ON, local AI, cache enabled, memory isolation)
+**CLI & Configuration:**
+- `finance_feedback_engine/cli/main.py`: 20+ commands via Click; integrated config editor; supports interactive approval prompts; help text auto-generated
+- `config/config.yaml`: Default template; all platform credentials, ensemble weights, risk limits, timeouts, logging
+- `config/config.local.yaml`: User overrides (git-ignored); env vars override this layer
+- `config/config.backtest.yaml`: Backtest preset (debate ON, local AI, cache enabled, memory isolation, no balance requirements)
 
 ## Developer Workflows
 
 **Setup (First Time):**
 ```bash
-pip install -r requirements.txt
-pip install -e .  # Installs package in editable mode
+pip install -e .           # Editable install from pyproject.toml
 cp config/config.yaml config/config.local.yaml
-# Edit config.local.yaml: add API keys (alpha_vantage_api_key, coinbase credentials, oanda credentials)
-# Keep config.local.yaml git-ignored (prevents accidental secret commits)
-python main.py install-deps  # Optional: install AI model dependencies (llama, mistral, etc.)
+# Edit config.local.yaml: alpha_vantage_api_key, coinbase credentials, oanda credentials, telegram token
+python main.py install-deps  # Optional: install local AI (ollama, etc.)
 ```
 
-**Common CLI Commands:**
+**Essential Commands by Task:**
+
+**Analysis & Signal Generation:**
 ```bash
-# Analysis (supports: BTCUSD, btc-usd, "BTC/USD", BTC_USD — all normalized to BTCUSD)
-python main.py analyze BTCUSD --provider ensemble          # Multi-provider debate mode (default)
-python main.py analyze EURUSD --provider codex             # Single provider
-python main.py analyze ETHUSDT --show-pulse                # Includes 6-timeframe technical indicators
+# Single-asset analysis with ensemble (default debate mode)
+python main.py analyze BTCUSD --provider ensemble
 
-# Trading
-python main.py execute <decision_id>                       # Execute persisted decision
-python main.py positions list                              # View open positions
-python main.py balance                                     # Show account balance
+# Show multi-timeframe pulse (technical indicators)
+python main.py analyze EURUSD --show-pulse
 
-# Monitoring
-python main.py monitor start                               # Begin real-time P&L tracking
-python main.py monitor status                              # Check active trades
-python main.py dashboard                                   # Rich TUI portfolio monitor
+# Single provider for comparison
+python main.py analyze ETHUSDT --provider gemini
+```
 
-# Autonomous Agent (OODA loop)
-python main.py run-agent --take-profit 0.05 --stop-loss 0.02  # Autonomous trading loop
-python main.py run-agent --asset-pair BTCUSD               # Single asset or multiple (config)
+**Trading Execution:**
+```bash
+# Execute stored decision (from data/decisions/)
+python main.py execute <decision_uuid>
 
-# Backtesting & Learning
+# View positions, balance
+python main.py positions list
+python main.py balance
+```
+
+**Autonomous Trading (OODA Loop):**
+```bash
+# Run agent with stop-loss/take-profit (config-driven asset pairs)
+python main.py run-agent --take-profit 0.05 --stop-loss 0.02
+
+# Single asset
+python main.py run-agent --asset-pair BTCUSD
+```
+
+**Monitoring & Dashboard:**
+```bash
+python main.py monitor start     # Background P&L tracking
+python main.py monitor status    # Active trades
+python main.py dashboard         # Rich TUI (q to quit)
+```
+
+**Backtesting & Learning:**
+```bash
+# Backtest single asset
 python main.py backtest BTCUSD --start-date 2024-01-01 --end-date 2024-03-01
-python main.py walk-forward BTCUSD --start-date 2024-01-01                     # Detect overfitting
-python main.py monte-carlo BTCUSD --samples 1000                               # Stochastic simulation
-python main.py learning-report --asset-pair BTCUSD                             # Provider weight analysis
-python main.py prune-memory --keep-recent 1000                                 # Cleanup old trades
 
-# Config & Setup
-python main.py config-editor                               # Interactive config wizard
-python main.py setup-redis                                 # Docker-based Redis for approval queue
-python main.py serve --port 8000                           # Start FastAPI web service (optional)
+# Walk-forward analysis (detect overfitting)
+python main.py walk-forward BTCUSD --start-date 2024-01-01
+
+# Monte Carlo stress test
+python main.py monte-carlo BTCUSD --samples 1000
+
+# Provider weight optimization report
+python main.py learning-report --asset-pair BTCUSD
+
+# Clean old memory
+python main.py prune-memory --keep-recent 1000
+```
+
+**Web Service (Optional):**
+```bash
+python main.py serve --port 8000
+# Swagger: http://localhost:8000/docs
+# Health: curl http://localhost:8000/health
+```
+
+**Configuration & Setup:**
+```bash
+python main.py config-editor      # Interactive config wizard
+python main.py setup-redis         # Docker Redis for approvals
 ```
 
 **Testing:**
 ```bash
-pytest tests/                                              # Run all tests (70% coverage required)
-pytest tests/test_phase1_integration.py                    # Core integration suite
-pytest tests/test_ensemble_tiers.py                        # Ensemble fallback logic
-pytest -v --tb=short                                       # Verbose output + short tracebacks
-pytest -k "ensemble" --cov=finance_feedback_engine         # Filter + coverage report
-pytest --cov-report=html                                   # Generate HTML coverage (htmlcov/)
+pytest tests/                          # All tests
+pytest tests/test_phase1_integration.py  # Core suite
+pytest -v --tb=short                  # Verbose
+pytest --cov=finance_feedback_engine   # Coverage (enforced ≥70%)
+pytest --cov-report=html               # HTML report (htmlcov/)
 ```
-
-**Key Test Fixtures (conftest.py):**
-- `cli_runner` — Click command runner for CLI testing
-- `mock_engine` — Pre-configured `FinanceFeedbackEngine` with mock data
-- `alpha_vantage_provider` — Async fixture; properly closes aiohttp sessions
-- `test_config_path` — Path to `config/config.test.mock.yaml`
 
 **Code Quality:**
 ```bash
-black finance_feedback_engine/                             # Auto-format code
-isort finance_feedback_engine/                             # Sort imports
-flake8 finance_feedback_engine/ --max-line-length=120      # Lint (config in setup.cfg)
-mypy finance_feedback_engine/ --ignore-missing-imports     # Type check (Python 3.10+ syntax)
-pytest --cov=finance_feedback_engine --cov-fail-under=70   # Enforce 70% coverage (pyproject.toml)
-```
-
-**Pre-commit Hooks:**
-```bash
-pre-commit install                                         # Setup hooks (.pre-commit-config.yaml)
-pre-commit run --all-files                                 # Manually run all hooks
+black finance_feedback_engine/
+isort finance_feedback_engine/
+flake8 finance_feedback_engine/ --max-line-length=120
+mypy finance_feedback_engine/ --ignore-missing-imports
 ```
 
 ## Project-Specific Conventions
 
 **Asset Pair Standardization (CRITICAL):**
-- All asset pair formats auto-normalize to uppercase, no separators: `BTCUSD`, `btc-usd`, `"BTC/USD"`, `BTC_USD` → `BTCUSD`
-- **Always use** `finance_feedback_engine.utils.validation.standardize_asset_pair()` before platform routing or decision storage
-- Failure to standardize causes inconsistent decision lookups and routing errors
-- Used in: CLI commands, agent orchestrator, platform routing, decision persistence
+- All formats normalize to uppercase, no separators: `BTCUSD`, `btc-usd`, `BTC/USD` → all become `BTCUSD`
+- **Always use** `finance_feedback_engine.utils.validation.standardize_asset_pair()` before routing or storage
+- Missing standardization → inconsistent decision lookups, platform routing failures
+- Used in: CLI, agent orchestrator, platform factory, decision persistence, config
 
-**Data Structures:**
-- **Market data**: `{'open': float, 'high': float, 'low': float, 'close': float, 'volume': int, 'market_cap': int (crypto only)}`
-- **Decisions**: JSON files in `data/decisions/YYYY-MM-DD_<uuid>.json` (append-only, never modify)
-- **Confidence**: Integer 0–100 in `decision['confidence']`
-- **Multi-timeframe pulse**: Dict with 6 timeframes (1min, 5min, 15min, 1hour, 4hour, daily), each containing RSI/MACD/Bollinger/ADX/ATR
+**Decision JSON Schema:**
+```json
+{
+  "id": "uuid",
+  "asset_pair": "BTCUSD",
+  "timestamp": "2025-01-01T12:00:00Z",
+  "action": "BUY|SELL|HOLD",
+  "confidence": 75,
+  "recommended_position_size": 0.025 | null,
+  "entry_price": 45000.00,
+  "stop_loss_pct": 0.02,
+  "take_profit_pct": 0.05,
+  "reasoning": "string",
+  "market_regime": "trending|ranging|volatile",
+  "ensemble_metadata": {
+    "providers_used": ["gemini", "codex"],
+    "providers_failed": [],
+    "active_weights": {"gemini": 0.6, "codex": 0.4},
+    "fallback_tier": 1,
+    "debate_summary": "string"
+  },
+  "risk_context": {
+    "portfolio_drawdown_pct": 5.2,
+    "var_limit_exceeded": false,
+    "concentration_check": "OK",
+    "correlation_check": "PASS"
+  }
+}
+```
 
-**Position Sizing:**
-- Default: 1% risk, 2% stop-loss
-- Formula: `position_size = (balance * risk_pct) / (entry_price * stop_loss_fraction)`
-- Signal-only mode: Sets `recommended_position_size: null` when balance unavailable
+**Position Sizing Formula:**
+```
+position_size = (balance × risk_pct) / (entry_price × stop_loss_fraction)
+Default: 1% risk, 2% stop-loss
+Signal-only: position_size = null (no execution, signal only)
+```
 
-**Ensemble Behavior:**
-- **Debate mode**: Default ON; structured debate (bullish/bearish advocates + judge); see `docs/GEMINI_CLI_INTEGRATION.md`
-- **Fallback tiers**: Primary (weighted/majority/stacking) → Majority vote → Simple average → Single provider
-- **Dynamic weights**: Renormalize when providers fail; formula: `adjusted_weight = original_weight / sum(active_weights)`
-- **Confidence degradation**: `factor = 0.7 + 0.3 * (active_providers / total_providers)`
-- **Metadata**: All decisions include `ensemble_metadata` (providers used/failed, weights, fallback tier)
+**Ensemble Fallback Tiers:**
+1. **Primary**: Weighted voting (configured per provider), or Majority vote, or Stacking
+2. **Secondary**: Simple majority (if primary unavailable)
+3. **Tertiary**: Simple average of available providers
+4. **Quaternary**: Single provider fallback
+5. Confidence degraded by factor: `0.7 + 0.3 * (active_providers / total_providers)`
 
-**Config Loading Hierarchy:**
-1. Environment variables (highest precedence)
-2. `config/config.local.yaml` (user overrides, git-ignored)
+**Config Loading (Precedence):**
+1. Environment variables (e.g., `ALPHA_VANTAGE_API_KEY`)
+2. `config/config.local.yaml` (git-ignored)
 3. `config/config.yaml` (defaults)
 
-**Safety Constraints:**
-- **Quicktest mode**: ONLY allowed in testing/backtesting; `TradingLoopAgent` raises `ValueError` if enabled in live mode
-- **Circuit breaker**: 5 failures → open for 60s (see `trading_platforms/circuit_breaker.py`)
-- **Kill-switch**: Agent stops on `>X%` gain/loss or `>Y%` drawdown (config: `agent.yaml`)
-- **Max concurrent trades**: 2 (hard limit in `TradeMonitor`)
-- **Risk checks**: VaR limits, position concentration, correlation-based diversification (see `risk/gatekeeper.py`)
+**Critical Safety Constraints:**
+- `quicktest_mode`: Testing/backtesting only; live `TradingLoopAgent` raises `ValueError`
+- Circuit breaker: 5 consecutive failures → 60s open (exponential backoff)
+- Kill-switch: Agent stops if cumulative gain >X% or drawdown >Y% (config: `agent.kill_switch`)
+- Max concurrent trades: Hard limit of 2 (in `TradeMonitor`)
+- Risk gatekeeper: VaR %, concentration limits, correlation threshold 0.7
 
 ## Web Service & Approval Workflows
 
-**FastAPI Integration (Optional):**
-- Start: `python main.py serve --port 8000` — runs REST API on http://localhost:8000
-- Health check: `curl http://localhost:8000/health`
-- Endpoints: `/analyze` (POST), `/execute` (POST), `/approvals` (GET/POST/DELETE)
-- Swagger UI: http://localhost:8000/docs for interactive testing
-- CORS enabled by default; configure in `config/config.local.yaml`
+**FastAPI Start:**
+```bash
+python main.py serve --port 8000
+curl http://localhost:8000/health
+# Swagger UI: http://localhost:8000/docs
+```
 
-**Telegram Approval Flow (Optional):**
-1. Set bot token in `config/config.local.yaml`: `telegram.bot_token`
-2. Approval request triggers: `TradingAgentOrchestrator.run()` with `approval_mode: telegram`
-3. User approves/denies via bot buttons → executes trade or skips
-4. Approval state persisted in Redis (auto-recovery on restart)
-5. Disable with `approval_mode: none` in config
+**Approval Flow (Telegram + Redis):**
+1. Config: `telegram.bot_token`, `redis.host`
+2. Decision triggers approval request (if `approval_mode: telegram`)
+3. Redis queue stores pending approvals (FIFO)
+4. Telegram bot sends approve/deny buttons
+5. User action executes trade or skips
+6. Auto-recovery on restart (Redis persists state)
 
-**Redis Queue Management:**
-- Auto-installed: `python main.py setup-redis` (Docker-based)
-- Persists approval queue across restarts
-- Clear stale approvals: `python main.py clear-approvals`
-- Check queue: `redis-cli LLEN finance_feedback_engine:approvals`
+**Redis Management:**
+```bash
+python main.py setup-redis          # Docker-based install
+python main.py clear-approvals      # Clear stale queue
+redis-cli LLEN finance_feedback_engine:approvals
+```
 
-## Risk Management Deep Dive
+## Risk Management Summary
 
 **VaR Calculation:**
-- Method: Historical VaR (95% confidence) on trailing 252-day window
-- Used by: `RiskGatekeeper` to validate position size
-- Formula: `var_limit = portfolio_value * var_threshold` (config: `risk.var_limit`)
+- Historical VaR (95% confidence) on 252-day trailing window
+- Used to validate position size (max % of portfolio)
+- Formula: `max_position = portfolio_value × var_threshold`
 
 **Correlation Analysis:**
-- Triggers: When portfolio has 3+ assets
-- Prevents: Adding highly correlated positions (threshold: 0.7)
-- Output: `ensemble_metadata.correlation_check` in decisions
+- Triggers when portfolio has 3+ assets
+- Blocks positions with correlation ≥0.7 to existing holdings
+- Logged in decision `risk_context.correlation_check`
 
 **Position Concentration:**
 - Max per asset: 30% of portfolio (configurable)
-- Max per sector: 40% (if market data includes sectors)
-- Rejected trades logged in decision metadata
+- Max per sector: 40% (if available)
+- Rejected trades noted in `risk_context`
 
-## Dashboard & Monitoring
+## Common Pitfalls & Solutions
 
-**Portfolio Dashboard:**
-- Launch: `python main.py dashboard` — rich TUI with live updates
-- Shows: Open positions, realized/unrealized P&L, portfolio metrics
-- Keyboard: `q` to quit, `r` to refresh, `s` to export snapshot
-- Updates: Real-time from `TradeMonitor`
-
-**Trade Monitoring:**
-- Automatic detection: Monitor watches for trades matching decision metadata
-- Tracking: Position entry price, current price, open time, unrealized P&L
-- Feedback: On trade close, `TradeMonitor` calls `PortfolioMemoryEngine.record_outcome()`
-- Max concurrent: 2 trades (hard limit to prevent monitoring lag)
-
-## Integration & Extension Patterns
-
-**Add Trading Platform:**
-1. Subclass `BaseTradingPlatform` in `finance_feedback_engine/trading_platforms/<name>_platform.py`
-2. Implement: `get_balance()`, `execute_trade()`, `get_account_info()`, optionally `get_portfolio_breakdown()`
-3. Register in `PlatformFactory.create_platform()` switch statement
-4. Add config template in `config/config.yaml` under `platform_credentials`
-5. Ensure circuit breaker integration via `set_execute_breaker()`
-
-**Add AI Provider:**
-1. Implement `.query(prompt: str) -> dict` method returning `{'action': str, 'confidence': int, 'reasoning': str}`
-2. Register in `config.yaml` under `ensemble.enabled_providers` and `ensemble.provider_weights`
-3. Handle in `DecisionEngine.query_ai_provider()` or add to `EnsembleManager`
-
-**Add Data Provider:**
-1. Implement `.get_market_data(asset_pair: str) -> dict` with OHLCV structure
-2. Optionally implement `.get_comprehensive_market_data()` for multi-timeframe + sentiment
-3. Inject in `FinanceFeedbackEngine.__init__()`
-
-**Extend Ensemble:**
-1. Add provider to `config.yaml`: `ensemble.enabled_providers` list and `ensemble.provider_weights` dict
-2. Test fallback: `pytest tests/test_ensemble_fallback.py`
-3. Verify metadata: `cat data/decisions/*.json | jq '.ensemble_metadata'`
-
-## Common Pitfalls & Troubleshooting
-
-**Asset Pair Standardization:**
-- Always use `standardize_asset_pair()` before platform routing or decision storage
-- Failure to standardize causes inconsistent lookups and platform routing errors
-
-**Config Loading:**
-- `config/config.local.yaml` is git-ignored and overrides defaults — check it first when debugging config issues
-- Environment variables take highest precedence; unset them if config changes aren't applying
-- Backtest-specific config: Use `config/config.backtest.yaml` which forces debate mode ON and local providers
-
-**Ensemble Provider Failures:**
-- Dynamic weights auto-renormalize when providers fail — check `ensemble_metadata.active_weights` in decisions
-- InsufficientProvidersError raised when quorum not met (Phase 1 validation)
-- Test with `pytest tests/test_ensemble_fallback.py` to verify fallback tiers work
-
-**Platform-Specific Issues:**
-- Circuit breaker opens after 5 consecutive failures (60s cooldown) — check logs for "Circuit breaker OPEN"
-- Unified platform routes by asset type: crypto → Coinbase, forex → Oanda (see `platform_factory.py`)
-- Mock platform returns synthetic data; ensure `trading_platform: mock` in test configs
-
-**Backtesting:**
-- Decision cache (SQLite) prevents redundant LLM queries; clear with `rm data/backtest_cache.db` if stale
-- Memory isolation mode (`memory_isolation_mode: true`) uses separate storage for backtests
-- Position sizing requires balance; signal-only mode activates when balance unavailable
-
-**Testing:**
-- 70% coverage enforced in pytest; add `# pragma: no cover` only for defensive error handling
-- Use `mock_engine` fixture from `conftest.py` for integration tests
-- Quicktest mode ONLY for tests; `TradingLoopAgent` raises ValueError if enabled in live mode
+| Issue | Root Cause | Solution |
+|-------|-----------|----------|
+| Inconsistent decision lookups | Asset pair not standardized | Use `standardize_asset_pair()` before routing |
+| Config not loading | Wrong precedence or typo | Check `config.local.yaml` exists, env vars unset |
+| Provider timeout | Network latency, API rate limit | Increase timeout in config, check API key validity |
+| Ensemble fails quorum | Too many provider failures | Verify provider configs, check fallback tiers work (`pytest test_ensemble_tiers.py`) |
+| Circuit breaker open | 5 consecutive execution failures | Wait 60s or restart service; check platform credentials |
+| Position not placed | Balance insufficient, signal-only mode active | Check balance, verify `recommended_position_size` not null |
+| Backtest cache stale | Old cached decisions | Run `rm data/backtest_cache.db` before next backtest |
+| Telegram bot silent | Token invalid, Redis unavailable | Verify token in config, run `python main.py setup-redis` |
+| Dashboard blank | No trades monitored (max 2 concurrent limit) | Open a position first, check `TradeMonitor` logs |
 
 ## Editing Safety Rules
 
-**Critical Rules:**
-- Make minimal, focused edits; preserve public APIs and config keys (breaking changes require migration plan)
-- When changing decision JSON schema, update: `decision_engine/decision_validation.py`, CLI display, persistence, and add example in `data/decisions/`
-- Prefer feature flags in config over hardcoded logic (e.g., `enable_x: true` in YAML)
-- Test ensemble changes with multiple providers to ensure fallback tiers work
-- When adding new platforms, ensure circuit breaker integration and test with `config.test.mock.yaml`
-- **Never disable debate mode in live trading** — only for quicktest (testing/backtesting)
+**Before Any Edit:**
+1. Understand the subsystem (read architecture section above)
+2. Verify related tests exist (`pytest --collect-only tests/ | grep keyword`)
+3. Run tests locally (`pytest tests/ -v --tb=short`)
+
+**Minimal, Focused Edits:**
+- Change one thing per commit
+- Preserve public APIs and config keys (breaking changes need migration)
+- Keep decision JSON schema changes synchronized across: validation schema, CLI display, persistence, tests
+- Prefer config flags over hardcoded logic
+
+**Critical Guardrails:**
+- Never disable debate mode in live trading (only in testing/backtesting)
+- Always ensure circuit breaker wraps new platform execute methods
+- Test ensemble changes with multiple providers to verify fallback tiers
+- When adding platforms, test with `config.test.mock.yaml` before live credentials
+- 70% coverage enforced in `pyproject.toml`; only `# pragma: no cover` for defensive error handling
 
 **Before Committing:**
-- Run `pytest --cov=finance_feedback_engine` (min 70% coverage, enforced in `pyproject.toml`)
-- Check no secrets in `config/config.local.yaml` (should be git-ignored)
-- Validate config changes against `config/config.yaml` schema
-- Test with MockPlatform before live platforms
-- For API changes: test endpoints with `pytest tests/test_api*.py`
-- For integrations: test with mocks first (`tests/test_integrations_telegram_redis.py`)
+```bash
+pytest --cov=finance_feedback_engine --cov-fail-under=70
+# No secrets in config.local.yaml (should be git-ignored)
+# Config changes validated against schema
+# Test with MockPlatform before live platforms
+pytest tests/test_api*.py                  # For API changes
+pytest tests/test_ensemble_tiers.py        # For ensemble changes
+pytest tests/test_integrations_telegram_redis.py  # For integrations
+```
 
-**Debugging Tips:**
-- **Decision cache stale?** Clear with: `rm data/backtest_cache.db`
-- **Provider not responding?** Check logs: `tail -f logs/` (if enabled in config)
-- **Risk gatekeeper blocking?** Check decision JSON: `cat data/decisions/latest.json | jq '.risk_context'`
-- **Telegram not sending?** Verify bot token: `python -c "import config; print(config.telegram.bot_token)"`
-- **API health check:** `curl -s http://localhost:8000/health | jq`
-
-**Documentation Updates:**
-- Update `CHANGELOG.md` for user-facing changes
-- Add quick reference in `*_QUICKREF.md` for major features
-- Update architecture diagrams in `docs/diagrams/` (Mermaid format)
-- For API endpoints: document in API docstrings and FastAPI auto-generates Swagger
-- For new providers: add provider info to README.md feature list and ensemble docs
+**Debugging Checklist:**
+- Stale decision cache? → `rm data/backtest_cache.db`
+- Provider lag? → Check logs: `tail -f logs/` (if logging enabled in config)
+- Risk gatekeeper blocking? → Inspect: `cat data/decisions/latest.json | jq '.risk_context'`
+- Telegram silent? → Verify: `python -c "import config; print(config.telegram.bot_token)"`
+- API down? → `curl -s http://localhost:8000/health | jq`
 
 ---
 
-**See Also:**
-- Full ensemble docs: `docs/ENSEMBLE_FALLBACK_SYSTEM.md`
-- Backtesting guide: `BACKTESTER_TRAINING_FIRST_QUICKREF.md`
-- Memory system: `PORTFOLIO_MEMORY_QUICKREF.md`
-- Monitoring: `LIVE_MONITORING_QUICKREF.md`
-- Signal-only mode: `SIGNAL_ONLY_MODE_QUICKREF.md`
-- Web API: `GEMINI_CLI_INTEGRATION.md` (includes debate mode and approval workflows)
+## Related Documentation
 
-**Recent Major Changes (Dec 2025):**
-- Separated risk modules into dedicated `finance_feedback_engine/risk/` directory
-- Added learning feedback analyzer for provider weight optimization
-- Integrated FastAPI web service with Telegram + Redis approval flows
-- Portfolio dashboard with real-time monitoring (Python Rich TUI)
-- VaR and correlation analysis for multi-asset risk management
-- Enhanced decision schema with `ensemble_metadata` and `risk_context` fields
+- Ensemble deep-dive: `docs/ENSEMBLE_FALLBACK_SYSTEM.md`
+- Backtesting guide: `docs/BACKTESTER_TRAINING_FIRST_QUICKREF.md`
+- Portfolio memory: `docs/PORTFOLIO_MEMORY_QUICKREF.md`
+- Live monitoring: `docs/LIVE_MONITORING_QUICKREF.md`
+- Signal-only mode: `docs/SIGNAL_ONLY_MODE_QUICKREF.md`
+- Web API + approval flows: `docs/GEMINI_CLI_INTEGRATION.md`
+- Architecture details: `docs/architecture/`
 
-If any section is unclear or incomplete, specify which part to expand or clarify.
-```
+---
+
+**Version History:**
+- **0.9.9** (Dec 2025): Risk module separation, learning feedback, FastAPI + Redis approval flows, portfolio dashboard, VaR/correlation analysis, enhanced decision schema
+- **0.9.0** (Nov 2025): Debate mode, ensemble fallback tiers, backtesting framework, market regime detection
+- **2.0.0** (Initial): Core trading engine, multi-platform support, CLI interface
+
+For clarifications or updates to this guide, check the repository docs or open an issue.
