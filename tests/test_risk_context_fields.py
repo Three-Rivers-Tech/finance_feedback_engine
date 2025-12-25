@@ -11,6 +11,7 @@ Tests:
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 # Add parent directory to path
@@ -19,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from finance_feedback_engine.core import FinanceFeedbackEngine
 
 
-def test_risk_context_fields():
+@pytest.mark.asyncio
+async def test_risk_context_fields():
     """Test that VaR and correlation context fields are injected into decisions."""
     print("\n" + "=" * 70)
     print("TEST: VaR/Correlation Context Fields in Decision")
@@ -34,14 +36,25 @@ def test_risk_context_fields():
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
+    # Enable backtest mode for testing (allows mock data generation)
+    config["is_backtest"] = True
+
+    # Configure mock trading platform for testing
+    config["trading_platform"] = "mock"
+
     # Initialize engine
     print("\n1. Initializing engine...")
     engine = FinanceFeedbackEngine(config)
+
+    # Manually initialize mock trading platform (needed in backtest mode)
+    from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
+    engine.trading_platform = MockTradingPlatform({})
+
     print("   ✓ Engine initialized")
 
-    # Generate a decision
+    # Generate a decision (using async API)
     print("\n2. Generating decision with risk context...")
-    decision = engine.analyze_asset("BTCUSD", use_memory_context=False)
+    decision = await engine.analyze_asset_async("BTCUSD", use_memory_context=False)
 
     # Validate decision structure
     assert isinstance(decision, dict), "Decision should be a dictionary"

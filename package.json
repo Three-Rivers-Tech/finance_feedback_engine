@@ -1,5 +1,8 @@
 {
   "dependencies": {
     "@modelcontextprotocol/server-redis": "^2025.4.25"
+  },
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.53"
   }
 }
