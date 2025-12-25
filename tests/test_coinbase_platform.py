@@ -11,54 +11,47 @@ from finance_feedback_engine.trading_platforms.coinbase_platform import (
 
 @pytest.fixture
 def mock_coinbase_client():
-    """Provides a mock Coinbase RESTClient using CDP API format."""
+    """Provides a mock Coinbase RESTClient using proper object structure."""
     client = MagicMock()
 
-    # Mock get_portfolios response (CDP API)
-    portfolios_response = MagicMock()
-    portfolios_response.portfolios = [
-        {"uuid": "test-portfolio-uuid", "name": "Default Portfolio"}
-    ]
-    client.get_portfolios.return_value = portfolios_response
-
-    # Mock get_portfolio_breakdown response (CDP API)
-    breakdown_response = {
-        "breakdown": {
-            "portfolio_balances": {
-                "total_futures_balance": {"value": "10000.0"},
-                "futures_unrealized_pnl": {"value": "400.0"},
-                "perp_unrealized_pnl": {"value": "100.0"},
-            },
-            "futures_positions": [
-                {
-                    "product_id": "BTC-USD-PERP",
-                    "side": "LONG",
-                    "number_of_contracts": "1.5",
-                    "avg_entry_price": "50000.0",
-                    "current_price": "51000.0",
-                    "unrealized_pnl": "750.0",
-                    "daily_realized_pnl": "50.0",
-                    "leverage": "10.0",
-                }
-            ],
-            "perp_positions": [],
-            "spot_positions": [
-                {
-                    "asset": "USD",
-                    "available_to_trade_fiat": "500.0",
-                },
-                {
-                    "asset": "USDC",
-                    "available_to_trade_fiat": "1500.0",
-                },
-                {
-                    "asset": "BTC",
-                    "available_to_trade_fiat": "0.0",  # Non-USD/USDC ignored
-                },
-            ],
-        }
+    # Mock get_futures_balance_summary response (object with attributes)
+    futures_response = MagicMock()
+    balance_summary = {
+        "total_usd_balance": {"value": "10000.0"},
+        "unrealized_pnl": {"value": "400.0"},
+        "daily_realized_pnl": {"value": "100.0"},
+        "futures_buying_power": {"value": "5000.0"},
+        "initial_margin": {"value": "1000.0"},
     }
-    client.get_portfolio_breakdown.return_value = breakdown_response
+    futures_response.balance_summary = balance_summary
+    client.get_futures_balance_summary.return_value = futures_response
+
+    # Mock list_futures_positions response
+    positions_response = MagicMock()
+    positions_response.positions = [
+        MagicMock(
+            product_id="BTC-USD-PERP",
+            side="LONG",
+            number_of_contracts="1.5",
+            avg_entry_price="50000.0",
+            current_price="51000.0",
+            unrealized_pnl="750.0",
+        )
+    ]
+    client.list_futures_positions.return_value = positions_response
+
+    # Mock get_accounts response for spot holdings
+    accounts_response = MagicMock()
+    usd_account = MagicMock()
+    usd_account.currency = "USD"
+    usd_account.available_balance = MagicMock(value="500.0")
+
+    usdc_account = MagicMock()
+    usdc_account.currency = "USDC"
+    usdc_account.available_balance = MagicMock(value="1500.0")
+
+    accounts_response.accounts = [usd_account, usdc_account]
+    client.get_accounts.return_value = accounts_response
 
     return client
 
@@ -97,4 +90,5 @@ def test_get_portfolio_breakdown_total_value(coinbase_platform):
     assert breakdown["total_value_usd"] == expected_total_value
     assert breakdown["futures_value_usd"] == 10000.0
     assert breakdown["spot_value_usd"] == 2000.0
-    assert len(breakdown["holdings"]) == 3  # 1 futures position, 2 spot balances
+    assert len(breakdown["holdings"]) == 2  # 2 spot balances (USD, USDC)
+    assert len(breakdown["futures_positions"]) == 1  # 1 futures position

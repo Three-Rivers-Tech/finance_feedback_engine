@@ -240,12 +240,41 @@ class TestLLMConnectionPooling:
     )
     def test_singleton_pattern(self):
         """Verify LocalLLMProvider uses singleton pattern."""
+        from subprocess import CompletedProcess
         from finance_feedback_engine.decision_engine.local_llm_provider import (
             LocalLLMProvider,
         )
 
+        def mock_subprocess_run(args, **kwargs):
+            """Mock subprocess.run to handle different ollama commands."""
+            if "list" in args:
+                # Model is available (ollama list shows it)
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout="llama3.2:3b-instruct-fp16".encode(),
+                    stderr=b""
+                )
+            elif "pull" in args:
+                # Model download succeeds
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"success",
+                    stderr=b""
+                )
+            else:
+                # Default: ollama --version check
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"",
+                    stderr=b""
+                )
+
         with patch(
-            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run"
+            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run",
+            side_effect=mock_subprocess_run
         ):
             config = {"decision_engine": {"local_models": []}}
 
@@ -262,16 +291,42 @@ class TestLLMConnectionPooling:
     )
     def test_connection_health_check(self):
         """Verify LLM connection health check works."""
+        from subprocess import CompletedProcess
         from finance_feedback_engine.decision_engine.local_llm_provider import (
             LocalLLMProvider,
         )
 
-        with patch(
-            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run"
-        ) as mock_run:
-            # Mock successful health check
-            mock_run.return_value = Mock(returncode=0, stdout="models list")
+        def mock_subprocess_run(args, **kwargs):
+            """Mock subprocess.run to handle different ollama commands."""
+            if "list" in args:
+                # Model is available (ollama list shows it)
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout="llama3.2:3b-instruct-fp16".encode(),
+                    stderr=b""
+                )
+            elif "pull" in args:
+                # Model download succeeds
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"success",
+                    stderr=b""
+                )
+            else:
+                # Default: ollama --version check
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"",
+                    stderr=b""
+                )
 
+        with patch(
+            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run",
+            side_effect=mock_subprocess_run
+        ):
             config = {"decision_engine": {"local_models": []}}
             provider = LocalLLMProvider(config)
 
@@ -283,12 +338,41 @@ class TestLLMConnectionPooling:
     )
     def test_connection_stats(self):
         """Verify connection statistics are tracked."""
+        from subprocess import CompletedProcess
         from finance_feedback_engine.decision_engine.local_llm_provider import (
             LocalLLMProvider,
         )
 
+        def mock_subprocess_run(args, **kwargs):
+            """Mock subprocess.run to handle different ollama commands."""
+            if "list" in args:
+                # Model is available (ollama list shows it)
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout="llama3.2:3b-instruct-fp16".encode(),
+                    stderr=b""
+                )
+            elif "pull" in args:
+                # Model download succeeds
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"success",
+                    stderr=b""
+                )
+            else:
+                # Default: ollama --version check
+                return CompletedProcess(
+                    args=args,
+                    returncode=0,
+                    stdout=b"",
+                    stderr=b""
+                )
+
         with patch(
-            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run"
+            "finance_feedback_engine.decision_engine.local_llm_provider.subprocess.run",
+            side_effect=mock_subprocess_run
         ):
             config = {"decision_engine": {"local_models": []}}
             provider = LocalLLMProvider(config)
