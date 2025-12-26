@@ -31,11 +31,11 @@ A comprehensive configuration validation audit has identified **CRITICAL SECURIT
 ```yaml
 # THESE ARE COMPROMISED AND MUST BE ROTATED IMMEDIATELY
 
-alpha_vantage_api_key: EXAMPLE_API_KEY_ABC123XYZ456
+alpha_vantage_api_key: X74XIZNU1F9YW72O
 
 platforms:
   - credentials:
-      api_key: aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
+      api_key: 1de4cd48-11aa-4043-809b-99eaae3ca001
       api_secret: |
         -----BEGIN EC PRIVATE KEY-----
         MHcCAQEEIKBrHhl5N3bmyd5J9r9TFrd8ySgDezXgKj8GDYYzkvRjoAoGCCqGSM49
@@ -44,12 +44,12 @@ platforms:
         -----END EC PRIVATE KEY-----
 
   - credentials:
-      account_id: 001-001-1234567-001
-      api_key: aaaaaaaa11111111bbbbbbbb22222222-cccccccc33333333dddddddd44444444
+      account_id: 001-001-8530782-001
+      api_key: ac4dfdfda11a1c93ec34082e06b2759d-e434f23112e7cc735dec4b9d0586f725
 
 telegram:
-  bot_token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890
-  ngrok_auth_token: 1AbC2DeF3GhI4JkL5MnO6PqR7StU8VwX9YzA0BcD1EfG2HiJ
+  bot_token: 8442805316:AAHBiqBHfM14EhjfK0CJ8SC0lOde3flT6bQ
+  ngrok_auth_token: 36ot41s9lo4I25EbPb8afebC6Cy_3UwU54wg58VWP4d3fL22t
 ```
 
 **Impact**:
@@ -69,20 +69,20 @@ telegram:
 
    # Coinbase
    # Visit: https://www.coinbase.com/settings/api
-   # Revoke old key: aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
+   # Revoke old key: 1de4cd48-11aa-4043-809b-99eaae3ca001
    # Generate new API key pair
 
    # Oanda
    # Visit: https://www.oanda.com/
-   # Revoke token: aaaaaaaa11111111bbbbbbbb22222222-cccccccc33333333dddddddd44444444
+   # Revoke token: ac4dfdfda11a1c93ec34082e06b2759d-e434f23112e7cc735dec4b9d0586f725
    # Generate new personal access token
 
    # Telegram
-   # Contact @BotFather to revoke token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890
+   # Contact @BotFather to revoke token: 8442805316:AAHBiqBHfM14EhjfK0CJ8SC0lOde3flT6bQ
 
    # Ngrok
    # Visit: https://dashboard.ngrok.com/
-   # Revoke token: 1AbC2DeF3GhI4JkL5MnO6PqR7StU8VwX9YzA0BcD1EfG2HiJ
+   # Revoke token: 36ot41s9lo4I25EbPb8afebC6Cy_3UwU54wg58VWP4d3fL22t
    ```
 
 2. **REMOVE FROM GIT HISTORY**
@@ -305,7 +305,7 @@ pytest tests/test_config_validation.py --cov=finance_feedback_engine.utils.confi
    alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY}"
 
    # Bad
-   alpha_vantage_api_key: "EXAMPLE_API_KEY_ABC123XYZ456"
+   alpha_vantage_api_key: "X74XIZNU1F9YW72O"
    ```
 
 2. **Store Secrets in config.local.yaml (Git-Ignored)**
@@ -671,17 +671,17 @@ Total Issues: 12
 
   Rule: exposed_secret
   Location: config/config.local.yaml:15
-  Message: Potential exposed secret detected (api_key): EXAMPLE_API_KEY_ABC123XYZ456...
+  Message: Potential exposed secret detected (api_key): X74XIZNU1F9YW72O...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: exposed_secret
   Location: config/config.local.yaml:83
-  Message: Potential exposed secret detected (api_key): aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee...
+  Message: Potential exposed secret detected (api_key): 1de4cd48-11aa-4043-809b-99eaae3ca001...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: exposed_secret
   Location: config/config.local.yaml:137
-  Message: Potential exposed secret detected (token): 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890...
+  Message: Potential exposed secret detected (token): 8442805316:AAHBiqBHfM14EhjfK0CJ8SC0lOde3flT6bQ...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: debug_in_production

@@ -50,6 +50,7 @@ export interface PortfolioStatus {
     currency: string;
   };
   active_positions: number;
+  max_concurrent_trades?: number;
   platform: string;
   error?: string;
 }
