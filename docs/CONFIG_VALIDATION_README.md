@@ -24,7 +24,7 @@ python scripts/validate_config.py --check-secrets
 **❌ Exposed Secret Detected**
 ```bash
 ❌ Potential secrets found in: config/config.local.yaml
-   Line 15: API Key - EXAMPLE_API_KEY_ABC123XYZ456...
+   Line 15: API Key - X74XIZNU1F9YW72O...
 
 Fix: Use environment variables
 alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY}"
@@ -150,7 +150,7 @@ python scripts/validate_config.py config/config.yaml -e production --exit-on-err
 **Never Hardcode Secrets**
 ```yaml
 # ❌ NEVER do this
-alpha_vantage_api_key: "EXAMPLE_API_KEY_ABC123XYZ456"
+alpha_vantage_api_key: "X74XIZNU1F9YW72O"
 ```
 
 **Never Commit config.local.yaml**

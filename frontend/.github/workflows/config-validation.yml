@@ -1,0 +1,189 @@
+name: Configuration Validation
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '.env*'
+      - 'src/config/**'
+      - 'scripts/validate-config.ts'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.env*'
+      - 'src/config/**'
+      - 'scripts/validate-config.ts'
+
+jobs:
+  validate-config:
+    name: Validate Configuration Files
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        environment: [development, production]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate ${{ matrix.environment }} configuration
+        run: |
+          if [ "${{ matrix.environment }}" = "production" ]; then
+            npm run validate-config:prod
+          else
+            npm run validate-config -- --env ${{ matrix.environment }}
+          fi
+
+      - name: Run configuration tests
+        run: npm run test:config
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for hardcoded secrets in .env files
+        run: |
+          echo "🔍 Scanning for hardcoded secrets..."
+
+          # Check for weak API keys
+          if grep -r "VITE_API_KEY.*=.*\(your_api_key\|example\|test\|demo\|dev-key\)" --include="*.env" . 2>/dev/null; then
+            echo "❌ Found weak or example API keys in .env files"
+            exit 1
+          fi
+
+          # Check for real API keys committed to .env (not .env.local or .env.example)
+          if [ -f ".env" ] && grep -q "VITE_API_KEY=.*[a-zA-Z0-9]" .env; then
+            echo "⚠️  Warning: API key found in .env file"
+            echo "Please use .env.local for local development keys"
+          fi
+
+          echo "✅ No critical secrets found"
+
+      - name: Check .gitignore
+        run: |
+          echo "🔍 Checking .gitignore configuration..."
+
+          if ! grep -q "^\.env$" .gitignore 2>/dev/null; then
+            echo "⚠️  Warning: .env not in .gitignore"
+            echo "Consider adding .env to .gitignore"
+          fi
+
+          if ! grep -q "^\.env\.local$" .gitignore 2>/dev/null; then
+            echo "⚠️  Warning: .env.local not in .gitignore"
+            echo "Consider adding .env.local to .gitignore"
+          fi
+
+          echo "✅ .gitignore check complete"
+
+      - name: Check for HTTP in production config
+        run: |
+          echo "🔍 Checking production configuration..."
+
+          if [ -f ".env.production" ]; then
+            # Check for HTTP URLs (excluding localhost)
+            if grep -E "VITE_.*URL.*=.*http://(?!localhost)" .env.production 2>/dev/null; then
+              echo "❌ Found HTTP URLs in production config"
+              echo "Production should use HTTPS or relative URLs"
+              exit 1
+            fi
+          fi
+
+          echo "✅ Production config security check passed"
+
+  type-check:
+    name: TypeScript Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run type-check
+
+  test-coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Check coverage threshold
+        run: |
+          echo "🔍 Checking test coverage..."
+
+          # Extract coverage percentage (this is a simplified check)
+          # In a real scenario, you'd parse the coverage report JSON
+
+          COVERAGE=$(npm run test:coverage 2>&1 | grep -oP 'All files.*?\|\s+\K\d+\.?\d*' | head -1 || echo "0")
+
+          echo "Coverage: ${COVERAGE}%"
+
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage below 80% threshold"
+            exit 1
+          fi
+
+          echo "✅ Coverage meets threshold"
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/coverage-final.json
+          flags: config
+          name: config-coverage
+        if: always()
+
+  validate-all:
+    name: All Checks Passed
+    runs-on: ubuntu-latest
+    needs: [validate-config, security-scan, type-check, test-coverage]
+
+    steps:
+      - name: All validations passed
+        run: |
+          echo "✅ All configuration validation checks passed!"
+          echo ""
+          echo "Summary:"
+          echo "  ✅ Configuration validation"
+          echo "  ✅ Security scan"
+          echo "  ✅ Type checking"
+          echo "  ✅ Test coverage"
+          echo ""
+          echo "Configuration is safe to merge!"
