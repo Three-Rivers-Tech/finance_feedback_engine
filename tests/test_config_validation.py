@@ -70,7 +70,7 @@ class TestConfigValidator:
     def test_exposed_api_key(self, validator):
         """Test detection of exposed API key"""
         config = {
-            "alpha_vantage_api_key": "REDACTED_ALPHAVANTAGE_KEY",  # Real key pattern
+            "alpha_vantage_api_key": "TEST_ALPHA_KEY_ABC123XYZ",  # Real key pattern
             "decision_engine": {
                 "ai_provider": "local",
             },
@@ -366,7 +366,7 @@ REDACTED_KEY_MATERIAL
         config = {
             "telegram": {
                 "enabled": True,
-                "bot_token": "8442805316:AAHBiqBHfM14EhjfK0CJ8SC0lOde3flT6bQ",  # Real pattern
+                "bot_token": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890",  # Real pattern
             },
             "decision_engine": {
                 "ai_provider": "local",
