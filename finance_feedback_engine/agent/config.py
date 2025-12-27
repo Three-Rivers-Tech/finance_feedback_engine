@@ -3,14 +3,6 @@ from typing import List, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class AutonomousAgentConfig(BaseModel):
-    """Configuration for the autonomous trading agent."""
-
-    enabled: bool = False
-    profit_target: float = 0.05  # 5%
-    stop_loss: float = 0.02  # 2%
-
-
 class TradingAgentConfig(BaseModel):
     """
     Configuration model for the Trading Agent.
@@ -19,16 +11,17 @@ class TradingAgentConfig(BaseModel):
     All percentage fields use decimal fraction notation (e.g., 0.05 = 5%).
     """
 
-    # --- Execution Controls ---
-    autonomous_execution: bool = False
-    approval_policy: Literal["always", "never", "on_new_asset"] = "on_new_asset"
+    # --- Execution Mode (SIMPLIFIED) ---
+    # Single binary switch: True = auto-execute trades, False = send to Telegram for approval
+    autonomous_mode: bool = False
+
+    # --- Safety Features (apply to both modes) ---
     max_daily_trades: int = 5
     # Kill-switch thresholds (decimal fraction of portfolio P/L, e.g., 0.05 = 5%)
     # Stop trading if portfolio gains >= kill_switch_gain_pct
     # or losses <= -kill_switch_loss_pct
     kill_switch_gain_pct: float = 0.05  # 5%
     kill_switch_loss_pct: float = 0.02  # 2%
-    autonomous: AutonomousAgentConfig = Field(default_factory=AutonomousAgentConfig)
 
     # --- Strategic Goals ---
     strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"

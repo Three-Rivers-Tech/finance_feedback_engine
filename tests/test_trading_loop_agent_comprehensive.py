@@ -91,13 +91,9 @@ def mock_trading_platform():
 @pytest.fixture
 def minimal_config():
     """Minimal valid configuration for autonomous mode."""
-    from finance_feedback_engine.agent.config import AutonomousAgentConfig
-
     config = TradingAgentConfig(
         asset_pairs=["BTCUSD"],
-        autonomous=AutonomousAgentConfig(
-            enabled=True
-        ),  # Autonomous mode bypasses notification validation
+        autonomous_mode=True,  # Autonomous mode bypasses notification validation
         analysis_frequency_seconds=60,
         max_daily_trades=10,
         max_drawdown_percent=0.2,  # 20%
@@ -116,11 +112,9 @@ def minimal_config():
 @pytest.fixture
 def signal_only_config():
     """Configuration for signal-only mode (requires Telegram)."""
-    from finance_feedback_engine.agent.config import AutonomousAgentConfig
-
     config = TradingAgentConfig(
         asset_pairs=["BTCUSD"],
-        autonomous=AutonomousAgentConfig(enabled=False),  # Signal-only mode
+        autonomous_mode=False,  # Signal-only mode
         analysis_frequency_seconds=60,
         max_daily_trades=10,
         max_drawdown_percent=0.2,
@@ -204,12 +198,10 @@ class TestAgentInitialization:
         mock_trading_platform,
     ):
         """Test signal-only mode without Telegram raises ValueError."""
-        from finance_feedback_engine.agent.config import AutonomousAgentConfig
-
         # Create config with signal-only mode (autonomous disabled) and no Telegram
         config = TradingAgentConfig(
             asset_pairs=["BTCUSD"],
-            autonomous=AutonomousAgentConfig(enabled=False),
+            autonomous_mode=False,
             analysis_frequency_seconds=60,
             max_daily_trades=10,
             max_drawdown_percent=0.2,

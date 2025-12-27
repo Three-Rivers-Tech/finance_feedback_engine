@@ -1278,10 +1278,9 @@ Format response as a structured technical analysis demonstration.
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool = False,
     ) -> Dict[str, Any]:
         """
-        Calculate all position sizing parameters.
+        Calculate all position sizing parameters for all decisions.
 
         Args:
             context: Decision context with market data and config
@@ -1290,7 +1289,6 @@ Format response as a structured technical analysis demonstration.
             has_existing_position: Whether an existing position exists
             relevant_balance: Platform-specific balance
             balance_source: Name of balance source (for logging)
-            signal_only_default: Whether signal-only mode is enabled
 
         Returns:
             Dict with keys:
@@ -1298,7 +1296,6 @@ Format response as a structured technical analysis demonstration.
             - stop_loss_price: Stop loss price level
             - sizing_stop_loss_percentage: Stop loss percentage used
             - risk_percentage: Risk percentage used
-            - signal_only: Whether this is signal-only mode
         """
         # Delegating to the position sizing calculator
         return self.position_sizing_calc.calculate_position_sizing_params(
@@ -1308,7 +1305,6 @@ Format response as a structured technical analysis demonstration.
             has_existing_position,
             relevant_balance,
             balance_source,
-            signal_only_default,
         )
 
     def _create_decision(
@@ -1343,15 +1339,7 @@ Format response as a structured technical analysis demonstration.
             asset_pair, context.get("portfolio"), context.get("monitoring_context")
         )
 
-        # Calculate position sizing parameters
-        # Prefer decision_engine.signal_only_default (used across the codebase/tests),
-        # fall back to top-level for backward compatibility.
-        decision_cfg = self.config.get("decision_engine", {})
-        signal_only_default = bool(
-            decision_cfg.get(
-                "signal_only_default", self.config.get("signal_only_default", False)
-            )
-        )
+        # Calculate position sizing parameters (always calculated for both autonomous and signal-only modes)
         sizing_params = self._calculate_position_sizing_params(
             context=context,
             current_price=context["market_data"].get("close", 0),
@@ -1359,7 +1347,6 @@ Format response as a structured technical analysis demonstration.
             has_existing_position=has_existing_position,
             relevant_balance=relevant_balance,
             balance_source=balance_source,
-            signal_only_default=signal_only_default,
         )
 
         # Delegating to the decision validator

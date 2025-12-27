@@ -37,10 +37,10 @@ class PositionSizingCalculator:
         has_existing_position: bool,
         relevant_balance: Dict[str, float],
         balance_source: str,
-        signal_only_default: bool,
     ) -> Dict[str, Any]:
         """
-        Calculate all position sizing parameters.
+        Calculate all position sizing parameters for ALL decisions.
+        Position sizing calculated for both autonomous and signal-only modes.
 
         Args:
             context: Decision context with market data and config
@@ -49,7 +49,6 @@ class PositionSizingCalculator:
             has_existing_position: Whether an existing position exists
             relevant_balance: Platform-specific balance
             balance_source: Name of balance source (for logging)
-            signal_only_default: Whether signal-only mode is enabled
 
         Returns:
             Dict with keys:
@@ -57,7 +56,6 @@ class PositionSizingCalculator:
             - stop_loss_price: Stop loss price level
             - sizing_stop_loss_percentage: Stop loss percentage used
             - risk_percentage: Risk percentage used
-            - signal_only: Whether this is signal-only mode
         """
         # Check if we have valid balance
         has_valid_balance = (
@@ -67,13 +65,8 @@ class PositionSizingCalculator:
         )
 
         # Determine if we should calculate position sizing
-        should_calculate = (
-            has_valid_balance
-            and not signal_only_default
-            and (
-                action in ["BUY", "SELL"]
-                or (action == "HOLD" and has_existing_position)
-            )
+        should_calculate = has_valid_balance and (
+            action in ["BUY", "SELL"] or (action == "HOLD" and has_existing_position)
         )
 
         # Get risk parameters from agent config
@@ -123,7 +116,6 @@ class PositionSizingCalculator:
             "stop_loss_price": None,
             "sizing_stop_loss_percentage": None,
             "risk_percentage": None,
-            "signal_only": False,
             "position_sizing_method": "risk_based",  # Default method
         }
 
@@ -170,7 +162,6 @@ class PositionSizingCalculator:
                     "stop_loss_price": stop_loss_price,
                     "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                     "risk_percentage": risk_percentage,
-                    "signal_only": False,
                 }
             )
 
@@ -192,14 +183,10 @@ class PositionSizingCalculator:
 
             return result
 
-        # CASE 2: Zero/invalid balance or signal_only_default=True - switch to signal-only mode
-        # Determine if this should be signal-only mode based on balance or config
-        signal_only = signal_only_default or not has_valid_balance
-
-        # HOLD without position: no sizing needed, but preserve signal_only flag
+        # CASE 2: Zero/invalid balance - skip position sizing calculation
+        # HOLD without position: no sizing needed
         if action == "HOLD" and not has_existing_position:
             logger.info("HOLD without existing position - no position sizing shown")
-            result["signal_only"] = signal_only
             return result
 
         # Determine minimum order size based on asset type (must be set unconditionally)
@@ -223,11 +210,11 @@ class PositionSizingCalculator:
         # Calculate minimum viable position size based on platform minimum
         # For crypto futures: minimum $10 USD notional, so position size = min_order_size / price
         # This ensures we can execute the smallest possible trade
-        if current_price > 0 and not signal_only:
+        if current_price > 0:
             # Calculate minimum position size in units
             min_position_size = min_order_size / current_price
 
-            # Use the minimum as the recommended size (when not in signal-only mode)
+            # Use the minimum as the recommended size
             recommended_position_size = min_position_size
 
             logger.info(
@@ -237,7 +224,7 @@ class PositionSizingCalculator:
                 current_price,
             )
         else:
-            # Signal-only mode (or missing price): provide sizing recommendation for human approval.
+            # Missing price: provide sizing recommendation using default balance
             default_balance = 10000.0
             if use_kelly_criterion and self.kelly_calculator:
                 # Use Kelly with default parameters
@@ -267,15 +254,8 @@ class PositionSizingCalculator:
                     default_balance,
                 )
 
-            if signal_only:
-                logger.info(
-                    "Signal-only mode enabled (balance_valid: %s, signal_only_default: %s)",
-                    has_valid_balance,
-                    signal_only_default,
-                )
-
-        # Calculate stop loss price (only if position size exists and not signal-only)
-        if current_price > 0 and sizing_stop_loss_percentage > 0 and not signal_only:
+        # Calculate stop loss price when we have valid data
+        if current_price > 0 and sizing_stop_loss_percentage > 0:
             stop_loss_price = (
                 current_price * (1 - sizing_stop_loss_percentage)
                 if action == "BUY"
@@ -290,19 +270,11 @@ class PositionSizingCalculator:
                 "stop_loss_price": stop_loss_price,
                 "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                 "risk_percentage": risk_percentage,
-                "signal_only": signal_only,
             }
         )
 
         # Log appropriate message
-        if signal_only:
-            if not has_valid_balance:
-                logger.info("Signal-only mode: No valid balance - no position sizing")
-            elif signal_only_default:
-                logger.info(
-                    "Signal-only mode: Config flag 'signal_only_default' enabled - no position sizing"
-                )
-        elif not has_valid_balance:
+        if not has_valid_balance:
             logger.warning(
                 "No valid %s balance - using minimum order size: %.6f units ($%.2f USD notional)",
                 balance_source,

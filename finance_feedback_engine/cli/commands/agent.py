@@ -54,101 +54,75 @@ def _initialize_agent(
 
     agent_config = TradingAgentConfig(**agent_config_data)
 
+    # Override autonomous_mode if --autonomous flag provided
     if autonomous:
-        agent_config.autonomous.enabled = True
-        if hasattr(agent_config.autonomous, "approval_required"):
-            agent_config.autonomous.approval_required = False
-        elif hasattr(agent_config.autonomous, "require_approval"):
-            agent_config.autonomous.require_approval = False
+        agent_config.autonomous_mode = True
         console.print(
-            "[yellow]--autonomous flag set: approvals disabled; running fully autonomous.[/yellow]"
+            "[yellow]--autonomous flag set: trades will execute automatically.[/yellow]"
         )
 
-    if not agent_config.autonomous.enabled:
+    # Check autonomous mode and validate Telegram if signal-only
+    if not agent_config.autonomous_mode:
         console.print(
-            "[yellow]Autonomous agent is not enabled in the configuration.[/yellow]"
+            "[yellow]Autonomous mode OFF: signals will be sent to Telegram for approval.[/yellow]"
         )
-        # Offer to enable autonomous mode for this session instead of soft-failing.
-        try:
-            enable_now = click.confirm(
-                "Would you like to enable autonomous execution for this run?",
-                default=False,
-            )
-        except (click.Abort, KeyboardInterrupt, EOFError):
-            enable_now = False
+        # VALIDATION: Ensure Telegram is configured for signal-only mode
+        telegram_config = config.get("telegram", {})
+        telegram_enabled = telegram_config.get("enabled", False)
+        telegram_has_token = bool(telegram_config.get("bot_token"))
+        telegram_has_chat_id = bool(telegram_config.get("chat_id"))
+
+        # Check for webhook configuration (if implemented)
+        webhook_config = config.get("webhook", {})
+        webhook_enabled = webhook_config.get("enabled", False)
+        webhook_has_url = bool(webhook_config.get("url"))
+
+        # Determine if any notification channel is properly configured
+        notification_available = (
+            telegram_enabled and telegram_has_token and telegram_has_chat_id
+        ) or (webhook_enabled and webhook_has_url)
+
+        if not notification_available:
             console.print(
-                "[yellow]Prompt cancelled. Autonomous execution not enabled for this run.[/yellow]"
-            )
-        # Unexpected exceptions propagate
-
-        if enable_now:
-            agent_config.autonomous.enabled = True
-            if hasattr(agent_config.autonomous, "approval_required"):
-                agent_config.autonomous.approval_required = False
-            elif hasattr(agent_config.autonomous, "require_approval"):
-                agent_config.autonomous.require_approval = False
-            console.print(
-                "[yellow]Session-only autonomy enabled: approvals disabled.[/yellow]"
-            )
-        else:
-            # Signal-only mode: generate signals and send to Telegram/webhooks for approval
-            # VALIDATION: Ensure notification channels are configured
-            telegram_config = config.get("telegram", {})
-            telegram_enabled = telegram_config.get("enabled", False)
-            telegram_has_token = bool(telegram_config.get("bot_token"))
-            telegram_has_chat_id = bool(telegram_config.get("chat_id"))
-
-            # Check for webhook configuration (if implemented)
-            webhook_config = config.get("webhook", {})
-            webhook_enabled = webhook_config.get("enabled", False)
-            webhook_has_url = bool(webhook_config.get("url"))
-
-            # Determine if any notification channel is properly configured
-            notification_available = (
-                telegram_enabled and telegram_has_token and telegram_has_chat_id
-            ) or (webhook_enabled and webhook_has_url)
-
-            if not notification_available:
-                console.print(
-                    "[red]❌ SIGNAL-ONLY MODE ERROR: No notification channels configured![/red]"
-                )
-                console.print(
-                    "[yellow]Signal-only mode requires at least one notification channel:[/yellow]"
-                )
-                console.print(
-                    "  1. Telegram: Set telegram.enabled=true, telegram.bot_token, and telegram.chat_id in config"
-                )
-                console.print(
-                    "  2. Webhook: Set webhook.enabled=true and webhook.url in config"
-                )
-                console.print("\n[yellow]Current configuration status:[/yellow]")
-                console.print(f"  Telegram enabled: {telegram_enabled}")
-                console.print(f"  Telegram token configured: {telegram_has_token}")
-                console.print(f"  Telegram chat_id configured: {telegram_has_chat_id}")
-                console.print(f"  Webhook enabled: {webhook_enabled}")
-                console.print(f"  Webhook URL configured: {webhook_has_url}")
-                logger.error(
-                    "Signal-only mode validation failed: No notification channels configured. "
-                    "Cannot proceed without Telegram or webhook for signal delivery."
-                )
-                raise click.ClickException(
-                    "Signal-only mode requires notification channels. "
-                    "Configure Telegram or webhook, or enable autonomous mode."
-                )
-
-            # Log which notification channels are active
-            active_channels = []
-            if telegram_enabled and telegram_has_token and telegram_has_chat_id:
-                active_channels.append("Telegram")
-            if webhook_enabled and webhook_has_url:
-                active_channels.append("Webhook")
-
-            console.print(
-                f"[cyan]✓ Running in signal-only mode with {', '.join(active_channels)} notifications.[/cyan]"
+                "[red]❌ SIGNAL-ONLY MODE ERROR: No notification channels configured![/red]"
             )
             console.print(
-                "[dim]Tip: pass `--autonomous` or set `agent.autonomous.enabled: true` in config to proceed without prompts.[/dim]"
+                "[yellow]Signal-only mode requires at least one notification channel:[/yellow]"
             )
+            console.print(
+                "  1. Telegram: Set telegram.enabled=true, telegram.bot_token, and telegram.chat_id in config"
+            )
+            console.print(
+                "  2. Webhook: Set webhook.enabled=true and webhook.url in config"
+            )
+            console.print("\n[yellow]Current configuration status:[/yellow]")
+            console.print(f"  Telegram enabled: {telegram_enabled}")
+            console.print(f"  Telegram token configured: {telegram_has_token}")
+            console.print(f"  Telegram chat_id configured: {telegram_has_chat_id}")
+            console.print(f"  Webhook enabled: {webhook_enabled}")
+            console.print(f"  Webhook URL configured: {webhook_has_url}")
+            logger.error(
+                "Signal-only mode validation failed: No notification channels configured. "
+                "Cannot proceed without Telegram or webhook for signal delivery."
+            )
+            raise click.ClickException(
+                "Signal-only mode requires notification channels. "
+                "Configure Telegram or webhook, or enable autonomous mode."
+            )
+
+        # Log which notification channels are active
+        active_channels = []
+        if telegram_enabled and telegram_has_token and telegram_has_chat_id:
+            active_channels.append("Telegram")
+        if webhook_enabled and webhook_has_url:
+            active_channels.append("Webhook")
+
+        console.print(
+            f"[cyan]✓ Running in signal-only mode with {', '.join(active_channels)} notifications.[/cyan]"
+        )
+        console.print(
+            "[dim]Tip: pass `--autonomous` or set `agent.autonomous_mode: true` in config for autonomous execution.[/dim]"
+        )
 
     console.print("[green]✓ Agent configuration loaded.[/green]")
     console.print(f"  Portfolio Take Profit: {take_profit:.2%}")

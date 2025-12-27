@@ -4,10 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from finance_feedback_engine.agent.config import (
-    AutonomousAgentConfig,
-    TradingAgentConfig,
-)
+from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 
 
@@ -17,7 +14,7 @@ class TestSignalOnlyModeValidation:
     def test_supports_signal_only_mode_returns_true_when_methods_exist(self):
         """Agent with required methods should support signal-only mode."""
         config = TradingAgentConfig(
-            autonomous=AutonomousAgentConfig(enabled=False),
+            autonomous_mode=False,
             asset_pairs=["BTCUSD"],
         )
 

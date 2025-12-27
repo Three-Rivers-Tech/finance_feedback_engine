@@ -697,6 +697,41 @@ class Backtester:
                 else:
                     # Default to fixed fraction if no volatility data
                     return current_balance * self.risk_per_trade
+        elif self.position_sizing_strategy == "volatility_based":
+            """
+            Volatility-based position sizing: Inverse relationship to volatility.
+            Higher volatility = smaller position size to maintain consistent risk.
+
+            Formula: position_size = base_risk * (target_volatility / current_volatility)
+            Scaling factor clamped to 0.2x-2.0x of base risk for safety.
+            """
+            if volatility is None or volatility <= 0:
+                logger.warning(
+                    "No volatility data for volatility_based sizing, using fixed_fraction fallback"
+                )
+                return current_balance * self.risk_per_trade
+
+            # Target volatility (2% daily volatility is a reasonable market baseline)
+            target_volatility = 0.02
+
+            # Calculate volatility scaling factor
+            vol_scaling = target_volatility / volatility
+
+            # Clamp scaling to reasonable range (0.2x to 2.0x of base risk)
+            # Prevents extreme positions in very calm or very volatile markets
+            vol_scaling = np.clip(vol_scaling, 0.2, 2.0)
+
+            # Calculate position size
+            base_risk = current_balance * self.risk_per_trade
+            position_dollars = base_risk * vol_scaling
+
+            logger.debug(
+                f"Volatility-based sizing: current_vol={volatility:.4f}, "
+                f"target_vol={target_volatility}, scaling={vol_scaling:.2f}, "
+                f"position=${position_dollars:.2f}"
+            )
+
+            return position_dollars
         elif self.position_sizing_strategy == "fixed_amount":
             # Fixed dollar amount per trade
             return min(
@@ -773,6 +808,29 @@ class Backtester:
         else:
             metrics["annualized_volatility"] = 0.0
             metrics["sharpe_ratio"] = 0.0
+
+        # Sortino Ratio: (Return - Risk-Free Rate) / Downside Deviation
+        # Only uses negative returns (downside deviation) instead of total volatility
+        if not returns.empty:
+            downside_returns = returns[returns < 0]  # Only negative returns
+            if not downside_returns.empty and len(downside_returns) > 0:
+                downside_deviation = downside_returns.std()
+                if downside_deviation > 0:
+                    scale = np.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+                    annualized_downside_deviation = downside_deviation * scale
+                    excess_return = (
+                        metrics["annualized_return_pct"] / 100
+                    ) - self.risk_free_rate
+                    metrics["sortino_ratio"] = (
+                        excess_return / annualized_downside_deviation
+                    )
+                else:
+                    metrics["sortino_ratio"] = 0.0
+            else:
+                # No downside returns means perfect strategy (all positive returns)
+                metrics["sortino_ratio"] = 0.0
+        else:
+            metrics["sortino_ratio"] = 0.0
 
         # Max Drawdown
         if not equity_series.empty:
@@ -889,14 +947,10 @@ class Backtester:
         # - With multi-timeframe pulse (1m, 5m, 15m, 1h, 4h, 1d simultaneously)
         mock_provider.initialize_pulse_mode(base_timeframe=self.timeframe)
 
-        # Import AutonomousAgentConfig for proper config structure
-        from ..agent.config import AutonomousAgentConfig
-
-        # Create agent config for backtesting
+        # Create agent config for backtesting with autonomous mode ON
         agent_config = TradingAgentConfig(
             asset_pairs=[asset_pair_std],
-            autonomous_execution=True,  # Legacy support
-            autonomous=AutonomousAgentConfig(enabled=True),  # Proper structure
+            autonomous_mode=True,  # Auto-execute trades in backtest
             max_daily_trades=999,  # No limit for backtesting
             min_confidence_threshold=0.0,  # Accept all signals
             analysis_frequency_seconds=0,  # Immediate execution

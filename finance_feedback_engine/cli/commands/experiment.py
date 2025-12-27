@@ -40,9 +40,12 @@ def _write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
         "start_date",
         "end_date",
         "n_trials",
+        "fitness_metric",
         "multi_objective",
         "optimize_weights",
-        "best_sharpe_ratio",
+        "optimize_take_profit",
+        "optimize_position_sizing",
+        "best_fitness_value",
         "best_drawdown_pct",
         "best_params_json",
     ]
@@ -86,6 +89,23 @@ def _write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
     is_flag=True,
     help="Disable MLflow tracking (if installed)",
 )
+@click.option(
+    "--fitness-metric",
+    type=click.Choice(["sharpe_ratio", "sortino_ratio"]),
+    default="sortino_ratio",
+    show_default=True,
+    help="Fitness metric to optimize (Sortino focuses on downside risk)",
+)
+@click.option(
+    "--optimize-take-profit",
+    is_flag=True,
+    help="Optimize take-profit levels (in addition to stop-loss)",
+)
+@click.option(
+    "--optimize-position-sizing",
+    is_flag=True,
+    help="Optimize position sizing strategy (fixed_fraction, kelly_criterion, volatility_based)",
+)
 @click.pass_context
 def experiment(
     ctx: click.Context,
@@ -97,6 +117,9 @@ def experiment(
     optimize_weights: bool,
     multi_objective: bool,
     no_mlflow: bool,
+    fitness_metric: str,
+    optimize_take_profit: bool,
+    optimize_position_sizing: bool,
 ):
     """Run an Optuna experiment across multiple asset pairs.
 
@@ -134,7 +157,12 @@ def experiment(
     console.print(f"Range: [yellow]{start_date}[/yellow] → [yellow]{end_date}[/yellow]")
     console.print(f"Trials/asset: [yellow]{n_trials}[/yellow]")
     console.print(f"Seed: [yellow]{seed}[/yellow]")
+    console.print(f"Fitness metric: [yellow]{fitness_metric}[/yellow]")
     console.print(f"Optimize weights: [yellow]{optimize_weights}[/yellow]")
+    console.print(f"Optimize take-profit: [yellow]{optimize_take_profit}[/yellow]")
+    console.print(
+        f"Optimize position sizing: [yellow]{optimize_position_sizing}[/yellow]"
+    )
     console.print(f"Multi-objective: [yellow]{multi_objective}[/yellow]\n")
 
     rows: List[Dict[str, Any]] = []
@@ -150,7 +178,10 @@ def experiment(
                     "end_date": end_date,
                     "n_trials": n_trials,
                     "seed": seed,
+                    "fitness_metric": fitness_metric,
                     "optimize_weights": optimize_weights,
+                    "optimize_take_profit": optimize_take_profit,
+                    "optimize_position_sizing": optimize_position_sizing,
                     "multi_objective": multi_objective,
                     "asset_pairs": ",".join(standardized_pairs),
                 }
@@ -168,6 +199,7 @@ def experiment(
                 end_date=end_date,
                 optimize_weights=optimize_weights,
                 multi_objective=multi_objective,
+                fitness_metric=fitness_metric,
             )
 
             run_ctx = None
@@ -216,9 +248,12 @@ def experiment(
                     "start_date": start_date,
                     "end_date": end_date,
                     "n_trials": n_trials,
+                    "fitness_metric": fitness_metric,
                     "multi_objective": multi_objective,
                     "optimize_weights": optimize_weights,
-                    "best_sharpe_ratio": best_sharpe,
+                    "optimize_take_profit": optimize_take_profit,
+                    "optimize_position_sizing": optimize_position_sizing,
+                    "best_fitness_value": best_sharpe,
                     "best_drawdown_pct": best_drawdown_pct,
                     "best_params_json": json.dumps(best_params, sort_keys=True),
                 }
@@ -227,7 +262,7 @@ def experiment(
                 assets_summary.append(
                     {
                         "asset_pair": asset_pair,
-                        "best_sharpe_ratio": best_sharpe,
+                        "best_fitness_value": best_sharpe,
                         "best_drawdown_pct": best_drawdown_pct,
                         "best_params": best_params,
                         "n_trials": n_trials,
@@ -236,13 +271,13 @@ def experiment(
 
                 if use_mlflow and run_ctx is not None:
                     if best_sharpe is not None:
-                        mlflow.log_metric("best_sharpe_ratio", best_sharpe)
+                        mlflow.log_metric(f"best_{fitness_metric}", best_sharpe)
                     if best_drawdown_pct is not None:
                         mlflow.log_metric("best_drawdown_pct", best_drawdown_pct)
                     mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
 
                 console.print(
-                    f"[green]✓[/green] {asset_pair}: best_sharpe={best_sharpe}"
+                    f"[green]✓[/green] {asset_pair}: best_{fitness_metric}={best_sharpe}"
                     + (
                         f", drawdown_pct={best_drawdown_pct}"
                         if best_drawdown_pct is not None

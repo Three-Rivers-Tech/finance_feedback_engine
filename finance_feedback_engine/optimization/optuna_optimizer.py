@@ -17,10 +17,12 @@ class OptunaOptimizer:
     Optimizes parameters like:
     - risk_per_trade
     - stop_loss_percentage
+    - take_profit_percentage
+    - position_sizing_strategy
     - provider_weights (ensemble)
     - voting_strategy
 
-    Supports single-objective (Sharpe ratio) and multi-objective (Sharpe + drawdown).
+    Supports single-objective (Sharpe or Sortino ratio) and multi-objective (fitness metric + drawdown).
     """
 
     def __init__(
@@ -32,6 +34,7 @@ class OptunaOptimizer:
         search_space: Optional[Dict[str, Tuple[float, float]]] = None,
         optimize_weights: bool = False,
         multi_objective: bool = False,
+        fitness_metric: str = "sortino_ratio",
     ):
         """
         Initialize Optuna optimizer.
@@ -44,6 +47,7 @@ class OptunaOptimizer:
             search_space: Custom parameter ranges (overrides defaults)
             optimize_weights: Whether to optimize ensemble provider weights
             multi_objective: Use multi-objective optimization (Sharpe + drawdown)
+            fitness_metric: Metric to optimize ("sharpe_ratio" or "sortino_ratio")
         """
         self.config = deepcopy(config)
         self.asset_pair = asset_pair
@@ -51,11 +55,13 @@ class OptunaOptimizer:
         self.end_date = end_date
         self.optimize_weights = optimize_weights
         self.multi_objective = multi_objective
+        self.fitness_metric = fitness_metric
 
         # Default search space
         self.search_space = search_space or {
             "risk_per_trade": (0.005, 0.03),
             "stop_loss_percentage": (0.01, 0.05),
+            "take_profit_percentage": (0.02, 0.10),
         }
 
         logger.info(
@@ -70,7 +76,7 @@ class OptunaOptimizer:
             trial: Optuna trial object
 
         Returns:
-            Float (Sharpe ratio) or Tuple (Sharpe, -drawdown) for multi-objective
+            Float (fitness metric) or Tuple (fitness metric, -drawdown) for multi-objective
         """
         # Suggest hyperparameters
         trial_config = deepcopy(self.config)
@@ -86,9 +92,31 @@ class OptunaOptimizer:
             self.search_space["stop_loss_percentage"][0],
             self.search_space["stop_loss_percentage"][1],
         )
+        take_profit_pct = trial.suggest_float(
+            "take_profit_percentage",
+            self.search_space.get("take_profit_percentage", (0.02, 0.10))[0],
+            self.search_space.get("take_profit_percentage", (0.02, 0.10))[1],
+        )
+
+        # Constraint: take_profit must be >= stop_loss for favorable risk/reward
+        if take_profit_pct < stop_loss_pct:
+            logger.debug(
+                f"Trial {trial.number}: Invalid constraint take_profit < stop_loss"
+            )
+            return -10.0  # Penalize invalid configurations
 
         trial_config["decision_engine"]["risk_per_trade"] = risk_per_trade
         trial_config["decision_engine"]["stop_loss_percentage"] = stop_loss_pct
+        trial_config["decision_engine"]["take_profit_percentage"] = take_profit_pct
+
+        # Position sizing strategy
+        position_sizing_strategy = trial.suggest_categorical(
+            "position_sizing_strategy",
+            ["fixed_fraction", "kelly_criterion", "volatility_based"],
+        )
+        trial_config["decision_engine"][
+            "position_sizing_strategy"
+        ] = position_sizing_strategy
 
         # Voting strategy
         if "ensemble" in trial_config:
@@ -129,7 +157,8 @@ class OptunaOptimizer:
             (results or {}).get("metrics", {}) if isinstance(results, dict) else {}
         )
 
-        sharpe = float(metrics.get("sharpe_ratio", -10.0) or -10.0)
+        # Use configurable fitness metric (sortino_ratio or sharpe_ratio)
+        fitness_value = float(metrics.get(self.fitness_metric, -10.0) or -10.0)
 
         if self.multi_objective:
             # Backtester reports max_drawdown_pct as a negative percentage (e.g., -12.3).
@@ -139,9 +168,9 @@ class OptunaOptimizer:
                 drawdown_pct_abs = abs(float(drawdown_pct))
             except (TypeError, ValueError):
                 drawdown_pct_abs = 100.0
-            return sharpe, -drawdown_pct_abs
+            return fitness_value, -drawdown_pct_abs
 
-        return sharpe
+        return fitness_value
 
     def _run_backtest(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -274,7 +303,7 @@ class OptunaOptimizer:
         logger.info(f"Optimization complete: {len(study.trials)} trials")
 
         if not self.multi_objective:
-            logger.info(f"Best Sharpe ratio: {study.best_value:.3f}")
+            logger.info(f"Best {self.fitness_metric}: {study.best_value:.3f}")
             logger.info(f"Best params: {study.best_params}")
 
         return study

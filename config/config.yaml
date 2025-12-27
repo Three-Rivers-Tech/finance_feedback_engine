@@ -498,16 +498,18 @@ logging:
 # Trading Agent (Risk Gatekeeper)
 # ============================================
 agent:
-  # Execution controls
-  autonomous_execution: false
-  approval_policy: on_new_asset
+  # Execution Mode (SIMPLIFIED)
+  # Single binary switch: true = auto-execute trades, false = send to Telegram
+  autonomous_mode: false
+
+  # Safety Features (apply to both modes)
   max_daily_trades: 5
+  kill_switch_gain_pct: 0.05   # 5% portfolio gain threshold
+  kill_switch_loss_pct: 0.02   # 2% portfolio loss threshold
+
+  # Strategic Settings
   strategic_goal: balanced
   risk_appetite: medium
-  autonomous:
-    enabled: false
-    profit_target: 0.05   # 5%
-    stop_loss: 0.02       # 2%
 
   # RiskGatekeeper configuration (decimal fractions)
   correlation_threshold: 0.7   # 70%
@@ -617,8 +619,8 @@ optimization:
   n_trials: 50
 
   # Default optimization metric
-  # Options: sharpe_ratio, total_return, profit_factor, win_rate
-  optimize_for: "sharpe_ratio"
+  # Options: sharpe_ratio, sortino_ratio, total_return, profit_factor, win_rate
+  optimize_for: "sortino_ratio"
 
   # Timeout in seconds (null = no timeout)
   timeout: null
@@ -632,6 +634,9 @@ optimization:
     stop_loss_pct:
       min: 0.01
       max: 0.05
+    take_profit_pct:  # NEW: Take-profit optimization
+      min: 0.02
+      max: 0.10
     position_size_pct:
       min: 0.005
       max: 0.02
@@ -644,6 +649,12 @@ optimization:
     atr_multiplier:
       min: 1.5
       max: 3.0
+
+    # Position sizing strategies (categorical)
+    position_sizing_strategies:
+      - fixed_fraction
+      - kelly_criterion
+      - volatility_based
 # ============================================================
 # SECURE API AUTHENTICATION CONFIGURATION
 # ============================================================

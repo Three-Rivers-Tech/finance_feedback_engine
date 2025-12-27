@@ -1,0 +1,2 @@
+asset_pair,start_date,end_date,n_trials,fitness_metric,multi_objective,optimize_weights,optimize_take_profit,optimize_position_sizing,best_fitness_value,best_drawdown_pct,best_params_json
+BTCUSD,2024-06-01,2024-06-30,10,sortino_ratio,False,False,True,True,-10.0,,"{""position_sizing_strategy"": ""volatility_based"", ""risk_per_trade"": 0.010274128641468722, ""stop_loss_percentage"": 0.03182467197642897, ""take_profit_percentage"": 0.03825255485363747, ""voting_strategy"": ""stacking""}"

@@ -128,7 +128,7 @@ class TradingLoopAgent:
                 f"Configuration errors: {', '.join(notification_errors)}\n"
                 "Please either:\n"
                 "1. Configure Telegram notifications (telegram.enabled=true, bot_token, chat_id)\n"
-                "2. Enable autonomous mode (autonomous.enabled=true)\n"
+                "2. Enable autonomous mode (autonomous_mode=true)\n"
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
@@ -151,7 +151,7 @@ class TradingLoopAgent:
 
         Signal-only mode requires:
         1. _send_signals_to_telegram() method exists
-        2. Agent checks autonomous.enabled flag in execution
+        2. Agent checks autonomous_mode flag in execution
         3. Notification delivery mechanism is available
 
         Returns:
@@ -173,26 +173,21 @@ class TradingLoopAgent:
     def _validate_notification_config(self) -> tuple[bool, list[str]]:
         """
         Validate notification delivery configuration on startup.
+        In signal-only mode (autonomous_mode=False), Telegram must be configured.
 
         Returns:
             (is_valid, list_of_errors)
         """
         errors = []
 
-        # Check if signal-only mode is enabled
-        autonomous_enabled = getattr(self.config, "autonomous", None)
-        if autonomous_enabled and hasattr(autonomous_enabled, "enabled"):
-            autonomous_enabled = autonomous_enabled.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
+        # Autonomous mode doesn't need notifications
+        if self.config.autonomous_mode:
+            return True, []
 
-        if autonomous_enabled:
-            return True, []  # Autonomous mode doesn't need notifications
-
-        # Validate Telegram configuration
+        # Signal-only mode: Telegram required
         telegram_config = getattr(self.config, "telegram", None)
         if not telegram_config:
-            errors.append("Telegram config missing")
+            errors.append("Telegram config missing (required for signal-only mode)")
             return False, errors
 
         telegram_enabled = telegram_config.get("enabled", False)
@@ -200,7 +195,7 @@ class TradingLoopAgent:
         telegram_chat_id = telegram_config.get("chat_id")
 
         if not telegram_enabled:
-            errors.append("Telegram not enabled")
+            errors.append("Telegram not enabled (set telegram.enabled: true)")
         if not telegram_token:
             errors.append("Telegram bot_token missing")
         if not telegram_chat_id:
@@ -1073,9 +1068,10 @@ class TradingLoopAgent:
 
     async def handle_execution_state(self):
         """
-        EXECUTION: Sending orders to BaseTradingPlatform for all approved decisions.
+        EXECUTION: Execute decisions or send signals based on autonomous_mode.
 
-        If autonomous mode is disabled, sends signals to Telegram for approval instead.
+        autonomous_mode=True: Execute trades directly via trading platform
+        autonomous_mode=False: Send signals to Telegram for manual approval
         """
         logger.info("State: EXECUTION - Processing decisions...")
 
@@ -1086,19 +1082,10 @@ class TradingLoopAgent:
             await self._transition_to(AgentState.IDLE)
             return
 
-        # Check if autonomous execution is enabled (prioritize autonomous.enabled over legacy autonomous_execution)
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
-
-        logger.info(f"Autonomous execution mode: {autonomous_enabled}")
-
-        if autonomous_enabled:
-            # Full autonomous mode: execute trades directly
-            logger.info("Autonomous execution enabled - executing trades directly")
+        # Single check for autonomous mode
+        if self.config.autonomous_mode:
+            # AUTONOMOUS: Execute trades directly
+            logger.info("Autonomous mode ON - executing trades directly")
             for decision in self._current_decisions:
                 decision_id = decision.get("id")
                 action = decision.get("action")
@@ -1123,10 +1110,8 @@ class TradingLoopAgent:
                         f"Exception during trade execution for decision {decision_id}: {e}"
                     )
         else:
-            # Signal-only mode: send to Telegram for approval
-            logger.info(
-                "Autonomous execution disabled - sending signals to Telegram for approval"
-            )
+            # SIGNAL-ONLY: Send to Telegram for manual approval
+            logger.info("Autonomous mode OFF - sending signals to Telegram")
             self._send_signals_to_telegram()
 
         # Clear all decisions after processing
@@ -1167,7 +1152,7 @@ class TradingLoopAgent:
                 f"Asset: {asset_pair}\n"
                 f"Action: {action.upper()}\n"
                 f"Confidence: {confidence}%\n"
-                f"Position Size: {recommended_position_size if recommended_position_size else 'Signal-only'}\n\n"
+                f"Position Size: {f'{recommended_position_size:.6f}' if recommended_position_size else 'Not calculated'}\n\n"
                 f"Reasoning:\n{reasoning}\n\n"
                 f"Decision ID: `{decision_id}`\n\n"
                 f"Reply with:\n"
@@ -1562,18 +1547,14 @@ class TradingLoopAgent:
             )
             return False
 
-        # Check autonomous execution setting
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
+        # Check autonomous execution setting (simplified to single boolean)
+        autonomous_enabled = getattr(self.config, "autonomous_mode", False)
 
         # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
             return True
 
+        # In signal-only mode (autonomous_mode=False), check if we have Telegram configured
         # Re-validate notification config before proceeding to execution
         notification_valid, errors = self._validate_notification_config()
         if not notification_valid:
@@ -1583,7 +1564,6 @@ class TradingLoopAgent:
             )
             return False
 
-        # If autonomous is disabled, check if we have Telegram configured for signal-only mode
         telegram_config = (
             self.config.telegram if hasattr(self.config, "telegram") else {}
         )
@@ -1597,13 +1577,10 @@ class TradingLoopAgent:
             )
             return True
 
-        # No execution path available (neither autonomous nor Telegram)
-        if self.config.approval_policy == "never":
-            return False
-
+        # No execution path available (neither autonomous nor Telegram configured)
         logger.warning(
             "Decision requires approval but Telegram is not configured. "
-            "Enable Telegram in config or set autonomous.enabled=true to proceed."
+            "Enable Telegram in config or set autonomous_mode=true to proceed."
         )
         return False
 

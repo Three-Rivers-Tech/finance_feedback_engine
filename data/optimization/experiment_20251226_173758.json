@@ -1,0 +1,25 @@
+{
+  "created_at": "2025-12-26T17:41:32.195023",
+  "start_date": "2024-06-01",
+  "end_date": "2024-06-30",
+  "n_trials_per_asset": 10,
+  "seed": null,
+  "optimize_weights": false,
+  "multi_objective": false,
+  "asset_pairs": [
+    "BTCUSD"
+  ],
+  "results": [
+    {
+      "asset_pair": "BTCUSD",
+      "best_fitness_value": -10.0,
+      "best_drawdown_pct": null,
+      "best_params": {
+        "risk_per_trade": 0.016401313699134203,
+        "stop_loss_percentage": 0.026876108808833156,
+        "take_profit_percentage": 0.0235481667501859
+      },
+      "n_trials": 10
+    }
+  ]
+}
