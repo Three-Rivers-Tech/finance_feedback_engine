@@ -109,7 +109,9 @@ class BaseTradingPlatform(ABC):
             if inspect.iscoroutinefunction(self.execute_trade):
                 return await breaker.call(self.execute_trade, decision)
             # Execute sync path via breaker in a thread to keep event loop responsive
-            return await asyncio.to_thread(breaker.call_sync, self.execute_trade, decision)
+            return await asyncio.to_thread(
+                breaker.call_sync, self.execute_trade, decision
+            )
 
         # Fallback: no breaker attached, run normally without blocking the loop
         return await self._run_async(self.execute_trade, decision)

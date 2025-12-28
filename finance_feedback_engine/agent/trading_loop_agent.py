@@ -929,17 +929,18 @@ class TradingLoopAgent:
                 # Enrich context with safety thresholds from config
                 # These are used by RiskGatekeeper._validate_leverage_and_concentration()
                 safety_config = self.config.get("safety", {})
-                monitoring_context["max_leverage"] = safety_config.get("max_leverage", 5.0)
-                monitoring_context["max_concentration"] = safety_config.get("max_position_pct", 25.0)
+                monitoring_context["max_leverage"] = safety_config.get(
+                    "max_leverage", 5.0
+                )
+                monitoring_context["max_concentration"] = safety_config.get(
+                    "max_position_pct", 25.0
+                )
 
             except Exception as e:
                 logger.warning(
                     f"Failed to get monitoring context for risk validation: {e}"
                 )
-                monitoring_context = {
-                    "max_leverage": 5.0,
-                    "max_concentration": 25.0
-                }
+                monitoring_context = {"max_leverage": 5.0, "max_concentration": 25.0}
 
             # First run the standard RiskGatekeeper validation
             approved, reason = self.risk_gatekeeper.validate_trade(

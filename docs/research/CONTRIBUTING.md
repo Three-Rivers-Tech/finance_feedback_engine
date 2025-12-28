@@ -41,11 +41,20 @@ Feature suggestions are welcome! Please:
    - Add tests for new features
    - Update documentation as needed
    - Ensure all tests pass
+   - **Pre-commit hooks will run automatically** - don't bypass them unless absolutely necessary
 
 4. **Commit your changes**
    ```bash
    git commit -m "Add feature: your feature description"
    ```
+   
+   **Note:** Pre-commit hooks will run automatically:
+   - Code formatting (black, isort)
+   - Linting (flake8, mypy)
+   - Security checks (bandit, secret detection)
+   - Test coverage (≥70%)
+   
+   If hooks fail, fix the issues before committing. Only bypass with `--no-verify` in emergencies.
 
 5. **Push to your fork**
    ```bash
@@ -75,11 +84,20 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
-# Install in development mode
-pip install -e .
+# Set up git hooks (IMPORTANT for contributors)
+./scripts/setup-hooks.sh
 ```
+
+This will install pre-commit hooks that automatically:
+- Format code (black, isort)
+- Run linting (flake8, mypy)
+- Check for security issues (bandit)
+- Prevent committing secrets
+- Enforce test coverage (≥70%)
+
+For more details, see [Pre-commit Configuration Guide](../PRE_COMMIT_GUIDE.md).
 
 ### Running Tests
 ```bash
@@ -99,6 +117,28 @@ python main.py -c config/examples/test.yaml analyze BTCUSD
 - Add docstrings to all functions and classes
 - Keep functions focused and single-purpose
 - Use type hints where appropriate
+
+**Automated Formatting:**
+The project uses automated code formatting tools that run via pre-commit hooks:
+- **black**: Code formatting
+- **isort**: Import sorting
+- **flake8**: Linting
+- **mypy**: Type checking
+- **bandit**: Security scanning
+
+These run automatically on commit. To run manually:
+```bash
+# Format all code
+black finance_feedback_engine/
+isort finance_feedback_engine/
+
+# Run linting
+flake8 finance_feedback_engine/
+mypy finance_feedback_engine/
+
+# Or use pre-commit
+pre-commit run --all-files
+```
 
 ### Example
 ```python
@@ -179,6 +219,48 @@ class MyPlatform(BaseTradingPlatform):
 - Include both success and error cases
 - Test with different configurations
 - Verify backward compatibility
+
+### Running Tests
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=finance_feedback_engine --cov-report=term-missing
+
+# Run specific test types
+pytest -m "not slow and not external_service"  # Fast tests only
+pytest -m integration  # Integration tests only
+```
+
+### Test Coverage Requirements
+- Minimum 70% test coverage required (enforced by pre-commit hooks)
+- Add tests for all new features and bug fixes
+- Test both success and error paths
+
+## Security
+
+### Preventing Secrets in Commits
+
+The project includes automatic secret detection that runs before every commit. This prevents:
+- API keys
+- Passwords and tokens
+- Private keys
+- Database credentials
+- Other sensitive information
+
+**Safe patterns:**
+- Use environment variables: `${ALPHA_VANTAGE_API_KEY}`
+- Use placeholders: `YOUR_API_KEY`, `your_secret_here`
+- Store secrets in `config/config.local.yaml` (git-ignored)
+- Use `.env` files (git-ignored)
+
+**If you get a secret detection warning:**
+1. Remove the hardcoded secret
+2. Use environment variables or config.local.yaml
+3. Rotate the exposed credential if it was real
+
+For more details, see `.pre-commit-hooks/README.md`.
 
 ## Questions?
 
