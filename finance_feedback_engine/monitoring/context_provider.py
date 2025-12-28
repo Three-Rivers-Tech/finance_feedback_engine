@@ -46,6 +46,71 @@ class MonitoringContextProvider:
 
         logger.info("MonitoringContextProvider initialized")
 
+    async def get_monitoring_context_async(
+        self, asset_pair: Optional[str] = None, lookback_hours: int = 24
+    ) -> Dict[str, Any]:
+        """Async variant of get_monitoring_context to avoid blocking the event loop."""
+        context = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "has_monitoring_data": False,
+            "active_positions": {"futures": []},
+            "active_trades_count": 0,
+            "recent_performance": {},
+            "risk_metrics": {},
+            "position_concentration": {},
+            "multi_timeframe_pulse": None,
+        }
+
+        try:
+            if hasattr(self.platform, "aget_portfolio_breakdown"):
+                portfolio = await self.platform.aget_portfolio_breakdown()
+
+                futures_positions = portfolio.get("futures_positions", [])
+                holdings = portfolio.get("holdings", [])
+
+                if asset_pair:
+                    futures_positions = [
+                        p
+                        for p in futures_positions
+                        if asset_pair in p.get("product_id", "")
+                    ]
+                    holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
+
+                context["active_positions"] = {
+                    "futures": futures_positions,
+                    "spot": holdings,
+                }
+                context["has_monitoring_data"] = True
+
+            # Active trades count from monitor
+            if self.trade_monitor:
+                context["active_trades_count"] = len(
+                    self.trade_monitor.active_trackers
+                )
+
+            # Recent performance from metrics collector
+            if self.metrics_collector:
+                recent_metrics = self.metrics_collector.get_recent_metrics(
+                    hours=lookback_hours, asset_pair=asset_pair
+                )
+                context["recent_performance"] = recent_metrics
+
+            # Risk metrics
+            context["risk_metrics"] = self._calculate_risk_metrics_from_dict(
+                portfolio if hasattr(self.platform, "aget_portfolio_breakdown") else {}
+            )
+
+            # Position concentration
+            context["position_concentration"] = self._calculate_concentration_from_dict(
+                portfolio if hasattr(self.platform, "aget_portfolio_breakdown") else {}
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting async monitoring context: {e}", exc_info=True)
+            context["error"] = str(e)
+
+        return context
+
     def get_monitoring_context(
         self, asset_pair: Optional[str] = None, lookback_hours: int = 24
     ) -> Dict[str, Any]:
@@ -78,6 +143,7 @@ class MonitoringContextProvider:
         try:
             # Get active positions from platform
             if hasattr(self.platform, "get_portfolio_breakdown"):
+                # Use sync method for backward compatibility
                 portfolio = self.platform.get_portfolio_breakdown()
 
                 # Extract active positions

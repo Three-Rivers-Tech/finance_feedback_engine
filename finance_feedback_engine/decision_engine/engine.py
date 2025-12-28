@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 import pytz
 
 from finance_feedback_engine.memory.vector_store import VectorMemory
+from finance_feedback_engine.utils.config_loader import normalize_decision_config
 
 logger = logging.getLogger(__name__)
 try:
@@ -113,7 +114,7 @@ class DecisionEngine:
         self.position_sizing_calc = PositionSizingCalculator(config)
 
         # Local models and priority configuration
-        decision_config = config.get("decision_engine", {})
+        decision_config = normalize_decision_config(config)
         self.local_models = decision_config.get("local_models", [])
         self.local_priority = decision_config.get("local_priority", False)
 
@@ -209,8 +210,7 @@ class DecisionEngine:
     @property
     def decision_threshold(self):
         """Get decision threshold from config. Supports flat and nested config structures."""
-        # Try nested structure first, then flat structure for backward compatibility
-        decision_config = self.config.get("decision_engine", self.config)
+        decision_config = normalize_decision_config(self.config)
         return decision_config.get("decision_threshold", 0.6)
 
     @property
@@ -760,7 +760,7 @@ Format response as a structured technical analysis demonstration.
         """
         Resolve the veto threshold using config defaults and adaptive memory context.
         """
-        decision_cfg = self.config.get("decision_engine", {})
+        decision_cfg = normalize_decision_config(self.config)
         base_threshold = float(decision_cfg.get("veto_threshold", 0.6))
 
         # Adaptive threshold from portfolio memory context (if provided)
@@ -1346,7 +1346,8 @@ Format response as a structured technical analysis demonstration.
         # Calculate position sizing parameters
         # Prefer decision_engine.signal_only_default (used across the codebase/tests),
         # fall back to top-level for backward compatibility.
-        decision_cfg = self.config.get("decision_engine", {})
+        # Use centralized config normalization to support nested/flat shapes
+        decision_cfg = normalize_decision_config(self.config)
         signal_only_default = bool(
             decision_cfg.get(
                 "signal_only_default", self.config.get("signal_only_default", False)

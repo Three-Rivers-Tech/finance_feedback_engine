@@ -24,11 +24,13 @@ const pollingIntervalSchema = z
   .min(1000, 'Polling interval must be at least 1000ms')
   .max(60000, 'Polling interval must not exceed 60000ms');
 
-// API key validation
+// API key validation (optional for all environments)
 const apiKeySchema = z
   .string()
-  .min(8, 'API key must be at least 8 characters')
-  .optional();
+  .min(1, 'API key must not be empty if provided')
+  .optional()
+  .or(z.literal(''))
+  .transform(val => val === '' ? undefined : val);
 
 /**
  * Main application configuration schema
@@ -86,9 +88,7 @@ export const environmentSchemas = {
     api: z.object({
       baseUrl: httpsUrlSchema,
       timeout: z.number().int().positive().default(30000),
-      apiKey: z
-        .string()
-        .min(16, 'Staging API key must be at least 16 characters'),
+      apiKey: apiKeySchema,
     }),
   }),
 
@@ -96,9 +96,7 @@ export const environmentSchemas = {
     api: z.object({
       baseUrl: z.union([httpsUrlSchema, relativeUrlSchema]),
       timeout: z.number().int().positive().default(30000),
-      apiKey: z
-        .string()
-        .min(32, 'Production API key must be at least 32 characters'),
+      apiKey: apiKeySchema,
     }),
   }),
 };

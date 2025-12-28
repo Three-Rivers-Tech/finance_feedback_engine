@@ -4,6 +4,8 @@ import logging
 from typing import Any, Dict, List
 
 from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
+from finance_feedback_engine.utils.validation import standardize_asset_pair
+from finance_feedback_engine.utils.circuit_breaker import CircuitBreaker
 
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .coinbase_platform import CoinbaseAdvancedPlatform
@@ -73,7 +75,9 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         - Crypto (BTC, ETH) trades are routed to Coinbase.
         - Forex (e.g., EUR_USD) trades are routed to Oanda.
         """
-        asset_pair = decision.get("asset_pair", "").upper()
+        # Standardize the asset pair before routing to avoid misclassification
+        raw_pair = decision.get("asset_pair", "")
+        asset_pair = standardize_asset_pair(raw_pair)
 
         # Classify asset and route to appropriate platform
         asset_class = classify_asset_pair(asset_pair)
@@ -90,7 +94,21 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 asset_pair,
                 target_platform.__class__.__name__,
             )
-            return target_platform.execute_trade(decision)
+            # Ensure a circuit breaker is present; lazily attach if missing
+            cb = target_platform.get_execute_breaker() if hasattr(target_platform, "get_execute_breaker") else None
+            if cb is None:
+                cb = CircuitBreaker(
+                    failure_threshold=3,
+                    recovery_timeout=60,
+                    name=f"execute_trade:{target_platform.__class__.__name__.lower()}",
+                )
+                if getattr(target_platform, "set_execute_breaker", None):
+                    target_platform.set_execute_breaker(cb)
+                else:
+                    setattr(target_platform, "_execute_breaker", cb)
+
+            # Use breaker for sync execution path
+            return cb.call_sync(target_platform.execute_trade, decision)
         else:
             logger.error("No suitable platform found for asset pair: %s", asset_pair)
             return {

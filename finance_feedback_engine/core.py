@@ -742,6 +742,33 @@ class FinanceFeedbackEngine:
 
         return {**portfolio, "_cached": False, "_cache_age_seconds": 0}
 
+    async def get_portfolio_breakdown_async(self) -> Dict[str, Any]:
+        """Async variant of get_portfolio_breakdown to avoid event-loop blocking."""
+        # Check cache first
+        if self._portfolio_cache and self._portfolio_cache_time:
+            cache_age = (datetime.now() - self._portfolio_cache_time).total_seconds()
+            if cache_age < self._portfolio_cache_ttl:
+                logger.debug(
+                    f"Portfolio cache hit (age: {cache_age:.1f}s, TTL: {self._portfolio_cache_ttl}s)"
+                )
+                self._cache_metrics.record_hit("portfolio")
+                return {
+                    **self._portfolio_cache,
+                    "_cached": True,
+                    "_cache_age_seconds": cache_age,
+                }
+
+        # Fetch fresh data
+        logger.debug("Portfolio cache miss - fetching fresh data (async)")
+        self._cache_metrics.record_miss("portfolio")
+        portfolio = await self.trading_platform.aget_portfolio_breakdown()
+
+        # Update cache
+        self._portfolio_cache = portfolio
+        self._portfolio_cache_time = datetime.now()
+
+        return {**portfolio, "_cached": False, "_cache_age_seconds": 0}
+
     def invalidate_portfolio_cache(self):
         """Invalidate portfolio cache (call after trades execute)."""
         self._portfolio_cache = None
@@ -788,6 +815,51 @@ class FinanceFeedbackEngine:
 
         # Pre-execution safety checks
         self._preexecution_checks(decision, monitoring_context=None)
+
+        # Mandatory RiskGatekeeper validation before execution (engine-level)
+        try:
+            # Build monitoring context if available
+            monitoring_context = {}
+            if hasattr(self, "monitoring_provider") and self.monitoring_provider:
+                try:
+                    monitoring_context = self.monitoring_provider.get_monitoring_context(
+                        asset_pair=decision.get("asset_pair")
+                    )
+                except Exception:
+                    monitoring_context = {}
+
+            # Enrich context with asset type and timestamp hints
+            try:
+                from .utils.asset_classifier import classify_asset_pair
+
+                asset_class = classify_asset_pair(decision.get("asset_pair", ""))
+                monitoring_context.setdefault(
+                    "asset_type", "crypto" if asset_class == "crypto" else "forex"
+                )
+            except Exception:
+                monitoring_context.setdefault("asset_type", "crypto")
+            monitoring_context.setdefault("market_data_timestamp", decision.get("timestamp"))
+
+            # Validate decision against risk constraints
+            from .risk.gatekeeper import RiskGatekeeper
+
+            gatekeeper = RiskGatekeeper()
+            allowed, reason = gatekeeper.validate_trade(decision, monitoring_context)
+            if not allowed:
+                logger.warning(f"Trade rejected by RiskGatekeeper: {reason}")
+                decision["executed"] = False
+                decision["execution_time"] = datetime.utcnow().isoformat()
+                decision["execution_result"] = {
+                    "success": False,
+                    "error": reason,
+                    "status": "REJECTED_BY_GATEKEEPER",
+                }
+                self.decision_store.update_decision(decision)
+                # Abort execution and return rejection result
+                return decision["execution_result"]
+        except Exception as e:
+            # Fail-safe: log but do not block if gatekeeper encounters an unexpected error
+            logger.error(f"RiskGatekeeper validation error: {e}", exc_info=True)
 
         # Use persistent circuit breaker on platform when available
         try:
@@ -845,11 +917,113 @@ class FinanceFeedbackEngine:
 
         return result
 
+    async def execute_decision_async(self, decision_id: str) -> Dict[str, Any]:
+        """Async variant of execute_decision to avoid blocking event loop."""
+        decision = self.decision_store.get_decision_by_id(decision_id)
+        if not decision:
+            raise ValueError(f"Decision {decision_id} not found")
+
+        self._preexecution_checks(decision, monitoring_context=None)
+
+        # Mandatory RiskGatekeeper validation before execution (engine-level, async)
+        try:
+            monitoring_context = {}
+            if hasattr(self, "monitoring_provider") and self.monitoring_provider:
+                try:
+                    monitoring_context = self.monitoring_provider.get_monitoring_context(
+                        asset_pair=decision.get("asset_pair")
+                    )
+                except Exception:
+                    monitoring_context = {}
+
+            try:
+                from .utils.asset_classifier import classify_asset_pair
+
+                asset_class = classify_asset_pair(decision.get("asset_pair", ""))
+                monitoring_context.setdefault(
+                    "asset_type", "crypto" if asset_class == "crypto" else "forex"
+                )
+            except Exception:
+                monitoring_context.setdefault("asset_type", "crypto")
+            monitoring_context.setdefault("market_data_timestamp", decision.get("timestamp"))
+
+            from .risk.gatekeeper import RiskGatekeeper
+
+            gatekeeper = RiskGatekeeper()
+            allowed, reason = gatekeeper.validate_trade(decision, monitoring_context)
+            if not allowed:
+                logger.warning(f"Trade rejected by RiskGatekeeper: {reason}")
+                decision["executed"] = False
+                decision["execution_time"] = datetime.utcnow().isoformat()
+                decision["execution_result"] = {
+                    "success": False,
+                    "error": reason,
+                    "status": "REJECTED_BY_GATEKEEPER",
+                }
+                self.decision_store.update_decision(decision)
+                return decision["execution_result"]
+        except Exception as e:
+            logger.error(f"RiskGatekeeper validation error: {e}", exc_info=True)
+
+        try:
+            breaker = None
+            if getattr(self.trading_platform, "get_execute_breaker", None):
+                breaker = self.trading_platform.get_execute_breaker()
+
+            if breaker is None:
+                from .utils.circuit_breaker import CircuitBreaker
+
+                cb_name = f"execute_trade:{self.trading_platform.__class__.__name__}"
+                breaker = CircuitBreaker(
+                    failure_threshold=3, recovery_timeout=60, name=cb_name
+                )
+
+            result = await breaker.call(
+                self.trading_platform.aexecute_trade, decision
+            )
+        except TradingError as e:
+            logger.error(f"Trade execution failed: {e}")
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {"success": False, "error": str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+        except (ConnectionError, socket.timeout, TimeoutError) as e:
+            logger.error(
+                f"Trade execution failed due to connection/network issue: {e}",
+                exc_info=True,
+            )
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {"success": False, "error": str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+        except Exception as e:
+            logger.error(f"Trade execution failed: {e}", exc_info=True)
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {"success": False, "error": str(e)}
+            self.decision_store.update_decision(decision)
+            raise
+
+        decision["executed"] = True
+        decision["execution_time"] = datetime.utcnow().isoformat()
+        decision["execution_result"] = result
+        self.decision_store.update_decision(decision)
+
+        self.invalidate_portfolio_cache()
+
+        return result
+
     def _preexecution_checks(
         self, decision: Dict[str, Any], monitoring_context: Optional[object] = None
     ) -> None:
         """
         Run pre-execution safety checks before sending orders to the platform.
+
+        NOTE: Risk validation is now centralized in RiskGatekeeper.validate_trade(),
+        which is called by the agent RISK_CHECK state. This method now only handles
+        signal-only mode blocking and enriches the context with safety thresholds.
         """
         # Block execution if signal_only mode
         if decision.get("signal_only", False):
@@ -859,43 +1033,10 @@ class FinanceFeedbackEngine:
                 "or disable signal-only via config key 'signal_only_default: false'."
             )
 
-        # If monitoring provider available, get context and run simple risk checks
-        try:
-            provider = self.monitoring_provider or monitoring_context
-            if provider:
-                ctx = provider.get_monitoring_context(
-                    asset_pair=decision.get("asset_pair")
-                )
-                risk = ctx.get("risk_metrics", {})
-                leverage = risk.get("leverage_estimate", 0)
-                largest_pct = ctx.get("position_concentration", {}).get(
-                    "largest_position_pct", 0
-                )
-
-                # Simple safety thresholds — configurable later via config
-                max_leverage = self.config.get("safety", {}).get("max_leverage", 5.0)
-                max_concentration = self.config.get("safety", {}).get(
-                    "max_position_pct", 25.0
-                )
-
-                if leverage and leverage > max_leverage:
-                    raise ValueError(
-                        f"Execution blocked: leverage {leverage:.2f} exceeds max {max_leverage}"
-                    )
-
-                if largest_pct and largest_pct > max_concentration:
-                    raise ValueError(
-                        f"Execution blocked: largest position {largest_pct:.1f}% exceeds max {max_concentration}%"
-                    )
-        except (TimeoutError, ConnectionError, socket.timeout) as e:
-            # If monitoring fetch fails due to known transient issues, allow execution but log warning
-            logger.warning(
-                f"Pre-execution monitoring checks failed due to network/timeout; proceeding cautiously: {e}"
-            )
-        except Exception as e:
-            # For any other error, re-raise to block execution and surface the problem
-            logger.error(f"Critical error during pre-execution monitoring checks: {e}")
-            raise
+        # Note: Leverage and concentration checks are now handled by
+        # RiskGatekeeper._validate_leverage_and_concentration() which is called
+        # during the agent RISK_CHECK state. This consolidates all risk validation
+        # in one place and prevents duplication.
 
     async def backtest(
         self,

@@ -236,8 +236,8 @@ class TradingLoopAgent:
         base_delay = 2.0
         for attempt in range(self._max_startup_retries):
             try:
-                # Query platform for current portfolio state (use cached method from engine)
-                portfolio = self.engine.get_portfolio_breakdown()
+                # Query platform for current portfolio state (async to avoid blocking)
+                portfolio = await self.engine.get_portfolio_breakdown_async()
 
                 logger.info(f"Portfolio breakdown keys: {list(portfolio.keys())}")
 
@@ -834,10 +834,10 @@ class TradingLoopAgent:
                 analyze_fn = getattr(self.engine, "analyze_asset", None)
                 analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
 
-                if callable(analyze_fn):
+                if callable(analyze_async_fn):
+                    analysis_result = await analyze_async_fn(asset_pair)
+                elif callable(analyze_fn):
                     analysis_result = analyze_fn(asset_pair)
-                elif callable(analyze_async_fn):
-                    analysis_result = analyze_async_fn(asset_pair)
                 else:
                     raise AttributeError(
                         "Engine must implement analyze_asset() or analyze_asset_async()"
@@ -925,11 +925,21 @@ class TradingLoopAgent:
                 monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
                     asset_pair=asset_pair
                 )
+
+                # Enrich context with safety thresholds from config
+                # These are used by RiskGatekeeper._validate_leverage_and_concentration()
+                safety_config = self.config.get("safety", {})
+                monitoring_context["max_leverage"] = safety_config.get("max_leverage", 5.0)
+                monitoring_context["max_concentration"] = safety_config.get("max_position_pct", 25.0)
+
             except Exception as e:
                 logger.warning(
                     f"Failed to get monitoring context for risk validation: {e}"
                 )
-                monitoring_context = {}
+                monitoring_context = {
+                    "max_leverage": 5.0,
+                    "max_concentration": 25.0
+                }
 
             # First run the standard RiskGatekeeper validation
             approved, reason = self.risk_gatekeeper.validate_trade(
@@ -1105,7 +1115,9 @@ class TradingLoopAgent:
                 asset_pair = decision.get("asset_pair")
 
                 try:
-                    execution_result = self.engine.execute_decision(decision_id)
+                    execution_result = await self.engine.execute_decision_async(
+                        decision_id
+                    )
                     if execution_result.get("success"):
                         logger.info(
                             f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor."
