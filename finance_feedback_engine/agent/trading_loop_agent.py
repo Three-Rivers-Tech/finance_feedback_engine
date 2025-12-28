@@ -1252,7 +1252,7 @@ class TradingLoopAgent:
                         webhook_payload = {
                             "event_type": "trading_decision",
                             "decision_id": decision_id,
-                            "timestamp": datetime.datetime.utcnow().isoformat(),
+                            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                             "asset_pair": asset_pair,
                             "action": action,
                             "confidence": confidence,
