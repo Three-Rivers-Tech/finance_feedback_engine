@@ -105,6 +105,14 @@ echo ""
 echo -e "${BLUE}[3/5]${NC} Configuring pre-commit..."
 if [ "$CONFIG_FILE" != ".pre-commit-config.yaml" ]; then
     echo "Creating symlink to $CONFIG_FILE..."
+    
+    # Check if .pre-commit-config.yaml exists and is not a symlink
+    if [ -f .pre-commit-config.yaml ] && [ ! -L .pre-commit-config.yaml ]; then
+        echo -e "${YELLOW}⚠  Warning: .pre-commit-config.yaml exists and will be replaced${NC}"
+        echo "Creating backup: .pre-commit-config.yaml.backup"
+        cp .pre-commit-config.yaml .pre-commit-config.yaml.backup
+    fi
+    
     ln -sf "$CONFIG_FILE" .pre-commit-config.yaml
     echo -e "${GREEN}✓ Symlink created${NC}"
 else
@@ -151,7 +159,14 @@ echo "• To run manually: pre-commit run --all-files"
 echo "• To bypass (not recommended): git commit --no-verify"
 echo ""
 echo -e "${BLUE}Installed Hooks:${NC}"
-pre-commit run --all-files --verbose 2>&1 | grep "^- repo:" || pre-commit run --hook-stage manual --all-files --verbose 2>&1 | grep "id:" || echo "  Run 'pre-commit run --all-files' to see all hooks"
+# List configured hooks from the config file
+echo "  Configured hooks in $CONFIG_FILE:"
+if command -v yq > /dev/null 2>&1; then
+    yq eval '.repos[].hooks[].id' "$CONFIG_FILE" 2>/dev/null | sed 's/^/    - /' || echo "    Run 'pre-commit run --all-files' to see all hooks"
+else
+    # Fallback: simple grep for hook IDs
+    grep -A 1 "- id:" "$CONFIG_FILE" | grep "id:" | sed 's/.*id: */    - /' || echo "    Run 'pre-commit run --all-files' to see all hooks"
+fi
 echo ""
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Config: $CONFIG_FILE"
