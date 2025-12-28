@@ -1,66 +1,66 @@
-{
-  "has_history": true,
-  "total_historical_trades": 50,
-  "recent_trades_analyzed": 10,
-  "recent_performance": {
-    "total_pnl": 65.8096506429307,
-    "win_rate": 50.0,
-    "winning_trades": 5,
-    "losing_trades": 5
-  },
-  "action_performance": {
-    "BUY": {
-      "win_rate": 60.0,
-      "total_pnl": 90.00695832868671,
-      "count": 5
-    },
-    "SELL": {
-      "win_rate": 40.0,
-      "total_pnl": -24.19730768575601,
-      "count": 5
+    {
+      "has_history": true,
+      "total_historical_trades": 10,
+      "recent_trades_analyzed": 4,
+      "recent_performance": {
+        "total_pnl": 10.0,
+        "win_rate": 50.0,
+        "winning_trades": 2,
+        "losing_trades": 2
+      },
+      "action_performance": {
+        "BUY": {
+          "win_rate": 50.0,
+          "total_pnl": 6.0,
+          "count": 2
+        },
+        "SELL": {
+          "win_rate": 50.0,
+          "total_pnl": 4.0,
+          "count": 2
+        }
+      },
+      "provider_performance": {
+        "local": {
+          "win_rate": 50.0,
+          "count": 4
+        }
+      },
+      "current_streak": {
+        "type": "winning",
+        "count": 1
+      },
+      "long_term_performance": {
+        "has_data": true,
+        "period_days": 90,
+        "period_start": "2000-01-01T00:00:00",
+        "period_end": "2000-04-01T00:00:00",
+        "realized_pnl": 20.0,
+        "total_trades": 10,
+        "win_rate": 50.0,
+        "winning_trades": 5,
+        "losing_trades": 5,
+        "avg_win": 5.0,
+        "avg_loss": -5.0,
+        "profit_factor": 1.0,
+        "gross_profit": 25.0,
+        "gross_loss": 25.0,
+        "best_trade": 8.0,
+        "worst_trade": -8.0,
+        "sharpe_ratio": 0.5,
+        "roi_percentage": 1.0,
+        "average_holding_hours": 24.0,
+        "recent_momentum": "stable",
+        "asset_pair": "all"
+      },
+      "veto_metrics": {
+        "total": 0,
+        "applied": 0,
+        "correct": 0,
+        "incorrect": 0,
+        "by_source": {},
+        "last_score": null,
+        "last_threshold": null
+      },
+      "veto_threshold_recommendation": 0.6
     }
-  },
-  "provider_performance": {
-    "local": {
-      "win_rate": 50.0,
-      "count": 10
-    }
-  },
-  "current_streak": {
-    "type": "winning",
-    "count": 1
-  },
-  "long_term_performance": {
-    "has_data": true,
-    "period_days": 90,
-    "period_start": "2025-09-29T06:23:39.217839",
-    "period_end": "2025-12-28T06:23:39.217945",
-    "realized_pnl": 128.1800280788501,
-    "total_trades": 45,
-    "win_rate": 51.11111111111111,
-    "winning_trades": 23,
-    "losing_trades": 22,
-    "avg_win": 50.54938322233549,
-    "avg_loss": -47.02071754703938,
-    "profit_factor": 1.1239105912589769,
-    "gross_profit": 1162.6358141137164,
-    "gross_loss": 1034.4557860348664,
-    "best_trade": 99.93564992938812,
-    "worst_trade": -78.91209425197528,
-    "sharpe_ratio": 0.8150549572368957,
-    "roi_percentage": 2.5636005615770023,
-    "average_holding_hours": 24.0,
-    "recent_momentum": "declining",
-    "asset_pair": "all"
-  },
-  "veto_metrics": {
-    "total": 0,
-    "applied": 0,
-    "correct": 0,
-    "incorrect": 0,
-    "by_source": {},
-    "last_score": null,
-    "last_threshold": null
-  },
-  "veto_threshold_recommendation": 0.6
-}
