@@ -4,8 +4,8 @@ import logging
 from typing import Any, Dict, List
 
 from finance_feedback_engine.utils.asset_classifier import classify_asset_pair
-from finance_feedback_engine.utils.validation import standardize_asset_pair
 from finance_feedback_engine.utils.circuit_breaker import CircuitBreaker
+from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .coinbase_platform import CoinbaseAdvancedPlatform
@@ -95,7 +95,11 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 target_platform.__class__.__name__,
             )
             # Ensure a circuit breaker is present; lazily attach if missing
-            cb = target_platform.get_execute_breaker() if hasattr(target_platform, "get_execute_breaker") else None
+            cb = (
+                target_platform.get_execute_breaker()
+                if hasattr(target_platform, "get_execute_breaker")
+                else None
+            )
             if cb is None:
                 cb = CircuitBreaker(
                     failure_threshold=3,
