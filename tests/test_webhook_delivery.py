@@ -98,7 +98,7 @@ async def test_webhook_delivery_retry_on_failure(trading_agent):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise httpx.RequestError("Connection failed")
+                raise httpx.RequestError("Connection failed", request=MagicMock())
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.raise_for_status = MagicMock()
@@ -126,7 +126,7 @@ async def test_webhook_delivery_max_retries_exceeded(trading_agent):
         mock_client = MagicMock()
         
         async def mock_post(*args, **kwargs):
-            raise httpx.RequestError("Always fails")
+            raise httpx.RequestError("Always fails", request=MagicMock())
         
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
