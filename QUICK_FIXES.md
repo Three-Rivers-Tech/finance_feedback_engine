@@ -129,14 +129,15 @@ async def _deliver_webhook(
     try:
         response = await _send_webhook()
         logger.info(
-            f"✅ Webhook delivered to {webhook_url} "
-            f"(status: {response.status_code})"
+            "✅ Webhook delivered successfully (status: %s)",
+            response.status_code,
         )
         return True
     except httpx.HTTPError as e:
         logger.error(
-            f"❌ Webhook delivery failed after {max_retries} attempts: {e}",
-            exc_info=True
+            "❌ Webhook delivery failed after %s attempts (%s)",
+            max_retries,
+            type(e).__name__,
         )
         return False
 ```
