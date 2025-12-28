@@ -25,16 +25,16 @@ from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
 from ..memory.portfolio_memory import PortfolioMemoryEngine
 from ..monitoring.trade_monitor import TradeMonitor
-from .dependencies import get_engine
+from .dependencies import get_engine, verify_api_key
 
 logger = logging.getLogger(__name__)
 
 # Router for bot control endpoints
-# TEMPORARILY DISABLED AUTH FOR DEBUGGING - RE-ENABLE FOR PRODUCTION
+# API authentication enabled for production security
 bot_control_router = APIRouter(
     prefix="/api/v1/bot",
     tags=["bot-control"],
-    # dependencies=[Depends(verify_api_key)],  # Temporarily disabled
+    dependencies=[Depends(verify_api_key)],  # Authentication required
 )
 
 # Global agent instance management

@@ -49,8 +49,10 @@ qdrant_storage/
 
 # Trading data (not versioned)
 data/decisions/
+data/decisions_test/
 data/decisions_test_run/
 data/memory/
+data/test_memory/
 data/trade_metrics/
 data/api_costs/
 data/historical_cache/
