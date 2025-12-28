@@ -32,14 +32,15 @@ FROM nginx:1.25-alpine
 # Copy built assets from builder stage
 COPY --from=builder /build/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY --from=builder /build/nginx.conf /etc/nginx/conf.d/default.conf 2>/dev/null || \
-     echo "server { \
-         listen 80; \
-         root /usr/share/nginx/html; \
-         index index.html; \
-         location / { try_files \$uri \$uri/ /index.html; } \
-     }" > /etc/nginx/conf.d/default.conf
+# Copy nginx configuration (SPA routing fallback)
+RUN echo "server { \
+    listen 80; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files \$uri \$uri/ /index.html; \
+    } \
+}" > /etc/nginx/conf.d/default.conf
 
 # Create non-root nginx user and set permissions
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

@@ -173,7 +173,15 @@ class OptunaOptimizer:
         timeframe = str(ab.get("timeframe", "1h")).lower()
 
         # If decision_engine overrides are present, prefer them.
-        decision_engine_cfg = (config or {}).get("decision_engine", {}) or {}
+        # Normalize decision_engine config to support nested/flat shapes consistently.
+        try:
+            from finance_feedback_engine.utils.config_loader import (
+                normalize_decision_config,
+            )
+            decision_engine_cfg = normalize_decision_config(config or {}) or {}
+        except Exception:
+            # Fallback to legacy access if normalization import fails in some environments
+            decision_engine_cfg = (config or {}).get("decision_engine", {}) or {}
         if isinstance(decision_engine_cfg, dict):
             if "stop_loss_percentage" in decision_engine_cfg:
                 stop_loss_percentage = float(

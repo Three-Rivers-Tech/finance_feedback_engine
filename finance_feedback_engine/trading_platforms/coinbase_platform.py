@@ -483,22 +483,28 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                                 return float(v.get("value", 0) or 0)
                             return float(getattr(v, "value", v) or 0)
 
+                        def _get_attr_value(obj: Any, attr: str, default: Any = 0) -> Any:
+                            """Safely get attribute from object or dict."""
+                            if isinstance(obj, dict):
+                                return obj.get(attr, default)
+                            return getattr(obj, attr, default)
+
                         futures_value_usd = _to_float_value(
-                            balance_summary.get("total_usd_balance", 0)
+                            _get_attr_value(balance_summary, "total_usd_balance", 0)
                         )
                         futures_summary = {
                             "total_balance_usd": futures_value_usd,
                             "unrealized_pnl": _to_float_value(
-                                balance_summary.get("unrealized_pnl", 0)
+                                _get_attr_value(balance_summary, "unrealized_pnl", 0)
                             ),
                             "daily_realized_pnl": _to_float_value(
-                                balance_summary.get("daily_realized_pnl", 0)
+                                _get_attr_value(balance_summary, "daily_realized_pnl", 0)
                             ),
                             "buying_power": _to_float_value(
-                                balance_summary.get("futures_buying_power", 0)
+                                _get_attr_value(balance_summary, "futures_buying_power", 0)
                             ),
                             "initial_margin": _to_float_value(
-                                balance_summary.get("initial_margin", 0)
+                                _get_attr_value(balance_summary, "initial_margin", 0)
                             ),
                         }
                 except RequestException:

@@ -516,7 +516,7 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
     try:
         # Get balance and active positions from trading platform
         if hasattr(engine, "trading_platform") and engine.trading_platform:
-            balance_info = engine.trading_platform.get_balance()
+            balance_info = await engine.trading_platform.aget_balance()
             # Normalize balance to a canonical shape expected by frontend
             total = None
             try:
@@ -542,7 +542,7 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             # Active positions count via standardized interface
             if hasattr(engine.trading_platform, "get_active_positions"):
                 try:
-                    positions_resp = engine.trading_platform.get_active_positions()
+                    positions_resp = await engine.trading_platform.aget_active_positions()
                     positions_list = positions_resp.get("positions", [])
                     status_data["active_positions"] = len(positions_list)
                 except Exception:

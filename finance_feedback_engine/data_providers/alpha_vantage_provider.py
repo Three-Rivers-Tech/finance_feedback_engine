@@ -452,7 +452,7 @@ class AlphaVantageProvider:
                     }
                     interval = interval_map.get(timeframe, "60min")
                     params = {
-                        "function": "DIGITAL_CURRENCY_INTRADAY",
+                        "function": "CRYPTO_INTRADAY",
                         "symbol": symbol,
                         "market": market,
                         "interval": interval,

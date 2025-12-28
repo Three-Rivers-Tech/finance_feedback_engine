@@ -473,6 +473,66 @@ class EnsembleDecisionManager:
             span_cm.__exit__(None, None, None)
         return final_decision
 
+    def _add_phase_metadata(
+        self,
+        decision: Dict[str, Any],
+        phase_num: int,
+        phase_action: str,
+        phase_confidence: float,
+        phase_agreement: float,
+        phase_providers: List[str],
+        phase_metrics: Optional[Dict[str, Any]] = None,
+        triggered: Optional[bool] = None,
+        skip_reason: Optional[str] = None,
+        escalation_reason: Optional[str] = None,
+        primary_provider: Optional[str] = None,
+        fallback_used: Optional[bool] = None,
+        codex_tiebreaker: Optional[bool] = None,
+        decision_changed: Optional[bool] = None,
+        position_value: Optional[float] = None,
+        escalation_triggers: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add phase-specific metadata to ensemble decision.
+
+        Consolidates repeated metadata assembly logic for both Phase 1-only and Phase 1+2 paths.
+        """
+        meta = decision["ensemble_metadata"]
+
+        # Phase-agnostic fields
+        meta[f"phase{phase_num}_providers_succeeded"] = phase_providers
+        meta[f"phase{phase_num}_action"] = phase_action
+        meta[f"phase{phase_num}_confidence"] = phase_confidence
+        meta[f"phase{phase_num}_agreement_rate"] = phase_agreement
+
+        if phase_metrics is not None:
+            meta[f"phase{phase_num}_metrics"] = phase_metrics
+
+        # Phase 2-specific fields
+        if phase_num == 2:
+            if triggered is not None:
+                meta["phase2_triggered"] = triggered
+            if skip_reason is not None:
+                meta["phase2_skip_reason"] = skip_reason
+            if primary_provider is not None:
+                meta["phase2_primary_provider"] = primary_provider
+            if fallback_used is not None:
+                meta["phase2_fallback_used"] = fallback_used
+
+        # Shared escalation/merge fields
+        if escalation_reason is not None:
+            meta["phase2_escalation_reason"] = escalation_reason
+        if position_value is not None:
+            meta["phase1_position_value"] = position_value
+        if escalation_triggers is not None:
+            meta["phase1_escalation_triggers"] = escalation_triggers
+        if codex_tiebreaker is not None:
+            meta["codex_tiebreaker"] = codex_tiebreaker
+        if decision_changed is not None:
+            meta["decision_changed_by_premium"] = decision_changed
+
+        return decision
+
     async def aggregate_decisions_two_phase(
         self,
         prompt: str,
@@ -568,62 +628,39 @@ class EnsembleDecisionManager:
                 f"Phase 2 not triggered (reason={phase2_skip_reason}); "
                 "using Phase 1 decision"
             )
-            phase1_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
-                phase1_decisions.keys()
+            return self._add_phase_metadata(
+                phase1_decision,
+                phase_num=1,
+                phase_action=phase1_action,
+                phase_confidence=phase1_confidence,
+                phase_agreement=phase1_agreement,
+                phase_providers=list(phase1_decisions.keys()),
+                phase_metrics=phase1_metrics,
+                triggered=False,
+                skip_reason=phase2_skip_reason,
+                escalation_reason=phase2_escalation_reason,
+                position_value=result.get("position_value"),
+                escalation_triggers=result.get("escalation_triggers", []),
             )
-            phase1_decision["ensemble_metadata"]["phase1_action"] = phase1_action
-            phase1_decision["ensemble_metadata"][
-                "phase1_confidence"
-            ] = phase1_confidence
-            phase1_decision["ensemble_metadata"][
-                "phase1_agreement_rate"
-            ] = phase1_agreement
-            phase1_decision["ensemble_metadata"]["phase2_triggered"] = False
-            phase1_decision["ensemble_metadata"][
-                "phase2_skip_reason"
-            ] = phase2_skip_reason
-            phase1_decision["ensemble_metadata"][
-                "phase2_escalation_reason"
-            ] = phase2_escalation_reason
-            phase1_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
-            phase1_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
-                "position_value"
-            )
-            phase1_decision["ensemble_metadata"]["phase1_escalation_triggers"] = (
-                result.get("escalation_triggers", [])
-            )
-            return phase1_decision
 
         # If Phase 2 completely failed, use Phase 1 result
         if not phase2_decisions:
             logger.warning("Phase 2 complete failure - using Phase 1 result")
-            phase1_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
-                phase1_decisions.keys()
+            return self._add_phase_metadata(
+                phase1_decision,
+                phase_num=1,
+                phase_action=phase1_action,
+                phase_confidence=phase1_confidence,
+                phase_agreement=phase1_agreement,
+                phase_providers=list(phase1_decisions.keys()),
+                phase_metrics=phase1_metrics,
+                triggered=True,
+                primary_provider=result.get("phase2_primary_used"),
+                fallback_used=True,
+                escalation_reason=phase2_escalation_reason,
+                position_value=result.get("position_value"),
+                escalation_triggers=result.get("escalation_triggers", []),
             )
-            phase1_decision["ensemble_metadata"]["phase1_action"] = phase1_action
-            phase1_decision["ensemble_metadata"][
-                "phase1_confidence"
-            ] = phase1_confidence
-            phase1_decision["ensemble_metadata"][
-                "phase1_agreement_rate"
-            ] = phase1_agreement
-            phase1_decision["ensemble_metadata"]["phase2_triggered"] = True
-            phase1_decision["ensemble_metadata"]["phase2_primary_provider"] = (
-                result.get("phase2_primary_used")
-            )
-            phase1_decision["ensemble_metadata"]["phase2_fallback_used"] = True
-            phase1_decision["ensemble_metadata"]["phase2_failed"] = True
-            phase1_decision["ensemble_metadata"][
-                "phase2_escalation_reason"
-            ] = phase2_escalation_reason
-            phase1_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
-            phase1_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
-                "position_value"
-            )
-            phase1_decision["ensemble_metadata"]["phase1_escalation_triggers"] = (
-                result.get("escalation_triggers", [])
-            )
-            return phase1_decision
 
         # Merge Phase 1 + Phase 2 decisions
         all_decisions = {**phase1_decisions, **phase2_decisions}
@@ -653,40 +690,23 @@ class EnsembleDecisionManager:
         decision_changed = final_decision["action"] != phase1_action
 
         # Add comprehensive two-phase metadata
-        final_decision["ensemble_metadata"]["phase1_providers_succeeded"] = list(
-            phase1_decisions.keys()
+        return self._add_phase_metadata(
+            final_decision,
+            phase_num=1,
+            phase_action=phase1_action,
+            phase_confidence=phase1_confidence,
+            phase_agreement=phase1_agreement,
+            phase_providers=list(phase1_decisions.keys()),
+            phase_metrics=phase1_metrics,
+            triggered=True,
+            primary_provider=phase2_primary_used,
+            fallback_used=phase2_fallback_used,
+            codex_tiebreaker=codex_tiebreaker_used,
+            decision_changed=decision_changed,
+            escalation_reason=phase2_escalation_reason,
+            position_value=result.get("position_value"),
+            escalation_triggers=result.get("escalation_triggers", []),
         )
-        final_decision["ensemble_metadata"]["phase1_action"] = phase1_action
-        final_decision["ensemble_metadata"]["phase1_confidence"] = phase1_confidence
-        final_decision["ensemble_metadata"]["phase1_agreement_rate"] = phase1_agreement
-        final_decision["ensemble_metadata"]["phase2_triggered"] = True
-        final_decision["ensemble_metadata"][
-            "phase2_primary_provider"
-        ] = phase2_primary_used
-        final_decision["ensemble_metadata"][
-            "phase2_fallback_used"
-        ] = phase2_fallback_used
-        final_decision["ensemble_metadata"]["codex_tiebreaker"] = codex_tiebreaker_used
-        final_decision["ensemble_metadata"][
-            "decision_changed_by_premium"
-        ] = decision_changed
-        final_decision["ensemble_metadata"][
-            "phase2_escalation_reason"
-        ] = phase2_escalation_reason
-        final_decision["ensemble_metadata"]["phase1_metrics"] = phase1_metrics
-        final_decision["ensemble_metadata"]["phase1_position_value"] = result.get(
-            "position_value"
-        )
-        final_decision["ensemble_metadata"]["phase1_escalation_triggers"] = result.get(
-            "escalation_triggers", []
-        )
-
-        logger.info(
-            f"Two-phase decision: {final_decision['action']} "
-            f"(Phase1: {phase1_action}, Changed: {decision_changed})"
-        )
-
-        return final_decision
 
     def debate_decisions(
         self,

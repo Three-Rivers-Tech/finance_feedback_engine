@@ -356,14 +356,16 @@ class TestHistoricalDataProvider:
             index=pd.DatetimeIndex(["2024-01-01"], name="timestamp"),
         )
 
-        with patch.object(provider, "_fetch_raw_data", return_value=mock_df):
-            data = provider.get_historical_data(
-                "AAPL", start_date="2024-01-01", end_date="2024-12-01"
-            )
+        # Mock both data_store (to return no cache) and _fetch_raw_data (to return our mock data)
+        with patch.object(provider.data_store, "load_dataframe", return_value=None):
+            with patch.object(provider, "_fetch_raw_data", return_value=mock_df):
+                data = provider.get_historical_data(
+                    "AAPL", start_date="2024-01-01", end_date="2024-12-01"
+                )
 
-            assert not data.empty
-            assert len(data) == 1
-            assert data.iloc[0]["close"] == 103.0
+                assert not data.empty
+                assert len(data) == 1
+                assert data.iloc[0]["close"] == 103.0
 
 
 if __name__ == "__main__":

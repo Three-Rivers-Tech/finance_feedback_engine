@@ -266,7 +266,7 @@ async def stop_agent() -> Dict[str, str]:
 
             # Signal agent to stop
             if hasattr(_agent_instance, "stop"):
-                await _agent_instance.stop()
+                _agent_instance.stop()
 
             # Cancel the task
             _agent_task.cancel()
@@ -328,15 +328,14 @@ async def emergency_stop(
                 logger.warning("Closing all open positions...")
 
                 # Get open positions
-                if hasattr(platform, "get_portfolio_breakdown"):
-                    breakdown = platform.get_portfolio_breakdown()
+                if hasattr(platform, "aget_portfolio_breakdown"):
+                    breakdown = await platform.aget_portfolio_breakdown()
                     positions = breakdown.get("positions", [])
 
                     for position in positions:
                         try:
-                            # Execute close trade - Note: sync version might be needed depending on platform
-                            # Using await version here as it's in an async function
-                            result = await platform.execute_trade(
+                            # Execute close trade without blocking the event loop
+                            result = await platform.aexecute_trade(
                                 {
                                     "asset_pair": position["asset_pair"],
                                     "action": (
@@ -397,12 +396,19 @@ async def get_agent_status(
 
         if platform:
             try:
-                balance = platform.get_balance()
+                # Add timeout to prevent hanging on API calls
+                balance = await asyncio.wait_for(
+                    platform.aget_balance(), timeout=3.0
+                )
                 portfolio_value = balance.get("total", balance.get("balance"))
 
-                if hasattr(platform, "get_portfolio_breakdown"):
-                    breakdown = platform.get_portfolio_breakdown()
+                if hasattr(platform, "aget_portfolio_breakdown"):
+                    breakdown = await asyncio.wait_for(
+                        platform.aget_portfolio_breakdown(), timeout=3.0
+                    )
                     active_positions = len(breakdown.get("positions", []))
+            except asyncio.TimeoutError:
+                logger.warning("Platform API call timed out after 3 seconds")
             except Exception as e:
                 logger.warning(f"Could not fetch portfolio info: {e}")
 
@@ -574,7 +580,7 @@ async def execute_manual_trade(
             )
 
         # Execute trade
-        result = await platform.execute_trade(trade_params)
+        result = await platform.aexecute_trade(trade_params)
 
         logger.info(f"✅ Manual trade executed: {result}")
 
@@ -609,7 +615,7 @@ async def get_open_positions(
             }
 
         # Use standardized active positions
-        raw = platform.get_active_positions()  # {"positions": [...]}
+        raw = await platform.aget_active_positions()  # {"positions": [...]}
         raw_positions = raw.get("positions", [])
 
         transformed = []
@@ -715,7 +721,7 @@ async def get_open_positions(
         total_value = 0.0
         try:
             if hasattr(platform, "get_portfolio_breakdown"):
-                pb = platform.get_portfolio_breakdown()
+                pb = await platform.aget_portfolio_breakdown()
                 total_value = float(pb.get("total_value_usd", 0.0))
         except Exception:
             total_value = 0.0
@@ -744,7 +750,7 @@ async def close_position(
     """
     try:
         # Get position details
-        breakdown = engine.platform.get_portfolio_breakdown()
+        breakdown = await engine.platform.aget_portfolio_breakdown()
         positions = breakdown.get("positions", [])
 
         position = next((p for p in positions if p.get("id") == position_id), None)
@@ -770,7 +776,7 @@ async def close_position(
             )
 
         # Execute closing trade
-        result = await engine.platform.execute_trade(
+        result = await engine.platform.aexecute_trade(
             {
                 "asset_pair": position["asset_pair"],
                 "action": "SELL" if position.get("side") == "LONG" else "BUY",

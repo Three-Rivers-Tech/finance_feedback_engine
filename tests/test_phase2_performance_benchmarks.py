@@ -439,13 +439,15 @@ class TestEndToEndPerformance:
             "trading_platform": "coinbase",
             "platform_credentials": {},
             "decision_engine": {"local_models": []},
-            "is_backtest": True,
+            # Don't set is_backtest=True to allow platform initialization
         }
 
         with (
             patch(
                 "finance_feedback_engine.core.PlatformFactory.create_platform"
             ) as mock_platform_factory,
+            patch("finance_feedback_engine.core.AlphaVantageProvider"),
+            patch("finance_feedback_engine.core.DecisionEngine"),
             patch("finance_feedback_engine.core.ensure_models_installed"),
         ):
             mock_platform = Mock()
@@ -453,9 +455,16 @@ class TestEndToEndPerformance:
             mock_platform.get_portfolio_breakdown = Mock(
                 return_value={"total_value_usd": 10000, "num_assets": 2}
             )
+            # Also mock the async variant
+            mock_platform.aget_portfolio_breakdown = AsyncMock(
+                return_value={"total_value_usd": 10000, "num_assets": 2}
+            )
             mock_platform_factory.return_value = mock_platform
 
             engine = FinanceFeedbackEngine(config)
+
+            # Ensure the mock platform is used
+            assert engine.trading_platform is not None
 
             # Warm up caches
             engine.get_portfolio_breakdown()

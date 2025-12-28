@@ -466,6 +466,8 @@ class TestPositionRecovery:
         mock_trading_platform,
     ):
         """Test position recovery retries on failure."""
+        from unittest.mock import AsyncMock
+
         agent = TradingLoopAgent(
             config=minimal_config,
             engine=mock_engine,
@@ -474,8 +476,10 @@ class TestPositionRecovery:
             trading_platform=mock_trading_platform,
         )
 
+        # Mock the async method (agent now uses get_portfolio_breakdown_async)
+        mock_engine.get_portfolio_breakdown_async = AsyncMock()
         # First call fails, second succeeds
-        mock_engine.get_portfolio_breakdown.side_effect = [
+        mock_engine.get_portfolio_breakdown_async.side_effect = [
             Exception("Connection error"),
             {"total_value_usd": 10000.0, "futures_positions": []},
         ]
@@ -484,7 +488,7 @@ class TestPositionRecovery:
 
         # Should have retried and succeeded
         assert agent._startup_complete.is_set()
-        assert mock_engine.get_portfolio_breakdown.call_count == 2
+        assert mock_engine.get_portfolio_breakdown_async.call_count == 2
 
     @pytest.mark.asyncio
     async def test_position_recovery_timeout(

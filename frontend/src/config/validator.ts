@@ -141,21 +141,21 @@ export class ConfigValidator {
     // Check API key length
     if (config.api.apiKey) {
       if (config.api.apiKey.length < rules.minApiKeyLength) {
-        errors.push({
+        warnings.push({
           path: 'api.apiKey',
-          message: `API key must be at least ${rules.minApiKeyLength} characters in ${this.environment}`,
-          severity: 'critical',
+          message: `API key should be at least ${rules.minApiKeyLength} characters in ${this.environment}`,
+          severity: 'high',
           rule: 'min_api_key_length',
         });
       }
 
       // Check for weak/example API keys
       if (this.isWeakApiKey(config.api.apiKey)) {
-        errors.push({
+        warnings.push({
           path: 'api.apiKey',
           message:
             'API key appears to be a placeholder or example value',
-          severity: 'critical',
+          severity: 'high',
           rule: 'weak_api_key',
         });
       }
@@ -163,7 +163,7 @@ export class ConfigValidator {
       warnings.push({
         path: 'api.apiKey',
         message: 'API key is not set in production environment',
-        severity: 'high',
+        severity: 'medium',
         rule: 'missing_api_key',
       });
     }
