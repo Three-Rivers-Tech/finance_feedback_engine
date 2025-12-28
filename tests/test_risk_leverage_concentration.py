@@ -1,6 +1,7 @@
 """Tests for consolidated leverage and concentration validation in RiskGatekeeper."""
 
 import pytest
+
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 

@@ -1,3 +1,15 @@
+# =============================================================================
+# Gemini AI Code Review Workflow
+# =============================================================================
+# Purpose: Provides AI-powered code review using Google's Gemini model
+# Trigger: Called by other workflows (workflow_call)
+# What it does:
+#   - Reviews pull request changes using Gemini AI
+#   - Provides intelligent feedback on code quality, bugs, security
+#   - Posts review comments directly on the PR
+# Documentation: https://github.com/google-gemini/gemini-code-review
+# =============================================================================
+
 name: '🔎 Gemini Review'
 
 on:
