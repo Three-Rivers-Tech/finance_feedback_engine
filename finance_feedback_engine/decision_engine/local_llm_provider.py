@@ -146,12 +146,20 @@ class LocalLLMProvider:
         try:
             # Test connection by listing models
             models_response = self.ollama_client.list()
-            available_models = models_response.models if hasattr(models_response, 'models') else models_response.get('models', [])
-            logger.info(f"Ollama connected successfully. Available models: {len(available_models)}")
+            available_models = (
+                models_response.models
+                if hasattr(models_response, "models")
+                else models_response.get("models", [])
+            )
+            logger.info(
+                f"Ollama connected successfully. Available models: {len(available_models)}"
+            )
             return True
         except Exception as e:
             logger.error(f"Failed to connect to Ollama: {e}")
-            logger.error("Make sure Ollama is running and OLLAMA_HOST environment variable is set correctly")
+            logger.error(
+                "Make sure Ollama is running and OLLAMA_HOST environment variable is set correctly"
+            )
             return False
 
     def _install_ollama(self) -> bool:
@@ -404,14 +412,23 @@ class LocalLLMProvider:
         try:
             models_response = self.ollama_client.list()
             # Handle both dict and typed response
-            available_models = models_response.models if hasattr(models_response, 'models') else models_response.get("models", [])
+            available_models = (
+                models_response.models
+                if hasattr(models_response, "models")
+                else models_response.get("models", [])
+            )
 
             # Check both full name and short name
             model_base = model_name.split(":")[0].lower()
             for model in available_models:
                 # Handle both dict and typed Model object
-                model_full_name = (model.model if hasattr(model, 'model') else model.get("name", "")).lower()
-                if model_name.lower() in model_full_name or model_base in model_full_name:
+                model_full_name = (
+                    model.model if hasattr(model, "model") else model.get("name", "")
+                ).lower()
+                if (
+                    model_name.lower() in model_full_name
+                    or model_base in model_full_name
+                ):
                     return True
 
             return False
@@ -515,7 +532,7 @@ class LocalLLMProvider:
                     options={
                         "temperature": 0.7,
                         "top_p": 0.9,
-                    }
+                    },
                 )
 
                 response_text = response.get("response", "").strip()

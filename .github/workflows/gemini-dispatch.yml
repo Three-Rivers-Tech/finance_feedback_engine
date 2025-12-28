@@ -1,3 +1,16 @@
+# =============================================================================
+# Gemini AI Workflow Dispatcher
+# =============================================================================
+# Purpose: Routes GitHub events to appropriate Gemini AI workflows
+# Trigger: PR comments, reviews, issues, and issue comments
+# What it does:
+#   - Detects when AI assistance is requested (@gemini mentions)
+#   - Routes to gemini-review.yml for code reviews
+#   - Routes to gemini-triage.yml for issue triage
+#   - Coordinates multiple Gemini workflows
+# Documentation: https://github.com/google-gemini/gemini-code-review
+# =============================================================================
+
 name: '🔀 Gemini Dispatch'
 
 on:

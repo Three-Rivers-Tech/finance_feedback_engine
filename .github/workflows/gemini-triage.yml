@@ -1,3 +1,15 @@
+# =============================================================================
+# Gemini AI Issue Triage Workflow
+# =============================================================================
+# Purpose: AI-powered issue triage and labeling
+# Trigger: Called by other workflows (workflow_call)
+# What it does:
+#   - Analyzes new issues using Gemini AI
+#   - Suggests appropriate labels (bug, feature, priority, etc.)
+#   - Provides initial triage classification
+# Documentation: https://github.com/google-gemini/gemini-code-review
+# =============================================================================
+
 name: '🔀 Gemini Triage'
 
 on:

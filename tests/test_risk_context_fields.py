@@ -47,7 +47,10 @@ async def test_risk_context_fields():
     engine = FinanceFeedbackEngine(config)
 
     # Manually initialize mock trading platform (needed in backtest mode)
-    from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
+    from finance_feedback_engine.trading_platforms.mock_platform import (
+        MockTradingPlatform,
+    )
+
     engine.trading_platform = MockTradingPlatform({})
 
     print("   ✓ Engine initialized")
