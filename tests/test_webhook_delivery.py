@@ -149,7 +149,7 @@ async def test_webhook_delivery_timeout(trading_agent):
         mock_client = MagicMock()
         
         async def mock_post(*args, **kwargs):
-            raise httpx.TimeoutException("Request timed out")
+            raise httpx.TimeoutException("Request timed out", request=MagicMock())
         
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
