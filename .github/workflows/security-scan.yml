@@ -145,6 +145,15 @@ jobs:
              [ "${{ needs.code-security.result }}" != "success" ] || \
              [ "${{ needs.secret-scan.result }}" != "success" ]; then
             echo "❌ Security scans found issues" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ needs.dependency-scan.result }}" != "success" ]; then
+              echo "  - Dependency Vulnerabilities scan did not succeed (result: ${{ needs.dependency-scan.result }})" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "${{ needs.code-security.result }}" != "success" ]; then
+              echo "  - Code Security scan did not succeed (result: ${{ needs.code-security.result }})" >> $GITHUB_STEP_SUMMARY
+            fi
+            if [ "${{ needs.secret-scan.result }}" != "success" ]; then
+              echo "  - Secret Detection scan did not succeed (result: ${{ needs.secret-scan.result }})" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
             
             # Provide detailed output about which scans failed
