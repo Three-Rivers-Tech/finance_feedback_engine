@@ -319,7 +319,9 @@ class RiskGatekeeper:
         self._check_cross_platform_correlation(context)
 
         # 6. Leverage and Concentration Check (Consolidated from pre-execution)
-        leverage_check_result = self._validate_leverage_and_concentration(decision, context)
+        leverage_check_result = self._validate_leverage_and_concentration(
+            decision, context
+        )
         if not leverage_check_result[0]:
             return leverage_check_result
 
@@ -508,9 +510,7 @@ class RiskGatekeeper:
 
         # Validate leverage
         if leverage and leverage > max_leverage:
-            logger.warning(
-                f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}"
-            )
+            logger.warning(f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}")
             asset_pair = decision.get("asset_pair", "UNKNOWN")
             asset_type = (
                 "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"

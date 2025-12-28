@@ -542,7 +542,9 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
             # Active positions count via standardized interface
             if hasattr(engine.trading_platform, "get_active_positions"):
                 try:
-                    positions_resp = await engine.trading_platform.aget_active_positions()
+                    positions_resp = (
+                        await engine.trading_platform.aget_active_positions()
+                    )
                     positions_list = positions_resp.get("positions", [])
                     status_data["active_positions"] = len(positions_list)
                 except Exception:

@@ -1,3 +1,16 @@
+# =============================================================================
+# Gemini AI Scheduled Issue Triage
+# =============================================================================
+# Purpose: Automated hourly triage of open issues using Gemini AI
+# Trigger: Hourly cron schedule, manual dispatch, workflow updates
+# What it does:
+#   - Scans open issues every hour
+#   - Uses Gemini AI to analyze and categorize issues
+#   - Suggests labels, priority, and routing
+#   - Helps maintain organized issue backlog
+# Documentation: https://github.com/google-gemini/gemini-code-review
+# =============================================================================
+
 name: '📋 Gemini Scheduled Issue Triage'
 
 on:

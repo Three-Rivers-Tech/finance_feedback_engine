@@ -397,9 +397,7 @@ async def get_agent_status(
         if platform:
             try:
                 # Add timeout to prevent hanging on API calls
-                balance = await asyncio.wait_for(
-                    platform.aget_balance(), timeout=3.0
-                )
+                balance = await asyncio.wait_for(platform.aget_balance(), timeout=3.0)
                 portfolio_value = balance.get("total", balance.get("balance"))
 
                 if hasattr(platform, "aget_portfolio_breakdown"):

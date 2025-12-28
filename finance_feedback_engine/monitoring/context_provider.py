@@ -84,9 +84,7 @@ class MonitoringContextProvider:
 
             # Active trades count from monitor
             if self.trade_monitor:
-                context["active_trades_count"] = len(
-                    self.trade_monitor.active_trackers
-                )
+                context["active_trades_count"] = len(self.trade_monitor.active_trackers)
 
             # Recent performance from metrics collector
             if self.metrics_collector:
