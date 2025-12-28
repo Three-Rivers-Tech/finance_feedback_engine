@@ -74,6 +74,8 @@ pre-commit install
 **Setup:**
 ```bash
 ./scripts/setup-hooks.sh --config enhanced
+# or
+pre-commit install -c .pre-commit-config-enhanced.yaml
 ```
 
 ---
