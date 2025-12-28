@@ -822,8 +822,10 @@ class FinanceFeedbackEngine:
             monitoring_context = {}
             if hasattr(self, "monitoring_provider") and self.monitoring_provider:
                 try:
-                    monitoring_context = self.monitoring_provider.get_monitoring_context(
-                        asset_pair=decision.get("asset_pair")
+                    monitoring_context = (
+                        self.monitoring_provider.get_monitoring_context(
+                            asset_pair=decision.get("asset_pair")
+                        )
                     )
                 except Exception:
                     monitoring_context = {}
@@ -838,7 +840,9 @@ class FinanceFeedbackEngine:
                 )
             except Exception:
                 monitoring_context.setdefault("asset_type", "crypto")
-            monitoring_context.setdefault("market_data_timestamp", decision.get("timestamp"))
+            monitoring_context.setdefault(
+                "market_data_timestamp", decision.get("timestamp")
+            )
 
             # Validate decision against risk constraints
             from .risk.gatekeeper import RiskGatekeeper
@@ -930,8 +934,10 @@ class FinanceFeedbackEngine:
             monitoring_context = {}
             if hasattr(self, "monitoring_provider") and self.monitoring_provider:
                 try:
-                    monitoring_context = self.monitoring_provider.get_monitoring_context(
-                        asset_pair=decision.get("asset_pair")
+                    monitoring_context = (
+                        self.monitoring_provider.get_monitoring_context(
+                            asset_pair=decision.get("asset_pair")
+                        )
                     )
                 except Exception:
                     monitoring_context = {}
@@ -945,7 +951,9 @@ class FinanceFeedbackEngine:
                 )
             except Exception:
                 monitoring_context.setdefault("asset_type", "crypto")
-            monitoring_context.setdefault("market_data_timestamp", decision.get("timestamp"))
+            monitoring_context.setdefault(
+                "market_data_timestamp", decision.get("timestamp")
+            )
 
             from .risk.gatekeeper import RiskGatekeeper
 
@@ -978,9 +986,7 @@ class FinanceFeedbackEngine:
                     failure_threshold=3, recovery_timeout=60, name=cb_name
                 )
 
-            result = await breaker.call(
-                self.trading_platform.aexecute_trade, decision
-            )
+            result = await breaker.call(self.trading_platform.aexecute_trade, decision)
         except TradingError as e:
             logger.error(f"Trade execution failed: {e}")
             decision["executed"] = False

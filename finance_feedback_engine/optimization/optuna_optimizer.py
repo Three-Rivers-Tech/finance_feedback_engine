@@ -178,6 +178,7 @@ class OptunaOptimizer:
             from finance_feedback_engine.utils.config_loader import (
                 normalize_decision_config,
             )
+
             decision_engine_cfg = normalize_decision_config(config or {}) or {}
         except Exception:
             # Fallback to legacy access if normalization import fails in some environments

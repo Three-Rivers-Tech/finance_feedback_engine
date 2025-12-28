@@ -156,4 +156,6 @@ class TestDailyTradeLimit:
 
         # Assert: No decisions should have been collected for execution
         assert len(trading_agent._current_decisions) == 0
-        mock_dependencies["engine"].analyze_asset_async.assert_called_once_with("BTCUSD")
+        mock_dependencies["engine"].analyze_asset_async.assert_called_once_with(
+            "BTCUSD"
+        )

@@ -8,11 +8,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Color codes for terminal output
-GREEN = '\033[92m'
-RED = '\033[91m'
-YELLOW = '\033[93m'
-BLUE = '\033[94m'
-RESET = '\033[0m'
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
 
 
 def print_status(message, status="info"):
@@ -73,9 +73,10 @@ def validate_required_keys():
         value = os.getenv(key, "")
 
         # Check if it's a placeholder
-        is_placeholder = any(placeholder in value for placeholder in [
-            "YOUR_", "REPLACE_WITH_", "demo", "default"
-        ])
+        is_placeholder = any(
+            placeholder in value
+            for placeholder in ["YOUR_", "REPLACE_WITH_", "demo", "default"]
+        )
 
         if not value:
             print_status(f"{name} ({key}): NOT SET", "error")
@@ -93,9 +94,10 @@ def validate_required_keys():
     for key, name in optional_keys.items():
         value = os.getenv(key, "")
 
-        is_placeholder = any(placeholder in value for placeholder in [
-            "YOUR_", "REPLACE_WITH_", "demo", "default"
-        ])
+        is_placeholder = any(
+            placeholder in value
+            for placeholder in ["YOUR_", "REPLACE_WITH_", "demo", "default"]
+        )
 
         if not value:
             print_status(f"{name} ({key}): NOT SET (optional)", "info")
@@ -116,13 +118,17 @@ def validate_platform_settings():
 
     # Coinbase settings
     use_sandbox = os.getenv("COINBASE_USE_SANDBOX", "false")
-    print_status(f"Coinbase Sandbox Mode: {use_sandbox}",
-                "warning" if use_sandbox == "true" else "info")
+    print_status(
+        f"Coinbase Sandbox Mode: {use_sandbox}",
+        "warning" if use_sandbox == "true" else "info",
+    )
 
     # Oanda settings
     oanda_env = os.getenv("OANDA_ENVIRONMENT", "live")
-    print_status(f"Oanda Environment: {oanda_env}",
-                "warning" if oanda_env == "practice" else "info")
+    print_status(
+        f"Oanda Environment: {oanda_env}",
+        "warning" if oanda_env == "practice" else "info",
+    )
 
     # Trading platform
     trading_platform = os.getenv("TRADING_PLATFORM", "unified")
@@ -159,7 +165,9 @@ def test_coinbase_connection():
         # Basic format validation
         if not api_key.startswith("organizations/"):
             print_status("Coinbase API key format appears incorrect", "warning")
-            print_status("Expected format: organizations/{org-id}/apiKeys/{key-id}", "info")
+            print_status(
+                "Expected format: organizations/{org-id}/apiKeys/{key-id}", "info"
+            )
         else:
             print_status("Coinbase API key format looks correct", "success")
 
