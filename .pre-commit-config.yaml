@@ -38,6 +38,9 @@ repos:
         name: Prevent secrets and credentials
         entry: python .pre-commit-hooks/prevent-secrets.py
         language: system
+        # Intentionally scan the full repository for secrets on every run.
+        # The prevent-secrets.py script performs its own repo-wide walk and
+        # does not accept per-file arguments, so pass_filenames must remain false.
         # Scan all files on every run for comprehensive secret detection.
         # The prevent-secrets.py script performs its own repository-wide scan
         # and does not process per-file arguments.
