@@ -509,6 +509,13 @@ agent:
     profit_target: 0.05   # 5%
     stop_loss: 0.02       # 2%
 
+  # Webhook configuration for trading signals
+  webhook:
+    enabled: false          # Set to true to enable webhook notifications
+    url: ""                 # e.g., https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+    retry_attempts: 3       # Number of retry attempts on failure
+    timeout_seconds: 10     # Request timeout in seconds
+
   # RiskGatekeeper configuration (decimal fractions)
   correlation_threshold: 0.7   # 70%
   max_correlated_assets: 2
