@@ -33,13 +33,19 @@ def mock_dependencies():
 
 @pytest.fixture
 def agent_config():
-    """Provides a default TradingAgentConfig."""
+    """
+    Provides a default TradingAgentConfig.
+    
+    Note: Autonomous mode is explicitly enabled to bypass notification
+    validation requirements. When autonomous mode is enabled, the agent
+    doesn't require Telegram or webhook configuration.
+    """
     return TradingAgentConfig(
         asset_pairs=["BTCUSD"],
         analysis_frequency_seconds=1,
         main_loop_error_backoff_seconds=1,
         autonomous_execution=True,
-        autonomous=AutonomousAgentConfig(enabled=True),
+        autonomous=AutonomousAgentConfig(enabled=True),  # Enables autonomous mode
         min_confidence_threshold=0.6,
     )
 
