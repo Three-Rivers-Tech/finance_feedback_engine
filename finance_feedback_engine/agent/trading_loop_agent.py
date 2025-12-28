@@ -1586,13 +1586,29 @@ class TradingLoopAgent:
             retry,
             stop_after_attempt,
             wait_exponential,
-            retry_if_exception_type,
         )
+
+        def is_retryable_error(exception):
+            """
+            Determine if an error should be retried.
+            
+            Retry on:
+            - Network errors (RequestError, TimeoutException)
+            - 5xx server errors (transient failures)
+            
+            Don't retry on:
+            - 4xx client errors (permanent failures)
+            """
+            if isinstance(exception, httpx.HTTPStatusError):
+                # Only retry on 5xx server errors
+                return 500 <= exception.response.status_code < 600
+            # Always retry network/timeout errors
+            return isinstance(exception, (httpx.RequestError, httpx.TimeoutException))
 
         @retry(
             stop=stop_after_attempt(max_retries),
             wait=wait_exponential(multiplier=1, min=2, max=10),
-            retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
+            retry=is_retryable_error,
         )
         async def _send_webhook():
             webhook_config = getattr(self, "webhook_config", {}) or {}
@@ -1612,14 +1628,22 @@ class TradingLoopAgent:
 
         try:
             response = await _send_webhook()
+            # Sanitize URL to prevent credential exposure in logs
+            from urllib.parse import urlparse
+            parsed_url = urlparse(webhook_url)
+            safe_url = f"{parsed_url.scheme}://{parsed_url.netloc}/***"
             logger.info(
-                f"✅ Webhook delivered to {webhook_url} "
+                f"✅ Webhook delivered successfully to {safe_url} "
                 f"(status: {response.status_code})"
             )
             return True
-        except httpx.HTTPError as e:
+        except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            # Log error without exposing webhook URL
+            error_type = type(e).__name__
+            status_code = getattr(e.response, 'status_code', 'N/A') if hasattr(e, 'response') else 'N/A'
             logger.error(
-                f"❌ Webhook delivery failed after {max_retries} attempts: {e}",
+                f"❌ Webhook delivery failed after {max_retries} attempts: "
+                f"{error_type} (status: {status_code})",
                 exc_info=True,
             )
             return False
