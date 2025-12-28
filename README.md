@@ -177,7 +177,32 @@ Or install in development mode:
 pip install -e .
 ```
 
-### 3. Configure the engine
+### 3. Set up Git hooks (for contributors)
+
+**Quick Setup:**
+```bash
+./scripts/setup-hooks.sh
+```
+
+This installs pre-commit hooks that automatically check code quality, prevent secrets from being committed, and enforce test coverage before each commit.
+
+**What's included:**
+- Code formatting (black, isort)
+- Linting (flake8, mypy)
+- Security scanning (bandit, secret detection)
+- Test coverage enforcement (≥70%)
+
+**Manual setup:**
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+For more details, see [Pre-commit Configuration Guide](docs/PRE_COMMIT_GUIDE.md).
+
+**Note:** This step is optional for users who only want to run the engine, but **required for contributors**.
+
+### 4. Configure the engine
 
 **Quick Setup (Recommended):**
 ```bash

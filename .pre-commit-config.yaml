@@ -34,6 +34,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: prevent-secrets
+        name: Prevent secrets and credentials
+        entry: python .pre-commit-hooks/prevent-secrets.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: pytest-fast
         name: pytest-fast (unit tests, no external services)
         entry: pytest -m "not slow and not external_service" -v --tb=short --cov=finance_feedback_engine --cov-report=term-missing --cov-fail-under=70
