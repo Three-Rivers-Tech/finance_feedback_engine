@@ -97,8 +97,18 @@ jobs:
           if [ -f htmlcov/index.html ]; then
             echo "📊 Coverage report generated successfully" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            # Extract coverage percentage
-            COVERAGE=$(grep -oP 'pc_cov">\K[0-9]+' htmlcov/index.html | head -1 || echo "N/A")
+            # Extract coverage percentage (portable, no GNU grep dependency)
+            COVERAGE=$(python3 << 'PYEOF'
+          import re
+          from pathlib import Path
+          try:
+              text = Path('htmlcov/index.html').read_text(encoding='utf-8', errors='ignore')
+              match = re.search(r'pc_cov">(\d+)', text)
+              print(match.group(1) if match else 'N/A')
+          except Exception:
+              print('N/A')
+          PYEOF
+          )
             echo "**Coverage:** ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
           fi
 
