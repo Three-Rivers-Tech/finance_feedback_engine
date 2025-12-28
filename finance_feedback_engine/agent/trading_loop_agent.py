@@ -1595,7 +1595,9 @@ class TradingLoopAgent:
             retry=retry_if_exception_type((httpx.RequestError, httpx.TimeoutException)),
         )
         async def _send_webhook():
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            webhook_config = getattr(self, "webhook_config", {}) or {}
+            timeout_seconds = webhook_config.get("timeout_seconds", 10.0)
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
                 response = await client.post(
                     webhook_url,
                     json=payload,
