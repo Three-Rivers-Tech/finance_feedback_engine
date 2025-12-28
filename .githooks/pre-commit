@@ -1,4 +1,19 @@
 #!/bin/bash
+# ============================================================================
+# DEPRECATED: This hook is deprecated and will be removed in a future version
+# ============================================================================
+# Please use the pre-commit framework instead:
+#   1. Install: pip install pre-commit
+#   2. Setup: pre-commit install
+#   3. Or use: ./scripts/setup-hooks.sh
+#
+# This functionality is now provided by the 'pytest-fast' hook in
+# .pre-commit-config.yaml
+#
+# For migration details, see .githooks/README.md
+# ============================================================================
+
+# Legacy hook implementation (for backwards compatibility)
 # Pre-commit hook to enforce test coverage threshold
 # Install: git config core.hooksPath .githooks && chmod +x .githooks/pre-commit
 # This hook runs pytest with coverage reporting and blocks commits if coverage < 70%
@@ -7,6 +22,11 @@ set -e
 
 echo "🧪 Running tests with coverage check..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo -e "${YELLOW}⚠️  WARNING: Using deprecated .githooks/pre-commit${NC}"
+echo -e "${YELLOW}   Please migrate to pre-commit framework:${NC}"
+echo -e "${YELLOW}   Run: ./scripts/setup-hooks.sh${NC}"
+echo ""
 
 # Colors for output
 RED='\033[0;31m'
