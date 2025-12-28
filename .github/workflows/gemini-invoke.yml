@@ -1,3 +1,16 @@
+# =============================================================================
+# Gemini AI Invocation Handler
+# =============================================================================
+# Purpose: Handles direct Gemini AI invocations from other workflows
+# Trigger: Called by other workflows (workflow_call)
+# What it does:
+#   - Provides reusable Gemini AI interaction logic
+#   - Authenticates with Google Cloud for Gemini API
+#   - Executes AI tasks and returns results
+#   - Used by gemini-dispatch, gemini-review, gemini-triage
+# Documentation: https://github.com/google-gemini/gemini-code-review
+# =============================================================================
+
 name: '▶️ Gemini Invoke'
 
 on:
