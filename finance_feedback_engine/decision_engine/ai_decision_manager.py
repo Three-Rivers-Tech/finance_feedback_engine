@@ -4,6 +4,8 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
+from finance_feedback_engine.utils.config_loader import normalize_decision_config
+
 from .decision_validation import build_fallback_decision
 from .ensemble_manager import EnsembleDecisionManager
 
@@ -22,8 +24,8 @@ class AIDecisionManager:
         self.config = config
         self.backtest_mode = backtest_mode
 
-        # Support both nested and flat config structures for backward compatibility
-        decision_config = config.get("decision_engine", config)
+        # Normalize config to handle nested/flat structures
+        decision_config = normalize_decision_config(config)
         self.ai_provider = decision_config.get("ai_provider", "local")
         self.model_name = decision_config.get("model_name", "default")
 

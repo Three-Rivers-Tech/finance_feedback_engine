@@ -8,10 +8,13 @@ Phase 2 optimization: Singleton pattern for connection reuse, eliminating 1-2s o
 """
 
 import logging
+import os
 import re
 import subprocess
 from datetime import datetime
 from typing import Any, Dict
+
+import ollama
 
 from .decision_validation import build_fallback_decision, try_parse_decision_json
 
@@ -60,6 +63,11 @@ class LocalLLMProvider:
             return
 
         self.config = config
+
+        # Initialize Ollama client (uses OLLAMA_HOST env var automatically)
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        logger.info(f"Connecting to Ollama at: {ollama_host}")
+        self.ollama_client = ollama.Client(host=ollama_host)
 
         # Read local models and priority from config
         decision_engine_config = config.get("decision_engine", {})
@@ -130,36 +138,20 @@ class LocalLLMProvider:
 
     def _check_ollama_installed(self) -> bool:
         """
-        Check if Ollama is installed. If not, attempt automatic installation.
+        Check if Ollama is accessible via HTTP API.
 
         Returns:
-            bool: True if Ollama is available or successfully installed
+            bool: True if Ollama is available
         """
         try:
-            result = subprocess.run(
-                ["ollama", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-            )
-
-            if result.returncode == 0:
-                version = result.stdout.strip()
-                logger.info("Ollama installed: %s", version)
-                return True
-            else:
-                logger.warning("Ollama command failed, attempting installation...")
-                return self._install_ollama()
-
-        except FileNotFoundError:
-            logger.warning("Ollama not found in PATH, attempting installation...")
-            return self._install_ollama()
-        except subprocess.TimeoutExpired:
-            logger.error("Ollama version check timeout")
-            return False
+            # Test connection by listing models
+            models_response = self.ollama_client.list()
+            available_models = models_response.models if hasattr(models_response, 'models') else models_response.get('models', [])
+            logger.info(f"Ollama connected successfully. Available models: {len(available_models)}")
+            return True
         except Exception as e:
-            logger.error(f"Error checking Ollama: {e}")
+            logger.error(f"Failed to connect to Ollama: {e}")
+            logger.error("Make sure Ollama is running and OLLAMA_HOST environment variable is set correctly")
             return False
 
     def _install_ollama(self) -> bool:
@@ -301,7 +293,7 @@ class LocalLLMProvider:
 
     def _download_model(self, model_name: str) -> bool:
         """
-        Download a specific model from Ollama library.
+        Download a specific model from Ollama library via HTTP API.
 
         Args:
             model_name: Name of model to download (e.g.,
@@ -314,19 +306,8 @@ class LocalLLMProvider:
             logger.info(f"Downloading {model_name} from Ollama library...")
             logger.info("This may take several minutes depending on your connection.")
 
-            # Run ollama pull command
-            result = subprocess.run(
-                ["ollama", "pull", model_name],
-                capture_output=True,
-                text=True,
-                timeout=600,  # 10 minute timeout for download
-                check=False,
-            )
-
-            if result.returncode != 0:
-                error_msg = result.stderr or result.stdout
-                logger.error(f"Download failed for {model_name}: {error_msg}")
-                return False
+            # Pull model via HTTP API
+            self.ollama_client.pull(model_name)
 
             # Verify the model was actually downloaded
             if not self._is_model_available(model_name):
@@ -340,14 +321,8 @@ class LocalLLMProvider:
             logger.info(f"Successfully downloaded {model_name}")
             return True
 
-        except subprocess.TimeoutExpired:
-            logger.error(
-                f"Download timeout for {model_name} (>10 minutes). "
-                f"Check your internet connection and try again."
-            )
-            return False
         except Exception as e:
-            logger.error(f"Unexpected error downloading {model_name}: {e}")
+            logger.error(f"Error downloading {model_name}: {e}")
             return False
 
     def _delete_model(self, model_name: str) -> bool:
@@ -425,22 +400,19 @@ class LocalLLMProvider:
             logger.warning(f"Error unloading model {self.model_name}: {e}")
 
     def _is_model_available(self, model_name: str) -> bool:
-        """Check if model is available locally."""
+        """Check if model is available locally via HTTP API."""
         try:
-            result = subprocess.run(
-                ["ollama", "list"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
+            models_response = self.ollama_client.list()
+            # Handle both dict and typed response
+            available_models = models_response.models if hasattr(models_response, 'models') else models_response.get("models", [])
 
-            if result.returncode == 0:
-                # Parse model list
-                models = result.stdout.lower()
-                # Handle both full name and short name
-                model_base = model_name.split(":")[0].lower()
-                return model_base in models or model_name.lower() in models
+            # Check both full name and short name
+            model_base = model_name.split(":")[0].lower()
+            for model in available_models:
+                # Handle both dict and typed Model object
+                model_full_name = (model.model if hasattr(model, 'model') else model.get("name", "")).lower()
+                if model_name.lower() in model_full_name or model_base in model_full_name:
+                    return True
 
             return False
 
@@ -535,33 +507,18 @@ class LocalLLMProvider:
                     f"{prompt}"
                 )
 
-                # Call Ollama with proper format
-                result = subprocess.run(
-                    ["ollama", "run", self.model_name, "--format", "json", full_prompt],
-                    capture_output=True,
-                    text=True,
-                    timeout=90,  # Increased timeout to 90 seconds
-                    check=False,
+                # Call Ollama via HTTP API
+                response = self.ollama_client.generate(
+                    model=self.model_name,
+                    prompt=full_prompt,
+                    format="json",
+                    options={
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                    }
                 )
 
-                if result.returncode != 0:
-                    logger.error(
-                        f"Ollama inference failed on attempt {attempt + 1}: {result.stderr}"
-                    )
-
-                    # If this is the last attempt, return fallback
-                    if attempt == max_retries - 1:
-                        return build_fallback_decision(
-                            "Local LLM unavailable after multiple attempts, using fallback decision."
-                        )
-
-                    # Retry with a brief delay
-                    import time
-
-                    time.sleep(2 * (attempt + 1))  # Increasing delay (2s, 4s, 6s)
-                    continue
-
-                response_text = result.stdout.strip()
+                response_text = response.get("response", "").strip()
 
                 # Check if response is empty
                 if not response_text:

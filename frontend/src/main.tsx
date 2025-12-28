@@ -5,20 +5,27 @@ import App from './App.tsx'
 import { configLoader } from './config'
 
 // Validate configuration on startup
-const config = configLoader.loadFromEnv();
+let config;
+try {
+  config = configLoader.loadFromEnv();
 
-if (!configLoader.isValid()) {
-  const errors = configLoader.getValidationErrors();
-  console.warn('⚠️ Configuration validation warnings:', errors);
+  if (!configLoader.isValid()) {
+    const errors = configLoader.getValidationErrors();
+    console.warn('⚠️ Configuration validation warnings:', errors);
 
-  // In production, critical errors would halt startup
-  // In development, we log warnings and continue
-  if (config.app.environment === 'production') {
-    const hasCriticalErrors = errors.some(e => e.includes('critical'));
-    if (hasCriticalErrors) {
-      throw new Error('Critical configuration errors detected. Cannot start application.');
+    // In development/staging, we log warnings but continue
+    // Only halt in production if critical
+    if (config?.app?.environment === 'production') {
+      const hasCriticalErrors = errors.some(e => e.includes('critical'));
+      if (hasCriticalErrors) {
+        console.error('Critical configuration errors:', errors);
+        // Don't throw - show error in UI instead
+      }
     }
   }
+} catch (error) {
+  console.error('Configuration loading failed:', error);
+  // Continue anyway - components will handle missing config gracefully
 }
 
 createRoot(document.getElementById('root')!).render(

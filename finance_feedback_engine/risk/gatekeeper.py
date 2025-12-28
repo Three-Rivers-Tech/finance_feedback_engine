@@ -318,7 +318,12 @@ class RiskGatekeeper:
         # 5. Cross-Platform Correlation Warning (Non-blocking)
         self._check_cross_platform_correlation(context)
 
-        # 6. Volatility / Confidence Check
+        # 6. Leverage and Concentration Check (Consolidated from pre-execution)
+        leverage_check_result = self._validate_leverage_and_concentration(decision, context)
+        if not leverage_check_result[0]:
+            return leverage_check_result
+
+        # 7. Volatility / Confidence Check
         volatility = decision.get("volatility", 0.0)
         # Confidence is stored as integer 0-100 in decision, convert to 0.0-1.0 for comparison
         raw_confidence = decision.get("confidence", 0)
@@ -471,3 +476,68 @@ class RiskGatekeeper:
         if warning:
             logger.warning(f"⚠️  Cross-platform correlation: {warning}")
             # Note: This is warning-only, doesn't block trade
+
+    def _validate_leverage_and_concentration(
+        self, decision: Dict, context: Dict
+    ) -> Tuple[bool, str]:
+        """
+        Validate leverage and position concentration.
+
+        Consolidated from core._preexecution_checks to centralize
+        all risk validation in one place.
+
+        Args:
+            decision: Trade decision
+            context: Portfolio context with risk_metrics and position_concentration
+
+        Returns:
+            Tuple (is_allowed, message)
+        """
+        # Extract risk metrics from context (provided by monitoring context provider)
+        risk_metrics = context.get("risk_metrics", {})
+        leverage = risk_metrics.get("leverage_estimate", 0)
+
+        # Extract concentration metrics
+        position_concentration = context.get("position_concentration", {})
+        largest_pct = position_concentration.get("largest_position_pct", 0)
+
+        # Get configurable thresholds (could be passed via context or use defaults)
+        # For now, use sensible defaults that match the original _preexecution_checks
+        max_leverage = context.get("max_leverage", 5.0)
+        max_concentration = context.get("max_concentration", 25.0)
+
+        # Validate leverage
+        if leverage and leverage > max_leverage:
+            logger.warning(
+                f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}"
+            )
+            asset_pair = decision.get("asset_pair", "UNKNOWN")
+            asset_type = (
+                "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+            )
+            self._metrics["ffe_risk_blocks_total"].add(
+                1, {"reason": "leverage", "asset_type": asset_type}
+            )
+            return False, f"Leverage {leverage:.2f} exceeds max {max_leverage}"
+
+        # Validate concentration
+        if largest_pct and largest_pct > max_concentration:
+            logger.warning(
+                f"Position concentration limit exceeded: {largest_pct:.1f}% > {max_concentration}%"
+            )
+            asset_pair = decision.get("asset_pair", "UNKNOWN")
+            asset_type = (
+                "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
+            )
+            self._metrics["ffe_risk_blocks_total"].add(
+                1, {"reason": "concentration", "asset_type": asset_type}
+            )
+            return False, (
+                f"Largest position {largest_pct:.1f}% exceeds max {max_concentration}%"
+            )
+
+        logger.debug(
+            f"Leverage/concentration check passed: leverage={leverage:.2f}, "
+            f"largest_position={largest_pct:.1f}%"
+        )
+        return True, "Leverage/concentration check passed"

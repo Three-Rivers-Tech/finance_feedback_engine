@@ -1,5 +1,7 @@
 """Base trading platform interface."""
 
+import asyncio
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, TypedDict
 
@@ -58,6 +60,12 @@ class BaseTradingPlatform(ABC):
         """Attach a CircuitBreaker instance to this platform."""
         self._execute_breaker = breaker
 
+    async def _run_async(self, func, *args, **kwargs):
+        """Run a possibly-sync platform call without blocking the event loop."""
+        if inspect.iscoroutinefunction(func):
+            return await func(*args, **kwargs)
+        return await asyncio.to_thread(func, *args, **kwargs)
+
     @abstractmethod
     def get_balance(self) -> Dict[str, float]:
         """
@@ -67,6 +75,10 @@ class BaseTradingPlatform(ABC):
             Dictionary mapping asset symbols to balances
         """
         pass
+
+    async def aget_balance(self) -> Dict[str, float]:
+        """Async adapter for get_balance to avoid event-loop blocking."""
+        return await self._run_async(self.get_balance)
 
     @abstractmethod
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
@@ -81,6 +93,27 @@ class BaseTradingPlatform(ABC):
         """
         pass
 
+    async def aexecute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
+        """Async adapter for execute_trade with circuit breaker protection.
+
+        If a CircuitBreaker is attached to this platform instance, use it to
+        guard the execution path. For synchronous platform implementations,
+        the breaker is executed in a worker thread to avoid blocking the
+        event loop.
+        """
+        breaker = getattr(self, "get_execute_breaker", None)
+        breaker = breaker() if callable(breaker) else None
+
+        if breaker is not None:
+            # Prefer async breaker call when the implementation is coroutine
+            if inspect.iscoroutinefunction(self.execute_trade):
+                return await breaker.call(self.execute_trade, decision)
+            # Execute sync path via breaker in a thread to keep event loop responsive
+            return await asyncio.to_thread(breaker.call_sync, self.execute_trade, decision)
+
+        # Fallback: no breaker attached, run normally without blocking the loop
+        return await self._run_async(self.execute_trade, decision)
+
     @abstractmethod
     def get_account_info(self) -> Dict[str, Any]:
         """
@@ -90,6 +123,10 @@ class BaseTradingPlatform(ABC):
             Account details
         """
         pass
+
+    async def aget_account_info(self) -> Dict[str, Any]:
+        """Async adapter for get_account_info."""
+        return await self._run_async(self.get_account_info)
 
     @abstractmethod
     def get_active_positions(self) -> PositionsResponse:
@@ -102,6 +139,10 @@ class BaseTradingPlatform(ABC):
             ``{"positions": [PositionInfo, ...]}``.
         """
         pass
+
+    async def aget_active_positions(self) -> PositionsResponse:
+        """Async adapter for get_active_positions."""
+        return await self._run_async(self.get_active_positions)
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
@@ -116,3 +157,7 @@ class BaseTradingPlatform(ABC):
             "holdings": [],
             "error": "Not implemented",
         }
+
+    async def aget_portfolio_breakdown(self) -> Dict[str, Any]:
+        """Async adapter for get_portfolio_breakdown."""
+        return await self._run_async(self.get_portfolio_breakdown)

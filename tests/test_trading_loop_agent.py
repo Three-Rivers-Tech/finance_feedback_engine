@@ -76,12 +76,14 @@ async def test_agent_initial_state(trading_agent):
 async def test_agent_process_cycle_no_action(trading_agent, mock_dependencies):
     """Test a full agent cycle where the AI decides to HOLD."""
     # Arrange
-    mock_dependencies["engine"].analyze_asset.return_value = {
-        "id": "decision-1",
-        "action": "HOLD",
-        "confidence": 80,
-        "asset_pair": "BTCUSD",
-    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "HOLD",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+        }
+    )
     trading_agent.is_running = True
 
     # Act
@@ -90,8 +92,8 @@ async def test_agent_process_cycle_no_action(trading_agent, mock_dependencies):
     # Assert
     # The cycle should go through all states and end at IDLE
     assert trading_agent.state == AgentState.IDLE
-    # analyze_asset should be called in the REASONING state
-    mock_dependencies["engine"].analyze_asset.assert_called_once_with("BTCUSD")
+    # analyze_asset_async should be called in the REASONING state
+    mock_dependencies["engine"].analyze_asset_async.assert_called_once_with("BTCUSD")
     # execute_decision should NOT be called for a HOLD action
     mock_dependencies["engine"].execute_decision.assert_not_called()
     # No decisions should be left in the current_decisions list

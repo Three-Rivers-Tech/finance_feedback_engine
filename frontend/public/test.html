@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FFE Debug Page</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #1a1a1a; color: #fff; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #2d5; }
+        .error { background: #d25; }
+        .info { background: #25d; }
+        pre { background: #000; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Finance Feedback Engine - Debug Dashboard</h1>
+
+    <div id="status"></div>
+
+    <h2>API Tests:</h2>
+    <button onclick="testAPI()">Test API Connection</button>
+    <button onclick="testBotStatus()">Test Bot Status</button>
+    <button onclick="testPortfolio()">Test Portfolio</button>
+
+    <div id="results"></div>
+
+    <script>
+        const API_BASE = '/api/v1';
+
+        function showStatus(message, type) {
+            document.getElementById('status').innerHTML =
+                `<div class="status ${type}">${message}</div>`;
+        }
+
+        function showResult(title, data) {
+            const div = document.getElementById('results');
+            div.innerHTML += `<h3>${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+        }
+
+        async function testAPI() {
+            showStatus('Testing API connection...', 'info');
+            try {
+                const response = await fetch('/api/v1/status');
+                const data = await response.json();
+                showStatus('✅ API Connected Successfully!', 'success');
+                showResult('System Status', data);
+            } catch (error) {
+                showStatus(`❌ API Connection Failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testBotStatus() {
+            showStatus('Fetching bot status...', 'info');
+            try {
+                const response = await fetch('/api/v1/bot/status');
+                const data = await response.json();
+                showStatus('✅ Bot Status Retrieved!', 'success');
+                showResult('Bot Status', data);
+            } catch (error) {
+                showStatus(`❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testPortfolio() {
+            showStatus('Fetching portfolio...', 'info');
+            try {
+                const response = await fetch('/api/v1/bot/positions');
+                const data = await response.json();
+                showStatus('✅ Portfolio Retrieved!', 'success');
+                showResult('Portfolio Positions', data);
+            } catch (error) {
+                showStatus(`❌ Failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-test on load
+        window.onload = function() {
+            showStatus('Page loaded. Click buttons to test API.', 'info');
+            testAPI();
+        };
+    </script>
+</body>
+</html>

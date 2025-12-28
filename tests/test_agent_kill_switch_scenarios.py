@@ -144,7 +144,7 @@ class TestDailyTradeLimit:
 
         # Mock the engine to return an actionable decision
         mock_decision = {"action": "BUY", "confidence": 95, "asset_pair": "BTCUSD"}
-        mock_dependencies["engine"].analyze_asset = AsyncMock(
+        mock_dependencies["engine"].analyze_asset_async = AsyncMock(
             return_value=mock_decision
         )
 
@@ -156,4 +156,4 @@ class TestDailyTradeLimit:
 
         # Assert: No decisions should have been collected for execution
         assert len(trading_agent._current_decisions) == 0
-        mock_dependencies["engine"].analyze_asset.assert_called_once_with("BTCUSD")
+        mock_dependencies["engine"].analyze_asset_async.assert_called_once_with("BTCUSD")
