@@ -1139,7 +1139,7 @@ class TradingLoopAgent:
             logger.info(
                 "Autonomous execution disabled - sending signals to Telegram for approval"
             )
-            self._send_signals_to_telegram()
+            await self._send_signals_to_telegram()
 
         # Clear all decisions after processing
         self._current_decisions.clear()
@@ -1147,7 +1147,7 @@ class TradingLoopAgent:
         # After processing, transition to LEARNING
         await self._transition_to(AgentState.LEARNING)
 
-    def _send_signals_to_telegram(self):
+    async def _send_signals_to_telegram(self):
         """
         Send trading signals to Telegram for human approval.
 
@@ -1238,7 +1238,7 @@ class TradingLoopAgent:
                 logger.error(error_msg, exc_info=True)
                 failure_reasons.append(f"{decision_id}: {error_msg}")
 
-            # Try webhook delivery if Telegram failed (future implementation)
+            # Try webhook delivery if Telegram failed
             if not signal_delivered:
                 try:
                     webhook_config = (
@@ -1248,13 +1248,35 @@ class TradingLoopAgent:
                     webhook_url = webhook_config.get("url")
 
                     if webhook_enabled and webhook_url:
-                        # TODO: Implement webhook delivery
-                        logger.info(
-                            f"Webhook delivery not yet implemented for {decision_id}"
+                        # Prepare webhook payload
+                        webhook_payload = {
+                            "event_type": "trading_decision",
+                            "decision_id": decision_id,
+                            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                            "asset_pair": asset_pair,
+                            "action": action,
+                            "confidence": confidence,
+                            "reasoning": reasoning,
+                            "recommended_position_size": recommended_position_size,
+                        }
+
+                        # Deliver webhook with retry logic
+                        webhook_success = await self._deliver_webhook(
+                            webhook_url=webhook_url,
+                            payload=webhook_payload,
+                            max_retries=webhook_config.get("retry_attempts", 3),
                         )
-                        failure_reasons.append(
-                            f"{decision_id}: Webhook delivery not implemented"
-                        )
+
+                        if webhook_success:
+                            signal_delivered = True
+                            signals_sent += 1
+                            logger.info(
+                                f"✅ Signal sent to webhook for decision {decision_id}"
+                            )
+                        else:
+                            failure_reasons.append(
+                                f"{decision_id}: Webhook delivery failed after retries"
+                            )
                     else:
                         logger.debug("Webhook not configured, skipping")
                 except Exception as e:
@@ -1544,6 +1566,87 @@ class TradingLoopAgent:
                 else float("inf")
             ),
         }
+
+    async def _deliver_webhook(
+        self, webhook_url: str, payload: dict, max_retries: int = 3
+    ) -> bool:
+        """
+        Deliver webhook payload to configured URL with retry logic.
+
+        Args:
+            webhook_url: Target webhook URL
+            payload: JSON payload to deliver
+            max_retries: Maximum retry attempts
+
+        Returns:
+            bool: True if delivered successfully
+        """
+        import httpx
+        from tenacity import (
+            retry,
+            stop_after_attempt,
+            wait_exponential,
+        )
+
+        def is_retryable_error(exception):
+            """
+            Determine if an error should be retried.
+            
+            Retry on:
+            - Network errors (RequestError, TimeoutException)
+            - 5xx server errors (transient failures)
+            
+            Don't retry on:
+            - 4xx client errors (permanent failures)
+            """
+            if isinstance(exception, httpx.HTTPStatusError):
+                # Only retry on 5xx server errors
+                return 500 <= exception.response.status_code < 600
+            # Always retry network/timeout errors
+            return isinstance(exception, (httpx.RequestError, httpx.TimeoutException))
+
+        @retry(
+            stop=stop_after_attempt(max_retries),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            retry=is_retryable_error,
+        )
+        async def _send_webhook():
+            webhook_config = getattr(self, "webhook_config", {}) or {}
+            timeout_seconds = webhook_config.get("timeout_seconds", 10.0)
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+                response = await client.post(
+                    webhook_url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "FinanceFeedbackEngine/0.9.9",
+                        "X-FFE-Event": payload.get("event_type", "decision"),
+                    },
+                )
+                response.raise_for_status()
+                return response
+
+        try:
+            response = await _send_webhook()
+            # Sanitize URL to prevent credential exposure in logs
+            from urllib.parse import urlparse
+            parsed_url = urlparse(webhook_url)
+            safe_url = f"{parsed_url.scheme}://{parsed_url.netloc}/***"
+            logger.info(
+                f"✅ Webhook delivered successfully to {safe_url} "
+                f"(status: {response.status_code})"
+            )
+            return True
+        except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
+            # Log error without exposing webhook URL
+            error_type = type(e).__name__
+            status_code = getattr(e.response, 'status_code', 'N/A') if hasattr(e, 'response') else 'N/A'
+            logger.error(
+                f"❌ Webhook delivery failed after {max_retries} attempts: "
+                f"{error_type} (status: {status_code})",
+                exc_info=True,
+            )
+            return False
 
     async def _should_execute(self, decision) -> bool:
         """
