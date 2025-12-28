@@ -52,8 +52,6 @@ SAFE_PLACEHOLDERS = {
     "test",
     "example",
     "sample",
-    "Coinbase",  # Common in variable names and docstrings
-    "credentials",  # Common variable name
     "my_secret_key_123",  # Example from documentation
     "sk_live_xxxxxxxxxxxxxxxx",  # Placeholder format
 }
