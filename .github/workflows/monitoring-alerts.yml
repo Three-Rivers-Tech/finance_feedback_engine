@@ -42,6 +42,14 @@ jobs:
         run: |
           PROD_URL="${{ secrets.PROD_URL || 'https://api.example.com' }}"
 
+          # Skip check if using default/example URL or running on feature branches
+          if [[ "$PROD_URL" == *"example.com"* ]] || [[ "$PROD_URL" == "https://api.example.com" ]]; then
+            echo "⚠️ Skipping production health check - no production URL configured"
+            echo "http_code=SKIPPED" >> $GITHUB_OUTPUT
+            echo "response=No production URL configured" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "Checking production health: $PROD_URL/health"
 
           RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/response.txt $PROD_URL/health || echo "000")
@@ -64,6 +72,14 @@ jobs:
         run: |
           STAGING_URL="${{ secrets.STAGING_URL || 'https://staging.example.com' }}"
 
+          # Skip check if using default/example URL
+          if [[ "$STAGING_URL" == *"example.com"* ]]; then
+            echo "⚠️ Skipping staging health check - no staging URL configured"
+            echo "http_code=SKIPPED" >> $GITHUB_OUTPUT
+            echo "response=No staging URL configured" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "Checking staging health: $STAGING_URL/health"
 
           RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/staging_response.txt $STAGING_URL/health || echo "000")
@@ -85,6 +101,29 @@ jobs:
           echo "## Critical Services Status" > services-status.md
           echo "" >> services-status.md
 
+          # Add health check results summary
+          PROD_STATUS="${{ steps.prod-check.outputs.http_code }}"
+          STAGING_STATUS="${{ steps.staging-check.outputs.http_code }}"
+
+          echo "### Environment Health" >> services-status.md
+          if [ "$PROD_STATUS" == "200" ]; then
+            echo "- ✅ Production: Healthy (HTTP 200)" >> services-status.md
+          elif [ "$PROD_STATUS" == "SKIPPED" ]; then
+            echo "- ⚪ Production: Not configured (skipped)" >> services-status.md
+          else
+            echo "- ❌ Production: Unhealthy (HTTP $PROD_STATUS)" >> services-status.md
+          fi
+
+          if [ "$STAGING_STATUS" == "200" ]; then
+            echo "- ✅ Staging: Healthy (HTTP 200)" >> services-status.md
+          elif [ "$STAGING_STATUS" == "SKIPPED" ]; then
+            echo "- ⚪ Staging: Not configured (skipped)" >> services-status.md
+          else
+            echo "- ⚠️ Staging: Unhealthy (HTTP $STAGING_STATUS)" >> services-status.md
+          fi
+
+          echo "" >> services-status.md
+
           # Check Redis (if configured)
           if [ -n "${{ secrets.REDIS_URL }}" ]; then
             if timeout 5 redis-cli -u ${{ secrets.REDIS_URL }} ping | grep -q PONG; then
@@ -95,20 +134,26 @@ jobs:
           fi
 
           cat services-status.md
+          cat services-status.md >> $GITHUB_STEP_SUMMARY
 
       - name: Create alert issue if unhealthy
-        if: steps.prod-check.outcome == 'failure'
+        if: |
+          steps.prod-check.outcome == 'failure' && 
+          steps.prod-check.outputs.http_code != 'SKIPPED' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production')
         uses: actions/github-script@v6
         with:
           script: |
             const prodStatus = '${{ steps.prod-check.outputs.http_code }}';
             const timestamp = new Date().toISOString();
+            const branch = '${{ github.ref_name }}';
 
             const body = `## 🚨 Production Health Check Failed
 
             **Timestamp:** ${timestamp}
             **HTTP Status:** ${prodStatus}
             **Environment:** Production
+            **Branch:** ${branch}
 
             ### Details
             - Health check endpoint returned non-200 status
@@ -387,36 +432,49 @@ jobs:
           # 🔍 Monitoring & Alerting Summary
 
           ## Check Results
-          | Check | Status |
-          |-------|--------|
-          | Health Check | ${{ needs.health-check.result }} |
-          | Performance | ${{ needs.performance-check.result }} |
-          | Security | ${{ needs.security-monitoring.result }} |
-          | Dependencies | ${{ needs.dependency-check.result }} |
+          | Check | Status | Notes |
+          |-------|--------|-------|
+          | Health Check | ${{ needs.health-check.result }} | Production/Staging endpoints |
+          | Performance | ${{ needs.performance-check.result }} | Response time analysis |
+          | Security | ${{ needs.security-monitoring.result }} | SSL & advisories |
+          | Dependencies | ${{ needs.dependency-check.result }} | Vulnerability scans |
+
+          ## Configuration Status
+          - **Production URL**: ${{ secrets.PROD_URL != '' && '✅ Configured' || '⚠️ Not configured (using defaults)' }}
+          - **Staging URL**: ${{ secrets.STAGING_URL != '' && '✅ Configured' || '⚠️ Not configured (using defaults)' }}
+          - **Branch**: ${{ github.ref_name }}
 
           ## System Status
           All critical services are being monitored continuously.
 
           ## Alert Configuration
-          - **Health checks:** Every 15 minutes
+          - **Health checks:** Every 15 minutes (scheduled runs only)
           - **Performance checks:** On-demand and scheduled
           - **Security scans:** Daily
           - **Dependency checks:** Daily
+          - **Alerts:** Only triggered on main/production branches with valid endpoints
 
           ## Notification Channels
-          - GitHub Issues (automated)
+          - GitHub Issues (automated for critical failures)
           - Workflow summaries
 
           ---
           **Next scheduled check:** $(date -u -d '+15 minutes' '+%Y-%m-%d %H:%M:%S UTC')
+          
+          > **Note:** Health check alerts are only created when running on main/production branches
+          > with properly configured production endpoints.
           EOF
 
       - name: Create incident if critical failure
-        if: needs.health-check.result == 'failure'
+        if: |
+          needs.health-check.result == 'failure' &&
+          (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production') &&
+          github.event_name == 'schedule'
         uses: actions/github-script@v6
         with:
           script: |
             const timestamp = new Date().toISOString();
+            const branch = '${{ github.ref_name }}';
 
             await github.rest.issues.create({
               owner: context.repo.owner,
@@ -425,6 +483,10 @@ jobs:
               body: `## Critical System Alert
 
               Multiple monitoring checks have failed. Immediate attention required.
+
+              **Timestamp:** ${timestamp}
+              **Branch:** ${branch}
+              **Trigger:** Scheduled monitoring
 
               ### Failed Checks
               - Health Check: ${{ needs.health-check.result }}
@@ -439,7 +501,7 @@ jobs:
               [View Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
 
               ---
-              *This is an automated alert. Please acknowledge and investigate immediately.*
+              *This is an automated alert from scheduled monitoring. Please acknowledge and investigate immediately.*
               `,
               labels: ['incident', 'critical', 'automated'],
               assignees: ['${{ github.repository_owner }}']
