@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   # =============================================================================
@@ -183,12 +183,12 @@ jobs:
           echo "Pre-commit: ${{ needs.pre-commit.result }}"
           echo "Tests: ${{ needs.test.result }}"
           echo "Security: ${{ needs.security.result }}"
-          
+
           if [ "${{ needs.pre-commit.result }}" != "success" ] || \
              [ "${{ needs.test.result }}" != "success" ] || \
              [ "${{ needs.security.result }}" != "success" ]; then
             echo "❌ CI checks failed"
             exit 1
           fi
-          
+
           echo "✅ All CI checks passed"

@@ -23,7 +23,7 @@ permissions:
   pull-requests: write
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   # =============================================================================
@@ -118,27 +118,27 @@ jobs:
           VERSION="${{ needs.prepare.outputs.version }}"
           echo "Updating version to: $VERSION"
 
-          python - <<'PY'
-import os
-import re
-from pathlib import Path
+          python << 'EOF'
+          import os
+          import re
+          from pathlib import Path
 
 
-def replace_version(path: Path, pattern: str, label: str) -> None:
-    text = path.read_text()
-    new_text, count = re.subn(pattern, lambda m: f"{m.group(1)}{os.environ['VERSION']}{m.group(3)}", text)
-    if count == 0:
-        raise SystemExit(f"Did not find {label} assignment in {path}")
-    path.write_text(new_text)
+          def replace_version(path: Path, pattern: str, label: str) -> None:
+              text = path.read_text()
+              new_text, count = re.subn(pattern, lambda m: f"{m.group(1)}{os.environ['VERSION']}{m.group(3)}", text)
+              if count == 0:
+                  raise SystemExit(f"Did not find {label} assignment in {path}")
+              path.write_text(new_text)
 
 
-if Path("setup.py").exists():
-    replace_version(Path("setup.py"), r"(version\s*=\s*['\"])([^'\"]+)(['\"])", "version")
+          if Path("setup.py").exists():
+              replace_version(Path("setup.py"), r"(version\s*=\s*['\"])([^'\"]+)(['\"])", "version")
 
-init_path = Path("finance_feedback_engine/__init__.py")
-if init_path.exists():
-    replace_version(init_path, r"(__version__\s*=\s*['\"])([^'\"]+)(['\"])", "__version__")
-PY
+          init_path = Path("finance_feedback_engine/__init__.py")
+          if init_path.exists():
+              replace_version(init_path, r"(__version__\s*=\s*['\"])([^'\"]+)(['\"])", "__version__")
+          EOF
 
       - name: Build distributions
         run: |
