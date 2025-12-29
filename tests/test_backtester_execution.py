@@ -898,8 +898,8 @@ class TestMonteCarloSimulation:
             enable_portfolio_memory=False,
         )
 
-        # Mock run_backtest
-        def mock_run_backtest(asset_pair, start_date, end_date, decision_engine):
+        # Mock run_backtest with data_override parameter support
+        def mock_run_backtest(asset_pair, start_date, end_date, decision_engine, data_override=None):
             return {
                 "metrics": {
                     "final_balance": 11000.0,
