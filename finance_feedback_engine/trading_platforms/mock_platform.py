@@ -172,6 +172,8 @@ class MockTradingPlatform(BaseTradingPlatform):
         suggested_amount = float(decision.get("suggested_amount", 0))
         entry_price = float(decision.get("entry_price", 50000.0))  # Default BTC price
         decision_id = decision.get("id", uuid.uuid4().hex)
+        order_type = decision.get("order_type", "market").lower()
+        is_maker = order_type == "limit"
 
         # Normalize asset pair format (BTCUSD -> BTC-USD)
         if "-" not in asset_pair and "/" not in asset_pair:
@@ -213,14 +215,15 @@ class MockTradingPlatform(BaseTradingPlatform):
             }
 
         # Apply slippage to execution price
-        execution_price = self._apply_slippage(entry_price, action)
+        execution_price = self._apply_slippage(entry_price, action, order_type=order_type)
         slippage_pct = abs((execution_price - entry_price) / entry_price) * 100
 
         # Calculate position size (contracts for futures)
         contracts = suggested_amount / (execution_price * self._contract_multiplier)
 
         # Calculate fees (0.06% maker/taker average for Coinbase)
-        fee_rate = 0.0006
+        # Maker/taker differentiation
+        fee_rate = 0.00025 if is_maker else 0.0006
         fee_amount = suggested_amount * fee_rate
 
         # Update balances and positions
