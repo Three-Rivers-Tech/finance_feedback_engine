@@ -35,7 +35,7 @@ def mock_dependencies():
 def agent_config():
     """
     Provides a default TradingAgentConfig.
-    
+
     Note: Autonomous mode is explicitly enabled to bypass notification
     validation requirements. When autonomous mode is enabled, the agent
     doesn't require Telegram or webhook configuration.
@@ -96,20 +96,24 @@ async def test_webhook_delivery_retry_on_failure(trading_agent):
     with patch("httpx.AsyncClient") as mock_client_class:
         # Create mock client that fails twice, then succeeds
         mock_client = MagicMock()
-        
+
         # First two calls raise error, third succeeds
         call_count = 0
-        
+
         async def mock_post(*args, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count < 3:
-                raise httpx.RequestError("Connection failed", request=MagicMock())
+                # Create proper Request mock for httpx.RequestError
+                mock_request = MagicMock()
+                error = httpx.RequestError("Connection failed", request=mock_request)
+                error.response = None  # No response attribute for network errors
+                raise error
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.raise_for_status = MagicMock()
             return mock_response
-        
+
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_class.return_value.__aexit__ = AsyncMock()
@@ -130,10 +134,13 @@ async def test_webhook_delivery_max_retries_exceeded(trading_agent):
     with patch("httpx.AsyncClient") as mock_client_class:
         # Create mock client that always fails
         mock_client = MagicMock()
-        
+
         async def mock_post(*args, **kwargs):
-            raise httpx.RequestError("Always fails", request=MagicMock())
-        
+            mock_request = MagicMock()
+            error = httpx.RequestError("Always fails", request=mock_request)
+            error.response = None  # No response for network errors
+            raise error
+
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_class.return_value.__aexit__ = AsyncMock()
@@ -153,10 +160,13 @@ async def test_webhook_delivery_timeout(trading_agent):
     with patch("httpx.AsyncClient") as mock_client_class:
         # Create mock client that times out
         mock_client = MagicMock()
-        
+
         async def mock_post(*args, **kwargs):
-            raise httpx.TimeoutException("Request timed out", request=MagicMock())
-        
+            mock_request = MagicMock()
+            error = httpx.TimeoutException("Request timed out", request=mock_request)
+            error.response = None  # No response for timeout errors
+            raise error
+
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client_class.return_value.__aexit__ = AsyncMock()
@@ -208,12 +218,12 @@ async def test_webhook_payload_format(trading_agent):
 
         # Capture the payload
         captured_payload = None
-        
+
         async def mock_post(url, json=None, headers=None):
             nonlocal captured_payload
             captured_payload = json
             return mock_response
-        
+
         mock_client = MagicMock()
         mock_client.post = mock_post
         mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)

@@ -369,3 +369,15 @@ class DecisionCache:
         logger.warning(f"Cleared ALL {deleted_count} cached decisions")
 
         return deleted_count
+
+    def close(self):
+        """Close all connections in the pool and clean up resources."""
+        self._cleanup_connections()
+        logger.info("Decision cache connections closed")
+
+    def __del__(self):
+        """Ensure connections are closed on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass  # Suppress errors during cleanup

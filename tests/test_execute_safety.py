@@ -63,6 +63,7 @@ def test_execution_requires_valid_decision(tmp_path, monkeypatch):
         engine.execute_decision(decision_id)
 
 
+@freeze_time("2025-01-01T00:00:01Z")
 def test_mock_platform_executes(tmp_path):
     cfg = make_config(storage_path=str(tmp_path / "decisions"))
     engine = FinanceFeedbackEngine(cfg)
@@ -76,7 +77,7 @@ def test_mock_platform_executes(tmp_path):
         "confidence": 80,
         "amount": 0.1,
         "suggested_amount": 0.1,  # Added: required for execution
-        "timestamp": "2025-01-01T00:00:00Z",
+        "timestamp": "2025-01-01T00:00:00Z",  # Fresh timestamp for freeze_time
     }
 
     engine.decision_store.save_decision(decision)
@@ -89,6 +90,8 @@ def test_mock_platform_executes(tmp_path):
 @freeze_time("2025-01-01T00:00:01Z")
 def test_breaker_opens_after_failures(tmp_path, monkeypatch):
     cfg = make_config(storage_path=str(tmp_path / "decisions"))
+    # Disable risk gatekeeper to avoid stale data rejection
+    cfg["risk"] = {"enable_gatekeeper": False}
     engine = FinanceFeedbackEngine(cfg)
 
     # Prepare a decision
@@ -110,7 +113,7 @@ def test_breaker_opens_after_failures(tmp_path, monkeypatch):
     engine.trading_platform.execute_trade = always_fail
 
     # First few calls should raise RuntimeError and be recorded
-    for _ in range(3):
+    for _ in range(5):  # Circuit breaker default is 5 failures
         with pytest.raises(RuntimeError):
             engine.execute_decision("test-breaker")
 
