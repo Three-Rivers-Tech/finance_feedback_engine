@@ -142,8 +142,6 @@ class OandaPlatform(BaseTradingPlatform):
 
         # Query API for instrument details
         try:
-            from oandapyV20.endpoints.instruments import InstrumentsCandles
-
             client = self._get_client()
 
             # Convert asset_pair to Oanda instrument format (e.g., EURUSD -> EUR_USD)

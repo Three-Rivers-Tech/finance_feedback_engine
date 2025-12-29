@@ -48,7 +48,7 @@ def dev(port: int):
     click.echo(click.style(f"   Frontend URL: http://localhost:{port}", fg="cyan"))
     click.echo(
         click.style(
-            f"   Backend API: http://localhost:8000 (start with 'python main.py serve')",
+            "   Backend API: http://localhost:8000 (start with 'python main.py serve')",
             fg="cyan",
         )
     )
@@ -106,7 +106,7 @@ def build(output_dir: str):
                 click.style(f"✅ Frontend build complete: {dist_dir}", fg="green")
             )
             click.echo(
-                click.style(f"   Serve with: python main.py frontend serve", fg="cyan")
+                click.style("   Serve with: python main.py frontend serve", fg="cyan")
             )
         else:
             click.echo(
@@ -135,7 +135,7 @@ def serve(port: int, dist_dir: str):
     if not dist_path.exists():
         click.echo(click.style(f"❌ Build directory not found: {dist_path}", fg="red"))
         click.echo(
-            click.style(f"   Run 'python main.py frontend build' first", fg="yellow")
+            click.style("   Run 'python main.py frontend build' first", fg="yellow")
         )
         sys.exit(1)
 
@@ -144,7 +144,7 @@ def serve(port: int, dist_dir: str):
     )
     click.echo(
         click.style(
-            f"   Backend API: http://localhost:8000 (start with 'python main.py serve')",
+            "   Backend API: http://localhost:8000 (start with 'python main.py serve')",
             fg="cyan",
         )
     )
