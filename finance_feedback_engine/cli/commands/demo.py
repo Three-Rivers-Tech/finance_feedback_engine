@@ -62,11 +62,11 @@ def _demo_quick(engine: FinanceFeedbackEngine, asset: str) -> None:
         result = asyncio.run(engine.analyze_asset(asset))
 
         if result:
-            click.echo(f"✅ Analysis Complete")
+            click.echo("✅ Analysis Complete")
             click.echo(f"   Action: {result.get('action', 'N/A')}")
             click.echo(f"   Confidence: {result.get('confidence', 'N/A')}%")
             click.echo(f"   Position Size: {result.get('position_size', 'N/A')}")
-            click.echo(f"\n📄 Full decision saved to: data/decisions/")
+            click.echo("\n📄 Full decision saved to: data/decisions/")
         else:
             click.echo("❌ Analysis failed or insufficient data")
     except Exception as e:
