@@ -19,12 +19,14 @@ import yaml
 
 class StepType(Enum):
     """Type of workflow step execution"""
+
     SEQUENTIAL = "sequential"
     PARALLEL = "parallel"
 
 
 class StepStatus(Enum):
     """Status of workflow step"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -34,6 +36,7 @@ class StepStatus(Enum):
 
 class ErrorAction(Enum):
     """Action to take on error"""
+
     FAIL = "fail"
     CONTINUE = "continue"
     RETRY = "retry"
@@ -42,6 +45,7 @@ class ErrorAction(Enum):
 @dataclass
 class StepResult:
     """Result of a workflow step execution"""
+
     name: str
     path: str
     status: StepStatus
@@ -68,9 +72,10 @@ class StepResult:
 @dataclass
 class WorkflowStep:
     """Definition of a workflow step"""
+
     name: str
     type: StepType = StepType.SEQUENTIAL
-    steps: Optional[List['WorkflowStep']] = None
+    steps: Optional[List["WorkflowStep"]] = None
     action: Optional[Callable] = None
     retries: int = 0
     timeout: int = 300
@@ -87,6 +92,7 @@ class WorkflowStep:
 @dataclass
 class WorkflowConfig:
     """Configuration for workflow orchestrator"""
+
     default_timeout: int = 300
     default_retries: int = 0
     max_parallel: int = 10
@@ -97,6 +103,7 @@ class WorkflowConfig:
 @dataclass
 class WorkflowResult:
     """Result of workflow execution"""
+
     workflow_name: str
     success: bool
     start_time: float
@@ -125,7 +132,7 @@ class WorkflowResult:
         filename = f"workflow_{self.workflow_name}_{timestamp}.json"
 
         filepath = output_dir / filename
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
         return filepath
@@ -141,11 +148,13 @@ class WorkflowOrchestrator:
         # Setup logging
         logging.basicConfig(
             level=getattr(logging, self.config.log_level),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         )
         self.logger = logging.getLogger("WorkflowOrchestrator")
 
-    async def execute(self, workflow: WorkflowStep, workflow_name: str = "default") -> WorkflowResult:
+    async def execute(
+        self, workflow: WorkflowStep, workflow_name: str = "default"
+    ) -> WorkflowResult:
         """Execute a workflow"""
         self.logger.info(f"Starting workflow: {workflow_name}")
 
@@ -155,7 +164,7 @@ class WorkflowOrchestrator:
             success=True,
             start_time=start_time,
             end_time=0,
-            duration=0
+            duration=0,
         )
 
         try:
@@ -180,10 +189,7 @@ class WorkflowOrchestrator:
         return result
 
     async def _execute_step(
-        self,
-        step: WorkflowStep,
-        result: WorkflowResult,
-        parent_path: str = ""
+        self, step: WorkflowStep, result: WorkflowResult, parent_path: str = ""
     ):
         """Execute a single step"""
         step_path = f"{parent_path}.{step.name}" if parent_path else step.name
@@ -197,7 +203,7 @@ class WorkflowOrchestrator:
                 name=step.name,
                 path=step_path,
                 status=StepStatus.SKIPPED,
-                start_time=time.time()
+                start_time=time.time(),
             )
             step_result.end_time = time.time()
             step_result.duration = 0
@@ -209,7 +215,7 @@ class WorkflowOrchestrator:
             name=step.name,
             path=step_path,
             status=StepStatus.IN_PROGRESS,
-            start_time=time.time()
+            start_time=time.time(),
         )
 
         try:
@@ -256,8 +262,7 @@ class WorkflowOrchestrator:
             try:
                 # Execute with timeout
                 output = await asyncio.wait_for(
-                    self._run_action(step.action),
-                    timeout=step.timeout
+                    self._run_action(step.action), timeout=step.timeout
                 )
 
                 step_result.output = output
@@ -265,7 +270,9 @@ class WorkflowOrchestrator:
 
             except asyncio.TimeoutError:
                 last_error = f"Timeout after {step.timeout}s"
-                self.logger.warning(f"Step {step.name} timed out (attempt {attempt + 1})")
+                self.logger.warning(
+                    f"Step {step.name} timed out (attempt {attempt + 1})"
+                )
 
             except Exception as e:
                 last_error = str(e)
@@ -274,17 +281,14 @@ class WorkflowOrchestrator:
                 )
 
             if attempt < step.retries:
-                backoff = min(2 ** attempt, 30)
+                backoff = min(2**attempt, 30)
                 self.logger.info(f"Retrying after {backoff}s...")
                 await asyncio.sleep(backoff)
 
         raise Exception(f"Step failed after {step.retries + 1} attempts: {last_error}")
 
     async def _execute_parallel(
-        self,
-        steps: List[WorkflowStep],
-        result: WorkflowResult,
-        parent_path: str
+        self, steps: List[WorkflowStep], result: WorkflowResult, parent_path: str
     ):
         """Execute steps in parallel"""
         self.logger.info(f"Executing {len(steps)} steps in parallel")
@@ -300,10 +304,7 @@ class WorkflowOrchestrator:
         await asyncio.gather(*tasks)
 
     async def _execute_sequential(
-        self,
-        steps: List[WorkflowStep],
-        result: WorkflowResult,
-        parent_path: str
+        self, steps: List[WorkflowStep], result: WorkflowResult, parent_path: str
     ):
         """Execute steps sequentially"""
         self.logger.info(f"Executing {len(steps)} steps sequentially")
@@ -330,7 +331,7 @@ class WorkflowOrchestrator:
         filepath = Path(filepath)
 
         with open(filepath) as f:
-            if filepath.suffix in ['.yaml', '.yml']:
+            if filepath.suffix in [".yaml", ".yml"]:
                 config = yaml.safe_load(f)
             else:
                 config = json.load(f)
@@ -341,13 +342,17 @@ class WorkflowOrchestrator:
         """Build workflow from configuration dictionary"""
         # This is a simplified version - would need more sophisticated parsing
         return WorkflowStep(
-            name=config.get('name', 'root'),
-            type=StepType(config.get('type', 'sequential')),
-            description=config.get('description', ''),
-            steps=[
-                self._build_workflow_from_config(step)
-                for step in config.get('steps', [])
-            ] if 'steps' in config else None,
+            name=config.get("name", "root"),
+            type=StepType(config.get("type", "sequential")),
+            description=config.get("description", ""),
+            steps=(
+                [
+                    self._build_workflow_from_config(step)
+                    for step in config.get("steps", [])
+                ]
+                if "steps" in config
+                else None
+            ),
         )
 
 
@@ -453,18 +458,14 @@ async def main():
         "--workflow",
         choices=["deployment", "test", "backup"],
         default="deployment",
-        help="Workflow to execute"
+        help="Workflow to execute",
     )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Load workflow from config file"
-    )
+    parser.add_argument("--config", type=Path, help="Load workflow from config file")
     parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
-        help="Logging level"
+        help="Logging level",
     )
 
     args = parser.parse_args()
