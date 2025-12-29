@@ -36,4 +36,3 @@
 - Unit tests need implementation-matched signatures
 
 **Impact:** Low - No production code broken, all existing tests pass. Coverage gate will block future commits until addressed.
-

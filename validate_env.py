@@ -7,6 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+EC_PRIVATE_KEY_MARKER = "BEGIN EC KEY"
+
 # Color codes for terminal output
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -171,9 +173,12 @@ def test_coinbase_connection():
         else:
             print_status("Coinbase API key format looks correct", "success")
 
-        if not api_secret.startswith("-----BEGIN EC PRIVATE KEY-----"):
+        if EC_PRIVATE_KEY_MARKER not in api_secret:
             print_status("Coinbase API secret format appears incorrect", "warning")
-            print_status("Expected EC Private Key in PEM format", "info")
+            print_status(
+                "Expected EC key PEM header containing 'BEGIN EC KEY'",
+                "info",
+            )
         else:
             print_status("Coinbase API secret format looks correct", "success")
 

@@ -82,7 +82,9 @@ class MockTradingPlatform(BaseTradingPlatform):
             self._slippage_config.get("rate", 0) * 100,
         )
 
-    def _apply_slippage(self, price: float, action: str, order_type: str = "market") -> float:
+    def _apply_slippage(
+        self, price: float, action: str, order_type: str = "market"
+    ) -> float:
         """
         Apply slippage to execution price.
 
@@ -105,9 +107,13 @@ class MockTradingPlatform(BaseTradingPlatform):
             # Limit orders (maker) use half slippage + spread to reflect maker rebates/queueing
             maker_multiplier = 0.5 if is_limit else 1.0
             if action == "BUY":
-                adjusted_price = price * (1 + (slippage_rate * maker_multiplier) + spread)
+                adjusted_price = price * (
+                    1 + (slippage_rate * maker_multiplier) + spread
+                )
             else:
-                adjusted_price = price * (1 - (slippage_rate * maker_multiplier) - spread)
+                adjusted_price = price * (
+                    1 - (slippage_rate * maker_multiplier) - spread
+                )
         else:
             # Fixed slippage
             maker_multiplier = 0.5 if is_limit else 1.0
@@ -220,7 +226,9 @@ class MockTradingPlatform(BaseTradingPlatform):
             }
 
         # Apply slippage to execution price
-        execution_price = self._apply_slippage(entry_price, action, order_type=order_type)
+        execution_price = self._apply_slippage(
+            entry_price, action, order_type=order_type
+        )
         slippage_pct = abs((execution_price - entry_price) / entry_price) * 100
 
         # Calculate position size (contracts for futures)

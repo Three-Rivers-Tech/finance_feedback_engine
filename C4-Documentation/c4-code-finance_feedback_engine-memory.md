@@ -109,7 +109,7 @@
   - Handles both dict and TradeOutcome inputs
   - Updates provider performance, veto metrics, and triggers Thompson Sampling callbacks
   - Returns: TradeOutcome object with computed P&L
-  
+
 - `_update_provider_performance(outcome: TradeOutcome, decision: Dict[str, Any]) -> None` (Lines ~491-541)
   - Update performance stats for providers and strategies
   - Tracks individual provider performance within ensembles
@@ -398,45 +398,45 @@ flowchart LR
         DecisionData["Trading Decision<br/>(dict or TradeOutcome)"]
         ExitData["Exit Price &<br/>Timestamp"]
     end
-    
+
     subgraph RecordOutcome["Trade Outcome Recording"]
         Record["record_trade_outcome()"]
         CalcPnL["Calculate P&L<br/>& Metrics"]
         UpdateProvider["_update_provider_<br/>performance()"]
     end
-    
+
     subgraph Storage["Persistent Storage"]
         Memory["Trade Outcomes<br/>(List)"]
         ExpBuf["Experience<br/>Buffer (deque)"]
         DiskStore["Disk Storage<br/>(JSON)"]
     end
-    
+
     subgraph Analysis["Performance Analysis"]
         Perf["analyze_performance()"]
         CalcStats["Calculate Win Rate,<br/>P&L, Risk Metrics"]
         PerfSnap["Performance<br/>Snapshots"]
     end
-    
+
     subgraph ContextGen["Context Generation"]
         PerfPeriod["get_performance_<br/>over_period()"]
         GenContext["generate_context()"]
         FormatPrompt["format_context_<br/>for_prompt()"]
         AIPrompt["AI System<br/>Prompt Context"]
     end
-    
+
     subgraph Learning["Learning & Adaptation"]
         ProviderRec["get_provider_<br/>recommendations()"]
         StratPerfSum["get_strategy_<br/>performance_summary()"]
         VetoThresh["get_veto_threshold_<br/>recommendation()"]
     end
-    
+
     subgraph VectorSearch["Vector Memory Search"]
         VectorMem["VectorMemory"]
         AddRec["add_record()"]
         FindSim["find_similar()"]
         Embed["get_embedding()<br/>(Ollama)"]
     end
-    
+
     DecisionData --> Record
     ExitData --> Record
     Record --> CalcPnL
@@ -503,7 +503,7 @@ classDiagram
             +cost_as_pct_of_position: Optional[float]
             +to_dict() Dict
         }
-        
+
         class PerformanceSnapshot {
             <<dataclass>>
             +timestamp: str
@@ -523,7 +523,7 @@ classDiagram
             +to_dict() Dict
         }
     }
-    
+
     namespace MemoryEngine {
         class PortfolioMemoryEngine {
             -config: Dict
@@ -572,7 +572,7 @@ classDiagram
             #_init_veto_metrics() Dict
         }
     }
-    
+
     namespace VectorStore {
         class VectorMemory {
             -storage_path: Path
@@ -588,7 +588,7 @@ classDiagram
             #_load_index()
         }
     }
-    
+
     TradeOutcome <-- PortfolioMemoryEngine : uses
     PerformanceSnapshot <-- PortfolioMemoryEngine : creates
     PortfolioMemoryEngine --> VectorMemory : optional[uses]
@@ -606,7 +606,7 @@ flowchart TD
         ParseDecision["Parse Decision &<br/>Market Data"]
         CalcPnL["Calculate P&L &<br/>Holding Period"]
     end
-    
+
     subgraph ProviderTracking["Provider Performance Tracking"]
         UpdateProv["_update_provider_<br/>performance()"]
         TrackPrimary["Track Primary<br/>Provider Stats"]
@@ -614,23 +614,23 @@ flowchart TD
         TrackStrategy["Track Strategy<br/>Performance"]
         TSCallback["Trigger Thompson<br/>Sampling Callback"]
     end
-    
+
     subgraph VetoTracking["Veto Decision Tracking"]
         VetoEval["_evaluate_veto_<br/>outcome()"]
         UpdateVeto["_update_veto_<br/>metrics()"]
         VetoStats["Update Veto Stats<br/>by Source"]
     end
-    
+
     subgraph Persistence["Save to Disk"]
         AutoSave["save_to_disk()"]
         AtomicWrite["_atomic_write_file()"]
     end
-    
+
     subgraph Analysis["Adaptive Learning"]
         GetVetoThresh["get_veto_threshold_<br/>recommendation()"]
         GetProvRec["get_provider_<br/>recommendations()"]
     end
-    
+
     RecordTrade --> ParseDecision
     ParseDecision --> CalcPnL
     CalcPnL --> UpdateProv
@@ -660,19 +660,19 @@ flowchart LR
         Memory1["Memory State<br/>at Day 100"]
         Snap["snapshot()"]
     end
-    
+
     subgraph TestWindow["Test Window<br/>Days 101-110"]
         SetRO["set_readonly(true)"]
         RecordTest["record_trade_outcome()<br/>(skipped in memory)"]
         Eval["Evaluate Strategy<br/>Performance"]
     end
-    
+
     subgraph PostTest["After Test Window"]
         Restore["restore(snapshot)"]
         Memory2["Memory Restored<br/>to Day 100"]
         SetRW["set_readonly(false)"]
     end
-    
+
     Memory1 --> Snap
     Snap -->|Deep Copy| TestWindow
     TestWindow --> SetRO

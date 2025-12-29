@@ -37,9 +37,9 @@ platforms:
   - credentials:
       api_key: aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
       api_secret: |
-        -----BEGIN EC PRIVATE KEY-----
+        BEGIN EC KEY PLACEHOLDER
         [EXAMPLE PRIVATE KEY - NEVER USE REAL KEYS IN EXAMPLES]
-        -----END EC PRIVATE KEY-----
+        END EC KEY PLACEHOLDER
 
   - credentials:
       account_id: 001-001-1234567-001

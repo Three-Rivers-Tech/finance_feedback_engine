@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from finance_feedback_engine.backtesting.agent_backtester import AgentModeBacktester
 from finance_feedback_engine.backtesting.backtester import Backtester
 from finance_feedback_engine.backtesting.monte_carlo import MonteCarloSimulator
-from finance_feedback_engine.backtesting.agent_backtester import AgentModeBacktester
 from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
 
 
@@ -25,23 +25,35 @@ class FakeHistoricalProvider:
             close_p = price * (1.0 + 0.001)
             high_p = max(open_p, close_p) * 1.001
             low_p = min(open_p, close_p) * 0.999
-            rows.append({
-                "date": ts.isoformat(),
-                "open": open_p,
-                "high": high_p,
-                "low": low_p,
-                "close": close_p,
-                "volume": 1000 + i,
-            })
+            rows.append(
+                {
+                    "date": ts.isoformat(),
+                    "open": open_p,
+                    "high": high_p,
+                    "low": low_p,
+                    "close": close_p,
+                    "volume": 1000 + i,
+                }
+            )
             price = close_p
         df = pd.DataFrame(rows)
         df["timestamp"] = pd.to_datetime(df["date"], utc=True)
-        df = df.set_index("timestamp")["open high low close volume".split()].sort_index()
+        df = df.set_index("timestamp")[
+            "open high low close volume".split()
+        ].sort_index()
         return df
 
 
 class FakeDecisionEngine:
-    async def generate_decision(self, asset_pair, market_data, balance, portfolio, memory_context, monitoring_context):
+    async def generate_decision(
+        self,
+        asset_pair,
+        market_data,
+        balance,
+        portfolio,
+        memory_context,
+        monitoring_context,
+    ):
         # Minimal BUY decision using market_data
         entry_price = float(market_data.get("close", market_data.get("open", 100)))
         return {
@@ -62,7 +74,14 @@ def test_fee_model_maker_vs_taker():
 
 
 def test_realistic_slippage_tiers():
-    bt = Backtester(FakeHistoricalProvider(), initial_balance=10000.0, config={"features": {"enhanced_slippage_model": True}, "backtesting": {"slippage_model": "realistic"}})
+    bt = Backtester(
+        FakeHistoricalProvider(),
+        initial_balance=10000.0,
+        config={
+            "features": {"enhanced_slippage_model": True},
+            "backtesting": {"slippage_model": "realistic"},
+        },
+    )
     ts = datetime.utcnow()
     s_crypto = bt._calculate_realistic_slippage("BTCUSD", 500, ts)
     s_fx = bt._calculate_realistic_slippage("EURUSD", 500, ts)
@@ -75,14 +94,28 @@ def test_monte_carlo_price_path_perturbation():
     bt = Backtester(FakeHistoricalProvider(), initial_balance=10000.0)
     mc = MonteCarloSimulator()
     dec = FakeDecisionEngine()
-    results = mc.run_monte_carlo(bt, "BTCUSD", "2024-01-01", "2024-01-10", dec, num_simulations=50, price_noise_std=0.002, seed=42)
+    results = mc.run_monte_carlo(
+        bt,
+        "BTCUSD",
+        "2024-01-01",
+        "2024-01-10",
+        dec,
+        num_simulations=50,
+        price_noise_std=0.002,
+        seed=42,
+    )
     assert results["num_simulations"] == 50
     assert "percentiles" in results
     assert set(results["percentiles"].keys()) == {"p5", "p25", "p50", "p75", "p95"}
 
 
 def test_agent_ooda_throttling_and_metrics():
-    bt = AgentModeBacktester(FakeHistoricalProvider(), initial_balance=10000.0, analysis_frequency_seconds=600, max_daily_trades=2)
+    bt = AgentModeBacktester(
+        FakeHistoricalProvider(),
+        initial_balance=10000.0,
+        analysis_frequency_seconds=600,
+        max_daily_trades=2,
+    )
     dec = FakeDecisionEngine()
     # Run backtest; ensure ooda metrics present
     results = bt.run_backtest("BTCUSD", "2024-01-01", "2024-01-02", dec)
@@ -112,22 +145,26 @@ def test_mock_platform_maker_vs_taker_slippage_and_fee():
 def test_mock_platform_limit_sell_uses_maker_fee():
     platform = MockTradingPlatform(initial_balance={"FUTURES_USD": 2000.0})
     # First open a long
-    platform.execute_trade({
-        "asset_pair": "BTCUSD",
-        "action": "BUY",
-        "order_type": "market",
-        "suggested_amount": 500.0,
-        "entry_price": 50.0,
-    })
+    platform.execute_trade(
+        {
+            "asset_pair": "BTCUSD",
+            "action": "BUY",
+            "order_type": "market",
+            "suggested_amount": 500.0,
+            "entry_price": 50.0,
+        }
+    )
 
     # Then close with a limit sell
-    res = platform.execute_trade({
-        "asset_pair": "BTCUSD",
-        "action": "SELL",
-        "order_type": "limit",
-        "suggested_amount": 500.0,
-        "entry_price": 55.0,
-    })
+    res = platform.execute_trade(
+        {
+            "asset_pair": "BTCUSD",
+            "action": "SELL",
+            "order_type": "limit",
+            "suggested_amount": 500.0,
+            "entry_price": 55.0,
+        }
+    )
 
     assert res["success"] is True
     assert res.get("fee_rate", 1) <= 0.0025

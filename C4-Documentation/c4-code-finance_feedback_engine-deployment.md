@@ -932,7 +932,7 @@ classDiagram
             +confirm_deployment()
         }
     }
-    
+
     namespace Orchestration {
         class DeploymentOrchestrator {
             -environment str
@@ -949,7 +949,7 @@ classDiagram
             +get_status() Dict
             +cleanup()
         }
-        
+
         class DeploymentStage {
             <<enumeration>>
             INITIALIZING
@@ -963,7 +963,7 @@ classDiagram
             FAILED
         }
     }
-    
+
     namespace Validation {
         class DockerValidator {
             +validate_docker_installed() bool
@@ -971,7 +971,7 @@ classDiagram
             +validate_docker_running() bool
             +validate_all() bool
         }
-        
+
         class ConfigValidator {
             -project_root Path
             -REQUIRED_VARS Dict
@@ -982,7 +982,7 @@ classDiagram
             +validate_docker_compose_exists() bool
             +validate_all() bool
         }
-        
+
         class EnvironmentValidator {
             +validate_disk_space() bool
             +validate_memory() bool
@@ -991,7 +991,7 @@ classDiagram
             +validate_all() bool
         }
     }
-    
+
     namespace Operations {
         class DockerOperations {
             -project_root Path
@@ -1005,7 +1005,7 @@ classDiagram
             +prune_system() bool
             +get_logs() str
         }
-        
+
         class HealthChecker {
             -base_url str
             -timeout int
@@ -1018,17 +1018,17 @@ classDiagram
             +wait_for_all() bool
         }
     }
-    
+
     namespace Logging {
         class JSONFormatter {
             +format() str
         }
-        
+
         class DeploymentLoggerAdapter {
             +process() tuple
         }
     }
-    
+
     namespace Tracing {
         class Tracer {
             -service_name str
@@ -1039,7 +1039,7 @@ classDiagram
             +enable()
             +disable()
         }
-        
+
         class Span {
             -name str
             -attributes Dict
@@ -1049,11 +1049,11 @@ classDiagram
             +duration() float
         }
     }
-    
+
     CliCommands --> DeploymentOrchestrator : uses
     CliCommands --> DockerOperations : uses for status
     CliCommands --> HealthChecker : uses for status
-    
+
     DeploymentOrchestrator --> DockerValidator : uses
     DeploymentOrchestrator --> ConfigValidator : uses
     DeploymentOrchestrator --> EnvironmentValidator : uses
@@ -1061,7 +1061,7 @@ classDiagram
     DeploymentOrchestrator --> HealthChecker : uses
     DeploymentOrchestrator --> Tracer : uses
     DeploymentOrchestrator --> DeploymentLoggerAdapter : uses
-    
+
     DeploymentOrchestrator --> DeploymentStage : uses
     DockerOperations --> JSONFormatter : uses
     HealthChecker --> JSONFormatter : uses
@@ -1080,7 +1080,7 @@ flowchart LR
         DOCKER["Docker Ops"]
         HEALTH["Health Checker"]
     end
-    
+
     subgraph External["External Systems"]
         DOCKER_DAEMON["Docker Daemon"]
         DOCKER_HUB["Docker Hub"]
@@ -1089,16 +1089,16 @@ flowchart LR
         GRAFANA["Grafana"]
         FS["File System"]
     end
-    
+
     CLI -->|orchestrates| ORCH
     ORCH -->|validates| FS
     ORCH -->|builds/deploys| DOCKER
     ORCH -->|checks health| HEALTH
-    
+
     DOCKER -->|runs commands| DOCKER_DAEMON
     DOCKER -->|pulls images| DOCKER_HUB
     DOCKER -->|starts containers| DOCKER_DAEMON
-    
+
     HEALTH -->|http GET| BACKEND
     HEALTH -->|http GET| PROMETHEUS
     HEALTH -->|http GET| GRAFANA

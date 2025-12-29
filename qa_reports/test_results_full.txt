@@ -2968,12 +2968,12 @@ _____________________ test_analyze_command_network_failure _____________________
 tests/test_cli_commands.py:42: in test_analyze_command_network_failure
     assert "Traceback" not in result.output or result.exit_code == 0
 E   assert ('Traceback' not in '{"timestamp...\nAborted!\n'
-E     
+E
 E     'Traceback' is contained here:
 E       {"timestamp": "2025-12-18T20:25:23.770354Z", "correlation_id": "36c5e0ad-a82b-4e33-9798-aee0e8903c3f", "level": "INFO", "logger": "finance_feedback_engine.monitoring.logging_config", "message": "Structured logging initialized", "module": "logging_config", "function": "setup_structured_logging", "line": 578, "context": {"taskName": null, "log_level": "INFO", "json_format": true, "correlation_ids": true, "pii_redaction": true, "file_logging": true}}
 E       Using AI provider: local
 E       {"timestamp": "2025-12-18T20:25:23.772217Z", "correlation_id": "36c5e0ad-a82b-4e33...
-E     
+E
 E     ...Full output truncated (424 lines hidden), use '-vv' to show or 1 == 0)
 E    +  where 1 = <Result SystemExit(1)>.exit_code
 ____________ TestAlphaVantageProvider.test_get_market_data_success _____________
@@ -22877,7 +22877,7 @@ _________________ TestFallbackTiers.test_fallback_to_majority __________________
 tests/test_ensemble_tiers.py:264: in test_fallback_to_majority
     assert result["ensemble_metadata"]["fallback_tier"] == "majority_fallback"
 E   AssertionError: assert 'weighted' == 'majority_fallback'
-E     
+E
 E     - majority_fallback
 E     + weighted
 ---------------------------- Captured stderr setup -----------------------------
@@ -23242,7 +23242,7 @@ __________________ TestFallbackTiers.test_fallback_to_average __________________
 tests/test_ensemble_tiers.py:298: in test_fallback_to_average
     assert (
 E   AssertionError: assert 'weighted' == 'average_fallback'
-E     
+E
 E     - average_fallback
 E     + weighted
 ---------------------------- Captured stderr setup -----------------------------
@@ -23607,7 +23607,7 @@ ______________ TestFallbackTiers.test_fallback_to_single_provider ______________
 tests/test_ensemble_tiers.py:329: in test_fallback_to_single_provider
     assert (
 E   AssertionError: assert 'weighted' == 'single_provider'
-E     
+E
 E     - single_provider
 E     + weighted
 ---------------------------- Captured stderr setup -----------------------------
@@ -26152,8 +26152,8 @@ finance_feedback_engine/integrations/redis_manager.py:69: in prompt_user_install
     raise OSError(
 E   OSError: pytest: reading from stdin while output is captured!  Consider using `-s`.
 ----------------------------- Captured stdout call -----------------------------
-🔧 Redis not found. Required for Telegram approval queue. Install now? [y/n] 
-(y): 
+🔧 Redis not found. Required for Telegram approval queue. Install now? [y/n]
+(y):
 ----------------------------- Captured stderr call -----------------------------
 --- Logging error ---
 Traceback (most recent call last):
@@ -26238,8 +26238,8 @@ tests/test_integrations_telegram_redis.py:250: in test_ensure_running_docker_fal
 E   assert False
 E    +  where False = any(<generator object TestRedisManager.test_ensure_running_docker_fallback.<locals>.<genexpr> at 0x7f13ddce0660>)
 ----------------------------- Captured stdout call -----------------------------
-🔧 Redis not found. Required for Telegram approval queue. Install now? [y/n] 
-(y): 
+🔧 Redis not found. Required for Telegram approval queue. Install now? [y/n]
+(y):
 ----------------------------- Captured stderr call -----------------------------
 --- Logging error ---
 Traceback (most recent call last):
@@ -39618,7 +39618,7 @@ _______ TestValidateDataFreshness.test_stock_daily_fresh_within_24_hours _______
 tests/utils/test_data_freshness.py:114: in test_stock_daily_fresh_within_24_hours
     assert warning == ""
 E   AssertionError: assert 'WARNING: Sto...r refreshing.' == ''
-E     
+E
 E     + WARNING: Stock daily data is 12.00 hours old (warning: 4 hours). Consider refreshing.
 ----------------------------- Captured stderr call -----------------------------
 --- Logging error ---

@@ -62,30 +62,30 @@
    - src/App.tsx
    - src/main.tsx
    - src/index.css
-   
+
 ✅ API Layer (11 files)
    - client.ts, types.ts
    - 5 polling hooks (useAgentStatus, usePortfolio, etc.)
-   
+
 ✅ State Management
    - stores/authStore.ts
-   
+
 ✅ Services & Utils
    - services/formatters.ts
    - utils/constants.ts
-   
+
 ✅ Components (17 files)
    - Common: Card, Button, MetricCard, Badge, Spinner
    - Layout: AppLayout, Header, Sidebar
    - Dashboard: PortfolioOverview, PositionsTable, RecentDecisions
    - Agent: AgentStatusDisplay, AgentControlPanel, CircuitBreakerStatus
-   
+
 ✅ Pages (4 files)
    - Dashboard.tsx
    - AgentControl.tsx
    - Analytics.tsx
    - Optimization.tsx (NEW!)
-   
+
 ✅ Configuration
    - .env, package.json, vite.config.ts, tailwind.config.js
 ```
@@ -124,12 +124,12 @@
 ✅ Health & Metrics
    GET  /health
    GET  /metrics
-   
+
 ✅ Portfolio & Decisions
    GET  /api/v1/status
    GET  /api/v1/decisions
    POST /api/v1/decisions
-   
+
 ✅ Bot Control
    POST /api/v1/bot/start
    POST /api/v1/bot/stop
@@ -137,7 +137,7 @@
    GET  /api/v1/bot/status
    GET  /api/v1/bot/positions
    PATCH /api/v1/bot/config
-   
+
 ✅ Optimization (NEW!)
    POST /api/v1/optimization/experiment
    GET  /api/v1/optimization/experiments
@@ -163,7 +163,7 @@
    - POST /api/v1/optimization/experiment
    - GET  /api/v1/optimization/experiments
    - GET  /api/v1/optimization/experiments/{id}
-   
+
 ✅ Features:
    - Multi-asset optimization
    - Configurable trials (10-200)
@@ -274,12 +274,12 @@ When everything is running correctly:
 
 1. **Grafana Dashboard**: http://localhost:3001/d/ffe-trading-metrics
    - Should show 8 panels (may be empty without agent running)
-   
+
 2. **Frontend**: http://localhost:5173
    - Navigation works (4 pages accessible)
    - API status shows "HEALTHY" in header
    - No console errors
-   
+
 3. **Backend**: http://localhost:8000/docs
    - Swagger UI loads
    - All endpoints documented

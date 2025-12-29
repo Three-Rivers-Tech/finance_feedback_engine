@@ -243,6 +243,7 @@ from .optimization import router as optimization_router
 
 # Import and include routers
 from .routes import (
+    approval_router,
     decisions_router,
     health_router,
     metrics_router,
@@ -255,6 +256,7 @@ app.include_router(metrics_router, tags=["metrics"])
 app.include_router(telegram_router, prefix="/webhook", tags=["telegram"])
 app.include_router(decisions_router, prefix="/api/v1", tags=["decisions"])
 app.include_router(status_router, prefix="/api/v1", tags=["status"])
+app.include_router(approval_router, tags=["approvals"])
 app.include_router(bot_control_router, tags=["bot-control"])
 app.include_router(optimization_router, tags=["optimization"])
 

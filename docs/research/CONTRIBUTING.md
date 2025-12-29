@@ -47,13 +47,13 @@ Feature suggestions are welcome! Please:
    ```bash
    git commit -m "Add feature: your feature description"
    ```
-   
+
    **Note:** Pre-commit hooks will run automatically:
    - Code formatting (black, isort)
    - Linting (flake8, mypy)
    - Security checks (bandit, secret detection)
    - Test coverage (≥70%)
-   
+
    If hooks fail, fix the issues before committing. Only bypass with `--no-verify` in emergencies.
 
 5. **Push to your fork**

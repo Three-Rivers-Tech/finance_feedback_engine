@@ -10,7 +10,7 @@ The Finance Feedback Engine 2.0 features a sophisticated ensemble decision syste
 - **Intelligent Voting**: Weighted, majority, and stacking strategies
 - **Adaptive Learning**: Improves provider weights based on historical accuracy
 - **Resilient Operation**: Continues functioning even when some providers fail
-- **Debate Mode**: Structured debate between bullish/bearish advocates with impartial judge 
+- **Debate Mode**: Structured debate between bullish/bearish advocates with impartial judge
 
 ## Current Status
 

@@ -11,6 +11,86 @@ class AutonomousAgentConfig(BaseModel):
     stop_loss: float = 0.02  # 2%
 
 
+class PairSelectionStatisticalConfig(BaseModel):
+    """Configuration for statistical metrics."""
+
+    sortino: dict = Field(
+        default_factory=lambda: {
+            "windows_days": [7, 30, 90],
+            "weights": [0.5, 0.3, 0.2],
+        }
+    )
+    correlation: dict = Field(default_factory=lambda: {"lookback_days": 30})
+    garch: dict = Field(
+        default_factory=lambda: {
+            "p": 1,
+            "q": 1,
+            "forecast_horizon_days": 7,
+            "fitting_window_days": 90,
+        }
+    )
+    aggregation_weights: dict = Field(
+        default_factory=lambda: {
+            "sortino": 0.4,
+            "diversification": 0.35,
+            "volatility": 0.25,
+        }
+    )
+
+
+class PairSelectionUniverseConfig(BaseModel):
+    """Configuration for pair universe discovery."""
+
+    auto_discover: bool = True
+    blacklist: List[str] = Field(default_factory=list)
+    cache_ttl_hours: int = 24
+
+
+class PairSelectionLLMConfig(BaseModel):
+    """Configuration for LLM integration."""
+
+    enabled: bool = True
+    candidate_oversampling: int = 3
+
+
+class PairSelectionThompsonConfig(BaseModel):
+    """Configuration for Thompson Sampling."""
+
+    enabled: bool = True
+    min_trades_for_update: int = 3
+    success_threshold: float = 0.55
+    failure_threshold: float = 0.45
+
+
+class PairSelectionPositionLockingConfig(BaseModel):
+    """Configuration for position locking."""
+
+    enabled: bool = True
+    cooldown_hours: int = 0
+
+
+class PairSelectionConfig(BaseModel):
+    """Configuration for autonomous pair selection system."""
+
+    enabled: bool = False
+    target_pair_count: int = 5
+    rotation_interval_hours: float = 1.0
+
+    universe: PairSelectionUniverseConfig = Field(
+        default_factory=PairSelectionUniverseConfig
+    )
+    statistical: PairSelectionStatisticalConfig = Field(
+        default_factory=PairSelectionStatisticalConfig
+    )
+    llm: PairSelectionLLMConfig = Field(default_factory=PairSelectionLLMConfig)
+    thompson_sampling: PairSelectionThompsonConfig = Field(
+        default_factory=PairSelectionThompsonConfig
+    )
+    position_locking: PairSelectionPositionLockingConfig = Field(
+        default_factory=PairSelectionPositionLockingConfig
+    )
+
+
 class TradingAgentConfig(BaseModel):
     """
     Configuration model for the Trading Agent.

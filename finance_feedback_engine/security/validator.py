@@ -145,7 +145,7 @@ class SecurityValidator:
                 elif not is_env_var and value != "":
                     # This looks like a real credential, not a placeholder or env var
                     self.errors.append(  # nosec B608 - False positive: this is error message formatting, not SQL
-                        f"🚨 Found plaintext credential in {config_file}:{current_path}. "
+                        f"🚨 Found plaintext credential in {config_file}:{current_path}. "  # nosec B608
                         f"Update config.yaml to use ${{ENV_VAR_NAME}} format. "
                         f"Set actual credentials in .env file, not config files."
                     )

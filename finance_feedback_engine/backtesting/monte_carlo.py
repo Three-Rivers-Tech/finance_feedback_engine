@@ -25,8 +25,13 @@ class MonteCarloSimulator:
     """
 
     def __init__(self):
-        """Initialize Monte Carlo simulator."""
-        pass
+        """
+        Initialize Monte Carlo simulator.
+
+        Sets up internal state for running simulations. The simulator
+        is stateless and reusable across multiple simulation runs.
+        """
+        logger.info("Monte Carlo simulator initialized")
 
     def run_monte_carlo(
         self,
@@ -60,14 +65,18 @@ class MonteCarloSimulator:
         )
 
         # Prepare RNG
-        rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+        rng = (
+            np.random.default_rng(seed) if seed is not None else np.random.default_rng()
+        )
 
         # Base data
         base_df = backtester.historical_data_provider.get_historical_data(
             asset_pair, start_date, end_date, timeframe=backtester.timeframe
         )
         if base_df is None or base_df.empty:
-            logger.warning("No historical data for Monte Carlo; returning empty results")
+            logger.warning(
+                "No historical data for Monte Carlo; returning empty results"
+            )
             return {
                 "num_simulations": 0,
                 "percentiles": {},

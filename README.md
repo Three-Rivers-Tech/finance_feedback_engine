@@ -232,7 +232,7 @@ flowchart TD
     MERGE[Merge Configuration Precedence: ENV > LOCAL > BASE]
     VALIDATE[Validate Required Keys API keys, credentials]
     RESULT([Final Config Object])
-    
+
     START --> DOTENV
     DOTENV --> ENV
     LOCAL{config.local.yaml Exists?}
@@ -1440,4 +1440,3 @@ docker-compose --profile full up -d
 ---
 
 For comprehensive deployment documentation, troubleshooting guides, and production best practices, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-

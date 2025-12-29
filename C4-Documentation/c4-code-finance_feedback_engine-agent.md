@@ -223,7 +223,7 @@ def __init__(
 
 **Returns**: `bool` - True if cycle completed successfully, False if agent should stop
 
-**State Loop**: 
+**State Loop**:
 - LEARNING -> PERCEPTION -> REASONING -> RISK_CHECK -> EXECUTION -> IDLE
 - Each transition logged and emitted to dashboard
 
@@ -343,7 +343,7 @@ def __init__(
 
 **Timeout**: 90 seconds per asset analysis
 
-**Error Handling**: 
+**Error Handling**:
 - Catches `asyncio.TimeoutError` and logs warning
 - Catches general exceptions and logs error with traceback
 - Accumulates failure counts for failure-based skipping
@@ -499,7 +499,7 @@ def __init__(
 
 **Validation Logic**:
 1. **Autonomous Check**: If `config.autonomous.enabled` is True, return success (no notifications needed)
-2. **Telegram Check**: 
+2. **Telegram Check**:
    - Verify `config.telegram` exists
    - Check `telegram.enabled` is True
    - Check `telegram.bot_token` is not empty
@@ -709,7 +709,7 @@ def __init__(
 2. On queue full: logs warning with size, drops event
 3. On other exception: logs warning
 
-**Error Handling**: 
+**Error Handling**:
 - Catches `queue.Full` - logs queue size and continues
 - Catches general exceptions - logs warning
 
@@ -726,10 +726,10 @@ def __init__(
 **Returns**: `bool` - True if decision should be executed or sent to Telegram
 
 **Checks**:
-1. **Confidence Check**: 
+1. **Confidence Check**:
    - Normalize confidence from 0-100 to 0-1
    - Reject if < `min_confidence_threshold`
-2. **Daily Limit Check**: 
+2. **Daily Limit Check**:
    - If `max_daily_trades > 0` and `daily_trade_count >= max_daily_trades`: reject
 3. **Execution Path Check**:
    - If autonomous_enabled: return True (allow execution)
@@ -806,17 +806,17 @@ flowchart TD
     Start([Agent Start]) --> Recovery[_recover_existing_positions]
     Recovery -->|Timeout after 60s| MainLoop
     Recovery -->|Success| MainLoop
-    
+
     MainLoop[Main Loop: run] -->|process_cycle| Learn[LEARNING State]
-    
+
     Learn -->|handle_learning_state| Perc[PERCEPTION State]
-    
+
     Perc -->|handle_perception_state| KillCheck{Kill Switch Check}
     KillCheck -->|Portfolio Loss Exceeded| Stop1[STOP Agent]
     KillCheck -->|Win Rate Too Low| Stop2[STOP Agent]
     KillCheck -->|Consecutive Losses| Stop3[STOP Agent]
     KillCheck -->|Safe| Reason[REASONING State]
-    
+
     Reason -->|handle_reasoning_state| AnalyzeLoop[For Each Asset Pair]
     AnalyzeLoop -->|timeout 90s| Analyze[analyze_asset_async]
     Analyze -->|Success| Collect{Action<br/>BUY/SELL?}
@@ -824,28 +824,28 @@ flowchart TD
     Collect -->|No/HOLD| Skip1[Skip]
     Analyze -->|Timeout| Fail1[Increment Failure Count]
     Collect -->|Confidence Low| Skip2[Skip]
-    
+
     AddDec --> CheckDecs{Decisions<br/>Collected?}
     Skip1 --> CheckDecs
     Skip2 --> CheckDecs
     Fail1 --> CheckDecs
-    
+
     CheckDecs -->|Yes| RiskCheck[RISK_CHECK State]
     CheckDecs -->|No| Idle1[IDLE State]
-    
+
     RiskCheck -->|handle_risk_check_state| ValidateLoop[For Each Decision]
     ValidateLoop -->|RiskGatekeeper| ValidateTrade[validate_trade]
     ValidateTrade -->|Approved| PerfCheck[_check_performance_based_risks]
     ValidateTrade -->|Rejected| CacheReject[Add to Rejection Cache]
     PerfCheck -->|Approved| ApproveList[Add to Approved List]
     PerfCheck -->|Rejected| CacheReject
-    
+
     ApproveList --> ApproveCheck{Approved<br/>Decisions?}
     CacheReject --> ApproveCheck
-    
+
     ApproveCheck -->|Yes| Exec[EXECUTION State]
     ApproveCheck -->|No| Idle2[IDLE State]
-    
+
     Exec -->|handle_execution_state| ModeCheck{Autonomous<br/>Enabled?}
     ModeCheck -->|Yes| ExecTrades[execute_decision_async for each]
     ModeCheck -->|No| SendSig[_send_signals_to_telegram]
@@ -853,21 +853,21 @@ flowchart TD
     SendSig --> ClearDecs[Clear _current_decisions]
     UpdateDaily --> Learn2[LEARNING State]
     ClearDecs --> Learn2
-    
+
     Learn2 --> MainLoop
-    
+
     Idle1 --> MainLoop
     Idle2 --> MainLoop
-    
+
     Stop1 --> End([Agent Stopped])
     Stop2 --> End
     Stop3 --> End
-    
+
     classDef state fill:#e1f5ff,stroke:#01579b,stroke-width:2px
     classDef decision fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef action fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef danger fill:#ffebee,stroke:#b71c1c,stroke-width:2px
-    
+
     class Learn,Perc,Reason,RiskCheck,Exec,Learn2 state
     class KillCheck,Analyze,Collect,CheckDecs,ValidateTrade,PerfCheck,ApproveCheck,ModeCheck decision
     class Recovery,Analyze,ExecTrades,SendSig,UpdateDaily action
@@ -901,7 +901,7 @@ classDiagram
             +normalize_percentage_fields()
         }
     }
-    
+
     namespace Core {
         class TradingLoopAgent {
             <<main orchestrator>>
@@ -919,7 +919,7 @@ classDiagram
             -async handle_perception_state()
             -async handle_reasoning_state()
         }
-        
+
         class AgentState {
             <<enum>>
             IDLE
@@ -930,7 +930,7 @@ classDiagram
             LEARNING
         }
     }
-    
+
     namespace Dependencies {
         class FinanceFeedbackEngine {
             <<external>>
@@ -960,7 +960,7 @@ classDiagram
             (minimal use)
         }
     }
-    
+
     TradingLoopAgent --|> TradingAgentConfig : uses
     TradingLoopAgent --|> AgentState : uses
     TradingLoopAgent --> FinanceFeedbackEngine : depends on
@@ -969,11 +969,11 @@ classDiagram
     TradingLoopAgent --> RiskGatekeeper : depends on
     TradingLoopAgent --> BaseTradingPlatform : depends on
     TradingAgentConfig --> AutonomousAgentConfig : contains
-    
+
     classDef config fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
     classDef core fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
     classDef external fill:#ffe0b2,stroke:#e65100,stroke-width:2px
-    
+
     class AutonomousAgentConfig,TradingAgentConfig config
     class TradingLoopAgent,AgentState core
     class FinanceFeedbackEngine,TradeMonitor,PortfolioMemoryEngine,RiskGatekeeper,BaseTradingPlatform external
@@ -995,7 +995,7 @@ flowchart LR
         UpdateWinRate["Recalculate win_rate"]
         IncrBatch["Increment<br/>_batch_review_counter"]
     end
-    
+
     subgraph Batch Review 10 Every 20 Trades
         CheckBatch{Counter % 20<br/>== 0?}
         Batch[_perform_batch_review]
@@ -1004,7 +1004,7 @@ flowchart LR
         CheckKelly["check_kelly_activation_criteria<br/>- Profit Factor >= 1.20<br/>- Stability < 0.15"]
         PerfSummary["Log performance summary<br/>- Total trades, P&L<br/>- Win rate, streaks"]
     end
-    
+
     Trade --> UpdatePerf
     UpdatePerf --> ExtractPNL
     ExtractPNL --> CalcMetrics
@@ -1021,10 +1021,10 @@ flowchart LR
     CheckKelly --> PerfSummary
     BootstrapMsg --> PerfSummary
     PerfSummary --> Done2[Next cycle]
-    
+
     classDef metric fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
     classDef batch fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
-    
+
     class UpdatePerf,ExtractPNL,CalcMetrics,StreamStreak,UpdateWinRate,IncrBatch metric
     class Batch,RollCost,KellyCheck,CheckKelly,PerfSummary batch
 ```
@@ -1038,52 +1038,52 @@ title: Multi-Channel Notification Delivery (_send_signals_to_telegram)
 flowchart TD
     Start[For Each Decision] --> Format["Format Telegram Message<br/>- Asset, action, confidence<br/>- Reasoning, decision_id"]
     Format --> TryTG{Telegram<br/>Enabled?}
-    
+
     TryTG -->|Yes| CheckTG["Check token, chat_id<br/>not empty"]
     TryTG -->|No| SkipTG[Skip Telegram]
-    
+
     CheckTG -->|Valid| SendTG["TelegramBot.send_message"]
     CheckTG -->|Invalid| TGErr["Log: Missing config"]
-    
+
     SendTG -->|Success| TGOk["Mark Sent<br/>signals_sent++"]
     SendTG -->|ImportError| TGImport["Log: Module not available"]
     SendTG -->|Exception| TGFail["Log: Send failed<br/>signals_failed++"]
-    
+
     SkipTG --> TryWebhook{Webhook<br/>Enabled?}
     TGErr --> TryWebhook
     TGImport --> TryWebhook
     TGFail --> TryWebhook
     TGOk --> Summary
-    
+
     TryWebhook -->|Yes| CheckWH["Check url not empty"]
     TryWebhook -->|No| SkipWH[Skip Webhook]
-    
+
     CheckWH -->|Valid| PrepPayload["Prepare JSON payload<br/>event_type, decision_id,<br/>asset_pair, action, confidence"]
     CheckWH -->|Invalid| WHErr["Log: Config missing"]
-    
+
     PrepPayload --> DeliverWH["_deliver_webhook<br/>max_retries=3<br/>exponential backoff"]
-    
+
     DeliverWH -->|Success| WHOk["Mark Sent<br/>signals_sent++"]
     DeliverWH -->|Failure| WHFail["Mark Failed<br/>signals_failed++"]
-    
+
     SkipWH --> Check{TG or WH<br/>Worked?}
     WHErr --> Check
     WhOk --> Summary
     WHFail --> Summary
-    
+
     Check -->|Yes| Summary["Generate Summary<br/>signals_sent, signals_failed"]
     Check -->|No| SafeCheck{ALL Signals<br/>Failed?}
-    
+
     SafeCheck -->|Yes| Critical["CRITICAL: Log failure<br/>No approval mechanism!<br/>Emit dashboard event"]
     SafeCheck -->|No| PartialWarn["WARNING: Partial failure<br/>Log details"]
-    
+
     Critical --> End([No Execution])
     PartialWarn --> End
-    
+
     classDef primary fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
     classDef fallback fill:#ffccbc,stroke:#bf360c,stroke-width:2px
     classDef safety fill:#ffebee,stroke:#b71c1c,stroke-width:2px
-    
+
     class SendTG,TGOk primary
     class DeliverWH,WHOk fallback
     class Critical,SafeCheck safety

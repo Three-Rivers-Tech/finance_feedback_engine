@@ -1,0 +1,10 @@
+{
+  "statistical_weight": {
+    "alpha": 1,
+    "beta": 1
+  },
+  "llm_weight": {
+    "alpha": 1,
+    "beta": 1
+  }
+}

@@ -29,7 +29,7 @@
 - **Location**: `finance_feedback_engine/pipelines/storage/delta_lake_manager.py:26-513`
 - **Description**: Manager for Delta Lake tables with ACID guarantees. Handles table creation, updates, optimization, and time travel queries with graceful fallback to Parquet format when Spark is unavailable.
 - **Responsibility**: Provide unified interface for Delta Lake operations with automatic fallback mechanisms
-- **Dependencies**: 
+- **Dependencies**:
   - Internal: None
   - External: pandas, pyspark, delta-spark, logging, datetime, pathlib
 
@@ -41,7 +41,7 @@
 - **Parameters**:
   - `storage_path` (str, default="s3://finance-lake"): Base path for Delta tables (S3, MinIO, or local path)
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Checks if PySpark is available
   - Initializes Spark session with Delta Lake extensions if available
   - Falls back to file-based storage if Spark unavailable
@@ -61,7 +61,7 @@
 - **Description**: Initialize Spark session with Delta Lake support and AWS S3 configuration
 - **Parameters**: None
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Creates SparkSession with Delta Lake SQL extensions
   - Configures DeltaCatalog for catalog operations
   - Disables retention duration check to allow aggressive vacuuming
@@ -79,7 +79,7 @@
   - `partition_columns` (Optional[List[str]], default=None): Columns to partition by
   - `mode` (str, default="append"): Write mode ('append', 'overwrite', 'merge')
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Falls back to Parquet if Spark unavailable
   - Converts Pandas DataFrame to Spark DataFrame
   - Writes data in Delta format with specified mode and partitioning
@@ -94,7 +94,7 @@
   - `table_name` (str): Table name (used as directory)
   - `mode` (str): Write mode (currently ignored in fallback)
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Creates table directory if not exists
   - Generates timestamped filename
   - Writes Parquet file using pyarrow engine
@@ -109,7 +109,7 @@
   - `as_of_timestamp` (Optional[str], default=None): ISO timestamp for time travel (e.g., '2025-01-01T00:00:00')
   - `filters` (Optional[List[str]], default=None): SQL-like filter expressions (e.g., ['asset_pair = "BTCUSD"'])
 - **Returns**: `pd.DataFrame` - Data from table as Pandas DataFrame
-- **Behavior**: 
+- **Behavior**:
   - Falls back to Parquet files if Spark unavailable
   - Uses Delta time travel feature when as_of_timestamp provided
   - Applies filter expressions sequentially
@@ -123,7 +123,7 @@
 - **Parameters**:
   - `table_name` (str): Table name (directory to read from)
 - **Returns**: `pd.DataFrame` - Empty DataFrame if no files found, otherwise concatenated data from all Parquet files
-- **Behavior**: 
+- **Behavior**:
   - Scans table directory for .parquet files
   - Returns empty DataFrame if directory doesn't exist
   - Reads all Parquet files and concatenates them
@@ -137,7 +137,7 @@
   - `table_name` (str): Delta table name to optimize
   - `zorder_columns` (Optional[List[str]], default=None): Columns to Z-order by (improves query performance for filtered queries)
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Returns early with warning if Spark unavailable
   - Compacts small files into larger ones
   - Applies Z-ordering if columns specified
@@ -151,7 +151,7 @@
   - `table_name` (str): Delta table name to vacuum
   - `retention_hours` (int, default=168): Keep versions from last N hours (default 7 days)
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Returns early with warning if Spark unavailable
   - Removes file versions older than retention period
   - Logs retention settings
@@ -166,7 +166,7 @@
   - `merge_keys` (List[str]): Columns to match on (e.g., ['asset_pair', 'timestamp'])
   - `update_columns` (Optional[List[str]], default=None): Columns to update (None = update all columns)
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Raises error if Spark unavailable (MERGE requires Spark)
   - Converts Pandas DataFrame to Spark DataFrame
   - Creates temporary view for updates
@@ -181,7 +181,7 @@
 - **Parameters**:
   - `table_name` (str): Delta table name
 - **Returns**: `pd.DataFrame` - DataFrame with columns: version, timestamp, operation, user, etc. Empty DataFrame if Spark unavailable
-- **Behavior**: 
+- **Behavior**:
   - Returns empty DataFrame with warning if Spark unavailable
   - Retrieves transaction log history
   - Converts to Pandas DataFrame
@@ -194,7 +194,7 @@
 - **Parameters**:
   - `table_name` (str): Delta table name to check
 - **Returns**: `bool` - True if table exists, False otherwise
-- **Behavior**: 
+- **Behavior**:
   - Uses Spark to check if readable as Delta format (if available)
   - Falls back to filesystem check for path existence
 - **Raises**: None (catches exceptions and returns False)
@@ -205,7 +205,7 @@
 - **Parameters**:
   - `table_name` (str): Delta table name to delete
 - **Returns**: None
-- **Behavior**: 
+- **Behavior**:
   - Removes entire table directory recursively
   - Logs warning when table deleted
   - Logs warning if table not found
@@ -314,7 +314,7 @@ classDiagram
             -storage_path: str
             -use_spark: bool
             -spark: SparkSession
-            
+
             +__init__(storage_path: str)
             +create_or_update_table(df, table_name, partition_columns, mode)
             +read_table(table_name, as_of_timestamp, filters)
@@ -324,14 +324,14 @@ classDiagram
             +get_table_history(table_name)
             +table_exists(table_name)
             +delete_table(table_name)
-            
+
             -_check_spark_available()
             -_init_spark()
             -_save_as_parquet(df, table_name, mode)
             -_read_parquet_fallback(table_name)
         }
     }
-    
+
     namespace ExternalLibraries {
         class SparkSession {
             <<external>>
@@ -346,7 +346,7 @@ classDiagram
             <<external>>
         }
     }
-    
+
     namespace StorageBackends {
         class DeltaLakeFormat {
             <<storage>>
@@ -368,7 +368,7 @@ classDiagram
             <<external>>
         }
     }
-    
+
     DeltaLakeManager --> SparkSession: initializes
     DeltaLakeManager --> PandasDataFrame: accepts/returns
     DeltaLakeManager --> DeltaTable: operates on
