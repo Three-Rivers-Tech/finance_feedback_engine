@@ -453,7 +453,9 @@ class Backtester:
         # Calculate volume-based dynamic slippage
         if enhanced_slippage and slippage_model == "realistic":
             base_slippage = self._calculate_realistic_slippage(
-                asset_pair=asset_pair, size=abs(amount_to_trade), timestamp=trade_timestamp
+                asset_pair=asset_pair,
+                size=abs(amount_to_trade),
+                timestamp=trade_timestamp,
             )
         else:
             base_slippage = self.slippage_percentage
@@ -522,7 +524,9 @@ class Backtester:
                 )  # Positive units to close negative SHORT position
             if fee_model == "tiered":
                 fee_rate = self._calculate_fees(
-                    platform=platform_name, size=trade_value, is_maker=order_type_lower == "limit"
+                    platform=platform_name,
+                    size=trade_value,
+                    is_maker=order_type_lower == "limit",
                 )
             fee = (trade_value * fee_rate) + self.commission_per_trade
             new_balance = current_balance - trade_value - fee
@@ -538,7 +542,9 @@ class Backtester:
                 units_traded = -amount_to_trade
             if fee_model == "tiered":
                 fee_rate = self._calculate_fees(
-                    platform=platform_name, size=trade_value, is_maker=order_type_lower == "limit"
+                    platform=platform_name,
+                    size=trade_value,
+                    is_maker=order_type_lower == "limit",
                 )
             fee = (trade_value * fee_rate) + self.commission_per_trade
             new_balance = current_balance + trade_value - fee
@@ -985,11 +991,17 @@ class Backtester:
                 self._decisions = {}  # Store decisions by ID
                 # Order type policy for backtests
                 bt_cfg = backtester.config or {}
-                bt_backtesting = bt_cfg.get("backtesting", {}) if isinstance(bt_cfg, dict) else {}
-                self._order_type_policy = (bt_backtesting.get("order_type") or "market").lower()
+                bt_backtesting = (
+                    bt_cfg.get("backtesting", {}) if isinstance(bt_cfg, dict) else {}
+                )
+                self._order_type_policy = (
+                    bt_backtesting.get("order_type") or "market"
+                ).lower()
                 # Probability to place maker (limit) orders when policy is 'auto'
                 try:
-                    self._maker_probability = float(bt_backtesting.get("maker_probability", 0.0))
+                    self._maker_probability = float(
+                        bt_backtesting.get("maker_probability", 0.0)
+                    )
                 except Exception:
                     self._maker_probability = 0.0
 
@@ -1077,7 +1089,8 @@ class Backtester:
 
                                 decision["order_type"] = (
                                     "limit"
-                                    if _np.random.rand() < max(0.0, min(1.0, self._maker_probability))
+                                    if _np.random.rand()
+                                    < max(0.0, min(1.0, self._maker_probability))
                                     else "market"
                                 )
                             except Exception:
