@@ -142,7 +142,7 @@ class PlatformFactory:
                 or instance.get_execute_breaker() is None
             ):
                 breaker = CircuitBreaker(
-                    failure_threshold=3,
+                    failure_threshold=5,
                     recovery_timeout=60,
                     name=f"execute_trade:{platform_name}",
                 )

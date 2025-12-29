@@ -38,7 +38,7 @@ class DockerValidator:
     def validate_docker_installed(self) -> bool:
         """Check if Docker is installed."""
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ["docker", "--version"], capture_output=True, text=True, check=True
             )
             return True
@@ -62,7 +62,7 @@ class DockerValidator:
         except (FileNotFoundError, subprocess.CalledProcessError):
             # Try docker compose plugin
             try:
-                result = subprocess.run(
+                subprocess.run(
                     ["docker", "compose", "version"],
                     capture_output=True,
                     text=True,

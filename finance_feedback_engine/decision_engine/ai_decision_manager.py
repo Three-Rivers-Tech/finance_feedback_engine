@@ -138,6 +138,11 @@ class AIDecisionManager:
         bear_case = None
         judge_decision = None
 
+        # Metrics helpers (low-cardinality aggregation)
+        from finance_feedback_engine.monitoring.prometheus import (
+            increment_provider_request,
+        )
+
         # Query bull provider (bullish case)
         try:
             bull_case = await self._query_single_provider(bull_provider, prompt)
@@ -148,14 +153,17 @@ class AIDecisionManager:
                     f"Debate: {bull_provider} (bull) returned invalid response"
                 )
                 failed_debate_providers.append(bull_provider)
+                increment_provider_request(bull_provider, "failure")
                 bull_case = None
             else:
                 logger.info(
                     f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)"
                 )
+                increment_provider_request(bull_provider, "success")
         except Exception as e:
             logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
             failed_debate_providers.append(bull_provider)
+            increment_provider_request(bull_provider, "failure")
 
         # Query bear provider (bearish case)
         try:
@@ -167,14 +175,17 @@ class AIDecisionManager:
                     f"Debate: {bear_provider} (bear) returned invalid response"
                 )
                 failed_debate_providers.append(bear_provider)
+                increment_provider_request(bear_provider, "failure")
                 bear_case = None
             else:
                 logger.info(
                     f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)"
                 )
+                increment_provider_request(bear_provider, "success")
         except Exception as e:
             logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
             failed_debate_providers.append(bear_provider)
+            increment_provider_request(bear_provider, "failure")
 
         # Query judge provider (final decision)
         try:
@@ -186,14 +197,17 @@ class AIDecisionManager:
                     f"Debate: {judge_provider} (judge) returned invalid response"
                 )
                 failed_debate_providers.append(judge_provider)
+                increment_provider_request(judge_provider, "failure")
                 judge_decision = None
             else:
                 logger.info(
                     f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)"
                 )
+                increment_provider_request(judge_provider, "success")
         except Exception as e:
             logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
             failed_debate_providers.append(judge_provider)
+            increment_provider_request(judge_provider, "failure")
 
         # Error: if any debate provider failed, raise error
         if bull_case is None or bear_case is None or judge_decision is None:
@@ -315,10 +329,13 @@ class AIDecisionManager:
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
 
+        from finance_feedback_engine.monitoring.prometheus import increment_provider_request
+
         for provider, result in zip(self.ensemble_manager.enabled_providers, results):
             if isinstance(result, Exception):
                 logger.error(f"Provider {provider} failed: {result}")
                 failed_providers.append(provider)
+                increment_provider_request(provider, "failure")
             else:
                 decision = result
                 if self.ensemble_manager._is_valid_provider_response(
@@ -328,9 +345,11 @@ class AIDecisionManager:
                     logger.debug(
                         f"Provider {provider} -> {decision.get('action')} ({decision.get('confidence')}%)"
                     )
+                    increment_provider_request(provider, "success")
                 else:
                     logger.warning(f"Provider {provider} returned invalid response")
                     failed_providers.append(provider)
+                    increment_provider_request(provider, "failure")
 
         # Raise error if all providers failed
         if not provider_decisions:

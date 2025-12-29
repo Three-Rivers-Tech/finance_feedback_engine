@@ -15,6 +15,8 @@
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
 languages:
 - python
+- typescript
+- bash
 encoding: "utf-8"
 
 # whether to use the project's gitignore file to ignore files
@@ -79,3 +81,4 @@ initial_prompt: ""
 
 project_name: "finance_feedback_engine-2.0"
 included_optional_tools: []
+fixed_tools: []
