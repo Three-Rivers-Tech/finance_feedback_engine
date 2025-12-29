@@ -218,6 +218,22 @@ class Backtester:
             f"Initialized Backtester with initial balance: ${initial_balance:.2f}, leverage: {self.platform_leverage}x, timeframe: {timeframe}"
         )
 
+    def close(self):
+        """Close all resources and database connections."""
+        if self.decision_cache:
+            try:
+                self.decision_cache.close()
+                logger.debug("Decision cache closed")
+            except Exception as e:
+                logger.warning(f"Error closing decision cache: {e}")
+
+    def __del__(self):
+        """Ensure resources are cleaned up on garbage collection."""
+        try:
+            self.close()
+        except Exception:
+            pass  # Suppress errors during cleanup
+
     # ============================================
     # Enhanced Slippage & Commission Modeling (Phase 1.1)
     # ============================================
