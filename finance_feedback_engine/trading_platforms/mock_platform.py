@@ -226,8 +226,8 @@ class MockTradingPlatform(BaseTradingPlatform):
         # Calculate position size (contracts for futures)
         contracts = suggested_amount / (execution_price * self._contract_multiplier)
 
-        # Calculate fees (0.06% maker/taker average for Coinbase)
-        # Maker/taker differentiation
+        # Calculate fees (maker/taker differentiation)
+        # Default rates approximate Coinbase Advanced standard tier
         fee_rate = 0.00025 if is_maker else 0.0006
         fee_amount = suggested_amount * fee_rate
 
@@ -343,8 +343,10 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "execution_price": execution_price,
                 "notional_value": suggested_amount,
                 "fee_amount": fee_amount,
+                "fee_rate": fee_rate,
                 "slippage_pct": slippage_pct,
                 "realized_pnl": realized_pnl,
+                "order_type": order_type,
             }
             self._trade_history.append(trade_record)
 
@@ -368,9 +370,11 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "execution_price": execution_price,
                 "total_value": suggested_amount,
                 "fee_amount": fee_amount,
+                "fee_rate": fee_rate,
                 "slippage_applied": slippage_pct,
                 "latency_seconds": latency,
                 "response": trade_record,
+                "order_type": order_type,
                 "timestamp": trade_record["timestamp"],
             }
 

@@ -42,15 +42,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y redis-tools
 
+      - name: Set production target URL
+        id: set-prod-url
+        run: |
+          # Prefer repo vars, then secrets, then env; else leave empty
+          if [ -n "${{ vars.PROD_HEALTH_URL }}" ]; then
+            echo "TARGET_URL=${{ vars.PROD_HEALTH_URL }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ secrets.PROD_URL }}" ]; then
+            echo "TARGET_URL=${{ secrets.PROD_URL }}" >> "$GITHUB_ENV"
+          elif [ -n "${{ env.PROD_HEALTH_URL }}" ]; then
+            echo "TARGET_URL=${{ env.PROD_HEALTH_URL }}" >> "$GITHUB_ENV"
+          else
+            echo "TARGET_URL=" >> "$GITHUB_ENV"
+          fi
+
       - name: Check production endpoint
         id: prod-check
         continue-on-error: true
+        if: ${{ env.TARGET_URL != '' }}
         run: |
-          PROD_URL="${{ secrets.PROD_URL || 'https://api.example.com' }}"
+          echo "Checking production health: ${TARGET_URL%/}/health"
 
-          echo "Checking production health: $PROD_URL/health"
-
-          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/response.txt "$PROD_URL/health" || echo "000")
+          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/response.txt "${TARGET_URL%/}/health" || echo "000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           if [ -f /tmp/response.txt ]; then
             RESPONSE_BODY=$(cat /tmp/response.txt || true)
@@ -59,7 +72,6 @@ jobs:
           fi
 
           echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
-          # Guard against multiline output breaking set-output semantics
           printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
 
           if [ "$HTTP_CODE" != "200" ]; then
@@ -68,6 +80,11 @@ jobs:
           else
             echo "✅ Production is healthy"
           fi
+
+      - name: Skip production check (URL not configured)
+        if: ${{ env.TARGET_URL == '' }}
+        run: |
+          echo "Production health check skipped: PROD_HEALTH_URL not configured." >> $GITHUB_STEP_SUMMARY
 
       - name: Check staging endpoint
         id: staging-check
@@ -139,10 +156,10 @@ jobs:
           cat services-status.md
 
       - name: Create alert issue if unhealthy
-        if: steps.prod-check.outcome == 'failure'
+        if: env.TARGET_URL != '' && steps.prod-check.outcome == 'failure'
         uses: actions/github-script@v6
         env:
-          PROD_URL: ${{ secrets.PROD_URL }}
+          PROD_URL: ${{ env.TARGET_URL }}
           RESPONSE_BODY: ${{ steps.prod-check.outputs.response }}
         with:
           script: |
@@ -150,7 +167,7 @@ jobs:
             const responseBody = process.env.RESPONSE_BODY || '';
             const timestamp = new Date().toISOString();
 
-            const prodUrl = (process.env.PROD_URL || 'https://api.example.com').replace(/\/$/, '');
+            const prodUrl = (process.env.PROD_URL || '').replace(/\/$/, '');
             const healthUrl = `${prodUrl}/health`;
             const metricsUrl = `${prodUrl}/metrics`;
 

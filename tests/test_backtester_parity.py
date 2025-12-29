@@ -131,3 +131,107 @@ def test_mock_platform_limit_sell_uses_maker_fee():
 
     assert res["success"] is True
     assert res.get("fee_rate", 1) <= 0.0025
+
+
+def test_backtester_execute_trade_limit_vs_market_fee_and_slippage():
+    bt = Backtester(
+        FakeHistoricalProvider(),
+        initial_balance=10000.0,
+        config={
+            "features": {"enhanced_slippage_model": True},
+            "backtesting": {"slippage_model": "realistic", "fee_model": "tiered"},
+        },
+    )
+    now = datetime.utcnow()
+    # Market (taker)
+    nb_mkt, units_mkt, fee_mkt, details_mkt = bt._execute_trade(
+        current_balance=10000.0,
+        current_price=100.0,
+        action="BUY",
+        amount_to_trade=500.0,
+        direction="BUY",
+        trade_timestamp=now,
+        candle_volume=10000.0,
+        side="LONG",
+        asset_pair="BTCUSD",
+        platform_name="coinbase",
+        order_type="market",
+    )
+    # Limit (maker)
+    nb_lim, units_lim, fee_lim, details_lim = bt._execute_trade(
+        current_balance=10000.0,
+        current_price=100.0,
+        action="BUY",
+        amount_to_trade=500.0,
+        direction="BUY",
+        trade_timestamp=now,
+        candle_volume=10000.0,
+        side="LONG",
+        asset_pair="BTCUSD",
+        platform_name="coinbase",
+        order_type="limit",
+    )
+
+    assert details_mkt["order_type"] == "market"
+    assert details_lim["order_type"] == "limit"
+    # Maker fee rate should be lower than taker
+    assert details_lim.get("fee_rate", 1) < details_mkt.get("fee_rate", 0)
+    # Maker slippage should be less or equal
+    assert details_lim.get("slippage_pct", 1) <= details_mkt.get("slippage_pct", 0)
+
+
+def test_backtester_liquidation_slippage_multiplier():
+    bt = Backtester(
+        FakeHistoricalProvider(),
+        initial_balance=10000.0,
+        config={
+            "features": {"enhanced_slippage_model": True},
+            "backtesting": {"slippage_model": "realistic", "fee_model": "tiered"},
+        },
+    )
+    now = datetime.utcnow()
+    _, _, _, normal = bt._execute_trade(
+        current_balance=10000.0,
+        current_price=100.0,
+        action="SELL",
+        amount_to_trade=5.0,  # base units
+        direction="SELL",
+        trade_timestamp=now,
+        candle_volume=10000.0,
+        side="LONG",
+        asset_pair="BTCUSD",
+        platform_name="coinbase",
+        order_type="market",
+        is_liquidation=False,
+    )
+    _, _, _, liq = bt._execute_trade(
+        current_balance=10000.0,
+        current_price=100.0,
+        action="SELL",
+        amount_to_trade=5.0,
+        direction="SELL",
+        trade_timestamp=now,
+        candle_volume=10000.0,
+        side="LONG",
+        asset_pair="BTCUSD",
+        platform_name="coinbase",
+        order_type="market",
+        is_liquidation=True,
+    )
+    assert liq["slippage_pct"] > normal["slippage_pct"]
+
+
+def test_backtester_realistic_slippage_forex_vs_crypto():
+    bt = Backtester(
+        FakeHistoricalProvider(),
+        initial_balance=10000.0,
+        config={
+            "features": {"enhanced_slippage_model": True},
+            "backtesting": {"slippage_model": "realistic"},
+        },
+    )
+    ts = datetime.utcnow()
+    s_btc = bt._calculate_realistic_slippage("BTCUSD", 1000.0, ts)
+    s_eur = bt._calculate_realistic_slippage("EURUSD", 1000.0, ts)
+    # Crypto should generally have >= slippage than major FX pairs
+    assert s_btc >= s_eur
