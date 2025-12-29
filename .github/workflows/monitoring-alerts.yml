@@ -1,4 +1,5 @@
 name: Monitoring & Alerting
+enabled: false
 
 on:
   schedule:
