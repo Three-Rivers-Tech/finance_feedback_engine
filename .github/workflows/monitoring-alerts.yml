@@ -159,8 +159,8 @@ jobs:
         if: env.TARGET_URL != '' && steps.prod-check.outcome == 'failure'
         uses: actions/github-script@v6
         env:
-          PROD_URL: ${{ env.TARGET_URL }}
-          RESPONSE_BODY: ${{ steps.prod-check.outputs.response }}
+          PROD_URL: "${{ env.TARGET_URL }}"
+          RESPONSE_BODY: "${{ steps.prod-check.outputs.response }}"
         with:
           script: |
             const prodStatus = '${{ steps.prod-check.outputs.http_code }}';

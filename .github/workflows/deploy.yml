@@ -24,7 +24,6 @@ jobs:
     if: github.event_name == 'push' || github.event.inputs.environment == 'staging'
     environment:
       name: staging
-      url: http://${{ secrets.STAGING_HOST }}
 
     steps:
       - name: Checkout code
@@ -69,7 +68,6 @@ jobs:
     if: github.event.inputs.environment == 'production'
     environment:
       name: production
-      url: http://${{ secrets.PROD_HOST }}
 
     steps:
       - name: Checkout code
