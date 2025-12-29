@@ -147,37 +147,31 @@ class AgentModeBacktester(Backtester):
         self, asset_pair: str, start_date: str, end_date: str, decision_engine: Any
     ) -> Dict[str, Any]:
         """
-        Run backtest with OODA loop simulation.
-
-        Enhances standard backtest with:
-        - Retry logic for data fetching
-        - OODA frequency throttling
-        - Kill-switch monitoring
-        - Daily trade limits
-        - Strategic context
-
-        Args:
-            asset_pair: Asset to backtest
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
-            decision_engine: Decision engine instance
-
-        Returns:
-            Enhanced results dict with OODA metrics
+        Run backtest with OODA loop simulation: retries, throttling, kill-switch, and daily trade limits.
         """
+        import asyncio
+        from finance_feedback_engine.agent.config import TradingAgentConfig
+        from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+        from finance_feedback_engine.data_providers.mock_live_provider import (
+            MockLiveProvider,
+        )
+        from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+        from finance_feedback_engine.trading_platforms.mock_platform import (
+            MockTradingPlatform,
+        )
+        from finance_feedback_engine.utils.validation import standardize_asset_pair
+
         logger.info(
             f"Starting Agent Mode Backtest for {asset_pair} from {start_date} to {end_date}"
         )
         logger.info(
-            f"Agent Configuration: Goal='{self.strategic_goal}', "
-            f"Risk='{self.risk_appetite}', OODA={self.analysis_frequency_seconds}s"
+            f"Agent Configuration: Goal='{self.strategic_goal}', Risk='{self.risk_appetite}', OODA={self.analysis_frequency_seconds}s"
         )
 
         # Fetch historical data
         data = self.historical_data_provider.get_historical_data(
-            asset_pair, start_date, end_date
+            asset_pair, start_date, end_date, timeframe=self.timeframe
         )
-
         if data.empty:
             logger.error(f"No historical data available for {asset_pair}")
             return {
@@ -186,7 +180,105 @@ class AgentModeBacktester(Backtester):
                 "error": "No data available",
             }
 
-        # Initialize tracking
+        asset_pair_std = standardize_asset_pair(asset_pair)
+        initial_balance_dict = {"FUTURES_USD": self.initial_balance}
+        mock_platform = MockTradingPlatform(initial_balance=initial_balance_dict)
+        mock_provider = MockLiveProvider(
+            historical_data=data, asset_pair=asset_pair_std, start_index=0
+        )
+        mock_provider.initialize_pulse_mode(base_timeframe=self.timeframe)
+
+        # Agent config aligned to requested OODA settings
+        from ..agent.config import AutonomousAgentConfig
+        agent_config = TradingAgentConfig(
+            asset_pairs=[asset_pair_std],
+            autonomous_execution=True,
+            autonomous=AutonomousAgentConfig(enabled=True),
+            max_daily_trades=self.max_daily_trades,
+            min_confidence_threshold=0.0,
+            analysis_frequency_seconds=self.analysis_frequency_seconds,
+            max_drawdown_percent=self.max_drawdown_pct,
+            correlation_threshold=0.7,
+            max_correlated_assets=5,
+            max_var_pct=0.1,
+            var_confidence=0.95,
+            position_sizing_strategy=self.position_sizing_strategy,
+            risk_per_trade=self.risk_per_trade,
+        )
+
+        trade_monitor = TradeMonitor(
+            platform=mock_platform,
+            portfolio_memory=self.memory_engine if self.memory_engine else None,
+        )
+
+        # Backtest engine wrapper (same as parent)
+        class BacktestEngine:
+            def __init__(self, backtester, decision_engine, mock_provider, mock_platform, asset_pair, memory_engine):
+                self.backtester = backtester
+                self.decision_engine = decision_engine
+                self.mock_provider = mock_provider
+                self.mock_platform = mock_platform
+                self.asset_pair = asset_pair
+                self.memory_engine = memory_engine
+                self._decisions = {}
+
+            async def analyze_asset(self, asset_pair):
+                market_data = await self.mock_provider.get_comprehensive_market_data(
+                    asset_pair=asset_pair, include_sentiment=True
+                )
+                balance = self.mock_platform.get_balance()
+                current_balance = balance.get("FUTURES_USD", self.backtester.initial_balance)
+                # Pick an effective price
+                effective_price = market_data.get("close", None)
+                if not effective_price:
+                    effective_price = market_data.get("open", 0)
+                position_size = self.backtester._calculate_position_size(
+                    current_balance=current_balance, current_price=effective_price or 0
+                )
+                decision = await self.decision_engine.generate_decision(
+                    asset_pair=asset_pair,
+                    market_data=market_data,
+                    balance=balance,
+                    portfolio={"holdings": []},
+                    memory_context=None,
+                    monitoring_context={"active_positions": {"futures": [], "spot": []}, "slots_available": 5},
+                )
+                if decision:
+                    decision.setdefault("position_size", position_size)
+                    if "id" in decision:
+                        self._decisions[decision["id"]] = decision
+                return decision
+
+            def execute_decision(self, decision_id):
+                decision = self._decisions.get(decision_id)
+                if not decision:
+                    return {"success": False, "message": f"Decision {decision_id} not found"}
+                try:
+                    return self.mock_platform.execute_trade(decision)
+                except Exception as e:
+                    logger.error(f"Error executing decision {decision_id}: {e}")
+                    return {"success": False, "message": str(e)}
+
+            def record_trade_outcome(self, outcome):
+                if self.memory_engine:
+                    try:
+                        self.memory_engine.record_outcome(outcome)
+                    except Exception:
+                        pass
+
+        backtest_engine = BacktestEngine(
+            self, decision_engine, mock_provider, mock_platform, asset_pair_std, self.memory_engine
+        )
+        agent = TradingLoopAgent(
+            config=agent_config,
+            engine=backtest_engine,
+            trade_monitor=trade_monitor,
+            portfolio_memory=self.memory_engine if self.memory_engine else None,
+            trading_platform=mock_platform,
+        )
+        agent.is_running = True
+
+        # OODA loop with throttling, retries, kill-switch, and daily trade limits
         ooda_metrics = {
             "total_iterations": 0,
             "candles_skipped_frequency": 0,
@@ -197,27 +289,82 @@ class AgentModeBacktester(Backtester):
             "kill_switch_timestamp": None,
         }
 
-        # Note: keep this placeholder for future OODA metrics that reference initial balance
-        # (avoid unused-local flake8 error until implemented).
+        # Calculate throttle in pulses (pulse is 300s)
+        throttle_pulses = max(1, int(self.analysis_frequency_seconds // 300))
+        last_processed_pulse = -1
+        daily_trade_counts: Dict[str, int] = {}
+        peak_value = self.initial_balance
 
-        # Run parent backtest with enhanced monitoring
-        # We'll wrap the iteration to add OODA logic
+        async def run_backtest_loop():
+            nonlocal last_processed_pulse, peak_value
+            pulse_idx = 0
+            while mock_provider.advance_pulse():
+                ooda_metrics["total_iterations"] += 1
+                pulse_idx += 1
 
-        # For now, call parent's run_backtest and enhance the results
-        # TODO: Override the main iteration loop to add retry/throttling/kill-switch
+                # Frequency throttling
+                if throttle_pulses > 1 and (pulse_idx - last_processed_pulse) < throttle_pulses:
+                    ooda_metrics["candles_skipped_frequency"] += 1
+                    continue
 
-        logger.warning(
-            "Agent Mode Backtester is partially implemented. "
-            "Full OODA loop simulation requires deeper integration. "
-            "Running standard backtest with agent configuration awareness."
-        )
+                # Simulate retry on data fetch
+                max_attempts = 3
+                attempt = 0
+                pulse_data = None
+                while attempt < max_attempts:
+                    try:
+                        # Wrap actual fetch with simulated failure
+                        raw_pulse = await mock_provider.get_pulse_data()
+                        pulse_data = self._simulate_data_fetch(raw_pulse, attempt=attempt)
+                        break
+                    except SimulatedDataFetchError as e:
+                        ooda_metrics["retry_events"].append({"attempt": attempt + 1, "error": str(e)})
+                        await asyncio.sleep(0.2 * (2 ** attempt))
+                        attempt += 1
+                    except Exception as e:
+                        logger.warning(f"Pulse fetch error: {e}")
+                        break
 
-        # Call parent backtest
-        results = super().run_backtest(
-            asset_pair, start_date, end_date, decision_engine
-        )
+                if pulse_data is None:
+                    # Could not fetch data; skip this pulse
+                    continue
 
-        # Add OODA metrics to results
+                # Daily trade limit check
+                current_candle = mock_provider.get_current_candle()
+                day_key = str(current_candle.get("date", "unknown"))[:10]
+                trades_before = len(mock_platform.get_trade_history())
+                # Process one agent cycle if under limit
+                if daily_trade_counts.get(day_key, 0) >= self.max_daily_trades:
+                    ooda_metrics["candles_skipped_daily_limit"] += 1
+                    continue
+
+                cycle_result = await agent.process_cycle()
+                trades_after = len(mock_platform.get_trade_history())
+                if trades_after > trades_before:
+                    daily_trade_counts[day_key] = daily_trade_counts.get(day_key, 0) + (trades_after - trades_before)
+
+                # Update peak and check kill-switch based on portfolio value
+                try:
+                    portfolio = mock_platform.get_portfolio_breakdown()
+                    current_value = float(portfolio.get("total_value_usd", self.initial_balance))
+                except Exception:
+                    current_value = self.initial_balance
+
+                peak_value = max(peak_value, current_value)
+                ks_reason = self._check_kill_switch(current_value, self.initial_balance, peak_value)
+                if ks_reason:
+                    ooda_metrics["kill_switch_triggered"] = True
+                    ooda_metrics["kill_switch_reason"] = ks_reason
+                    ooda_metrics["kill_switch_timestamp"] = current_candle.get("date")
+                    logger.warning(f"Kill-switch triggered: {ks_reason}")
+                    break
+
+                last_processed_pulse = pulse_idx
+
+        asyncio.run(run_backtest_loop())
+
+        # Compute results via parent's reporting (reuse metrics computation on platform state)
+        results = super().run_backtest(asset_pair, start_date, end_date, decision_engine)
         results["ooda_metrics"] = ooda_metrics
         results["agent_config"] = {
             "strategic_goal": self.strategic_goal,
@@ -230,7 +377,6 @@ class AgentModeBacktester(Backtester):
         }
 
         logger.info(f"Agent Mode Backtest complete for {asset_pair}")
-
         return results
 
 

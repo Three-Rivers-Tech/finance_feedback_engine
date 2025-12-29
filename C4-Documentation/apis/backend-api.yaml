@@ -1,0 +1,481 @@
+openapi: 3.1.0
+info:
+  title: Finance Feedback Engine Backend API
+  description: |
+    AI-powered trading decision engine with autonomous agent capabilities.
+
+    This API provides access to:
+    - Trading decision generation using ensemble AI providers
+    - Autonomous trading agent control and monitoring
+    - Portfolio status and performance tracking
+    - Real-time health and metrics endpoints
+    - Telegram webhook integration for notifications
+  version: 1.0.0
+  contact:
+    name: Finance Feedback Engine Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+  - url: http://backend:8000
+    description: Docker container (internal)
+  - url: https://api.finance-feedback-engine.example.com
+    description: Production server
+
+tags:
+  - name: health
+    description: Health check and readiness probes
+  - name: decisions
+    description: Trading decision generation and retrieval
+  - name: bot-control
+    description: Autonomous trading agent control
+  - name: status
+    description: Portfolio and system status
+  - name: metrics
+    description: Prometheus metrics exposition
+  - name: telegram
+    description: Telegram webhook integration
+  - name: optimization
+    description: Portfolio optimization and analysis
+
+paths:
+  /:
+    get:
+      summary: API root endpoint
+      description: Returns API information and available endpoints
+      tags:
+        - health
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: Finance Feedback Engine API
+                  version:
+                    type: string
+                    example: 1.0.0
+                  docs:
+                    type: string
+                    example: /docs
+                  health:
+                    type: string
+                    example: /health
+                  metrics:
+                    type: string
+                    example: /metrics
+
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns application health status including uptime, circuit breaker states, and portfolio information
+      tags:
+        - health
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /ready:
+    get:
+      summary: Readiness probe
+      description: Kubernetes readiness probe - checks if application is ready to serve requests
+      tags:
+        - health
+      responses:
+        '200':
+          description: Application is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: true
+                  timestamp:
+                    type: string
+                    format: date-time
+        '503':
+          description: Application is not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready:
+                    type: boolean
+                    example: false
+                  reason:
+                    type: string
+
+  /live:
+    get:
+      summary: Liveness probe
+      description: Kubernetes liveness probe - checks if application is alive
+      tags:
+        - health
+      responses:
+        '200':
+          description: Application is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alive:
+                    type: boolean
+                    example: true
+
+  /metrics:
+    get:
+      summary: Prometheus metrics endpoint
+      description: Returns metrics in Prometheus text exposition format
+      tags:
+        - metrics
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+              example: |
+                # HELP ffe_decisions_total Total number of trading decisions
+                # TYPE ffe_decisions_total counter
+                ffe_decisions_total{action="BUY"} 42
+                ffe_decisions_total{action="SELL"} 38
+
+  /api/v1/decisions:
+    post:
+      summary: Create trading decision
+      description: Trigger a new trading decision analysis for a specific asset pair
+      tags:
+        - decisions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+      responses:
+        '200':
+          description: Decision created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecisionResponse'
+        '500':
+          description: Decision generation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List recent decisions
+      description: Retrieve recent trading decisions with pagination
+      tags:
+        - decisions
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of decisions to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: List of decisions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decisions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Decision'
+                  count:
+                    type: integer
+
+  /api/v1/status:
+    get:
+      summary: Get portfolio status
+      description: Retrieve portfolio balance, active positions, and platform information
+      tags:
+        - status
+      responses:
+        '200':
+          description: Portfolio status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortfolioStatus'
+
+  /api/bot/start:
+    post:
+      summary: Start trading agent
+      description: Start the autonomous trading agent OODA loop
+      tags:
+        - bot-control
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                watchlist:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional asset watchlist override
+      responses:
+        '200':
+          description: Agent started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: started
+                  message:
+                    type: string
+
+  /api/bot/stop:
+    post:
+      summary: Stop trading agent
+      description: Gracefully stop the autonomous trading agent
+      tags:
+        - bot-control
+      responses:
+        '200':
+          description: Agent stopped successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: stopped
+
+  /api/bot/status:
+    get:
+      summary: Get agent status
+      description: Retrieve current agent status, metrics, and active trades
+      tags:
+        - bot-control
+      responses:
+        '200':
+          description: Agent status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentStatus'
+
+  /webhook/telegram:
+    post:
+      summary: Telegram webhook
+      description: Receives updates from Telegram Bot API for approval requests
+      tags:
+        - telegram
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Telegram Update object
+      responses:
+        '200':
+          description: Webhook processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+        '503':
+          description: Telegram bot not initialized
+
+components:
+  schemas:
+    AnalysisRequest:
+      type: object
+      required:
+        - asset_pair
+      properties:
+        asset_pair:
+          type: string
+          description: Trading pair symbol (e.g., BTC-USD, EUR-USD)
+          example: BTC-USD
+        provider:
+          type: string
+          description: AI provider to use
+          default: ensemble
+          enum:
+            - ensemble
+            - claude
+            - openai
+            - gemini
+            - ollama
+        include_sentiment:
+          type: boolean
+          description: Include sentiment analysis
+          default: true
+        include_macro:
+          type: boolean
+          description: Include macro analysis
+          default: true
+
+    DecisionResponse:
+      type: object
+      required:
+        - decision_id
+        - asset_pair
+        - action
+        - confidence
+        - reasoning
+      properties:
+        decision_id:
+          type: string
+          format: uuid
+          description: Unique decision identifier
+        asset_pair:
+          type: string
+          description: Trading pair symbol
+        action:
+          type: string
+          enum:
+            - BUY
+            - SELL
+            - HOLD
+          description: Recommended action
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Decision confidence percentage
+        reasoning:
+          type: string
+          description: AI-generated reasoning for the decision
+
+    Decision:
+      type: object
+      properties:
+        decision_id:
+          type: string
+        asset_pair:
+          type: string
+        action:
+          type: string
+        confidence:
+          type: integer
+        reasoning:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        provider:
+          type: string
+
+    PortfolioStatus:
+      type: object
+      properties:
+        balance:
+          type: object
+          properties:
+            total:
+              type: number
+              format: double
+            available:
+              type: number
+              format: double
+            currency:
+              type: string
+        active_positions:
+          type: integer
+          description: Number of active trades
+        max_concurrent_trades:
+          type: integer
+          description: Maximum allowed concurrent trades
+        platform:
+          type: string
+          description: Trading platform name
+
+    AgentStatus:
+      type: object
+      properties:
+        is_running:
+          type: boolean
+        uptime_seconds:
+          type: number
+        current_phase:
+          type: string
+          enum:
+            - observe
+            - orient
+            - decide
+            - act
+            - idle
+        active_trades:
+          type: integer
+        daily_trade_count:
+          type: integer
+        watchlist:
+          type: array
+          items:
+            type: string
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+        uptime_seconds:
+          type: number
+        circuit_breakers:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - closed
+              - open
+              - half_open
+        components:
+          type: object
+          additionalProperties:
+            type: object
+
+    Error:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Error message
+        reference_id:
+          type: string
+          format: uuid
+          description: Error reference ID for tracking

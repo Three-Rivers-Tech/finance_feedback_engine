@@ -37,6 +37,7 @@ class MonteCarloSimulator:
         decision_engine,
         num_simulations: int = 1000,
         price_noise_std: float = 0.001,
+        seed: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Run Monte Carlo simulation with price perturbations.
@@ -58,32 +59,56 @@ class MonteCarloSimulator:
             f"noise std={price_noise_std}"
         )
 
-        # Note: Full implementation would require modifying backtester to accept
-        # perturbed prices. For now, provide scaffold.
+        # Prepare RNG
+        rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
 
-        logger.warning(
-            "Monte Carlo simulation is partially implemented. "
-            "Full price perturbation requires deeper backtester integration. "
-            "Returning placeholder results."
+        # Base data
+        base_df = backtester.historical_data_provider.get_historical_data(
+            asset_pair, start_date, end_date, timeframe=backtester.timeframe
         )
+        if base_df is None or base_df.empty:
+            logger.warning("No historical data for Monte Carlo; returning empty results")
+            return {
+                "num_simulations": 0,
+                "percentiles": {},
+                "statistics": {},
+                "note": "No data available",
+            }
 
-        # Placeholder: Run base backtest
+        # Run baseline backtest
         base_results = backtester.run_backtest(
             asset_pair, start_date, end_date, decision_engine
         )
-
-        base_final_balance = base_results["metrics"].get(
+        base_final_balance = base_results.get("metrics", {}).get(
             "final_balance", backtester.initial_balance
         )
 
-        # Simulate variations (placeholder - would need actual price perturbations)
-        simulated_balances = []
+        # Perturb price paths and re-run backtests per scenario
+        simulated_balances: List[float] = []
         for i in range(num_simulations):
-            # In full implementation, would perturb prices and re-run
-            # For now, add Gaussian noise to base result
-            noise = np.random.normal(0, price_noise_std * base_final_balance)
-            simulated_balance = base_final_balance + noise
-            simulated_balances.append(simulated_balance)
+            df = base_df.copy()
+            try:
+                # Apply multiplicative noise to OHLC columns
+                for col in ["open", "high", "low", "close"]:
+                    if col in df.columns:
+                        eps = rng.normal(0.0, price_noise_std, size=len(df))
+                        df[col] = df[col] * (1.0 + eps)
+                # Ensure non-negative prices
+                for col in ["open", "high", "low", "close"]:
+                    if col in df.columns:
+                        df[col] = df[col].clip(lower=0.01)
+            except Exception as e:
+                logger.debug(f"Price perturbation failed on simulation {i}: {e}")
+                df = base_df
+
+            # Run backtest with data override
+            sim_results = backtester.run_backtest(
+                asset_pair, start_date, end_date, decision_engine, data_override=df
+            )
+            sim_balance = sim_results.get("metrics", {}).get(
+                "final_balance", backtester.initial_balance
+            )
+            simulated_balances.append(sim_balance)
 
         # Calculate statistics
         percentiles = np.percentile(simulated_balances, [5, 25, 50, 75, 95])
@@ -108,7 +133,7 @@ class MonteCarloSimulator:
                 "best_case": max(simulated_balances),
                 "std_dev": np.std(simulated_balances),
             },
-            "note": "Partial implementation - full price perturbation pending",
+            "note": "Price-path perturbation Monte Carlo",
         }
 
 

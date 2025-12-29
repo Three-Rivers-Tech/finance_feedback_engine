@@ -252,6 +252,16 @@ class Backtester:
         features = self.config.get("features", {})
         return features.get("enhanced_slippage_model", False)
 
+    def _get_slippage_model(self) -> str:
+        """Return configured slippage model (basic|realistic)."""
+        return (
+            self.config.get("backtesting", {}).get("slippage_model", "basic")
+        ).lower()
+
+    def _get_fee_model(self) -> str:
+        """Return configured fee model (simple|tiered)."""
+        return self.config.get("backtesting", {}).get("fee_model", "simple").lower()
+
     def _calculate_realistic_slippage(
         self, asset_pair: str, size: float, timestamp: datetime
     ) -> float:
@@ -411,6 +421,9 @@ class Backtester:
         is_liquidation: bool = False,  # True if forced liquidation
         next_candle_open: Optional[float] = None,  # For latency simulation
         candle_duration_seconds: float = 86400.0,  # Duration of candle in seconds (default: 1 day)
+        asset_pair: str = "BTCUSD",  # Used for realistic slippage models
+        platform_name: str = "default",  # Used for tiered fee modeling
+        order_type: str = "market",  # market|limit|stop; limit assumed maker
     ) -> Tuple[
         float, float, float, Dict[str, Any]
     ]:  # new_balance, units, fee, trade_details
@@ -431,10 +444,21 @@ class Backtester:
                 f"Latency {latency_seconds:.2f}s pushed fill into next candle (duration: {candle_duration_seconds:.0f}s), using open price {fill_price:.2f}"
             )
 
-        # Calculate volume-based dynamic slippage
-        base_slippage = self.slippage_percentage
-        volume_slippage = 0.0
+        # Determine slippage/fee models
+        enhanced_slippage = self._is_enhanced_slippage_enabled()
+        slippage_model = self._get_slippage_model()
+        fee_model = self._get_fee_model()
+        order_type_lower = order_type.lower()
 
+        # Calculate volume-based dynamic slippage
+        if enhanced_slippage and slippage_model == "realistic":
+            base_slippage = self._calculate_realistic_slippage(
+                asset_pair=asset_pair, size=abs(amount_to_trade), timestamp=trade_timestamp
+            )
+        else:
+            base_slippage = self.slippage_percentage
+
+        volume_slippage = 0.0
         if candle_volume > 0:
             order_size_usd = (
                 amount_to_trade
@@ -448,6 +472,10 @@ class Backtester:
             volume_slippage = min(volume_impact, 0.05)  # Cap at 5% max slippage
 
         total_slippage = base_slippage + volume_slippage
+
+        # Limit orders (maker) typically see lower slippage
+        if order_type_lower == "limit":
+            total_slippage *= 0.5
 
         # Apply 3x slippage multiplier for forced liquidations
         if is_liquidation:
@@ -466,6 +494,7 @@ class Backtester:
         units_traded = 0.0
         trade_value = 0.0
         fee = 0.0
+        fee_rate = self.fee_percentage
 
         if direction == "BUY":
             # BUY: Opens LONG or closes SHORT position
@@ -491,7 +520,11 @@ class Backtester:
                 units_traded = abs(
                     units_traded
                 )  # Positive units to close negative SHORT position
-            fee = (trade_value * self.fee_percentage) + self.commission_per_trade
+            if fee_model == "tiered":
+                fee_rate = self._calculate_fees(
+                    platform=platform_name, size=trade_value, is_maker=order_type_lower == "limit"
+                )
+            fee = (trade_value * fee_rate) + self.commission_per_trade
             new_balance = current_balance - trade_value - fee
         elif direction == "SELL":
             # SELL: Opens SHORT or closes LONG position
@@ -503,7 +536,11 @@ class Backtester:
             else:
                 # Closing LONG position - units are negative (selling)
                 units_traded = -amount_to_trade
-            fee = (trade_value * self.fee_percentage) + self.commission_per_trade
+            if fee_model == "tiered":
+                fee_rate = self._calculate_fees(
+                    platform=platform_name, size=trade_value, is_maker=order_type_lower == "limit"
+                )
+            fee = (trade_value * fee_rate) + self.commission_per_trade
             new_balance = current_balance + trade_value - fee
         else:
             return (
@@ -522,7 +559,10 @@ class Backtester:
             "units_traded": units_traded,
             "trade_value": trade_value,
             "fee": fee,
+            "fee_rate": fee_rate,
             "slippage_pct": total_slippage * 100,
+            "slippage_model": slippage_model,
+            "order_type": order_type_lower,
             "latency_seconds": latency_seconds,
             "is_liquidation": is_liquidation,
             "status": "EXECUTED",
@@ -816,6 +856,7 @@ class Backtester:
         start_date: Union[str, datetime],
         end_date: Union[str, datetime],
         decision_engine: DecisionEngine,
+        data_override: Optional["pd.DataFrame"] = None,
     ) -> Dict[str, Any]:
         """
         Runs a backtest for a given asset, date range, and strategy using TradingLoopAgent.
@@ -852,10 +893,13 @@ class Backtester:
             f"Starting backtest for {asset_pair} from {start_date} to {end_date} with timeframe={self.timeframe}..."
         )
 
-        # 1. Fetch historical data with the configured timeframe
-        data = self.historical_data_provider.get_historical_data(
-            asset_pair, start_date, end_date, timeframe=self.timeframe
-        )
+        # 1. Fetch historical data with the configured timeframe (or use override)
+        if data_override is not None:
+            data = data_override.copy()
+        else:
+            data = self.historical_data_provider.get_historical_data(
+                asset_pair, start_date, end_date, timeframe=self.timeframe
+            )
         if data.empty:
             logger.error(f"No historical data available for backtest for {asset_pair}.")
             return {"metrics": {"net_return_pct": 0, "total_trades": 0}, "trades": []}

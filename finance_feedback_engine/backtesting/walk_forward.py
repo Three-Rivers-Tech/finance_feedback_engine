@@ -113,6 +113,20 @@ class WalkForwardAnalyzer:
             f"train={train_window_days}d, test={test_window_days}d, step={step_days}d"
         )
 
+        # Basic date validation to prevent invalid ranges and lookahead bias
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+            if start_dt >= end_dt:
+                return {
+                    "error": "Invalid date range: start_date must be before end_date",
+                    "windows": [],
+                    "aggregate_test_performance": {},
+                }
+        except Exception:
+            # Defer detailed parsing errors to downstream handlers
+            pass
+
         # Check if backtester has memory engine
         if not hasattr(backtester, "memory_engine") or backtester.memory_engine is None:
             logger.warning(
@@ -290,9 +304,9 @@ class WalkForwardAnalyzer:
             "windows": window_results,
             "num_windows": len(window_results),
             "aggregate_test_performance": {
-                "avg_sharpe_ratio": avg_test_sharpe,
-                "avg_return_pct": avg_test_return,
-                "avg_win_rate_pct": avg_test_win_rate,
+                "avg_test_sharpe": avg_test_sharpe,
+                "avg_test_return_pct": avg_test_return,
+                "avg_test_win_rate_pct": avg_test_win_rate,
             },
             "overfitting_analysis": {
                 "avg_test_train_ratio": avg_test_train_ratio,

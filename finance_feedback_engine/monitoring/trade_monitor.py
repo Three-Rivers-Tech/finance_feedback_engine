@@ -342,6 +342,14 @@ class TradeMonitor:
         """Query platform for open positions and detect new trades."""
         try:
             portfolio = self.platform.get_portfolio_breakdown()
+            # Emit aggregated portfolio value gauge for Grafana
+            try:
+                total_value = float(portfolio.get("total_value_usd", 0.0) or 0.0)
+                from .prometheus import update_portfolio_value
+
+                update_portfolio_value(platform="unified", value_dollars=total_value)
+            except Exception:
+                pass
         except ValueError as e:
             # Credential/configuration errors (e.g., invalid PEM file, missing API keys)
             if (
@@ -434,6 +442,12 @@ class TradeMonitor:
         for trade_id in completed:
             tracker = self.active_trackers.pop(trade_id)
             logger.info(f"Cleaned up completed tracker: {trade_id}")
+            # Refresh active trades gauge after cleanup
+            try:
+                from .prometheus import update_active_trades
+                update_active_trades(platform="unified", count=len(self.active_trackers))
+            except Exception:
+                pass
 
     def _process_pending_trades(self):
         """Start tracking pending trades if slots available."""
@@ -466,6 +480,13 @@ class TradeMonitor:
                     f"Active trackers: {len(self.active_trackers)}/{self.MAX_CONCURRENT_TRADES}"
                 )
 
+                # Update aggregated active trades gauge (low cardinality)
+                try:
+                    from .prometheus import update_active_trades
+                    update_active_trades(platform="unified", count=len(self.active_trackers))
+                except Exception:
+                    pass
+
             except Empty:
                 # No pending trades
                 break
@@ -489,6 +510,18 @@ class TradeMonitor:
 
         # Record metrics for long-term analysis
         self.metrics_collector.record_trade_metrics(metrics)
+
+        # Update aggregated P&L distribution for Grafana dashboards and active trades gauge
+        try:
+            from .prometheus import update_trade_pnl_trade, update_active_trades
+
+            product_id = metrics.get("product_id", "UNKNOWN")
+            asset_pair = product_id.replace("-", "").upper()
+            pnl = float(metrics.get("realized_pnl", 0.0))
+            update_trade_pnl_trade(asset_pair=asset_pair, trade_id=trade_id, pnl_dollars=pnl)
+            update_active_trades(platform="unified", count=len(self.active_trackers))
+        except Exception:
+            pass
 
         # Put the completed trade metrics into a queue for the agent to process
         self.closed_trades_queue.put(metrics)
