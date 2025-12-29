@@ -983,6 +983,15 @@ class Backtester:
                 self.asset_pair = asset_pair
                 self.memory_engine = memory_engine
                 self._decisions = {}  # Store decisions by ID
+                # Order type policy for backtests
+                bt_cfg = backtester.config or {}
+                bt_backtesting = bt_cfg.get("backtesting", {}) if isinstance(bt_cfg, dict) else {}
+                self._order_type_policy = (bt_backtesting.get("order_type") or "market").lower()
+                # Probability to place maker (limit) orders when policy is 'auto'
+                try:
+                    self._maker_probability = float(bt_backtesting.get("maker_probability", 0.0))
+                except Exception:
+                    self._maker_probability = 0.0
 
             async def analyze_asset(self, asset_pair):
                 """Generate a decision using the decision engine and current mock data."""
@@ -1053,6 +1062,26 @@ class Backtester:
                         decision["position_size"] = min(
                             decision["position_size"], position_size
                         )
+
+                    # Inject order_type if not provided by providers
+                    if "order_type" not in decision:
+                        policy = self._order_type_policy
+                        if policy == "limit":
+                            decision["order_type"] = "limit"
+                        elif policy == "market":
+                            decision["order_type"] = "market"
+                        elif policy == "auto":
+                            # Simple policy: place limit (maker) with configured probability
+                            try:
+                                import numpy as _np  # local import to avoid global dependency at import time
+
+                                decision["order_type"] = (
+                                    "limit"
+                                    if _np.random.rand() < max(0.0, min(1.0, self._maker_probability))
+                                    else "market"
+                                )
+                            except Exception:
+                                decision["order_type"] = "market"
 
                     # Store decision for later execution
                     if "id" in decision:

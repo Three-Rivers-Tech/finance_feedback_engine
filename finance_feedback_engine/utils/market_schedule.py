@@ -30,7 +30,8 @@ class MarketSchedule:
             asset_type: One of "crypto", "forex", or "stocks" (case-insensitive).
             now_utc: Optional timezone-aware UTC datetime for testing/overrides.
         """
-        now_utc = now_utc or _dt.datetime.utcnow().replace(tzinfo=pytz.UTC)
+        # Use timezone-aware UTC by default to avoid deprecation warnings
+        now_utc = now_utc or _dt.datetime.now(_dt.UTC)
         if now_utc.tzinfo is None:
             now_utc = now_utc.replace(tzinfo=pytz.UTC)
         asset_kind = (asset_type or "crypto").lower()

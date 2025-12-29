@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -51,7 +51,7 @@ class MonitoringContextProvider:
     ) -> Dict[str, Any]:
         """Async variant of get_monitoring_context to avoid blocking the event loop."""
         context = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "has_monitoring_data": False,
             "active_positions": {"futures": []},
             "active_trades_count": 0,
@@ -128,7 +128,7 @@ class MonitoringContextProvider:
             - position_concentration: Asset allocation breakdown
         """
         context = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "has_monitoring_data": False,
             "active_positions": {"futures": []},
             "active_trades_count": 0,
@@ -333,7 +333,7 @@ class MonitoringContextProvider:
             if not metrics_dir.exists():
                 return {}
 
-            cutoff_time = datetime.utcnow() - timedelta(hours=lookback_hours)
+            cutoff_time = datetime.now(UTC) - timedelta(hours=lookback_hours)
             recent_trades = []
 
             for metric_file in metrics_dir.glob("trade_*.json"):
