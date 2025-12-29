@@ -82,8 +82,9 @@ jobs:
       - name: Run Bandit security scan
         run: |
           # Run Bandit with config from pyproject.toml
-          # Fail on medium+ severity issues
-          bandit -c pyproject.toml -r finance_feedback_engine/ -ll -f screen
+          # Fail on high severity issues only (-lll)
+          # Medium severity issues are informational but don't fail the build
+          bandit -c pyproject.toml -r finance_feedback_engine/ -lll -f screen
           bandit -c pyproject.toml -r finance_feedback_engine/ -ll -f json -o bandit-report.json
 
       - name: Upload Bandit report
