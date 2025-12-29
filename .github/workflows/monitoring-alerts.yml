@@ -99,10 +99,21 @@ jobs:
       - name: Create alert issue if unhealthy
         if: steps.prod-check.outcome == 'failure'
         uses: actions/github-script@v6
+        env:
+          PROD_URL: ${{ secrets.PROD_URL }}
         with:
           script: |
             const prodStatus = '${{ steps.prod-check.outputs.http_code }}';
+            const responseBody = `${{ steps.prod-check.outputs.response }}`;
             const timestamp = new Date().toISOString();
+
+            const prodUrl = (process.env.PROD_URL || 'https://api.example.com').replace(/\/$/, '');
+            const healthUrl = `${prodUrl}/health`;
+            const metricsUrl = `${prodUrl}/metrics`;
+
+            const truncatedResponse = (responseBody || '').length > 2000
+              ? (responseBody || '').slice(0, 2000) + '\n…(truncated)'
+              : (responseBody || '');
 
             const body = `## 🚨 Production Health Check Failed
 
@@ -114,6 +125,15 @@ jobs:
             - Health check endpoint returned non-200 status
             - Automated monitoring detected the issue
             - Immediate investigation required
+
+            ### Endpoints
+            - Health: ${healthUrl}
+            - Metrics: ${metricsUrl}
+
+            ### Response Snapshot
+            \n\n\`\`\`
+            ${truncatedResponse}
+            \`\`\`
 
             ### Actions Required
             1. Check production logs
@@ -134,7 +154,7 @@ jobs:
               repo: context.repo.repo,
               title: `🚨 Production Health Check Failed - ${timestamp}`,
               body: body,
-              labels: ['alert', 'production', 'critical', 'automated']
+              labels: ['alert', 'production', 'critical', 'automated', 'observability']
             });
 
   # ===========================================================================
@@ -203,9 +223,10 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { data: advisories } = await github.rest.repos.listVulnerabilityAlerts({
+            const { data: advisories } = await github.rest.dependabot.listAlertsForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
+              state: 'open'
             });
 
             if (advisories && advisories.length > 0) {
@@ -416,6 +437,20 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            // Dedupe: if any open issue already references this workflow run, do not create another.
+            const runMarker = `actions/runs/${context.runId}`;
+            const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:body "${runMarker}" label:automated`;
+
+            const { data: existing } = await github.rest.search.issuesAndPullRequests({
+              q,
+              per_page: 1,
+            });
+
+            if (existing.total_count && existing.total_count > 0) {
+              console.log(`Found existing issue referencing ${runMarker}; skipping incident creation.`);
+              return;
+            }
+
             const timestamp = new Date().toISOString();
 
             await github.rest.issues.create({
