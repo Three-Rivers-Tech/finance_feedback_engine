@@ -18,7 +18,7 @@ permissions:
   issues: write
 
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   # =============================================================================
@@ -140,7 +140,7 @@ jobs:
           echo "- Code Security: ${{ needs.code-security.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Secret Detection: ${{ needs.secret-scan.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.dependency-scan.result }}" != "success" ] || \
              [ "${{ needs.code-security.result }}" != "success" ] || \
              [ "${{ needs.secret-scan.result }}" != "success" ]; then
@@ -155,7 +155,7 @@ jobs:
               echo "  - Secret Detection scan did not succeed (result: ${{ needs.secret-scan.result }})" >> $GITHUB_STEP_SUMMARY
             fi
             echo "" >> $GITHUB_STEP_SUMMARY
-            
+
             # Provide detailed output about which scans failed
             if [ "${{ needs.dependency-scan.result }}" != "success" ]; then
               echo "  - ❌ Dependency Vulnerabilities scan failed (status: ${{ needs.dependency-scan.result }})" >> $GITHUB_STEP_SUMMARY
@@ -166,8 +166,8 @@ jobs:
             if [ "${{ needs.secret-scan.result }}" != "success" ]; then
               echo "  - ❌ Secret Detection scan failed (status: ${{ needs.secret-scan.result }})" >> $GITHUB_STEP_SUMMARY
             fi
-            
+
             exit 1
           fi
-          
+
           echo "✅ All security scans passed" >> $GITHUB_STEP_SUMMARY
