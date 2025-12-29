@@ -102,7 +102,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             )
             if cb is None:
                 cb = CircuitBreaker(
-                    failure_threshold=3,
+                    failure_threshold=5,
                     recovery_timeout=60,
                     name=f"execute_trade:{target_platform.__class__.__name__.lower()}",
                 )
@@ -112,7 +112,24 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     setattr(target_platform, "_execute_breaker", cb)
 
             # Use breaker for sync execution path
-            return cb.call_sync(target_platform.execute_trade, decision)
+            result = cb.call_sync(target_platform.execute_trade, decision)
+            # Emit circuit breaker state metric (low cardinality)
+            try:
+                from finance_feedback_engine.monitoring.prometheus import update_circuit_breaker_state
+                from finance_feedback_engine.utils.circuit_breaker import CircuitState
+
+                state_map = {
+                    CircuitState.CLOSED.value: 0,
+                    CircuitState.OPEN.value: 1,
+                    CircuitState.HALF_OPEN.value: 2,
+                }
+                update_circuit_breaker_state(
+                    service=target_platform.__class__.__name__.lower(),
+                    state=state_map.get(cb.state.value, 0),
+                )
+            except Exception:
+                pass
+            return result
         else:
             logger.error("No suitable platform found for asset pair: %s", asset_pair)
             return {

@@ -82,7 +82,7 @@ class MockTradingPlatform(BaseTradingPlatform):
             self._slippage_config.get("rate", 0) * 100,
         )
 
-    def _apply_slippage(self, price: float, action: str) -> float:
+    def _apply_slippage(self, price: float, action: str, order_type: str = "market") -> float:
         """
         Apply slippage to execution price.
 
@@ -97,19 +97,24 @@ class MockTradingPlatform(BaseTradingPlatform):
         slippage_rate = self._slippage_config.get("rate", 0.001)
         spread = self._slippage_config.get("spread", 0.0005)
 
+        is_limit = str(order_type).lower() == "limit"
+
         if slippage_type == "percentage":
             # BUY: pay more (slippage + spread)
             # SELL: receive less (slippage + spread)
+            # Limit orders (maker) use half slippage + spread to reflect maker rebates/queueing
+            maker_multiplier = 0.5 if is_limit else 1.0
             if action == "BUY":
-                adjusted_price = price * (1 + slippage_rate + spread)
+                adjusted_price = price * (1 + (slippage_rate * maker_multiplier) + spread)
             else:
-                adjusted_price = price * (1 - slippage_rate - spread)
+                adjusted_price = price * (1 - (slippage_rate * maker_multiplier) - spread)
         else:
             # Fixed slippage
+            maker_multiplier = 0.5 if is_limit else 1.0
             if action == "BUY":
-                adjusted_price = price + slippage_rate + spread
+                adjusted_price = price + (slippage_rate * maker_multiplier) + spread
             else:
-                adjusted_price = price - slippage_rate - spread
+                adjusted_price = price - (slippage_rate * maker_multiplier) - spread
 
         return max(adjusted_price, 0.01)  # Prevent negative prices
 

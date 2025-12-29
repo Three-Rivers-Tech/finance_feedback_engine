@@ -36,6 +36,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install redis-cli (redis-tools)
+        if: ${{ secrets.REDIS_URL != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+
       - name: Check production endpoint
         id: prod-check
         continue-on-error: true
@@ -44,12 +50,17 @@ jobs:
 
           echo "Checking production health: $PROD_URL/health"
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/response.txt $PROD_URL/health || echo "000")
+          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/response.txt "$PROD_URL/health" || echo "000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          RESPONSE_BODY=$(cat /tmp/response.txt)
+          if [ -f /tmp/response.txt ]; then
+            RESPONSE_BODY=$(cat /tmp/response.txt || true)
+          else
+            RESPONSE_BODY=""
+          fi
 
-          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
-          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          # Guard against multiline output breaking set-output semantics
+          printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
 
           if [ "$HTTP_CODE" != "200" ]; then
             echo "❌ Production health check failed: HTTP $HTTP_CODE"
@@ -66,18 +77,49 @@ jobs:
 
           echo "Checking staging health: $STAGING_URL/health"
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/staging_response.txt $STAGING_URL/health || echo "000")
+          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/staging_response.txt "$STAGING_URL/health" || echo "000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          RESPONSE_BODY=$(cat /tmp/staging_response.txt)
+          if [ -f /tmp/staging_response.txt ]; then
+            RESPONSE_BODY=$(cat /tmp/staging_response.txt || true)
+          else
+            RESPONSE_BODY=""
+          fi
 
-          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
-          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
 
           if [ "$HTTP_CODE" != "200" ]; then
             echo "⚠️ Staging health check failed: HTTP $HTTP_CODE"
           else
             echo "✅ Staging is healthy"
           fi
+
+      - name: Create alert issue if staging unhealthy
+        if: steps.staging-check.outputs.http_code != '200'
+        uses: actions/github-script@v6
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          STAGING_RESPONSE_BODY: ${{ steps.staging-check.outputs.response }}
+        with:
+          script: |
+            const status = '${{ steps.staging-check.outputs.http_code }}';
+            const responseBody = process.env.STAGING_RESPONSE_BODY || '';
+            const timestamp = new Date().toISOString();
+
+            const stagingUrl = (process.env.STAGING_URL || 'https://staging.example.com').replace(/\/$/, '');
+            const healthUrl = `${stagingUrl}/health`;
+
+            const truncated = responseBody.length > 2000 ? responseBody.slice(0, 2000) + '\n…(truncated)' : responseBody;
+
+            const body = `## ⚠️ Staging Health Check Failed\n\n**Timestamp:** ${timestamp}\n**HTTP Status:** ${status}\n**Environment:** Staging\n\n### Details\n- Health check endpoint returned non-200 status\n- Investigation recommended\n\n### Endpoint\n- Health: ${healthUrl}\n\n### Response Snapshot\n\n${truncated}\n\n---\n*Automated monitoring alert*`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Staging Health Check Failed - ${timestamp}`,
+              body,
+              labels: ['alert', 'staging', 'observability', 'automated']
+            });
 
       - name: Check critical services
         id: services-check
@@ -99,10 +141,22 @@ jobs:
       - name: Create alert issue if unhealthy
         if: steps.prod-check.outcome == 'failure'
         uses: actions/github-script@v6
+        env:
+          PROD_URL: ${{ secrets.PROD_URL }}
+          RESPONSE_BODY: ${{ steps.prod-check.outputs.response }}
         with:
           script: |
             const prodStatus = '${{ steps.prod-check.outputs.http_code }}';
+            const responseBody = process.env.RESPONSE_BODY || '';
             const timestamp = new Date().toISOString();
+
+            const prodUrl = (process.env.PROD_URL || 'https://api.example.com').replace(/\/$/, '');
+            const healthUrl = `${prodUrl}/health`;
+            const metricsUrl = `${prodUrl}/metrics`;
+
+            const truncatedResponse = (responseBody || '').length > 2000
+              ? (responseBody || '').slice(0, 2000) + '\n…(truncated)'
+              : (responseBody || '');
 
             const body = `## 🚨 Production Health Check Failed
 
@@ -115,6 +169,11 @@ jobs:
             - Automated monitoring detected the issue
             - Immediate investigation required
 
+            ### Endpoints
+            - Health: ${healthUrl}
+            - Metrics: ${metricsUrl}
+
+### Response Snapshot
             ### Actions Required
             1. Check production logs
             2. Verify service status
@@ -134,7 +193,7 @@ jobs:
               repo: context.repo.repo,
               title: `🚨 Production Health Check Failed - ${timestamp}`,
               body: body,
-              labels: ['alert', 'production', 'critical', 'automated']
+              labels: ['alert', 'production', 'critical', 'automated', 'observability']
             });
 
   # ===========================================================================
@@ -203,9 +262,10 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { data: advisories } = await github.rest.repos.listVulnerabilityAlerts({
+            const { data: advisories } = await github.rest.dependabot.listAlertsForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
+              state: 'open'
             });
 
             if (advisories && advisories.length > 0) {
@@ -390,8 +450,8 @@ jobs:
           | Check | Status |
           |-------|--------|
           | Health Check | ${{ needs.health-check.result }} |
-          | Performance | ${{ needs.performance-check.result }} |
-          | Security | ${{ needs.security-monitoring.result }} |
+          | Performance | ${{ needs.performance-check.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.performance-check.result }} |
+          | Security | ${{ needs.security-monitoring.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.security-monitoring.result }} |
           | Dependencies | ${{ needs.dependency-check.result }} |
 
           ## System Status
@@ -416,6 +476,20 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            // Dedupe: if any open issue already references this workflow run, do not create another.
+            const runMarker = `actions/runs/${context.runId}`;
+            const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:body "${runMarker}" label:automated`;
+
+            const { data: existing } = await github.rest.search.issuesAndPullRequests({
+              q,
+              per_page: 1,
+            });
+
+            if (existing.total_count && existing.total_count > 0) {
+              console.log(`Found existing issue referencing ${runMarker}; skipping incident creation.`);
+              return;
+            }
+
             const timestamp = new Date().toISOString();
 
             await github.rest.issues.create({
