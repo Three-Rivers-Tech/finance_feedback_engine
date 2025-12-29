@@ -1,5 +1,4 @@
 name: Deploy to Environments
-enabled: false
 
 on:
   push:

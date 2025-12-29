@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 env:
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   # ===========================================================================
@@ -191,7 +191,7 @@ jobs:
             - Health: ${healthUrl}
             - Metrics: ${metricsUrl}
 
-### Response Snapshot
+            ### Response Snapshot
             ### Actions Required
             1. Check production logs
             2. Verify service status
