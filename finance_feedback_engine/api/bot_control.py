@@ -690,12 +690,10 @@ async def get_open_positions(
                     )
                     pnl_pct = 0.0
 
-                # DEBUG: Write to file
-                with open("/tmp/pnl_debug.log", "a") as f:
-                    f.write(
-                        f"Position {instrument}: pnl={pnl}, notional={notional}, pnl_pct={pnl_pct}\n"
-                    )
-
+                # Log detailed P&L calculation for debugging
+                logger.debug(
+                    f"Position {instrument} P&L calculation: pnl={pnl}, notional={notional}, pnl_pct={pnl_pct}"
+                )
                 logger.info(
                     f"Position {instrument} P&L calculation: pnl={pnl}, notional={notional}, pnl_pct={pnl_pct}"
                 )
