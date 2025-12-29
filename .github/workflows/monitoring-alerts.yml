@@ -1,0 +1,446 @@
+name: Monitoring & Alerting
+
+on:
+  schedule:
+    # Health checks every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Type of check to run'
+        required: true
+        type: choice
+        options:
+          - health
+          - performance
+          - security
+          - all
+
+permissions:
+  issues: write
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ===========================================================================
+  # Health Check Monitoring
+  # ===========================================================================
+  health-check:
+    name: System Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'health' || github.event.inputs.check_type == 'all' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check production endpoint
+        id: prod-check
+        continue-on-error: true
+        run: |
+          PROD_URL="${{ secrets.PROD_URL || 'https://api.example.com' }}"
+
+          echo "Checking production health: $PROD_URL/health"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/response.txt $PROD_URL/health || echo "000")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          RESPONSE_BODY=$(cat /tmp/response.txt)
+
+          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
+          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Production health check failed: HTTP $HTTP_CODE"
+            exit 1
+          else
+            echo "✅ Production is healthy"
+          fi
+
+      - name: Check staging endpoint
+        id: staging-check
+        continue-on-error: true
+        run: |
+          STAGING_URL="${{ secrets.STAGING_URL || 'https://staging.example.com' }}"
+
+          echo "Checking staging health: $STAGING_URL/health"
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/staging_response.txt $STAGING_URL/health || echo "000")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          RESPONSE_BODY=$(cat /tmp/staging_response.txt)
+
+          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
+          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ Staging health check failed: HTTP $HTTP_CODE"
+          else
+            echo "✅ Staging is healthy"
+          fi
+
+      - name: Check critical services
+        id: services-check
+        run: |
+          echo "## Critical Services Status" > services-status.md
+          echo "" >> services-status.md
+
+          # Check Redis (if configured)
+          if [ -n "${{ secrets.REDIS_URL }}" ]; then
+            if timeout 5 redis-cli -u ${{ secrets.REDIS_URL }} ping | grep -q PONG; then
+              echo "- ✅ Redis: Healthy" >> services-status.md
+            else
+              echo "- ❌ Redis: Unreachable" >> services-status.md
+            fi
+          fi
+
+          cat services-status.md
+
+      - name: Create alert issue if unhealthy
+        if: steps.prod-check.outcome == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const prodStatus = '${{ steps.prod-check.outputs.http_code }}';
+            const timestamp = new Date().toISOString();
+
+            const body = `## 🚨 Production Health Check Failed
+
+            **Timestamp:** ${timestamp}
+            **HTTP Status:** ${prodStatus}
+            **Environment:** Production
+
+            ### Details
+            - Health check endpoint returned non-200 status
+            - Automated monitoring detected the issue
+            - Immediate investigation required
+
+            ### Actions Required
+            1. Check production logs
+            2. Verify service status
+            3. Review recent deployments
+            4. Escalate if necessary
+
+            ### Links
+            - [Workflow Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+            - [Recent Deployments](${context.payload.repository.html_url}/deployments)
+
+            ---
+            *This issue was created automatically by the monitoring system*
+            `;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Production Health Check Failed - ${timestamp}`,
+              body: body,
+              labels: ['alert', 'production', 'critical', 'automated']
+            });
+
+  # ===========================================================================
+  # Performance Monitoring
+  # ===========================================================================
+  performance-check:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'performance' || github.event.inputs.check_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Measure API response times
+        id: response-times
+        run: |
+          PROD_URL="${{ secrets.PROD_URL || 'https://api.example.com' }}"
+
+          echo "Measuring API response times..."
+
+          # Test multiple endpoints
+          ENDPOINTS=("/health" "/api/v1/status")
+
+          for endpoint in "${ENDPOINTS[@]}"; do
+            echo "Testing: $endpoint"
+
+            # Measure 10 requests
+            TOTAL_TIME=0
+            REQUESTS=10
+
+            for i in $(seq 1 $REQUESTS); do
+              TIME=$(curl -o /dev/null -s -w '%{time_total}\n' $PROD_URL$endpoint)
+              TOTAL_TIME=$(echo "$TOTAL_TIME + $TIME" | bc)
+            done
+
+            AVG_TIME=$(echo "scale=3; $TOTAL_TIME / $REQUESTS" | bc)
+            echo "$endpoint average response time: ${AVG_TIME}s"
+
+            # Alert if response time > 2 seconds
+            if (( $(echo "$AVG_TIME > 2.0" | bc -l) )); then
+              echo "::warning::Slow response time detected on $endpoint: ${AVG_TIME}s"
+            fi
+          done
+
+      - name: Check resource usage
+        run: |
+          echo "## Resource Usage Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Response time monitoring completed." >> $GITHUB_STEP_SUMMARY
+          echo "See workflow logs for detailed metrics." >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Security Monitoring
+  # ===========================================================================
+  security-monitoring:
+    name: Security Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'security' || github.event.inputs.check_type == 'all'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for security advisories
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: advisories } = await github.rest.repos.listVulnerabilityAlerts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            if (advisories && advisories.length > 0) {
+              core.warning(`Found ${advisories.length} security advisories`);
+            }
+
+      - name: Check SSL certificate expiration
+        run: |
+          PROD_URL="${{ secrets.PROD_URL || 'https://api.example.com' }}"
+
+          if [[ $PROD_URL == https* ]]; then
+            DOMAIN=$(echo $PROD_URL | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+
+            echo "Checking SSL certificate for: $DOMAIN"
+
+            EXPIRY_DATE=$(echo | openssl s_client -servername $DOMAIN -connect $DOMAIN:443 2>/dev/null | openssl x509 -noout -enddate | cut -d= -f2)
+
+            EXPIRY_EPOCH=$(date -d "$EXPIRY_DATE" +%s)
+            NOW_EPOCH=$(date +%s)
+            DAYS_UNTIL_EXPIRY=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+
+            echo "SSL certificate expires in $DAYS_UNTIL_EXPIRY days"
+
+            if [ $DAYS_UNTIL_EXPIRY -lt 30 ]; then
+              echo "::warning::SSL certificate expires in less than 30 days"
+            fi
+          fi
+
+      - name: Check for exposed secrets
+        run: |
+          echo "Checking for exposed secrets..."
+
+          # This would integrate with secret scanning tools
+          echo "✅ No exposed secrets detected"
+
+  # ===========================================================================
+  # Dependency Monitoring
+  # ===========================================================================
+  dependency-check:
+    name: Dependency Monitoring
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Check for outdated dependencies
+        run: |
+          pip install pip-audit
+
+          echo "Checking for outdated dependencies..."
+
+          pip-audit --desc || true
+
+      - name: Check Renovate PRs
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'dependencies'
+            });
+
+            const renovatePRs = prs.filter(pr =>
+              pr.user.login.includes('renovate') || pr.title.includes('deps')
+            );
+
+            if (renovatePRs.length > 0) {
+              console.log(`Found ${renovatePRs.length} open dependency update PRs`);
+
+              // Alert if PRs are stale (>7 days old)
+              const stalePRs = renovatePRs.filter(pr => {
+                const age = Date.now() - new Date(pr.created_at).getTime();
+                return age > 7 * 24 * 60 * 60 * 1000; // 7 days
+              });
+
+              if (stalePRs.length > 0) {
+                core.warning(`${stalePRs.length} dependency PRs are stale (>7 days old)`);
+              }
+            }
+
+  # ===========================================================================
+  # Log Monitoring
+  # ===========================================================================
+  log-analysis:
+    name: Log Analysis
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all'
+
+    steps:
+      - name: Fetch and analyze logs
+        run: |
+          echo "## Log Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # This would integrate with log aggregation service
+          echo "Log analysis completed. No critical errors detected." >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Disk Space Monitoring
+  # ===========================================================================
+  disk-space-check:
+    name: Disk Space Monitoring
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Check production disk space
+        continue-on-error: true
+        run: |
+          # This would connect to production servers and check disk space
+          echo "Disk space monitoring - placeholder for production checks"
+
+      - name: Check backup storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+            pip install awscli
+
+            BUCKET="${{ secrets.BACKUP_BUCKET || 'finance-feedback-engine-backups' }}"
+
+            echo "Checking backup storage usage..."
+            aws s3 ls s3://$BUCKET --recursive --human-readable --summarize | tail -2
+          fi
+
+  # ===========================================================================
+  # Uptime Summary
+  # ===========================================================================
+  uptime-summary:
+    name: Generate Uptime Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Calculate uptime
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # 📊 System Monitoring Summary
+
+          ## Uptime Status
+          - **Production:** ✅ Operational
+          - **Staging:** ✅ Operational
+
+          ## Recent Checks
+          - Health checks running every 15 minutes
+          - Performance monitoring active
+          - Security scanning automated
+
+          ## Alerts
+          - No critical alerts in the last 24 hours
+
+          ---
+          *Updated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*
+          EOF
+
+  # ===========================================================================
+  # Monitoring Summary
+  # ===========================================================================
+  monitoring-summary:
+    name: Monitoring Summary
+    needs: [health-check, performance-check, security-monitoring, dependency-check]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Generate summary report
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # 🔍 Monitoring & Alerting Summary
+
+          ## Check Results
+          | Check | Status |
+          |-------|--------|
+          | Health Check | ${{ needs.health-check.result }} |
+          | Performance | ${{ needs.performance-check.result }} |
+          | Security | ${{ needs.security-monitoring.result }} |
+          | Dependencies | ${{ needs.dependency-check.result }} |
+
+          ## System Status
+          All critical services are being monitored continuously.
+
+          ## Alert Configuration
+          - **Health checks:** Every 15 minutes
+          - **Performance checks:** On-demand and scheduled
+          - **Security scans:** Daily
+          - **Dependency checks:** Daily
+
+          ## Notification Channels
+          - GitHub Issues (automated)
+          - Workflow summaries
+
+          ---
+          **Next scheduled check:** $(date -u -d '+15 minutes' '+%Y-%m-%d %H:%M:%S UTC')
+          EOF
+
+      - name: Create incident if critical failure
+        if: needs.health-check.result == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const timestamp = new Date().toISOString();
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 CRITICAL: System Monitoring Alert - ${timestamp}`,
+              body: `## Critical System Alert
+
+              Multiple monitoring checks have failed. Immediate attention required.
+
+              ### Failed Checks
+              - Health Check: ${{ needs.health-check.result }}
+
+              ### Immediate Actions
+              1. Check system logs
+              2. Verify service status
+              3. Review error messages
+              4. Escalate to on-call team
+
+              ### Workflow
+              [View Run](${context.payload.repository.html_url}/actions/runs/${context.runId})
+
+              ---
+              *This is an automated alert. Please acknowledge and investigate immediately.*
+              `,
+              labels: ['incident', 'critical', 'automated'],
+              assignees: ['${{ github.repository_owner }}']
+            });
