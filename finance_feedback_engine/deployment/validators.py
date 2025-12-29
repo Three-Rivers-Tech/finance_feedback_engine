@@ -52,7 +52,7 @@ class DockerValidator:
         """Check if Docker Compose is installed."""
         try:
             # Try docker-compose first
-            result = subprocess.run(
+            subprocess.run(
                 ["docker-compose", "--version"],
                 capture_output=True,
                 text=True,

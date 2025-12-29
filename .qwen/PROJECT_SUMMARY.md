@@ -7,7 +7,7 @@ Fix technical debt in the Finance Feedback Engine 2.0 related to the signal-only
 - **Technology Stack**: Python 3.11.9, Ollama LLM, CLI-based AI tools, ensemble AI providers
 - **Architecture**: Decision engine with local AI models, CLI providers, ensemble decision making, and market analysis context
 - **Configuration Location**: The `signal_only_default` option should be in the main config dictionary, not nested under 'decision_engine'
-- **Trading Modes**: 
+- **Trading Modes**:
   - Normal mode: Performs position sizing calculations with stop losses and risk management
   - Signal-only mode: Provides signals only without position sizing (useful for backtesting or when no trading platform is available)
 - **Code Files Modified**: `/home/cmp6510/finance_feedback_engine-2.0/finance_feedback_engine/decision_engine/engine.py` - Fixed the configuration reading and syntax errors in related files
@@ -33,4 +33,4 @@ The technical debt issue has been successfully resolved. The signal-only mode no
 ---
 
 ## Summary Metadata
-**Update time**: 2025-12-15T18:46:55.205Z 
+**Update time**: 2025-12-15T18:46:55.205Z

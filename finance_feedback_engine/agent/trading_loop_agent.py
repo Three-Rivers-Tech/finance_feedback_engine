@@ -145,6 +145,78 @@ class TradingLoopAgent:
             AgentState.LEARNING: self.handle_learning_state,
         }
 
+        # Pair selection system (optional)
+        self.pair_selector = None
+        self.pair_scheduler = None
+        
+        # Initialize pair selection if configured
+        if hasattr(config, 'pair_selection') and config.pair_selection.get('enabled', False):
+            try:
+                from finance_feedback_engine.pair_selection import (
+                    PairSelector,
+                    PairSelectionConfig,
+                )
+                from finance_feedback_engine.pair_selection.core.selection_scheduler import (
+                    PairSelectionScheduler,
+                )
+                
+                # Build PairSelectionConfig from dict config
+                ps_config = config.pair_selection
+                pair_selection_config = PairSelectionConfig(
+                    target_pair_count=ps_config.get('target_pair_count', 5),
+                    candidate_oversampling=ps_config.get('llm', {}).get('candidate_oversampling', 3),
+                    sortino_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('sortino', 0.4),
+                    diversification_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('diversification', 0.35),
+                    volatility_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('volatility', 0.25),
+                    sortino_windows_days=ps_config.get('statistical', {}).get('sortino', {}).get('windows_days', [7, 30, 90]),
+                    sortino_window_weights=ps_config.get('statistical', {}).get('sortino', {}).get('weights', [0.5, 0.3, 0.2]),
+                    correlation_lookback_days=ps_config.get('statistical', {}).get('correlation', {}).get('lookback_days', 30),
+                    garch_p=ps_config.get('statistical', {}).get('garch', {}).get('p', 1),
+                    garch_q=ps_config.get('statistical', {}).get('garch', {}).get('q', 1),
+                    garch_forecast_horizon_days=ps_config.get('statistical', {}).get('garch', {}).get('forecast_horizon_days', 7),
+                    garch_fitting_window_days=ps_config.get('statistical', {}).get('garch', {}).get('fitting_window_days', 90),
+                    thompson_enabled=ps_config.get('thompson_sampling', {}).get('enabled', True),
+                    thompson_success_threshold=ps_config.get('thompson_sampling', {}).get('success_threshold', 0.55),
+                    thompson_failure_threshold=ps_config.get('thompson_sampling', {}).get('failure_threshold', 0.45),
+                    thompson_min_trades=ps_config.get('thompson_sampling', {}).get('min_trades_for_update', 3),
+                    universe_cache_ttl_hours=ps_config.get('universe', {}).get('cache_ttl_hours', 24),
+                    pair_blacklist=ps_config.get('universe', {}).get('blacklist', []),
+                    llm_enabled=ps_config.get('llm', {}).get('enabled', True),
+                    llm_enabled_providers=None,  # Will use all enabled
+                )
+                
+                # Initialize pair selector
+                self.pair_selector = PairSelector(
+                    data_provider=engine.data_provider,
+                    config=pair_selection_config,
+                    ai_decision_manager=getattr(engine, 'ai_decision_manager', None),
+                )
+                
+                # Initialize scheduler
+                def on_selection_callback(result):
+                    """Update agent's asset_pairs when selection completes."""
+                    self.config.asset_pairs = result.selected_pairs
+                    logger.info(f"Updated active pairs: {result.selected_pairs}")
+                
+                self.pair_scheduler = PairSelectionScheduler(
+                    pair_selector=self.pair_selector,
+                    trade_monitor=trade_monitor,
+                    portfolio_memory=portfolio_memory,
+                    interval_hours=ps_config.get('rotation_interval_hours', 1.0),
+                    on_selection_callback=on_selection_callback,
+                )
+                
+                logger.info("✓ Pair selection system initialized")
+                
+            except ImportError as e:
+                logger.warning(f"Pair selection disabled: Import error - {e}")
+                self.pair_selector = None
+                self.pair_scheduler = None
+            except Exception as e:
+                logger.error(f"Failed to initialize pair selection: {e}", exc_info=True)
+                self.pair_selector = None
+                self.pair_scheduler = None
+
     def supports_signal_only_mode(self) -> bool:
         """
         Check if this agent implementation supports signal-only mode.
@@ -588,6 +660,14 @@ class TradingLoopAgent:
                     "Starting agent with empty position state."
                 )
                 self._startup_complete.set()
+
+            # Start pair selection scheduler if configured
+            if self.pair_scheduler:
+                try:
+                    await self.pair_scheduler.start()
+                    logger.info("✓ Pair selection scheduler started")
+                except Exception as e:
+                    logger.error(f"Failed to start pair scheduler: {e}", exc_info=True)
 
             # Main loop: process cycles with sleep intervals
             while self.is_running:
@@ -1253,7 +1333,9 @@ class TradingLoopAgent:
                         webhook_payload = {
                             "event_type": "trading_decision",
                             "decision_id": decision_id,
-                            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                            "timestamp": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat(),
                             "asset_pair": asset_pair,
                             "action": action,
                             "confidence": confidence,
@@ -1583,20 +1665,16 @@ class TradingLoopAgent:
             bool: True if delivered successfully
         """
         import httpx
-        from tenacity import (
-            retry,
-            stop_after_attempt,
-            wait_exponential,
-        )
+        from tenacity import retry, stop_after_attempt, wait_exponential
 
         def is_retryable_error(exception):
             """
             Determine if an error should be retried.
-            
+
             Retry on:
             - Network errors (RequestError, TimeoutException)
             - 5xx server errors (transient failures)
-            
+
             Don't retry on:
             - 4xx client errors (permanent failures)
             """
@@ -1631,6 +1709,7 @@ class TradingLoopAgent:
             response = await _send_webhook()
             # Sanitize URL to prevent credential exposure in logs
             from urllib.parse import urlparse
+
             parsed_url = urlparse(webhook_url)
             safe_url = f"{parsed_url.scheme}://{parsed_url.netloc}/***"
             logger.info(
@@ -1641,7 +1720,11 @@ class TradingLoopAgent:
         except (httpx.RequestError, httpx.TimeoutException, httpx.HTTPStatusError) as e:
             # Log error without exposing webhook URL
             error_type = type(e).__name__
-            status_code = getattr(e.response, 'status_code', 'N/A') if hasattr(e, 'response') else 'N/A'
+            status_code = (
+                getattr(e.response, "status_code", "N/A")
+                if hasattr(e, "response")
+                else "N/A"
+            )
             logger.error(
                 f"❌ Webhook delivery failed after {max_retries} attempts: "
                 f"{error_type} (status: {status_code})",
@@ -1790,3 +1873,12 @@ class TradingLoopAgent:
         logger.info("Stopping autonomous trading agent...")
         self.is_running = False
         self.stop_requested = True
+        
+        # Stop pair selection scheduler if running
+        if self.pair_scheduler and self.pair_scheduler.is_running:
+            try:
+                import asyncio
+                asyncio.create_task(self.pair_scheduler.stop())
+                logger.info("Stopping pair selection scheduler...")
+            except Exception as e:
+                logger.error(f"Error stopping pair scheduler: {e}", exc_info=True)

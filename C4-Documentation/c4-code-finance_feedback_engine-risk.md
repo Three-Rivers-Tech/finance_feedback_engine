@@ -864,4 +864,3 @@ else:
 - Falls back to live market status if timestamp parsing fails in live mode
 - Legacy category-based correlation check available as fallback
 - Cross-platform correlation is warning-only, never blocks trades
-

@@ -2,9 +2,9 @@
 
 import asyncio
 import logging
-import time
 import os
 import socket
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -580,6 +580,7 @@ class FinanceFeedbackEngine:
             record_decision_latency,
             update_decision_confidence,
         )
+
         _decision_start = time.perf_counter()
         try:
             decision = await self.decision_engine.generate_decision(
@@ -647,7 +648,9 @@ class FinanceFeedbackEngine:
         # Record aggregated decision latency metric
         try:
             _duration = time.perf_counter() - _decision_start
-            record_decision_latency(provider="ensemble", asset_pair=asset_pair, duration_seconds=_duration)
+            record_decision_latency(
+                provider="ensemble", asset_pair=asset_pair, duration_seconds=_duration
+            )
         except Exception:
             # Metrics should never break the flow
             pass
@@ -682,7 +685,9 @@ class FinanceFeedbackEngine:
         # Update decision confidence gauge (aggregated)
         try:
             conf = float(decision.get("confidence", 0))
-            update_decision_confidence(asset_pair=asset_pair, action=action, confidence=conf)
+            update_decision_confidence(
+                asset_pair=asset_pair, action=action, confidence=conf
+            )
         except Exception:
             pass
 

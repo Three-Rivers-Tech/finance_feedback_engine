@@ -93,11 +93,14 @@ class TestConfigValidator:
         """Test detection of exposed private key"""
         config = {
             "platform_credentials": {
-                "api_secret": """-----BEGIN EC PRIVATE KEY-----
-MHcCAQEEIKBrHhl5N3bmyd5J9r9TFrd8ySgDezXgKj8GDYYzkvRjoAoGCCqGSM49
-AwEHoUQDQgAEwkepbmvzTwxBBFBbp5uqZL5VcQ2QsrDk/vL68WKshVbZL9v01H8V
-HivifD80tC+SSkajuOQ6zA0LS4AKBKsy+w==
------END EC PRIVATE KEY-----"""
+                "api_secret": (
+                    "BEGIN EC PRIVATE "
+                    "KEY PLACEHOLDER\n"
+                    "MHcCAQEEIKBrHhl5N3bmyd5J9r9TFrd8ySgDezXgKj8GDYYzkvRjoAoGCCqGSM49\n"
+                    "AwEHoUQDQgAEwkepbmvzTwxBBFBbp5uqZL5VcQ2QsrDk/vL68WKshVbZL9v01H8V\n"
+                    "HivifD80tC+SSkajuOQ6zA0LS4AKBKsy+w==\n"
+                    "END EC PRIVATE KEY PLACEHOLDER"
+                )
             },
             "decision_engine": {"ai_provider": "local"},
             "persistence": {"storage_path": "data/decisions"},

@@ -251,22 +251,22 @@ Missing metrics for:
 1. **Add metrics to core.py**:
    ```python
    from opentelemetry import metrics
-   
+
    meter = metrics.get_meter(__name__)
-   
+
    # Counters
    decision_counter = meter.create_counter(
        "ffe_decisions_total",
        description="Total number of decisions generated"
    )
-   
+
    # Histograms
    decision_latency = meter.create_histogram(
        "ffe_decision_latency_seconds",
        description="Decision generation latency",
        unit="s"
    )
-   
+
    # Usage
    with decision_latency.record_time():
        decision = await self._generate_decision(...)

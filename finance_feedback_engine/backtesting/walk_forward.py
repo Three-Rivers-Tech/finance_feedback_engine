@@ -24,8 +24,13 @@ class WalkForwardAnalyzer:
     """
 
     def __init__(self):
-        """Initialize walk-forward analyzer."""
-        pass
+        """
+        Initialize walk-forward analyzer.
+
+        Sets up internal state for conducting walk-forward analyses.
+        The analyzer is stateless and reusable for multiple backtests.
+        """
+        logger.info("Walk-forward analyzer initialized")
 
     def _generate_windows(
         self,

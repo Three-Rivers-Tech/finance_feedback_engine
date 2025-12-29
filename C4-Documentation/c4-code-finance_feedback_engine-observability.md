@@ -57,7 +57,7 @@ def init_tracer(config: dict) -> None
 
 **Returns**: `None`
 
-**Description**: 
+**Description**:
 Initializes global OpenTelemetry tracing infrastructure. Creates a TracerProvider with parent-based sampling (respects parent span decisions for child spans). Sets up span processors and exporters based on configured backend. Includes guard to prevent re-initialization.
 
 **Backend Support**:
@@ -92,7 +92,7 @@ def get_tracer(name: str, version: Optional[str] = None) -> trace.Tracer
 
 **Returns**: `trace.Tracer` - OpenTelemetry Tracer instance
 
-**Description**: 
+**Description**:
 Retrieves a tracer instance for a given module. Handles version parameter compatibility across different OpenTelemetry versions by gracefully falling back if the version parameter is not accepted.
 
 **Dependencies**:
@@ -112,7 +112,7 @@ Provides OpenTelemetry context integration for logging, span management, and tra
 
 **Signature**: `class OTelContextFilter(logging.Filter)`
 
-**Description**: 
+**Description**:
 Logging filter that injects OpenTelemetry trace context (trace_id and span_id) into Python log records for correlation.
 
 **Methods**:
@@ -129,7 +129,7 @@ def filter(self, record: logging.LogRecord) -> bool
 
 **Returns**: `bool` - Always returns True (allows record to be logged)
 
-**Description**: 
+**Description**:
 Extracts current span context from OpenTelemetry and adds trace_id and span_id as hex-formatted fields to the log record. Enables log aggregation systems to correlate logs with traces.
 
 **Location**: Lines 18-22
@@ -153,7 +153,7 @@ def get_current_span_attributes() -> Dict[str, Any]
   - `trace_id: str` - Current trace ID in hex format (32 characters)
   - `span_id: str` - Current span ID in hex format (16 characters)
 
-**Description**: 
+**Description**:
 Extracts and formats the current OpenTelemetry span context for use in application code. Useful for adding trace identifiers to request responses or structured log messages.
 
 **Location**: Lines 26-36
@@ -183,7 +183,7 @@ def with_span(
 
 **Returns**: Context manager for span lifecycle
 
-**Description**: 
+**Description**:
 Context manager that creates a new span with standard attributes. Merges provided attributes with context kwargs and starts the span. Useful for annotating specific code sections with operation names and metadata.
 
 **Example Usage**:
@@ -214,7 +214,7 @@ def set_correlation_id(correlation_id: str) -> None
 
 **Returns**: `None`
 
-**Description**: 
+**Description**:
 Sets the correlation ID for the current execution context. Uses Python's ContextVar for async-safe context isolation. Called when processing incoming requests to propagate the correlation ID through the request lifecycle.
 
 **Location**: Lines 73-75
@@ -235,7 +235,7 @@ def clear_correlation_id() -> None
 
 **Returns**: `None`
 
-**Description**: 
+**Description**:
 Clears the correlation ID from the current execution context. Useful for cleanup in request lifecycle management.
 
 **Location**: Lines 78-80
@@ -256,7 +256,7 @@ def get_correlation_id() -> str
 
 **Returns**: `str` - Correlation ID (UUID format if not already set)
 
-**Description**: 
+**Description**:
 Retrieves the current correlation ID, generating a new UUID if none exists in the current context. Ensures every request/trace has a unique identifier for end-to-end tracing.
 
 **Location**: Lines 83-93
@@ -280,10 +280,10 @@ def get_trace_headers() -> Dict[str, str]
   - `X-Correlation-ID: str` - Correlation ID (always present)
   - `traceparent: str` - W3C Trace Context format header (conditionally present)
 
-**Description**: 
+**Description**:
 Generates HTTP headers for trace context propagation to external services. Includes correlation ID and W3C traceparent header (if a valid span context exists). Enables trace continuity when making requests to downstream services.
 
-**W3C Trace Context Format**: 
+**W3C Trace Context Format**:
 ```
 traceparent: 00-{trace_id_hex}-{span_id_hex}-{sampled_flag}
 ```
@@ -325,7 +325,7 @@ def init_metrics_from_config(config: dict) -> None
 
 **Returns**: `None`
 
-**Description**: 
+**Description**:
 Initializes global OpenTelemetry metrics infrastructure with Prometheus exporter. Creates a MeterProvider with PrometheusMetricReader. Includes guard to prevent re-initialization and graceful fallback to noop provider if initialization fails.
 
 **Dependencies**:
@@ -350,7 +350,7 @@ def get_meter(name: str, version: Optional[str] = None) -> metrics.Meter
 
 **Returns**: `metrics.Meter` - OpenTelemetry Meter instance
 
-**Description**: 
+**Description**:
 Retrieves a meter instance for a given module. Used to create counters, gauges, and histograms for application metrics.
 
 **Location**: Lines 53-62
@@ -372,7 +372,7 @@ def create_counters(meter: metrics.Meter) -> dict
 
 **Returns**: `dict` - Dictionary mapping counter names to Counter objects
 
-**Description**: 
+**Description**:
 Creates standard monotonically increasing counters for the finance feedback engine. Each counter tracks cumulative events (decisions created, executed, trades completed, etc.).
 
 **Counters Created**:
@@ -406,7 +406,7 @@ def create_gauges(meter: metrics.Meter) -> dict
 
 **Returns**: `dict` - Dictionary mapping gauge names to ObservableGauge objects
 
-**Description**: 
+**Description**:
 Creates observable gauges for point-in-time measurements of system state. Gauges represent values that can increase or decrease (e.g., active positions, portfolio value).
 
 **Gauges Created**:
@@ -437,7 +437,7 @@ def create_histograms(meter: metrics.Meter) -> dict
 
 **Returns**: `dict` - Dictionary mapping histogram names to Histogram objects
 
-**Description**: 
+**Description**:
 Creates histograms for distribution analysis of latency and performance metrics. Histograms bucket values for percentile analysis and automatic aggregation.
 
 **Histograms Created**:
@@ -521,7 +521,7 @@ classDiagram
             +create_histogram()
         }
     }
-    
+
     namespace TracerModule {
         class tracer_init {
             <<module>>
@@ -529,7 +529,7 @@ classDiagram
             +get_tracer(name)
         }
     }
-    
+
     namespace MetricsModule {
         class metrics_init {
             <<module>>
@@ -540,7 +540,7 @@ classDiagram
             +create_histograms(meter)
         }
     }
-    
+
     namespace ContextModule {
         class OTelContextFilter {
             -record: LogRecord
@@ -555,7 +555,7 @@ classDiagram
             +get_trace_headers()
         }
     }
-    
+
     namespace ExporterBackends {
         class JaegerExporter {
             <<backend>>
@@ -567,16 +567,16 @@ classDiagram
             <<backend>>
         }
     }
-    
+
     tracer_init --> TracerProvider : creates and configures
     tracer_init --> JaegerExporter : conditionally uses
     tracer_init --> OTLPExporter : conditionally uses
     tracer_init --> ConsoleExporter : fallback uses
     tracer_init --> Tracer : provides access
-    
+
     metrics_init --> MeterProvider : creates and configures
     metrics_init --> Meter : provides access
-    
+
     context_helpers --> Tracer : reads current span
     OTelContextFilter --> Tracer : extracts span context
 ```
@@ -591,24 +591,24 @@ flowchart LR
     subgraph Incoming["Incoming Request"]
         A["Receive request<br/>with X-Correlation-ID header"]
     end
-    
+
     subgraph Setup["Context Setup"]
         B["set_correlation_id()<br/>from header"]
         C["init_tracer()<br/>at startup"]
     end
-    
+
     subgraph Processing["Request Processing"]
         D["with_span()<br/>creates span"]
         E["Logger with<br/>OTelContextFilter"]
         F["Outgoing HTTP<br/>get_trace_headers()"]
     end
-    
+
     subgraph Export["Export & Correlation"]
         G["Span exported<br/>to Jaeger/Tempo/Console"]
         H["Log record includes<br/>trace_id, span_id"]
         I["Downstream service<br/>receives traceparent"]
     end
-    
+
     A --> B
     B --> C
     C --> D
@@ -631,25 +631,25 @@ flowchart TB
         A["init_metrics_from_config()"]
         B["Create MeterProvider<br/>with PrometheusMetricReader"]
     end
-    
+
     subgraph MetricCreation["Metric Definition"]
         C["create_counters()"]
         D["create_gauges()"]
         E["create_histograms()"]
     end
-    
+
     subgraph Recording["Recording Metrics"]
         F["Application code<br/>get_meter()"]
         G["counter.add()"]
         H["gauge.set()"]
         I["histogram.record()"]
     end
-    
+
     subgraph Export["Export to Prometheus"]
         J["PrometheusMetricReader<br/>aggregates metrics"]
         K["Expose metrics endpoint<br/>:8000/metrics"]
     end
-    
+
     A --> B
     B --> C
     B --> D
@@ -679,12 +679,12 @@ flowchart TB
         C["init_metrics_from_config()"]
         D["get_meter()"]
     end
-    
+
     subgraph Tracer["tracer.py"]
         E["_tracer_provider<br/>(global state)"]
         F["_tracer_initialized<br/>(guard flag)"]
     end
-    
+
     subgraph Metrics["metrics.py"]
         G["_meter_provider<br/>(global state)"]
         H["_meter_initialized<br/>(guard flag)"]
@@ -692,7 +692,7 @@ flowchart TB
         J["create_gauges()"]
         K["create_histograms()"]
     end
-    
+
     subgraph Context["context.py"]
         L["_correlation_id_var<br/>(ContextVar)"]
         M["get_correlation_id()"]
@@ -701,15 +701,15 @@ flowchart TB
         P["with_span()"]
         Q["OTelContextFilter"]
     end
-    
+
     A --> E
     A --> F
     B --> E
-    
+
     C --> G
     C --> H
     D --> G
-    
+
     M --> L
     N --> L
     O --> M

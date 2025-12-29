@@ -255,3 +255,77 @@ class OandaDataProvider:
         if candles:
             return candles[-1]["close"]
         return 0.0
+
+    def list_instruments(self) -> List[Dict[str, Any]]:
+        """
+        List all available instruments from Oanda.
+
+        Fetches the full list of tradeable instruments for pair discovery.
+        Only returns currency pairs (type='CURRENCY').
+
+        Returns:
+            List of instrument dictionaries with keys:
+            - name: Instrument name (e.g., 'EUR_USD')
+            - type: Instrument type ('CURRENCY', 'CFD', 'METAL', etc.)
+            - displayName: Human-readable name
+            - pipLocation: Pip location for price formatting
+            - minimumTradeSize: Minimum trade size
+
+        Raises:
+            CircuitBreakerOpenError: If circuit breaker is open
+            ValueError: If API request fails
+        """
+        logger.info("Fetching instrument list from Oanda")
+
+        try:
+            # Rate limiting
+            self.rate_limiter.wait_for_token()
+
+            # Call circuit breaker protected request
+            instruments = self.circuit_breaker.call_sync(
+                self._fetch_instruments_from_api
+            )
+
+            # Filter to only currency pairs
+            currency_pairs = [
+                i for i in instruments
+                if i.get('type') == 'CURRENCY'
+            ]
+
+            logger.info(
+                f"Retrieved {len(currency_pairs)} currency pairs "
+                f"(out of {len(instruments)} total instruments)"
+            )
+            return currency_pairs
+
+        except CircuitBreakerOpenError:
+            logger.error("Circuit breaker open for Oanda data provider")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to fetch Oanda instruments: {e}")
+            raise
+
+    def _fetch_instruments_from_api(self) -> List[Dict[str, Any]]:
+        """
+        Fetch instruments from Oanda API (internal, circuit breaker protected).
+
+        Returns:
+            List of instrument dictionaries
+        """
+        import requests
+
+        # Oanda instruments endpoint
+        url = f"{self.base_url}/v3/accounts/{self.account_id}/instruments"
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Return instruments list
+        return data.get("instruments", [])

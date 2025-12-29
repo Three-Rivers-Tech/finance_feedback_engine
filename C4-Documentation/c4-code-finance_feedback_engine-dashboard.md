@@ -24,7 +24,7 @@
 - **Methods**:
   - `__init__(platforms: list) -> None`
     - **Description**: Initialize the aggregator with a list of platform instances
-    - **Parameters**: 
+    - **Parameters**:
       - `platforms` (list): List of trading platform objects that implement `get_portfolio_breakdown()` method
     - **Return Type**: None
     - **Location**: Line 13-14
@@ -40,7 +40,7 @@
       - `platforms` (list): List of dicts with platform-specific breakdowns
       - `unrealized_pnl` (float): Sum of unrealized profit/loss across all platforms
     - **Location**: Lines 16-47
-    - **Dependencies**: 
+    - **Dependencies**:
       - `console` (Rich Console object)
       - Platform instances' `get_portfolio_breakdown()` method
     - **Future Notes**: Code comments indicate planned deduplication of assets and normalization of allocation percentages
@@ -166,13 +166,13 @@ classDiagram
             +__init__(platforms: list)
             +aggregate() dict
         }
-        
+
         class DisplayFunctions {
             <<module>>
             +display_portfolio_dashboard(aggregated_data: dict) void
         }
     }
-    
+
     namespace ExternalLibraries {
         class RichConsole {
             <<library>>
@@ -184,14 +184,14 @@ classDiagram
             <<library>>
         }
     }
-    
+
     namespace PlatformInterface {
         class TradingPlatform {
             <<interface>>
             +get_portfolio_breakdown() dict
         }
     }
-    
+
     PortfolioDashboardAggregator --> TradingPlatform : aggregates from
     DisplayFunctions --> PortfolioDashboardAggregator : consumes
     DisplayFunctions --> RichConsole : uses
@@ -210,25 +210,25 @@ flowchart LR
         Platform1["Platform 1<br/>get_portfolio_breakdown()"]
         Platform2["Platform N<br/>get_portfolio_breakdown()"]
     end
-    
+
     subgraph Aggregation["Aggregation Layer"]
         Agg["PortfolioDashboardAggregator<br/>aggregate()"]
     end
-    
+
     subgraph Processing["Data Aggregation"]
         Totals["Sum Totals<br/>total_value_usd<br/>num_assets<br/>unrealized_pnl"]
         Collect["Collect Holdings<br/>Collect Platforms"]
     end
-    
+
     subgraph Output["Output: Display"]
         Display["display_portfolio_dashboard()<br/>with Rich formatting"]
     end
-    
+
     subgraph CLI["CLI Output"]
         Header["Header Panel<br/>Portfolio Summary"]
         PlatformBreakdown["Platform Breakdown<br/>Holdings Tables"]
     end
-    
+
     Platform1 -->|breakdown dict| Agg
     Platform2 -->|breakdown dict| Agg
     Agg -->|aggregated dict| Totals

@@ -913,3 +913,155 @@ async def submit_trace(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid request",
         )
+
+# Approval persistence endpoints
+approval_router = APIRouter(prefix="/api/v1", tags=["approvals"])
+
+
+class ApprovalRequest(BaseModel):
+    """Request model for recording an approval decision."""
+
+    decision_id: str
+    status: str  # "approved" or "rejected"
+    user_id: Optional[str] = None
+    user_name: Optional[str] = None
+    approval_notes: Optional[str] = None
+    modifications: Optional[Dict[str, Any]] = None
+    original_decision: Optional[Dict[str, Any]] = None
+
+
+class ApprovalResponse(BaseModel):
+    """Response model for approval persistence."""
+
+    approval_id: str
+    decision_id: str
+    status: str
+    timestamp: str
+    message: str
+
+
+@approval_router.post("/approvals", response_model=ApprovalResponse)
+async def record_approval(
+    request: ApprovalRequest,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> ApprovalResponse:
+    """
+    Record an approval decision for a trading decision.
+
+    Persists approval data to filesystem with metadata and timestamps.
+
+    Args:
+        request: Approval details (decision_id, status, user info, notes)
+        engine: Engine instance from dependency injection
+
+    Returns:
+        Confirmation of approval persistence with approval_id and timestamp
+    """
+    import json
+    import uuid
+    from datetime import datetime
+    from pathlib import Path
+
+    try:
+        approval_id = str(uuid.uuid4())
+
+        # Create approval data structure
+        approval_data = {
+            "decision_id": request.decision_id,
+            "status": request.status,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "user_id": request.user_id,
+            "user_name": request.user_name,
+            "original_decision": request.original_decision or {},
+            "modifications": request.modifications or {},
+            "approval_notes": request.approval_notes or "",
+        }
+
+        # Ensure data/approvals directory exists
+        approval_dir = Path("data/approvals")
+        approval_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitize filename (prevent path traversal)
+        def _sanitize_id(decision_id: str) -> str:
+            """Sanitize ID for safe filename."""
+            import re
+
+            return re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
+
+        safe_decision_id = _sanitize_id(request.decision_id)
+        approval_filename = f"{safe_decision_id}_{request.status}.json"
+        approval_file = approval_dir / approval_filename
+
+        # Write approval to file
+        with open(approval_file, "w") as f:
+            json.dump(approval_data, f, indent=2)
+
+        logger.info(f"Recorded approval: {approval_file}")
+
+        return ApprovalResponse(
+            approval_id=approval_id,
+            decision_id=request.decision_id,
+            status=request.status,
+            timestamp=approval_data["timestamp"],
+            message=f"Approval recorded for decision {request.decision_id}",
+        )
+
+    except Exception as e:
+        logger.error(f"Error recording approval: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error recording approval: {str(e)}",
+        )
+
+
+@approval_router.get("/approvals/{decision_id}")
+async def get_approval(
+    decision_id: str,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> Dict[str, Any]:
+    """
+    Retrieve an approval record by decision ID.
+
+    Looks for approval files matching the decision ID in data/approvals/.
+
+    Args:
+        decision_id: The decision ID to look up
+        engine: Engine instance from dependency injection
+
+    Returns:
+        Approval data (approved or rejected) or 404 if not found
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    try:
+        approval_dir = Path("data/approvals")
+
+        # Sanitize the decision_id for filename matching
+        safe_decision_id = re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
+
+        # Look for matching approval files (both approved and rejected)
+        approved_file = approval_dir / f"{safe_decision_id}_approved.json"
+        rejected_file = approval_dir / f"{safe_decision_id}_rejected.json"
+
+        if approved_file.exists():
+            with open(approved_file, "r") as f:
+                return json.load(f)
+        elif rejected_file.exists():
+            with open(rejected_file, "r") as f:
+                return json.load(f)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Approval record not found for decision {decision_id}",
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving approval: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error retrieving approval: {str(e)}",
+        )

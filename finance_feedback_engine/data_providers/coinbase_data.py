@@ -233,3 +233,70 @@ class CoinbaseDataProvider:
         if candles:
             return candles[-1]["close"]
         return 0.0
+
+    def list_products(self) -> List[Dict[str, Any]]:
+        """
+        List all available products from Coinbase Advanced Trade API.
+
+        Fetches the full list of tradeable products for pair discovery.
+        Only returns products with status='online' (active trading).
+
+        Returns:
+            List of product dictionaries with keys:
+            - product_id: Product identifier (e.g., 'BTC-USD')
+            - base_currency_id: Base currency (e.g., 'BTC')
+            - quote_currency_id: Quote currency (e.g., 'USD')
+            - status: Product status ('online', 'offline', etc.)
+            - trading_disabled: Boolean indicating if trading is disabled
+
+        Raises:
+            CircuitBreakerOpenError: If circuit breaker is open
+            ValueError: If API request fails
+        """
+        logger.info("Fetching product list from Coinbase")
+
+        try:
+            # Rate limiting
+            self.rate_limiter.wait_for_token()
+
+            # Call circuit breaker protected request
+            products = self.circuit_breaker.call_sync(self._fetch_products_from_api)
+
+            # Filter to only online products
+            online_products = [
+                p for p in products
+                if p.get('status') == 'online' and not p.get('trading_disabled', False)
+            ]
+
+            logger.info(
+                f"Retrieved {len(online_products)} online products "
+                f"(out of {len(products)} total)"
+            )
+            return online_products
+
+        except CircuitBreakerOpenError:
+            logger.error("Circuit breaker open for Coinbase data provider")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to fetch Coinbase products: {e}")
+            raise
+
+    def _fetch_products_from_api(self) -> List[Dict[str, Any]]:
+        """
+        Fetch products from Coinbase API (internal, circuit breaker protected).
+
+        Returns:
+            List of product dictionaries
+        """
+        import requests
+
+        # Coinbase public products endpoint
+        url = f"{self.BASE_URL}/api/v3/brokerage/products"
+
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        # Return products list
+        return data.get("products", [])

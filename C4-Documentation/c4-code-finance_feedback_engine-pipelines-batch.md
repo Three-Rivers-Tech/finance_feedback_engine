@@ -92,7 +92,7 @@
     - `context`: Contextual metadata (asset_pair, timeframe, provider, etc.)
   - **Returns**: None
   - **Side Effects**: Creates JSON file with UUID and ISO timestamp in filename
-  - **File Format**: 
+  - **File Format**:
     ```json
     {
       "timestamp": "ISO format",
@@ -150,7 +150,7 @@
     - `provider`: Provider name ('alpha_vantage', 'coinbase', 'oanda')
   - **Returns**: Initialized provider instance
   - **Raises**: `ValueError` if provider not recognized
-  - **Dynamic Imports**: 
+  - **Dynamic Imports**:
     - `AlphaVantageProvider` from `finance_feedback_engine.data_providers.alpha_vantage_provider`
     - `CoinbaseDataProvider` from `finance_feedback_engine.data_providers.coinbase_data`
     - `OandaDataProvider` from `finance_feedback_engine.data_providers.oanda_data`
@@ -166,7 +166,7 @@
     - `start_date`: ISO date string
     - `end_date`: ISO date string
   - **Returns**: List of candle dictionaries with keys: date, open, high, low, close, [volume]
-  - **Retry Strategy**: 
+  - **Retry Strategy**:
     - Max 3 attempts
     - Base delay: 5 seconds
     - Exponential backoff: 5s, 10s, 20s
@@ -218,7 +218,7 @@
     - `asset_pair`: Trading pair for partition column
     - `timeframe`: Time period for partition column (not used in partition but for context)
   - **Returns**: None
-  - **Storage Behavior**: 
+  - **Storage Behavior**:
     - Append-only mode (Bronze layer pattern)
     - Partitions by date and asset_pair
     - Adds partition columns: partition_date, partition_asset_pair
@@ -374,7 +374,7 @@ classDiagram
             -config: Dict
             +ingest_all_assets(assets, timeframes, dates) Dict
         }
-        
+
         class BatchDataIngester {
             -delta_mgr: DeltaLakeManager
             -config: Dict
@@ -388,7 +388,7 @@ classDiagram
             -_write_to_delta() None
             +save_dead_letter_queue() None
         }
-        
+
         class WatermarkStore {
             -storage_path: Path
             -_watermarks: Dict
@@ -397,33 +397,33 @@ classDiagram
             +get(asset, timeframe) Optional[str]
             +set(asset, timeframe, ts) None
         }
-        
+
         class DeadLetterQueue {
             -storage_path: Path
             +save(records, error, context) None
         }
     }
-    
+
     namespace DataProviders {
         class AlphaVantageProvider {
             +get_historical_data() List
         }
-        
+
         class CoinbaseDataProvider {
             +get_historical_data() List
         }
-        
+
         class OandaDataProvider {
             +get_historical_data() List
         }
     }
-    
+
     namespace Storage {
         class DeltaLakeManager {
             +create_or_update_table() None
         }
     }
-    
+
     MultiAssetBatchIngester --> BatchDataIngester : uses
     BatchDataIngester --> WatermarkStore : composes
     BatchDataIngester --> DeadLetterQueue : composes
@@ -441,33 +441,33 @@ title: Data Validation Pipeline
 ---
 flowchart TD
     A["Raw OHLC Candles<br/>List[Dict]"] -->|validate_and_clean| B{Required Fields<br/>Present?}
-    
+
     B -->|No| C["Return Empty DF<br/>+ All records to DLQ"]
     B -->|Yes| D["Add asset_pair<br/>Column"]
-    
+
     D --> E["OHLC Sanity Checks"]
-    
+
     E --> E1["Check: High >= Low"]
     E --> E2["Check: Close in[Low, High]"]
     E --> E3["Check: Open in[Low, High]"]
     E --> E4["Check: All prices > 0"]
-    
+
     E1 --> F["Mark Invalid Rows<br/>Add to failed_records"]
     E2 --> F
     E3 --> F
     E4 --> F
-    
+
     F --> G["Remove Duplicates<br/>keep=last"]
     G --> H["Type Conversions<br/>date → timestamp"]
     H --> I["Numeric Conversion<br/>OHLC columns"]
     I --> J["Fill missing volume"]
     J --> K["Drop NaN Critical Fields"]
-    
+
     K --> L["Return Valid DF<br/>+ Failed Records List"]
-    
+
     L -->|Valid| M["_add_metadata()"]
     L -->|Failed| N["DeadLetterQueue.save()"]
-    
+
     M --> O["_write_to_delta()"]
     O --> P["Update Watermark"]
     N --> Q["Log for Manual Review"]

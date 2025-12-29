@@ -86,58 +86,6 @@ jobs:
         run: |
           echo "Production health check skipped: PROD_HEALTH_URL not configured." >> $GITHUB_STEP_SUMMARY
 
-      - name: Check staging endpoint
-        id: staging-check
-        continue-on-error: true
-        run: |
-          STAGING_URL="${{ secrets.STAGING_URL || 'https://staging.example.com' }}"
-
-          echo "Checking staging health: $STAGING_URL/health"
-
-          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/staging_response.txt "$STAGING_URL/health" || echo "000")
-          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          if [ -f /tmp/staging_response.txt ]; then
-            RESPONSE_BODY=$(cat /tmp/staging_response.txt || true)
-          else
-            RESPONSE_BODY=""
-          fi
-
-          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
-          printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
-
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "⚠️ Staging health check failed: HTTP $HTTP_CODE"
-          else
-            echo "✅ Staging is healthy"
-          fi
-
-      - name: Create alert issue if staging unhealthy
-        if: steps.staging-check.outputs.http_code != '200'
-        uses: actions/github-script@v6
-        env:
-          STAGING_URL: ${{ secrets.STAGING_URL }}
-          STAGING_RESPONSE_BODY: ${{ steps.staging-check.outputs.response }}
-        with:
-          script: |
-            const status = '${{ steps.staging-check.outputs.http_code }}';
-            const responseBody = process.env.STAGING_RESPONSE_BODY || '';
-            const timestamp = new Date().toISOString();
-
-            const stagingUrl = (process.env.STAGING_URL || 'https://staging.example.com').replace(/\/$/, '');
-            const healthUrl = `${stagingUrl}/health`;
-
-            const truncated = responseBody.length > 2000 ? responseBody.slice(0, 2000) + '\n…(truncated)' : responseBody;
-
-            const body = `## ⚠️ Staging Health Check Failed\n\n**Timestamp:** ${timestamp}\n**HTTP Status:** ${status}\n**Environment:** Staging\n\n### Details\n- Health check endpoint returned non-200 status\n- Investigation recommended\n\n### Endpoint\n- Health: ${healthUrl}\n\n### Response Snapshot\n\n${truncated}\n\n---\n*Automated monitoring alert*`;
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `⚠️ Staging Health Check Failed - ${timestamp}`,
-              body,
-              labels: ['alert', 'staging', 'observability', 'automated']
-            });
-
       - name: Check critical services
         id: services-check
         run: |

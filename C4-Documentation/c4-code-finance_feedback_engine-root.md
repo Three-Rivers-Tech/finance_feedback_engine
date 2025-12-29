@@ -46,7 +46,7 @@
   - Description: Initialize the Finance Feedback Engine with configuration. Validates security settings, initializes error tracking, data providers (Alpha Vantage, historical), trading platform (single or unified multi-platform), decision engine, persistence layer, Prometheus metrics, portfolio memory engine, and monitoring integration.
   - Parameters:
     - `config`: Configuration dictionary containing API keys, platform credentials, decision engine config, persistence settings, monitoring flags
-  - Dependencies: 
+  - Dependencies:
     - `AlphaVantageProvider`, `HistoricalDataProvider` (data providers)
     - `DecisionEngine` (decision making)
     - `PlatformFactory`, `MockTradingPlatform` (trading platforms)
@@ -88,7 +88,7 @@
     - `include_macro`: Include macroeconomic indicators
     - `use_memory_context`: Include portfolio memory context
   - Returns: Trading decision dictionary
-  - Dependencies: 
+  - Dependencies:
     - `data_provider.get_comprehensive_market_data()`
     - `trading_platform.get_balance()`
     - `get_portfolio_breakdown()`
@@ -107,7 +107,7 @@
     - `decision_id`: ID of decision to execute
   - Returns: Execution result dictionary with success/failure status
   - Raises: `TradingError`, `ConnectionError`, `ValueError`
-  - Dependencies: 
+  - Dependencies:
     - `decision_store.get_decision_by_id()`
     - `RiskGatekeeper.validate_trade()`
     - `trading_platform.execute_trade()`
@@ -143,7 +143,7 @@
   - Parameters:
     - `force_refresh`: Bypass cache and fetch fresh data
   - Returns: Portfolio breakdown dict with caching metadata (_cached flag, _cache_age_seconds)
-  - Dependencies: 
+  - Dependencies:
     - `trading_platform.get_portfolio_breakdown()`
     - `_cache_metrics.record_hit()`, `_cache_metrics.record_miss()`
 
@@ -198,7 +198,7 @@
     - `hit_take_profit`: Whether take profit triggered
   - Returns: TradeOutcome dict if memory enabled, None otherwise
   - Raises: `ValueError` if decision not found
-  - Dependencies: 
+  - Dependencies:
     - `decision_store.get_decision_by_id()`
     - `memory_engine.record_trade_outcome()`
     - `decision_engine.ensemble_manager.update_base_weights()`
@@ -495,7 +495,7 @@ classDiagram
             +trade_monitor: TradeMonitor
             +monitoring_provider: MonitoringContextProvider
             +delta_lake: DeltaLakeManager
-            
+
             +analyze_asset(asset_pair) Dict
             +analyze_asset_async(asset_pair) Dict
             +execute_decision(decision_id) Dict
@@ -507,7 +507,7 @@ classDiagram
             +get_performance_snapshot() Dict
         }
     }
-    
+
     namespace DataLayer {
         class AlphaVantageProvider {
             +get_comprehensive_market_data(asset_pair) Dict
@@ -516,7 +516,7 @@ classDiagram
             +get_data(asset_pair, start, end) DataFrame
         }
     }
-    
+
     namespace TradingLayer {
         class TradingPlatform {
             +get_balance() Dict
@@ -527,14 +527,14 @@ classDiagram
             +create_platform(name, credentials) TradingPlatform
         }
     }
-    
+
     namespace DecisionLayer {
         class DecisionEngine {
             +generate_decision(asset_pair, market_data) Dict
             +set_monitoring_context(context) void
         }
     }
-    
+
     namespace PersistenceLayer {
         class DecisionStore {
             +save_decision(decision) void
@@ -548,7 +548,7 @@ classDiagram
             +analyze_performance(window_days) PerformanceSnapshot
         }
     }
-    
+
     namespace MonitoringLayer {
         class TradeMonitor {
             +start() void
@@ -558,13 +558,13 @@ classDiagram
             +get_monitoring_context(asset_pair) Dict
         }
     }
-    
+
     namespace RiskLayer {
         class RiskGatekeeper {
             +validate_trade(decision, context) Tuple~bool, str~
         }
     }
-    
+
     FinanceFeedbackEngine --> AlphaVantageProvider: uses
     FinanceFeedbackEngine --> HistoricalDataProvider: uses
     FinanceFeedbackEngine --> TradingPlatform: coordinates with
