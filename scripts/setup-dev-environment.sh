@@ -162,22 +162,30 @@ log_success "pip upgraded"
 # ===========================================================================
 log_step "3/10 Installing Python dependencies"
 
-if [ -f "requirements.txt" ]; then
+# Install package in editable mode from pyproject.toml (single source of truth)
+log_info "Installing package in editable mode with dependencies..."
+if [ "$MINIMAL_SETUP" = false ]; then
+    pip install -e ".[dev]" > /dev/null 2>&1
+    log_success "Package and development dependencies installed"
+else
+    pip install -e . > /dev/null 2>&1
+    log_success "Package installed"
+fi
+
+# Fallback for legacy requirements files (for compatibility)
+if [ -f "requirements.txt" ] && [ ! -f "pyproject.toml" ]; then
+    log_warn "Using legacy requirements.txt (pyproject.toml is the preferred single source of truth)"
     log_info "Installing production dependencies..."
     pip install -r requirements.txt > /dev/null 2>&1
     log_success "Production dependencies installed"
 fi
 
-if [ -f "requirements-dev.txt" ] && [ "$MINIMAL_SETUP" = false ]; then
+if [ -f "requirements-dev.txt" ] && [ "$MINIMAL_SETUP" = false ] && [ ! -f "pyproject.toml" ]; then
+    log_warn "Using legacy requirements-dev.txt (pyproject.toml is the preferred single source of truth)"
     log_info "Installing development dependencies..."
     pip install -r requirements-dev.txt > /dev/null 2>&1
     log_success "Development dependencies installed"
 fi
-
-# Install package in editable mode
-log_info "Installing package in editable mode..."
-pip install -e . > /dev/null 2>&1
-log_success "Package installed"
 
 # ===========================================================================
 # Step 4: Environment Configuration
