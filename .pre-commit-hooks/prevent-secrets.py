@@ -166,11 +166,11 @@ def scan_file(file_path: str) -> List[Tuple[int, str, str]]:
 
         for line_num, line in enumerate(lines, 1):
             stripped = line.strip()
-            
+
             # Skip comments
             if stripped.startswith("#"):
                 continue
-            
+
             # Track docstring state for multi-line docstrings
             # Check for docstring delimiters (""" or ''')
             if '"""' in line:
@@ -186,7 +186,7 @@ def scan_file(file_path: str) -> List[Tuple[int, str, str]]:
                     in_docstring = False
                     docstring_delimiter = None
                     continue
-            
+
             if "'''" in line:
                 if not in_docstring:
                     in_docstring = True
@@ -200,17 +200,19 @@ def scan_file(file_path: str) -> List[Tuple[int, str, str]]:
                     in_docstring = False
                     docstring_delimiter = None
                     continue
-            
+
             # Skip lines inside docstrings
             if in_docstring:
                 continue
-            
+
             # Skip validation code that checks for PEM-style key headers
             # More specific check for validation patterns
-            if ('startswith("-----BEGIN' in line or 
-                "startswith('-----BEGIN" in line or
-                'startswith("-----END' in line or
-                "startswith('-----END" in line):
+            if (
+                'startswith("-----BEGIN' in line
+                or "startswith('-----BEGIN" in line
+                or 'startswith("-----END' in line
+                or "startswith('-----END" in line
+            ):
                 continue
 
             # Check each pattern
