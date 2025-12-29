@@ -44,12 +44,17 @@ jobs:
 
           echo "Checking production health: $PROD_URL/health"
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/response.txt $PROD_URL/health || echo "000")
+          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/response.txt "$PROD_URL/health" || echo "000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          RESPONSE_BODY=$(cat /tmp/response.txt)
+          if [ -f /tmp/response.txt ]; then
+            RESPONSE_BODY=$(cat /tmp/response.txt || true)
+          else
+            RESPONSE_BODY=""
+          fi
 
-          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
-          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          # Guard against multiline output breaking set-output semantics
+          printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
 
           if [ "$HTTP_CODE" != "200" ]; then
             echo "❌ Production health check failed: HTTP $HTTP_CODE"
@@ -66,12 +71,16 @@ jobs:
 
           echo "Checking staging health: $STAGING_URL/health"
 
-          RESPONSE=$(curl -s -w "\n%{http_code}" -o /tmp/staging_response.txt $STAGING_URL/health || echo "000")
+          RESPONSE=$(curl -S -s -w "\n%{http_code}" -o /tmp/staging_response.txt "$STAGING_URL/health" || echo "000")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-          RESPONSE_BODY=$(cat /tmp/staging_response.txt)
+          if [ -f /tmp/staging_response.txt ]; then
+            RESPONSE_BODY=$(cat /tmp/staging_response.txt || true)
+          else
+            RESPONSE_BODY=""
+          fi
 
-          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
-          echo "response=$RESPONSE_BODY" >> $GITHUB_OUTPUT
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          printf "response<<EOF\n%s\nEOF\n" "$RESPONSE_BODY" >> "$GITHUB_OUTPUT"
 
           if [ "$HTTP_CODE" != "200" ]; then
             echo "⚠️ Staging health check failed: HTTP $HTTP_CODE"
