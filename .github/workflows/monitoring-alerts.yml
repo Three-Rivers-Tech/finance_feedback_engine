@@ -36,6 +36,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install redis-cli (redis-tools)
+        if: ${{ secrets.REDIS_URL != '' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-tools
+
       - name: Check production endpoint
         id: prod-check
         continue-on-error: true
@@ -88,6 +94,33 @@ jobs:
             echo "✅ Staging is healthy"
           fi
 
+      - name: Create alert issue if staging unhealthy
+        if: steps.staging-check.outputs.http_code != '200'
+        uses: actions/github-script@v6
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+          STAGING_RESPONSE_BODY: ${{ steps.staging-check.outputs.response }}
+        with:
+          script: |
+            const status = '${{ steps.staging-check.outputs.http_code }}';
+            const responseBody = process.env.STAGING_RESPONSE_BODY || '';
+            const timestamp = new Date().toISOString();
+
+            const stagingUrl = (process.env.STAGING_URL || 'https://staging.example.com').replace(/\/$/, '');
+            const healthUrl = `${stagingUrl}/health`;
+
+            const truncated = responseBody.length > 2000 ? responseBody.slice(0, 2000) + '\n…(truncated)' : responseBody;
+
+            const body = `## ⚠️ Staging Health Check Failed\n\n**Timestamp:** ${timestamp}\n**HTTP Status:** ${status}\n**Environment:** Staging\n\n### Details\n- Health check endpoint returned non-200 status\n- Investigation recommended\n\n### Endpoint\n- Health: ${healthUrl}\n\n### Response Snapshot\n\n${truncated}\n\n---\n*Automated monitoring alert*`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `⚠️ Staging Health Check Failed - ${timestamp}`,
+              body,
+              labels: ['alert', 'staging', 'observability', 'automated']
+            });
+
       - name: Check critical services
         id: services-check
         run: |
@@ -110,10 +143,11 @@ jobs:
         uses: actions/github-script@v6
         env:
           PROD_URL: ${{ secrets.PROD_URL }}
+          RESPONSE_BODY: ${{ steps.prod-check.outputs.response }}
         with:
           script: |
             const prodStatus = '${{ steps.prod-check.outputs.http_code }}';
-            const responseBody = `${{ steps.prod-check.outputs.response }}`;
+            const responseBody = process.env.RESPONSE_BODY || '';
             const timestamp = new Date().toISOString();
 
             const prodUrl = (process.env.PROD_URL || 'https://api.example.com').replace(/\/$/, '');
@@ -139,11 +173,7 @@ jobs:
             - Health: ${healthUrl}
             - Metrics: ${metricsUrl}
 
-            ### Response Snapshot
-            \n\n\`\`\`
-            ${truncatedResponse}
-            \`\`\`
-
+### Response Snapshot
             ### Actions Required
             1. Check production logs
             2. Verify service status
@@ -420,8 +450,8 @@ jobs:
           | Check | Status |
           |-------|--------|
           | Health Check | ${{ needs.health-check.result }} |
-          | Performance | ${{ needs.performance-check.result }} |
-          | Security | ${{ needs.security-monitoring.result }} |
+          | Performance | ${{ needs.performance-check.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.performance-check.result }} |
+          | Security | ${{ needs.security-monitoring.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.security-monitoring.result }} |
           | Dependencies | ${{ needs.dependency-check.result }} |
 
           ## System Status

@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Finance Feedback Engine Frontend Application
+  description: |
+    React Single Page Application (SPA) providing web interface for the Finance Feedback Engine.
+
+    The frontend application provides:
+    - Real-time dashboard with portfolio overview
+    - Trading agent control panel
+    - Decision history and analytics
+    - Position monitoring and management
+    - System health visualization
+    - Circuit breaker status monitoring
+
+    The frontend communicates with the backend via REST API and uses Nginx as a reverse proxy.
+  version: 0.9.9
+
+servers:
+  - url: http://localhost:5173
+    description: Vite development server
+  - url: http://localhost:80
+    description: Production Nginx server
+  - url: http://frontend:80
+    description: Docker container (internal)
+
+tags:
+  - name: pages
+    description: Frontend application routes
+  - name: components
+    description: React component interfaces
+
+paths:
+  /:
+    get:
+      summary: Dashboard page
+      description: Main dashboard showing portfolio overview, positions, and recent decisions
+      tags:
+        - pages
+      responses:
+        '200':
+          description: Dashboard HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /agent-control:
+    get:
+      summary: Agent control page
+      description: Page for controlling and monitoring the autonomous trading agent
+      tags:
+        - pages
+      responses:
+        '200':
+          description: Agent control HTML page
+
+  /analytics:
+    get:
+      summary: Analytics page
+      description: Analytics and performance visualization page
+      tags:
+        - pages
+      responses:
+        '200':
+          description: Analytics HTML page
+
+  /optimization:
+    get:
+      summary: Optimization page
+      description: Portfolio optimization and backtesting page
+      tags:
+        - pages
+      responses:
+        '200':
+          description: Optimization HTML page
+
+components:
+  schemas:
+    FrontendConfig:
+      type: object
+      description: Frontend configuration loaded from environment variables
+      properties:
+        apiUrl:
+          type: string
+          description: Backend API base URL
+          example: http://localhost:8000
+        environment:
+          type: string
+          enum:
+            - development
+            - staging
+            - production
+        features:
+          type: object
+          properties:
+            enableTrading:
+              type: boolean
+            enableNotifications:
+              type: boolean
+
+    DashboardState:
+      type: object
+      description: Dashboard page state
+      properties:
+        portfolioOverview:
+          $ref: '#/components/schemas/PortfolioOverview'
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+        recentDecisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Decision'
+
+    PortfolioOverview:
+      type: object
+      properties:
+        balance:
+          type: number
+        profitLoss:
+          type: number
+        profitLossPercentage:
+          type: number
+        activePositions:
+          type: integer
+
+    Position:
+      type: object
+      properties:
+        symbol:
+          type: string
+        quantity:
+          type: number
+        entryPrice:
+          type: number
+        currentPrice:
+          type: number
+        unrealizedPnL:
+          type: number
+
+    Decision:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        asset:
+          type: string
+        action:
+          type: string
+        confidence:
+          type: integer

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import os
 import socket
 from datetime import datetime
@@ -575,6 +576,11 @@ class FinanceFeedbackEngine:
                 memory_context["transaction_costs"] = {"has_data": False}
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
+        from .monitoring.prometheus import (
+            record_decision_latency,
+            update_decision_confidence,
+        )
+        _decision_start = time.perf_counter()
         try:
             decision = await self.decision_engine.generate_decision(
                 asset_pair=asset_pair,
@@ -638,6 +644,14 @@ class FinanceFeedbackEngine:
             # Re-raise to preserve existing error handling behavior
             raise
 
+        # Record aggregated decision latency metric
+        try:
+            _duration = time.perf_counter() - _decision_start
+            record_decision_latency(provider="ensemble", asset_pair=asset_pair, duration_seconds=_duration)
+        except Exception:
+            # Metrics should never break the flow
+            pass
+
         # Persist decision
         self.decision_store.save_decision(decision)
 
@@ -664,6 +678,13 @@ class FinanceFeedbackEngine:
             self._metrics["ffe_decisions_created_total"].add(
                 1, {"action": action, "asset_type": asset_type}
             )
+
+        # Update decision confidence gauge (aggregated)
+        try:
+            conf = float(decision.get("confidence", 0))
+            update_decision_confidence(asset_pair=asset_pair, action=action, confidence=conf)
+        except Exception:
+            pass
 
         return decision
 

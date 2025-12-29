@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ..core import FinanceFeedbackEngine
@@ -351,17 +352,20 @@ async def liveness_check():
     return get_liveness_status()
 
 
-# Metrics endpoint (stubbed for Phase 2)
+# Metrics endpoint
 @metrics_router.get("/metrics")
 async def metrics():
     """
-    Prometheus metrics endpoint (stubbed).
+    Prometheus metrics endpoint.
 
-    TODO Phase 2: Instrument metrics in core.py and decision_engine.py
+    Returns metrics in the Prometheus text exposition format with the
+    appropriate content type for Prometheus scrapers.
     """
     from ..monitoring.prometheus import generate_metrics
 
-    return generate_metrics()
+    metrics_text = generate_metrics()
+    # Content type per Prometheus text format specification
+    return Response(content=metrics_text, media_type="text/plain; version=0.0.4")
 
 
 # Telegram webhook endpoint (stubbed - implemented in telegram_bot.py)
