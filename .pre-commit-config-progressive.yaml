@@ -32,7 +32,7 @@ repos:
     hooks:
       - id: black
         name: Format code with Black
-        language_version: python3.11
+        language_version: python3.13
         args: ['--line-length=88']
         # Only format modified files, not entire codebase
         pass_filenames: true
@@ -50,63 +50,66 @@ repos:
   # PHASE 2: ADD BASIC LINTING (Uncomment when ready)
   # =============================================================================
 
-  # # Basic Python linting with lenient settings
-  # - repo: https://github.com/PyCQA/flake8
-  #   rev: 7.0.0
-  #   hooks:
-  #     - id: flake8
-  #       name: Lint with Flake8 (lenient)
-  #       args:
-  #         - '--max-line-length=120'  # More lenient than 88
-  #         - '--extend-ignore=E203,W503,E501,E402,F401'  # Ignore common issues
-  #         - '--max-complexity=15'  # Allow complex functions for now
-  #       files: ^finance_feedback_engine/.*\.py$  # Only check main code, not tests
+  # Basic Python linting with lenient settings
+  - repo: https://github.com/PyCQA/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: Lint with Flake8 (lenient)
+        args:
+          - '--max-line-length=120'  # More lenient than 88
+          - '--extend-ignore=E203,W503,E501,E402,F401,C901'  # Ignore common issues + complexity for now
+          - '--max-complexity=15'  # Allow complex functions for now
+        files: ^finance_feedback_engine/.*\.py$  # Only check main code, not tests
 
   # =============================================================================
   # PHASE 3: ADD SECURITY & TYPE CHECKS (Uncomment when ready)
   # =============================================================================
 
-  # # Security scanning (informational only at first)
-  # - repo: https://github.com/PyCQA/bandit
-  #   rev: 1.7.5
-  #   hooks:
-  #     - id: bandit
-  #       name: Security check with Bandit
-  #       args: ['-ll', '-i', '-r']  # Low severity, informational
-  #       files: ^finance_feedback_engine/.*\.py$
-  #       exclude: ^tests/
+  # Security scanning (informational only at first)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        name: Security check with Bandit
+        args: ['-ll', '-i', '-r']  # Low severity, informational
+        files: ^finance_feedback_engine/.*\.py$
+        exclude: ^tests/
+        additional_dependencies:
+          - bandit[toml]
+          - pbr
 
-  # # Type checking (optional, informational)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.8.0
-  #   hooks:
-  #     - id: mypy
-  #       name: Type check with mypy (optional)
-  #       args: [--ignore-missing-imports, --no-error-summary]
-  #       additional_dependencies:
-  #         - types-requests
-  #         - types-PyYAML
-  #       files: ^finance_feedback_engine/.*\.py$
-  #       # Don't fail on type errors initially
-  #       pass_filenames: true
-  #       always_run: false
+  # Type checking (optional, informational)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        name: Type check with mypy (optional)
+        args: [--ignore-missing-imports, --no-error-summary]
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+        files: ^finance_feedback_engine/.*\.py$
+        # Don't fail on type errors initially
+        pass_filenames: true
+        always_run: false
 
   # =============================================================================
   # PHASE 4: ADD TEST RUNNER (Uncomment when tests are stable)
   # =============================================================================
 
-  # # Run critical tests only
-  # - repo: local
-  #   hooks:
-  #     - id: pytest-critical
-  #       name: Run critical tests
-  #       entry: python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no
-  #       language: system
-  #       pass_filenames: false
-  #       # Only run on Python file changes
-  #       files: \.py$
-  #       # Don't block commit if tests fail initially
-  #       verbose: true
+  # Run critical tests only
+  - repo: local
+    hooks:
+      - id: pytest-critical
+        name: Run critical tests
+        entry: python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no
+        language: system
+        pass_filenames: false
+        # Only run on Python file changes
+        files: \.py$
+        # Don't block commit if tests fail initially
+        verbose: true
 
   # =============================================================================
   # LOCAL HOOKS (Safe, informational)
@@ -163,4 +166,4 @@ exclude: |
 
 # Default language version
 default_language_version:
-  python: python3.11
+  python: python3.13

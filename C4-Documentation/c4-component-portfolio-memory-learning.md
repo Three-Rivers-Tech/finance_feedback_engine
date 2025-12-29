@@ -82,7 +82,7 @@ C4Component
     Rel(memory_engine, context_gen, "Generates context")
     Rel(memory_engine, vector_mem, "Stores embeddings")
     Rel(memory_engine, validation, "Computes metrics")
-    
+
     Rel(thompson, decision_engine, "Updates provider weights")
     Rel(context_gen, decision_engine, "Provides performance context")
     Rel(vector_mem, ollama_svc, "Requests embeddings", "HTTP")

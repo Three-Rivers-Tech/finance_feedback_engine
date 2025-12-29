@@ -25,10 +25,10 @@
 - **Description**: Loads configuration with tiered fallback mechanism (local → base config). Matches CLI's config loading behavior
 - **Parameters**: None
 - **Returns**: `dict` - Merged configuration from local and base config files
-- **Raises**: 
+- **Raises**:
   - `RuntimeError` - If file loading fails (OSError, IOError, yaml.YAMLError)
   - `ValueError` - If no valid configuration loaded
-- **Dependencies**: 
+- **Dependencies**:
   - `pathlib.Path`
   - `yaml`
   - `load_config` from `..utils.config_loader`
@@ -36,7 +36,7 @@
 **`lifespan(app: FastAPI) -> asynccontextmanager`**
 - **Location**: `app.py:67-180`
 - **Description**: Async context manager for application lifespan (startup and shutdown). Initializes FinanceFeedbackEngine, AuthManager, Telegram bot, and OpenTelemetry tracing
-- **Parameters**: 
+- **Parameters**:
   - `app: FastAPI` - The FastAPI application instance
 - **Returns**: `AsyncGenerator` - Async context manager yielding during app runtime
 - **Dependencies**:
@@ -80,7 +80,7 @@
 **`GET /` - Root Endpoint**
 - **Location**: `app.py:213-217`
 - **Description**: Returns API metadata including documentation links
-- **Response**: 
+- **Response**:
   ```json
   {
     "name": "Finance Feedback Engine API",
@@ -111,7 +111,7 @@
 **`_pseudonymize_user_id(user_id: str) -> str`**
 - **Location**: `routes.py:19-59`
 - **Description**: Creates non-reversible pseudonymous identifier from user_id using HMAC-SHA256 for GDPR/privacy compliance
-- **Parameters**: 
+- **Parameters**:
   - `user_id: str` - Original user identifier (email, username, etc.)
 - **Returns**: `str` - Hex-encoded HMAC-SHA256 hash (64 characters)
 - **Security Notes**:
@@ -123,7 +123,7 @@
 **`_validate_webhook_token(request: Request) -> bool`**
 - **Location**: `routes.py:62-110`
 - **Description**: Validates webhook authentication token using constant-time comparison to prevent timing attacks
-- **Parameters**: 
+- **Parameters**:
   - `request: Request` - FastAPI Request object
 - **Returns**: `bool` - True if token valid, False otherwise
 - **Accepts Tokens From**:
@@ -136,7 +136,7 @@
 **`_validate_webhook_ip(request: Request) -> bool`**
 - **Location**: `routes.py:113-147`
 - **Description**: Validates webhook source IP against optional allowlist
-- **Parameters**: 
+- **Parameters**:
   - `request: Request` - FastAPI Request object
 - **Returns**: `bool` - True if IP valid or allowlist not configured, False if blocked
 - **Configuration**: `ALERT_WEBHOOK_ALLOWED_IPS` environment variable (comma-separated list, optional)
@@ -145,10 +145,10 @@
 **`_validate_jwt_token(token: str) -> str`**
 - **Location**: `routes.py:150-250`
 - **Description**: Comprehensive JWT token validation with signature, expiry, issuer, and audience checks
-- **Parameters**: 
+- **Parameters**:
   - `token: str` - JWT token string from Authorization header
 - **Returns**: `str` - user_id extracted from token's 'sub' claim
-- **Raises**: 
+- **Raises**:
   - `HTTPException(401)` - If token invalid, expired, or missing claims
   - `HTTPException(500)` - If python-jose not installed
 - **Validation Steps**:
@@ -260,12 +260,12 @@
 **`POST /webhook/telegram` - Telegram Webhook**
 - **Location**: `routes.py:358-390`
 - **Description**: Receives Telegram Bot API updates and processes approval requests
-- **Dependencies**: 
+- **Dependencies**:
   - `get_engine`
   - `telegram_bot` from `..integrations.telegram_bot`
 - **Request**: JSON from Telegram Bot API
 - **Response**: `{"status": "ok"}`
-- **Raises**: 
+- **Raises**:
   - `HTTPException(503)` - If Telegram bot not initialized
   - `HTTPException(500)` - If webhook processing fails
 
@@ -449,7 +449,7 @@
 **`_safe_json(value: Any) -> Any`**
 - **Location**: `health_checks.py:17-28`
 - **Description**: Converts objects to JSON-serializable primitives to avoid recursion with mock objects
-- **Parameters**: 
+- **Parameters**:
   - `value: Any` - Any Python object
 - **Returns**: `Any` - JSON-serializable version of input
 - **Handles**: dict, list, tuple, set, str, int, float, bool, None
@@ -460,7 +460,7 @@
 **`get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]`**
 - **Location**: `health_checks.py:31-149`
 - **Description**: Comprehensive health status for all components with circuit breaker states
-- **Parameters**: 
+- **Parameters**:
   - `engine: FinanceFeedbackEngine` - Engine instance to check
 - **Returns**: Dictionary with keys:
   - `status: str` - Health status ("healthy", "degraded", "unhealthy")
@@ -480,7 +480,7 @@
 **`get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]`**
 - **Location**: `health_checks.py:152-180`
 - **Description**: Kubernetes readiness probe checking if app is ready to serve requests
-- **Parameters**: 
+- **Parameters**:
   - `engine: FinanceFeedbackEngine` - Engine instance to check
 - **Returns**: Dictionary with keys:
   - `ready: bool` - True if ready, False otherwise
@@ -756,7 +756,7 @@
   - `close_positions: bool` - Close all positions at market price (default: True)
 - **Parameters**:
   - `engine: FinanceFeedbackEngine` - From dependency injection
-- **Response**: 
+- **Response**:
   ```json
   {
     "status": "emergency_stopped",
@@ -787,7 +787,7 @@
 - **Location**: `bot_control.py:417-530`
 - **Description**: Updates agent configuration in real-time
 - **Request Model**: `ConfigUpdateRequest`
-- **Response**: 
+- **Response**:
   ```json
   {
     "status": "updated",
@@ -890,7 +890,7 @@
 **`get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]`**
 - **Location**: `health.py:13-119`
 - **Description**: Comprehensive health status (legacy implementation)
-- **Parameters**: 
+- **Parameters**:
   - `engine: FinanceFeedbackEngine` - Engine instance
 - **Returns**: Dictionary with health information
 - **Status Values**: "healthy", "degraded", "unhealthy"
@@ -955,7 +955,7 @@ classDiagram
             +lifespan() AsyncContextManager
             +app FastAPI
         }
-        
+
         class RoutesModule {
             <<module>>
             +_pseudonymize_user_id()
@@ -970,7 +970,7 @@ classDiagram
             +alerts_router APIRouter
             +traces_router APIRouter
         }
-        
+
         class DependenciesModule {
             <<module>>
             +get_engine()
@@ -978,14 +978,14 @@ classDiagram
             +verify_api_key()
             +security HTTPBearer
         }
-        
+
         class HealthChecksModule {
             <<module>>
             +get_enhanced_health_status()
             +get_readiness_status()
             +get_liveness_status()
         }
-        
+
         class OptimizationModule {
             <<module>>
             +run_experiment()
@@ -993,7 +993,7 @@ classDiagram
             +get_experiment()
             +router APIRouter
         }
-        
+
         class BotControlModule {
             <<module>>
             +is_agent_running()
@@ -1008,7 +1008,7 @@ classDiagram
             +bot_control_router APIRouter
         }
     }
-    
+
     namespace CoreSystems {
         class FinanceFeedbackEngine {
             +analyze_asset()
@@ -1017,47 +1017,47 @@ classDiagram
             +trading_platform
             +data_provider
         }
-        
+
         class AuthManager {
             +validate_api_key()
             +get_key_stats()
         }
-        
+
         class TradingLoopAgent {
             +run()
             +stop()
             +state OODA_State
         }
-        
+
         class TelegramBot {
             +process_update()
             +send_alert()
         }
-        
+
         class TradeMonitor {
             +start()
         }
     }
-    
+
     AppModule --> FinanceFeedbackEngine: initializes
     AppModule --> AuthManager: initializes
     AppModule --> TelegramBot: initializes
-    
+
     RoutesModule --> FinanceFeedbackEngine: uses
     RoutesModule --> TelegramBot: uses
     RoutesModule --> AuthManager: uses
-    
+
     DependenciesModule --> FinanceFeedbackEngine: provides
     DependenciesModule --> AuthManager: provides
-    
+
     BotControlModule --> TradingLoopAgent: manages
     BotControlModule --> TradeMonitor: manages
     BotControlModule --> FinanceFeedbackEngine: uses
-    
+
     OptimizationModule --> FinanceFeedbackEngine: uses
-    
+
     HealthChecksModule --> FinanceFeedbackEngine: inspects
-    
+
     AppModule --> RoutesModule: registers routers
     AppModule --> DependenciesModule: uses dependencies
     AppModule --> BotControlModule: registers router
@@ -1074,42 +1074,42 @@ flowchart LR
     subgraph Client["Client"]
         HTTP[HTTP Request with Bearer Token]
     end
-    
+
     subgraph Auth["Authentication & Validation"]
         Extract[Extract Token from Header]
         Validate[Validate API Key/JWT]
         RateLimit[Check Rate Limit]
     end
-    
+
     subgraph Core["Core Processing"]
         Engine[FinanceFeedbackEngine]
         Decision[analyze_asset or execute_decision]
         Store[Decision Store/Cache]
     end
-    
+
     subgraph Response["Response Generation"]
         Format[Format Response]
         Log[Audit Log]
         Return[Return HTTP Response]
     end
-    
+
     HTTP -->|/api/v1/decisions| Extract
     HTTP -->|/api/v1/bot/*| Extract
     HTTP -->|/api/traces| Extract
-    
+
     Extract --> Validate
     Validate -->|Valid| RateLimit
     Validate -->|Invalid| Return
-    
+
     RateLimit -->|Under Limit| Engine
     RateLimit -->|Exceeded| Return
-    
+
     Engine --> Decision
     Decision --> Store
     Store --> Format
     Format --> Log
     Log --> Return
-    
+
     Return -->|HTTP 200| Client
     Return -->|HTTP 401/429| Client
     Return -->|HTTP 500| Client
@@ -1122,12 +1122,12 @@ title: Trading Decision Analysis Data Flow
 ---
 flowchart TD
     Request["POST /api/v1/decisions"]
-    
+
     subgraph Validation["Input Validation"]
         ValidAsset["Validate asset_pair"]
         ValidProvider["Validate provider"]
     end
-    
+
     subgraph Analysis["Decision Analysis"]
         CheckCache["Check decision cache"]
         AnalyzeAsset["engine.analyze_asset"]
@@ -1135,34 +1135,34 @@ flowchart TD
         GetSentiment["Get sentiment"]
         GetMacro["Get macro analysis"]
     end
-    
+
     subgraph Ensemble["Ensemble Decision"]
         WeightProviders["Weight providers"]
         Calculate["Calculate confidence"]
         Store["Store decision"]
     end
-    
+
     subgraph Response["Response"]
         Format["Format response"]
         Return["Return DecisionResponse"]
     end
-    
+
     Request --> ValidAsset
     Request --> ValidProvider
     ValidAsset --> CheckCache
     ValidProvider --> CheckCache
-    
+
     CheckCache -->|Cache Hit| Return
     CheckCache -->|Cache Miss| AnalyzeAsset
-    
+
     AnalyzeAsset --> GetData
     AnalyzeAsset --> GetSentiment
     AnalyzeAsset --> GetMacro
-    
+
     GetData --> WeightProviders
     GetSentiment --> WeightProviders
     GetMacro --> WeightProviders
-    
+
     WeightProviders --> Calculate
     Calculate --> Store
     Store --> Format
@@ -1176,49 +1176,49 @@ title: Multi-Objective Optimization Experiment Flow
 ---
 flowchart TD
     Start["POST /api/v1/optimization/experiment"]
-    
+
     subgraph Safety["Safety Checks"]
         CheckAgent["Is agent running?"]
         StopIfRunning["HTTP 409 if yes"]
     end
-    
+
     subgraph Setup["Experiment Setup"]
         LoadConfig["Load config"]
         CreateOptimizer["Create OptunaOptimizer"]
         SetupStudy["Setup Optuna study"]
     end
-    
+
     subgraph Optimize["Optimization Loop"]
         RunTrials["Run n_trials"]
         EvalObjectives["Evaluate both objectives"]
         BuildPareto["Build Pareto front"]
     end
-    
+
     subgraph Analysis["Representative Solutions"]
         BestSharpe["Find best Sharpe ratio"]
         BestDD["Find best drawdown"]
         FindKnee["Find knee point balanced"]
     end
-    
+
     subgraph Output["Output & Save"]
         SaveJSON["Save to JSON file"]
         ReturnResponse["Return ExperimentResponse"]
     end
-    
+
     Start --> CheckAgent
     CheckAgent -->|Running| StopIfRunning
     CheckAgent -->|Stopped| LoadConfig
-    
+
     LoadConfig --> CreateOptimizer
     CreateOptimizer --> SetupStudy
     SetupStudy --> RunTrials
     RunTrials --> EvalObjectives
     EvalObjectives --> BuildPareto
-    
+
     BuildPareto --> BestSharpe
     BuildPareto --> BestDD
     BuildPareto --> FindKnee
-    
+
     BestSharpe --> SaveJSON
     BestDD --> SaveJSON
     FindKnee --> SaveJSON
@@ -1232,7 +1232,7 @@ flowchart TD
 2. **JWT Validation**: Trace submission endpoints require valid JWT with proper claim validation
 3. **Rate Limiting**: API keys and users are rate-limited to prevent abuse
 4. **Privacy**: User IDs are pseudonymized using HMAC-SHA256 before storage/logging (GDPR compliance)
-5. **Webhook Security**: 
+5. **Webhook Security**:
    - Token validation using constant-time comparison (prevents timing attacks)
    - Optional IP allowlist for additional protection
 6. **CORS**: Strict configuration with explicit origins (no wildcards in production)

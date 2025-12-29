@@ -492,9 +492,21 @@ def _confirm_agent_startup(
     default=False,
     help="Skip confirmation prompt and start agent immediately (for automation)",
 )
+@click.option(
+    "--enable-pair-selection/--disable-pair-selection",
+    default=None,
+    help="Enable or disable autonomous pair selection (overrides config)",
+)
+@click.option(
+    "--pair-selection-interval",
+    type=float,
+    default=None,
+    help="Pair rotation interval in hours (overrides config, e.g., 1.0 for hourly)",
+)
 @click.pass_context
 def run_agent(
-    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs, yes
+    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs, yes,
+    enable_pair_selection, pair_selection_interval
 ):
     """Starts the autonomous trading agent."""
     if 1 <= take_profit <= 100:
@@ -540,6 +552,23 @@ def run_agent(
         console.print(
             f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}"
         )
+
+    # Apply pair selection CLI overrides to config
+    if enable_pair_selection is not None or pair_selection_interval is not None:
+        # Ensure pair_selection config section exists
+        if "pair_selection" not in config:
+            config["pair_selection"] = {}
+        
+        if enable_pair_selection is not None:
+            config["pair_selection"]["enabled"] = enable_pair_selection
+            status = "ENABLED" if enable_pair_selection else "DISABLED"
+            console.print(f"[cyan]Pair selection override:[/cyan] {status}")
+        
+        if pair_selection_interval is not None:
+            config["pair_selection"]["rotation_interval_hours"] = pair_selection_interval
+            console.print(
+                f"[cyan]Pair selection interval override:[/cyan] {pair_selection_interval} hours"
+            )
 
     # Display configuration and confirm startup
     config = ctx.obj["config"]

@@ -445,7 +445,10 @@ class TradeMonitor:
             # Refresh active trades gauge after cleanup
             try:
                 from .prometheus import update_active_trades
-                update_active_trades(platform="unified", count=len(self.active_trackers))
+
+                update_active_trades(
+                    platform="unified", count=len(self.active_trackers)
+                )
             except Exception:
                 pass
 
@@ -483,7 +486,10 @@ class TradeMonitor:
                 # Update aggregated active trades gauge (low cardinality)
                 try:
                     from .prometheus import update_active_trades
-                    update_active_trades(platform="unified", count=len(self.active_trackers))
+
+                    update_active_trades(
+                        platform="unified", count=len(self.active_trackers)
+                    )
                 except Exception:
                     pass
 
@@ -513,12 +519,14 @@ class TradeMonitor:
 
         # Update aggregated P&L distribution for Grafana dashboards and active trades gauge
         try:
-            from .prometheus import update_trade_pnl_trade, update_active_trades
+            from .prometheus import update_active_trades, update_trade_pnl_trade
 
             product_id = metrics.get("product_id", "UNKNOWN")
             asset_pair = product_id.replace("-", "").upper()
             pnl = float(metrics.get("realized_pnl", 0.0))
-            update_trade_pnl_trade(asset_pair=asset_pair, trade_id=trade_id, pnl_dollars=pnl)
+            update_trade_pnl_trade(
+                asset_pair=asset_pair, trade_id=trade_id, pnl_dollars=pnl
+            )
             update_active_trades(platform="unified", count=len(self.active_trackers))
         except Exception:
             pass

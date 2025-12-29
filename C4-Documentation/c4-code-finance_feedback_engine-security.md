@@ -200,21 +200,21 @@ classDiagram
             -_check_plaintext_credentials(config, config_file, path) void
             +validate_all(config_path) Tuple~bool, List~str~~
         }
-        
+
         class PickleToJsonMigrator {
             +find_pickle_files(root_dir) List~Path~
             +compute_file_hash(filepath) str
             +verify_json_output(json_path) bool
             +create_migration_report(pickle_files, migrations) str
         }
-        
+
         class StartupValidator {
             <<module>>
             +validate_at_startup(config_path, raise_on_error) bool
             +migration_instructions() str
         }
     }
-    
+
     SecurityValidator --> PickleToJsonMigrator : no direct dependency
     StartupValidator --> SecurityValidator : instantiates
     StartupValidator --> PickleToJsonMigrator : utility access
@@ -267,7 +267,7 @@ flowchart TD
 
 ### Plaintext Credential Detection
 - **Purpose**: Prevent accidental commit of API keys and secrets
-- **Detection Method**: 
+- **Detection Method**:
   - Checks key names against SENSITIVE_KEYS list (api_key, password, secret, token, passphrase)
   - Checks values against PLACEHOLDER_PATTERNS (YOUR_, REPLACE_, CHANGE_, example)
   - Verifies non-placeholder values are either env vars (`${...}`) or empty
@@ -277,7 +277,7 @@ flowchart TD
 ### Pickle RCE Vulnerability Remediation
 - **CVE/Issue**: CRT-2, CVSS 9.8
 - **Risk**: pickle.load() can execute arbitrary code on malicious pickle data
-- **Mitigation**: 
+- **Mitigation**:
   - Find all pickle files using find_pickle_files()
   - Migrate to JSON format using PickleToJsonMigrator
   - Verify integrity using SHA256 hashes

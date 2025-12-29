@@ -105,14 +105,14 @@ echo ""
 echo -e "${BLUE}[3/5]${NC} Configuring pre-commit..."
 if [ "$CONFIG_FILE" != ".pre-commit-config.yaml" ]; then
     echo "Creating symlink to $CONFIG_FILE..."
-    
+
     # Check if .pre-commit-config.yaml exists and is not a symlink
     if [ -f .pre-commit-config.yaml ] && [ ! -L .pre-commit-config.yaml ]; then
         echo -e "${YELLOW}⚠  Warning: .pre-commit-config.yaml exists and will be replaced${NC}"
         echo "Creating backup: .pre-commit-config.yaml.backup"
         cp .pre-commit-config.yaml .pre-commit-config.yaml.backup
     fi
-    
+
     ln -sf "$CONFIG_FILE" .pre-commit-config.yaml
     echo -e "${GREEN}✓ Symlink created${NC}"
 else

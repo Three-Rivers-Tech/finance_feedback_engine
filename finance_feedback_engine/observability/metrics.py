@@ -40,7 +40,7 @@ def init_metrics_from_config(config: dict) -> None:
         _meter_initialized = True
         return
 
-    _prometheus_port = metrics_config.get("prometheus_port", 8000)  # Reserved for future use
+    metrics_config.get("prometheus_port", 8000)  # Reserved for future use
     service_name = config.get("service", {}).get("name", "finance_feedback_engine")
     service_version = config.get("service", {}).get("version", "2.0.0")
 

@@ -522,6 +522,110 @@ agent:
   max_var_pct: 0.05            # 5%
   var_confidence: 0.95         # 95%
 
+  # Asset pairs for trading (can be overridden by pair_selection system)
+  asset_pairs:
+    - BTCUSD
+    - ETHUSD
+    - EURUSD
+
+# ============================================
+# Autonomous Pair Selection System
+# ============================================
+# Research-backed pair selection combining statistical analysis and LLM voting
+# Methods: Sortino Ratio, Correlation Analysis, GARCH Volatility Forecasting
+# Learning: Thompson Sampling adapts statistical vs LLM weight balance
+pair_selection:
+  # Enable autonomous pair selection (IMPORTANT: Start disabled for safety)
+  enabled: false
+
+  # Target number of active pairs to maintain
+  target_pair_count: 5
+
+  # Re-evaluation frequency (hours)
+  # System will re-select pairs every N hours
+  rotation_interval_hours: 1.0
+
+  # Pair universe discovery
+  universe:
+    # Auto-discover pairs from exchanges
+    auto_discover: true
+
+    # Pairs to exclude from selection (blacklist)
+    blacklist: []
+    # Example: blacklist: ["SHIBUSD", "DOGEUSD"]
+
+    # Cache TTL for discovered pairs (hours)
+    cache_ttl_hours: 24
+
+  # Statistical metrics configuration
+  statistical:
+    # Sortino Ratio (downside risk-adjusted returns)
+    sortino:
+      # Multi-timeframe windows (days)
+      windows_days: [7, 30, 90]
+
+      # Window weights (must sum to 1.0)
+      # Recent data weighted higher
+      weights: [0.5, 0.3, 0.2]
+
+    # Correlation Analysis (portfolio diversification)
+    correlation:
+      # Lookback period for correlation calculation (days)
+      lookback_days: 30
+
+    # GARCH Volatility Forecasting
+    garch:
+      # GARCH(p, q) order
+      p: 1  # Autoregressive term
+      q: 1  # Moving average term
+
+      # Forecast horizon (days ahead)
+      forecast_horizon_days: 7
+
+      # Fitting window for GARCH model (days)
+      fitting_window_days: 90
+
+    # Metric aggregation weights (must sum to 1.0)
+    aggregation_weights:
+      sortino: 0.4          # Risk-adjusted returns
+      diversification: 0.35  # Portfolio correlation
+      volatility: 0.25       # GARCH forecast
+
+  # LLM integration configuration
+  llm:
+    # Enable LLM ensemble voting
+    enabled: true
+
+    # Candidate oversampling multiplier
+    # Query LLM for top N*multiplier candidates
+    # Example: 5 slots * 3 = evaluate top 15 candidates
+    candidate_oversampling: 3
+
+  # Thompson Sampling configuration
+  thompson_sampling:
+    # Enable adaptive weight learning
+    enabled: true
+
+    # Minimum completed trades before updating weights
+    min_trades_for_update: 3
+
+    # Win rate threshold for success signal (0.0-1.0)
+    # Increment alpha if win_rate >= this threshold
+    success_threshold: 0.55  # 55%
+
+    # Win rate threshold for failure signal (0.0-1.0)
+    # Increment beta if win_rate <= this threshold
+    failure_threshold: 0.45  # 45%
+
+  # Position locking configuration
+  position_locking:
+    # Lock pairs with open positions from rotation
+    enabled: true
+
+    # Cooldown period after position closes (hours)
+    # Prevents immediate re-selection
+    cooldown_hours: 0
+
 # ============================================
 # USAGE NOTES
 # ============================================

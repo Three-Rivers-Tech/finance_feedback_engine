@@ -329,7 +329,9 @@ class AIDecisionManager:
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
 
-        from finance_feedback_engine.monitoring.prometheus import increment_provider_request
+        from finance_feedback_engine.monitoring.prometheus import (
+            increment_provider_request,
+        )
 
         for provider, result in zip(self.ensemble_manager.enabled_providers, results):
             if isinstance(result, Exception):

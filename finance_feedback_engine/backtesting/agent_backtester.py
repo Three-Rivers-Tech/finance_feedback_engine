@@ -150,6 +150,7 @@ class AgentModeBacktester(Backtester):
         Run backtest with OODA loop simulation: retries, throttling, kill-switch, and daily trade limits.
         """
         import asyncio
+
         from finance_feedback_engine.agent.config import TradingAgentConfig
         from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
         from finance_feedback_engine.data_providers.mock_live_provider import (
@@ -190,6 +191,7 @@ class AgentModeBacktester(Backtester):
 
         # Agent config aligned to requested OODA settings
         from ..agent.config import AutonomousAgentConfig
+
         agent_config = TradingAgentConfig(
             asset_pairs=[asset_pair_std],
             autonomous_execution=True,
@@ -213,7 +215,15 @@ class AgentModeBacktester(Backtester):
 
         # Backtest engine wrapper (same as parent)
         class BacktestEngine:
-            def __init__(self, backtester, decision_engine, mock_provider, mock_platform, asset_pair, memory_engine):
+            def __init__(
+                self,
+                backtester,
+                decision_engine,
+                mock_provider,
+                mock_platform,
+                asset_pair,
+                memory_engine,
+            ):
                 self.backtester = backtester
                 self.decision_engine = decision_engine
                 self.mock_provider = mock_provider
@@ -227,7 +237,9 @@ class AgentModeBacktester(Backtester):
                     asset_pair=asset_pair, include_sentiment=True
                 )
                 balance = self.mock_platform.get_balance()
-                current_balance = balance.get("FUTURES_USD", self.backtester.initial_balance)
+                current_balance = balance.get(
+                    "FUTURES_USD", self.backtester.initial_balance
+                )
                 # Pick an effective price
                 effective_price = market_data.get("close", None)
                 if not effective_price:
@@ -241,7 +253,10 @@ class AgentModeBacktester(Backtester):
                     balance=balance,
                     portfolio={"holdings": []},
                     memory_context=None,
-                    monitoring_context={"active_positions": {"futures": [], "spot": []}, "slots_available": 5},
+                    monitoring_context={
+                        "active_positions": {"futures": [], "spot": []},
+                        "slots_available": 5,
+                    },
                 )
                 if decision:
                     decision.setdefault("position_size", position_size)
@@ -252,7 +267,10 @@ class AgentModeBacktester(Backtester):
             def execute_decision(self, decision_id):
                 decision = self._decisions.get(decision_id)
                 if not decision:
-                    return {"success": False, "message": f"Decision {decision_id} not found"}
+                    return {
+                        "success": False,
+                        "message": f"Decision {decision_id} not found",
+                    }
                 try:
                     return self.mock_platform.execute_trade(decision)
                 except Exception as e:
@@ -267,7 +285,12 @@ class AgentModeBacktester(Backtester):
                         pass
 
         backtest_engine = BacktestEngine(
-            self, decision_engine, mock_provider, mock_platform, asset_pair_std, self.memory_engine
+            self,
+            decision_engine,
+            mock_provider,
+            mock_platform,
+            asset_pair_std,
+            self.memory_engine,
         )
         agent = TradingLoopAgent(
             config=agent_config,
@@ -303,7 +326,10 @@ class AgentModeBacktester(Backtester):
                 pulse_idx += 1
 
                 # Frequency throttling
-                if throttle_pulses > 1 and (pulse_idx - last_processed_pulse) < throttle_pulses:
+                if (
+                    throttle_pulses > 1
+                    and (pulse_idx - last_processed_pulse) < throttle_pulses
+                ):
                     ooda_metrics["candles_skipped_frequency"] += 1
                     continue
 
@@ -315,11 +341,15 @@ class AgentModeBacktester(Backtester):
                     try:
                         # Wrap actual fetch with simulated failure
                         raw_pulse = await mock_provider.get_pulse_data()
-                        pulse_data = self._simulate_data_fetch(raw_pulse, attempt=attempt)
+                        pulse_data = self._simulate_data_fetch(
+                            raw_pulse, attempt=attempt
+                        )
                         break
                     except SimulatedDataFetchError as e:
-                        ooda_metrics["retry_events"].append({"attempt": attempt + 1, "error": str(e)})
-                        await asyncio.sleep(0.2 * (2 ** attempt))
+                        ooda_metrics["retry_events"].append(
+                            {"attempt": attempt + 1, "error": str(e)}
+                        )
+                        await asyncio.sleep(0.2 * (2**attempt))
                         attempt += 1
                     except Exception as e:
                         logger.warning(f"Pulse fetch error: {e}")
@@ -338,20 +368,26 @@ class AgentModeBacktester(Backtester):
                     ooda_metrics["candles_skipped_daily_limit"] += 1
                     continue
 
-                cycle_result = await agent.process_cycle()
+                _ = await agent.process_cycle()
                 trades_after = len(mock_platform.get_trade_history())
                 if trades_after > trades_before:
-                    daily_trade_counts[day_key] = daily_trade_counts.get(day_key, 0) + (trades_after - trades_before)
+                    daily_trade_counts[day_key] = daily_trade_counts.get(day_key, 0) + (
+                        trades_after - trades_before
+                    )
 
                 # Update peak and check kill-switch based on portfolio value
                 try:
                     portfolio = mock_platform.get_portfolio_breakdown()
-                    current_value = float(portfolio.get("total_value_usd", self.initial_balance))
+                    current_value = float(
+                        portfolio.get("total_value_usd", self.initial_balance)
+                    )
                 except Exception:
                     current_value = self.initial_balance
 
                 peak_value = max(peak_value, current_value)
-                ks_reason = self._check_kill_switch(current_value, self.initial_balance, peak_value)
+                ks_reason = self._check_kill_switch(
+                    current_value, self.initial_balance, peak_value
+                )
                 if ks_reason:
                     ooda_metrics["kill_switch_triggered"] = True
                     ooda_metrics["kill_switch_reason"] = ks_reason
@@ -364,7 +400,9 @@ class AgentModeBacktester(Backtester):
         asyncio.run(run_backtest_loop())
 
         # Compute results via parent's reporting (reuse metrics computation on platform state)
-        results = super().run_backtest(asset_pair, start_date, end_date, decision_engine)
+        results = super().run_backtest(
+            asset_pair, start_date, end_date, decision_engine
+        )
         results["ooda_metrics"] = ooda_metrics
         results["agent_config"] = {
             "strategic_goal": self.strategic_goal,

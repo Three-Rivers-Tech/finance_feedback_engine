@@ -122,7 +122,7 @@ class JSONFormatter(logging.Formatter):
             'function': record.funcName,
             'line': record.lineno,
         }
-        
+
         # Add extra fields
         if hasattr(record, 'agent_state'):
             log_data['agent_state'] = record.agent_state
@@ -132,7 +132,7 @@ class JSONFormatter(logging.Formatter):
             log_data['asset_pair'] = record.asset_pair
         if hasattr(record, 'duration_ms'):
             log_data['duration_ms'] = record.duration_ms
-            
+
         return json.dumps(log_data)
 ```
 
@@ -144,18 +144,18 @@ class JSONFormatter(logging.Formatter):
 logging:
   level: "INFO"
   format: "json"  # or "text" for development
-  
+
   # Rotation policy
   rotation:
     max_bytes: 10485760  # 10 MB
     backup_count: 30     # Keep 30 files
-    
+
   # Retention policy
   retention:
     hot_tier_days: 7      # Keep last 7 days in fast storage
     warm_tier_days: 30    # Archive 8-30 days to S3/object storage
     cold_tier_days: 365   # Compress and deep archive for compliance
-    
+
   # Performance settings
   async_logging: true     # Non-blocking I/O
   buffer_size: 8192       # 8KB buffer
@@ -169,15 +169,15 @@ logging:
 # finance_feedback_engine/monitoring/output_capture/process_monitor.py
 class ProcessMonitor:
     """Capture stdout/stderr/return codes from subprocesses."""
-    
+
     def capture_llm_call(self, provider: str, prompt: str) -> dict:
         """Monitor LLM API calls with timeout and error capture."""
         start_time = time.time()
-        
+
         try:
             # Existing LLM call logic here
             result = self._execute_llm_call(provider, prompt)
-            
+
             # Record success metrics
             self.metrics.record_llm_call(
                 provider=provider,
@@ -185,9 +185,9 @@ class ProcessMonitor:
                 status='success',
                 tokens=result.get('usage', {}).get('total_tokens', 0)
             )
-            
+
             return result
-            
+
         except TimeoutError as e:
             self.metrics.record_llm_call(
                 provider=provider,
@@ -220,7 +220,7 @@ from typing import Dict, List
 
 class LogParser:
     """Real-time log parsing and metric extraction."""
-    
+
     PATTERNS = {
         'kill_switch': re.compile(r'KILL.*SWITCH|Portfolio.*limit.*exceeded', re.I),
         'api_failure': re.compile(r'Connection refused|rate limit|timeout|502|503', re.I),
@@ -228,12 +228,12 @@ class LogParser:
         'risk_violation': re.compile(r'RiskGatekeeper.*reject|drawdown.*exceed', re.I),
         'slow_query': re.compile(r'duration_ms:\s*(\d+)', re.I),
     }
-    
+
     def parse_log_line(self, line: str) -> Dict:
         """Extract metrics and events from a log line."""
         events = []
         metrics = {}
-        
+
         # Pattern matching
         for event_type, pattern in self.PATTERNS.items():
             match = pattern.search(line)
@@ -243,11 +243,11 @@ class LogParser:
                     'timestamp': datetime.utcnow().isoformat(),
                     'details': match.group(0)
                 })
-                
+
                 # Extract numeric metrics
                 if event_type == 'slow_query' and match.groups():
                     metrics['duration_ms'] = int(match.group(1))
-                    
+
         return {'events': events, 'metrics': metrics}
 ```
 
@@ -371,11 +371,11 @@ CREATE RETENTION POLICY "cold" ON "ffe_metrics" DURATION 365d REPLICATION 1
 # finance_feedback_engine/monitoring/analysis/bottleneck_detector.py
 class BottleneckDetector:
     """Identify performance bottlenecks using statistical analysis."""
-    
+
     def detect_bottlenecks(self, time_window='1h') -> List[Dict]:
         """Analyze metrics and identify bottlenecks."""
         bottlenecks = []
-        
+
         # 1. Check for high p99 latencies
         slow_endpoints = self.query_influx(f"""
             SELECT PERCENTILE(duration_ms, 99) as p99
@@ -384,7 +384,7 @@ class BottleneckDetector:
             GROUP BY service, endpoint
             HAVING p99 > 5000
         """)
-        
+
         for endpoint in slow_endpoints:
             bottlenecks.append({
                 'type': 'high_latency',
@@ -393,16 +393,16 @@ class BottleneckDetector:
                 'threshold_ms': 5000,
                 'severity': 'high' if endpoint['p99'] > 10000 else 'medium'
             })
-        
+
         # 2. Check for state transition loops
         stuck_states = self.detect_stuck_states()
         bottlenecks.extend(stuck_states)
-        
+
         # 3. Check for memory leaks
         memory_growth = self.detect_memory_growth()
         if memory_growth:
             bottlenecks.append(memory_growth)
-            
+
         return bottlenecks
 ```
 
@@ -421,15 +421,15 @@ from typing import Optional
 
 class CacheManager:
     """Intelligent caching for frequently accessed data."""
-    
+
     def __init__(self, redis_url: str = 'redis://localhost:6379'):
         self.redis_client = redis.from_url(redis_url)
-        
+
     def cache_market_data(self, asset_pair: str, data: dict, ttl: int = 60):
         """Cache market data with TTL."""
         key = f"market_data:{asset_pair}"
         self.redis_client.setex(key, ttl, json.dumps(data))
-        
+
     def cache_provider_response(self, provider: str, prompt_hash: str, response: dict, ttl: int = 300):
         """Cache LLM responses to avoid duplicate calls."""
         key = f"llm:{provider}:{prompt_hash}"
@@ -444,18 +444,18 @@ Extend existing circuit breaker with dynamic backoff:
 # Enhance finance_feedback_engine/utils/circuit_breaker.py
 class AdaptiveCircuitBreaker(CircuitBreaker):
     """Circuit breaker with dynamic retry timing."""
-    
+
     def calculate_backoff(self) -> float:
         """Calculate exponential backoff with jitter."""
         base_delay = 2.0
         max_delay = 60.0
-        
+
         # Exponential backoff with historical failure rate
         delay = min(base_delay * (2 ** self.failure_count), max_delay)
-        
+
         # Add jitter to prevent thundering herd
         jitter = random.uniform(0, delay * 0.1)
-        
+
         return delay + jitter
 ```
 
@@ -467,18 +467,18 @@ Monitor and adjust thread pool sizes based on load:
 # finance_feedback_engine/monitoring/optimization/optimizer_engine.py
 class ResourceOptimizer:
     """Dynamically adjust resource allocation."""
-    
+
     def optimize_thread_pool(self, trade_monitor):
         """Adjust MAX_CONCURRENT_TRADES based on system load."""
         current_load = psutil.cpu_percent()
         current_memory = psutil.virtual_memory().percent
-        
+
         if current_load < 50 and current_memory < 60:
             # System has capacity, increase concurrency
             new_max = min(trade_monitor.MAX_CONCURRENT_TRADES + 1, 5)
             trade_monitor.MAX_CONCURRENT_TRADES = new_max
             logger.info(f"Increased max concurrent trades to {new_max}")
-            
+
         elif current_load > 80 or current_memory > 80:
             # System under pressure, reduce concurrency
             new_max = max(trade_monitor.MAX_CONCURRENT_TRADES - 1, 1)
@@ -619,7 +619,7 @@ groups:
         annotations:
           summary: "Kill switch triggered"
           description: "Agent kill switch was activated due to portfolio loss threshold"
-          
+
       # Agent stuck in state
       - alert: AgentStuckInState
         expr: changes(ffe_agent_state[5m]) == 0 AND ffe_agent_state != 0
@@ -630,7 +630,7 @@ groups:
         annotations:
           summary: "Agent stuck in {{ $labels.state }}"
           description: "Agent has not transitioned states in 5 minutes"
-          
+
   - name: api_health
     interval: 1m
     rules:
@@ -644,7 +644,7 @@ groups:
         annotations:
           summary: "High API latency for {{ $labels.service }}"
           description: "p95 latency is {{ $value }}s (threshold: 10s)"
-          
+
       # API failure rate
       - alert: HighAPIFailureRate
         expr: rate(ffe_provider_requests_total{status="failure"}[5m]) / rate(ffe_provider_requests_total[5m]) > 0.1
@@ -655,7 +655,7 @@ groups:
         annotations:
           summary: "High failure rate for {{ $labels.provider }}"
           description: "{{ $value | humanizePercentage }} of requests failing"
-          
+
   - name: resource_exhaustion
     interval: 1m
     rules:
@@ -669,7 +669,7 @@ groups:
         annotations:
           summary: "High memory usage"
           description: "Memory usage is {{ $value | humanizePercentage }}"
-          
+
       # Disk space
       - alert: LowDiskSpace
         expr: (node_filesystem_avail_bytes{mountpoint="/data"} / node_filesystem_size_bytes) < 0.1
@@ -693,19 +693,19 @@ route:
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 4h
-  
+
   routes:
     # Critical alerts → PagerDuty + Telegram
     - match:
         severity: critical
       receiver: 'critical-alerts'
       continue: true
-      
+
     # High severity → Telegram
     - match:
         severity: high
       receiver: 'telegram'
-      
+
     # Warnings → Email
     - match:
         severity: warning
@@ -718,12 +718,12 @@ receivers:
         description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
     webhook_configs:
       - url: '${TELEGRAM_WEBHOOK_URL}'
-        
+
   - name: 'telegram'
     webhook_configs:
       - url: '${TELEGRAM_WEBHOOK_URL}'
         send_resolved: true
-        
+
   - name: 'email'
     email_configs:
       - to: '${ALERT_EMAIL}'
@@ -746,7 +746,7 @@ import pandas as pd
 
 class AnomalyDetector:
     """ML-based anomaly detection for metrics."""
-    
+
     def extract_features(self, time_window='1h') -> pd.DataFrame:
         """Extract features from metrics for ML models."""
         features = {
@@ -754,29 +754,29 @@ class AnomalyDetector:
             'cycle_duration_mean': self.get_metric('ffe_agent_cycle_duration_seconds', 'mean'),
             'cycle_duration_p95': self.get_metric('ffe_agent_cycle_duration_seconds', 'p95'),
             'state_transition_rate': self.get_metric('ffe_agent_state', 'changes'),
-            
+
             # API metrics
             'api_latency_p95': self.get_metric('ffe_api_call_duration_seconds', 'p95'),
             'api_failure_rate': self.get_metric('ffe_provider_requests_total', 'failure_rate'),
-            
+
             # Trade metrics
             'win_rate': self.get_metric('ffe_trade_pnl_dollars_summary', 'win_rate'),
             'avg_pnl': self.get_metric('ffe_trade_pnl_dollars_summary', 'mean'),
-            
+
             # Resource metrics
             'cpu_usage': self.get_metric('process_cpu_seconds_total', 'rate'),
             'memory_usage': self.get_metric('process_resident_memory_bytes', 'current'),
         }
-        
+
         return pd.DataFrame([features])
-    
+
     def detect_anomalies(self) -> List[Dict]:
         """Detect anomalies using Isolation Forest."""
         features = self.extract_features()
-        
+
         # Use pre-trained model
         predictions = self.model.predict(features)
-        
+
         anomalies = []
         if predictions[0] == -1:  # Anomaly detected
             anomalies.append({
@@ -785,7 +785,7 @@ class AnomalyDetector:
                 'features': features.to_dict('records')[0],
                 'severity': self.calculate_severity(features)
             })
-            
+
         return anomalies
 ```
 
@@ -795,11 +795,11 @@ class AnomalyDetector:
 # finance_feedback_engine/monitoring/optimization/feedback_loop.py
 class OptimizationFeedbackLoop:
     """Generate optimization recommendations from metrics."""
-    
+
     def generate_recommendations(self) -> List[Dict]:
         """Analyze metrics and suggest optimizations."""
         recommendations = []
-        
+
         # Check for cache hit rate
         cache_hit_rate = self.get_cache_hit_rate()
         if cache_hit_rate < 0.6:
@@ -809,7 +809,7 @@ class OptimizationFeedbackLoop:
                 'reason': f'Cache hit rate is {cache_hit_rate:.2%}',
                 'suggested_config': {'cache_ttl': 300}
             })
-        
+
         # Check for provider performance
         slow_providers = self.identify_slow_providers()
         if slow_providers:
@@ -819,7 +819,7 @@ class OptimizationFeedbackLoop:
                 'providers': slow_providers,
                 'reason': 'High latency detected'
             })
-        
+
         return recommendations
 ```
 
@@ -917,25 +917,25 @@ finance_feedback_engine/
     prometheus.py                 # Prometheus metrics (existing)
     model_performance_monitor.py  # ML model monitoring (existing)
     context_provider.py           # Monitoring context (existing)
-    
+
     # New components to create
     logging_config.py             # Structured logging setup
-    
+
     output_capture/
       __init__.py
       process_monitor.py          # Subprocess output capture
       log_parser.py               # Real-time log parsing
-      
+
     metrics/
       __init__.py
       time_series_store.py        # InfluxDB wrapper
       kpi_calculator.py           # Derived metrics calculation
-      
+
     analysis/
       __init__.py
       bottleneck_detector.py      # Performance bottleneck detection
       anomaly_detector.py         # ML-based anomaly detection
-      
+
     optimization/
       __init__.py
       cache_manager.py            # Redis caching layer
@@ -948,7 +948,7 @@ monitoring/
   alert_rules.yml                 # Alert rules (existing, to be enhanced)
   alertmanager.yml                # Alertmanager config (existing, to be enhanced)
   docker-compose.yml              # Container orchestration (existing)
-  
+
   # New components
   grafana/
     dashboards/
@@ -977,7 +977,7 @@ config/
 logging:
   level: "INFO"
   format: "json"  # or "text"
-  
+
   # Output destinations
   outputs:
     console: true
@@ -987,19 +987,19 @@ logging:
     syslog:
       enabled: false
       address: "localhost:514"
-  
+
   # Rotation policy
   rotation:
     max_bytes: 10485760  # 10 MB
     backup_count: 30
     compression: "gzip"
-  
+
   # Retention tiers
   retention:
     hot_tier_days: 7
     warm_tier_days: 30
     cold_tier_days: 365
-  
+
   # Performance settings
   async_logging: true
   buffer_size: 8192
@@ -1012,7 +1012,7 @@ metrics:
     enabled: true
     port: 8000
     path: "/metrics"
-  
+
   # InfluxDB time-series storage
   influxdb:
     enabled: true
@@ -1021,7 +1021,7 @@ metrics:
     retention_policy: "hot"
     batch_size: 100
     flush_interval_seconds: 10
-  
+
   # Metric collection intervals
   intervals:
     agent_state: 5  # seconds
@@ -1042,14 +1042,14 @@ dashboards:
 # Alerting configuration
 alerting:
   enabled: true
-  
+
   # Alert channels
   channels:
     telegram:
       enabled: false
       bot_token: "${TELEGRAM_BOT_TOKEN}"
       chat_id: "${TELEGRAM_CHAT_ID}"
-      
+
     email:
       enabled: false
       smtp_host: "smtp.gmail.com"
@@ -1057,11 +1057,11 @@ alerting:
       from_address: "alerts@ffe.local"
       to_addresses:
         - "admin@example.com"
-      
+
     pagerduty:
       enabled: false
       service_key: "${PAGERDUTY_SERVICE_KEY}"
-  
+
   # Alert thresholds
   thresholds:
     api_latency_p95_seconds: 10
@@ -1073,31 +1073,31 @@ alerting:
 # Optimization engine
 optimization:
   enabled: true
-  
+
   # Caching configuration
   cache:
     redis_url: "redis://localhost:6379"
     market_data_ttl: 60
     llm_response_ttl: 300
-    
+
   # Auto-tuning
   auto_tuning:
     enabled: true
     learning_rate: 0.1
-    
+
   # Resource management
   resources:
     auto_scale_thread_pool: true
     min_concurrent_trades: 1
     max_concurrent_trades: 5
-    
+
   # ML models
   ml:
     anomaly_detection:
       enabled: true
       model_path: "models/anomaly_detector.pkl"
       sensitivity: 0.7
-    
+
     failure_prediction:
       enabled: false
       lookback_hours: 24
@@ -1145,10 +1145,10 @@ async def stream_logs(
 async def get_bottlenecks(time_window: str = Query("1h")):
     """Get current performance bottlenecks."""
     from finance_feedback_engine.monitoring.analysis.bottleneck_detector import BottleneckDetector
-    
+
     detector = BottleneckDetector()
     bottlenecks = detector.detect_bottlenecks(time_window)
-    
+
     return {
         "time_window": time_window,
         "bottlenecks": bottlenecks,
@@ -1159,10 +1159,10 @@ async def get_bottlenecks(time_window: str = Query("1h")):
 async def get_optimization_recommendations():
     """Get suggested optimizations based on metrics."""
     from finance_feedback_engine.monitoring.optimization.feedback_loop import OptimizationFeedbackLoop
-    
+
     loop = OptimizationFeedbackLoop()
     recommendations = loop.generate_recommendations()
-    
+
     return {
         "recommendations": recommendations,
         "timestamp": datetime.utcnow().isoformat()
@@ -1172,13 +1172,13 @@ async def get_optimization_recommendations():
 async def clear_cache(cache_type: Optional[str] = Query(None)):
     """Clear specific cache or all caches."""
     from finance_feedback_engine.monitoring.optimization.cache_manager import CacheManager
-    
+
     cache = CacheManager()
     if cache_type:
         cache.clear(cache_type)
     else:
         cache.clear_all()
-    
+
     return {"status": "success", "cache_type": cache_type or "all"}
 ```
 
@@ -1202,13 +1202,13 @@ import re
 
 class PIIRedactor:
     """Redact sensitive information from logs."""
-    
+
     PATTERNS = {
         'api_key': re.compile(r'(api[_-]?key["\s:=]+)([a-zA-Z0-9_-]{20,})'),
         'token': re.compile(r'(token["\s:=]+)([a-zA-Z0-9_-]{20,})'),
         'account_id': re.compile(r'(account[_-]?id["\s:=]+)(\d{3}-\d{3}-\d{7}-\d{3})'),
     }
-    
+
     def redact(self, message: str) -> str:
         """Redact PII from log message."""
         for pattern_name, pattern in self.PATTERNS.items():

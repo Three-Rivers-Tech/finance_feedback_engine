@@ -115,7 +115,9 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             result = cb.call_sync(target_platform.execute_trade, decision)
             # Emit circuit breaker state metric (low cardinality)
             try:
-                from finance_feedback_engine.monitoring.prometheus import update_circuit_breaker_state
+                from finance_feedback_engine.monitoring.prometheus import (
+                    update_circuit_breaker_state,
+                )
                 from finance_feedback_engine.utils.circuit_breaker import CircuitState
 
                 state_map = {

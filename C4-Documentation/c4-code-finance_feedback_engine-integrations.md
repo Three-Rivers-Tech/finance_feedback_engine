@@ -38,7 +38,7 @@ finance_feedback_engine/integrations/
 - `is_redis_running(password: str = None) -> bool`
   - **Location**: Line 15
   - **Description**: Check if Redis is currently running and accessible
-  - **Parameters**: 
+  - **Parameters**:
     - `password` (str, optional): Redis authentication password
   - **Returns**: `bool` - True if Redis is accessible, False otherwise
   - **Dependencies**: `redis` library
@@ -62,7 +62,7 @@ finance_feedback_engine/integrations/
 - `get_connection_url(password: str = None) -> str`
   - **Location**: Line 62
   - **Description**: Generate Redis connection URL for use by clients
-  - **Parameters**: 
+  - **Parameters**:
     - `password` (str, optional): Redis authentication password
   - **Returns**: `str` - Redis connection URL (redis://localhost:6379 or redis://:password@localhost:6379)
   - **Dependencies**: None
@@ -82,11 +82,11 @@ finance_feedback_engine/integrations/
   - **Description**: Install Redis on Linux using apt-get with comprehensive error handling
   - **Parameters**: None
   - **Returns**: `bool` - True if installation succeeded, False otherwise
-  - **Dependencies**: 
+  - **Dependencies**:
     - `subprocess` standard library
     - `apt-get` system package manager
     - `systemctl` or `service` command (OS-dependent)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Executes system commands requiring sudo
     - Modifies system state (installs packages)
     - May prompt for sudo password
@@ -98,10 +98,10 @@ finance_feedback_engine/integrations/
   - **Description**: Install Redis on macOS using Homebrew
   - **Parameters**: None
   - **Returns**: `bool` - True if installation succeeded, False otherwise
-  - **Dependencies**: 
+  - **Dependencies**:
     - `subprocess` standard library
     - `brew` package manager
-  - **Side Effects**: 
+  - **Side Effects**:
     - Executes system commands
     - Modifies system state (installs packages, starts service)
   - **Error Handling**: Checks for Homebrew availability before installation
@@ -111,11 +111,11 @@ finance_feedback_engine/integrations/
   - **Description**: Install and start Redis using Docker container (cross-platform fallback)
   - **Parameters**: None
   - **Returns**: `bool` - True if Docker container started successfully, False otherwise
-  - **Dependencies**: 
+  - **Dependencies**:
     - `subprocess` standard library
     - `docker` command-line tool
     - `redis:alpine` Docker image
-  - **Side Effects**: 
+  - **Side Effects**:
     - Executes Docker commands
     - Stops and removes existing `ffe-redis` container if present
     - Starts new Redis container with auto-restart policy
@@ -124,7 +124,7 @@ finance_feedback_engine/integrations/
 - `ensure_running(auto_install: bool = True) -> bool` (classmethod)
   - **Location**: Line 295
   - **Description**: Main entry point for ensuring Redis is running with automated installation workflow
-  - **Parameters**: 
+  - **Parameters**:
     - `auto_install` (bool, default=True): Whether to prompt for auto-install
   - **Returns**: `bool` - True if Redis is running after this call, False otherwise
   - **Dependencies**: All instance methods above
@@ -156,7 +156,7 @@ finance_feedback_engine/integrations/
 - `__init__(config: dict)`
   - **Location**: Line 31
   - **Description**: Initialize Telegram approval bot with configuration
-  - **Parameters**: 
+  - **Parameters**:
     - `config` (dict): Telegram configuration containing:
       - `bot_token` (str): Telegram Bot API token
       - `allowed_user_ids` (list): User IDs authorized to approve decisions
@@ -166,7 +166,7 @@ finance_feedback_engine/integrations/
       - `webhook_url` (str, optional): Production webhook URL
       - `ngrok_auth_token` (str, optional): ngrok authentication token
   - **Returns**: None
-  - **Side Effects**: 
+  - **Side Effects**:
     - Creates Telegram Bot instance
     - Initializes Redis client if enabled
     - Creates TunnelManager instance
@@ -177,7 +177,7 @@ finance_feedback_engine/integrations/
   - **Description**: Initialize Redis connection for approval queue with fallback to in-memory
   - **Parameters**: None
   - **Returns**: None
-  - **Side Effects**: 
+  - **Side Effects**:
     - Calls `RedisManager.ensure_running()` with user prompts
     - Creates Redis client connection
     - Modifies `self.use_redis` flag on failure
@@ -186,25 +186,25 @@ finance_feedback_engine/integrations/
 - `_sanitize_decision_id(decision_id: str) -> str` (staticmethod)
   - **Location**: Line 85
   - **Description**: Sanitize decision_id to safe alphanumeric characters for filename use
-  - **Parameters**: 
+  - **Parameters**:
     - `decision_id` (str): Raw decision ID (may contain special characters)
   - **Returns**: `str` - Sanitized decision ID safe for filenames
   - **Dependencies**: `re` regular expression module
   - **Security**: Prevents path traversal attacks (../../ sequences)
-  - **Edge Cases**: 
+  - **Edge Cases**:
     - Long underscore runs from path traversal patterns
     - Trailing special characters
 
 - `_write_approval_file(decision_id: str, approval_data: dict, status: str)` (async)
   - **Location**: Line 107
   - **Description**: Write approval/rejection file asynchronously with sanitized filename
-  - **Parameters**: 
+  - **Parameters**:
     - `decision_id` (str): Raw decision ID
     - `approval_data` (dict): Approval data to persist (contains decision_id, approved flag, timestamp, source)
     - `status` (str): 'approved' or 'rejected'
   - **Returns**: None (async)
   - **Dependencies**: `aiofiles` for async file I/O
-  - **Side Effects**: 
+  - **Side Effects**:
     - Creates `data/approvals/` directory if not exists
     - Writes JSON file with format: `{safe_id}_{status}.json`
   - **Raises**: RuntimeError if aiofiles not installed
@@ -213,10 +213,10 @@ finance_feedback_engine/integrations/
 - `setup_webhook(public_url: str)` (async)
   - **Location**: Line 127
   - **Description**: Register webhook URL with Telegram Bot API
-  - **Parameters**: 
+  - **Parameters**:
     - `public_url` (str): Public HTTPS URL for webhook (e.g., from TunnelManager)
   - **Returns**: None (async)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Calls Telegram Bot API to set webhook
     - Webhook endpoint: `{public_url}/webhook/telegram`
   - **Raises**: RuntimeError if bot not initialized, other exceptions from Telegram API
@@ -225,7 +225,7 @@ finance_feedback_engine/integrations/
 - `format_decision_message(decision: Dict[str, Any]) -> str`
   - **Location**: Line 143
   - **Description**: Format trading decision as readable Telegram message with markdown
-  - **Parameters**: 
+  - **Parameters**:
     - `decision` (dict): Decision dictionary containing:
       - `asset_pair` (str): Trading pair
       - `action` (str): BUY/SELL/HOLD
@@ -243,11 +243,11 @@ finance_feedback_engine/integrations/
 - `create_approval_keyboard(decision_id: str)`
   - **Location**: Line 165
   - **Description**: Create inline keyboard with Approve/Reject/Modify buttons
-  - **Parameters**: 
+  - **Parameters**:
     - `decision_id` (str): Decision ID for callback data
   - **Returns**: `InlineKeyboardMarkup` object or None if bot not initialized
   - **Dependencies**: `telegram.InlineKeyboardButton`, `telegram.InlineKeyboardMarkup`
-  - **Callback Format**: 
+  - **Callback Format**:
     - Approve: `approve:{decision_id}`
     - Reject: `reject:{decision_id}`
     - Modify: `modify:{decision_id}`
@@ -255,11 +255,11 @@ finance_feedback_engine/integrations/
 - `send_approval_request(decision: Dict[str, Any], user_id: int)` (async)
   - **Location**: Line 184
   - **Description**: Send approval request message to Telegram user with inline keyboard
-  - **Parameters**: 
+  - **Parameters**:
     - `decision` (dict): Trading decision to request approval for
     - `user_id` (int): Telegram user ID to send message to
   - **Returns**: None (async)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Sends Telegram message via Bot API
     - Stores decision in approval queue (Redis or in-memory)
   - **Raises**: RuntimeError if bot not initialized, ValueError if decision_id missing
@@ -269,11 +269,11 @@ finance_feedback_engine/integrations/
 - `process_update(update_data: Dict[str, Any], engine)` (async)
   - **Location**: Line 211
   - **Description**: Process incoming Telegram update from webhook
-  - **Parameters**: 
+  - **Parameters**:
     - `update_data` (dict): Raw update data from Telegram Bot API
     - `engine`: FinanceFeedbackEngine instance for decision execution
   - **Returns**: None (async)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Parses Telegram update
     - Routes to callback query or message handler
   - **Raises**: RuntimeError if bot not initialized
@@ -284,18 +284,18 @@ finance_feedback_engine/integrations/
 - `_handle_callback_query(query, engine)` (async)
   - **Location**: Line 234
   - **Description**: Handle inline keyboard button presses (approve/reject/modify)
-  - **Parameters**: 
+  - **Parameters**:
     - `query`: Telegram CallbackQuery object
     - `engine`: FinanceFeedbackEngine instance
   - **Returns**: None (async)
-  - **Authorization**: 
+  - **Authorization**:
     - Checks user_id against whitelist (`self.allowed_users`)
     - Returns "Unauthorized" alert if not in whitelist
   - **Actions**:
     - `approve:{decision_id}`: Calls `_approve_decision()`, executes decision via engine
     - `reject:{decision_id}`: Calls `_reject_decision()`
     - `modify:{decision_id}`: Returns "not implemented" message (future feature)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Edits original message with approval status
     - Sends alert popups to user
   - **Error Handling**: Catches and logs exceptions, prevents crashes on invalid decisions
@@ -303,7 +303,7 @@ finance_feedback_engine/integrations/
 - `_handle_message(message)` (async)
   - **Location**: Line 294
   - **Description**: Handle text message commands from users
-  - **Parameters**: 
+  - **Parameters**:
     - `message`: Telegram Message object
   - **Returns**: None (async)
   - **Authorization**: Checks user_id against whitelist
@@ -316,11 +316,11 @@ finance_feedback_engine/integrations/
 - `_approve_decision(decision_id: str, engine)` (async)
   - **Location**: Line 320
   - **Description**: Approve and execute a trading decision
-  - **Parameters**: 
+  - **Parameters**:
     - `decision_id` (str): Decision ID to approve
     - `engine`: FinanceFeedbackEngine instance
   - **Returns**: None (async)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Writes approval file via `_write_approval_file()`
     - Calls `engine.execute_decision(decision_id)` to execute trade
     - Logs approval and execution results
@@ -330,10 +330,10 @@ finance_feedback_engine/integrations/
 - `_reject_decision(decision_id: str)` (async)
   - **Location**: Line 339
   - **Description**: Reject a trading decision without execution
-  - **Parameters**: 
+  - **Parameters**:
     - `decision_id` (str): Decision ID to reject
   - **Returns**: None (async)
-  - **Side Effects**: 
+  - **Side Effects**:
     - Writes rejection file via `_write_approval_file()`
     - Logs rejection
   - **Rejection Data**: Includes decision_id, approved=False, timestamp, source='telegram'
@@ -343,7 +343,7 @@ finance_feedback_engine/integrations/
   - **Description**: Cleanup resources and close connections
   - **Parameters**: None
   - **Returns**: None
-  - **Side Effects**: 
+  - **Side Effects**:
     - Closes TunnelManager (disconnects ngrok tunnel)
     - Closes Redis client connection
   - **Safety**: Safe to call multiple times
@@ -367,7 +367,7 @@ finance_feedback_engine/integrations/
 - `__init__(config: dict)`
   - **Location**: Line 24
   - **Description**: Initialize tunnel manager with configuration
-  - **Parameters**: 
+  - **Parameters**:
     - `config` (dict): Configuration containing:
       - `webhook_url` (str, optional): Production webhook URL (takes precedence)
       - `ngrok_auth_token` (str, optional): ngrok authentication token
@@ -377,7 +377,7 @@ finance_feedback_engine/integrations/
 - `get_public_url(port: int = 8000) -> str`
   - **Location**: Line 38
   - **Description**: Get public URL for webhook, using custom domain or auto-starting ngrok
-  - **Parameters**: 
+  - **Parameters**:
     - `port` (int, default=8000): Local port to expose
   - **Returns**: `str` - Public HTTPS URL for webhook registration
   - **Workflow**:
@@ -389,7 +389,7 @@ finance_feedback_engine/integrations/
 - `_setup_ngrok_tunnel(port: int) -> str`
   - **Location**: Line 59
   - **Description**: Auto-setup ngrok tunnel for local development with idempotent behavior
-  - **Parameters**: 
+  - **Parameters**:
     - `port` (int): Local port to tunnel
   - **Returns**: `str` - Public ngrok URL (https://...)
   - **Workflow**:
@@ -402,10 +402,10 @@ finance_feedback_engine/integrations/
     4. Create ngrok tunnel via `ngrok.connect(port, 'http')`
     5. Cache public URL and port for reuse
   - **Idempotency**: Returns existing tunnel URL if port matches and tunnel active
-  - **Error Handling**: 
+  - **Error Handling**:
     - ImportError if pyngrok not installed
     - RuntimeError for ngrok setup failures
-  - **Side Effects**: 
+  - **Side Effects**:
     - Imports pyngrok (may fail if not installed)
     - Creates new ngrok tunnel process
     - Logs warnings about free tier limitations
@@ -417,7 +417,7 @@ finance_feedback_engine/integrations/
   - **Description**: Close ngrok tunnel if active
   - **Parameters**: None
   - **Returns**: None
-  - **Side Effects**: 
+  - **Side Effects**:
     - Disconnects ngrok tunnel via `ngrok.disconnect()`
     - Clears cached URL and port
   - **Safety**: Safe to call multiple times, idempotent
@@ -433,7 +433,7 @@ finance_feedback_engine/integrations/
 - `__exit__(exc_type, exc_val, exc_tb)`
   - **Location**: Line 161
   - **Description**: Context manager exit - ensures cleanup
-  - **Parameters**: 
+  - **Parameters**:
     - `exc_type`: Exception type if one occurred in with block
     - `exc_val`: Exception value
     - `exc_tb`: Exception traceback
@@ -499,9 +499,9 @@ finance_feedback_engine/integrations/
 - **Location**: `finance_feedback_engine/integrations/telegram_bot.py`, Line 364
 - **Signature**: `init_telegram_bot(config: dict) -> Optional[TelegramApprovalBot]`
 - **Description**: Initialize global Telegram bot instance with configuration validation
-- **Parameters**: 
+- **Parameters**:
   - `config` (dict): Telegram configuration containing `enabled`, `bot_token`, etc.
-- **Returns**: 
+- **Returns**:
   - `TelegramApprovalBot` instance if successfully initialized
   - `None` if bot disabled or initialization failed
 - **Workflow**:
@@ -509,7 +509,7 @@ finance_feedback_engine/integrations/
   2. Validate `bot_token` is configured
   3. Create and store TelegramApprovalBot instance globally
   4. Return instance or None
-- **Side Effects**: 
+- **Side Effects**:
   - Creates global `telegram_bot` variable
   - May start Redis if enabled
   - May start ngrok tunnel
@@ -540,7 +540,7 @@ finance_feedback_engine/integrations/
   - Used for: Bot instance creation, message sending, webhook setup, update parsing
   - Version: Typically 13.x or later
   - Import: Dynamic check in `TelegramApprovalBot.__init__()` and method calls
-  
+
 #### Optional Dependencies
 - **redis** (`redis`): Redis client library
   - Used for: Approval queue persistence in RedisManager and TelegramApprovalBot
@@ -674,7 +674,7 @@ Config Dict
 
 1. **Initialization**:
    ```
-   init_telegram_bot(config) 
+   init_telegram_bot(config)
    -> TelegramApprovalBot.__init__(config)
       -> _init_redis()
          -> RedisManager.ensure_running()
@@ -959,7 +959,7 @@ classDiagram
             +install_redis_docker() bool
             +ensure_running() bool
         }
-        
+
         class TelegramApprovalBot {
             -bot_token: str
             -allowed_users: set
@@ -982,7 +982,7 @@ classDiagram
             -_reject_decision()
             +close()
         }
-        
+
         class TunnelManager {
             -config: dict
             -tunnel: Any
@@ -1000,7 +1000,7 @@ classDiagram
             +generate_custom_domain_config() dict
         }
     }
-    
+
     namespace External {
         class TelegramBotAPI {
             <<external service>>
@@ -1009,7 +1009,7 @@ classDiagram
             +answer_callback_query()
             +edit_message_text()
         }
-        
+
         class RedisService {
             <<external service>>
             +setex()
@@ -1017,20 +1017,20 @@ classDiagram
             +keys()
             +ping()
         }
-        
+
         class NgrokService {
             <<external service>>
             +connect()
             +disconnect()
             +get_tunnels()
         }
-        
+
         class FinanceFeedbackEngine {
             <<external>>
             +execute_decision()
         }
     }
-    
+
     TelegramApprovalBot --> TunnelManager : uses
     TelegramApprovalBot --> RedisManager : uses
     TelegramApprovalBot --> TelegramBotAPI : integrates
@@ -1038,7 +1038,7 @@ classDiagram
     TelegramApprovalBot --> FinanceFeedbackEngine : executes decisions
     TunnelManager --> NgrokService : creates tunnels
     RedisManager --> RedisService : manages lifecycle
-    
+
     class _AiofilesStub {
         <<fallback>>
         +open: None
@@ -1047,4 +1047,3 @@ classDiagram
 ```
 
 ---
-

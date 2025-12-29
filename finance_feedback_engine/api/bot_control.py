@@ -369,6 +369,124 @@ async def emergency_stop(
         )
 
 
+@bot_control_router.post("/pause", response_model=AgentStatusResponse)
+async def pause_agent() -> AgentStatusResponse:
+    """
+    Pause the trading agent.
+
+    Temporarily halts the trading loop without closing positions. The agent can be
+    resumed later with the /resume endpoint.
+    """
+    global _agent_instance, _agent_task
+
+    try:
+        logger.info("Pausing trading agent...")
+
+        async with _agent_lock:
+            if _agent_instance is None or _agent_task is None or _agent_task.done():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Agent is not running"
+                )
+
+            # Set flag to pause (stop accepting new decisions)
+            # The agent will continue to monitor existing positions
+            if hasattr(_agent_instance, "is_running"):
+                _agent_instance.is_running = False
+
+            # Store pause state
+            if hasattr(_agent_instance, "_paused"):
+                _agent_instance._paused = True
+            else:
+                # Add paused attribute if it doesn't exist
+                _agent_instance._paused = True
+
+            logger.info("✅ Trading agent paused")
+
+            # Return current status
+            uptime = None
+            if hasattr(_agent_instance, "start_time"):
+                uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+
+            return AgentStatusResponse(
+                state=BotState.STOPPED,
+                agent_ooda_state=_agent_instance.state.name
+                if _agent_instance and hasattr(_agent_instance, "state")
+                else None,
+                uptime_seconds=uptime,
+                config={"paused": True},
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error pausing agent: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error pausing agent: {str(e)}",
+        )
+
+
+@bot_control_router.post("/resume", response_model=AgentStatusResponse)
+async def resume_agent() -> AgentStatusResponse:
+    """
+    Resume the trading agent.
+
+    Resumes a paused agent to continue trading. Only works if the agent was previously
+    paused (not stopped or crashed).
+    """
+    global _agent_instance, _agent_task
+
+    try:
+        logger.info("Resuming trading agent...")
+
+        async with _agent_lock:
+            if _agent_instance is None or _agent_task is None or _agent_task.done():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Agent is not running or paused",
+                )
+
+            # Check if agent was paused
+            is_paused = getattr(_agent_instance, "_paused", False)
+            if not is_paused:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Agent is not paused",
+                )
+
+            # Resume agent
+            if hasattr(_agent_instance, "is_running"):
+                _agent_instance.is_running = True
+
+            if hasattr(_agent_instance, "_paused"):
+                _agent_instance._paused = False
+
+            logger.info("✅ Trading agent resumed")
+
+            # Return current status
+            uptime = None
+            if hasattr(_agent_instance, "start_time"):
+                uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+
+            return AgentStatusResponse(
+                state=BotState.RUNNING,
+                agent_ooda_state=_agent_instance.state.name
+                if _agent_instance and hasattr(_agent_instance, "state")
+                else None,
+                uptime_seconds=uptime,
+                config={"paused": False},
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resuming agent: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error resuming agent: {str(e)}",
+        )
+
+
 @bot_control_router.get("/status", response_model=AgentStatusResponse)
 async def get_agent_status(
     engine: FinanceFeedbackEngine = Depends(get_engine),

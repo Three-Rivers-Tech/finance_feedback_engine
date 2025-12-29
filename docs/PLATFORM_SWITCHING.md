@@ -20,7 +20,7 @@ trading_platform: "oanda"
 # Comment out Coinbase credentials
 platform_credentials:
   # api_key: "organizations/..."
-  # api_secret: "-----BEGIN EC PRIVATE KEY REDACTED-----..."
+  # api_secret: "EC_PRIVATE_KEY_PLACEHOLDER"
   # use_sandbox: false
 
   # Uncomment and configure Oanda
@@ -52,7 +52,7 @@ platform_credentials:
 
   # Uncomment and configure Coinbase
   api_key: "organizations/..."
-  api_secret: "-----BEGIN EC PRIVATE KEY REDACTED-----..."
+  api_secret: "EC_PRIVATE_KEY_PLACEHOLDER"
   use_sandbox: false
 ```
 

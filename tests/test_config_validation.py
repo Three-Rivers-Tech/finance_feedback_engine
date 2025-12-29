@@ -93,11 +93,14 @@ class TestConfigValidator:
         """Test detection of exposed private key"""
         config = {
             "platform_credentials": {
-                "api_secret": """-----BEGIN EC PRIVATE KEY REDACTED-----
-REDACTED_KEY_MATERIAL
-REDACTED_KEY_MATERIAL
-REDACTED_KEY_MATERIAL
------END EC PRIVATE KEY REDACTED-----"""
+                "api_secret": (
+                    "BEGIN EC PRIVATE "
+                    "KEY PLACEHOLDER\n"
+                    "REDACTED_KEY_MATERIAL\n"
+                    "REDACTED_KEY_MATERIAL\n"
+                    "REDACTED_KEY_MATERIAL\n"
+                    "END EC PRIVATE KEY PLACEHOLDER"
+                )
             },
             "decision_engine": {"ai_provider": "local"},
             "persistence": {"storage_path": "data/decisions"},

@@ -83,19 +83,19 @@ Add this method to `TradingLoopAgent` class:
 
 ```python
 async def _deliver_webhook(
-    self, 
-    webhook_url: str, 
+    self,
+    webhook_url: str,
     payload: dict,
     max_retries: int = 3
 ) -> bool:
     """
     Deliver webhook payload to configured URL with retry logic.
-    
+
     Args:
         webhook_url: Target webhook URL
         payload: JSON payload to deliver
         max_retries: Maximum retry attempts
-        
+
     Returns:
         bool: True if delivered successfully
     """
@@ -106,7 +106,7 @@ async def _deliver_webhook(
         wait_exponential,
         retry_if_exception_type
     )
-    
+
     @retry(
         stop=stop_after_attempt(max_retries),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -125,7 +125,7 @@ async def _deliver_webhook(
             )
             response.raise_for_status()
             return response
-    
+
     try:
         response = await _send_webhook()
         logger.info(
@@ -169,14 +169,14 @@ if webhook_enabled and webhook_url:
         "confidence": decision.confidence,
         "reasoning": decision.reasoning,
     }
-    
+
     # Deliver webhook with retry logic
     webhook_success = await self._deliver_webhook(
         webhook_url=webhook_url,
         payload=webhook_payload,
         max_retries=webhook_config.get("retry_attempts", 3)
     )
-    
+
     if not webhook_success:
         failure_reasons.append(
             f"{decision_id}: Webhook delivery failed"
@@ -209,12 +209,12 @@ async def test_webhook_delivery_success(trading_agent):
     """Test successful webhook delivery."""
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value.status_code = 200
-        
+
         result = await trading_agent._deliver_webhook(
             webhook_url="https://example.com/webhook",
             payload={"event": "test"}
         )
-        
+
         assert result is True
         mock_post.assert_called_once()
 
@@ -229,13 +229,13 @@ async def test_webhook_delivery_retry_on_failure(trading_agent):
             httpx.RequestError("Connection failed"),
             AsyncMock(status_code=200)
         ]
-        
+
         result = await trading_agent._deliver_webhook(
             webhook_url="https://example.com/webhook",
             payload={"event": "test"},
             max_retries=3
         )
-        
+
         assert result is True
         assert mock_post.call_count == 3
 
@@ -245,13 +245,13 @@ async def test_webhook_delivery_max_retries_exceeded(trading_agent):
     """Test webhook fails after max retries."""
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_post.side_effect = httpx.RequestError("Always fails")
-        
+
         result = await trading_agent._deliver_webhook(
             webhook_url="https://example.com/webhook",
             payload={"event": "test"},
             max_retries=3
         )
-        
+
         assert result is False
         assert mock_post.call_count == 3
 ```
@@ -336,17 +336,17 @@ tracer = get_tracer(__name__)
 
 async def analyze_asset(self, asset_pair: str, **kwargs) -> dict:
     """Generate trading decision with metrics instrumentation."""
-    
+
     # Start timing
     start_time = time.time()
-    
+
     with tracer.start_as_current_span("analyze_asset") as span:
         span.set_attribute("asset_pair", asset_pair)
-        
+
         try:
             # ... existing logic ...
             decision = await self._generate_decision(...)
-            
+
             # Record success metrics
             decisions_counter.add(
                 1,
@@ -356,12 +356,12 @@ async def analyze_asset(self, asset_pair: str, **kwargs) -> dict:
                     "provider": kwargs.get("provider", "unknown")
                 }
             )
-            
+
             span.set_attribute("decision.action", decision.action)
             span.set_attribute("decision.confidence", decision.confidence)
-            
+
             return decision
-            
+
         except Exception as e:
             # Record error metrics
             decisions_counter.add(
@@ -374,7 +374,7 @@ async def analyze_asset(self, asset_pair: str, **kwargs) -> dict:
             )
             span.record_exception(e)
             raise
-            
+
         finally:
             # Record latency
             elapsed = time.time() - start_time
@@ -392,7 +392,7 @@ Update `finance_feedback_engine/api/routes.py`:
 async def get_metrics():
     """
     Prometheus metrics endpoint with OpenTelemetry integration.
-    
+
     Returns metrics in Prometheus text format for scraping.
     Metrics include:
     - Decision generation counters and latency
@@ -402,10 +402,10 @@ async def get_metrics():
     """
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     from ..observability.metrics import get_prometheus_registry
-    
+
     registry = get_prometheus_registry()
     metrics_output = generate_latest(registry)
-    
+
     return Response(
         content=metrics_output,
         media_type=CONTENT_TYPE_LATEST
@@ -430,11 +430,11 @@ After implementing fixes:
 - [ ] **Issue #1**: API authentication enabled
   - [ ] Tests pass: `pytest tests/api/test_bot_control_auth.py -v`
   - [ ] Manual test: `curl http://localhost:8000/api/v1/bot/status` returns 401
-  
+
 - [ ] **Issue #2**: Webhook delivery working
   - [ ] Tests pass: `pytest tests/agent/test_webhook_delivery.py -v`
   - [ ] Manual test: Configure webhook URL and verify POST received
-  
+
 - [ ] **Issue #3**: Metrics instrumented
   - [ ] Tests pass: `pytest tests/observability/ -v`
   - [ ] Manual test: `curl http://localhost:8000/metrics` shows OpenTelemetry metrics

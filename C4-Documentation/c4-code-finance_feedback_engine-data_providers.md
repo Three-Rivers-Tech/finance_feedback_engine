@@ -46,7 +46,7 @@ The data_providers module consists of core infrastructure classes, provider impl
 **Key Methods**:
 
 - `__init__(config, rate_limiter, session)`
-  - **Parameters**: 
+  - **Parameters**:
     - `config: Optional[Dict[str, Any]]` - Configuration dictionary
     - `rate_limiter: Optional[RateLimiter]` - Shared rate limiter (creates default if None)
     - `session: Optional[aiohttp.ClientSession]` - Shared aiohttp session (creates if None)
@@ -95,7 +95,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Location**: Lines 188-199
 
 - `async __aexit__(exc_type, exc_val, exc_tb) -> bool`
-  - **Parameters**: 
+  - **Parameters**:
     - `exc_type` - Exception type
     - `exc_val` - Exception value
     - `exc_tb` - Exception traceback
@@ -127,7 +127,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Returns**: JSON response as dictionary
   - **Purpose**: Shared HTTP request handler with rate limiting, circuit breaking, and retries
   - **Location**: Lines 256-324
-  - **Features**: 
+  - **Features**:
     - Rate limiting (prevents API throttling)
     - Circuit breaking (fault tolerance)
     - Exponential backoff retries (automatic)
@@ -181,7 +181,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Features**: Circuit breaker, metrics, caching, timeout configuration
 
 - `_get_from_cache(key: str, ttl_seconds: int) -> Optional[Dict[str, Any]]`
-  - **Parameters**: 
+  - **Parameters**:
     - `key: str` - Cache key
     - `ttl_seconds: int` - Time-to-live in seconds
   - **Returns**: Cached data if valid, None if expired or missing
@@ -221,7 +221,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Returns**: JSON response
   - **Purpose**: Make async HTTP request with rate limiting and retries
   - **Location**: Lines 229-290
-  - **Features**: 
+  - **Features**:
     - Rate limiting integration
     - Exponential backoff retries
     - Correlation ID tracing
@@ -554,7 +554,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Returns**: None
   - **Purpose**: Async polling loop for real-time data
   - **Location**: Lines 52-85
-  - **Features**: 
+  - **Features**:
     - Polls Alpha Vantage 1-minute intraday
     - Validates data before handling
     - Persists to data store
@@ -865,7 +865,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Returns**: Historical DataFrame with columns: open, high, low, close, volume
   - **Purpose**: Get historical data with caching and validation
   - **Location**: Lines 142-220
-  - **Features**: 
+  - **Features**:
     - Data store caching
     - Financial data validation
     - Timezone handling (UTC)
@@ -977,7 +977,7 @@ The data_providers module consists of core infrastructure classes, provider impl
   - **Returns**: Enriched market data matching AlphaVantageProvider format
   - **Purpose**: Get current candle with enrichments
   - **Location**: Lines 141-235
-  - **Features**: 
+  - **Features**:
     - Calculates price range, body size, trend
     - Dummy RSI, MACD, Bollinger Bands
     - Dummy sentiment and macro data
@@ -1260,12 +1260,12 @@ classDiagram
             #async _make_http_request(url, params) Dict
             #_validate_response(response) Dict
         }
-        
+
         class DataProviderError {
             <<exception>>
         }
     }
-    
+
     namespace Providers {
         class AlphaVantageProvider {
             +String api_key
@@ -1280,7 +1280,7 @@ classDiagram
             #async _get_forex_data() Dict
             #async _enrich_market_data() Dict
         }
-        
+
         class CoinbaseDataProvider {
             +String BASE_URL
             +Dict GRANULARITIES
@@ -1290,7 +1290,7 @@ classDiagram
             #_normalize_asset_pair() String
             #_fetch_candles_from_api() List
         }
-        
+
         class OandaDataProvider {
             +String base_url
             +Dict GRANULARITIES
@@ -1299,7 +1299,7 @@ classDiagram
             #_normalize_asset_pair() String
             #_fetch_candles_from_api() List
         }
-        
+
         class RealtimeDataProvider {
             +String symbol
             +Callable data_handler
@@ -1310,7 +1310,7 @@ classDiagram
             #async _listen_for_data()
         }
     }
-    
+
     namespace Aggregation {
         class UnifiedDataProvider {
             +AlphaVantageProvider alpha_vantage
@@ -1324,7 +1324,7 @@ classDiagram
             -_is_crypto() bool
             -_is_forex() bool
         }
-        
+
         class TimeframeAggregator {
             +UnifiedDataProvider data_provider
             +__init__(data_provider)
@@ -1337,7 +1337,7 @@ classDiagram
             -_detect_trend() Dict
             -_analyze_trend_alignment() Dict
         }
-        
+
         class HistoricalDataProvider {
             +AlphaVantageProvider provider
             +TimeSeriesDataStore data_store
@@ -1346,7 +1346,7 @@ classDiagram
             +get_data_with_transformations() DataFrame
             -_fetch_raw_data() DataFrame
         }
-        
+
         class MockLiveProvider {
             +DataFrame historical_data
             +String asset_pair
@@ -1362,18 +1362,18 @@ classDiagram
             +async get_pulse_data() Dict
         }
     }
-    
+
     BaseDataProvider <|-- AlphaVantageProvider
     BaseDataProvider <|-- CoinbaseDataProvider
     CoinbaseDataProvider <|-- OandaDataProvider
-    
+
     UnifiedDataProvider --> AlphaVantageProvider
     UnifiedDataProvider --> CoinbaseDataProvider
     UnifiedDataProvider --> OandaDataProvider
-    
+
     TimeframeAggregator --> UnifiedDataProvider
     HistoricalDataProvider --> AlphaVantageProvider
-    
+
     AlphaVantageProvider --> CircuitBreaker
     AlphaVantageProvider --> RateLimiter
 ```
@@ -1464,4 +1464,3 @@ Confluence detection identifies trend alignment across timeframes for trade conf
 - **Automatic Retries**: Exponential backoff built-in
 - **Request Correlation**: Distributed tracing headers for debugging
 - **Metrics**: Prometheus-compatible latency recording
-

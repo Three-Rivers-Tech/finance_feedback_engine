@@ -1,10 +1,14 @@
 """Tests for webhook delivery functionality."""
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
 
-from finance_feedback_engine.agent.config import TradingAgentConfig, AutonomousAgentConfig
+from finance_feedback_engine.agent.config import (
+    AutonomousAgentConfig,
+    TradingAgentConfig,
+)
 from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 
 

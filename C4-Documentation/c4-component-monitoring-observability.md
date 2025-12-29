@@ -97,7 +97,7 @@ C4Component
     Rel(trade_monitor, metrics_collector, "Records trade metrics")
     Rel(trade_monitor, context_provider, "Provides active trades")
     Rel(trade_monitor, prometheus, "Emits metrics")
-    
+
     Rel(prometheus, prometheus_svc, "Exposes /metrics", "HTTP")
     Rel(tracer, jaeger, "Exports spans", "gRPC/Thrift")
     Rel(error_tracker, sentry, "Sends errors", "HTTPS")
