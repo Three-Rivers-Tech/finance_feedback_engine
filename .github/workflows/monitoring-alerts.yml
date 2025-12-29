@@ -1,5 +1,4 @@
 name: Monitoring & Alerting
-enabled: false
 
 on:
   schedule:
@@ -38,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install redis-cli (redis-tools)
-        if: ${{ secrets.REDIS_URL != '' }}
+        if: false  # Disabled - configure REDIS_URL secret to enable
         run: |
           sudo apt-get update
           sudo apt-get install -y redis-tools
@@ -461,15 +460,29 @@ jobs:
     steps:
       - name: Generate summary report
         run: |
-          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # Determine performance status
+          if [ "${{ needs.performance-check.result }}" = "skipped" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            PERF_STATUS="N/A"
+          else
+            PERF_STATUS="${{ needs.performance-check.result }}"
+          fi
+
+          # Determine security status
+          if [ "${{ needs.security-monitoring.result }}" = "skipped" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            SEC_STATUS="N/A"
+          else
+            SEC_STATUS="${{ needs.security-monitoring.result }}"
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
           # 🔍 Monitoring & Alerting Summary
 
           ## Check Results
           | Check | Status |
           |-------|--------|
           | Health Check | ${{ needs.health-check.result }} |
-          | Performance | ${{ needs.performance-check.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.performance-check.result }} |
-          | Security | ${{ needs.security-monitoring.result == 'skipped' && github.event_name == 'schedule' ? 'N/A' : needs.security-monitoring.result }} |
+          | Performance | ${PERF_STATUS} |
+          | Security | ${SEC_STATUS} |
           | Dependencies | ${{ needs.dependency-check.result }} |
 
           ## System Status
