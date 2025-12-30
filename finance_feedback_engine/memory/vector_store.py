@@ -273,4 +273,13 @@ class VectorMemory:
 
         # Pickle format no longer supported - JSON is the only persistence format
         # This eliminates CRT-2 RCE vulnerability (CVSS 9.8)
-        logger.info("No existing vector index found (JSON format only)")
+
+        # Check if legacy pickle file exists and warn user
+        pkl_path = self.storage_path.with_suffix(".pkl")
+        if pkl_path.exists():
+            logger.warning(
+                f"Legacy pickle file found at {pkl_path} but is no longer supported for security reasons. "
+                "Please migrate your data manually to JSON format. Vector store will start empty."
+            )
+        else:
+            logger.info("No existing vector index found (JSON format only)")

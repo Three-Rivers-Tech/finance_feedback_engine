@@ -85,7 +85,6 @@ class TestConfigurationLoading:
         """auto_discover should be False by default for safety."""
         config = PairSelectionConfig(
             target_pair_count=5,
-            auto_discover=False,
         )
 
         assert config.auto_discover is False

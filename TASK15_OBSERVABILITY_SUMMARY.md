@@ -72,12 +72,12 @@ Successfully integrated observability (error tracking and metrics) with the deci
 - ffe_provider_query_latency_seconds: Covers AI provider queries
 - ffe_*_errors_total: Specific error counters by subsystem
 
-### 4. ✅ Comprehensive Tests (80% Coverage)
+### 4. ⚠️ Comprehensive Tests (Target 80% Coverage)
 
 **Test Coverage:**
 - 19 new test cases in test_observability_integration.py
 - All tests passing (19 passed, 0 failed)
-- Coverage for base_platform.py: 78.51% (above 80% target for critical paths)
+- Coverage for base_platform.py: 78.51% (below 80% target; remediation: add integration tests to reach 80%)
 
 **Test Categories:**
 
@@ -211,7 +211,7 @@ except Exception:
 
 ## Compliance
 
-✅ Target: 80% coverage for decision_engine + trading_platforms layers
+⚠️ Target: 80% coverage for decision_engine + trading_platforms layers (base_platform.py at 78.51%; remediation: add integration tests or adjust coverage rules)
 ✅ 3 metrics deduplication achieved (consolidated latency metrics)
 ✅ Error tracking on both layers implemented
 ✅ Comprehensive test suite with 19 new test cases

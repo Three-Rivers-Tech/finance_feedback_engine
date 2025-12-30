@@ -12,7 +12,7 @@ assignees: ""
 
 ## Affected Tests
 
-### TelegramApprovalBot Tests (6)
+### TelegramApprovalBot Tests (8)
 
 1. **`test_process_update_validates_user`** (Line 62)
    - **Reason**: `process_update` now requires `engine` parameter
@@ -45,7 +45,6 @@ assignees: ""
 8. **`test_set_webhook`** (Line 176)
    - **Reason**: Method renamed to `setup_webhook`
    - **Fix**: Update method call name
-
 ### RedisManager Tests (Marked as class skip)
 
 - **Reason**: Tests mock subprocess but implementation uses redis library

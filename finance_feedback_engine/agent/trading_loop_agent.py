@@ -66,6 +66,7 @@ class TradingLoopAgent:
             var_confidence=self.config.var_confidence,
         )
         self.is_running = False
+        self._paused = False
         self.state = AgentState.IDLE
         self._current_decision = None
         self._current_decisions = []  # New: to store multiple decisions
@@ -1960,9 +1961,26 @@ class TradingLoopAgent:
         # Stop pair selection scheduler if running
         if self.pair_scheduler and self.pair_scheduler.is_running:
             try:
-                import asyncio
-
-                asyncio.create_task(self.pair_scheduler.stop())
-                logger.info("Stopping pair selection scheduler...")
+                # Check if there's a running event loop
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Schedule the coroutine in the running loop
+                    if loop.is_running():
+                        asyncio.run_coroutine_threadsafe(
+                            self.pair_scheduler.stop(), loop
+                        )
+                        logger.info("Scheduled pair selection scheduler stop in running event loop")
+                    else:
+                        logger.warning(
+                            "Event loop exists but is not running; cannot stop pair scheduler gracefully"
+                        )
+                except RuntimeError:
+                    # No running event loop - log warning
+                    logger.warning(
+                        "No running event loop available to stop pair scheduler; "
+                        "scheduler may not stop gracefully"
+                    )
             except Exception as e:
-                logger.error(f"Error stopping pair scheduler: {e}", exc_info=True)
+                logger.error(
+                    f"Error stopping pair scheduler: {e}", exc_info=True
+                )

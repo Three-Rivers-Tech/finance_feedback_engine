@@ -102,12 +102,11 @@ repos:
     hooks:
       - id: pytest-critical
         name: Run critical tests
-        entry: bash -c 'python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no || true'
+        entry: python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no
         language: system
         pass_filenames: false
         # Only run on Python file changes
         files: \.py$
-        # Don't block commit if tests fail (always exits 0)
         verbose: true
 
   # =============================================================================

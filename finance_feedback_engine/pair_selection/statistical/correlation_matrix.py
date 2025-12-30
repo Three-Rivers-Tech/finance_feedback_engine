@@ -127,13 +127,11 @@ class CorrelationAnalyzer:
                 returns = self._get_returns(
                     asset_pair=pair,
                     data_provider=data_provider,
-                    lookback_days=self.lookback_days,
+                    lookback_days=self.lookback_days
                 )
 
                 if returns is not None and len(returns) >= 5:
-                    # Align returns to same length (use minimum)
-                    min_len = min(len(candidate_returns), len(returns))
-                    position_returns[pair] = returns[-min_len:]
+                    position_returns[pair] = returns
 
             if not position_returns:
                 logger.warning(
@@ -145,19 +143,23 @@ class CorrelationAnalyzer:
                     max_correlation=0.0,
                     correlation_matrix={},
                     warnings=["No position data available for correlation"],
-                    sample_size=len(candidate_returns),
+                    sample_size=len(candidate_returns)
                 )
+
+            # Find global minimum length across all return series
+            all_lengths = [len(candidate_returns)] + [len(r) for r in position_returns.values()]
+            min_len = min(all_lengths)
+
+            # Align candidate returns once
+            candidate_aligned = candidate_returns[-min_len:]
 
             # Calculate pairwise correlations
             correlations = {}
             for pair, returns in position_returns.items():
-                # Align lengths
-                min_len = min(len(candidate_returns), len(returns))
-                cand_aligned = candidate_returns[-min_len:]
                 pos_aligned = returns[-min_len:]
 
                 # Calculate correlation
-                corr = self._calculate_correlation(cand_aligned, pos_aligned)
+                corr = self._calculate_correlation(candidate_aligned, pos_aligned)
                 correlations[pair] = corr
 
             # Find maximum absolute correlation

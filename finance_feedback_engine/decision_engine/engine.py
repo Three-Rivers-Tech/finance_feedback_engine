@@ -787,14 +787,18 @@ Format response as a structured technical analysis demonstration.
         except Exception as e:
             # Track AI provider error
             logger.error(f"AI provider query failed for {asset_pair}: {e}", exc_info=True)
-            self._counters.get("ffe_ai_provider_errors_total").add(
-                1,
-                attributes={
-                    "provider": self.ai_manager.ai_provider or "unknown",
-                    "error_type": type(e).__name__,
-                    "asset_pair": asset_pair or "unknown",
-                }
-            )
+            error_counter = self._counters.get("ffe_ai_provider_errors_total")
+            if error_counter:
+                error_counter.add(
+                    1,
+                    attributes={
+                        "provider": self.ai_manager.ai_provider or "unknown",
+                        "error_type": type(e).__name__,
+                        "asset_pair": asset_pair or "unknown",
+                    }
+                )
+            else:
+                logger.debug("AI provider error counter not available for metrics recording")
 
             # Record failed query latency
             query_elapsed = time.time() - query_start_time
@@ -1610,13 +1614,19 @@ Format response as a structured technical analysis demonstration.
                     similar = self.vector_memory.find_similar(query, top_k=3)
                     context["semantic_memory"] = similar
                 except Exception as e:
-                    logger.error(
-                        f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}"
-                    )
+                    error_counter = self._counters.get("ffe_decisions_errors_total")
+                    if error_counter:
+                        error_counter.add(
+                            1, attributes={"error_type": "vector_memory_retrieval", "asset_pair": asset_pair}
+                        )
                     # Track error in metrics
-                    self._counters.get("ffe_decisions_errors_total").add(
-                        1, attributes={"error_type": "vector_memory_retrieval", "asset_pair": asset_pair}
-                    )
+                    errors_counter = self._counters.get("ffe_decisions_errors_total")
+                    if errors_counter:
+                        errors_counter.add(
+                            1, attributes={"error_type": "vector_memory_retrieval", "asset_pair": asset_pair}
+                        )
+                    else:
+                        logger.debug("Decisions error counter not available for metrics recording")
                     context["semantic_memory"] = []
 
             # Generate AI prompt
@@ -1662,13 +1672,17 @@ Format response as a structured technical analysis demonstration.
         except Exception as e:
             # Track decision generation errors
             logger.error(f"Error generating decision for {asset_pair}: {e}", exc_info=True)
-            self._counters.get("ffe_decisions_errors_total").add(
-                1,
-                attributes={
-                    "error_type": type(e).__name__,
-                    "asset_pair": asset_pair,
-                }
-            )
+            errors_counter = self._counters.get("ffe_decisions_errors_total")
+            if errors_counter:
+                errors_counter.add(
+                    1,
+                    attributes={
+                        "error_type": type(e).__name__,
+                        "asset_pair": asset_pair,
+                    }
+                )
+            else:
+                logger.debug("Decisions error counter not available for metrics recording")
 
             # Record failed decision generation latency
             decision_elapsed = time.time() - decision_start_time

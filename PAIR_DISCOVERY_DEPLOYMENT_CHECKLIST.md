@@ -1,4 +1,4 @@
-"""
+
 PAIR DISCOVERY SAFEGUARDS - DEPLOYMENT CHECKLIST
 
 Use this checklist before deploying the pair selection system with

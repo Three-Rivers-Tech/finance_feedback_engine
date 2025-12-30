@@ -394,11 +394,7 @@ async def pause_agent() -> AgentStatusResponse:
                 _agent_instance.is_running = False
 
             # Store pause state
-            if hasattr(_agent_instance, "_paused"):
-                _agent_instance._paused = True
-            else:
-                # Add paused attribute if it doesn't exist
-                _agent_instance._paused = True
+            _agent_instance._paused = True
 
             logger.info("✅ Trading agent paused")
 
@@ -451,19 +447,15 @@ async def resume_agent() -> AgentStatusResponse:
                 )
 
             # Check if agent was paused
-            is_paused = getattr(_agent_instance, "_paused", False)
-            if not is_paused:
+            if not _agent_instance._paused:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Agent is not paused",
                 )
 
             # Resume agent
-            if hasattr(_agent_instance, "is_running"):
-                _agent_instance.is_running = True
-
-            if hasattr(_agent_instance, "_paused"):
-                _agent_instance._paused = False
+            _agent_instance.is_running = True
+            _agent_instance._paused = False
 
             logger.info("✅ Trading agent resumed")
 

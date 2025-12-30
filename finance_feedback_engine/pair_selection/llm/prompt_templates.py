@@ -93,7 +93,7 @@ Example:
 
 def build_pair_evaluation_prompt(
     candidates: Dict[str, float],
-    candidate_metrics: Dict[str, Dict[str, any]],
+    candidate_metrics: Dict[str, Dict[str, Any]],
     portfolio_context: Dict[str, Any],
     available_slots: int,
 ) -> str:
@@ -147,7 +147,7 @@ def build_pair_evaluation_prompt(
 def build_pair_description_prompt(
     selected_pairs: List[str],
     statistical_scores: Dict[str, float],
-    llm_votes: Dict[str, Dict[str, any]],
+    llm_votes: Dict[str, Dict[str, Any]]
 ) -> str:
     """
     Build prompt for generating selection reasoning.
@@ -206,18 +206,36 @@ def _format_candidates_table(
         correlation = metrics.get("correlation")
         garch = metrics.get("garch")
 
-        sortino_val = f"{sortino.composite_score:.2f}" if sortino else "N/A"
-        corr_val = f"{correlation.diversification_score:.2f}" if correlation else "N/A"
-        vol_val = f"{garch.forecasted_vol:.2%}" if garch else "N/A"
+        # Defensive attribute access with safe defaults
+        sortino_val = "N/A"
+        if sortino:
+            composite_score_attr = getattr(sortino, "composite_score", None)
+            sortino_val = f"{composite_score_attr:.2f}" if composite_score_attr is not None else "N/A"
 
-        # Generate details string
+        corr_val = "N/A"
+        if correlation:
+            div_score_attr = getattr(correlation, "diversification_score", None)
+            corr_val = f"{div_score_attr:.2f}" if div_score_attr is not None else "N/A"
+
+        vol_val = "N/A"
+        if garch:
+            forecasted_vol_attr = getattr(garch, "forecasted_vol", None)
+            vol_val = f"{forecasted_vol_attr:.2%}" if forecasted_vol_attr is not None else "N/A"
+
+        # Generate details string with defensive attribute access
         details = []
         if sortino:
-            details.append(f"Returns: {sortino.mean_return:.2%}")
+            mean_return_attr = getattr(sortino, "mean_return", None)
+            if mean_return_attr is not None:
+                details.append(f"Returns: {mean_return_attr:.2%}")
         if garch:
-            details.append(f"Regime: {garch.volatility_regime}")
-        if correlation and correlation.max_correlation > 0.7:
-            details.append(f"⚠️ High corr: {correlation.max_correlation:.2f}")
+            vol_regime_attr = getattr(garch, "volatility_regime", None)
+            if vol_regime_attr is not None:
+                details.append(f"Regime: {vol_regime_attr}")
+        if correlation:
+            max_corr_attr = getattr(correlation, "max_correlation", None)
+            if max_corr_attr is not None and max_corr_attr > 0.7:
+                details.append(f"⚠️ High corr: {max_corr_attr:.2f}")
 
         details_str = ", ".join(details) if details else "-"
 
@@ -270,7 +288,7 @@ def _format_portfolio_context(portfolio_context: Dict[str, Any]) -> str:
 def _format_selected_pairs_summary(
     selected_pairs: List[str],
     statistical_scores: Dict[str, float],
-    llm_votes: Dict[str, Dict[str, any]],
+    llm_votes: Dict[str, Dict[str, Any]]
 ) -> str:
     """Format selected pairs with brief summary."""
     lines = []

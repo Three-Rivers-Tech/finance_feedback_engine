@@ -14,28 +14,31 @@ class AutonomousAgentConfig(BaseModel):
 class PairSelectionStatisticalConfig(BaseModel):
     """Configuration for statistical metrics."""
 
-    sortino: dict = Field(
-        default_factory=lambda: {
-            "windows_days": [7, 30, 90],
-            "weights": [0.5, 0.3, 0.2],
-        }
-    )
-    correlation: dict = Field(default_factory=lambda: {"lookback_days": 30})
-    garch: dict = Field(
-        default_factory=lambda: {
-            "p": 1,
-            "q": 1,
-            "forecast_horizon_days": 7,
-            "fitting_window_days": 90,
-        }
-    )
-    aggregation_weights: dict = Field(
-        default_factory=lambda: {
-            "sortino": 0.4,
-            "diversification": 0.35,
-            "volatility": 0.25,
-        }
-    )
+class SortinoConfig(BaseModel):
+    windows_days: List[int] = [7, 30, 90]
+    weights: List[float] = [0.5, 0.3, 0.2]
+
+class CorrelationConfig(BaseModel):
+    lookback_days: int = 30
+
+class GarchConfig(BaseModel):
+    p: int = 1
+    q: int = 1
+    forecast_horizon_days: int = 7
+    fitting_window_days: int = 90
+
+class AggregationWeightsConfig(BaseModel):
+    sortino: float = 0.4
+    diversification: float = 0.35
+    volatility: float = 0.25
+
+class PairSelectionStatisticalConfig(BaseModel):
+    """Configuration for statistical metrics."""
+
+    sortino: SortinoConfig = Field(default_factory=SortinoConfig)
+    correlation: CorrelationConfig = Field(default_factory=CorrelationConfig)
+    garch: GarchConfig = Field(default_factory=GarchConfig)
+    aggregation_weights: AggregationWeightsConfig = Field(default_factory=AggregationWeightsConfig)
 
 
 class PairSelectionUniverseConfig(BaseModel):
@@ -60,6 +63,51 @@ class PairSelectionThompsonConfig(BaseModel):
     min_trades_for_update: int = 3
     success_threshold: float = 0.55
     failure_threshold: float = 0.45
+
+    @field_validator("min_trades_for_update")
+    @classmethod
+    def validate_min_trades_for_update(cls, v: int) -> int:
+        """Validate that min_trades_for_update is a positive integer."""
+        if not isinstance(v, int):
+            try:
+                v = int(v)
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"min_trades_for_update must be an integer, got {type(v).__name__}"
+                ) from e
+        if v <= 0:
+            raise ValueError(
+                f"min_trades_for_update must be greater than 0, got {v}"
+            )
+        return v
+
+    @field_validator("success_threshold", "failure_threshold")
+    @classmethod
+    def validate_threshold(cls, v: float, info) -> float:
+        """Validate that thresholds are floats within [0.0, 1.0]."""
+        field_name = info.field_name
+        if not isinstance(v, (int, float)):
+            try:
+                v = float(v)
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"{field_name} must be a float, got {type(v).__name__}"
+                ) from e
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(
+                f"{field_name} must be within [0.0, 1.0], got {v}"
+            )
+        return float(v)
+
+    @model_validator(mode="after")
+    def validate_threshold_ordering(self) -> "PairSelectionThompsonConfig":
+        """Validate that success_threshold is greater than failure_threshold."""
+        if self.success_threshold <= self.failure_threshold:
+            raise ValueError(
+                f"success_threshold ({self.success_threshold}) must be greater than "
+                f"failure_threshold ({self.failure_threshold})"
+            )
+        return self
 
 
 class PairSelectionPositionLockingConfig(BaseModel):
