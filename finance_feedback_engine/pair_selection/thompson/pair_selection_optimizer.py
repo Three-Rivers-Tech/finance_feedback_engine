@@ -58,7 +58,7 @@ class PairSelectionThompsonOptimizer:
         success_threshold: float = 0.55,
         failure_threshold: float = 0.45,
         min_trades_for_update: int = 3,
-        learning_rate: float = 1.0
+        learning_rate: float = 1.0,
     ):
         """
         Initialize Thompson Sampling optimizer for pair selection.
@@ -82,10 +82,10 @@ class PairSelectionThompsonOptimizer:
         self.stats = self._load_stats()
 
         # Initialize with uniform priors if new
-        if 'statistical_weight' not in self.stats:
-            self.stats['statistical_weight'] = {'alpha': 1, 'beta': 1}
-        if 'llm_weight' not in self.stats:
-            self.stats['llm_weight'] = {'alpha': 1, 'beta': 1}
+        if "statistical_weight" not in self.stats:
+            self.stats["statistical_weight"] = {"alpha": 1, "beta": 1}
+        if "llm_weight" not in self.stats:
+            self.stats["llm_weight"] = {"alpha": 1, "beta": 1}
 
         # Save initial state
         self._save_stats()
@@ -111,13 +111,12 @@ class PairSelectionThompsonOptimizer:
         """
         # Sample from Beta distributions
         stat_sample = np.random.beta(
-            self.stats['statistical_weight']['alpha'],
-            self.stats['statistical_weight']['beta']
+            self.stats["statistical_weight"]["alpha"],
+            self.stats["statistical_weight"]["beta"],
         )
 
         llm_sample = np.random.beta(
-            self.stats['llm_weight']['alpha'],
-            self.stats['llm_weight']['beta']
+            self.stats["llm_weight"]["alpha"], self.stats["llm_weight"]["beta"]
         )
 
         # Normalize to sum to 1.0
@@ -125,12 +124,9 @@ class PairSelectionThompsonOptimizer:
 
         if total == 0:
             # Fallback to equal weights
-            return {'statistical': 0.5, 'llm': 0.5}
+            return {"statistical": 0.5, "llm": 0.5}
 
-        weights = {
-            'statistical': stat_sample / total,
-            'llm': llm_sample / total
-        }
+        weights = {"statistical": stat_sample / total, "llm": llm_sample / total}
 
         logger.debug(
             f"Sampled weights: statistical={weights['statistical']:.3f}, "
@@ -140,17 +136,16 @@ class PairSelectionThompsonOptimizer:
         return weights
 
     def update_from_outcome(
-        self,
-        selection_id: str,
-        outcome_tracker: PairSelectionOutcomeTracker
+        self, selection_id: str, outcome_tracker: PairSelectionOutcomeTracker
     ):
         """
         Update Thompson Sampling distributions based on selection performance.
 
         Reward strategy:
-        - Win rate >= success_threshold: Both weights get success signal (alpha++)
-        - Win rate <= failure_threshold: Both weights get failure signal (beta++)
-        - Win rate in between: No update (neutral outcome)
+                - Win rate >= success_threshold: Increment alpha for weights proportional to
+                    the Thompson weights used for this selection (or equally if unavailable)
+                - Win rate <= failure_threshold: Increment beta proportionally
+                - Win rate in between: No update (neutral outcome)
 
         Args:
             selection_id: Selection ID to evaluate
@@ -163,7 +158,7 @@ class PairSelectionThompsonOptimizer:
             logger.warning(f"No performance data for selection {selection_id}")
             return
 
-        completed_trades = perf.get('completed_trades', 0)
+        completed_trades = perf.get("completed_trades", 0)
 
         if completed_trades < self.min_trades_for_update:
             logger.debug(
@@ -172,21 +167,23 @@ class PairSelectionThompsonOptimizer:
             )
             return
 
-        win_rate = perf.get('win_rate', 0.0) / 100.0  # Convert to 0-1 range
-        total_pnl = perf.get('total_pnl', 0.0)
+        win_rate = perf.get("win_rate", 0.0) / 100.0  # Convert to 0-1 range
+        total_pnl = perf.get("total_pnl", 0.0)
 
         # Determine outcome
+        weight_shares = self._extract_weight_shares(outcome_tracker, selection_id)
+
         if win_rate >= self.success_threshold:
-            # Success - increment alpha for both weights
-            self._record_success()
+            # Success - increment alpha weighted by the selection's Thompson mix
+            self._record_success(weight_shares)
             logger.info(
                 f"Thompson update: Selection {selection_id} SUCCESSFUL "
                 f"({win_rate:.1%} WR, ${total_pnl:.2f} P&L)"
             )
 
         elif win_rate <= self.failure_threshold:
-            # Failure - increment beta for both weights
-            self._record_failure()
+            # Failure - increment beta weighted by the selection's Thompson mix
+            self._record_failure(weight_shares)
             logger.info(
                 f"Thompson update: Selection {selection_id} UNSUCCESSFUL "
                 f"({win_rate:.1%} WR, ${total_pnl:.2f} P&L)"
@@ -199,27 +196,56 @@ class PairSelectionThompsonOptimizer:
                 f"({win_rate:.1%} WR, ${total_pnl:.2f} P&L). No update."
             )
 
-    def _record_success(self):
+    def _record_success(self, weight_shares: Optional[Dict[str, float]] = None):
         """Record a successful selection batch (increment alpha)."""
-        # Increment alpha with learning rate
-        increment = int(self.learning_rate)
+        increment = self._get_increment_value()
+        stat_share, llm_share = self._resolve_weight_shares(weight_shares)
 
-        self.stats['statistical_weight']['alpha'] += increment
-        self.stats['llm_weight']['alpha'] += increment
+        self.stats["statistical_weight"]["alpha"] += increment * stat_share
+        self.stats["llm_weight"]["alpha"] += increment * llm_share
 
         self._save_stats()
         self._log_current_state()
 
-    def _record_failure(self):
+    def _record_failure(self, weight_shares: Optional[Dict[str, float]] = None):
         """Record an unsuccessful selection batch (increment beta)."""
-        # Increment beta with learning rate
-        increment = int(self.learning_rate)
+        increment = self._get_increment_value()
+        stat_share, llm_share = self._resolve_weight_shares(weight_shares)
 
-        self.stats['statistical_weight']['beta'] += increment
-        self.stats['llm_weight']['beta'] += increment
+        self.stats["statistical_weight"]["beta"] += increment * stat_share
+        self.stats["llm_weight"]["beta"] += increment * llm_share
 
         self._save_stats()
         self._log_current_state()
+
+    def _extract_weight_shares(
+        self, outcome_tracker: PairSelectionOutcomeTracker, selection_id: str
+    ) -> Optional[Dict[str, float]]:
+        """Pull Thompson weight mix used for the selection (if recorded)."""
+        selection_history = getattr(outcome_tracker, "selection_history", {})
+        selection_record = selection_history.get(selection_id, {})
+        metadata = selection_record.get("metadata") or {}
+        return metadata.get("thompson_weights")
+
+    def _resolve_weight_shares(
+        self, weight_shares: Optional[Dict[str, float]]
+    ) -> tuple[float, float]:
+        """Normalize provided weight shares; default to equal updates."""
+        if not weight_shares:
+            return 0.5, 0.5
+
+        stat = max(weight_shares.get("statistical", 0.0), 0.0)
+        llm = max(weight_shares.get("llm", 0.0), 0.0)
+        total = stat + llm
+
+        if total <= 0:
+            return 0.5, 0.5
+
+        return stat / total, llm / total
+
+    def _get_increment_value(self) -> float:
+        """Return non-truncated learning-rate increment (>=0)."""
+        return max(float(self.learning_rate), 0.0)
 
     def get_expected_weights(self) -> Dict[str, float]:
         """
@@ -232,24 +258,21 @@ class PairSelectionThompsonOptimizer:
             {'statistical': 0.58, 'llm': 0.42}  # Example expected values
         """
         # Expected value of Beta(alpha, beta) = alpha / (alpha + beta)
-        stat_alpha = self.stats['statistical_weight']['alpha']
-        stat_beta = self.stats['statistical_weight']['beta']
+        stat_alpha = self.stats["statistical_weight"]["alpha"]
+        stat_beta = self.stats["statistical_weight"]["beta"]
         stat_expected = stat_alpha / (stat_alpha + stat_beta)
 
-        llm_alpha = self.stats['llm_weight']['alpha']
-        llm_beta = self.stats['llm_weight']['beta']
+        llm_alpha = self.stats["llm_weight"]["alpha"]
+        llm_beta = self.stats["llm_weight"]["beta"]
         llm_expected = llm_alpha / (llm_alpha + llm_beta)
 
         # Normalize
         total = stat_expected + llm_expected
 
         if total == 0:
-            return {'statistical': 0.5, 'llm': 0.5}
+            return {"statistical": 0.5, "llm": 0.5}
 
-        return {
-            'statistical': stat_expected / total,
-            'llm': llm_expected / total
-        }
+        return {"statistical": stat_expected / total, "llm": llm_expected / total}
 
     def get_stats_summary(self) -> Dict[str, any]:
         """
@@ -268,17 +291,17 @@ class PairSelectionThompsonOptimizer:
                 'total_updates': 8
             }
         """
-        stat_alpha = self.stats['statistical_weight']['alpha']
-        stat_beta = self.stats['statistical_weight']['beta']
+        stat_alpha = self.stats["statistical_weight"]["alpha"]
+        stat_beta = self.stats["statistical_weight"]["beta"]
         stat_sum = stat_alpha + stat_beta
         stat_expected = stat_alpha / stat_sum
-        stat_variance = (stat_alpha * stat_beta) / (stat_sum ** 2 * (stat_sum + 1))
+        stat_variance = (stat_alpha * stat_beta) / (stat_sum**2 * (stat_sum + 1))
 
-        llm_alpha = self.stats['llm_weight']['alpha']
-        llm_beta = self.stats['llm_weight']['beta']
+        llm_alpha = self.stats["llm_weight"]["alpha"]
+        llm_beta = self.stats["llm_weight"]["beta"]
         llm_sum = llm_alpha + llm_beta
         llm_expected = llm_alpha / llm_sum
-        llm_variance = (llm_alpha * llm_beta) / (llm_sum ** 2 * (llm_sum + 1))
+        llm_variance = (llm_alpha * llm_beta) / (llm_sum**2 * (llm_sum + 1))
 
         # Total updates = (alpha + beta - 2) because we start with alpha=1, beta=1
         stat_updates = stat_alpha + stat_beta - 2
@@ -288,29 +311,29 @@ class PairSelectionThompsonOptimizer:
         expected_weights = self.get_expected_weights()
 
         return {
-            'statistical_weight': {
-                'alpha': stat_alpha,
-                'beta': stat_beta,
-                'expected_value': stat_expected,
-                'variance': stat_variance
+            "statistical_weight": {
+                "alpha": stat_alpha,
+                "beta": stat_beta,
+                "expected_value": stat_expected,
+                "variance": stat_variance,
             },
-            'llm_weight': {
-                'alpha': llm_alpha,
-                'beta': llm_beta,
-                'expected_value': llm_expected,
-                'variance': llm_variance
+            "llm_weight": {
+                "alpha": llm_alpha,
+                "beta": llm_beta,
+                "expected_value": llm_expected,
+                "variance": llm_variance,
             },
-            'expected_weights': expected_weights,
-            'total_updates': total_updates
+            "expected_weights": expected_weights,
+            "total_updates": total_updates,
         }
 
     def _log_current_state(self):
         """Log current Beta distribution parameters."""
         summary = self.get_stats_summary()
 
-        stat = summary['statistical_weight']
-        llm = summary['llm_weight']
-        expected = summary['expected_weights']
+        stat = summary["statistical_weight"]
+        llm = summary["llm_weight"]
+        expected = summary["expected_weights"]
 
         logger.info(
             f"Thompson state: "
@@ -328,7 +351,7 @@ class PairSelectionThompsonOptimizer:
             return {}
 
         try:
-            with open(self.stats_file, 'r') as f:
+            with open(self.stats_file, "r") as f:
                 stats = json.load(f)
 
             logger.info(f"Loaded Thompson stats from {self.stats_file}")
@@ -341,7 +364,7 @@ class PairSelectionThompsonOptimizer:
     def _save_stats(self):
         """Save Thompson stats to disk."""
         try:
-            with open(self.stats_file, 'w') as f:
+            with open(self.stats_file, "w") as f:
                 json.dump(self.stats, f, indent=2)
 
             logger.debug(f"Saved Thompson stats to {self.stats_file}")

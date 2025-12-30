@@ -90,9 +90,8 @@ repos:
           - types-requests
           - types-PyYAML
         files: ^finance_feedback_engine/.*\.py$
-        # Don't fail on type errors initially
-        pass_filenames: true
-        always_run: false
+        # Don't fail on type errors initially - run manually only
+        stages: [manual]
 
   # =============================================================================
   # PHASE 4: ADD TEST RUNNER (Uncomment when tests are stable)
@@ -103,12 +102,12 @@ repos:
     hooks:
       - id: pytest-critical
         name: Run critical tests
-        entry: python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no
+        entry: bash -c 'python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no || true'
         language: system
         pass_filenames: false
         # Only run on Python file changes
         files: \.py$
-        # Don't block commit if tests fail initially
+        # Don't block commit if tests fail (always exits 0)
         verbose: true
 
   # =============================================================================

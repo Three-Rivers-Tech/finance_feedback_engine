@@ -61,7 +61,7 @@ class TestApproveCommandLoading:
         self, runner, sample_decision, tmp_path, monkeypatch
     ):
         """Test approve command loads decision from file."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
 
         # Change to tmp_path so CLI finds the decision file
         monkeypatch.chdir(tmp_path)
@@ -109,7 +109,7 @@ class TestApproveYesFlow:
         monkeypatch,
     ):
         """Test 'yes' approval executes trade immediately."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
         mock_prompt.return_value = "yes"
 
         mock_engine = Mock()
@@ -165,7 +165,7 @@ class TestApproveYesFlow:
         monkeypatch,
     ):
         """Test 'yes' approval saves to data/approvals/."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
         mock_prompt.return_value = "yes"
 
         mock_engine = Mock()
@@ -228,7 +228,7 @@ class TestApproveNoFlow:
         monkeypatch,
     ):
         """Test 'no' rejection skips trade execution."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
         mock_prompt.return_value = "no"
 
         mock_engine = Mock()
@@ -259,7 +259,7 @@ class TestApproveNoFlow:
         monkeypatch,
     ):
         """Test 'no' rejection saves rejection record."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
         mock_prompt.return_value = "no"
 
         mock_engine = Mock()
@@ -302,7 +302,7 @@ class TestApproveModifyFlow:
         monkeypatch,
     ):
         """Test modifying position_size in approval flow."""
-        decision_file, decision_data = sample_decision
+        _, decision_data = sample_decision
 
         # First prompt: 'modify', subsequent prompts for each field
         mock_prompt.return_value = "modify"
@@ -444,138 +444,160 @@ class TestApprovalPersistence:
     @pytest.fixture
     def approval_dir(self, tmp_path):
         """Create a temporary approvals directory."""
-        approval_dir = tmp_path / "approvals"
+        approval_dir = tmp_path / "data" / "approvals"
         approval_dir.mkdir(parents=True, exist_ok=True)
         return approval_dir
 
-    def test_approval_file_format(self, approval_dir):
-        """Test approval file contains all required fields."""
-        from datetime import datetime
-        import json
+    @patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine")
+    @patch("rich.prompt.Prompt.ask")
+    def test_approval_file_format(
+        self,
+        mock_prompt,
+        mock_engine_class,
+        runner,
+        sample_decision,
+        approval_dir,
+        monkeypatch,
+    ):
+        """Invoke CLI approve flow and verify persisted approval structure."""
+        _, decision_data = sample_decision
 
-        # Create a sample approval file
-        approval_data = {
-            "decision_id": "test-123-abc",
-            "status": "approved",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "user_id": "123456789",
-            "user_name": "test_user",
-            "original_decision": {
-                "id": "test-123-abc",
-                "asset_pair": "BTCUSD",
-                "action": "BUY",
-                "confidence": 75,
-                "position_size": 0.05,
-                "stop_loss_pct": 2.0,
-                "take_profit_pct": 5.0,
-            },
-            "modifications": {
-                "position_size": None,
-                "stop_loss_pct": None,
-                "take_profit_pct": None,
-            },
-            "approval_notes": "Confirmed after market analysis",
-        }
+        mock_prompt.return_value = "yes"
+        mock_engine = Mock()
+        mock_engine.execute_decision = Mock(
+            return_value={"success": True, "message": "Trade executed"}
+        )
+        mock_engine_class.return_value = mock_engine
 
-        # Write to file
-        approval_file = approval_dir / "test_123_abc_approved.json"
-        approval_file.write_text(json.dumps(approval_data, indent=2))
+        # Run CLI from tmp root so relative data/ paths resolve to fixtures
+        monkeypatch.chdir(approval_dir.parent.parent)
 
-        # Verify file exists and contains all required fields
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ):
+            result = runner.invoke(
+                cli, ["approve", decision_data["decision_id"]], obj={"config": {}}
+            )
+
+        assert result.exit_code == 0
+
+        approval_file = approval_dir / f"{decision_data['decision_id']}_approved.json"
         assert approval_file.exists()
         loaded_data = json.loads(approval_file.read_text())
 
-        # Check all required fields are present
-        assert "decision_id" in loaded_data
-        assert "status" in loaded_data
-        assert "timestamp" in loaded_data
-        assert "user_id" in loaded_data
-        assert "user_name" in loaded_data
-        assert "original_decision" in loaded_data
-        assert "modifications" in loaded_data
-        assert "approval_notes" in loaded_data
-
-        # Verify values
+        assert loaded_data["decision_id"] == decision_data["decision_id"]
         assert loaded_data["status"] == "approved"
-        assert loaded_data["original_decision"]["asset_pair"] == "BTCUSD"
+        assert loaded_data["approved"] is True
+        assert loaded_data["modified"] is False
+        assert loaded_data["source"] == "cli"
+        assert loaded_data["approval_notes"] == decision_data.get("approval_notes", "")
 
-    def test_approval_timestamp_recorded(self, approval_dir):
-        """Test approval includes timestamp."""
         from datetime import datetime
-        import json
-        import time
 
-        # Create approval with timestamp
-        timestamp_before = datetime.utcnow().isoformat()
-        time.sleep(0.1)  # Ensure timestamp is after "before"
+        # Ensure timestamp parses via real persistence helper
+        datetime.fromisoformat(loaded_data["timestamp"])
 
-        approval_data = {
-            "decision_id": "test-456-def",
-            "status": "approved",
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "user_id": "123456789",
-            "user_name": "test_user",
-            "original_decision": {
-                "id": "test-456-def",
-                "asset_pair": "EURUSD",
-                "action": "SELL",
-                "confidence": 80,
-            },
-            "modifications": {},
-            "approval_notes": "",
-        }
+    @patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine")
+    @patch("rich.prompt.Prompt.ask")
+    def test_approval_timestamp_recorded(
+        self,
+        mock_prompt,
+        mock_engine_class,
+        runner,
+        sample_decision,
+        approval_dir,
+        monkeypatch,
+    ):
+        """Timestamp is generated by the approve CLI flow."""
+        from datetime import datetime
 
-        approval_file = approval_dir / "test_456_def_approved.json"
-        approval_file.write_text(json.dumps(approval_data, indent=2))
+        _, decision_data = sample_decision
+        mock_prompt.return_value = "yes"
 
-        time.sleep(0.1)  # Ensure timestamp is before "after"
-        timestamp_after = datetime.utcnow().isoformat()
-
-        # Load and verify timestamp
-        loaded_data = json.loads(approval_file.read_text())
-        recorded_timestamp = datetime.fromisoformat(
-            loaded_data["timestamp"].replace("Z", "+00:00")
+        mock_engine = Mock()
+        mock_engine.execute_decision = Mock(
+            return_value={"success": True, "message": "Trade executed"}
         )
+        mock_engine_class.return_value = mock_engine
 
-        # Verify timestamp is within expected range
-        assert recorded_timestamp.isoformat() > timestamp_before
-        assert recorded_timestamp.isoformat() < timestamp_after
+        monkeypatch.chdir(approval_dir.parent.parent)
 
-    def test_approval_rejection_recorded(self, approval_dir):
+        timestamp_before = datetime.utcnow()
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ):
+            result = runner.invoke(
+                cli, ["approve", decision_data["decision_id"]], obj={"config": {}}
+            )
+        timestamp_after = datetime.utcnow()
+
+        assert result.exit_code == 0
+
+        approval_file = approval_dir / f"{decision_data['decision_id']}_approved.json"
+        loaded_data = json.loads(approval_file.read_text())
+        recorded_timestamp = datetime.fromisoformat(loaded_data["timestamp"])
+
+        assert timestamp_before <= recorded_timestamp <= timestamp_after
+
+    @patch("finance_feedback_engine.cli.main.FinanceFeedbackEngine")
+    @patch("rich.prompt.Prompt.ask")
+    def test_approval_rejection_recorded(
+        self,
+        mock_prompt,
+        mock_engine_class,
+        runner,
+        sample_decision,
+        approval_dir,
+        monkeypatch,
+    ):
         """Test rejected approval is properly recorded."""
-        import json
+        decision_file, decision_data = sample_decision
+        rejection_reason = "Risk too high"
 
-        approval_data = {
-            "decision_id": "test-789-ghi",
-            "status": "rejected",
-            "timestamp": "2025-01-15T14:30:00Z",
-            "user_id": "123456789",
-            "user_name": "test_user",
-            "original_decision": {
-                "id": "test-789-ghi",
-                "asset_pair": "BTCUSD",
-                "action": "BUY",
-                "confidence": 50,
-            },
-            "modifications": {},
-            "approval_notes": "Risk too high",
-        }
+        # Persist approval notes into the decision file so the CLI carries them through
+        decision_data["approval_notes"] = rejection_reason
+        decision_file.write_text(json.dumps(decision_data, indent=2))
 
-        approval_file = approval_dir / "test_789_ghi_rejected.json"
-        approval_file.write_text(json.dumps(approval_data, indent=2))
+        mock_prompt.return_value = "no"
+        mock_engine_class.return_value = Mock()
 
+        # Run CLI from the tmp_path root so data/ paths align with the fixture
+        monkeypatch.chdir(approval_dir.parent.parent)
+
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ):
+            result = runner.invoke(
+                cli, ["approve", decision_data["decision_id"]], obj={"config": {}}
+            )
+
+        assert result.exit_code == 0
+
+        approval_file = approval_dir / f"{decision_data['decision_id']}_rejected.json"
         assert approval_file.exists()
         loaded_data = json.loads(approval_file.read_text())
         assert loaded_data["status"] == "rejected"
-        assert loaded_data["approval_notes"] == "Risk too high"
+        assert loaded_data["approval_notes"] == rejection_reason
 
     def test_approval_file_naming_sanitized(self, approval_dir):
         """Test approval filenames are properly sanitized."""
-        import json
+        from finance_feedback_engine.integrations.telegram_bot import (
+            TelegramApprovalBot,
+        )
 
         # Test dangerous filename that should be sanitized
         dangerous_id = "test/../../../etc/passwd"
-        sanitized_id = "test_______________etc_passwd"
+
+        # Invoke actual sanitization function
+        sanitized_id = TelegramApprovalBot._sanitize_decision_id(dangerous_id)
+
+        # Verify sanitization removes path traversal characters
+        assert ".." not in sanitized_id
+        assert "/" not in sanitized_id
+        assert sanitized_id != dangerous_id  # Must be different from dangerous input
+        assert all(
+            c.isalnum() or c in "_-" for c in sanitized_id
+        )  # Only safe characters
 
         approval_data = {
             "decision_id": dangerous_id,
@@ -588,13 +610,85 @@ class TestApprovalPersistence:
             "approval_notes": "",
         }
 
-        # Use sanitized filename
+        # Use sanitized filename from actual function
         approval_file = approval_dir / f"{sanitized_id}_approved.json"
         approval_file.write_text(json.dumps(approval_data, indent=2))
 
         # Verify file is created with sanitized name (not in dangerous location)
         assert approval_file.exists()
         assert approval_dir in approval_file.parents
+
+    def test_sanitization_function_removes_path_traversal(self):
+        """Test that sanitization function removes path traversal patterns."""
+        from finance_feedback_engine.integrations.telegram_bot import (
+            TelegramApprovalBot,
+        )
+
+        # Test various path traversal attempts
+        test_cases = [
+            ("../../../etc/passwd", "etc_passwd"),  # Path traversal
+            ("test..config", "test..config"),  # Double dots not followed by slash
+            ("~/sensitive", "_sensitive"),  # Home directory escape
+            ("file;rm -rf /", "file_rm__rf__"),  # Shell injection
+            ("test`whoami`", "test_whoami_"),  # Command injection
+            ("$(cat /etc/passwd)", "_cat__etc_passwd_"),  # Command substitution
+            ("test|nc -e /bin/sh", "test_nc__e__bin_sh"),  # Pipe command
+            ("valid_id-123", "valid_id-123"),  # Valid ID stays unchanged
+            ("test@domain.com", "test_domain.com"),  # Email-like string
+            ("test\x00null", "test_null"),  # Null byte
+        ]
+
+        for dangerous_input, expected_substring in test_cases:
+            result = TelegramApprovalBot._sanitize_decision_id(dangerous_input)
+            # Verify no dangerous characters remain
+            assert (
+                ".." not in result
+            ), f"Path traversal (..) found in sanitization of {dangerous_input}"
+            assert (
+                "/" not in result
+            ), f"Forward slash (/) found in sanitization of {dangerous_input}"
+            assert (
+                "\\" not in result
+            ), f"Backslash (\\) found in sanitization of {dangerous_input}"
+            assert (
+                ";" not in result
+            ), f"Semicolon (;) found in sanitization of {dangerous_input}"
+            assert (
+                "`" not in result
+            ), f"Backtick (`) found in sanitization of {dangerous_input}"
+            assert (
+                "$" not in result
+            ), f"Dollar sign ($) found in sanitization of {dangerous_input}"
+            assert (
+                "|" not in result
+            ), f"Pipe (|) found in sanitization of {dangerous_input}"
+            assert (
+                "\x00" not in result
+            ), f"Null byte found in sanitization of {dangerous_input}"
+            # Verify result contains only safe characters
+            assert all(
+                c.isalnum() or c in "_-" for c in result
+            ), f"Unsafe character in sanitized: {result}"
+
+    def test_sanitization_function_preserves_valid_ids(self):
+        """Test that sanitization preserves valid alphanumeric IDs."""
+        from finance_feedback_engine.integrations.telegram_bot import (
+            TelegramApprovalBot,
+        )
+
+        # Valid IDs should remain unchanged
+        valid_ids = [
+            "abc123",
+            "test_decision_id",
+            "TEST-DECISION-123",
+            "a",
+            "1",
+            "a1b2c3_-_d4e5f6",
+        ]
+
+        for valid_id in valid_ids:
+            result = TelegramApprovalBot._sanitize_decision_id(valid_id)
+            assert result == valid_id, f"Valid ID was modified: {valid_id} -> {result}"
 
 
 class TestRichUIDisplay:

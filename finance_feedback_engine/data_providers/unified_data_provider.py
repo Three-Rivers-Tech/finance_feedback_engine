@@ -407,8 +407,7 @@ class UnifiedDataProvider:
         return result
 
     def discover_available_pairs(
-        self,
-        exchanges: Optional[List[str]] = None
+        self, exchanges: Optional[List[str]] = None
     ) -> List[str]:
         """
         Auto-discover tradeable pairs from configured exchanges.
@@ -427,20 +426,20 @@ class UnifiedDataProvider:
         if exchanges is None:
             exchanges = []
             if self.coinbase:
-                exchanges.append('coinbase')
+                exchanges.append("coinbase")
             if self.oanda:
-                exchanges.append('oanda')
+                exchanges.append("oanda")
 
         discovered = []
 
         # Coinbase discovery
-        if 'coinbase' in exchanges and self.coinbase:
+        if "coinbase" in exchanges and self.coinbase:
             try:
                 logger.info("Discovering pairs from Coinbase...")
                 products = self.coinbase.list_products()
 
                 for product in products:
-                    product_id = product.get('product_id', '')
+                    product_id = product.get("product_id", "")
                     if product_id:
                         # Standardize format
                         standardized = self._standardize_pair(product_id)
@@ -452,13 +451,13 @@ class UnifiedDataProvider:
                 logger.warning(f"Coinbase discovery failed: {e}")
 
         # Oanda discovery
-        if 'oanda' in exchanges and self.oanda:
+        if "oanda" in exchanges and self.oanda:
             try:
                 logger.info("Discovering pairs from Oanda...")
                 instruments = self.oanda.list_instruments()
 
                 for instrument in instruments:
-                    name = instrument.get('name', '')
+                    name = instrument.get("name", "")
                     if name:
                         # Standardize format
                         standardized = self._standardize_pair(name)
@@ -495,6 +494,8 @@ class UnifiedDataProvider:
             Standardized pair (e.g., 'BTCUSD', 'EURUSD')
         """
         # Remove common separators and uppercase
-        standardized = raw_pair.replace('-', '').replace('_', '').replace('/', '').upper()
+        standardized = (
+            raw_pair.replace("-", "").replace("_", "").replace("/", "").upper()
+        )
 
         return standardized

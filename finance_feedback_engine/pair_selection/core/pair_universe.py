@@ -119,19 +119,16 @@ class PairUniverseCache:
                 }
             }
         """
-        stats = {
-            'total_entries': len(self.cache),
-            'exchanges': {}
-        }
+        stats = {"total_entries": len(self.cache), "exchanges": {}}
 
         current_time = time.time()
 
         for exchange, (pairs, timestamp) in self.cache.items():
             age_seconds = current_time - timestamp
-            stats['exchanges'][exchange] = {
-                'pairs_count': len(pairs),
-                'age_seconds': age_seconds,
-                'is_fresh': age_seconds < self.ttl_seconds
+            stats["exchanges"][exchange] = {
+                "pairs_count": len(pairs),
+                "age_seconds": age_seconds,
+                "is_fresh": age_seconds < self.ttl_seconds,
             }
 
         return stats

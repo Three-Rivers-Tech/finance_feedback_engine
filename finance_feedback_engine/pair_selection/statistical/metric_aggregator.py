@@ -12,13 +12,13 @@ Normalization approach:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
-from .sortino_analyzer import SortinoScore
 from .correlation_matrix import CorrelationScore
 from .garch_volatility import GARCHForecast
+from .sortino_analyzer import SortinoScore
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +34,11 @@ class AggregatedMetrics:
         weights_used: Weights applied {metric: weight}
         raw_metrics: Raw metric objects for reference
     """
+
     composite_score: float
     component_scores: Dict[str, float]
     weights_used: Dict[str, float]
-    raw_metrics: Dict[str, any]
+    raw_metrics: Dict[str, Any]
 
 
 class MetricAggregator:
@@ -50,10 +51,7 @@ class MetricAggregator:
         - volatility: 0.25 (risk management)
     """
 
-    def __init__(
-        self,
-        weights: Optional[Dict[str, float]] = None
-    ):
+    def __init__(self, weights: Optional[Dict[str, float]] = None):
         """
         Initialize Metric Aggregator.
 
@@ -65,11 +63,18 @@ class MetricAggregator:
                     'volatility': 0.25
                 }
         """
+        required_keys = {"sortino", "diversification", "volatility"}
+
         self.weights = weights or {
-            'sortino': 0.4,
-            'diversification': 0.35,
-            'volatility': 0.25
+            "sortino": 0.4,
+            "diversification": 0.35,
+            "volatility": 0.25,
         }
+
+        # Validate required keys
+        missing_keys = required_keys - self.weights.keys()
+        if missing_keys:
+            raise ValueError(f"Missing required weight keys: {missing_keys}")
 
         # Validate weights
         if not np.isclose(sum(self.weights.values()), 1.0):
@@ -86,7 +91,7 @@ class MetricAggregator:
         self,
         sortino: Optional[SortinoScore],
         correlation: Optional[CorrelationScore],
-        garch: Optional[GARCHForecast]
+        garch: Optional[GARCHForecast],
     ) -> AggregatedMetrics:
         """
         Weighted combination of normalized metrics.
@@ -103,22 +108,23 @@ class MetricAggregator:
         sortino_score = self._normalize_sortino(sortino) if sortino else 0.0
         diversification_score = (
             correlation.diversification_score
-            if correlation else 0.5  # Neutral if missing
+            if correlation
+            else 0.5  # Neutral if missing
         )
         volatility_score = self._normalize_volatility(garch) if garch else 0.5
 
         # Store component scores
         component_scores = {
-            'sortino': sortino_score,
-            'diversification': diversification_score,
-            'volatility': volatility_score
+            "sortino": sortino_score,
+            "diversification": diversification_score,
+            "volatility": volatility_score,
         }
 
         # Calculate weighted composite
         composite = (
-            self.weights['sortino'] * sortino_score +
-            self.weights['diversification'] * diversification_score +
-            self.weights['volatility'] * volatility_score
+            self.weights["sortino"] * sortino_score
+            + self.weights["diversification"] * diversification_score
+            + self.weights["volatility"] * volatility_score
         )
 
         # Ensure composite is in [0, 1] range
@@ -129,10 +135,10 @@ class MetricAggregator:
             component_scores=component_scores,
             weights_used=self.weights.copy(),
             raw_metrics={
-                'sortino': sortino,
-                'correlation': correlation,
-                'garch': garch
-            }
+                "sortino": sortino,
+                "correlation": correlation,
+                "garch": garch,
+            },
         )
 
         logger.debug(
@@ -203,8 +209,7 @@ class MetricAggregator:
         return float(vol_score)
 
     def aggregate_multiple(
-        self,
-        metrics: Dict[str, Dict[str, any]]
+        self, metrics: Dict[str, Dict[str, Any]]
     ) -> Dict[str, AggregatedMetrics]:
         """
         Aggregate metrics for multiple pairs at once.
@@ -227,9 +232,9 @@ class MetricAggregator:
 
         for pair, pair_metrics in metrics.items():
             results[pair] = self.aggregate_metrics(
-                sortino=pair_metrics.get('sortino'),
-                correlation=pair_metrics.get('correlation'),
-                garch=pair_metrics.get('garch')
+                sortino=pair_metrics.get("sortino"),
+                correlation=pair_metrics.get("correlation"),
+                garch=pair_metrics.get("garch"),
             )
 
         return results

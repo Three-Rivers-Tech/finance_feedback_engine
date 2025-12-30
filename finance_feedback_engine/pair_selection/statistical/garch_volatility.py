@@ -42,6 +42,7 @@ class GARCHForecast:
         confidence_intervals: 95% confidence interval for forecast
         persistence: alpha + beta (close to 1 = high persistence)
     """
+
     forecasted_vol: float
     model_params: Dict[str, float]
     volatility_regime: str
@@ -63,7 +64,7 @@ class GARCHVolatilityForecaster:
         p: int = 1,
         q: int = 1,
         fitting_window_days: int = 90,
-        forecast_horizon_days: int = 7
+        forecast_horizon_days: int = 7,
     ):
         """
         Initialize GARCH Volatility Forecaster.
@@ -85,9 +86,7 @@ class GARCHVolatilityForecaster:
         )
 
     def forecast_volatility(
-        self,
-        asset_pair: str,
-        data_provider
+        self, asset_pair: str, data_provider
     ) -> Optional[GARCHForecast]:
         """
         Fit GARCH(1,1) and forecast next N days of volatility.
@@ -112,9 +111,7 @@ class GARCHVolatilityForecaster:
 
             # Fetch historical data (90 days for stable fitting)
             candles, provider = data_provider.get_candles(
-                asset_pair=asset_pair,
-                granularity="1d",
-                limit=self.fitting_window_days
+                asset_pair=asset_pair, granularity="1d", limit=self.fitting_window_days
             )
 
             if not candles or len(candles) < 30:
@@ -139,25 +136,21 @@ class GARCHVolatilityForecaster:
 
             # Fit GARCH(1,1) model
             model = arch_model(
-                returns_pct,
-                vol='Garch',
-                p=self.p,
-                q=self.q,
-                dist='normal'
+                returns_pct, vol="Garch", p=self.p, q=self.q, dist="normal"
             )
 
             # Fit with suppressed output
-            fit = model.fit(disp='off', show_warning=False)
+            fit = model.fit(disp="off", show_warning=False)
 
             # Extract parameters
             params = {
-                'omega': fit.params.get('omega', 0.0),
-                'alpha': fit.params.get(f'alpha[{self.p}]', 0.0),
-                'beta': fit.params.get(f'beta[{self.q}]', 0.0)
+                "omega": fit.params.get("omega", 0.0),
+                "alpha": fit.params.get(f"alpha[{self.p}]", 0.0),
+                "beta": fit.params.get(f"beta[{self.q}]", 0.0),
             }
 
             # Calculate persistence (alpha + beta close to 1 means high persistence)
-            persistence = params['alpha'] + params['beta']
+            persistence = params["alpha"] + params["beta"]
 
             # Forecast next horizon_days
             forecast = fit.forecast(horizon=self.forecast_horizon_days)
@@ -189,11 +182,8 @@ class GARCHVolatilityForecaster:
                 model_params=params,
                 volatility_regime=regime,
                 historical_vol=historical_vol,
-                confidence_intervals={
-                    'lower': ci_lower,
-                    'upper': ci_upper
-                },
-                persistence=persistence
+                confidence_intervals={"lower": ci_lower, "upper": ci_upper},
+                persistence=persistence,
             )
 
             logger.info(
@@ -211,9 +201,7 @@ class GARCHVolatilityForecaster:
             return self._fallback_volatility_estimate(asset_pair, data_provider)
 
     def _fallback_volatility_estimate(
-        self,
-        asset_pair: str,
-        data_provider
+        self, asset_pair: str, data_provider
     ) -> Optional[GARCHForecast]:
         """
         Fallback to simple historical volatility if GARCH fitting fails.
@@ -228,9 +216,7 @@ class GARCHVolatilityForecaster:
         try:
             # Fetch 30 days of data as fallback
             candles, provider = data_provider.get_candles(
-                asset_pair=asset_pair,
-                granularity="1d",
-                limit=30
+                asset_pair=asset_pair, granularity="1d", limit=30
             )
 
             if not candles or len(candles) < 10:
@@ -251,14 +237,14 @@ class GARCHVolatilityForecaster:
             # Use historical vol as forecast
             result = GARCHForecast(
                 forecasted_vol=historical_vol,
-                model_params={'omega': 0.0, 'alpha': 0.0, 'beta': 0.0},
+                model_params={"omega": 0.0, "alpha": 0.0, "beta": 0.0},
                 volatility_regime="medium",
                 historical_vol=historical_vol,
                 confidence_intervals={
-                    'lower': historical_vol * 0.8,
-                    'upper': historical_vol * 1.2
+                    "lower": historical_vol * 0.8,
+                    "upper": historical_vol * 1.2,
                 },
-                persistence=0.0
+                persistence=0.0,
             )
 
             logger.info(
@@ -286,8 +272,8 @@ class GARCHVolatilityForecaster:
 
         returns = []
         for i in range(1, len(candles)):
-            prev_close = candles[i - 1].get('close')
-            curr_close = candles[i].get('close')
+            prev_close = candles[i - 1].get("close")
+            curr_close = candles[i].get("close")
 
             if prev_close is None or curr_close is None or prev_close == 0:
                 continue

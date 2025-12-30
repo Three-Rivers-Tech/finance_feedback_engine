@@ -31,6 +31,7 @@ class CorrelationScore:
         warnings: List of high-correlation warnings
         sample_size: Number of returns used for calculation
     """
+
     diversification_score: float
     max_correlation: float
     correlation_matrix: Dict[str, float]
@@ -48,11 +49,7 @@ class CorrelationAnalyzer:
     highly correlated pairs (e.g., BTCUSD and ETHUSD often move together).
     """
 
-    def __init__(
-        self,
-        lookback_days: int = 30,
-        correlation_threshold: float = 0.7
-    ):
+    def __init__(self, lookback_days: int = 30, correlation_threshold: float = 0.7):
         """
         Initialize Correlation Analyzer.
 
@@ -73,7 +70,7 @@ class CorrelationAnalyzer:
         candidate: str,
         active_positions: List[str],
         data_provider,
-        portfolio_memory=None
+        portfolio_memory=None,
     ) -> Optional[CorrelationScore]:
         """
         Calculate how correlated a candidate is with current portfolio.
@@ -99,7 +96,7 @@ class CorrelationAnalyzer:
                 max_correlation=0.0,
                 correlation_matrix={},
                 warnings=[],
-                sample_size=0
+                sample_size=0,
             )
 
         try:
@@ -107,7 +104,7 @@ class CorrelationAnalyzer:
             candidate_returns = self._get_returns(
                 asset_pair=candidate,
                 data_provider=data_provider,
-                lookback_days=self.lookback_days
+                lookback_days=self.lookback_days,
             )
 
             if candidate_returns is None or len(candidate_returns) < 5:
@@ -121,7 +118,7 @@ class CorrelationAnalyzer:
                     max_correlation=0.0,
                     correlation_matrix={},
                     warnings=["Insufficient data for correlation calculation"],
-                    sample_size=len(candidate_returns) if candidate_returns else 0
+                    sample_size=len(candidate_returns) if candidate_returns else 0,
                 )
 
             # Fetch returns for all active positions
@@ -130,7 +127,7 @@ class CorrelationAnalyzer:
                 returns = self._get_returns(
                     asset_pair=pair,
                     data_provider=data_provider,
-                    lookback_days=self.lookback_days
+                    lookback_days=self.lookback_days,
                 )
 
                 if returns is not None and len(returns) >= 5:
@@ -148,7 +145,7 @@ class CorrelationAnalyzer:
                     max_correlation=0.0,
                     correlation_matrix={},
                     warnings=["No position data available for correlation"],
-                    sample_size=len(candidate_returns)
+                    sample_size=len(candidate_returns),
                 )
 
             # Calculate pairwise correlations
@@ -164,7 +161,9 @@ class CorrelationAnalyzer:
                 correlations[pair] = corr
 
             # Find maximum absolute correlation
-            max_corr = max(abs(c) for c in correlations.values()) if correlations else 0.0
+            max_corr = (
+                max(abs(c) for c in correlations.values()) if correlations else 0.0
+            )
 
             # Diversification score: 1 - max_correlation
             # High correlation → low score
@@ -183,7 +182,7 @@ class CorrelationAnalyzer:
                 max_correlation=max_corr,
                 correlation_matrix=correlations,
                 warnings=warnings,
-                sample_size=len(candidate_returns)
+                sample_size=len(candidate_returns),
             )
 
             logger.info(
@@ -199,16 +198,12 @@ class CorrelationAnalyzer:
 
         except Exception as e:
             logger.error(
-                f"Error calculating correlation for {candidate}: {e}",
-                exc_info=True
+                f"Error calculating correlation for {candidate}: {e}", exc_info=True
             )
             return None
 
     def _get_returns(
-        self,
-        asset_pair: str,
-        data_provider,
-        lookback_days: int
+        self, asset_pair: str, data_provider, lookback_days: int
     ) -> Optional[List[float]]:
         """
         Fetch and calculate returns for an asset pair.
@@ -223,9 +218,7 @@ class CorrelationAnalyzer:
         """
         try:
             candles, provider = data_provider.get_candles(
-                asset_pair=asset_pair,
-                granularity="1d",
-                limit=lookback_days
+                asset_pair=asset_pair, granularity="1d", limit=lookback_days
             )
 
             if not candles or len(candles) < 2:
@@ -238,8 +231,8 @@ class CorrelationAnalyzer:
             # Calculate returns
             returns = []
             for i in range(1, len(candles)):
-                prev_close = candles[i - 1].get('close')
-                curr_close = candles[i].get('close')
+                prev_close = candles[i - 1].get("close")
+                curr_close = candles[i].get("close")
 
                 if prev_close is None or curr_close is None or prev_close == 0:
                     continue
@@ -254,9 +247,7 @@ class CorrelationAnalyzer:
             return None
 
     def _calculate_correlation(
-        self,
-        returns1: List[float],
-        returns2: List[float]
+        self, returns1: List[float], returns2: List[float]
     ) -> float:
         """
         Calculate Pearson correlation coefficient between two return series.

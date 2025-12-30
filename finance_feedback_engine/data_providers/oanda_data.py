@@ -287,10 +287,7 @@ class OandaDataProvider:
             )
 
             # Filter to only currency pairs
-            currency_pairs = [
-                i for i in instruments
-                if i.get('type') == 'CURRENCY'
-            ]
+            currency_pairs = [i for i in instruments if i.get("type") == "CURRENCY"]
 
             logger.info(
                 f"Retrieved {len(currency_pairs)} currency pairs "
