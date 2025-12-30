@@ -245,3 +245,50 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             "platform_breakdowns": platform_breakdowns,
             "unrealized_pnl": total_unrealized,
         }
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test connectivity across all configured platforms.
+
+        Returns:
+            Dictionary with aggregated validation results from all platforms.
+            Will return True for each check if ANY platform passes it.
+        """
+        aggregated_results = {
+            "api_auth": False,
+            "account_active": False,
+            "trading_enabled": False,
+            "balance_available": False,
+            "market_data_access": False,
+        }
+
+        platform_results = {}
+
+        for name, platform in self.platforms.items():
+            try:
+                logger.info("Testing connection for %s platform", name)
+                result = platform.test_connection()
+                platform_results[name] = result
+
+                # Aggregate: if ANY platform succeeds for a check, mark it as True
+                for key in aggregated_results:
+                    if result.get(key, False):
+                        aggregated_results[key] = True
+
+            except Exception as e:
+                logger.error("Failed to test connection for %s: %s", name, e)
+                platform_results[name] = {
+                    "error": str(e),
+                    "api_auth": False,
+                    "account_active": False,
+                    "trading_enabled": False,
+                    "balance_available": False,
+                    "market_data_access": False,
+                }
+
+        if not platform_results:
+            raise ValueError("No platforms available to test connection")
+
+        # Log per-platform results for debugging
+        logger.info("Platform connection test results: %s", platform_results)
+
+        return aggregated_results

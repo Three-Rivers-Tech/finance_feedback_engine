@@ -1,7 +1,7 @@
 // API Response Types
 export interface AgentStatus {
   state: 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
-  agent_ooda_state: 'IDLE' | 'PERCEPTION' | 'REASONING' | 'RISK_CHECK' | 'EXECUTION' | 'LEARNING' | null;
+  agent_ooda_state: 'IDLE' | 'RECOVERING' | 'PERCEPTION' | 'REASONING' | 'RISK_CHECK' | 'EXECUTION' | 'LEARNING' | null;
   uptime_seconds: number | null;
   total_trades: number;
   active_positions: number;

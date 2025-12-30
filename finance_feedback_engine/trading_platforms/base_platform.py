@@ -305,3 +305,30 @@ class BaseTradingPlatform(ABC):
     async def aget_portfolio_breakdown(self) -> Dict[str, Any]:
         """Async adapter for get_portfolio_breakdown."""
         return await self._run_async(self.get_portfolio_breakdown)
+
+    @abstractmethod
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test platform connectivity and validate all prerequisites for trading.
+
+        This method performs comprehensive validation before the trading agent starts,
+        ensuring all systems are operational and credentials are valid.
+
+        Returns:
+            Dictionary with validation results:
+            {
+                "api_auth": bool,  # API authentication successful
+                "account_active": bool,  # Account is active/enabled
+                "trading_enabled": bool,  # Trading permissions granted
+                "balance_available": bool,  # Can query balance
+                "market_data_access": bool,  # Can access market data
+            }
+
+        Raises:
+            Exception: If critical validation fails that prevents trading
+        """
+        pass
+
+    async def atest_connection(self) -> Dict[str, bool]:
+        """Async adapter for test_connection."""
+        return await self._run_async(self.test_connection)

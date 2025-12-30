@@ -13,22 +13,34 @@ npm install
 
 ```bash
 # Copy example file
-cp .env.example .env.local
+cp .env.local.example .env.local
 
-# Edit with your values
+# Edit with your values (VITE_API_BASE_URL is REQUIRED)
 nano .env.local
 ```
 
+**Minimum `.env.local` (REQUIRED):**
+
 ```env
-# .env.local
+# REQUIRED: Backend API endpoint - must be set
+VITE_API_BASE_URL=http://localhost:8000
+
+# REQUIRED: API key for development (minimum 8 characters)
 VITE_API_KEY=your-personal-dev-key-here
 ```
+
+⚠️ **The `VITE_API_BASE_URL` environment variable is MANDATORY.** Application will not run without it.
 
 ### 3. Test Configuration
 
 ```bash
 # Validate current config
 npm run validate-config
+
+# Expected output:
+# ✓ Configuration validation passed
+# Environment: development
+# API Base URL: http://localhost:8000
 
 # Run config tests
 npm run test:config
@@ -40,8 +52,9 @@ npm run test:config
 import { config } from '@/config';
 
 // Use validated, type-safe config
-const apiUrl = config.api.baseUrl;
-const timeout = config.api.timeout;
+const apiUrl = config.api.baseUrl;     // "http://localhost:8000"
+const timeout = config.api.timeout;     // 30000
+const apiKey = config.api.apiKey;       // "your-personal-dev-key-here"
 ```
 
 ## 📝 Common Tasks
@@ -90,70 +103,122 @@ npm run validate-config -- --verbose
 
 ## 🔧 Configuration Options
 
-### Required Environment Variables
+### ⚠️ REQUIRED Environment Variables
 
 ```env
-# API Configuration
+# API Configuration - MANDATORY
+# Must point to running backend server
 VITE_API_BASE_URL=http://localhost:8000
 
 # Services
 VITE_GRAFANA_URL=http://localhost:3001
 
-# Polling Intervals (milliseconds)
+# Polling Intervals (milliseconds, optional)
 VITE_POLLING_INTERVAL_CRITICAL=3000
 VITE_POLLING_INTERVAL_MEDIUM=5000
 
-# Optional: API Key
+# API Key (optional for development, required for staging/prod)
 VITE_API_KEY=your-api-key
 ```
 
-### Environment-Specific Files
+### Environment-Specific Setup
 
-- `.env.example` - Template (commit this)
-- `.env` - Development defaults (commit this, no secrets)
-- `.env.local` - Local overrides (DO NOT COMMIT)
-- `.env.production` - Production config (commit this)
+**Development:**
+```env
+VITE_API_BASE_URL=http://localhost:8000
+VITE_API_KEY=dev-key-12345678  # Optional minimum 8 chars
+```
+
+**Staging:**
+```env
+VITE_API_BASE_URL=https://api-staging.example.com
+VITE_API_KEY=staging-key-with-16-chars  # Recommended
+```
+
+**Production:**
+```env
+VITE_API_BASE_URL=https://api.example.com
+VITE_API_KEY=production-key-with-32-chars  # Required
+```
+
+### Environment File Precedence
+
+1. Environment variables (e.g., `VITE_API_BASE_URL=value`)
+2. `.env.local` (development only, git-ignored)
+3. `.env.{mode}` (e.g., `.env.production`)
+4. `.env` (shared defaults)
+5. Hardcoded defaults (for optional variables)
 
 ## 🐛 Troubleshooting
 
-### "Configuration validation failed"
+### ❌ "API base URL is required. Set VITE_API_BASE_URL environment variable"
+
+**Solution:**
+
+1. Create or edit `.env.local`:
+   ```bash
+   cp .env.local.example .env.local
+   nano .env.local
+   ```
+
+2. Add the required variable:
+   ```env
+   VITE_API_BASE_URL=http://localhost:8000
+   VITE_API_KEY=dev-key-12345678
+   ```
+
+3. Restart the dev server:
+   ```bash
+   npm run dev
+   ```
+
+### ❌ "Configuration validation failed"
 
 ```bash
-# Check what's wrong
+# Check what's wrong in detail
 npm run validate-config -- --verbose
 
 # Common issues:
-# - Invalid URL format
-# - Polling interval out of range (1000-60000)
-# - Weak API key (e.g., "test", "example")
+# - VITE_API_BASE_URL not set or empty
+# - Invalid URL format (must include http:// or https://)
+# - Polling interval out of range (1000-60000 ms)
+# - Weak API key (avoided patterns: "test", "example", "demo")
 ```
 
-### "API key required"
+### ❌ "API requests fail / Cannot reach server"
 
-```bash
-# Set in .env.local
-echo "VITE_API_KEY=dev-key-12345678" >> .env.local
+1. Verify backend is running:
+   ```bash
+   curl http://localhost:8000/health
+   ```
 
-# Or use localStorage in browser
-localStorage.setItem('api_key', 'your-key');
-```
+2. Check if URL is correct in `.env.local`:
+   ```bash
+   grep VITE_API_BASE_URL .env.local
+   ```
 
-### "HTTPS required in production"
+3. If backend is on different port:
+   ```env
+   VITE_API_BASE_URL=http://localhost:YOUR_PORT
+   ```
 
+### ❌ "HTTPS required in production/staging"
+
+Use HTTPS URL (not HTTP):
 ```env
-# Use HTTPS
-VITE_API_BASE_URL=https://api.example.com
+# ❌ Wrong
+VITE_API_BASE_URL=http://api-staging.example.com
 
-# Or use relative URL (proxied by Nginx)
-VITE_API_BASE_URL=/api
+# ✓ Correct
+VITE_API_BASE_URL=https://api-staging.example.com
 ```
 
 ## 📚 Documentation
 
-- **Full Guide:** `src/config/README.md`
+- **Full Environment Setup Guide:** [ENVIRONMENT_SETUP.md](./ENVIRONMENT_SETUP.md) ⭐ **Read this first!**
 - **Security Report:** `CONFIGURATION_SECURITY_REPORT.md`
 - **Implementation Summary:** `CONFIGURATION_VALIDATION_SUMMARY.md`
-- **API Reference:** `src/config/README.md#api-reference`
+- **Config System Code:** `src/config/`
 
 ## 💡 Pro Tips
 

@@ -193,6 +193,19 @@ export class ConfigValidator {
     const errors: ValidationError[] = [];
     const warnings: ValidationError[] = [];
 
+    // Validate API base URL is set and non-empty
+    if (!config.api.baseUrl || config.api.baseUrl.trim().length === 0) {
+      errors.push({
+        path: 'api.baseUrl',
+        message:
+          'API base URL is required. Set VITE_API_BASE_URL environment variable. ' +
+          'For development, use http://localhost:8000; ' +
+          'for staging/production, use HTTPS URL (e.g., https://api.example.com).',
+        severity: 'critical',
+        rule: 'required_base_url',
+      });
+    }
+
     // Validate polling intervals are reasonable
     if (config.polling.critical < 1000) {
       warnings.push({

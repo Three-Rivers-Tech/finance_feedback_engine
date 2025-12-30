@@ -5,6 +5,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from ..exceptions import TradingError
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .retry_handler import standardize_platform_error
@@ -84,6 +85,9 @@ class OandaPlatform(BaseTradingPlatform):
         Returns:
             oandapyV20 API context instance
         """
+        # TradingError is available at module level, no need for import inside method
+        _TradingError = TradingError
+
         if self._client is None:
             try:
                 from oandapyV20 import API
@@ -108,7 +112,7 @@ class OandaPlatform(BaseTradingPlatform):
                 logger.warning(
                     "oandapyV20 not installed. " "Install with: pip install oandapyV20"
                 )
-                raise ValueError(
+                raise _TradingError(
                     "oandapyV20 library not available. Install with: pip install oandapyV20"
                 )
             except Exception as e:
@@ -269,11 +273,137 @@ class OandaPlatform(BaseTradingPlatform):
             logger.error(
                 "oandapyV20 library not installed. Install with: pip install oandapyV20"
             )
-            raise ValueError(
+            from ..exceptions import TradingError
+            raise TradingError(
                 "oandapyV20 library not available. Install with: pip install oandapyV20"
             )
         except Exception as e:
             logger.error("Error fetching Oanda balances: %s", e)
+            raise
+
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test Oanda platform connectivity and validate all trading prerequisites.
+
+        Performs comprehensive validation:
+        1. API authentication (client initialization)
+        2. Account active status (can query account)
+        3. Trading permissions (account allows trading)
+        4. Balance availability (can query balances)
+        5. Market data access (can query instruments)
+
+        Returns:
+            Dictionary with validation results:
+            {
+                "api_auth": bool,
+                "account_active": bool,
+                "trading_enabled": bool,
+                "balance_available": bool,
+                "market_data_access": bool,
+            }
+
+        Raises:
+            Exception: If critical validation fails
+        """
+        logger.info("Testing Oanda connection and validating prerequisites...")
+
+        results = {
+            "api_auth": False,
+            "account_active": False,
+            "trading_enabled": False,
+            "balance_available": False,
+            "market_data_access": False,
+        }
+
+        try:
+            from oandapyV20.endpoints.accounts import AccountSummary, AccountDetails
+            from oandapyV20.endpoints.instruments import InstrumentsCandles
+
+            # 1. Test API authentication by initializing client
+            try:
+                client = self._get_client()
+                results["api_auth"] = True
+                logger.info("✓ API authentication successful")
+            except Exception as e:
+                logger.error(f"✗ API authentication failed: {e}")
+                raise
+
+            # 2. Test account active status by querying account summary
+            try:
+                request = AccountSummary(accountID=self.account_id)
+                response = client.request(request)
+                account = response.get("account", {})
+
+                if account:
+                    results["account_active"] = True
+                    logger.info("✓ Account is active")
+                else:
+                    logger.warning("✗ Account not found or inactive")
+            except Exception as e:
+                logger.error(f"✗ Account status check failed: {e}")
+                raise
+
+            # 3. Test trading permissions by checking account details
+            try:
+                request = AccountDetails(accountID=self.account_id)
+                response = client.request(request)
+                account = response.get("account", {})
+
+                # Check if account has hedging enabled or can place trades
+                margin_rate = float(account.get("marginRate", 0))
+                if margin_rate > 0:
+                    results["trading_enabled"] = True
+                    logger.info(f"✓ Trading permissions enabled (margin rate: {margin_rate})")
+                else:
+                    logger.warning("✗ Trading permissions denied or margin not available")
+            except Exception as e:
+                logger.warning(f"✗ Trading permissions check failed: {e}")
+                # Don't raise - might be API version issue
+
+            # 4. Test balance availability
+            try:
+                balance = self.get_balance()
+                if balance:
+                    results["balance_available"] = True
+                    total = sum(balance.values())
+                    currencies = list(balance.keys())
+                    logger.info(f"✓ Balance available ({', '.join(currencies)}: {total:.2f})")
+                else:
+                    logger.warning("✗ Balance query returned empty (may be zero balance)")
+                    results["balance_available"] = True  # Query succeeded even if zero
+            except Exception as e:
+                logger.error(f"✗ Balance query failed: {e}")
+                raise
+
+            # 5. Test market data access by querying a common instrument
+            try:
+                params = {"count": 1, "granularity": "H1"}
+                instrument = "EUR_USD"  # Most common forex pair
+                request = InstrumentsCandles(instrument=instrument, params=params)
+                response = client.request(request)
+                candles = response.get("candles", [])
+
+                if candles:
+                    results["market_data_access"] = True
+                    logger.info(f"✓ Market data access granted (queried {instrument})")
+                else:
+                    logger.warning("✗ Market data access denied or no data available")
+            except Exception as e:
+                logger.error(f"✗ Market data access failed: {e}")
+                raise
+
+            # Summary
+            all_passed = all(results.values())
+            if all_passed:
+                logger.info("✓ All connection validation checks passed")
+            else:
+                failed = [k for k, v in results.items() if not v]
+                logger.warning(f"⚠ Some validation checks failed: {failed}")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Connection validation failed: {e}")
             raise
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
@@ -638,7 +768,8 @@ class OandaPlatform(BaseTradingPlatform):
             logger.error(
                 "Oanda library not installed. " "Install with: pip install oandapyV20"
             )
-            raise ValueError("Oanda library required. Please install oandapyV20")
+            from ..exceptions import TradingError
+            raise TradingError("Oanda library required. Please install oandapyV20")
         except Exception as e:
             logger.error("Error fetching Oanda portfolio: %s", e)
             # Return minimal portfolio on error

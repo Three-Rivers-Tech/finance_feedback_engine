@@ -236,6 +236,39 @@ describe('ConfigValidator', () => {
       expect(result.valid).toBe(false);
     });
 
+    it('should reject empty baseUrl', () => {
+      const config = {
+        ...validDevConfig,
+        api: {
+          ...validDevConfig.api,
+          baseUrl: '',
+        },
+      };
+      const result = validator.validate(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+      expect(
+        result.errors?.some(
+          (e) =>
+            e.path === 'api.baseUrl' &&
+            e.rule === 'required_base_url'
+        )
+      ).toBe(true);
+    });
+
+    it('should reject whitespace-only baseUrl', () => {
+      const config = {
+        ...validDevConfig,
+        api: {
+          ...validDevConfig.api,
+          baseUrl: '   ',
+        },
+      };
+      const result = validator.validate(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors).toBeDefined();
+    });
+
     it('should reject invalid version format', () => {
       const config = {
         ...validDevConfig,

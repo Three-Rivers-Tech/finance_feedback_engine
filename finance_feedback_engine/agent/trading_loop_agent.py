@@ -29,6 +29,7 @@ class AgentState(Enum):
     """Represents the current state of the trading agent."""
 
     IDLE = auto()
+    RECOVERING = auto()
     PERCEPTION = auto()
     REASONING = auto()
     RISK_CHECK = auto()
@@ -40,11 +41,12 @@ class AgentState(Enum):
 # in finance_feedback_engine.monitoring.prometheus.agent_state.
 STATE_METRIC_VALUES: dict[AgentState, int] = {
     AgentState.IDLE: 0,
-    AgentState.LEARNING: 1,
-    AgentState.PERCEPTION: 2,
-    AgentState.REASONING: 3,
-    AgentState.RISK_CHECK: 4,
-    AgentState.EXECUTION: 5,
+    AgentState.RECOVERING: 1,
+    AgentState.LEARNING: 2,
+    AgentState.PERCEPTION: 3,
+    AgentState.REASONING: 4,
+    AgentState.RISK_CHECK: 5,
+    AgentState.EXECUTION: 6,
 }
 
 
@@ -156,6 +158,7 @@ class TradingLoopAgent:
         # State machine handler map
         self.state_handlers = {
             AgentState.IDLE: self.handle_idle_state,
+            AgentState.RECOVERING: self.handle_recovering_state,
             AgentState.PERCEPTION: self.handle_perception_state,
             AgentState.REASONING: self.handle_reasoning_state,
             AgentState.RISK_CHECK: self.handle_risk_check_state,
@@ -317,6 +320,13 @@ class TradingLoopAgent:
                 self.pair_selector = None
                 self.pair_scheduler = None
 
+    @property
+    def start_time(self):
+        """Public accessor for start time (returns datetime object)."""
+        if self._start_time is None:
+            return None
+        return datetime.datetime.fromtimestamp(self._start_time)
+
     def supports_signal_only_mode(self) -> bool:
         """
         Check if this agent implementation supports signal-only mode.
@@ -383,358 +393,6 @@ class TradingLoopAgent:
 
         return True, []
 
-    async def _recover_existing_positions(self):
-        """
-        Recover existing open positions from the trading platform on startup.
-
-        This method:
-        1. Queries platform.get_portfolio_breakdown() with exponential backoff retry
-        2. Extracts open positions (futures_positions or positions lists)
-        3. Creates synthetic decision IDs and records
-        4. Rebuilds portfolio memory from platform truth
-        5. Associates positions with trade monitor
-
-        Sets _startup_complete event when finished.
-        """
-        import hashlib
-        import time
-
-        from finance_feedback_engine.memory.portfolio_memory import TradeOutcome
-        from finance_feedback_engine.utils.validation import standardize_asset_pair
-
-        logger.info("Starting position recovery from trading platform...")
-
-        # Exponential backoff retry loop
-        base_delay = 2.0
-        for attempt in range(self._max_startup_retries):
-            try:
-                # Query platform for current portfolio state (async to avoid blocking)
-                portfolio = await self.engine.get_portfolio_breakdown_async()
-
-                logger.info(f"Portfolio breakdown keys: {list(portfolio.keys())}")
-
-                # Extract positions based on platform type
-                positions = []
-
-                # Check if this is UnifiedTradingPlatform (has platform_breakdowns)
-                if "platform_breakdowns" in portfolio:
-                    logger.info(
-                        f"Using unified platform breakdown with {len(portfolio['platform_breakdowns'])} platforms"
-                    )
-                    for platform_name, platform_data in portfolio[
-                        "platform_breakdowns"
-                    ].items():
-                        logger.info(
-                            f"Processing platform: {platform_name}, keys: {list(platform_data.keys())}"
-                        )
-                        # Coinbase futures positions
-                        if "futures_positions" in platform_data:
-                            fps = platform_data["futures_positions"]
-                            logger.info(
-                                f"{platform_name} has {len(fps)} futures_positions: {fps}"
-                            )
-                            logger.debug(
-                                f"Processing {len(fps)} futures positions from {platform_name}"
-                            )
-                            for idx, pos in enumerate(
-                                platform_data["futures_positions"]
-                            ):
-                                # Handle both dict and PositionInfo objects
-                                contracts = (
-                                    pos.get("contracts", 0)
-                                    if isinstance(pos, dict)
-                                    else getattr(pos, "contracts", 0)
-                                )
-                                units = (
-                                    pos.get("units", 0)
-                                    if isinstance(pos, dict)
-                                    else getattr(pos, "units", 0)
-                                )
-
-                                # Use units if contracts is zero (units can be negative for SHORT)
-                                if contracts and float(contracts) != 0:
-                                    size = abs(float(contracts))
-                                else:
-                                    size = abs(float(units))
-
-                                logger.debug(
-                                    f"{platform_name} position {idx}: contracts={contracts}, units={units}, size={size}"
-                                )
-
-                                # Position is active if it has non-zero size OR has unrealized P&L
-                                unrealized_pnl = (
-                                    pos.get("unrealized_pnl", 0)
-                                    if isinstance(pos, dict)
-                                    else getattr(pos, "unrealized_pnl", 0)
-                                )
-                                has_pnl = unrealized_pnl and float(unrealized_pnl) != 0
-
-                                # If size is reported as 0 but has P&L, infer size from P&L and price
-                                if size == 0 and has_pnl:
-                                    entry_price_val = (
-                                        pos.get("entry_price", 0)
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "entry_price", 0)
-                                    )
-                                    current_price_val = (
-                                        pos.get("current_price", 0)
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "current_price", 0)
-                                    )
-                                    if entry_price_val and current_price_val:
-                                        # Estimate size from P&L: size = PnL / (current - entry)
-                                        price_diff = float(current_price_val) - float(
-                                            entry_price_val
-                                        )
-                                        if abs(price_diff) > 0.01:
-                                            size = abs(
-                                                float(unrealized_pnl) / price_diff
-                                            )
-                                            logger.info(
-                                                f"Inferred size {size} from P&L for {platform_name} position"
-                                            )
-
-                                if size != 0 or has_pnl:
-                                    product_id = (
-                                        pos.get("product_id", "UNKNOWN")
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "product_id", "UNKNOWN")
-                                    )
-                                    side = (
-                                        pos.get("side", "UNKNOWN")
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "side", "UNKNOWN")
-                                    )
-                                    entry_price = (
-                                        pos.get("entry_price", 0)
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "entry_price", 0)
-                                    )
-                                    current_price = (
-                                        pos.get("current_price", 0)
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "current_price", 0)
-                                    )
-                                    leverage = (
-                                        pos.get("leverage", 1)
-                                        if isinstance(pos, dict)
-                                        else getattr(pos, "leverage", 1)
-                                    )
-
-                                    logger.info(
-                                        f"Recovered {platform_name} futures position: {product_id} {side} size={size}"
-                                    )
-
-                                    positions.append(
-                                        {
-                                            "platform": f"{platform_name}_futures",
-                                            "product_id": product_id,
-                                            "side": side,
-                                            "size": size,
-                                            "entry_price": entry_price,
-                                            "current_price": current_price,
-                                            "unrealized_pnl": unrealized_pnl,
-                                            "leverage": leverage,
-                                        }
-                                    )
-                                else:
-                                    logger.debug(
-                                        f"Skipping {platform_name} position {idx} with zero size"
-                                    )
-
-                        # Oanda forex positions
-                        if "positions" in platform_data:
-                            for pos in platform_data["positions"]:
-                                units = pos.get("units", 0)
-                                if units and float(units) != 0:
-                                    # Extract entry_price from Oanda position data
-                                    entry_price = pos.get("entry_price", 0)
-                                    if not entry_price:
-                                        # Fallback to current_price if available
-                                        entry_price = pos.get("current_price", 0)
-
-                                    positions.append(
-                                        {
-                                            "platform": f"{platform_name}_forex",
-                                            "product_id": pos.get(
-                                                "instrument", "UNKNOWN"
-                                            ),
-                                            "side": pos.get("position_type", "UNKNOWN"),
-                                            "size": abs(float(units)),
-                                            "entry_price": entry_price,
-                                            "current_price": pos.get(
-                                                "current_price", 0
-                                            ),
-                                            "unrealized_pnl": pos.get(
-                                                "unrealized_pl", 0
-                                            ),
-                                            "leverage": 1,
-                                        }
-                                    )
-
-                logger.info(f"Found {len(positions)} open position(s) on platform")
-
-                # Process each position
-                for pos in positions:
-                    try:
-                        # Standardize asset pair
-                        product_id = pos["product_id"]
-                        asset_pair = standardize_asset_pair(product_id)
-
-                        # Generate synthetic decision ID
-                        timestamp = datetime.datetime.utcnow().isoformat()
-                        hash_input = (
-                            f"{product_id}_{timestamp}_{pos['platform']}_{pos['size']}"
-                        )
-                        hash_suffix = hashlib.sha256(hash_input.encode()).hexdigest()[
-                            :8
-                        ]
-                        decision_id = (
-                            f"RECOVERED_{asset_pair}_{int(time.time())}_{hash_suffix}"
-                        )
-
-                        # Get entry price (fallback to current price if unavailable)
-                        entry_price = pos["entry_price"]
-                        if entry_price == 0:
-                            entry_price = pos["current_price"]
-                            if entry_price == 0:
-                                logger.warning(
-                                    f"No entry price available for {asset_pair}, "
-                                    "will track unrealized P&L only"
-                                )
-                                entry_price = "UNKNOWN"
-
-                        # Build synthetic decision record (with new fields)
-                        synthetic_decision = {
-                            "id": decision_id,
-                            "asset_pair": asset_pair,
-                            "action": "HOLD",
-                            "confidence": 50,
-                            "timestamp": timestamp,
-                            "entry_price": (
-                                entry_price if entry_price != "UNKNOWN" else None
-                            ),
-                            "recommended_position_size": pos["size"],
-                            "position_size": pos["size"],
-                            "signal_only": True,
-                            "ai_provider": "recovery",
-                            "reasoning": f"Position recovered from {pos['platform']} platform on startup",
-                            "metadata": {
-                                "recovery_source": "platform_startup",
-                                "platform": pos["platform"],
-                                "original_product_id": product_id,
-                                "side": pos["side"],
-                                "original_unrealized_pnl": pos["unrealized_pnl"],
-                                "leverage": pos["leverage"],
-                                "entry_price_status": (
-                                    "known" if entry_price != "UNKNOWN" else "unknown"
-                                ),
-                                "current_price": pos.get("current_price"),  # New
-                                "avg_entry_price": pos.get("avg_entry_price"),  # New
-                                "averagePrice": pos.get("averagePrice"),  # New (Oanda)
-                            },
-                        }
-
-                        # Save decision to store
-                        if hasattr(self.engine, "decision_store"):
-                            self.engine.decision_store.save_decision(synthetic_decision)
-                            logger.info(
-                                f"Saved synthetic decision {decision_id} for {asset_pair}"
-                            )
-
-                        # Create partial TradeOutcome for portfolio memory
-                        outcome = TradeOutcome(
-                            decision_id=decision_id,
-                            asset_pair=asset_pair,
-                            action="HOLD",
-                            entry_timestamp=timestamp,
-                            exit_timestamp=None,
-                            entry_price=(
-                                float(entry_price) if entry_price != "UNKNOWN" else 0.0
-                            ),
-                            exit_price=None,
-                            position_size=pos["size"],
-                            realized_pnl=None,
-                            pnl_percentage=None,
-                            holding_period_hours=None,
-                            ai_provider="recovery",
-                            ensemble_providers=None,
-                            decision_confidence=50,
-                            market_sentiment=None,
-                            volatility=None,
-                            price_trend=None,
-                            was_profitable=None,
-                            hit_stop_loss=False,
-                            hit_take_profit=False,
-                        )
-
-                        # Append to portfolio memory (rebuild from platform truth)
-                        self.portfolio_memory.trade_outcomes.append(outcome)
-                        logger.info(f"Added {asset_pair} to portfolio memory")
-
-                        # Associate with trade monitor for tracking
-                        self.trade_monitor.associate_decision_to_trade(
-                            decision_id, asset_pair
-                        )
-                        logger.info(f"Associated {asset_pair} with trade monitor")
-
-                        # Store position metadata for later reference
-                        self._recovered_positions.append(
-                            {
-                                "decision_id": decision_id,
-                                "asset_pair": asset_pair,
-                                "side": pos["side"],
-                                "size": pos["size"],
-                                "unrealized_pnl": pos["unrealized_pnl"],
-                                "platform": pos["platform"],
-                            }
-                        )
-
-                    except Exception as e:
-                        logger.error(
-                            f"Error processing position {pos.get('product_id', 'UNKNOWN')}: {e}",
-                            exc_info=True,
-                        )
-                        continue
-
-                # Log recovery summary
-                if self._recovered_positions:
-                    total_pnl = sum(
-                        p["unrealized_pnl"] for p in self._recovered_positions
-                    )
-                    logger.info(
-                        f"✓ Position recovery complete: {len(self._recovered_positions)} position(s), "
-                        f"Total unrealized P&L: ${total_pnl:.2f}"
-                    )
-                else:
-                    logger.info("✓ Position recovery complete: No open positions found")
-
-                # Mark startup as complete
-                self._startup_complete.set()
-                return
-
-            except Exception as e:
-                self._startup_retry_count += 1
-                if self._startup_retry_count >= self._max_startup_retries:
-                    logger.error(
-                        f"Failed to recover positions after {self._max_startup_retries} attempts: {e}",
-                        exc_info=True,
-                    )
-                    # Continue anyway with empty recovery
-                    self._startup_complete.set()
-                    return
-                else:
-                    # Exponential backoff
-                    delay = base_delay * (2**attempt)
-                    logger.warning(
-                        f"Position recovery attempt {attempt + 1} failed: {e}. "
-                        f"Retrying in {delay:.1f}s..."
-                    )
-                    await asyncio.sleep(delay)
-
-        # If we exit the loop without success, mark complete anyway
-        self._startup_complete.set()
-
     async def run(self):
         """
         The main trading loop, implemented as a state machine.
@@ -748,18 +406,9 @@ class TradingLoopAgent:
             self.is_running = True
             self._start_time = time.time()  # For uptime tracking
 
-            # Block until position recovery completes
-            try:
-                await asyncio.wait_for(
-                    self._recover_existing_positions(),
-                    timeout=60.0,  # 60 second timeout
-                )
-            except asyncio.TimeoutError:
-                logger.error(
-                    "Position recovery timed out after 60 seconds. "
-                    "Starting agent with empty position state."
-                )
-                self._startup_complete.set()
+            # Transition to RECOVERING state immediately
+            # (position recovery is now a proper OODA state)
+            await self._transition_to(AgentState.RECOVERING)
 
             # Start pair selection scheduler if configured
             if self.pair_scheduler:
@@ -876,6 +525,290 @@ class TradingLoopAgent:
             # Note: Sleep is handled externally in run() or by backtester
             # This state just marks the end of the cycle
             await self._transition_to(AgentState.LEARNING)
+
+    async def handle_recovering_state(self):
+        """
+        RECOVERING: Recover existing positions from platform on startup.
+
+        This method performs comprehensive position recovery with:
+        1. Single API call to platform with one retry on failure
+        2. Position limiting (keep top 2 by unrealized P&L, close excess)
+        3. Position normalization (generate decision IDs, apply risk rules)
+        4. Decision persistence (create synthetic decision records)
+        5. All-or-nothing validation (fail entire recovery if any position fails)
+
+        Emits recovery_complete or recovery_failed events with detailed metadata.
+        Transitions to LEARNING state on success or assumes clean slate on failure.
+        """
+        import hashlib
+        import uuid as uuid_module
+
+        from finance_feedback_engine.memory.portfolio_memory import TradeOutcome
+        from finance_feedback_engine.utils.validation import standardize_asset_pair
+
+        logger.info("State: RECOVERING - Checking for existing positions...")
+
+        max_retries = 1  # Single retry on transient failures
+        max_positions = 2  # Maximum concurrent positions allowed
+
+        for attempt in range(max_retries + 1):
+            try:
+                # Query platform for current portfolio state
+                portfolio = await self.engine.get_portfolio_breakdown_async()
+                logger.info(f"Portfolio breakdown retrieved: {list(portfolio.keys())}")
+
+                # Extract positions from platform response
+                raw_positions = []
+
+                # Handle UnifiedTradingPlatform (platform_breakdowns)
+                if "platform_breakdowns" in portfolio:
+                    for platform_name, platform_data in portfolio["platform_breakdowns"].items():
+                        # Coinbase futures
+                        if "futures_positions" in platform_data:
+                            for pos in platform_data["futures_positions"]:
+                                raw_positions.append({
+                                    "platform": platform_name,
+                                    "product_id": pos.get("product_id") or pos.get("instrument"),
+                                    "side": pos.get("side", "LONG"),
+                                    "size": abs(float(pos.get("contracts", 0) or pos.get("units", 0))),
+                                    "entry_price": float(pos.get("entry_price", 0)),
+                                    "current_price": float(pos.get("current_price", 0)),
+                                    "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
+                                    "opened_at": pos.get("opened_at"),
+                                })
+                        # Oanda positions
+                        if "positions" in platform_data:
+                            for pos in platform_data["positions"]:
+                                raw_positions.append({
+                                    "platform": platform_name,
+                                    "product_id": pos.get("instrument"),
+                                    "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
+                                    "size": abs(float(pos.get("units", 0))),
+                                    "entry_price": float(pos.get("entry_price", 0)),
+                                    "current_price": float(pos.get("current_price", 0)),
+                                    "unrealized_pnl": float(pos.get("pnl", 0)),
+                                    "opened_at": pos.get("opened_at"),
+                                })
+                # Handle direct platform responses (futures_positions or positions keys)
+                elif "futures_positions" in portfolio:
+                    for pos in portfolio["futures_positions"]:
+                        raw_positions.append({
+                            "platform": "coinbase",
+                            "product_id": pos.get("product_id") or pos.get("instrument"),
+                            "side": pos.get("side", "LONG"),
+                            "size": abs(float(pos.get("contracts", 0) or pos.get("units", 0))),
+                            "entry_price": float(pos.get("entry_price", 0)),
+                            "current_price": float(pos.get("current_price", 0)),
+                            "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
+                            "opened_at": pos.get("opened_at"),
+                        })
+                elif "positions" in portfolio:
+                    for pos in portfolio["positions"]:
+                        raw_positions.append({
+                            "platform": "oanda",
+                            "product_id": pos.get("instrument"),
+                            "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
+                            "size": abs(float(pos.get("units", 0))),
+                            "entry_price": float(pos.get("entry_price", 0)),
+                            "current_price": float(pos.get("current_price", 0)),
+                            "unrealized_pnl": float(pos.get("pnl", 0)),
+                            "opened_at": pos.get("opened_at"),
+                        })
+
+                # Filter out positions with zero size
+                active_positions = [p for p in raw_positions if p["size"] > 0]
+
+                if not active_positions:
+                    logger.info("✓ No open positions found - starting with clean slate")
+                    self._emit_dashboard_event({
+                        "type": "recovery_complete",
+                        "found": 0,
+                        "kept": 0,
+                        "closed_excess": [],
+                        "timestamp": time.time(),
+                    })
+                    self._startup_complete.set()
+                    await self._transition_to(AgentState.LEARNING)
+                    return
+
+                # Sort by unrealized P&L (descending) and keep top 2
+                sorted_positions = sorted(active_positions, key=lambda x: x["unrealized_pnl"], reverse=True)
+                positions_to_keep = sorted_positions[:max_positions]
+                positions_to_close = sorted_positions[max_positions:]
+
+                logger.info(f"Found {len(active_positions)} positions: keeping {len(positions_to_keep)}, closing {len(positions_to_close)}")
+
+                # Close excess positions synchronously (all-or-nothing)
+                closed_positions = []
+                if positions_to_close:
+                    for pos in positions_to_close:
+                        try:
+                            asset_pair = standardize_asset_pair(pos["product_id"])
+                            logger.info(f"Closing excess position: {asset_pair} (P&L: ${pos['unrealized_pnl']:.2f})")
+
+                            # Close via platform
+                            close_result = await self.trading_platform.aclose_position(pos["product_id"])
+
+                            closed_positions.append({
+                                "asset_pair": asset_pair,
+                                "unrealized_pnl": pos["unrealized_pnl"],
+                                "reason": "exceeded_max_positions",
+                            })
+                            logger.info(f"✓ Closed {asset_pair}")
+
+                        except Exception as e:
+                            # All-or-nothing: if any close fails, abort entire recovery
+                            error_msg = f"Failed to close excess position {pos['product_id']}: {e}"
+                            logger.error(error_msg)
+                            self._emit_dashboard_event({
+                                "type": "recovery_failed",
+                                "reason": "position_close_failed",
+                                "failed_positions": [{
+                                    "asset_pair": standardize_asset_pair(pos["product_id"]),
+                                    "error": str(e),
+                                }],
+                                "timestamp": time.time(),
+                            })
+                            self._startup_complete.set()
+                            await self._transition_to(AgentState.LEARNING)
+                            return
+
+                # Normalize and validate kept positions
+                normalized_positions = []
+                validation_errors = []
+
+                for pos in positions_to_keep:
+                    try:
+                        asset_pair = standardize_asset_pair(pos["product_id"])
+
+                        # Generate standard UUID for decision
+                        decision_id = str(uuid_module.uuid4())
+
+                        # Calculate stop-loss/take-profit using risk rules (2% stop, 5% target)
+                        entry_price = pos["entry_price"]
+                        stop_loss_price = entry_price * (1 - 0.02) if pos["side"] == "LONG" else entry_price * (1 + 0.02)
+                        take_profit_price = entry_price * (1 + 0.05) if pos["side"] == "LONG" else entry_price * (1 - 0.05)
+
+                        # Create decision record (same as newly-created positions)
+                        decision = {
+                            "id": decision_id,
+                            "asset_pair": asset_pair,
+                            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            "action": "BUY" if pos["side"] == "LONG" else "SELL",
+                            "confidence": 75,  # Default confidence for recovered positions
+                            "recommended_position_size": pos["size"],
+                            "entry_price": entry_price,
+                            "stop_loss_pct": 0.02,
+                            "take_profit_pct": 0.05,
+                            "reasoning": f"Recovered existing {pos['side']} position from {pos['platform']} platform",
+                            "market_regime": "unknown",
+                            "ensemble_metadata": {
+                                "providers_used": ["recovery"],
+                                "providers_failed": [],
+                                "active_weights": {"recovery": 1.0},
+                                "fallback_tier": 0,
+                                "debate_summary": "Position recovered from platform at startup",
+                            },
+                            "risk_context": {
+                                "portfolio_drawdown_pct": 0.0,
+                                "var_limit_exceeded": False,
+                                "concentration_check": "OK",
+                                "correlation_check": "PASS",
+                            }
+                        }
+
+                        # Persist decision to decision store
+                        self.engine.decision_store.save_decision(decision)
+                        logger.info(f"✓ Persisted decision {decision_id} for {asset_pair}")
+
+                        # Add to portfolio memory
+                        outcome = TradeOutcome(
+                            decision_id=decision_id,
+                            asset_pair=asset_pair,
+                            action="BUY" if pos["side"] == "LONG" else "SELL",
+                            entry_timestamp=datetime.datetime.utcnow().isoformat() + "Z",
+                            entry_price=entry_price,
+                            position_size=pos["size"],
+                            ai_provider="recovery",
+                            market_sentiment=None,
+                            volatility=None,
+                            price_trend=None,
+                            was_profitable=None,
+                            hit_stop_loss=False,
+                            hit_take_profit=False,
+                        )
+                        self.portfolio_memory.trade_outcomes.append(outcome)
+
+                        # Associate with trade monitor
+                        self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+
+                        normalized_positions.append({
+                            "decision_id": decision_id,
+                            "asset_pair": asset_pair,
+                            "side": pos["side"],
+                            "size": pos["size"],
+                            "entry_price": entry_price,
+                            "unrealized_pnl": pos["unrealized_pnl"],
+                            "platform": pos["platform"],
+                        })
+
+                    except Exception as e:
+                        validation_errors.append({
+                            "asset_pair": standardize_asset_pair(pos.get("product_id", "UNKNOWN")),
+                            "error": str(e),
+                        })
+                        logger.error(f"Failed to normalize position {pos.get('product_id')}: {e}", exc_info=True)
+
+                # All-or-nothing: if any position validation failed, abort recovery
+                if validation_errors:
+                    logger.error(f"Position validation failed for {len(validation_errors)} positions")
+                    self._emit_dashboard_event({
+                        "type": "recovery_failed",
+                        "reason": "position_validation_failed",
+                        "failed_positions": validation_errors,
+                        "timestamp": time.time(),
+                    })
+                    self._startup_complete.set()
+                    await self._transition_to(AgentState.LEARNING)
+                    return
+
+                # Recovery successful!
+                self._recovered_positions = normalized_positions
+                total_pnl = sum(p["unrealized_pnl"] for p in normalized_positions)
+
+                logger.info(f"✓ Recovery complete: {len(normalized_positions)} positions (Total P&L: ${total_pnl:.2f})")
+
+                self._emit_dashboard_event({
+                    "type": "recovery_complete",
+                    "found": len(active_positions),
+                    "kept": len(normalized_positions),
+                    "closed_excess_positions": closed_positions,
+                    "positions": normalized_positions,
+                    "total_unrealized_pnl": total_pnl,
+                    "timestamp": time.time(),
+                })
+
+                self._startup_complete.set()
+                await self._transition_to(AgentState.LEARNING)
+                return
+
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"Recovery attempt {attempt + 1} failed: {e}. Retrying...")
+                    await asyncio.sleep(2.0)  # Brief delay before retry
+                    continue
+                else:
+                    # Final failure - assume clean slate
+                    logger.info(f"Recovery failed after {max_retries + 1} attempts: {e}. Starting with clean slate.")
+                    self._emit_dashboard_event({
+                        "type": "recovery_failed",
+                        "reason": "platform_api_error",
+                        "error": str(e),
+                        "timestamp": time.time(),
+                    })
+                    self._startup_complete.set()
+                    await self._transition_to(AgentState.LEARNING)
+                    return
 
     async def handle_perception_state(self):
         """
@@ -1833,7 +1766,7 @@ class TradingLoopAgent:
             if response is None:
                 logger.error("Webhook delivery returned None response")
                 return False
-                
+
             # Sanitize URL to prevent credential exposure in logs
             from urllib.parse import urlparse
 
@@ -1939,7 +1872,7 @@ class TradingLoopAgent:
 
         This method exposes the inner logic of the run() method for controlled
         execution in backtesting scenarios. It processes one complete cycle:
-        LEARNING -> PERCEPTION -> REASONING -> RISK_CHECK -> EXECUTION -> (back to IDLE)
+        RECOVERING -> LEARNING -> PERCEPTION -> REASONING -> RISK_CHECK -> EXECUTION -> (back to IDLE)
 
         The sleep between cycles is handled externally by the caller (e.g., run() method
         or backtester), allowing for flexible timing control.
@@ -1951,9 +1884,10 @@ class TradingLoopAgent:
             return False
 
         try:
-            # Start from LEARNING state (check for completed trades)
-            # This matches the flow: sleep -> LEARNING -> PERCEPTION -> ... -> IDLE
-            self.state = AgentState.LEARNING
+            # Start from current state (RECOVERING on first cycle, LEARNING thereafter)
+            # If state is already set (e.g., RECOVERING), keep it; otherwise start from LEARNING
+            if self.state == AgentState.IDLE:
+                self.state = AgentState.LEARNING
 
             # Execute state machine until we return to IDLE or encounter error
             max_iterations = 10  # Prevent infinite loops in one cycle

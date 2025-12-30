@@ -22,7 +22,7 @@ groups:
           description: "Circuit breaker is OPEN for {{ $labels.service }} for over 2 minutes, blocking executions."
 
       - alert: ProviderFailureRateHigh
-        expr: (sum by (provider) (rate(ffe_provider_requests_total{status="failure"}[5m]))) / clamp_min(sum by (provider) (rate(ffe_provider_requests_total[5m])), 1) > 0.10
+        expr: (sum by (provider) (rate(ffe_provider_requests_total{status="failure"}[5m]))) / clamp_min(sum by (provider) (rate(ffe_provider_requests_total[5m])), 0.0001) > 0.10
         for: 5m
         labels:
           severity: warning
