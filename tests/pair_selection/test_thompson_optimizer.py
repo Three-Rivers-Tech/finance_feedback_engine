@@ -43,6 +43,10 @@ class TestPairSelectionThompsonOptimizer:
     def outcome_tracker(self):
         """Create mock PairSelectionOutcomeTracker."""
         tracker = MagicMock()
+        # Add selection_history dict as expected by the optimizer
+        tracker.selection_history = {}
+        return tracker
+
         tracker.get_selection_performance = MagicMock()
         return tracker
 
