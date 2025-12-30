@@ -274,7 +274,7 @@ class PairSelectionThompsonOptimizer:
 
         return {"statistical": stat_expected / total, "llm": llm_expected / total}
 
-    def get_stats_summary(self) -> Dict[str, any]:
+    def get_stats_summary(self) -> Dict[str, Any]:
         """
         Get summary of current Thompson Sampling state.
 

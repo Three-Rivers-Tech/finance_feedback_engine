@@ -271,58 +271,6 @@ class VectorMemory:
                 self.ids = []
                 return
 
-        # Fall back to legacy pickle format (.pkl extension) if JSON not found
-        if self.storage_path.exists():
-            logger.warning(
-                f"Loading legacy pickle format from {self.storage_path}. "
-                "This format is deprecated. Consider migrating to JSON format."
-            )
-            try:
-                import pickle
-
-                with open(self.storage_path, "rb") as f:
-                    # Read the raw data
-                    raw_data = f.read()
-
-                    # Use a restricted unpickler to prevent arbitrary code execution
-                    class RestrictedUnpickler(pickle.Unpickler):
-                        def find_class(self, module, name):
-                            # Only allow safe classes from these modules
-                            if module in (
-                                "numpy",
-                                "collections",
-                                "numpy.core.multiarray",
-                                "__builtin__",
-                                "builtins",
-                            ):
-                                return getattr(
-                                    __import__(module, fromlist=[name]), name
-                                )
-                            # Prevent loading from unsafe modules that could execute arbitrary code
-                            raise pickle.UnpicklingError(
-                                f"Global '{module}.{name}' is forbidden"
-                            )
-
-                    # Use a BytesIO object to pass data to the restricted unpickler
-                    data = RestrictedUnpickler(io.BytesIO(raw_data)).load()
-
-                self.vectors = data.get("vectors", [])
-                self.metadata = data.get("metadata", {})
-                self.ids = data.get("ids", [])
-
-                logger.info(
-                    f"Loaded {len(self.vectors)} vectors from {self.storage_path}"
-                )
-                logger.warning(
-                    "Pickle format loaded successfully. The data will be saved in JSON format on next save."
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to load pickle index: {e}")
-                # Reset to empty state
-                self.vectors = []
-                self.metadata = {}
-                self.ids = []
-            return
-
-        logger.info("No existing vector index found")
+        # Pickle format no longer supported - JSON is the only persistence format
+        # This eliminates CRT-2 RCE vulnerability (CVSS 9.8)
+        logger.info("No existing vector index found (JSON format only)")

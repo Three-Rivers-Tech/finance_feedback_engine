@@ -129,6 +129,21 @@ def create_counters(meter: metrics.Meter) -> dict:
             description="Total trades executed",
             unit="1",
         ),
+        "ffe_decisions_errors_total": meter.create_counter(
+            name="ffe_decisions_errors_total",
+            description="Total decision generation errors",
+            unit="1",
+        ),
+        "ffe_platform_execution_errors_total": meter.create_counter(
+            name="ffe_platform_execution_errors_total",
+            description="Total platform execution errors",
+            unit="1",
+        ),
+        "ffe_ai_provider_errors_total": meter.create_counter(
+            name="ffe_ai_provider_errors_total",
+            description="Total AI provider query errors",
+            unit="1",
+        ),
     }
 
 
@@ -191,5 +206,10 @@ def create_histograms(meter: metrics.Meter) -> dict:
             name="ffe_pnl_percentage",
             description="P&L percentage on closed trades",
             unit="%",
+        ),
+        "ffe_decision_generation_latency_seconds": meter.create_histogram(
+            name="ffe_decision_generation_latency_seconds",
+            description="Latency of decision generation (from context creation to final decision)",
+            unit="s",
         ),
     }

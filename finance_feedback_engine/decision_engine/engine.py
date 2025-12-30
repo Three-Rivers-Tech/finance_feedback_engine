@@ -2,12 +2,14 @@
 
 import asyncio
 import logging
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 import pytz
 
 from finance_feedback_engine.memory.vector_store import VectorMemory
+from finance_feedback_engine.observability.metrics import create_counters, create_histograms, get_meter
 from finance_feedback_engine.utils.config_loader import normalize_decision_config
 
 logger = logging.getLogger(__name__)
@@ -201,6 +203,15 @@ class DecisionEngine:
         logger.info(
             f"Decision engine initialized with provider: {self.ai_manager.ai_provider}"
         )
+
+        # Initialize Prometheus metrics for error tracking and latency measurement
+        self._meter = get_meter(__name__)
+        self._counters = create_counters(self._meter)
+        self._histograms = create_histograms(self._meter)
+
+        # Additional metrics for decision engine layer
+        # (errors_total and decision_latency are new metrics; see metrics.py)
+        logger.info("Decision engine observability initialized")
 
     @property
     def ai_provider(self):
@@ -753,8 +764,53 @@ Format response as a structured technical analysis demonstration.
         Returns:
             AI response
         """
-        # Delegating to the AI manager
-        return await self.ai_manager.query_ai(prompt, asset_pair, market_data)
+        # Track AI provider query latency
+        query_start_time = time.time()
+        try:
+            # Delegating to the AI manager
+            ai_response = await self.ai_manager.query_ai(prompt, asset_pair, market_data)
+
+            # Record successful query latency
+            query_elapsed = time.time() - query_start_time
+            if self._histograms.get("ffe_provider_query_latency_seconds"):
+                provider_name = self.ai_manager.ai_provider or "unknown"
+                self._histograms["ffe_provider_query_latency_seconds"].record(
+                    query_elapsed,
+                    attributes={
+                        "provider": provider_name,
+                        "asset_pair": asset_pair or "unknown",
+                        "status": "success"
+                    }
+                )
+
+            return ai_response
+        except Exception as e:
+            # Track AI provider error
+            logger.error(f"AI provider query failed for {asset_pair}: {e}", exc_info=True)
+            self._counters.get("ffe_ai_provider_errors_total").add(
+                1,
+                attributes={
+                    "provider": self.ai_manager.ai_provider or "unknown",
+                    "error_type": type(e).__name__,
+                    "asset_pair": asset_pair or "unknown",
+                }
+            )
+
+            # Record failed query latency
+            query_elapsed = time.time() - query_start_time
+            if self._histograms.get("ffe_provider_query_latency_seconds"):
+                provider_name = self.ai_manager.ai_provider or "unknown"
+                self._histograms["ffe_provider_query_latency_seconds"].record(
+                    query_elapsed,
+                    attributes={
+                        "provider": provider_name,
+                        "asset_pair": asset_pair or "unknown",
+                        "status": "failed"
+                    }
+                )
+
+            # Re-raise to let caller handle
+            raise
 
     def _resolve_veto_threshold(self, context: Dict[str, Any]) -> float:
         """
@@ -1475,6 +1531,9 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Trading decision with recommendation
         """
+        # Start timing for decision generation latency
+        decision_start_time = time.time()
+
         # Root span for decision generation
         if tracer:
             span_cm = tracer.start_as_current_span(
@@ -1491,100 +1550,142 @@ Format response as a structured technical analysis demonstration.
             span_cm.__enter__()
         logger.info("Generating decision for %s", asset_pair)
 
-        # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
-        # to accurately simulate production behavior. Keeping the parameter for backward
-        # compatibility but it no longer changes decision logic.
-        if self.backtest_mode:
-            logger.warning(
-                "backtest_mode=True is deprecated. Backtests now use real AI providers "
-                "for accurate simulation. Use 'mock' provider for fast rule-based testing."
-            )
-
-        # Merge monitoring context from parameter with live monitoring provider
-        # Parameter takes precedence (for backtesting)
-        if monitoring_context is None and self.monitoring_provider:
-            try:
-                monitoring_context = self.monitoring_provider.get_monitoring_context(
-                    asset_pair=asset_pair
+        try:
+            # NOTE: backtest_mode flag is deprecated - backtests should use real AI providers
+            # to accurately simulate production behavior. Keeping the parameter for backward
+            # compatibility but it no longer changes decision logic.
+            if self.backtest_mode:
+                logger.warning(
+                    "backtest_mode=True is deprecated. Backtests now use real AI providers "
+                    "for accurate simulation. Use 'mock' provider for fast rule-based testing."
                 )
-                # Handle active_positions as either list or dict
-                active_pos = monitoring_context.get("active_positions", [])
-                if isinstance(active_pos, dict):
-                    num_positions = len(active_pos.get("futures", []))
-                elif isinstance(active_pos, list):
-                    num_positions = len(active_pos)
-                else:
-                    num_positions = 0
 
-                logger.info(
-                    "Monitoring context loaded: %d active positions, %d slots",
-                    num_positions,
-                    monitoring_context.get("slots_available", 0),
-                )
-                if tracer:
-                    cur = trace.get_current_span()
-                    cur.set_attribute("monitor.active_positions", num_positions)
-                    cur.set_attribute(
-                        "monitor.slots_available",
+            # Merge monitoring context from parameter with live monitoring provider
+            # Parameter takes precedence (for backtesting)
+            if monitoring_context is None and self.monitoring_provider:
+                try:
+                    monitoring_context = self.monitoring_provider.get_monitoring_context(
+                        asset_pair=asset_pair
+                    )
+                    # Handle active_positions as either list or dict
+                    active_pos = monitoring_context.get("active_positions", [])
+                    if isinstance(active_pos, dict):
+                        num_positions = len(active_pos.get("futures", []))
+                    elif isinstance(active_pos, list):
+                        num_positions = len(active_pos)
+                    else:
+                        num_positions = 0
+
+                    logger.info(
+                        "Monitoring context loaded: %d active positions, %d slots",
+                        num_positions,
                         monitoring_context.get("slots_available", 0),
                     )
-            except Exception as e:
-                logger.warning("Could not load monitoring context: %s", e)
-        elif monitoring_context:
-            logger.debug("Using provided monitoring context (backtesting mode)")
+                    if tracer:
+                        cur = trace.get_current_span()
+                        cur.set_attribute("monitor.active_positions", num_positions)
+                        cur.set_attribute(
+                            "monitor.slots_available",
+                            monitoring_context.get("slots_available", 0),
+                        )
+                except Exception as e:
+                    logger.warning("Could not load monitoring context: %s", e)
+            elif monitoring_context:
+                logger.debug("Using provided monitoring context (backtesting mode)")
 
-        # Create decision context
-        context = await self._create_decision_context(
-            asset_pair,
-            market_data,
-            balance,
-            portfolio,
-            memory_context,
-            monitoring_context,
-        )
-
-        # Retrieve semantic memory
-        if self.vector_memory:
-            query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
-            try:
-                similar = self.vector_memory.find_similar(query, top_k=3)
-                context["semantic_memory"] = similar
-            except Exception as e:
-                logger.error(
-                    f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}"
-                )
-                context["semantic_memory"] = []
-
-        # Generate AI prompt
-        prompt = self._create_ai_prompt(context)
-
-        # Compress context window to reduce token usage
-        prompt = self._compress_context_window(prompt, max_tokens=3000)
-
-        # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
-        ai_response = await self._query_ai(
-            prompt, asset_pair=asset_pair, market_data=market_data
-        )
-
-        # Apply optional veto logic before final decision creation
-        ai_response, veto_metadata = self._apply_veto_logic(ai_response, context)
-        if veto_metadata:
-            ai_response["veto_metadata"] = veto_metadata
-
-        # Validate AI response action to ensure it's one of the allowed values
-        if ai_response.get("action") not in ["BUY", "SELL", "HOLD"]:
-            logger.warning(
-                f"AI provider returned an invalid action: "
-                f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
+            # Create decision context
+            context = await self._create_decision_context(
+                asset_pair,
+                market_data,
+                balance,
+                portfolio,
+                memory_context,
+                monitoring_context,
             )
-            ai_response["action"] = "HOLD"
 
-        # Create structured decision object
-        decision = self._create_decision(asset_pair, context, ai_response)
-        if span_cm:
-            span_cm.__exit__(None, None, None)
+            # Retrieve semantic memory
+            if self.vector_memory:
+                query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
+                try:
+                    similar = self.vector_memory.find_similar(query, top_k=3)
+                    context["semantic_memory"] = similar
+                except Exception as e:
+                    logger.error(
+                        f"Failed to retrieve semantic memory for asset {asset_pair} with query '{query}': {e}"
+                    )
+                    # Track error in metrics
+                    self._counters.get("ffe_decisions_errors_total").add(
+                        1, attributes={"error_type": "vector_memory_retrieval", "asset_pair": asset_pair}
+                    )
+                    context["semantic_memory"] = []
 
-        return decision
+            # Generate AI prompt
+            prompt = self._create_ai_prompt(context)
+
+            # Compress context window to reduce token usage
+            prompt = self._compress_context_window(prompt, max_tokens=3000)
+
+            # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
+            ai_response = await self._query_ai(
+                prompt, asset_pair=asset_pair, market_data=market_data
+            )
+
+            # Apply optional veto logic before final decision creation
+            ai_response, veto_metadata = self._apply_veto_logic(ai_response, context)
+            if veto_metadata:
+                ai_response["veto_metadata"] = veto_metadata
+
+            # Validate AI response action to ensure it's one of the allowed values
+            if ai_response.get("action") not in ["BUY", "SELL", "HOLD"]:
+                logger.warning(
+                    f"AI provider returned an invalid action: "
+                    f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
+                )
+                ai_response["action"] = "HOLD"
+
+            # Create structured decision object
+            decision = self._create_decision(asset_pair, context, ai_response)
+
+            # Record successful decision generation latency
+            decision_elapsed = time.time() - decision_start_time
+            if self._histograms.get("ffe_decision_generation_latency_seconds"):
+                self._histograms["ffe_decision_generation_latency_seconds"].record(
+                    decision_elapsed,
+                    attributes={"asset_pair": asset_pair, "status": "success"}
+                )
+
+            if span_cm:
+                span_cm.__exit__(None, None, None)
+
+            return decision
+
+        except Exception as e:
+            # Track decision generation errors
+            logger.error(f"Error generating decision for {asset_pair}: {e}", exc_info=True)
+            self._counters.get("ffe_decisions_errors_total").add(
+                1,
+                attributes={
+                    "error_type": type(e).__name__,
+                    "asset_pair": asset_pair,
+                }
+            )
+
+            # Record failed decision generation latency
+            decision_elapsed = time.time() - decision_start_time
+            if self._histograms.get("ffe_decision_generation_latency_seconds"):
+                self._histograms["ffe_decision_generation_latency_seconds"].record(
+                    decision_elapsed,
+                    attributes={"asset_pair": asset_pair, "status": "failed"}
+                )
+
+            if span_cm:
+                try:
+                    span_cm.__exit__(type(e), e, None)
+                except Exception:
+                    pass
+
+            # Re-raise the exception so caller can handle it
+            raise
 
     async def _create_decision_context(
         self,

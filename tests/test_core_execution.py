@@ -18,6 +18,8 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timedelta
+
+import pandas as pd
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -96,7 +98,7 @@ class TestTradeExecution:
             "executed_price": 50000.0,
         }
         engine.trading_platform.execute_trade = Mock(return_value=mock_result)
-        
+
         # Mock gatekeeper to allow trade
         with patch("finance_feedback_engine.risk.gatekeeper.RiskGatekeeper") as mock_gatekeeper_class:
             mock_gatekeeper = Mock()
@@ -131,7 +133,7 @@ class TestTradeExecution:
             "reasoning": "Test trade",
             "amount": 100.0,
         }
-        
+
         # Save to store
         engine.decision_store.save_decision(decision)
 
@@ -139,14 +141,14 @@ class TestTradeExecution:
         engine.trading_platform.execute_trade = Mock(
             side_effect=TradingError("Insufficient liquidity")
         )
-        
+
         with patch("finance_feedback_engine.risk.gatekeeper.RiskGatekeeper") as mock_gk:
             mock_gk.return_value.validate_trade = Mock(return_value=(True, ""))
-            
+
             # Execute should raise the TradingError
             with pytest.raises(TradingError, match="Insufficient liquidity"):
                 engine.execute_decision(decision_id)
-            
+
             # Verify decision was updated with failure
             updated_decision = engine.decision_store.get_decision_by_id(decision_id)
             assert updated_decision["executed"] is False
@@ -172,7 +174,7 @@ class TestTradeExecution:
             "reasoning": "Test trade",
             "amount": 100.0,
         }
-        
+
         # Save to store
         engine.decision_store.save_decision(decision)
 
@@ -183,7 +185,7 @@ class TestTradeExecution:
             "executed_amount": 100.0,
         }
         engine.trading_platform.aexecute_trade = AsyncMock(return_value=mock_result)
-        
+
         with patch("finance_feedback_engine.risk.gatekeeper.RiskGatekeeper") as mock_gk:
             mock_gk.return_value.validate_trade = Mock(return_value=(True, ""))
 
@@ -264,7 +266,7 @@ class TestTradeExecution:
             "reasoning": "Quorum failure",
             "amount": 0,
         }
-        
+
         # Save to store
         engine.decision_store.save_decision(decision)
 
@@ -276,7 +278,7 @@ class TestTradeExecution:
 
             # Execute should return rejection result (not raise)
             result = engine.execute_decision(decision_id)
-            
+
             # Verify rejection
             assert result["success"] is False
             assert result["status"] == "REJECTED_BY_GATEKEEPER"
@@ -312,7 +314,7 @@ class TestMemoryManagement:
         mock_outcome.realized_pnl = 100.0
         mock_outcome.was_profitable = True
         mock_outcome.to_dict = Mock(return_value={"realized_pnl": 100.0})
-        
+
         engine.memory_engine = Mock()
         engine.memory_engine.record_trade_outcome = Mock(return_value=mock_outcome)
 
@@ -425,7 +427,7 @@ class TestPerformanceTracking:
                 "total_profit_usd": 1500.0,
             }
         )
-        
+
         engine.memory_engine = Mock()
         engine.memory_engine.analyze_performance = Mock(return_value=mock_snapshot)
 
@@ -454,43 +456,16 @@ class TestPerformanceTracking:
 
 
 class TestBacktesting:
-    """Test backtesting functionality."""
+    """Test backtesting functionality (using Backtester directly)."""
 
-    @pytest.mark.asyncio
-    @patch("finance_feedback_engine.core.ensure_models_installed")
-    @patch("finance_feedback_engine.core.validate_at_startup")
-    async def test_backtest_initializes_backtester(
-        self, mock_validate, mock_models, minimal_config
-    ):
-        """Test that backtest() initializes and runs backtester."""
-        engine = FinanceFeedbackEngine(minimal_config)
+    def test_backtester_can_be_imported(self):
+        """Test that Backtester can be imported directly (deprecated engine.backtest() removed)."""
+        from finance_feedback_engine.backtesting.backtester import Backtester
 
-        # Mock backtester from backtesting module
-        with patch("finance_feedback_engine.backtesting.backtester.Backtester") as mock_backtester_class:
-            mock_backtester = Mock()
-            mock_backtester.run = AsyncMock(
-                return_value={
-                    "total_return": 0.15,
-                    "sharpe_ratio": 1.2,
-                    "max_drawdown": -0.08,
-                    "total_trades": 25,
-                }
-            )
-            mock_backtester_class.return_value = mock_backtester
-
-            # Run backtest (async method with correct parameters)
-            result = await engine.backtest(
-                asset_pair="BTCUSD",
-                start="2024-01-01",
-                end="2024-12-31",
-                initial_balance=10000.0,
-            )
-
-            # Verify backtester was created and run
-            assert mock_backtester_class.called
-            assert mock_backtester.run.called
-            assert result["total_return"] == 0.15
-            assert result["total_trades"] == 25
+        # Verify Backtester exists and has run_backtest method
+        assert hasattr(Backtester, 'run_backtest')
+        assert callable(getattr(Backtester, 'run_backtest'))
+        # Success - developers should use: python main.py backtest BTCUSD --start-date ...
 
 
 class TestAsyncContextManagement:

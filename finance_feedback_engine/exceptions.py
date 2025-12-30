@@ -7,165 +7,244 @@ error handling instead of broad try/except Exception blocks.
 
 
 class FFEError(Exception):
-    """Base exception for all Finance Feedback Engine errors."""
+    """
+    Base exception for all Finance Feedback Engine errors.
 
-    pass
+    All custom exceptions in the system inherit from this class,
+    allowing for broad exception catching when needed while still
+    maintaining a clear exception hierarchy.
+    """
 
 
 class ConfigurationError(FFEError):
-    """Raised when there are configuration issues."""
+    """
+    Raised when configuration validation fails or required configuration is missing.
 
-    pass
+    Examples: missing API keys, invalid config values, incompatible settings.
+    """
 
 
 class APIError(FFEError):
-    """Base class for API-related errors."""
+    """
+    Base class for all API-related errors.
 
-    pass
+    Parent class for connection errors, response errors, and rate limit errors
+    when interacting with external APIs (Alpha Vantage, trading platforms, etc.).
+    """
 
 
 class APIConnectionError(APIError):
-    """Raised when there are connection issues with APIs."""
+    """
+    Raised when unable to establish connection to external API.
 
-    pass
+    Examples: network timeout, DNS resolution failure, refused connection.
+    """
 
 
 class APIResponseError(APIError):
-    """Raised when API returns unexpected response."""
+    """
+    Raised when API returns malformed or unexpected response.
 
-    pass
+    Examples: invalid JSON, missing required fields, HTTP 500 errors.
+    """
 
 
 class APIRateLimitError(APIError):
-    """Raised when rate limits are exceeded."""
+    """
+    Raised when API rate limits are exceeded.
 
-    pass
+    Indicates the API request quota has been exhausted and retry should
+    be attempted after a backoff period.
+    """
 
 
 class ValidationError(FFEError):
-    """Base class for validation errors."""
+    """
+    Base class for all validation errors.
 
-    pass
+    Parent class for errors that occur when validating user input,
+    configuration values, or data integrity checks.
+    """
 
 
 class RiskValidationError(ValidationError):
-    """Raised when risk validation fails."""
+    """
+    Raised when risk checks fail in RiskGatekeeper.
 
-    pass
+    Examples: position exceeds max concentration, VaR limit exceeded,
+    correlation threshold breached.
+    """
 
 
 class AssetPairValidationError(ValidationError):
-    """Raised when asset pair validation fails."""
+    """
+    Raised when asset pair format or existence validation fails.
 
-    pass
+    Examples: invalid asset pair format, unsupported trading pair,
+    pair not available on selected platform.
+    """
 
 
 class DecisionEngineError(FFEError):
-    """Base class for decision engine related errors."""
+    """
+    Base class for all decision engine errors.
 
-    pass
+    Parent class for errors occurring in AI decision-making pipeline,
+    including model installation, LLM provider communication, and ensemble voting.
+    """
 
 
 class ModelInstallationError(DecisionEngineError):
-    """Raised when model installation fails."""
+    """
+    Raised when local AI model installation fails.
 
-    pass
+    Examples: Ollama service unavailable, insufficient disk space,
+    model download timeout, corrupted model files.
+    """
 
 
 class AIClientError(DecisionEngineError):
-    """Raised when AI client operations fail."""
+    """
+    Raised when AI provider client operations fail.
 
-    pass
+    Examples: API authentication failure, malformed response from LLM,
+    prompt execution timeout, provider service unavailable.
+    """
 
 
 class TradingError(FFEError):
-    """Base class for trading related errors."""
+    """
+    Base class for all trading platform errors.
 
-    pass
+    Parent class for errors occurring during trade execution, balance queries,
+    and position management across Coinbase, Oanda, and other platforms.
+    """
 
 
 class BalanceRetrievalError(TradingError):
-    """Raised when balance retrieval fails."""
+    """
+    Raised when unable to retrieve account balance from trading platform.
 
-    pass
+    Examples: API endpoint unavailable, authentication expired,
+    platform-specific balance query failure.
+    """
 
 
 class OrderExecutionError(TradingError):
-    """Raised when order execution fails."""
+    """
+    Raised when trade order execution fails on platform.
 
-    pass
+    Examples: insufficient funds, invalid order size, market closed,
+    platform rejected order due to risk limits.
+    """
 
 
 class PositionError(TradingError):
-    """Raised when position operations fail."""
+    """
+    Raised when position queries or updates fail.
 
-    pass
+    Examples: position not found, failed to close position,
+    unable to retrieve open positions from platform.
+    """
 
 
 class DataProviderError(FFEError):
-    """Base class for data provider related errors."""
+    """
+    Base class for all data provider errors.
 
-    pass
+    Parent class for errors when fetching market data from Alpha Vantage
+    or other data sources (OHLCV, sentiment, news).
+    """
 
 
 class DataRetrievalError(DataProviderError):
-    """Raised when data retrieval fails."""
+    """
+    Raised when unable to retrieve market data from provider.
 
-    pass
+    Examples: API key invalid, symbol not found, data request timeout,
+    provider rate limit exceeded.
+    """
 
 
 class BacktestingError(FFEError):
-    """Base class for backtesting related errors."""
+    """
+    Base class for all backtesting errors.
 
-    pass
+    Parent class for errors during historical strategy simulation,
+    data replay, and performance calculation.
+    """
 
 
 class BacktestValidationError(BacktestingError):
-    """Raised when backtesting validation fails."""
+    """
+    Raised when backtest configuration or data validation fails.
 
-    pass
+    Examples: insufficient historical data, invalid date range,
+    missing required indicators, incompatible strategy parameters.
+    """
 
 
 class FFEMemoryError(FFEError):
-    """Base class for memory-related errors (e.g., vector store, caching)."""
+    """
+    Base class for all memory and caching errors.
 
-    pass
+    Parent class for errors in portfolio memory, decision caching,
+    and vector store operations.
+    """
 
 
 class VectorStoreError(FFEMemoryError):
-    """Raised when vector store operations fail."""
+    """
+    Raised when vector store read/write operations fail.
 
-    pass
+    Examples: corrupted cache file, disk I/O error, serialization failure,
+    unable to load decision history.
+    """
 
 
 class PersistenceError(FFEError):
-    """Base class for persistence related errors."""
+    """
+    Base class for all data persistence errors.
 
-    pass
+    Parent class for errors when saving or loading decisions,
+    configurations, and other persistent state.
+    """
 
 
 class StorageError(PersistenceError):
-    """Raised when storage operations fail."""
+    """
+    Raised when file system storage operations fail.
 
-    pass
+    Examples: disk full, permission denied, directory not found,
+    file already exists when uniqueness required.
+    """
 
 
 class CircuitBreakerError(FFEError):
-    """Raised when circuit breaker is open."""
+    """
+    Raised when circuit breaker prevents operation due to repeated failures.
 
-    pass
+    Circuit breaker opens after threshold of consecutive failures to prevent
+    cascading errors. Automatically resets after cooldown period.
+    """
 
 
 class FFESystemError(FFEError):
-    """Raised when system-level issues occur."""
+    """
+    Raised when system-level or infrastructure issues occur.
 
-    pass
+    Examples: out of memory, file descriptor limit reached,
+    system signal received, unexpected shutdown.
+    """
 
 
 class InsufficientProvidersError(FFEError):
-    """Raised when insufficient providers are available for ensemble decisions."""
+    """
+    Raised when ensemble cannot reach quorum due to provider failures.
 
-    pass
+    Indicates too many AI providers are unavailable to make a reliable
+    ensemble decision. Requires minimum number of successful responses.
+    """
 
 
 # Import all exceptions to make them available from the module

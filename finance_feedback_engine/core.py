@@ -27,6 +27,8 @@ from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
 from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
+from .utils.credential_validator import validate_credentials
+from .utils.config_schema_validator import validate_and_warn
 from .utils.cache_metrics import CacheMetrics
 from .utils.failure_logger import log_quorum_failure
 from .utils.model_installer import ensure_models_installed
@@ -63,6 +65,12 @@ class FinanceFeedbackEngine:
         # Run security validation at startup (warns on plaintext credentials)
         config_path = Path(__file__).parent.parent / "config" / "config.yaml"
         validate_at_startup(config_path, raise_on_error=False)
+
+        # Validate credentials (fail fast on placeholder values)
+        validate_credentials(config)
+
+        # Validate config schema (warns on misconfigurations)
+        validate_and_warn(config)
 
         self.config = config
 
@@ -327,9 +335,6 @@ class FinanceFeedbackEngine:
             # Optionally start internal TradeMonitor (no direct CLI control)
             if self._auto_start_monitor_flag:
                 self._auto_start_trade_monitor()
-
-        # Backtester (lazy init holder)
-        self._backtester: Optional["Backtester"] = None
 
         logger.info("Finance Feedback Engine initialized successfully")
 
@@ -1069,58 +1074,6 @@ class FinanceFeedbackEngine:
         # RiskGatekeeper._validate_leverage_and_concentration() which is called
         # during the agent RISK_CHECK state. This consolidates all risk validation
         # in one place and prevents duplication.
-
-    async def backtest(
-        self,
-        asset_pair: str,
-        start: str,
-        end: str,
-        strategy: str = "sma_crossover",
-        short_window: Optional[int] = None,
-        long_window: Optional[int] = None,
-        initial_balance: Optional[float] = None,
-        fee_percentage: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """DEPRECATED: Use AdvancedBacktester directly via CLI.
-
-        This method is maintained for backward compatibility but will be removed.
-        Use: python main.py backtest ASSET --start DATE --end DATE
-
-        Args:
-            asset_pair: Symbol pair (e.g. 'BTCUSD').
-            start: Start date (YYYY-MM-DD).
-            end: End date (YYYY-MM-DD).
-            strategy: Strategy identifier (deprecated, still passed to legacy Backtester).
-            short_window: Override for short SMA window (deprecated, still passed to legacy Backtester).
-            long_window: Override for long SMA window (deprecated, still passed to legacy Backtester).
-            initial_balance: Override starting balance.
-            fee_percentage: Override per trade fee percent.
-        Returns:
-            Dict with strategy metadata, performance metrics and trade log.
-        """
-        import warnings
-
-        warnings.warn(
-            "FinanceFeedbackEngine.backtest() is deprecated. "
-            "Use AdvancedBacktester directly via CLI: python main.py backtest ASSET --start DATE --end DATE",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if self._backtester is None:
-            from .backtesting.backtester import Backtester
-
-            bt_conf = self.config.get("backtesting", {})
-            self._backtester = Backtester(self.data_provider, bt_conf)
-        return await self._backtester.run(
-            asset_pair=asset_pair,
-            start=start,
-            end=end,
-            strategy_name=strategy,
-            short_window=short_window,
-            long_window=long_window,
-            initial_balance=initial_balance,
-            fee_percentage=fee_percentage,
-        )
 
     # ===================================================================
     # Portfolio Memory Methods

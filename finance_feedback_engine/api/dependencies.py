@@ -32,7 +32,8 @@ def get_engine() -> FinanceFeedbackEngine:
 
 
 # API Key verification
-security = HTTPBearer()
+# auto_error=False: Let verify_api_key handle 401 responses (not FastAPI's default 403)
+security = HTTPBearer(auto_error=False)
 
 
 def get_auth_manager() -> AuthManager:
@@ -84,7 +85,8 @@ def verify_api_key(
     Raises:
         HTTPException: If API key is invalid, missing, or rate limited
     """
-    if not credentials or not credentials.credentials:
+    # HTTPBearer with auto_error=False returns None when credentials missing
+    if credentials is None or not credentials.credentials:
         logger.warning("❌ Authentication attempt with missing credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

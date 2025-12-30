@@ -227,7 +227,7 @@ def scan_file(file_path: str) -> List[Tuple[int, str, str]]:
                             value = match.group(1)
                         else:
                             value = match.group(0)
-                    except:
+                    except (IndexError, AttributeError):
                         value = match.group(0)
 
                     # Check if it's a safe placeholder

@@ -506,7 +506,8 @@ class LocalLLMProvider:
         # Verify connection before query (Phase 2 optimization)
         self.ensure_connection()
 
-        max_retries = 3
+        # Get max_retries from config (defaults to 3)
+        max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
         for attempt in range(max_retries):
             try:
                 logger.info(
@@ -568,14 +569,15 @@ class LocalLLMProvider:
                     except (ValueError, TypeError):
                         decision["confidence"] = 60
 
-                    # Safely convert amount to float (default 0.1 if missing/invalid)
+                    # Safely convert amount to float (get default from config)
+                    default_position_size = self.config.get("decision_engine", {}).get("default_position_size", 0.1)
                     try:
-                        amount_val = decision.get("amount", 0.1)
+                        amount_val = decision.get("amount", default_position_size)
                         decision["amount"] = (
-                            float(amount_val) if amount_val is not None else 0.1
+                            float(amount_val) if amount_val is not None else default_position_size
                         )
                     except (ValueError, TypeError):
-                        decision["amount"] = 0.1
+                        decision["amount"] = default_position_size
 
                     logger.info(
                         f"Local LLM decision: {decision['action']} "
