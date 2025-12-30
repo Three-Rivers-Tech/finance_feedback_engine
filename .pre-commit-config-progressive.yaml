@@ -97,12 +97,12 @@ repos:
   # PHASE 4: ADD TEST RUNNER (Uncomment when tests are stable)
   # =============================================================================
 
-  # Run critical tests only
+  # Run critical tests only (BLOCKING)
   - repo: local
     hooks:
       - id: pytest-critical
         name: Run critical tests
-        entry: bash -c 'python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=no || true'
+        entry: bash -c 'python -m pytest tests/test_core_integration.py tests/test_api.py -q --tb=line'
         language: system
         pass_filenames: false
         # Only run on Python file changes

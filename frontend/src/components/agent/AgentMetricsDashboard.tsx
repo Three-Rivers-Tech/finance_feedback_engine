@@ -21,22 +21,43 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
   const [closeError, setCloseError] = useState<string | null>(null);
   const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
 
-  const { recentDecisions, signalAlerts, avgConfidence } = useMemo(() => {
+  // Helper to normalize confidence values to 0-100 range
+  const normalizeConfidence = (value: number | undefined): number | null => {
+    if (value === null || value === undefined || Number.isNaN(value)) {
+      return null;
+    }
+    // If value is in 0-1 range, multiply by 100; otherwise assume already a percentage
+    return value <= 1 ? value * 100 : value;
+  };
+
+  const recentDecisions = useMemo(() => {
     const decisionEvents = events.filter((evt) =>
       ['decision_approved', 'decision_rejected'].includes(evt.event)
     );
-    const recent = decisionEvents.slice(-5).reverse();
-    const confidences = decisionEvents
-      .map((evt) => Number(evt.data?.confidence ?? evt.data?.confidence_score ?? 0))
-      .filter((v) => !Number.isNaN(v) && v > 0);
-    const avg = confidences.length
-      ? confidences.reduce((acc, v) => acc + v, 0) / confidences.length
-      : null;
-    const alerts = events
+    return decisionEvents.slice(-5).reverse();
+  }, [events]);
+
+  const signalAlerts = useMemo(() => {
+    return events
       .filter((evt) => evt.event === 'signal_delivery_failure')
       .slice(-3)
       .reverse();
-    return { recentDecisions: recent, signalAlerts: alerts, avgConfidence: avg };
+  }, [events]);
+
+  const avgConfidence = useMemo(() => {
+    const decisionEvents = events.filter((evt) =>
+      ['decision_approved', 'decision_rejected'].includes(evt.event)
+    );
+    const confidences = decisionEvents
+      .map((evt) => {
+        const rawValue = evt.data?.confidence ?? evt.data?.confidence_score ?? 0;
+        return normalizeConfidence(Number(rawValue));
+      })
+      .filter((v) => v !== null && v > 0) as number[];
+
+    return confidences.length
+      ? confidences.reduce((acc, v) => acc + v, 0) / confidences.length
+      : null;
   }, [events]);
 
   const totalUnrealized = useMemo(
@@ -87,7 +108,11 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
         </div>
         <div>
           <p className="text-xs text-text-secondary mb-1">AVG CONFIDENCE (RECENT)</p>
-          <p className="font-mono text-lg">{avgConfidence ? `${avgConfidence.toFixed(1)}%` : 'N/A'}</p>
+          <p className="font-mono text-lg">
+            {avgConfidence !== null && avgConfidence !== undefined
+              ? `${avgConfidence.toFixed(1)}%`
+              : 'N/A'}
+          </p>
         </div>
       </div>
 
@@ -108,7 +133,10 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
                   <p className="text-xs text-text-secondary font-mono">{evt.data?.reason || evt.data?.reasoning}</p>
                 </div>
                 <Badge variant={evt.event === 'decision_approved' ? 'success' : 'danger'}>
-                  {evt.data?.action} {evt.data?.confidence ? `${evt.data.confidence}%` : ''}
+                  {evt.data?.action}
+                  {evt.data?.confidence !== undefined && evt.data?.confidence !== null
+                    ? ` ${normalizeConfidence(Number(evt.data.confidence))?.toFixed(0) ?? ''}%`
+                    : ''}
                 </Badge>
               </div>
             ))}
@@ -189,7 +217,10 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
                 </p>
               </div>
               <Badge variant={decision.action === 'BUY' ? 'success' : 'warning'}>
-                {decision.action} {decision.confidence}%
+                {decision.action}
+                {decision.confidence !== undefined && decision.confidence !== null
+                  ? ` ${normalizeConfidence(Number(decision.confidence))?.toFixed(0) ?? ''}%`
+                  : ''}
               </Badge>
             </div>
           ))}

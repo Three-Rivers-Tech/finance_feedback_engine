@@ -133,7 +133,7 @@ class PortfolioBacktester:
         decision_engine: Optional[DecisionEngine] = None,
         data_provider: Optional[HistoricalDataProvider] = None,
         risk_gatekeeper: Optional[RiskGatekeeper] = None,
-        memory_engine: Optional[PortfolioMemoryEngine] = None,
+        memory_engine: Optional[PortfolioMemoryEngineAdapter] = None,
     ):
         """
         Initialize portfolio backtester.

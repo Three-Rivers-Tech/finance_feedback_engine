@@ -11,6 +11,7 @@ Responsibilities:
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -311,20 +312,43 @@ class MemoryPersistence(IMemoryPersistence):
 
         Raises:
             FileNotFoundError: If snapshot doesn't exist
+            ValueError: If filename attempts path traversal
             IOError: If load fails
         """
-        snapshot_file = self.storage_path / "snapshots" / filename
+        # Security: Prevent path traversal attacks
+        # Check for absolute paths
+        if os.path.isabs(filename):
+            raise ValueError(f"Absolute paths are not allowed: {filename}")
 
-        if not snapshot_file.exists():
+        # Check for path traversal components (..)
+        if ".." in filename or filename.startswith("/"):
+            raise ValueError(f"Path traversal not allowed in filename: {filename}")
+
+        # Resolve snapshot directory and candidate file
+        snapshot_dir = (self.storage_path / "snapshots").resolve()
+        candidate = (snapshot_dir / filename).resolve()
+
+        # Verify that the resolved candidate is within snapshot_dir
+        try:
+            candidate.relative_to(snapshot_dir)
+        except ValueError:
+            raise PermissionError(
+                f"Attempted access outside snapshots directory: {filename}"
+            )
+
+        # Final check: ensure the file exists and is within the allowed directory
+        if not candidate.is_file():
             raise FileNotFoundError(f"Snapshot not found: {filename}")
 
         try:
-            with open(snapshot_file, "r") as f:
+            with open(candidate, "r") as f:
                 snapshot = json.load(f)
 
             logger.info(f"Snapshot loaded: {filename}")
             return snapshot
 
+        except (FileNotFoundError, PermissionError, ValueError):
+            raise
         except Exception as e:
             logger.error(f"Failed to load snapshot {filename}: {e}")
             raise IOError(f"Failed to load snapshot: {e}") from e

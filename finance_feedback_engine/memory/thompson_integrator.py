@@ -253,9 +253,8 @@ class ThompsonIntegrator(IThompsonIntegrator):
                 callback(provider, won, regime)
             except Exception as e:
                 logger.error(
-                    f"Thompson callback {callback.__name__} failed: {e}",
+                    f"Thompson callback {getattr(callback, '__name__', repr(callback))} failed: {e}",
                     exc_info=True,
                 )
-
 
 __all__ = ["ThompsonIntegrator"]

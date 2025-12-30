@@ -184,8 +184,9 @@ The following are now handled internally:
 Note: The `@platform_retry` import was removed from the module, but the decorator still exists in `retry_handler.py` for use in other modules that need it. The `get_balance()` method in Oanda still uses `@platform_retry` for backward compatibility (queries are idempotent, so no risk).
 
 If you want to ensure no accidental re-introduction of the decorator on `execute_trade`, you can:
-1. Search for `@platform_retry.*execute_trade`
-2. Or add a type hint: `def execute_trade(self, decision: Dict[str, Any], /):` (prevents decorator wrapping)
+1. **Manual check**: Search for `@platform_retry.*execute_trade` in the codebase
+2. **Automated unit test**: Add a test that verifies the `execute_trade` method is not decorated with `@platform_retry`, either by inspecting the function's decorator attributes or asserting the absence of the decorator using AST analysis
+3. **Code review**: Add a checklist item requiring reviewers to verify that `execute_trade` does not have the `@platform_retry` decorator
 
 ## References
 
