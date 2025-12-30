@@ -4,9 +4,10 @@ Unit tests for SortinoAnalyzer.
 Tests multi-timeframe Sortino Ratio calculation with various market scenarios.
 """
 
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock
 
 from finance_feedback_engine.pair_selection.statistical.sortino_analyzer import (
     SortinoAnalyzer,
@@ -21,9 +22,7 @@ class TestSortinoAnalyzer:
     def analyzer(self):
         """Create SortinoAnalyzer instance with default config."""
         return SortinoAnalyzer(
-            windows_days=[7, 30, 90],
-            weights=[0.5, 0.3, 0.2],
-            risk_free_rate=0.0
+            windows_days=[7, 30, 90], weights=[0.5, 0.3, 0.2], risk_free_rate=0.0
         )
 
     @pytest.fixture
@@ -36,14 +35,13 @@ class TestSortinoAnalyzer:
     def test_calculate_sortino_positive_returns(self, analyzer, mock_data_provider):
         """Test Sortino calculation with positive returns (trending up)."""
         mock_candles = [
-            {'close': 100 + i, 'timestamp': f'2025-01-{i+1:02d}T00:00:00Z'}
+            {"close": 100 + i, "timestamp": f"2025-01-{i+1:02d}T00:00:00Z"}
             for i in range(30)
         ]
-        mock_data_provider.get_candles.return_value = (mock_candles, 'coinbase')
+        mock_data_provider.get_candles.return_value = (mock_candles, "coinbase")
 
         result = analyzer.calculate_multi_timeframe_sortino(
-            asset_pair="BTCUSD",
-            data_provider=mock_data_provider
+            asset_pair="BTCUSD", data_provider=mock_data_provider
         )
 
         assert isinstance(result, SortinoScore)
@@ -54,14 +52,13 @@ class TestSortinoAnalyzer:
     def test_calculate_sortino_negative_returns(self, analyzer, mock_data_provider):
         """Test Sortino calculation with negative returns (downtrend)."""
         mock_candles = [
-            {'close': 100 - i, 'timestamp': f'2025-01-{i+1:02d}T00:00:00Z'}
+            {"close": 100 - i, "timestamp": f"2025-01-{i+1:02d}T00:00:00Z"}
             for i in range(30)
         ]
-        mock_data_provider.get_candles.return_value = (mock_candles, 'coinbase')
+        mock_data_provider.get_candles.return_value = (mock_candles, "coinbase")
 
         result = analyzer.calculate_multi_timeframe_sortino(
-            asset_pair="BTCUSD",
-            data_provider=mock_data_provider
+            asset_pair="BTCUSD", data_provider=mock_data_provider
         )
 
         assert isinstance(result, SortinoScore)

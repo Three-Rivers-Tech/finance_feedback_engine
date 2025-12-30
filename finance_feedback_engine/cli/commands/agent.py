@@ -505,8 +505,16 @@ def _confirm_agent_startup(
 )
 @click.pass_context
 def run_agent(
-    ctx, take_profit, stop_loss, setup, autonomous, max_drawdown, asset_pairs, yes,
-    enable_pair_selection, pair_selection_interval
+    ctx,
+    take_profit,
+    stop_loss,
+    setup,
+    autonomous,
+    max_drawdown,
+    asset_pairs,
+    yes,
+    enable_pair_selection,
+    pair_selection_interval,
 ):
     """Starts the autonomous trading agent."""
     if 1 <= take_profit <= 100:
@@ -539,6 +547,9 @@ def run_agent(
 
     console.print("\n[bold cyan]🚀 Initializing Autonomous Agent...[/bold cyan]")
 
+    # Load config for overrides
+    config = ctx.obj["config"]
+
     # Parse asset pairs if provided
     parsed_asset_pairs = None
     if asset_pairs:
@@ -558,20 +569,21 @@ def run_agent(
         # Ensure pair_selection config section exists
         if "pair_selection" not in config:
             config["pair_selection"] = {}
-        
+
         if enable_pair_selection is not None:
             config["pair_selection"]["enabled"] = enable_pair_selection
             status = "ENABLED" if enable_pair_selection else "DISABLED"
             console.print(f"[cyan]Pair selection override:[/cyan] {status}")
-        
+
         if pair_selection_interval is not None:
-            config["pair_selection"]["rotation_interval_hours"] = pair_selection_interval
+            config["pair_selection"][
+                "rotation_interval_hours"
+            ] = pair_selection_interval
             console.print(
                 f"[cyan]Pair selection interval override:[/cyan] {pair_selection_interval} hours"
             )
 
     # Display configuration and confirm startup
-    config = ctx.obj["config"]
     parsed_asset_pairs_for_display = parsed_asset_pairs if parsed_asset_pairs else None
     if not _confirm_agent_startup(
         config, take_profit, stop_loss, parsed_asset_pairs_for_display, yes

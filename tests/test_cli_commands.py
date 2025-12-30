@@ -38,5 +38,10 @@ def test_analyze_command_network_failure():
     # Should either succeed with local provider or fail gracefully
     # We just verify it doesn't crash
     assert result.exit_code in [0, 1]  # Either success or handled failure
-    # Output should not contain Python tracebacks
-    assert "Traceback" not in result.output or result.exit_code == 0
+    # v0.9.9: Structured logging may include traceback on handled failures.
+    # If it succeeds, ensure no traceback noise; if it fails, ensure a clear error message.
+    if result.exit_code == 0:
+        assert "Traceback" not in result.output
+    else:
+        # Handled failure: CLI should surface an error message (structured logs may include traceback)
+        assert "Error:" in result.output

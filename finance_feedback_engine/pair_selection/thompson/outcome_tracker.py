@@ -73,7 +73,7 @@ class PairSelectionOutcomeTracker:
         statistical_scores: Dict[str, float],
         llm_votes: Dict[str, Any],
         combined_scores: Dict[str, float],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Record a pair selection event.
@@ -97,14 +97,14 @@ class PairSelectionOutcomeTracker:
 
         # Create selection record
         record = {
-            'selection_id': selection_id,
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'selected_pairs': selected_pairs,
-            'statistical_scores': statistical_scores,
-            'llm_votes': serialized_votes,
-            'combined_scores': combined_scores,
-            'metadata': metadata or {},
-            'outcomes': {}  # Will be populated as trades complete
+            "selection_id": selection_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "selected_pairs": selected_pairs,
+            "statistical_scores": statistical_scores,
+            "llm_votes": serialized_votes,
+            "combined_scores": combined_scores,
+            "metadata": metadata or {},
+            "outcomes": {},  # Will be populated as trades complete
         }
 
         # Store in memory
@@ -123,7 +123,7 @@ class PairSelectionOutcomeTracker:
     def record_trade_outcome(
         self,
         asset_pair: str,
-        trade_outcome: Any  # TradeOutcome object from portfolio_memory
+        trade_outcome: Any,  # TradeOutcome object from portfolio_memory
     ) -> Optional[str]:
         """
         Link trade outcome to originating pair selection.
@@ -141,18 +141,18 @@ class PairSelectionOutcomeTracker:
         for sel_id in reversed(list(self.selection_history.keys())):
             selection = self.selection_history[sel_id]
 
-            if asset_pair in selection['selected_pairs']:
+            if asset_pair in selection["selected_pairs"]:
                 # Update outcome
-                selection['outcomes'][asset_pair] = {
-                    'decision_id': getattr(trade_outcome, 'decision_id', 'unknown'),
-                    'realized_pnl': getattr(trade_outcome, 'realized_pnl', 0.0),
-                    'was_profitable': getattr(trade_outcome, 'was_profitable', False),
-                    'holding_period_hours': getattr(
-                        trade_outcome, 'holding_period_hours', 0.0
+                selection["outcomes"][asset_pair] = {
+                    "decision_id": getattr(trade_outcome, "decision_id", "unknown"),
+                    "realized_pnl": getattr(trade_outcome, "realized_pnl", 0.0),
+                    "was_profitable": getattr(trade_outcome, "was_profitable", False),
+                    "holding_period_hours": getattr(
+                        trade_outcome, "holding_period_hours", 0.0
                     ),
-                    'entry_price': getattr(trade_outcome, 'entry_price', 0.0),
-                    'exit_price': getattr(trade_outcome, 'exit_price', 0.0),
-                    'recorded_at': datetime.utcnow().isoformat() + 'Z'
+                    "entry_price": getattr(trade_outcome, "entry_price", 0.0),
+                    "exit_price": getattr(trade_outcome, "exit_price", 0.0),
+                    "recorded_at": datetime.utcnow().isoformat() + "Z",
                 }
 
                 # Persist to disk
@@ -165,15 +165,10 @@ class PairSelectionOutcomeTracker:
 
                 return sel_id
 
-        logger.warning(
-            f"No matching selection found for {asset_pair} trade outcome"
-        )
+        logger.warning(f"No matching selection found for {asset_pair} trade outcome")
         return None
 
-    def get_selection_performance(
-        self,
-        selection_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def get_selection_performance(self, selection_id: str) -> Optional[Dict[str, Any]]:
         """
         Calculate aggregate performance for a selection batch.
 
@@ -197,60 +192,54 @@ class PairSelectionOutcomeTracker:
             logger.warning(f"Selection {selection_id} not found")
             return None
 
-        outcomes = selection.get('outcomes', {})
-        selected_pairs = selection.get('selected_pairs', [])
+        outcomes = selection.get("outcomes", {})
+        selected_pairs = selection.get("selected_pairs", [])
 
         if not outcomes:
             return {
-                'total_pnl': 0.0,
-                'win_rate': 0.0,
-                'avg_holding_hours': 0.0,
-                'completed_trades': 0,
-                'pending_trades': len(selected_pairs),
-                'selected_pairs_count': len(selected_pairs)
+                "total_pnl": 0.0,
+                "win_rate": 0.0,
+                "avg_holding_hours": 0.0,
+                "completed_trades": 0,
+                "pending_trades": len(selected_pairs),
+                "selected_pairs_count": len(selected_pairs),
             }
 
         # Filter to completed trades (have realized_pnl)
-        completed = [
-            o for o in outcomes.values()
-            if o.get('realized_pnl') is not None
-        ]
+        completed = [o for o in outcomes.values() if o.get("realized_pnl") is not None]
 
         if not completed:
             return {
-                'total_pnl': 0.0,
-                'win_rate': 0.0,
-                'avg_holding_hours': 0.0,
-                'completed_trades': 0,
-                'pending_trades': len(selected_pairs),
-                'selected_pairs_count': len(selected_pairs)
+                "total_pnl": 0.0,
+                "win_rate": 0.0,
+                "avg_holding_hours": 0.0,
+                "completed_trades": 0,
+                "pending_trades": len(selected_pairs),
+                "selected_pairs_count": len(selected_pairs),
             }
 
         # Calculate metrics
-        total_pnl = sum(o['realized_pnl'] for o in completed)
-        win_count = sum(1 for o in completed if o.get('was_profitable', False))
+        total_pnl = sum(o["realized_pnl"] for o in completed)
+        win_count = sum(1 for o in completed if o.get("was_profitable", False))
         win_rate = (win_count / len(completed)) * 100 if completed else 0.0
 
         holding_hours = [
-            o['holding_period_hours']
+            o["holding_period_hours"]
             for o in completed
-            if o.get('holding_period_hours', 0) > 0
+            if o.get("holding_period_hours", 0) > 0
         ]
         avg_holding = sum(holding_hours) / len(holding_hours) if holding_hours else 0.0
 
         return {
-            'total_pnl': total_pnl,
-            'win_rate': win_rate,
-            'avg_holding_hours': avg_holding,
-            'completed_trades': len(completed),
-            'pending_trades': len(selected_pairs) - len(completed),
-            'selected_pairs_count': len(selected_pairs)
+            "total_pnl": total_pnl,
+            "win_rate": win_rate,
+            "avg_holding_hours": avg_holding,
+            "completed_trades": len(completed),
+            "pending_trades": len(selected_pairs) - len(completed),
+            "selected_pairs_count": len(selected_pairs),
         }
 
-    def get_recent_selections(
-        self,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def get_recent_selections(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Get most recent selection records.
 
@@ -262,9 +251,7 @@ class PairSelectionOutcomeTracker:
         """
         # Sort by timestamp (descending)
         sorted_selections = sorted(
-            self.selection_history.values(),
-            key=lambda x: x['timestamp'],
-            reverse=True
+            self.selection_history.values(), key=lambda x: x["timestamp"], reverse=True
         )
 
         return sorted_selections[:limit]
@@ -285,31 +272,29 @@ class PairSelectionOutcomeTracker:
         """
         if not self.selection_history:
             return {
-                'total_selections': 0,
-                'selections_with_outcomes': 0,
-                'total_trades_tracked': 0,
-                'oldest_selection': None,
-                'newest_selection': None
+                "total_selections": 0,
+                "selections_with_outcomes": 0,
+                "total_trades_tracked": 0,
+                "oldest_selection": None,
+                "newest_selection": None,
             }
 
         selections_with_outcomes = sum(
-            1 for s in self.selection_history.values()
-            if s.get('outcomes')
+            1 for s in self.selection_history.values() if s.get("outcomes")
         )
 
         total_trades = sum(
-            len(s.get('outcomes', {}))
-            for s in self.selection_history.values()
+            len(s.get("outcomes", {})) for s in self.selection_history.values()
         )
 
-        timestamps = [s['timestamp'] for s in self.selection_history.values()]
+        timestamps = [s["timestamp"] for s in self.selection_history.values()]
 
         return {
-            'total_selections': len(self.selection_history),
-            'selections_with_outcomes': selections_with_outcomes,
-            'total_trades_tracked': total_trades,
-            'oldest_selection': min(timestamps) if timestamps else None,
-            'newest_selection': max(timestamps) if timestamps else None
+            "total_selections": len(self.selection_history),
+            "selections_with_outcomes": selections_with_outcomes,
+            "total_trades_tracked": total_trades,
+            "oldest_selection": min(timestamps) if timestamps else None,
+            "newest_selection": max(timestamps) if timestamps else None,
         }
 
     def _serialize_llm_votes(self, llm_votes: Dict[str, Any]) -> Dict[str, Dict]:
@@ -317,21 +302,21 @@ class PairSelectionOutcomeTracker:
         serialized = {}
 
         for pair, vote_obj in llm_votes.items():
-            if hasattr(vote_obj, '__dict__'):
+            if hasattr(vote_obj, "__dict__"):
                 # Convert dataclass/object to dict
                 serialized[pair] = {
-                    'vote': getattr(vote_obj, 'vote', 'NEUTRAL'),
-                    'confidence': getattr(vote_obj, 'confidence', 50),
-                    'reasoning': getattr(vote_obj, 'reasoning', ''),
-                    'vote_score': getattr(vote_obj, 'vote_score', 0.0),
-                    'provider_votes': getattr(vote_obj, 'provider_votes', {})
+                    "vote": getattr(vote_obj, "vote", "NEUTRAL"),
+                    "confidence": getattr(vote_obj, "confidence", 50),
+                    "reasoning": getattr(vote_obj, "reasoning", ""),
+                    "vote_score": getattr(vote_obj, "vote_score", 0.0),
+                    "provider_votes": getattr(vote_obj, "provider_votes", {}),
                 }
             elif isinstance(vote_obj, dict):
                 # Already a dict
                 serialized[pair] = vote_obj
             else:
                 # Fallback
-                serialized[pair] = {'vote': str(vote_obj)}
+                serialized[pair] = {"vote": str(vote_obj)}
 
         return serialized
 
@@ -342,7 +327,7 @@ class PairSelectionOutcomeTracker:
             return {}
 
         try:
-            with open(self.history_file, 'r') as f:
+            with open(self.history_file, "r") as f:
                 history = json.load(f)
 
             logger.info(f"Loaded {len(history)} selection records from disk")
@@ -355,7 +340,7 @@ class PairSelectionOutcomeTracker:
     def _save_history(self):
         """Save selection history to disk."""
         try:
-            with open(self.history_file, 'w') as f:
+            with open(self.history_file, "w") as f:
                 json.dump(self.selection_history, f, indent=2)
 
             logger.debug(

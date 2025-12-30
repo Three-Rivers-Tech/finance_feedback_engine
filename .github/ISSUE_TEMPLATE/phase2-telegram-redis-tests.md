@@ -58,10 +58,10 @@ assignees: ""
 ```python
 async def process_update(self, update_data: Dict[str, Any], engine):
     """Process Telegram webhook update with engine context."""
-    
+
 async def send_approval_request(self, decision_id: str, decision: Dict[str, Any]):
     """Send approval request via Telegram."""
-    
+
 async def setup_webhook(self, webhook_url: str):
     """Setup Telegram webhook."""
 ```

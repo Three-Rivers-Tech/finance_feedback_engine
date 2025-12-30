@@ -4,11 +4,13 @@ Integration tests for complete pair selection pipeline.
 Tests the 7-step pair selection process end-to-end with mocked components.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from finance_feedback_engine.pair_selection.core.pair_selector import (
-    PairSelector,
     PairSelectionConfig,
+    PairSelector,
 )
 
 
@@ -38,7 +40,7 @@ class TestPairSelectionPipeline:
             universe_cache_ttl_hours=24,
             pair_blacklist=[],
             llm_enabled=True,
-            llm_enabled_providers=None
+            llm_enabled_providers=None,
         )
 
     @pytest.fixture
@@ -72,17 +74,14 @@ class TestPairSelectionPipeline:
         return manager
 
     def test_pipeline_basic_functionality(
-        self,
-        config,
-        mock_data_provider,
-        mock_ai_decision_manager
+        self, config, mock_data_provider, mock_ai_decision_manager
     ):
         """Test basic pipeline initialization."""
         # Create selector with AI manager
         selector = PairSelector(
             data_provider=mock_data_provider,
             config=config,
-            ai_decision_manager=mock_ai_decision_manager
+            ai_decision_manager=mock_ai_decision_manager,
         )
 
         # Verify initialization

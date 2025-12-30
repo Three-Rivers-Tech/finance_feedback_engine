@@ -51,9 +51,7 @@ class PairSelectionScheduler:
         self._last_selection_time: Optional[datetime] = None
         self._selection_count = 0
 
-        logger.info(
-            f"PairSelectionScheduler initialized (interval: {interval_hours}h)"
-        )
+        logger.info(f"PairSelectionScheduler initialized (interval: {interval_hours}h)")
 
     async def start(self):
         """Start the background scheduler task."""
@@ -156,10 +154,10 @@ class PairSelectionScheduler:
     def get_status(self) -> dict:
         """Get scheduler status and statistics."""
         return {
-            'is_running': self.is_running,
-            'interval_hours': self.interval_seconds / 3600,
-            'selection_count': self._selection_count,
-            'last_selection_time': (
+            "is_running": self.is_running,
+            "interval_hours": self.interval_seconds / 3600,
+            "selection_count": self._selection_count,
+            "last_selection_time": (
                 self._last_selection_time.isoformat()
                 if self._last_selection_time
                 else None
