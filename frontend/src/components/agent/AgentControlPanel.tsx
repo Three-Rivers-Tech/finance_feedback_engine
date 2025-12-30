@@ -31,6 +31,8 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     price: '',
   });
 
+  const [startMode, setStartMode] = useState<'autonomous' | 'telegram'>('autonomous');
+
   const isRunning = status?.state === 'running';
   const isPaused = useMemo(() => status?.config?.paused === true, [status]);
 
@@ -44,7 +46,11 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     setIsStarting(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/start', {});
+      await apiClient.post('/api/v1/bot/start', {
+        autonomous: startMode === 'autonomous',
+        // Default core pairs - pair selection will add more
+        asset_pairs: ['BTCUSD', 'ETHUSD', 'EURUSD'],
+      });
       await refresh();
     } catch (err) {
       setError(handleApiError(err));
@@ -156,10 +162,45 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         </div>
       )}
 
+      {!isRunning && (
+        <div className="mb-4 p-4 bg-surface-secondary border border-border rounded">
+          <p className="text-sm font-mono text-text-secondary mb-3">Start Mode</p>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="startMode"
+                value="autonomous"
+                checked={startMode === 'autonomous'}
+                onChange={(e) => setStartMode(e.target.value as 'autonomous')}
+                className="w-4 h-4 text-accent-cyan"
+              />
+              <span className="text-sm font-mono">Autonomous (Full Trading)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="startMode"
+                value="telegram"
+                checked={startMode === 'telegram'}
+                onChange={(e) => setStartMode(e.target.value as 'telegram')}
+                className="w-4 h-4 text-accent-cyan"
+              />
+              <span className="text-sm font-mono">Signal-Only (Telegram)</span>
+            </label>
+          </div>
+          {startMode === 'telegram' && (
+            <p className="mt-2 text-xs font-mono text-accent-yellow">
+              ⚠️ Telegram mode requires bot_token and chat_id in config.yaml
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3 mb-6">
         {!isRunning ? (
           <Button variant="primary" onClick={handleStart} disabled={isStarting}>
-            {isStarting ? 'Starting...' : 'Start Agent'}
+            {isStarting ? 'Starting...' : `Start Agent (${startMode === 'autonomous' ? 'Autonomous' : 'Signal-Only'})`}
           </Button>
         ) : (
           <Button variant="secondary" onClick={handleStop} disabled={isStopping}>

@@ -298,8 +298,21 @@ class TradingLoopAgent:
                 # Initialize scheduler
                 def on_selection_callback(result):
                     """Update agent's asset_pairs when selection completes."""
-                    self.config.asset_pairs = result.selected_pairs
-                    logger.info(f"Updated active pairs: {result.selected_pairs}")
+                    # Always preserve core pairs (BTCUSD, ETHUSD, EURUSD)
+                    core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
+                    
+                    # Merge selected pairs with core pairs (union, preserving order)
+                    # Core pairs come first, then any additional selected pairs
+                    final_pairs = list(core_pairs)  # Start with core pairs
+                    for pair in result.selected_pairs:
+                        if pair not in final_pairs:
+                            final_pairs.append(pair)
+                    
+                    self.config.asset_pairs = final_pairs
+                    logger.info(
+                        f"✓ Updated active pairs: {final_pairs} "
+                        f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
+                    )
 
                 self.pair_scheduler = PairSelectionScheduler(
                     pair_selector=self.pair_selector,
@@ -814,7 +827,9 @@ class TradingLoopAgent:
         """
         PERCEPTION: Fetching market data, portfolio state, and performing safety checks.
         """
+        logger.info("=" * 80)
         logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
+        logger.info("=" * 80)
 
         # --- Safety Check: Portfolio Kill Switch ---
         if (
@@ -909,7 +924,27 @@ class TradingLoopAgent:
         """
         REASONING: Running the DecisionEngine with retry logic for robustness.
         """
+        logger.info("=" * 80)
         logger.info("State: REASONING - Running DecisionEngine...")
+        logger.info("=" * 80)
+
+        # Guard against empty or missing core pairs
+        core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
+        if not self.config.asset_pairs:
+            logger.error(
+                "CRITICAL: No asset pairs configured! Restoring core pairs."
+            )
+            self.config.asset_pairs = core_pairs
+        
+        # Validate core pairs are present
+        missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
+        if missing_core_pairs:
+            logger.warning(
+                f"Core pairs missing from asset_pairs: {missing_core_pairs}. Restoring them."
+            )
+            self.config.asset_pairs.extend(missing_core_pairs)
+
+        logger.info(f"Analyzing {len(self.config.asset_pairs)} pairs: {self.config.asset_pairs}")
 
         MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
 
@@ -932,6 +967,7 @@ class TradingLoopAgent:
                 self.analysis_failure_timestamps.pop(key, None)
 
         for asset_pair in self.config.asset_pairs:
+            logger.info(f">>> Starting analysis for {asset_pair}")
             failure_key = f"analysis:{asset_pair}"
 
             # --- Check if asset was recently rejected ---
@@ -954,7 +990,7 @@ class TradingLoopAgent:
 
             # Use asyncio.wait_for to prevent long-running operations from blocking the loop
             try:
-                logger.debug(f"Analyzing {asset_pair} (with timeout)...")
+                logger.info(f"    → Calling DecisionEngine for {asset_pair} (90s timeout)...")
 
                 analyze_fn = getattr(self.engine, "analyze_asset", None)
                 analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
@@ -1017,6 +1053,12 @@ class TradingLoopAgent:
                     f"It will be skipped for a while.",
                     exc_info=True,
                 )
+
+            # Add delay between pairs to avoid Alpha Vantage rate limits
+            # Only delay if there are more pairs to analyze
+            if asset_pair != self.config.asset_pairs[-1]:
+                logger.info(f"    → Waiting 15s before analyzing next pair (rate limit protection)...")
+                await asyncio.sleep(15)
 
         # After analyzing all assets, transition based on collected decisions
         if self._current_decisions:
@@ -1466,7 +1508,9 @@ class TradingLoopAgent:
         """
         LEARNING: Processing outcomes of closed trades to update the model.
         """
+        logger.info("=" * 80)
         logger.info("State: LEARNING - Processing closed trades for feedback...")
+        logger.info("=" * 80)
 
         closed_trades = self.trade_monitor.get_closed_trades()
         if not closed_trades:

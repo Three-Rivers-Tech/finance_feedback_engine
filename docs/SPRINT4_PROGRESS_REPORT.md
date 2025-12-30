@@ -599,10 +599,10 @@ Total_Remaining: 52 operations, ~9 hours
 
 ```yaml
 Option_A_Complete_Sprint_4:
-  - Migrate portfolio_memory.py (1.5 hours)
-  - Migrate thompson_sampling.py (0.5 hours)
-  - Migrate performance_tracker.py (0.5 hours)
-  - Total: 2.5 hours to complete sprint
+  - Migrate failure_logger.py (0.5 hours)
+  - Migrate vector_store.py (0.5 hours)
+  - Migrate metrics_collector.py (0.5 hours)
+  - Total: 1.5 hours to continue sprint
 
 Option_B_Partial_Complete:
   - Document current progress
