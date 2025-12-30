@@ -565,44 +565,22 @@ def run_agent(
         )
 
     # Apply pair selection CLI overrides to config
-     # Parse asset pairs if provided
-     parsed_asset_pairs = None
-     if asset_pairs:
-         from finance_feedback_engine.utils.validation import standardize_asset_pair
+    if enable_pair_selection is not None or pair_selection_interval is not None:
+        # Ensure pair_selection config section exists
+        if "pair_selection" not in config:
+            config["pair_selection"] = {}
 
-         parsed_asset_pairs = [
-             standardize_asset_pair(pair.strip())
-             for pair in asset_pairs.split(",")
-             if pair.strip()
-         ]
-         console.print(
-             f"[cyan]Asset pairs override:[/cyan] {', '.join(parsed_asset_pairs)}"
-         )
+        if enable_pair_selection is not None:
+            config["pair_selection"]["enabled"] = enable_pair_selection
+            status = "ENABLED" if enable_pair_selection else "DISABLED"
+            console.print(f"[cyan]Pair selection override:[/cyan] {status}")
 
-     # Display configuration and confirm startup
-     config = ctx.obj["config"]
-
-     # Apply pair selection CLI overrides to config
-     if enable_pair_selection is not None or pair_selection_interval is not None:
-         # Ensure pair_selection config section exists
-         if "pair_selection" not in config:
-             config["pair_selection"] = {}
-
-         if enable_pair_selection is not None:
-             config["pair_selection"]["enabled"] = enable_pair_selection
-             status = "ENABLED" if enable_pair_selection else "DISABLED"
-             console.print(f"[cyan]Pair selection override:[/cyan] {status}")
-
-         if pair_selection_interval is not None:
-             config["pair_selection"]["rotation_interval_hours"] = pair_selection_interval
-             console.print(
-                 f"[cyan]Pair selection interval override:[/cyan] {pair_selection_interval} hours"
-             )
-
-     parsed_asset_pairs_for_display = parsed_asset_pairs if parsed_asset_pairs else None
-     if not _confirm_agent_startup(
-         config, take_profit, stop_loss, parsed_asset_pairs_for_display, yes
-     ):
+        if pair_selection_interval is not None:
+            config["pair_selection"][
+                "rotation_interval_hours"
+            ] = pair_selection_interval
+            console.print(
+                f"[cyan]Pair selection interval override:[/cyan] {pair_selection_interval} hours"
             )
 
     # Display configuration and confirm startup

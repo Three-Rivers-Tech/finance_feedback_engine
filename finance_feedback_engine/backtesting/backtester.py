@@ -140,8 +140,8 @@ class Backtester:
         self.memory_engine = None
         if enable_portfolio_memory:
             try:
-                from finance_feedback_engine.memory.portfolio_memory import (
-                    PortfolioMemoryEngine,
+                from finance_feedback_engine.memory.portfolio_memory_adapter import (
+                    PortfolioMemoryEngineAdapter,
                 )
 
                 # Determine storage path based on isolation mode
@@ -157,7 +157,7 @@ class Backtester:
                         memory_config["persistence"] = {"storage_path": "data"}
                     logger.info("Using shared portfolio memory (training mode)")
 
-                self.memory_engine = PortfolioMemoryEngine(memory_config)
+                self.memory_engine = PortfolioMemoryEngineAdapter(memory_config)
             except Exception as e:
                 logger.warning(f"Could not initialize portfolio memory: {e}")
 

@@ -1,10 +1,11 @@
 """Persistence layer for storing trading decisions."""
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from finance_feedback_engine.utils.file_io import FileIOManager, FileIOError
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ class DecisionStore:
         # Create storage directory if it doesn't exist
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
+        # Initialize FileIOManager with storage path as base
+        self.file_io = FileIOManager(self.storage_path)
+
         logger.info(f"Decision store initialized at {self.storage_path}")
 
     def save_decision(self, decision: Dict[str, Any]) -> None:
@@ -51,13 +55,16 @@ class DecisionStore:
         date_str = timestamp.split("T")[0]
         filename = f"{date_str}_{decision_id}.json"
 
-        filepath = self.storage_path / filename
-
         try:
-            with open(filepath, "w") as f:
-                json.dump(decision, f, indent=2)
-            logger.info(f"Decision saved: {filepath}")
-        except Exception as e:
+            self.file_io.write_json(
+                filename,
+                decision,
+                atomic=True,
+                backup=False,  # No backup for new decisions
+                create_dirs=False  # Directory already created in __init__
+            )
+            logger.info(f"Decision saved: {self.storage_path / filename}")
+        except FileIOError as e:
             logger.error(f"Error saving decision: {e}")
 
     def get_decision_by_id(self, decision_id: str) -> Optional[Dict[str, Any]]:
@@ -73,9 +80,10 @@ class DecisionStore:
         # Search for file containing this decision ID
         for filepath in self.storage_path.glob(f"*_{decision_id}.json"):
             try:
-                with open(filepath, "r") as f:
-                    return json.load(f)
-            except Exception as e:
+                # Read using FileIOManager with relative path
+                relative_path = filepath.relative_to(self.storage_path)
+                return self.file_io.read_json(relative_path)
+            except FileIOError as e:
                 logger.error(f"Error loading decision from {filepath}: {e}")
 
         logger.warning(f"Decision not found: {decision_id}")
@@ -108,15 +116,16 @@ class DecisionStore:
                 break
 
             try:
-                with open(filepath, "r") as f:
-                    decision = json.load(f)
+                # Read using FileIOManager
+                relative_path = filepath.relative_to(self.storage_path)
+                decision = self.file_io.read_json(relative_path)
 
                 # Filter by asset pair if specified
                 if asset_pair and decision.get("asset_pair") != asset_pair:
                     continue
 
                 decisions.append(decision)
-            except Exception as e:
+            except FileIOError as e:
                 logger.error(f"Error loading decision from {filepath}: {e}")
 
         logger.info(f"Retrieved {len(decisions)} decisions")
@@ -153,11 +162,18 @@ class DecisionStore:
         # Find and update the existing file
         for filepath in self.storage_path.glob(f"*_{decision_id}.json"):
             try:
-                with open(filepath, "w") as f:
-                    json.dump(decision, f, indent=2)
+                # Write using FileIOManager with atomic write and backup
+                relative_path = filepath.relative_to(self.storage_path)
+                self.file_io.write_json(
+                    relative_path,
+                    decision,
+                    atomic=True,
+                    backup=True,  # Backup existing decision before update
+                    create_dirs=False
+                )
                 logger.info(f"Decision updated: {filepath}")
                 return
-            except Exception as e:
+            except FileIOError as e:
                 logger.error(f"Error updating decision: {e}")
 
         # If not found, save as new

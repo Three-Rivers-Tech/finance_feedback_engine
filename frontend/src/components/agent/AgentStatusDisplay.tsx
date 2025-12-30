@@ -1,13 +1,17 @@
 import React from 'react';
-import { useAgentStatus } from '../../api/hooks/useAgentStatus';
+import type { AgentStatus } from '../../api/types';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { Spinner } from '../common/Spinner';
 import { formatUptime } from '../../services/formatters';
 
-export const AgentStatusDisplay: React.FC = () => {
-  const { data: status, isLoading } = useAgentStatus();
+type Props = {
+  status: AgentStatus | null | undefined;
+  isLoading?: boolean;
+  isLive?: boolean;
+};
 
+export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false, isLive = false }) => {
   if (isLoading) {
     return (
       <Card>
@@ -34,7 +38,7 @@ export const AgentStatusDisplay: React.FC = () => {
   return (
     <Card>
       <h2 className="text-lg font-mono font-bold text-accent-cyan mb-4 uppercase">
-        Agent Status
+        Agent Status {isLive ? <span className="text-xs text-green-400">• live</span> : null}
       </h2>
       <div className="grid grid-cols-2 gap-4">
         <div>

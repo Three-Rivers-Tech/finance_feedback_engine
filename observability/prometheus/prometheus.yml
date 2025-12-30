@@ -5,6 +5,10 @@ global:
     monitor: 'finance-feedback-engine'
     environment: 'production'
 
+# Alerting rules
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
 # Alertmanager configuration (optional)
 # alerting:
 #   alertmanagers:
@@ -35,6 +39,7 @@ scrape_configs:
   # Grafana metrics (optional)
   - job_name: 'grafana'
     scrape_interval: 30s
+    metrics_path: '/grafana/metrics'
     static_configs:
       - targets: ['grafana:3000']
     metric_relabel_configs:

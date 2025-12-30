@@ -9,6 +9,11 @@ from enum import Enum, auto
 
 from opentelemetry import metrics, trace
 
+from finance_feedback_engine.monitoring.prometheus import (
+    update_agent_state,
+    update_decision_confidence,
+)
+
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
@@ -29,6 +34,18 @@ class AgentState(Enum):
     RISK_CHECK = auto()
     EXECUTION = auto()
     LEARNING = auto()
+
+
+# Prometheus-friendly mapping for OODA states. Values align with the gauge docstring
+# in finance_feedback_engine.monitoring.prometheus.agent_state.
+STATE_METRIC_VALUES: dict[AgentState, int] = {
+    AgentState.IDLE: 0,
+    AgentState.LEARNING: 1,
+    AgentState.PERCEPTION: 2,
+    AgentState.REASONING: 3,
+    AgentState.RISK_CHECK: 4,
+    AgentState.EXECUTION: 5,
+}
 
 
 class TradingLoopAgent:
@@ -146,6 +163,9 @@ class TradingLoopAgent:
             AgentState.LEARNING: self.handle_learning_state,
         }
 
+        # Initialize gauge with starting state
+        self._record_state_metric()
+
         # Pair selection system (optional)
         self.pair_selector = None
         self.pair_scheduler = None
@@ -182,18 +202,14 @@ class TradingLoopAgent:
                     min_listing_age_days=discovery_filters_cfg.get(
                         "min_listing_age_days", 365
                     ),
-                    max_spread_pct=discovery_filters_cfg.get(
-                        "max_spread_pct", 0.001
-                    ),
+                    max_spread_pct=discovery_filters_cfg.get("max_spread_pct", 0.001),
                     min_depth_usd=discovery_filters_cfg.get(
                         "min_depth_usd", 10_000_000
                     ),
                     exclude_suspicious_patterns=discovery_filters_cfg.get(
                         "exclude_suspicious_patterns", True
                     ),
-                    min_venue_count=discovery_filters_cfg.get(
-                        "min_venue_count", 2
-                    ),
+                    min_venue_count=discovery_filters_cfg.get("min_venue_count", 2),
                     auto_add_to_whitelist=discovery_filters_cfg.get(
                         "auto_add_to_whitelist", False
                     ),
@@ -783,6 +799,9 @@ class TradingLoopAgent:
         self.state = new_state
         logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
 
+        # Update Prometheus gauge to reflect the new state
+        self._record_state_metric()
+
         # Emit event for dashboard
         self._emit_dashboard_event(
             {
@@ -792,6 +811,15 @@ class TradingLoopAgent:
                 "timestamp": time.time(),
             }
         )
+
+    def _record_state_metric(self):
+        """Push the current OODA state to Prometheus gauge."""
+        try:
+            state_value = STATE_METRIC_VALUES.get(self.state)
+            if state_value is not None:
+                update_agent_state(state_value)
+        except Exception:
+            logger.debug("Failed to update agent state metric", exc_info=True)
 
     def _cleanup_rejected_cache(self):
         """
@@ -1126,6 +1154,16 @@ class TradingLoopAgent:
                     f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue."
                 )
                 approved_decisions.append(decision)
+
+                # Record decision confidence for metrics dashboards
+                try:
+                    update_decision_confidence(
+                        asset_pair,
+                        decision.get("action", "UNKNOWN"),
+                        float(decision.get("confidence", 0)),
+                    )
+                except Exception:
+                    logger.debug("Failed to record decision confidence metric", exc_info=True)
 
                 # Emit approval event for dashboard
                 self._emit_dashboard_event(
@@ -1749,7 +1787,7 @@ class TradingLoopAgent:
             bool: True if delivered successfully
         """
         import httpx
-        from tenacity import retry, stop_after_attempt, wait_exponential
+        from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
         def is_retryable_error(exception):
             """
@@ -1771,7 +1809,7 @@ class TradingLoopAgent:
         @retry(
             stop=stop_after_attempt(max_retries),
             wait=wait_exponential(multiplier=1, min=2, max=10),
-            retry=is_retryable_error,
+            retry=retry_if_exception(is_retryable_error),
         )
         async def _send_webhook():
             webhook_config = getattr(self, "webhook_config", {}) or {}
@@ -1791,6 +1829,11 @@ class TradingLoopAgent:
 
         try:
             response = await _send_webhook()
+            # Handle case where response might be None (shouldn't happen but defensive)
+            if response is None:
+                logger.error("Webhook delivery returned None response")
+                return False
+                
             # Sanitize URL to prevent credential exposure in logs
             from urllib.parse import urlparse
 
@@ -1958,6 +2001,10 @@ class TradingLoopAgent:
         self.is_running = False
         self.stop_requested = True
 
+        # Mark state as IDLE for metrics when stop is requested
+        self.state = AgentState.IDLE
+        self._record_state_metric()
+
         # Stop pair selection scheduler if running
         if self.pair_scheduler and self.pair_scheduler.is_running:
             try:
@@ -1969,7 +2016,9 @@ class TradingLoopAgent:
                         asyncio.run_coroutine_threadsafe(
                             self.pair_scheduler.stop(), loop
                         )
-                        logger.info("Scheduled pair selection scheduler stop in running event loop")
+                        logger.info(
+                            "Scheduled pair selection scheduler stop in running event loop"
+                        )
                     else:
                         logger.warning(
                             "Event loop exists but is not running; cannot stop pair scheduler gracefully"
@@ -1981,6 +2030,46 @@ class TradingLoopAgent:
                         "scheduler may not stop gracefully"
                     )
             except Exception as e:
-                logger.error(
-                    f"Error stopping pair scheduler: {e}", exc_info=True
-                )
+                logger.error(f"Error stopping pair scheduler: {e}", exc_info=True)
+
+    def pause(self) -> bool:
+        """
+        Pause the trading agent.
+
+        Temporarily halts the trading loop without closing positions. The agent can be
+        resumed later with the resume() method.
+
+        Returns:
+            bool: True if pause was successful, False if agent was not running or already paused.
+        """
+        if not self.is_running:
+            logger.warning("Cannot pause: agent is not running")
+            return False
+
+        if self._paused:
+            logger.warning("Cannot pause: agent is already paused")
+            return False
+
+        logger.info("Pausing trading agent via public method")
+        self.is_running = False
+        self._paused = True
+        return True
+
+    def resume(self) -> bool:
+        """
+        Resume the trading agent.
+
+        Resumes a paused agent to continue trading. Only works if the agent was previously
+        paused (not stopped or crashed).
+
+        Returns:
+            bool: True if resume was successful, False if agent was not paused.
+        """
+        if not self._paused:
+            logger.warning("Cannot resume: agent is not paused")
+            return False
+
+        logger.info("Resuming trading agent via public method")
+        self.is_running = True
+        self._paused = False
+        return True

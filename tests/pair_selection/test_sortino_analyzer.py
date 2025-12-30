@@ -71,7 +71,8 @@ class TestSortinoAnalyzer:
 
         mean_return = np.mean(returns)
         downside_returns = [r for r in returns if r < 0.0]
-        downside_dev = np.std(downside_returns)
+        # Use ddof=1 to match implementation (sample standard deviation)
+        downside_dev = np.std(downside_returns, ddof=1) if len(downside_returns) > 1 else 0.0
 
         expected_sortino = mean_return / downside_dev if downside_dev > 0 else 10.0
         expected_sortino = np.clip(expected_sortino, -10.0, 10.0)

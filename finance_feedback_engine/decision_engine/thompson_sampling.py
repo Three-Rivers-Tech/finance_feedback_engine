@@ -46,6 +46,8 @@ from typing import Any, Dict, List, Optional
 
 from scipy.stats import beta
 
+from finance_feedback_engine.utils.file_io import FileIOError, FileIOManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,6 +105,9 @@ class ThompsonSamplingWeightOptimizer:
 
         # Persistence configuration
         self.persistence_path = persistence_path or "data/thompson_sampling_stats.json"
+
+        # Initialize FileIOManager for atomic file operations
+        self.file_io = FileIOManager()
 
         # Load existing stats if available
         self._load_stats()
@@ -272,10 +277,6 @@ class ThompsonSamplingWeightOptimizer:
         Uses atomic write pattern to prevent corruption.
         """
         try:
-            # Ensure directory exists
-            path = Path(self.persistence_path)
-            path.parent.mkdir(parents=True, exist_ok=True)
-
             # Prepare data for serialization
             data = {
                 "provider_stats": self.provider_stats,
@@ -283,17 +284,19 @@ class ThompsonSamplingWeightOptimizer:
                 "providers": self.providers,
             }
 
-            # Atomic write: write to temp file then rename
-            temp_path = str(path) + ".tmp"
-            with open(temp_path, "w") as f:
-                json.dump(data, f, indent=2)
-
-            # Atomic rename
-            os.replace(temp_path, str(path))
+            # Write atomically using FileIOManager
+            self.file_io.write_json(
+                self.persistence_path,
+                data,
+                atomic=True,
+                backup=False,  # No backup for stats updates (high frequency)
+                create_dirs=True,
+                indent=2,
+            )
 
             logger.debug(f"Thompson Sampling stats saved to {self.persistence_path}")
 
-        except Exception as e:
+        except FileIOError as e:
             logger.warning(f"Failed to save Thompson Sampling stats: {e}")
 
     def _load_stats(self) -> None:
@@ -303,17 +306,15 @@ class ThompsonSamplingWeightOptimizer:
         Merges loaded stats with any providers in init list that
         weren't in the saved file.
         """
-        path = Path(self.persistence_path)
-
-        if not path.exists():
-            logger.debug(
-                f"No existing Thompson Sampling stats at {self.persistence_path}"
-            )
-            return
-
         try:
-            with open(path, "r") as f:
-                data = json.load(f)
+            # Read with FileIOManager (returns {} if file doesn't exist)
+            data = self.file_io.read_json(self.persistence_path, default={})
+
+            if not data:
+                logger.debug(
+                    f"No existing Thompson Sampling stats at {self.persistence_path}"
+                )
+                return
 
             # Load provider stats
             if "provider_stats" in data:
@@ -337,7 +338,7 @@ class ThompsonSamplingWeightOptimizer:
                 f"{len(self.provider_stats)} providers"
             )
 
-        except Exception as e:
+        except FileIOError as e:
             logger.warning(f"Failed to load Thompson Sampling stats: {e}")
 
     def reset_provider(self, provider: str) -> None:

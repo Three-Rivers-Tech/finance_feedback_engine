@@ -21,7 +21,7 @@ from .exceptions import (
     ModelInstallationError,
     TradingError,
 )
-from .memory.portfolio_memory import PortfolioMemoryEngine
+from .memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from .monitoring.error_tracking import ErrorTracker
 from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
@@ -269,41 +269,41 @@ class FinanceFeedbackEngine:
 
         # Initialize portfolio memory engine
         memory_enabled = config.get("portfolio_memory", {}).get("enabled", False)
-        self.memory_engine: Optional[PortfolioMemoryEngine] = None
+        self.memory_engine: Optional[PortfolioMemoryEngineAdapter] = None
         if memory_enabled:
             # Auto-load persisted memory if exists
             memory_path = "data/memory/portfolio_memory.json"
             if os.path.exists(memory_path):
                 try:
-                    self.memory_engine = PortfolioMemoryEngine.load_from_disk(
+                    self.memory_engine = PortfolioMemoryEngineAdapter.load_from_disk(
                         memory_path
                     )
-                    logger.info(f"Loaded portfolio memory from {memory_path}")
+                    logger.info(f"Loaded portfolio memory from {memory_path} (using new adapter)")
                 except (FileNotFoundError, PermissionError) as e:
                     logger.warning(
                         f"Failed to load portfolio memory: {e}, starting fresh"
                     )
-                    self.memory_engine = PortfolioMemoryEngine(config)
+                    self.memory_engine = PortfolioMemoryEngineAdapter(config)
                 except FFEMemoryError as e:
                     logger.warning(
                         f"Failed to load portfolio memory due to memory error: {e}, starting fresh"
                     )
-                    self.memory_engine = PortfolioMemoryEngine(config)
+                    self.memory_engine = PortfolioMemoryEngineAdapter(config)
                 except (OSError, IOError) as e:
                     logger.warning(
                         f"IO error loading portfolio memory: {e}, starting fresh",
                         exc_info=True,
                     )
-                    self.memory_engine = PortfolioMemoryEngine(config)
+                    self.memory_engine = PortfolioMemoryEngineAdapter(config)
                 except Exception as e:
                     logger.warning(
                         f"Unexpected error loading portfolio memory: {e}, starting fresh",
                         exc_info=True,
                     )
-                    self.memory_engine = PortfolioMemoryEngine(config)
+                    self.memory_engine = PortfolioMemoryEngineAdapter(config)
             else:
-                self.memory_engine = PortfolioMemoryEngine(config)
-                logger.info("No persisted memory found, starting fresh")
+                self.memory_engine = PortfolioMemoryEngineAdapter(config)
+                logger.info("No persisted memory found, starting fresh (using new adapter)")
 
             logger.info("Portfolio Memory Engine enabled")
 

@@ -8,7 +8,7 @@ import { z } from 'zod';
 // URL validation schemas
 const httpUrlSchema = z.string().url().startsWith('http://');
 const httpsUrlSchema = z.string().url().startsWith('https://');
-const relativeUrlSchema = z.string().startsWith('/');
+const relativeUrlSchema = z.string().regex(/^\/|^$/);  // Allow empty string or paths starting with /
 
 // Create conditional URL schema based on environment
 const apiUrlSchema = z.union([

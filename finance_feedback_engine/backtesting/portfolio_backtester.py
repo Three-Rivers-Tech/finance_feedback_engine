@@ -22,7 +22,7 @@ from finance_feedback_engine.data_providers.historical_data_provider import (
     HistoricalDataProvider,
 )
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
-from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 logger = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ class PortfolioBacktester:
                 is_backtest=True,
             )
 
-        self.memory_engine = memory_engine or PortfolioMemoryEngine(config)
+        self.memory_engine = memory_engine or PortfolioMemoryEngineAdapter(config)
 
         # Portfolio configuration
         self.fee_rate = config.get("backtesting", {}).get("fee_rate", 0.001)  # 0.1%
