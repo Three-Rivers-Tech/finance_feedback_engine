@@ -416,7 +416,6 @@ class TestPositionRecovery:
         assert agent._startup_complete.is_set()
         assert len(agent._recovered_positions) == 0
 
-    @pytest.mark.skip(reason="Mock structure doesn't match platform_breakdowns format")
     @pytest.mark.asyncio
     async def test_position_recovery_with_futures_positions(
         self,
@@ -427,6 +426,8 @@ class TestPositionRecovery:
         mock_trading_platform,
     ):
         """Test position recovery with open futures positions."""
+        from unittest.mock import AsyncMock
+
         agent = TradingLoopAgent(
             config=minimal_config,
             engine=mock_engine,
@@ -435,21 +436,28 @@ class TestPositionRecovery:
             trading_platform=mock_trading_platform,
         )
 
-        # Mock portfolio with open position
-        mock_engine.get_portfolio_breakdown.return_value = {
-            "total_value_usd": 10000.0,
-            "futures_positions": [
-                {
-                    "product_id": "BTC-USD-PERP",
-                    "side": "LONG",
-                    "contracts": 1.5,
-                    "entry_price": 50000.0,
-                    "current_price": 51000.0,
-                    "unrealized_pnl": 1500.0,
-                    "leverage": 10,
+        # Mock async portfolio method with open position (using unified platform_breakdowns format)
+        mock_engine.get_portfolio_breakdown_async = AsyncMock(
+            return_value={
+                "total_value_usd": 10000.0,
+                "platform_breakdowns": {
+                    "coinbase": {
+                        "total_value_usd": 10000.0,
+                        "futures_positions": [
+                            {
+                                "product_id": "BTC-USD-PERP",
+                                "side": "LONG",
+                                "contracts": 1.5,
+                                "entry_price": 50000.0,
+                                "current_price": 51000.0,
+                                "unrealized_pnl": 1500.0,
+                                "leverage": 10,
+                            }
+                        ]
+                    }
                 }
-            ],
-        }
+            }
+        )
 
         await agent._recover_existing_positions()
 

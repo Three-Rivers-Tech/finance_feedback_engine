@@ -119,24 +119,115 @@ providers:
 # CRITICAL: All new features start as FALSE (disabled by default)
 # Enable features one at a time after thorough testing
 # See TDD_WORKFLOW.md for rollout protocol
+#
+# STATUS LEGEND:
+# [READY]    - Implemented, tested, awaiting user approval
+# [DEFERRED] - Planned, not implemented, post-MVP
+# [RESEARCH] - Experimental, no implementation timeline
+#
 features:
-  # Phase 1: Quick Wins (Week 1)
-  enhanced_slippage_model: false      # Realistic slippage with market hours & volume impact
-  thompson_sampling_weights: false    # Auto-optimize ensemble weights via Thompson Sampling
-  optuna_hyperparameter_search: false # Bayesian hyperparameter grid search with backtester
+  # ==========================================
+  # Phase 1: Quick Wins (Q1 2026 - Weeks 1-4)
+  # ==========================================
 
-  # Phase 2: Medium-Term (Weeks 2-4)
-  sentiment_veto: false               # Multi-LLM sentiment validation system
-  paper_trading_mode: false           # Live data, simulated execution
-  visual_reports: false               # Plotly/Matplotlib backtest visualizations
+  # [DEFERRED] Enhanced slippage modeling for realistic backtesting
+  # WHAT: Tiered slippage based on liquidity, market hours, order size
+  # WHY: Current 1bp fixed slippage unrealistic for large orders
+  # WHEN: Post-MVP after 100+ backtest runs validate baseline
+  # PREREQ: Historical order book data, volume profiles
+  # OWNER: Backtesting team
+  enhanced_slippage_model: false
 
-  # Phase 3: Advanced ML (Weeks 5-10)
-  rl_agent: false                     # Reinforcement Learning (PPO) decision agent
-  multi_agent_system: false           # Specialized agents (technical/fundamental/sentiment/risk/execution)
+  # [DEFERRED] Thompson Sampling for ensemble weight optimization
+  # WHAT: Auto-tune provider weights using multi-armed bandit (MAB)
+  # WHY: Manual weight tuning is time-consuming and suboptimal
+  # WHEN: Post-MVP after 500+ decisions with portfolio_memory enabled
+  # PREREQ: portfolio_memory.enabled=true, adaptive_learning=true
+  # OWNER: Decision engine team
+  # NOTE: Basic adaptive learning already enabled (learning_rate: 0.1)
+  thompson_sampling_weights: false
 
-  # Phase 4: Infrastructure (Weeks 11-12)
-  parallel_backtesting: false         # Multi-process hyperparameter optimization
-  limit_stop_orders: false            # Advanced order types beyond market orders
+  # [DEFERRED] Optuna hyperparameter search integration
+  # WHAT: Bayesian optimization for backtester parameters (stop-loss, take-profit, thresholds)
+  # WHY: Grid search is inefficient for high-dimensional parameter spaces
+  # WHEN: Q2 2026 after baseline backtest metrics established
+  # PREREQ: 30+ days historical data, compute resources for parallel trials
+  # OWNER: Optimization team
+  optuna_hyperparameter_search: false
+
+  # ==========================================
+  # Phase 2: Medium-Term (Q2 2026 - Weeks 5-12)
+  # ==========================================
+
+  # [DEFERRED] Multi-LLM sentiment veto system
+  # WHAT: Secondary sentiment validation layer (bull/bear consensus)
+  # WHY: Prevent execution on news-driven volatility without fundamental signal
+  # WHEN: Q2 2026 after sentiment_veto module implementation
+  # PREREQ: sentiment analysis API integration (Alpha Vantage NEWS_SENTIMENT)
+  # OWNER: Decision engine team
+  # RISK: Adds latency (200-500ms per veto check)
+  sentiment_veto: false
+
+  # [DEFERRED] Paper trading mode
+  # WHAT: Live data with simulated execution (no real capital risk)
+  # WHY: Test strategies in production environment before live capital
+  # WHEN: Q1 2026 (high priority for user onboarding)
+  # PREREQ: Mock platform enhancements, decision replay capability
+  # OWNER: Trading platforms team
+  # NOTE: Use 'mock' platform for basic paper trading now
+  paper_trading_mode: false
+
+  # [DEFERRED] Visual backtest reports (Plotly/Matplotlib)
+  # WHAT: Interactive charts (equity curve, drawdown, trade distribution)
+  # WHY: CLI-only output insufficient for strategy analysis
+  # WHEN: Q2 2026 after backtester stabilization
+  # PREREQ: Plotly/Matplotlib dependencies, HTML export support
+  # OWNER: Backtesting team
+  visual_reports: false
+
+  # ==========================================
+  # Phase 3: Advanced ML (Q3 2026 - Research)
+  # ==========================================
+
+  # [RESEARCH] Reinforcement Learning (RL) decision agent
+  # WHAT: PPO-based agent replacing LLM decision engine
+  # WHY: Potentially faster, more consistent than LLM prompting
+  # WHEN: Research phase, no production timeline
+  # PREREQ: Stable backtesting framework, 90+ days training data
+  # OWNER: Research team
+  # RISK: High - RL instability, overfitting, black-box decisions
+  # NOTE: Consider LLM fine-tuning as alternative (more explainable)
+  rl_agent: false
+
+  # [RESEARCH] Multi-agent system (specialized agents)
+  # WHAT: Separate agents for technical/fundamental/sentiment/risk/execution
+  # WHY: Domain-specific reasoning may outperform single LLM
+  # WHEN: Research phase, depends on rl_agent success
+  # PREREQ: Agent orchestration layer, consensus mechanism
+  # OWNER: Research team
+  # RISK: Coordination complexity, higher API costs
+  multi_agent_system: false
+
+  # ==========================================
+  # Phase 4: Infrastructure (Q4 2026+)
+  # ==========================================
+
+  # [DEFERRED] Parallel backtesting with multiprocessing
+  # WHAT: Distribute hyperparameter search across CPU cores
+  # WHY: Single-threaded backtesting slow for parameter sweeps
+  # WHEN: Q3 2026 after optuna integration
+  # PREREQ: Thread-safe data providers, shared decision cache
+  # OWNER: Infrastructure team
+  parallel_backtesting: false
+
+  # [DEFERRED] Limit and stop orders (advanced order types)
+  # WHAT: Support limit orders, stop-loss orders, trailing stops
+  # WHY: Market orders suffer from slippage on large positions
+  # WHEN: Q4 2026 (requires exchange API support verification)
+  # PREREQ: Platform-specific implementations (Coinbase, Oanda)
+  # OWNER: Trading platforms team
+  # NOTE: Current implementation uses market orders only
+  limit_stop_orders: false
 
 # Backtesting Configuration (Enhanced Slippage Feature)
 backtesting:
@@ -290,7 +381,33 @@ monitoring:
   # Include macro indicators in market analysis
   include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
 
-  # Enable live dashboard view for autonomous agent
+  # ==========================================
+  # Live Dashboard View [DEFERRED]
+  # ==========================================
+  # STATUS: [DEFERRED] Post-MVP enhancement (Q1 2026)
+  #
+  # WHAT: Real-time Rich TUI dashboard for autonomous agent monitoring
+  #       - Active trades, positions, P&L
+  #       - Market pulse (6-timeframe technical indicators)
+  #       - Recent AI decisions with reasoning
+  #       - Performance attribution per provider
+  #
+  # WHY: CLI-only interface insufficient for monitoring autonomous agent
+  #      Live view provides immediate feedback on agent state
+  #
+  # WHEN: Q1 2026 (1-2 weeks implementation)
+  #
+  # PREREQ:
+  #       - Autonomous agent stable (agent.autonomous.enabled=true)
+  #       - TradeMonitor tested and working (monitoring.enabled=true)
+  #       - Rich TUI library integration complete
+  #
+  # OWNER: Monitoring team
+  #
+  # RISK: LOW - purely observational, no execution impact
+  #
+  # ALTERNATIVE: Use `python main.py dashboard` for static snapshots
+  #
   enable_live_view: false
 
   # Live dashboard configuration
@@ -529,11 +646,44 @@ agent:
     - EURUSD
 
 # ============================================
-# Autonomous Pair Selection System
+# Autonomous Pair Selection System [DEFERRED]
 # ============================================
-# Research-backed pair selection combining statistical analysis and LLM voting
-# Methods: Sortino Ratio, Correlation Analysis, GARCH Volatility Forecasting
-# Learning: Thompson Sampling adapts statistical vs LLM weight balance
+# STATUS: [DEFERRED] Post-MVP feature (Q3 2026+)
+#
+# WHAT: Research-backed pair selection combining statistical analysis and LLM voting
+#       Methods: Sortino Ratio, Correlation Analysis, GARCH Volatility Forecasting
+#       Learning: Thompson Sampling adapts statistical vs LLM weight balance
+#
+# WHY: Manual pair selection doesn't scale and misses opportunities
+#      Automated rotation can improve Sharpe ratio and diversification
+#
+# WHEN: Q3 2026 after:
+#       1. 90+ days trading history with current pairs
+#       2. Thompson sampling validation on static pairs
+#       3. Backtester validation of rotation strategy
+#
+# PREREQ:
+#       - Stable trading on 3-5 static pairs (agent.asset_pairs)
+#       - GARCH volatility forecasting module tested
+#       - LLM ensemble voting proven reliable (ensemble.adaptive_learning=true)
+#       - Discovery filters tuned (volume, spread, listing age thresholds)
+#
+# OWNER: Research team + Trading platforms team
+#
+# RISK: HIGH
+#       - Adds new pairs without human vetting (manipulation risk)
+#       - Auto-discovery may select low-liquidity pairs (slippage risk)
+#       - Frequent rotation increases trading fees
+#       - Thompson sampling may over-rotate in volatile markets
+#
+# SAFEGUARDS:
+#       - Whitelist mode enforced by default (whitelist_enabled: true)
+#       - Discovery filters tuned conservatively (volume > 50M USD)
+#       - Position locking prevents closing profitable positions
+#       - Rotation cooldown prevents thrashing
+#
+# RECOMMENDATION: Keep disabled until Q3 2026, use manual agent.asset_pairs
+#
 pair_selection:
   # Enable autonomous pair selection (IMPORTANT: Start disabled for safety)
   enabled: false

@@ -25,6 +25,9 @@ class TestUnifiedPlatformRouting:
             "decision_id": "test-001",
         }
         platform.get_account_info.return_value = {"status": "active"}
+        # Prevent Mock from creating auto-mocks for circuit breaker checks
+        platform.get_execute_breaker.return_value = None
+        platform.set_execute_breaker = Mock()
         return platform
 
     @pytest.fixture
@@ -38,6 +41,9 @@ class TestUnifiedPlatformRouting:
             "decision_id": "test-002",
         }
         platform.get_account_info.return_value = {"status": "active"}
+        # Prevent Mock from creating auto-mocks for circuit breaker checks
+        platform.get_execute_breaker.return_value = None
+        platform.set_execute_breaker = Mock()
         return platform
 
     @pytest.fixture
