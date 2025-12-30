@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pytest
 from requests.exceptions import ConnectionError, RequestException, Timeout
 
+from finance_feedback_engine.exceptions import TradingError
 from finance_feedback_engine.trading_platforms.coinbase_platform import (
     CoinbaseAdvancedPlatform,
 )
@@ -295,13 +296,13 @@ class TestCoinbasePortfolioBreakdown:
     """Tests for Coinbase portfolio breakdown error handling."""
 
     def test_get_portfolio_breakdown_import_error(self, coinbase_platform):
-        """Should raise ValueError when library not installed."""
+        """Should raise TradingError when library not installed."""
         coinbase_platform._client = None
 
         with patch.object(
             coinbase_platform, "_get_client", side_effect=ImportError("No module")
         ):
-            with pytest.raises(ValueError, match="Coinbase Advanced library required"):
+            with pytest.raises(TradingError, match="Coinbase Advanced library required"):
                 coinbase_platform.get_portfolio_breakdown()
 
     def test_get_portfolio_breakdown_network_error(
@@ -393,11 +394,11 @@ class TestOandaConnectionErrors:
     @patch("oandapyV20.API")
     def test_client_initialization_import_error(self, mock_api, oanda_credentials):
         """Should raise ValueError when oandapyV20 not available."""
+        platform = OandaPlatform(oanda_credentials)
         with patch(
             "builtins.__import__",
             side_effect=ImportError("No module named 'oandapyV20'"),
         ):
-            platform = OandaPlatform(oanda_credentials)
             with pytest.raises(ValueError, match="oandapyV20 library not available"):
                 platform._get_client()
 

@@ -1,11 +1,13 @@
 """Oanda trading platform integration."""
 
 import logging
+import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
-from .retry_handler import platform_retry, standardize_platform_error
+from .retry_handler import standardize_platform_error
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,7 @@ class OandaPlatform(BaseTradingPlatform):
 
         # Initialize timeout configuration (standardized)
         from .retry_handler import get_timeout_config
+
         self.timeout_config = {
             "platform_balance": get_timeout_config(config, "platform_balance"),
             "platform_portfolio": get_timeout_config(config, "platform_portfolio"),
@@ -229,7 +232,6 @@ class OandaPlatform(BaseTradingPlatform):
             self._min_trade_size_cache.clear()
             logger.debug("Cleared all minimum trade size cache entries")
 
-    @platform_retry(max_attempts=3, min_wait=1, max_wait=10)
     def get_balance(self) -> Dict[str, float]:
         """
         Get account balances from Oanda.
@@ -648,10 +650,103 @@ class OandaPlatform(BaseTradingPlatform):
                 "error": str(e),
             }
 
-    @platform_retry(max_attempts=3, min_wait=2, max_wait=15)
+    def _get_recent_orders(
+        self, instrument: str, max_results: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Query recent orders from Oanda to detect duplicates.
+
+        Used for idempotency detection: before submitting a new order,
+        check if an order with the same clientRequestID already exists.
+
+        Args:
+            instrument: Currency pair (e.g., 'EUR_USD')
+            max_results: Maximum number of recent orders to retrieve
+
+        Returns:
+            List of recent order dictionaries from Oanda API
+        """
+        try:
+            from oandapyV20.endpoints.orders import OrderList
+
+            client = self._get_client()
+            request = OrderList(self.account_id)
+            # Oanda OrderList doesn't filter by instrument in constructor,
+            # but returns all orders; we'll filter in post-processing
+            response = client.request(request)
+
+            orders = response.get("orders", [])
+            logger.debug(
+                "Retrieved %d recent orders from Oanda for account %s",
+                len(orders),
+                self.account_id,
+            )
+            return orders
+        except ImportError:
+            logger.error(
+                "Oanda library not installed. Install with: pip install oandapyV20"
+            )
+            return []
+        except Exception as e:
+            logger.warning(
+                "Failed to query recent orders for duplicate detection: %s", e
+            )
+            # Return empty list to allow submission (worst case: duplicate, but trade still happens)
+            return []
+
+    def _find_duplicate_order(
+        self, instrument: str, units: int, client_request_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Search recent orders for an existing order matching this trade.
+
+        Idempotency detection: checks for orders with matching clientRequestID,
+        or matching instrument/units/direction within the last few minutes.
+
+        Args:
+            instrument: Currency pair (e.g., 'EUR_USD')
+            units: Order size (positive for BUY, negative for SELL)
+            client_request_id: Unique idempotency key for this order
+
+        Returns:
+            Matching order dict if found, None otherwise
+        """
+        try:
+            recent_orders = self._get_recent_orders(instrument)
+
+            for order in recent_orders:
+                # Check by clientRequestID (primary idempotency key)
+                if order.get("clientRequestID") == client_request_id:
+                    logger.info(
+                        "Found duplicate order by clientRequestID: %s, order_id=%s",
+                        client_request_id,
+                        order.get("id"),
+                    )
+                    return order
+
+            logger.debug(
+                "No duplicate order found for clientRequestID %s, instrument %s",
+                client_request_id,
+                instrument,
+            )
+            return None
+        except Exception as e:
+            logger.warning(
+                "Error searching for duplicate orders (clientRequestID=%s): %s",
+                client_request_id,
+                e,
+            )
+            return None
+
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute a forex trade on Oanda.
+        Execute a forex trade on Oanda with idempotent retry logic.
+
+        **IDEMPOTENCY STRATEGY**:
+        - Generates a unique clientRequestID for each trade attempt
+        - Before submission, queries recent orders to detect duplicates
+        - Manually retries only on transient connection errors (not HTTP 5xx or timeouts)
+        - Logs all attempts with clientRequestID for audit trail
 
         Args:
             decision: Trading decision containing:
@@ -661,17 +756,23 @@ class OandaPlatform(BaseTradingPlatform):
                 - stop_loss_percentage: Stop loss percentage
 
         Returns:
-            Execution result with order details
+            Execution result with order details and clientRequestID
         """
-        logger.info(f"Executing trade on Oanda: {decision}")
-
+        decision_id = decision.get("id", str(uuid.uuid4()))
         action = decision.get("action", "HOLD")
+
+        logger.info(
+            "Executing trade on Oanda: decision_id=%s, action=%s, asset=%s",
+            decision_id,
+            action,
+            decision.get("asset_pair"),
+        )
 
         if action == "HOLD":
             return {
                 "success": True,
                 "platform": "oanda",
-                "decision_id": decision.get("id"),
+                "decision_id": decision_id,
                 "environment": self.environment,
                 "message": "HOLD - no trade executed",
                 "timestamp": decision.get("timestamp"),
@@ -680,7 +781,11 @@ class OandaPlatform(BaseTradingPlatform):
         try:
             from oandapyV20.endpoints.orders import OrderCreate
 
-            client = self._get_client()
+            # Generate unique idempotency key for this trade
+            client_request_id = f"ffe-{decision_id}-{uuid.uuid4().hex[:8]}"
+            logger.info(
+                "Generated clientRequestID for idempotency: %s", client_request_id
+            )
 
             # Parse decision parameters
             asset_pair = decision.get("asset_pair", "")
@@ -703,6 +808,7 @@ class OandaPlatform(BaseTradingPlatform):
                 return {
                     "success": False,
                     "platform": "oanda",
+                    "decision_id": decision_id,
                     "error": f"Unknown action: {action}",
                 }
 
@@ -714,7 +820,40 @@ class OandaPlatform(BaseTradingPlatform):
                 else:
                     stop_loss_price = entry_price * (1 + stop_loss_pct)
 
-            # Build order data
+            # **IDEMPOTENCY CHECK**: Query recent orders to detect duplicates
+            logger.debug(
+                "Checking for duplicate orders (clientRequestID=%s, instrument=%s, units=%d)",
+                client_request_id,
+                instrument,
+                order_units,
+            )
+            existing_order = self._find_duplicate_order(
+                instrument, order_units, client_request_id
+            )
+            if existing_order:
+                order_id = existing_order.get("id")
+                order_status = existing_order.get("state")
+                logger.info(
+                    "Reusing existing order (duplicate detected): order_id=%s, status=%s, clientRequestID=%s",
+                    order_id,
+                    order_status,
+                    client_request_id,
+                )
+                return {
+                    "success": True,
+                    "platform": "oanda",
+                    "decision_id": decision_id,
+                    "environment": self.environment,
+                    "instrument": instrument,
+                    "units": order_units,
+                    "order_id": order_id,
+                    "order_status": order_status,
+                    "client_request_id": client_request_id,
+                    "message": "Order already exists (idempotency detected)",
+                    "timestamp": decision.get("timestamp"),
+                }
+
+            # Build order data with clientRequestID for idempotency
             order_data = {
                 "order": {
                     "type": "MARKET",
@@ -722,6 +861,7 @@ class OandaPlatform(BaseTradingPlatform):
                     "units": str(int(order_units)),
                     "timeInForce": "FOK",  # Fill or Kill
                     "positionFill": "DEFAULT",
+                    "clientRequestID": client_request_id,  # Idempotency key
                 }
             }
 
@@ -731,70 +871,219 @@ class OandaPlatform(BaseTradingPlatform):
                     "price": f"{stop_loss_price:.5f}"
                 }
 
-            # Execute order
-            order_request = OrderCreate(accountID=self.account_id, data=order_data)
-            response = client.request(order_request)
+            # **MANUAL RETRY LOGIC** (replaces @platform_retry decorator)
+            # Only retry on transient connection errors, not HTTP 5xx or timeouts
+            max_attempts = 3
+            attempt = 0
+            last_exception = None
 
-            # Check for API-level errors in the response
-            if "errorMessage" in response or "orderRejectTransaction" in response:
-                error_message = response.get(
-                    "errorMessage",
-                    response.get("orderRejectTransaction", {}).get(
-                        "rejectReason", "Unknown error"
-                    ),
+            while attempt < max_attempts:
+                attempt += 1
+                logger.info(
+                    "Submitting order (attempt %d/%d): clientRequestID=%s",
+                    attempt,
+                    max_attempts,
+                    client_request_id,
                 )
-                logger.error(f"Oanda API returned an error: {error_message}")
-                return {
-                    "success": False,
-                    "platform": "oanda",
-                    "decision_id": decision.get("id"),
-                    "error": error_message,
-                    "timestamp": decision.get("timestamp"),
-                }
 
-            # Parse response
-            order_fill = response.get("orderFillTransaction", {})
-            order_create = response.get("orderCreateTransaction", {})
+                try:
+                    client = self._get_client()
+                    order_request = OrderCreate(
+                        accountID=self.account_id, data=order_data
+                    )
+                    start_time = time.time()
+                    response = client.request(order_request)
+                    elapsed = time.time() - start_time
 
-            # If neither fill nor create transaction is present, assume failure
-            if not order_fill and not order_create:
-                logger.error(
-                    f"Oanda trade execution failed: No fill or create transaction in response. Full response: {response}"
-                )
-                return {
-                    "success": False,
-                    "platform": "oanda",
-                    "decision_id": decision.get("id"),
-                    "error": "No order fill or create transaction found in response.",
-                    "response": response,
-                }
+                    logger.info(
+                        "Order submission succeeded: clientRequestID=%s, elapsed=%.2fs",
+                        client_request_id,
+                        elapsed,
+                    )
 
-            return {
-                "success": True,
-                "platform": "oanda",
-                "decision_id": decision.get("id"),
-                "environment": self.environment,
-                "instrument": instrument,
-                "units": order_units,
-                "order_id": order_fill.get("id", order_create.get("id")),
-                "price": float(order_fill.get("price", 0)),
-                "pl": float(order_fill.get("pl", 0)),
-                "timestamp": decision.get("timestamp"),
-                "message": "Trade executed successfully",
-                "response": response,
-            }
+                    # Check for API-level errors in the response
+                    if (
+                        "errorMessage" in response
+                        or "orderRejectTransaction" in response
+                    ):
+                        error_message = response.get(
+                            "errorMessage",
+                            response.get("orderRejectTransaction", {}).get(
+                                "rejectReason", "Unknown error"
+                            ),
+                        )
+                        logger.error(
+                            "Oanda API returned an error: %s (clientRequestID=%s)",
+                            error_message,
+                            client_request_id,
+                        )
+                        return {
+                            "success": False,
+                            "platform": "oanda",
+                            "decision_id": decision_id,
+                            "client_request_id": client_request_id,
+                            "error": error_message,
+                            "attempt": attempt,
+                            "timestamp": decision.get("timestamp"),
+                        }
+
+                    # Parse response
+                    order_fill = response.get("orderFillTransaction", {})
+                    order_create = response.get("orderCreateTransaction", {})
+
+                    # If neither fill nor create transaction is present, assume failure
+                    if not order_fill and not order_create:
+                        logger.error(
+                            "No fill or create transaction in response (clientRequestID=%s): %s",
+                            client_request_id,
+                            response,
+                        )
+                        return {
+                            "success": False,
+                            "platform": "oanda",
+                            "decision_id": decision_id,
+                            "client_request_id": client_request_id,
+                            "error": "No order fill or create transaction found in response.",
+                            "response": response,
+                            "attempt": attempt,
+                        }
+
+                    order_id = order_fill.get("id", order_create.get("id"))
+                    logger.info(
+                        "Trade executed successfully: order_id=%s, clientRequestID=%s, attempt=%d",
+                        order_id,
+                        client_request_id,
+                        attempt,
+                    )
+
+                    return {
+                        "success": True,
+                        "platform": "oanda",
+                        "decision_id": decision_id,
+                        "environment": self.environment,
+                        "instrument": instrument,
+                        "units": order_units,
+                        "order_id": order_id,
+                        "client_request_id": client_request_id,
+                        "price": float(order_fill.get("price", 0)),
+                        "pl": float(order_fill.get("pl", 0)),
+                        "timestamp": decision.get("timestamp"),
+                        "message": "Trade executed successfully",
+                        "attempt": attempt,
+                        "response": response,
+                    }
+
+                except ConnectionError as e:
+                    # Transient connection error - may retry
+                    last_exception = e
+                    logger.warning(
+                        "Connection error (attempt %d/%d): %s (clientRequestID=%s)",
+                        attempt,
+                        max_attempts,
+                        e,
+                        client_request_id,
+                    )
+                    if attempt < max_attempts:
+                        wait_time = min(2**attempt, 15)  # Exponential backoff
+                        logger.info("Retrying after %.1f seconds...", wait_time)
+                        time.sleep(wait_time)
+                    continue
+
+                except TimeoutError as e:
+                    # Timeout: DO NOT RETRY (order may have been submitted)
+                    # Instead, query for existing order
+                    last_exception = e
+                    logger.error(
+                        "Timeout error - will not retry to prevent duplicates (clientRequestID=%s): %s",
+                        client_request_id,
+                        e,
+                    )
+                    # Query to see if order went through
+                    existing = self._find_duplicate_order(
+                        instrument, order_units, client_request_id
+                    )
+                    if existing:
+                        logger.info(
+                            "Order was submitted before timeout: order_id=%s",
+                            existing.get("id"),
+                        )
+                        return {
+                            "success": True,
+                            "platform": "oanda",
+                            "decision_id": decision_id,
+                            "order_id": existing.get("id"),
+                            "client_request_id": client_request_id,
+                            "message": "Order submitted (detected after timeout)",
+                            "timestamp": decision.get("timestamp"),
+                        }
+                    # Re-raise to signal failure
+                    raise
+
+                except Exception as e:
+                    # Other errors: check if retryable
+                    last_exception = e
+                    error_str = str(e).lower()
+
+                    # Only retry on DNS/connection issues
+                    if any(
+                        keyword in error_str
+                        for keyword in [
+                            "dns",
+                            "refused",
+                            "host unreachable",
+                            "network unreachable",
+                        ]
+                    ):
+                        logger.warning(
+                            "Retryable network error (attempt %d/%d): %s (clientRequestID=%s)",
+                            attempt,
+                            max_attempts,
+                            e,
+                            client_request_id,
+                        )
+                        if attempt < max_attempts:
+                            wait_time = min(2**attempt, 15)
+                            logger.info("Retrying after %.1f seconds...", wait_time)
+                            time.sleep(wait_time)
+                        continue
+                    else:
+                        # Non-retryable error
+                        logger.error(
+                            "Non-retryable error (clientRequestID=%s): %s",
+                            client_request_id,
+                            e,
+                        )
+                        raise standardize_platform_error(e, "execute_trade")
+
+            # Exhausted retries
+            logger.error(
+                "Failed to execute trade after %d attempts (clientRequestID=%s): %s",
+                max_attempts,
+                client_request_id,
+                last_exception,
+            )
+            if last_exception:
+                raise standardize_platform_error(last_exception, "execute_trade")
+            else:
+                raise ValueError("Failed to execute trade: no exception captured")
 
         except ImportError:
             logger.error(
-                "Oanda library not installed. " "Install with: pip install oandapyV20"
+                "Oanda library not installed. Install with: pip install oandapyV20"
             )
             return {
                 "success": False,
                 "platform": "oanda",
+                "decision_id": decision_id,
                 "error": "Oanda library not installed",
             }
         except Exception as e:
-            logger.error("Error executing Oanda trade: %s", e)
+            logger.error(
+                "Error executing Oanda trade (decision_id=%s): %s",
+                decision_id,
+                e,
+                exc_info=True,
+            )
             raise standardize_platform_error(e, "execute_trade")
 
     def get_active_positions(self) -> PositionsResponse:

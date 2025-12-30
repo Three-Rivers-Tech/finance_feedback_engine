@@ -992,7 +992,6 @@ def config_editor(ctx, output):
 
 
 @cli.command(name="validate-config")
-@cli.command(name="validate-config")
 @click.option(
     "--config-path",
     "-c",

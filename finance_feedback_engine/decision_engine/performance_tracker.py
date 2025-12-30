@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from finance_feedback_engine.utils.file_io import FileIOError, FileIOManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +32,14 @@ class PerformanceTracker:
         """
         self.config = config
         self.learning_rate = learning_rate
+
+        # Initialize FileIOManager for atomic file operations
+        self.file_io = FileIOManager()
+
+        # Set up history path
+        storage_path = self.config.get("persistence", {}).get("storage_path", "data")
+        self.history_path = Path(storage_path) / "ensemble_history.json"
+
         self.performance_history = self._load_performance_history()
 
     def update_provider_performance(
@@ -147,26 +157,24 @@ class PerformanceTracker:
 
     def _load_performance_history(self) -> Dict[str, Any]:
         """Load provider performance history from disk."""
-        storage_path = self.config.get("persistence", {}).get("storage_path", "data")
-        history_path = Path(storage_path) / "ensemble_history.json"
-
-        if history_path.exists():
-            try:
-                with open(history_path, "r") as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load performance history: {e}")
-
-        return {}
+        try:
+            # Read with FileIOManager (returns {} if file doesn't exist)
+            return self.file_io.read_json(self.history_path, default={})
+        except FileIOError as e:
+            logger.warning(f"Failed to load performance history: {e}")
+            return {}
 
     def _save_performance_history(self) -> None:
         """Save provider performance history to disk."""
-        storage_path = self.config.get("persistence", {}).get("storage_path", "data")
-        history_path = Path(storage_path) / "ensemble_history.json"
-
         try:
-            history_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(history_path, "w") as f:
-                json.dump(self.performance_history, f, indent=2)
-        except Exception as e:
+            # Write atomically using FileIOManager
+            self.file_io.write_json(
+                self.history_path,
+                self.performance_history,
+                atomic=True,
+                backup=False,  # No backup for high-frequency updates
+                create_dirs=True,
+                indent=2,
+            )
+        except FileIOError as e:
             logger.error(f"Failed to save performance history: {e}")

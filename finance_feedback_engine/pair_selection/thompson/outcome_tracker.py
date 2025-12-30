@@ -107,21 +107,22 @@ class PairSelectionOutcomeTracker:
             "outcomes": {},  # Will be populated as trades complete
         }
 
-        # Store in memory
-        self.selection_history[selection_id] = record
-
-        # Persist to disk (raise_on_error=True ensures persistence is tracked)
         try:
+            # Store in memory
+            self.selection_history[selection_id] = record
+
+            # Persist to disk (raise_on_error=True ensures persistence is tracked)
             self._save_history(raise_on_error=True)
+
         except Exception as e:
+            # Rollback in-memory mutation to restore consistency
+            self.selection_history.pop(selection_id, None)
+
             logger.error(
                 f"Failed to persist selection {selection_id} to disk; "
-                f"data may be lost on restart: {e}"
+                f"in-memory state reverted to prevent corruption: {e}"
             )
-            # Still return selection_id, but warn caller that persistence failed
-            raise ValueError(
-                f"Failed to persist selection record to disk: {e}"
-            ) from e
+            raise ValueError(f"Failed to persist selection record to disk: {e}") from e
 
         logger.info(
             f"Recorded selection {selection_id}: "
@@ -152,26 +153,43 @@ class PairSelectionOutcomeTracker:
             selection = self.selection_history[sel_id]
 
             if asset_pair in selection["selected_pairs"]:
-                # Update outcome
-                selection["outcomes"][asset_pair] = {
-                    "decision_id": getattr(trade_outcome, "decision_id", "unknown"),
-                    "realized_pnl": getattr(trade_outcome, "realized_pnl", 0.0),
-                    "was_profitable": getattr(trade_outcome, "was_profitable", False),
-                    "holding_period_hours": getattr(
-                        trade_outcome, "holding_period_hours", 0.0
-                    ),
-                    "entry_price": getattr(trade_outcome, "entry_price", 0.0),
-                    "exit_price": getattr(trade_outcome, "exit_price", 0.0),
-                    "recorded_at": datetime.utcnow().isoformat() + "Z",
-                }
+                # Store previous outcome value (if exists) to enable rollback on failure
+                previous_outcome = selection["outcomes"].get(asset_pair)
 
-                # Persist to disk (raise_on_error=True ensures persistence is tracked)
                 try:
+                    # Build new outcome record
+                    new_outcome = {
+                        "decision_id": getattr(trade_outcome, "decision_id", "unknown"),
+                        "realized_pnl": getattr(trade_outcome, "realized_pnl", 0.0),
+                        "was_profitable": getattr(
+                            trade_outcome, "was_profitable", False
+                        ),
+                        "holding_period_hours": getattr(
+                            trade_outcome, "holding_period_hours", 0.0
+                        ),
+                        "entry_price": getattr(trade_outcome, "entry_price", 0.0),
+                        "exit_price": getattr(trade_outcome, "exit_price", 0.0),
+                        "recorded_at": datetime.utcnow().isoformat() + "Z",
+                    }
+
+                    # Mutate in-memory state
+                    selection["outcomes"][asset_pair] = new_outcome
+
+                    # Persist to disk (raise_on_error=True ensures persistence is tracked)
                     self._save_history(raise_on_error=True)
+
                 except Exception as e:
+                    # Rollback in-memory mutation to restore consistency
+                    if previous_outcome is None:
+                        # Was a new entry, remove it
+                        selection["outcomes"].pop(asset_pair, None)
+                    else:
+                        # Restore previous value
+                        selection["outcomes"][asset_pair] = previous_outcome
+
                     logger.error(
                         f"Failed to persist trade outcome for {asset_pair} to disk; "
-                        f"Thompson Sampling feedback loop may be corrupted: {e}"
+                        f"in-memory state reverted to prevent corruption: {e}"
                     )
                     raise ValueError(
                         f"Failed to persist trade outcome to disk: {e}"
@@ -368,8 +386,8 @@ class PairSelectionOutcomeTracker:
         """
         try:
             # Write to temp file first, then atomically rename
-            temp_file = self.history_file.with_suffix('.tmp')
-            with open(temp_file, 'w') as f:
+            temp_file = self.history_file.with_suffix(".tmp")
+            with open(temp_file, "w") as f:
                 json.dump(self.selection_history, f, indent=2)
             temp_file.replace(self.history_file)
 

@@ -12,18 +12,21 @@ Provides endpoints for:
 
 import asyncio
 import copy
+import json
 import logging
+import time
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from ..agent.config import TradingAgentConfig
 from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
-from ..memory.portfolio_memory import PortfolioMemoryEngine
+from ..memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from ..monitoring.trade_monitor import TradeMonitor
 from .dependencies import get_engine, verify_api_key
 
@@ -189,7 +192,7 @@ async def start_agent(
             take_profit = float(request.take_profit or 0.0)
             stop_loss = float(request.stop_loss or 0.0)
 
-            portfolio_memory = engine.memory_engine or PortfolioMemoryEngine(
+            portfolio_memory = engine.memory_engine or PortfolioMemoryEngineAdapter(
                 config_snapshot
             )
             engine.memory_engine = portfolio_memory
@@ -385,16 +388,18 @@ async def pause_agent() -> AgentStatusResponse:
         async with _agent_lock:
             if _agent_instance is None or _agent_task is None or _agent_task.done():
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="Agent is not running"
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Agent is not running - cannot pause an agent that isn't started"
                 )
 
             # Set flag to pause (stop accepting new decisions)
             # The agent will continue to monitor existing positions
-            if hasattr(_agent_instance, "is_running"):
-                _agent_instance.is_running = False
-
-            # Store pause state
-            _agent_instance._paused = True
+            # Use public pause() method instead of directly setting attributes
+            if not _agent_instance.pause():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Failed to pause agent: agent is not running",
+                )
 
             logger.info("✅ Trading agent paused")
 
@@ -442,20 +447,23 @@ async def resume_agent() -> AgentStatusResponse:
         async with _agent_lock:
             if _agent_instance is None or _agent_task is None or _agent_task.done():
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Agent is not running or paused",
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Agent is not running - cannot resume an agent that isn't started",
                 )
 
-            # Check if agent was paused
-            if not _agent_instance._paused:
+            # Check if agent was paused (use safe getattr with default False)
+            if not getattr(_agent_instance, "_paused", False):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Agent is not paused",
                 )
 
-            # Resume agent
-            _agent_instance.is_running = True
-            _agent_instance._paused = False
+            # Resume agent using public method
+            if not _agent_instance.resume():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Failed to resume agent: agent is not paused",
+                )
 
             logger.info("✅ Trading agent resumed")
 
@@ -549,6 +557,77 @@ async def get_agent_status(
     except Exception as e:
         logger.error(f"Error getting agent status: {e}", exc_info=True)
         return AgentStatusResponse(state=BotState.ERROR, error_message=str(e))
+
+
+@bot_control_router.get("/stream")
+async def stream_agent_events(
+    request: Request,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> StreamingResponse:
+    """Server-Sent Events stream for live agent status and dashboard events."""
+
+    async def event_generator() -> AsyncIterator[str]:
+        last_status_sent = 0.0
+
+        while True:
+            # Stop streaming when client disconnects
+            if await request.is_disconnected():
+                logger.info("Client disconnected from /api/v1/bot/stream")
+                break
+
+            event_payload = None
+
+            # Drain dashboard queue (non-blocking with timeout)
+            if _agent_instance is not None and hasattr(
+                _agent_instance, "_dashboard_event_queue"
+            ):
+                try:
+                    loop = asyncio.get_running_loop()
+                    queue_item = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None, _agent_instance._dashboard_event_queue.get
+                        ),
+                        timeout=3.0,
+                    )
+                    event_payload = {
+                        "event": queue_item.get("type", "event"),
+                        "data": queue_item,
+                    }
+                except asyncio.TimeoutError:
+                    # No new events within timeout window
+                    event_payload = None
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(
+                        f"Dashboard event stream read failed: {e}", exc_info=True
+                    )
+                    event_payload = None
+
+            # If no queue event, emit periodic status + heartbeat
+            if event_payload is None:
+                now = time.time()
+                if now - last_status_sent >= 5:
+                    status_payload = await get_agent_status(engine)
+                    status_data = (
+                        status_payload.model_dump()
+                        if hasattr(status_payload, "model_dump")
+                        else status_payload.__dict__
+                    )
+                    event_payload = {"event": "status", "data": status_data}
+                    last_status_sent = now
+                else:
+                    event_payload = {"event": "heartbeat", "data": {}}
+
+            yield f"data: {json.dumps(event_payload, default=str)}\n\n"
+
+            # Small sleep to avoid tight loop when idle
+            await asyncio.sleep(0.5)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+    }
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 
 
 @bot_control_router.patch("/config")
