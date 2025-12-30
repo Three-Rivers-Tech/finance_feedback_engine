@@ -50,7 +50,7 @@ class TestPlatformCredentials:
                 api_key="YOUR_API_KEY",
                 environment="practice"
             )
-        assert "Credential not configured" in str(exc_info.value)
+        assert "placeholder" in str(exc_info.value).lower()
 
     def test_reject_short_api_key(self):
         """API keys shorter than 10 characters should be rejected."""

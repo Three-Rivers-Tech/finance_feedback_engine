@@ -1,0 +1,72 @@
+groups:
+  - name: agent-control-alerts
+    rules:
+      - alert: AgentDown
+        expr: up{job="ffe-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: ffe-agent
+        annotations:
+          summary: "Agent API is down"
+          description: "The FastAPI backend for the trading agent is unreachable for more than 1 minute."
+
+      - alert: CircuitBreakerOpen
+        expr: max by (service) (ffe_circuit_breaker_state) == 1
+        for: 2m
+        labels:
+          severity: warning
+          service: ffe-platform
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.service }}"
+          description: "Circuit breaker is OPEN for {{ $labels.service }} for over 2 minutes, blocking executions."
+
+      - alert: ProviderFailureRateHigh
+        expr: (sum by (provider) (rate(ffe_provider_requests_total{status="failure"}[5m]))) / clamp_min(sum by (provider) (rate(ffe_provider_requests_total[5m])), 1) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+          service: ffe-providers
+        annotations:
+          summary: "High provider failure rate ({{ $labels.provider }})"
+          description: "Failure rate for provider {{ $labels.provider }} exceeded 10% over 5m."
+
+      - alert: DecisionLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(ffe_decision_latency_seconds_bucket[5m]))) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: ffe-decision-engine
+        annotations:
+          summary: "P95 decision latency > 10s"
+          description: "Decision generation latency (p95) exceeded 10 seconds over the last 5 minutes."
+
+      - alert: PortfolioDropFast
+        expr: ((sum by (platform) (ffe_portfolio_value_dollars)) - (sum by (platform) (ffe_portfolio_value_dollars offset 1h))) / clamp_min(sum by (platform) (ffe_portfolio_value_dollars offset 1h), 1) < -0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: ffe-portfolio
+        annotations:
+          summary: "Portfolio value dropped >5% in 1h"
+          description: "Portfolio value declined more than 5% over the last hour for platform {{ $labels.platform }}."
+
+      - alert: ActiveTradesExceeded
+        expr: max_over_time(ffe_active_trades_total[1m]) > 2
+        for: 2m
+        labels:
+          severity: critical
+          service: ffe-risk
+        annotations:
+          summary: "Active trades exceeded safety limit"
+          description: "Active trades exceeded the safety cap of 2 across the last 2 minutes."
+
+      - alert: DecisionConfidenceLow
+        expr: avg_over_time(ffe_decision_confidence[15m]) < 50
+        for: 10m
+        labels:
+          severity: warning
+          service: ffe-decision-engine
+        annotations:
+          summary: "Average decision confidence < 50%"
+          description: "Rolling 15-minute average of decision confidence fell below 50%."

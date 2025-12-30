@@ -17,7 +17,7 @@ Formula:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -96,17 +96,19 @@ class SortinoAnalyzer:
 
         if not np.isclose(total, 1.0):
             logger.warning(
-                f"Weights sum to {total:.3f}, not 1.0. " "Normalizing weights."
+                "Weights sum to %.3f, not 1.0. " "Normalizing weights.",
+                total
             )
             self.weights = [w / total for w in self.weights]
 
         logger.info(
-            f"Sortino Analyzer initialized: windows={self.windows_days}, "
-            f"weights={self.weights}, MAR={self.risk_free_rate}"
+            "Sortino Analyzer initialized: windows=%.3f, "
+            "weights=%.3f, MAR=%.3f",
+            self.windows_days, self.weights, self.risk_free_rate
         )
 
     def calculate_multi_timeframe_sortino(
-        self, asset_pair: str, data_provider
+        self, asset_pair: str, data_provider: 'UnifiedDataProvider'
     ) -> Optional[SortinoScore]:
         """
         Calculate Sortino Ratio across multiple timeframes.
@@ -133,8 +135,9 @@ class SortinoAnalyzer:
 
                 if not candles or len(candles) < 2:
                     logger.warning(
-                        f"Insufficient data for {asset_pair} "
-                        f"(window={window_days}d): {len(candles) if candles else 0} candles"
+                        "Insufficient data for %.3f "
+                        "(window=%.3fd): %d candles",
+                        asset_pair, window_days, len(candles) if candles else 0
                     )
                     scores[window_days] = 0.0
                     continue
@@ -144,7 +147,8 @@ class SortinoAnalyzer:
 
                 if len(returns) == 0:
                     logger.warning(
-                        f"No returns calculated for {asset_pair} (window={window_days}d)"
+                        "No returns calculated for %s (window=%dd)",
+                        asset_pair, window_days
                     )
                     scores[window_days] = 0.0
                     continue
@@ -160,8 +164,8 @@ class SortinoAnalyzer:
                 total_returns_count += len(returns)
 
                 logger.debug(
-                    f"{asset_pair} Sortino ({window_days}d): {sortino:.3f} "
-                    f"({len(returns)} returns)"
+                    "%s Sortino (%dd): %.3f (%d returns)",
+                    asset_pair, window_days, sortino, len(returns)
                 )
 
             except Exception as e:

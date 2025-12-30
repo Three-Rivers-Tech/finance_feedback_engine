@@ -13,6 +13,7 @@ export interface AgentStatus {
   config: {
     asset_pairs: string[];
     autonomous: boolean;
+    paused?: boolean;
   };
 }
 

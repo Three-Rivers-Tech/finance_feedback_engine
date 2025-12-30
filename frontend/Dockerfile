@@ -32,15 +32,38 @@ FROM nginx:1.25-alpine
 # Copy built assets from builder stage
 COPY --from=builder /build/dist /usr/share/nginx/html
 
-# Copy nginx configuration (SPA routing fallback)
-RUN echo "server { \
-    listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files \$uri \$uri/ /index.html; \
-    } \
-}" > /etc/nginx/conf.d/default.conf
+# Copy the comprehensive nginx configuration
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Frontend SPA routing
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Backend API proxy
+    location /api {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Grafana proxy - simple passthrough
+    location /grafana/ {
+        proxy_pass http://grafana:3000/grafana/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOF
 
 # Create non-root nginx user and set permissions
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
