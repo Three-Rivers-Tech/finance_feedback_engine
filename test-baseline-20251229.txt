@@ -1,0 +1,5 @@
+TOTAL                                                                         21758  18929   6168      3  10.14%
+
+7 empty files skipped.
+FAIL Required test coverage of 70% not reached. Total coverage: 10.14%
+======================== 1302 tests collected in 5.74s =========================
