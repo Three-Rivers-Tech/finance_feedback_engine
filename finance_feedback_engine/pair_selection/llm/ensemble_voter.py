@@ -387,12 +387,18 @@ class PairEnsembleVoter:
         return aggregated
 
     def _score_to_vote(self, score: float) -> str:
-        """Map numeric score to categorical vote."""
-        if score >= 1.5:
+        """Map numeric score to categorical vote using config thresholds."""
+        # Get thresholds from config (with defaults)
+        thresholds = self.config.get("ensemble", {}).get("vote_thresholds", {})
+        strong_buy = thresholds.get("strong_buy", 1.5)
+        buy = thresholds.get("buy", 0.5)
+        neutral = thresholds.get("neutral", -0.5)
+
+        if score >= strong_buy:
             return "STRONG_BUY"
-        elif score >= 0.5:
+        elif score >= buy:
             return "BUY"
-        elif score >= -0.5:
+        elif score >= neutral:
             return "NEUTRAL"
         else:
             return "AVOID"

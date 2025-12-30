@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
+from .retry_handler import platform_retry, standardize_platform_error
 
 logger = logging.getLogger(__name__)
 
@@ -55,13 +56,13 @@ class OandaPlatform(BaseTradingPlatform):
                 else "https://api-fxtrade.oanda.com"
             )
 
-        # Initialize timeout configuration
-        api_timeouts = (config or {}).get("api_timeouts", {})
+        # Initialize timeout configuration (standardized)
+        from .retry_handler import get_timeout_config
         self.timeout_config = {
-            "platform_balance": api_timeouts.get("platform_balance", 5),
-            "platform_portfolio": api_timeouts.get("platform_portfolio", 10),
-            "platform_execute": api_timeouts.get("platform_execute", 30),
-            "platform_connection": api_timeouts.get("platform_connection", 3),
+            "platform_balance": get_timeout_config(config, "platform_balance"),
+            "platform_portfolio": get_timeout_config(config, "platform_portfolio"),
+            "platform_execute": get_timeout_config(config, "platform_execute"),
+            "platform_connection": get_timeout_config(config, "platform_connection"),
         }
 
         # Initialize Oanda client (lazy loading)
@@ -228,6 +229,7 @@ class OandaPlatform(BaseTradingPlatform):
             self._min_trade_size_cache.clear()
             logger.debug("Cleared all minimum trade size cache entries")
 
+    @platform_retry(max_attempts=3, min_wait=1, max_wait=10)
     def get_balance(self) -> Dict[str, float]:
         """
         Get account balances from Oanda.
@@ -646,6 +648,7 @@ class OandaPlatform(BaseTradingPlatform):
                 "error": str(e),
             }
 
+    @platform_retry(max_attempts=3, min_wait=2, max_wait=15)
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a forex trade on Oanda.
@@ -792,13 +795,7 @@ class OandaPlatform(BaseTradingPlatform):
             }
         except Exception as e:
             logger.error("Error executing Oanda trade: %s", e)
-            return {
-                "success": False,
-                "platform": "oanda",
-                "decision_id": decision.get("id"),
-                "error": str(e),
-                "timestamp": decision.get("timestamp"),
-            }
+            raise standardize_platform_error(e, "execute_trade")
 
     def get_active_positions(self) -> PositionsResponse:
         """

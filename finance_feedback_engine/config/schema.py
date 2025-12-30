@@ -77,7 +77,7 @@ class PlatformCredentials(BaseModel):
         """Ensure credentials are not placeholder values."""
         if v and v.startswith("YOUR_"):
             raise ValueError(
-                f"Credential not configured: '{v}'. "
+                "Credential appears to be a placeholder (starts with 'YOUR_'). "
                 "Please set actual credentials in environment variables or config."
             )
         return v
