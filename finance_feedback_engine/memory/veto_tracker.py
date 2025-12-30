@@ -147,6 +147,8 @@ class VetoTracker(IVetoTracker):
             # Default conservative threshold
             return 0.6
 
+        MIN_SAMPLES = 10  # Minimum decisions to consider a threshold reliable
+
         # Calculate accuracy for each threshold
         threshold_accuracies = {}
 
@@ -155,7 +157,7 @@ class VetoTracker(IVetoTracker):
             incorrect = outcomes["incorrect"]
             total = correct + incorrect
 
-            if total > 0:
+            if total >= MIN_SAMPLES:
                 accuracy = correct / total
                 threshold_accuracies[threshold] = accuracy
 

@@ -4,7 +4,7 @@
 
 Concise, actionable guidance for AI coding agents. Focus on minimal, targeted edits. Reference concrete files, commands, and project-specific conventions.
 
-**Last Updated:** December 2025. Version: 0.9.10. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode), portfolio monitoring, web API, React frontend (Vite/TypeScript), Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard, OpenTelemetry observability.
+**Last Updated:** December 30, 2025. Version: 0.9.11. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode + Thompson Sampling), pair selection (statistical + LLM), portfolio monitoring, web API, React frontend (Vite/TypeScript), Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard, sentiment veto, learning validation, OpenTelemetry observability.
 
 ## Big Picture Architecture
 
@@ -66,6 +66,9 @@ Alpha Vantage (6 timeframes) + Sentiment
 
 **Memory & Learning:**
 - `finance_feedback_engine/memory/portfolio_memory.py`: Experience replay (win/loss tracking by asset & provider); performance attribution; regime-aware weight recommendations; ML-driven ensemble optimization
+- `finance_feedback_engine/memory/thompson_integrator.py`: Thompson Sampling integration service; tracks provider + regime performance; callback registry for external optimizers; provider recommendations
+- `finance_feedback_engine/decision_engine/thompson_sampling.py`: Bayesian weight optimizer using Beta distributions; samples weights for exploration/exploitation; regime-aware multipliers (trending/ranging/volatile)
+- `finance_feedback_engine/pair_selection/thompson/pair_selection_optimizer.py`: Thompson Sampling for pair selection weights (statistical vs LLM phase balance)
 - `finance_feedback_engine/learning/feedback_analyzer.py`: Post-trade outcome analysis; per-provider win rates; feeds ensemble weight recalculation
 - `finance_feedback_engine/monitoring/trade_monitor.py`: Async real-time P&L tracking; auto-detects trades from platform; max 2 concurrent (safety limit); feedback loop triggers on close
 - `finance_feedback_engine/monitoring/context_provider.py`: Injects live position state into decision prompts for portfolio-aware AI reasoning; concentration checks
@@ -176,6 +179,18 @@ python main.py learning-report --asset-pair BTCUSD
 python main.py prune-memory --keep-recent 1000
 ```
 
+**Pair Selection & Multi-Asset Discovery:**
+```bash
+# Discover and rank pairs using statistical + LLM scoring
+python main.py analyze-pair --asset-class crypto --top-n 5
+
+# Get statistical analysis for pair
+python main.py analyze-pair BTCUSD --show-statistical-metrics
+
+# Full ranked list with confidence scores (multi-asset)
+python main.py analyze-pair --asset-class forex --limit 10 --verbose
+```
+
 **Web Service (Optional):**
 ```bash
 python main.py serve --port 8000
@@ -281,6 +296,15 @@ Signal-only: position_size = null (no execution, signal only)
 - Max concurrent trades: Hard limit of 2 (in `TradeMonitor`)
 - Risk gatekeeper: VaR %, concentration limits, correlation threshold 0.7
 
+**Thompson Sampling Integration Patterns (Advanced):**
+- Feature-gated: Check `config.features.thompson_sampling_weights` before using optimizer
+- Weight updates: Only call `update_weights_from_outcome()` after confirmed trade outcome
+- Callbacks: Use `register_thompson_sampling_callback()` in PortfolioMemoryEngine to auto-update
+- Persistence: Stats save to `data/thompson_stats.json` automatically; survives restarts
+- Regime awareness: Always provide `market_regime` when sampling weights (trending/ranging/volatile)
+- Min samples: Require ~30+ samples before weights stabilize; ignore early-stage optimizer output for critical decisions
+- Dissenting providers: Credit providers whose direction matched outcome even if magnitude differed
+
 ## Web Service & Approval Workflows
 
 **FastAPI Start:**
@@ -335,6 +359,9 @@ redis-cli LLEN finance_feedback_engine:approvals
 | Backtest cache stale | Old cached decisions | Run `rm data/backtest_cache.db` before next backtest |
 | Telegram bot silent | Token invalid, Redis unavailable | Verify token in config, run `python main.py setup-redis` |
 | Dashboard blank | No trades monitored (max 2 concurrent limit) | Open a position first, check `TradeMonitor` logs |
+| Thompson weights unbalanced | Insufficient historical data (<30 samples) | Run more backtests or live trades; optimizer needs data |
+| Veto blocking all BUYs | Sentiment threshold too aggressive | Lower `veto_threshold` in config (default 0.6 → try 0.7) |
+| Pair discovery empty | Insufficient asset data or filtering too strict | Check Alpha Vantage API key, increase `pair_selection.max_assets` |
 
 ## Editing Safety Rules
 
@@ -401,7 +428,70 @@ cd frontend && npm run test && npm run type-check  # For frontend changes
 
 ---
 
+## Advanced Learning & Optimization Patterns
+
+**Thompson Sampling for Ensemble Weights:**
+- `finance_feedback_engine/decision_engine/thompson_sampling.py`: Beta distribution-based provider weight optimizer
+- Uses Bayesian exploration/exploitation: higher alpha (wins) → higher mean weight; higher beta (losses) → lower mean weight
+- Integrated into `EnsembleDecisionManager` (feature flag: `features.thompson_sampling_weights`)
+- Regime-aware multipliers: different distributions per market condition (trending/ranging/volatile)
+- Persistence: saves stats to `data/thompson_stats.json` across runs
+- Reference: Phase 1.2, Bayesian Bandits (Russo et al. 2018)
+
+**Thompson Sampling for Pair Selection:**
+- `finance_feedback_engine/pair_selection/thompson/pair_selection_optimizer.py`: Optimizes statistical vs LLM component weights
+- Tracks success/failure thresholds (55% success → alpha +1, 45% failure → beta +1)
+- Requires minimum 3 completed trades before updating Beta distributions
+- Outcome tracking via `PairSelectionOutcomeTracker` for batched performance analysis
+- Critical for portfolio-aware pair discovery (prevents over-trading correlated pairs)
+
+**Portfolio Memory Thompson Integration:**
+- `finance_feedback_engine/memory/thompson_integrator.py`: Bridges PortfolioMemoryEngine ↔ Thompson optimizers
+- Tracks wins/losses per provider + per regime → feeds Thompson callbacks
+- Provides provider recommendations and regime-specific statistics
+- Enables coexistence of veto system + Thompson sampling without conflicts
+
+**Learning Validation Metrics (Monte Carlo):**
+- `finance_feedback_engine/backtesting/monte_carlo.py`: Generates RL/meta-learning diagnostics
+- Metrics: Sample Efficiency (DQN/Rainbow), Cumulative Regret (Multi-armed Bandits), Concept Drift (Online Learning)
+- Thompson Sampling Diagnostics: Exploration vs exploitation balance analysis
+- Learning Curve: Early vs late performance comparison
+- Used in `learning-report` command for backtest analysis
+
+## Pair Selection & Multi-Asset Orchestration
+
+**Asset Pair Discovery System:**
+- `finance_feedback_engine/pair_selection/`: Multi-stage pair filtering (statistical + LLM scoring)
+- Entry point: `analyze_pair()` CLI command; returns ranked pairs with confidence
+- Safety guardrails: Correlation checks, concentration limits, historical performance filtering
+- Two-phase aggregation: Statistical metrics (TTM Squeeze, RSI) → LLM debate ranking
+- Feature flags: `pair_selection.enabled`, `pair_selection.statistical_weight`, `pair_selection.llm_weight`
+
+**Key Files:**
+- `pair_selection/core.py`: Main orchestrator (runs statistical + LLM phases)
+- `pair_selection/statistical/`: Technical score computation (TTM Squeeze, RSI, volume)
+- `pair_selection/llm/`: Debate-based LLM pair ranking (bullish/bearish advocates)
+- `pair_selection/thompson/`: Dynamic phase weight tuning via Thompson Sampling
+- Config: `pair_selection` section in config.yaml (enable phases, weights, thresholds)
+
+## Veto System (Sentiment-Based Risk Override)
+
+**Veto Mechanism:**
+- `finance_feedback_engine/decision_engine/veto.py`: Sentiment-driven decision override
+- Blocks BUY signals if negative sentiment exceeds `veto_threshold` (default: 0.6)
+- Source: Alpha Vantage News Sentiment API + custom sentiment aggregation
+- Tracked in decision `risk_context.veto_applied` (true/false)
+- Learning: Veto accuracy monitored in portfolio memory for threshold tuning
+
+**Integration:**
+- Called in `DecisionEngine.build_decision()` post-ensemble aggregation
+- Feature flag: `features.sentiment_veto` (default: true)
+- Works alongside Thompson Sampling: both callbacks fire on trade outcome
+
+---
+
 **Version History:**
+- **0.9.11** (Dec 2025): Thompson Sampling for ensemble weights + pair selection, veto system, pair discovery safety, learning validation metrics, enhanced memory architecture
 - **0.9.10** (Dec 2025): Frontend React migration (Vite + TypeScript + Zustand), enhanced test coverage, OpenTelemetry observability, pair discovery safeguards
 - **0.9.9** (Dec 2025): Risk module separation, learning feedback, FastAPI + Redis approval flows, portfolio dashboard, VaR/correlation analysis, enhanced decision schema
 - **0.9.0** (Nov 2025): Debate mode, ensemble fallback tiers, backtesting framework, market regime detection

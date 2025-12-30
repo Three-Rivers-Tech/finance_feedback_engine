@@ -14,6 +14,7 @@ import asyncio
 import copy
 import json
 import logging
+import queue
 import time
 from datetime import datetime
 from enum import Enum
@@ -577,24 +578,32 @@ async def stream_agent_events(
 
             event_payload = None
 
-            # Drain dashboard queue (non-blocking with timeout)
+            # Drain dashboard queue (non-blocking with short-lived executor thread)
             if _agent_instance is not None and hasattr(
                 _agent_instance, "_dashboard_event_queue"
             ):
                 try:
                     loop = asyncio.get_running_loop()
+
+                    def _get_queue_item_nowait():
+                        """Non-blocking queue get for executor (never blocks indefinitely)."""
+                        try:
+                            return _agent_instance._dashboard_event_queue.get_nowait()
+                        except queue.Empty:
+                            return None
+
                     queue_item = await asyncio.wait_for(
-                        loop.run_in_executor(
-                            None, _agent_instance._dashboard_event_queue.get
-                        ),
+                        loop.run_in_executor(None, _get_queue_item_nowait),
                         timeout=3.0,
                     )
-                    event_payload = {
-                        "event": queue_item.get("type", "event"),
-                        "data": queue_item,
-                    }
+
+                    if queue_item is not None:
+                        event_payload = {
+                            "event": queue_item.get("type", "event"),
+                            "data": queue_item,
+                        }
                 except asyncio.TimeoutError:
-                    # No new events within timeout window
+                    # Executor thread returned within timeout but found no event
                     event_payload = None
                 except Exception as e:  # noqa: BLE001
                     logger.debug(

@@ -170,13 +170,17 @@ class PortfolioMemoryEngineAdapter:
         """
         return self._legacy_engine.check_kelly_activation_criteria(window=window)
 
-    def generate_context(self, lookback_hours: int = 24) -> Dict[str, Any]:
+    def generate_context(self, asset_pair: Optional[str] = None, lookback_hours: int = 24) -> Dict[str, Any]:
         """
         Generate context (legacy method).
         
         Delegates to legacy PortfolioMemoryEngine.
+        
+        Args:
+            asset_pair: Optional asset pair to filter context
+            lookback_hours: Hours to look back (legacy parameter, not used by new engine)
         """
-        return self._legacy_engine.generate_context(lookback_hours=lookback_hours)
+        return self._legacy_engine.generate_context(asset_pair=asset_pair)
 
     def format_context_for_prompt(
         self, context: Optional[Dict[str, Any]] = None

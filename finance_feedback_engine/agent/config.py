@@ -251,7 +251,10 @@ class TradingAgentConfig(BaseModel):
         return v
 
     # --- Data & Analysis Controls ---
-    asset_pairs: List[str] = ["BTCUSD", "ETHUSD"]
+    # Core pairs that are always active (never removed by pair selection)
+    asset_pairs: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
+    # Core pairs that must always remain in asset_pairs (pair selection can only add to these)
+    core_pairs: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
     analysis_frequency_seconds: int = 300
     monitoring_frequency_seconds: int = 60
     min_confidence_threshold: float = (
