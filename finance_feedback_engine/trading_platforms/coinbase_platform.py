@@ -6,10 +6,10 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from requests.exceptions import RequestException
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo
+from .retry_handler import platform_retry, get_timeout_config, standardize_platform_error
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +63,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         self.passphrase = credentials.get("passphrase")
         self.use_sandbox = credentials.get("use_sandbox", False)
 
-        # Initialize timeout configuration
-        api_timeouts = (config or {}).get("api_timeouts", {})
+        # Initialize timeout configuration (standardized)
         self.timeout_config = {
-            "platform_balance": api_timeouts.get("platform_balance", 5),
-            "platform_portfolio": api_timeouts.get("platform_portfolio", 10),
-            "platform_execute": api_timeouts.get("platform_execute", 30),
-            "platform_connection": api_timeouts.get("platform_connection", 3),
+            "platform_balance": get_timeout_config(config, "platform_balance"),
+            "platform_portfolio": get_timeout_config(config, "platform_portfolio"),
+            "platform_execute": get_timeout_config(config, "platform_execute"),
+            "platform_connection": get_timeout_config(config, "platform_connection"),
         }
 
         # Initialize Coinbase client (lazy loading)
@@ -828,15 +827,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         except Exception as e:
             logger.error("Error fetching portfolio breakdown: %s", e)
-            raise
+            raise standardize_platform_error(e, "get_portfolio_breakdown")
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_fixed(2),
-        retry=retry_if_exception_type(
-            (RequestException, ConnectionError, TimeoutError)
-        ),
-    )
+    @platform_retry(max_attempts=3, min_wait=1, max_wait=10)
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a trade on Coinbase.

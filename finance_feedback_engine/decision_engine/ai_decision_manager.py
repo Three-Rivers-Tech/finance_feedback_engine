@@ -12,7 +12,7 @@ from .ensemble_manager import EnsembleDecisionManager
 logger = logging.getLogger(__name__)
 
 MAX_WORKERS = 4
-ENSEMBLE_TIMEOUT = 30
+# ENSEMBLE_TIMEOUT now loaded from config (decision_engine.ensemble_timeout, default 30)
 
 
 class AIDecisionManager:
@@ -28,6 +28,7 @@ class AIDecisionManager:
         decision_config = normalize_decision_config(config)
         self.ai_provider = decision_config.get("ai_provider", "local")
         self.model_name = decision_config.get("model_name", "default")
+        self.ensemble_timeout = decision_config.get("ensemble_timeout", 30)
 
         # Initialize ensemble manager if using ensemble mode
         self.ensemble_manager = None

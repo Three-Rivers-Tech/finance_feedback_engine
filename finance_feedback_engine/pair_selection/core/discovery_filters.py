@@ -295,7 +295,7 @@ class PairDiscoveryFilter:
         logger.info(f"Added {pair} to whitelist (auto_add_to_whitelist=true)")
         return True
 
-    def get_filter_summary(self) -> Dict[str, any]:
+    def get_filter_summary(self) -> Dict[str, Any]:
         """
         Get summary of active filters.
 

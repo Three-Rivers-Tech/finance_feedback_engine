@@ -105,7 +105,7 @@ class PairUniverseCache:
         else:
             logger.debug(f"No cache entry to invalidate for '{exchange}'")
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """
         Get cache statistics.
 
