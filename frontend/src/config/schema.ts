@@ -8,14 +8,17 @@ import { z } from 'zod';
 // URL validation schemas
 const httpUrlSchema = z.string().url().startsWith('http://');
 const httpsUrlSchema = z.string().url().startsWith('https://');
-const relativeUrlSchema = z.string().regex(/^\/|^$/);  // Allow empty string or paths starting with /
+const relativeUrlSchema = z.string().regex(/^\/.+$/);  // Paths starting with / (no empty strings)
 
 // Create conditional URL schema based on environment
 const apiUrlSchema = z.union([
   httpUrlSchema,
   httpsUrlSchema,
   relativeUrlSchema,
-]);
+]).refine(
+  (url) => url.length > 0,
+  'API base URL is required and cannot be empty'
+);
 
 // Polling interval validation (in milliseconds)
 const pollingIntervalSchema = z

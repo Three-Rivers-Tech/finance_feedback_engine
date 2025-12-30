@@ -137,7 +137,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "coinbase-advanced-py not installed. "
                     "Install with: pip install coinbase-advanced-py"
                 )
-                raise ValueError(
+                from ..exceptions import TradingError
+                raise TradingError(
                     "Coinbase Advanced library not available. "
                     "Install coinbase-advanced-py"
                 )
@@ -425,12 +426,124 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 "Coinbase library not installed. "
                 "Install with: pip install coinbase-advanced-py"
             )
-            raise ValueError(
+            from ..exceptions import TradingError
+            raise TradingError(
                 "Coinbase Advanced library required for real data. "
                 "Please install coinbase-advanced-py"
             )
         except Exception as e:
             logger.error("Error fetching Coinbase balances: %s", e)
+            raise
+
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test Coinbase platform connectivity and validate all trading prerequisites.
+
+        Performs comprehensive validation:
+        1. API authentication (client initialization)
+        2. Account active status (can query account)
+        3. Trading permissions (can access trading endpoints)
+        4. Balance availability (can query balances)
+        5. Market data access (can query products)
+
+        Returns:
+            Dictionary with validation results:
+            {
+                "api_auth": bool,
+                "account_active": bool,
+                "trading_enabled": bool,
+                "balance_available": bool,
+                "market_data_access": bool,
+            }
+
+        Raises:
+            Exception: If critical validation fails
+        """
+        logger.info("Testing Coinbase connection and validating prerequisites...")
+
+        results = {
+            "api_auth": False,
+            "account_active": False,
+            "trading_enabled": False,
+            "balance_available": False,
+            "market_data_access": False,
+        }
+
+        try:
+            # 1. Test API authentication by initializing client
+            try:
+                client = self._get_client()
+                results["api_auth"] = True
+                logger.info("✓ API authentication successful")
+            except Exception as e:
+                logger.error(f"✗ API authentication failed: {e}")
+                raise
+
+            # 2. Test account active status by querying accounts
+            try:
+                accounts_response = client.get_accounts()
+                accounts = getattr(accounts_response, "accounts", None) or []
+                if accounts:
+                    results["account_active"] = True
+                    logger.info("✓ Account is active")
+                else:
+                    logger.warning("✗ No accounts found - account may be inactive")
+            except Exception as e:
+                logger.error(f"✗ Account status check failed: {e}")
+                raise
+
+            # 3. Test trading permissions by checking futures balance
+            try:
+                futures_response = client.get_futures_balance_summary()
+                balance_summary = getattr(futures_response, "balance_summary", None)
+                if balance_summary:
+                    results["trading_enabled"] = True
+                    logger.info("✓ Trading permissions enabled (futures access granted)")
+                else:
+                    logger.warning("✗ Trading permissions denied or futures not enabled")
+            except Exception as e:
+                logger.warning(f"✗ Trading permissions check failed: {e}")
+                # Don't raise - futures may not be enabled but spot trading could work
+
+            # 4. Test balance availability
+            try:
+                balance = self.get_balance()
+                if balance:
+                    results["balance_available"] = True
+                    total = sum(balance.values())
+                    logger.info(f"✓ Balance available (Total: ${total:.2f})")
+                else:
+                    logger.warning("✗ Balance query returned empty (may be zero balance)")
+                    results["balance_available"] = True  # Query succeeded even if zero
+            except Exception as e:
+                logger.error(f"✗ Balance query failed: {e}")
+                raise
+
+            # 5. Test market data access by querying a common product
+            try:
+                product_id = "BTC-USD"  # Most common pair
+                product = client.get_product(product_id=product_id)
+                if product:
+                    results["market_data_access"] = True
+                    logger.info(f"✓ Market data access granted (queried {product_id})")
+                else:
+                    logger.warning("✗ Market data access denied or product unavailable")
+            except Exception as e:
+                logger.error(f"✗ Market data access failed: {e}")
+                raise
+
+            # Summary
+            all_passed = all(results.values())
+            if all_passed:
+                logger.info("✓ All connection validation checks passed")
+            else:
+                failed = [k for k, v in results.items() if not v]
+                logger.warning(f"⚠ Some validation checks failed: {failed}")
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Connection validation failed: {e}")
             raise
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
@@ -458,7 +571,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 logger.error(
                     "Coinbase library not installed. Install with: pip install coinbase-advanced-py"
                 )
-                raise ValueError(
+                from ..exceptions import TradingError
+                raise TradingError(
                     "Coinbase Advanced library required for real data. Please install coinbase-advanced-py"
                 )
 

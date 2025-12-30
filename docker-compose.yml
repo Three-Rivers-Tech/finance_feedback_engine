@@ -56,8 +56,8 @@ services:
   # =============================================================================
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: ffe-frontend
     image: finance-feedback-engine-frontend:latest
     restart: unless-stopped

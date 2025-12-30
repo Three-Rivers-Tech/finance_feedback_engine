@@ -156,19 +156,27 @@ class TestTradeRetrieval:
         coordinator = PortfolioMemoryCoordinator(storage_path=tmp_path)
 
         # Add some trades
-        for i in range(5):
-            outcome = TradeOutcome(
-                decision_id=f"test-{i}",
-                asset_pair="BTC-USD",
-                action="BUY",
-                entry_timestamp=datetime.now().isoformat(),
-            )
-            coordinator.record_trade_outcome(outcome)
+from datetime import datetime, timedelta
 
-        recent = coordinator.get_recent_trades(limit=3)
+def test_get_recent_trades(self, tmp_path):
+    """Should get recent trades from recorder."""
+    coordinator = PortfolioMemoryCoordinator(storage_path=tmp_path)
 
-        assert len(recent) == 3
-        assert recent[0].decision_id == "test-4"  # Most recent first
+    base_time = datetime.now()
+    # Add some trades
+    for i in range(5):
+        outcome = TradeOutcome(
+            decision_id=f"test-{i}",
+            asset_pair="BTC-USD",
+            action="BUY",
+            entry_timestamp=(base_time + timedelta(seconds=i)).isoformat(),
+        )
+        coordinator.record_trade_outcome(outcome)
+
+    recent = coordinator.get_recent_trades(limit=3)
+
+    assert len(recent) == 3
+    assert recent[0].decision_id == "test-4"  # Most recent first
 
     def test_get_all_trades(self, tmp_path):
         """Should get all trades from recorder."""

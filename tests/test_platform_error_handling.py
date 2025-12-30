@@ -70,12 +70,18 @@ class TestCoinbaseConnectionErrors:
     """Tests for Coinbase platform connection error handling."""
 
     def test_client_initialization_import_error(self, coinbase_platform):
-        """Should raise ValueError when coinbase library not available."""
-        with patch(
-            "builtins.__import__", side_effect=ImportError("No module named 'coinbase'")
-        ):
+        """Should raise TradingError when coinbase library not available."""
+        import builtins
+        original_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if "coinbase" in name:
+                raise ImportError("No module named 'coinbase'")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=mock_import):
             with pytest.raises(
-                ValueError, match="Coinbase Advanced library not available"
+                TradingError, match="Coinbase Advanced library not available"
             ):
                 coinbase_platform._get_client()
 
@@ -88,13 +94,13 @@ class TestCoinbaseConnectionErrors:
                 coinbase_platform._get_client()
 
     def test_get_balance_import_error(self, coinbase_platform):
-        """Should raise ValueError when library not installed during get_balance."""
+        """Should raise TradingError when library not installed during get_balance."""
         coinbase_platform._client = None  # Ensure client not initialized
 
         with patch.object(
             coinbase_platform, "_get_client", side_effect=ImportError("No module")
         ):
-            with pytest.raises(ValueError, match="Coinbase Advanced library required"):
+            with pytest.raises(TradingError, match="Coinbase Advanced library required"):
                 coinbase_platform.get_balance()
 
     def test_get_balance_network_timeout(self, coinbase_platform, mock_coinbase_client):
@@ -399,7 +405,7 @@ class TestOandaConnectionErrors:
             "builtins.__import__",
             side_effect=ImportError("No module named 'oandapyV20'"),
         ):
-            with pytest.raises(ValueError, match="oandapyV20 library not available"):
+            with pytest.raises(TradingError, match="oandapyV20 library not available"):
                 platform._get_client()
 
     @patch("oandapyV20.API")
