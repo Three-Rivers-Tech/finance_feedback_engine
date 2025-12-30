@@ -95,7 +95,7 @@ def build_pair_evaluation_prompt(
     candidates: Dict[str, float],
     candidate_metrics: Dict[str, Dict[str, any]],
     portfolio_context: Dict[str, Any],
-    available_slots: int
+    available_slots: int,
 ) -> str:
     """
     Build context-rich prompt for LLM pair evaluation.
@@ -124,11 +124,11 @@ def build_pair_evaluation_prompt(
     portfolio_summary = _format_portfolio_context(portfolio_context)
 
     # Extract market context
-    current_regime = portfolio_context.get('current_regime', 'unknown')
-    recent_pnl = portfolio_context.get('total_pnl', 0.0)
-    win_rate = portfolio_context.get('win_rate', 0.0)
-    trade_count = portfolio_context.get('total_trades', 0)
-    active_positions = portfolio_context.get('active_pairs', [])
+    current_regime = portfolio_context.get("current_regime", "unknown")
+    recent_pnl = portfolio_context.get("total_pnl", 0.0)
+    win_rate = portfolio_context.get("win_rate", 0.0)
+    trade_count = portfolio_context.get("total_trades", 0)
+    active_positions = portfolio_context.get("active_pairs", [])
 
     # Fill template
     return PAIR_EVALUATION_PROMPT.format(
@@ -140,14 +140,14 @@ def build_pair_evaluation_prompt(
         trade_count=trade_count,
         active_positions=", ".join(active_positions) if active_positions else "None",
         available_slots=available_slots,
-        candidate_count=len(candidates)
+        candidate_count=len(candidates),
     )
 
 
 def build_pair_description_prompt(
     selected_pairs: List[str],
     statistical_scores: Dict[str, float],
-    llm_votes: Dict[str, Dict[str, any]]
+    llm_votes: Dict[str, Dict[str, any]],
 ) -> str:
     """
     Build prompt for generating selection reasoning.
@@ -162,9 +162,7 @@ def build_pair_description_prompt(
     """
     # Format selected pairs with scores
     pairs_summary = _format_selected_pairs_summary(
-        selected_pairs,
-        statistical_scores,
-        llm_votes
+        selected_pairs, statistical_scores, llm_votes
     )
 
     # Format statistical scores
@@ -176,13 +174,12 @@ def build_pair_description_prompt(
     return PAIR_DESCRIPTION_PROMPT.format(
         selected_pairs=pairs_summary,
         statistical_scores=scores_summary,
-        llm_votes=votes_summary
+        llm_votes=votes_summary,
     )
 
 
 def _format_candidates_table(
-    candidates: Dict[str, float],
-    candidate_metrics: Dict[str, Dict[str, any]]
+    candidates: Dict[str, float], candidate_metrics: Dict[str, Dict[str, any]]
 ) -> str:
     """
     Format candidates into a readable table.
@@ -195,11 +192,7 @@ def _format_candidates_table(
         Formatted table string
     """
     # Sort by composite score (descending)
-    sorted_candidates = sorted(
-        candidates.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )
+    sorted_candidates = sorted(candidates.items(), key=lambda x: x[1], reverse=True)
 
     lines = []
     lines.append("| Pair | Composite | Sortino | Correlation | Volatility | Details |")
@@ -209,9 +202,9 @@ def _format_candidates_table(
         metrics = candidate_metrics.get(pair, {})
 
         # Extract metric details
-        sortino = metrics.get('sortino')
-        correlation = metrics.get('correlation')
-        garch = metrics.get('garch')
+        sortino = metrics.get("sortino")
+        correlation = metrics.get("correlation")
+        garch = metrics.get("garch")
 
         sortino_val = f"{sortino.composite_score:.2f}" if sortino else "N/A"
         corr_val = f"{correlation.diversification_score:.2f}" if correlation else "N/A"
@@ -240,29 +233,35 @@ def _format_portfolio_context(portfolio_context: Dict[str, Any]) -> str:
     """Format portfolio context into readable summary."""
     lines = []
 
+    def _to_percent(value: float) -> float:
+        """Normalize win rate to percentage regardless of fraction/percent input."""
+        return value * 100 if value <= 1 else value
+
     # Market regime
-    regime = portfolio_context.get('current_regime', 'unknown')
+    regime = portfolio_context.get("current_regime", "unknown")
     lines.append(f"- Market Regime: {regime.upper()}")
 
     # Performance by regime
-    regime_perf = portfolio_context.get('regime_performance', {})
+    regime_perf = portfolio_context.get("regime_performance", {})
     if regime_perf:
         lines.append("- Regime Performance:")
         for regime_name, stats in regime_perf.items():
-            win_rate = stats.get('win_rate', 0) * 100
-            avg_pnl = stats.get('avg_pnl', 0)
-            lines.append(f"  - {regime_name}: {win_rate:.1f}% WR, ${avg_pnl:.2f} avg P&L")
+            win_rate = _to_percent(stats.get("win_rate", 0))
+            avg_pnl = stats.get("avg_pnl", 0)
+            lines.append(
+                f"  - {regime_name}: {win_rate:.1f}% WR, ${avg_pnl:.2f} avg P&L"
+            )
 
     # Active positions
-    active_pairs = portfolio_context.get('active_pairs', [])
+    active_pairs = portfolio_context.get("active_pairs", [])
     if active_pairs:
         lines.append(f"- Active Positions: {', '.join(active_pairs)}")
     else:
         lines.append("- Active Positions: None (fresh portfolio)")
 
     # Recent performance
-    total_pnl = portfolio_context.get('total_pnl', 0)
-    win_rate = portfolio_context.get('win_rate', 0)
+    total_pnl = portfolio_context.get("total_pnl", 0)
+    win_rate = _to_percent(portfolio_context.get("win_rate", 0))
     lines.append(f"- Recent P&L: ${total_pnl:.2f} ({win_rate:.1f}% win rate)")
 
     return "\n".join(lines)
@@ -271,7 +270,7 @@ def _format_portfolio_context(portfolio_context: Dict[str, Any]) -> str:
 def _format_selected_pairs_summary(
     selected_pairs: List[str],
     statistical_scores: Dict[str, float],
-    llm_votes: Dict[str, Dict[str, any]]
+    llm_votes: Dict[str, Dict[str, any]],
 ) -> str:
     """Format selected pairs with brief summary."""
     lines = []
@@ -279,8 +278,8 @@ def _format_selected_pairs_summary(
     for pair in selected_pairs:
         score = statistical_scores.get(pair, 0.0)
         vote = llm_votes.get(pair, {})
-        vote_type = vote.get('vote', 'N/A')
-        confidence = vote.get('confidence', 0)
+        vote_type = vote.get("vote", "N/A")
+        confidence = vote.get("confidence", 0)
 
         lines.append(
             f"- {pair}: Score {score:.3f}, Vote: {vote_type} ({confidence}% confidence)"
@@ -290,8 +289,7 @@ def _format_selected_pairs_summary(
 
 
 def _format_scores_summary(
-    selected_pairs: List[str],
-    statistical_scores: Dict[str, float]
+    selected_pairs: List[str], statistical_scores: Dict[str, float]
 ) -> str:
     """Format statistical scores summary."""
     lines = []
@@ -304,17 +302,16 @@ def _format_scores_summary(
 
 
 def _format_votes_summary(
-    selected_pairs: List[str],
-    llm_votes: Dict[str, Dict[str, any]]
+    selected_pairs: List[str], llm_votes: Dict[str, Dict[str, any]]
 ) -> str:
     """Format LLM votes summary."""
     lines = []
 
     for pair in selected_pairs:
         vote = llm_votes.get(pair, {})
-        vote_type = vote.get('vote', 'N/A')
-        confidence = vote.get('confidence', 0)
-        reasoning = vote.get('reasoning', 'No reasoning provided')
+        vote_type = vote.get("vote", "N/A")
+        confidence = vote.get("confidence", 0)
+        reasoning = vote.get("reasoning", "No reasoning provided")
 
         lines.append(f"- {pair}: {vote_type} ({confidence}%)")
         lines.append(f"  Reasoning: {reasoning}")

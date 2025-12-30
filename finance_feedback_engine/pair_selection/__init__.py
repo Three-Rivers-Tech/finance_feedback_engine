@@ -9,11 +9,11 @@ Research-backed pair selection using:
 - Thompson Sampling (adaptive weight optimization)
 """
 
-from .core.pair_selector import PairSelector, PairSelectionConfig, PairSelectionResult
+from .core.pair_selector import PairSelectionConfig, PairSelectionResult, PairSelector
 from .core.pair_universe import PairUniverseCache
 from .llm.ensemble_voter import EnsembleVote, PairEnsembleVoter
 from .statistical.correlation_matrix import CorrelationAnalyzer, CorrelationScore
-from .statistical.garch_volatility import GARCHVolatilityForecaster, GARCHForecast
+from .statistical.garch_volatility import GARCHForecast, GARCHVolatilityForecaster
 from .statistical.metric_aggregator import AggregatedMetrics, MetricAggregator
 from .statistical.sortino_analyzer import SortinoAnalyzer, SortinoScore
 from .thompson.outcome_tracker import PairSelectionOutcomeTracker

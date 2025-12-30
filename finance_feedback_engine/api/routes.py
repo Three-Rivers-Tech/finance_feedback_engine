@@ -914,6 +914,7 @@ async def submit_trace(
             detail="Invalid request",
         )
 
+
 # Approval persistence endpoints
 approval_router = APIRouter(prefix="/api/v1", tags=["approvals"])
 

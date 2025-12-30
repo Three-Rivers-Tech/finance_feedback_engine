@@ -17,11 +17,16 @@ from typing import Any, Dict, List, Optional, Set
 
 from ..llm.ensemble_voter import EnsembleVote, PairEnsembleVoter
 from ..statistical.correlation_matrix import CorrelationAnalyzer, CorrelationScore
-from ..statistical.garch_volatility import GARCHVolatilityForecaster, GARCHForecast
+from ..statistical.garch_volatility import GARCHForecast, GARCHVolatilityForecaster
 from ..statistical.metric_aggregator import AggregatedMetrics, MetricAggregator
 from ..statistical.sortino_analyzer import SortinoAnalyzer, SortinoScore
 from ..thompson.outcome_tracker import PairSelectionOutcomeTracker
 from ..thompson.pair_selection_optimizer import PairSelectionThompsonOptimizer
+from .discovery_filters import (
+    DiscoveryFilterConfig,
+    PairDiscoveryFilter,
+    WhitelistConfig,
+)
 from .pair_universe import PairUniverseCache
 
 logger = logging.getLogger(__name__)
@@ -64,10 +69,22 @@ class PairSelectionConfig:
     # Universe configuration
     universe_cache_ttl_hours: int = 24
     pair_blacklist: List[str] = field(default_factory=list)
+    auto_discover: bool = False  # Disabled by default for safety
+
+    # Discovery filter configuration
+    discovery_filter_config: Optional[DiscoveryFilterConfig] = None
+    whitelist_config: Optional[WhitelistConfig] = None
 
     # LLM configuration
     llm_enabled: bool = True
     llm_enabled_providers: Optional[List[str]] = None
+
+    def __post_init__(self):
+        """Initialize default filter configs if not provided."""
+        if self.discovery_filter_config is None:
+            self.discovery_filter_config = DiscoveryFilterConfig()
+        if self.whitelist_config is None:
+            self.whitelist_config = WhitelistConfig()
 
 
 @dataclass
@@ -153,9 +170,9 @@ class PairSelector:
 
         self.metric_aggregator = MetricAggregator(
             weights={
-                'sortino': config.sortino_weight,
-                'diversification': config.diversification_weight,
-                'volatility': config.volatility_weight,
+                "sortino": config.sortino_weight,
+                "diversification": config.diversification_weight,
+                "volatility": config.volatility_weight,
             }
         )
 
@@ -183,10 +200,20 @@ class PairSelector:
             ttl_hours=config.universe_cache_ttl_hours
         )
 
+        # Initialize discovery filter
+        self.discovery_filter = PairDiscoveryFilter(
+            discovery_filter_config=config.discovery_filter_config,
+            whitelist_config=config.whitelist_config,
+        )
+
         logger.info(
             f"PairSelector initialized (target pairs: {config.target_pair_count}, "
             f"LLM: {config.llm_enabled}, Thompson: {config.thompson_enabled})"
         )
+
+        # Log filter summary
+        filter_summary = self.discovery_filter.get_filter_summary()
+        logger.info(f"Discovery Filter Config: {filter_summary}")
 
     async def select_pairs(
         self,
@@ -239,7 +266,9 @@ class PairSelector:
         logger.info(f"  → Scored {len(statistical_scores)} candidate pairs")
 
         if not statistical_scores:
-            logger.warning("  → No candidates with valid scores, using locked pairs only")
+            logger.warning(
+                "  → No candidates with valid scores, using locked pairs only"
+            )
             return self._create_locked_only_result(locked_pairs)
 
         # STEP 4: Select top candidates for LLM evaluation
@@ -308,8 +337,8 @@ class PairSelector:
             llm_votes=llm_votes,
             combined_scores={p: combined_scores.get(p, 0.0) for p in newly_selected},
             metadata={
-                'locked_pairs': list(locked_pairs),
-                'thompson_weights': thompson_weights,
+                "locked_pairs": list(locked_pairs),
+                "thompson_weights": thompson_weights,
             },
         )
 
@@ -330,37 +359,58 @@ class PairSelector:
             selection_reasoning=reasoning,
             selection_id=selection_id,
             metadata={
-                'universe_size': len(universe),
-                'candidates_evaluated': len(statistical_scores),
-                'available_slots': available_slots,
+                "universe_size": len(universe),
+                "candidates_evaluated": len(statistical_scores),
+                "available_slots": available_slots,
             },
         )
 
     async def _discover_pair_universe(self) -> List[str]:
         """STEP 1: Discover tradeable pairs from exchanges."""
         # Check cache first
-        cached = self.universe_cache.get('all_exchanges')
+        cached = self.universe_cache.get("all_exchanges")
         if cached:
             logger.debug(f"Using cached universe ({len(cached)} pairs)")
             return cached
 
         # Discover from exchanges
         try:
-            universe = self.data_provider.discover_available_pairs()
-            
-            # Apply blacklist
+            raw_pairs = self.data_provider.discover_available_pairs()
+            logger.info(f"Discovered {len(raw_pairs)} pairs from exchanges (pre-filter)")
+
+            # Apply discovery filters and whitelist
+            filtered_pairs, rejection_reasons = self.discovery_filter.filter_pairs(
+                raw_pairs,
+                pair_metrics=None,  # No detailed metrics available at discovery time
+            )
+
+            logger.info(
+                f"Discovery filters result: {len(filtered_pairs)} pairs accepted, "
+                f"{len(rejection_reasons)} rejected"
+            )
+
+            if rejection_reasons:
+                logger.debug(f"Rejection summary:")
+                for pair, reason in list(rejection_reasons.items())[:10]:
+                    logger.debug(f"  {pair}: {reason}")
+                if len(rejection_reasons) > 10:
+                    logger.debug(
+                        f"  ... and {len(rejection_reasons) - 10} more rejected pairs"
+                    )
+
+            # Apply additional blacklist (if any pairs still need removal)
             if self.config.pair_blacklist:
-                universe = [
-                    p for p in universe if p not in self.config.pair_blacklist
+                filtered_pairs = [
+                    p for p in filtered_pairs if p not in self.config.pair_blacklist
                 ]
                 logger.debug(
-                    f"Applied blacklist, removed {len(self.config.pair_blacklist)} pairs"
+                    f"Applied config blacklist, removed {len(self.config.pair_blacklist)} pairs"
                 )
 
             # Cache result
-            self.universe_cache.set('all_exchanges', universe)
+            self.universe_cache.set("all_exchanges", filtered_pairs)
 
-            return universe
+            return filtered_pairs
 
         except Exception as e:
             logger.error(f"Failed to discover pair universe: {e}")
@@ -370,7 +420,7 @@ class PairSelector:
     def _get_locked_pairs(self, trade_monitor) -> Set[str]:
         """STEP 2: Get pairs locked due to open positions."""
         active_trades = trade_monitor.get_active_trades()
-        locked = {trade['asset_pair'] for trade in active_trades}
+        locked = {trade["asset_pair"] for trade in active_trades}
         return locked
 
     async def _calculate_statistical_scores(
@@ -429,9 +479,7 @@ class PairSelector:
                 )
 
             except Exception as e:
-                logger.warning(
-                    f"  Failed to calculate metrics for {asset_pair}: {e}"
-                )
+                logger.warning(f"  Failed to calculate metrics for {asset_pair}: {e}")
                 continue
 
         return statistical_scores, detailed_metrics
@@ -462,27 +510,27 @@ class PairSelector:
         # Build candidate metrics dict for prompt
         candidate_metrics = {
             pair: {
-                'sortino': metrics.sortino,
-                'correlation': metrics.correlation,
-                'garch': metrics.garch,
-                'composite': metrics.composite_score,
+                "sortino": metrics.sortino,
+                "correlation": metrics.correlation,
+                "garch": metrics.garch,
+                "composite": metrics.composite_score,
             }
             for pair, metrics in detailed_metrics.items()
             if pair in top_candidates
         }
 
         # Get portfolio context
-        if hasattr(portfolio_memory, 'get_pair_selection_context'):
+        if hasattr(portfolio_memory, "get_pair_selection_context"):
             market_context = portfolio_memory.get_pair_selection_context()
         else:
             # Fallback context if method doesn't exist yet
             market_context = {
-                'current_regime': 'unknown',
-                'regime_performance': {},
-                'active_pairs': list(locked_pairs) if 'locked_pairs' in locals() else [],
-                'total_pnl': 0.0,
-                'win_rate': 0.0,
-                'total_trades': 0,
+                "current_regime": "unknown",
+                "regime_performance": {},
+                "active_pairs": [],
+                "total_pnl": 0.0,
+                "win_rate": 0.0,
+                "total_trades": 0,
             }
 
         # Query ensemble
@@ -508,14 +556,14 @@ class PairSelector:
             thompson_weights = self.thompson_optimizer.sample_weights()
         else:
             # Fallback to statistical only
-            thompson_weights = {'statistical': 1.0, 'llm': 0.0}
+            thompson_weights = {"statistical": 1.0, "llm": 0.0}
 
         combined_scores = {}
 
         # Combine scores for top candidates
         for pair in top_candidates.keys():
             stat_score = statistical_scores.get(pair, 0.0)
-            
+
             # Normalize statistical score to [0, 1]
             stat_normalized = stat_score
 
@@ -529,8 +577,8 @@ class PairSelector:
 
             # Weighted combination
             combined = (
-                thompson_weights['statistical'] * stat_normalized +
-                thompson_weights['llm'] * llm_normalized
+                thompson_weights["statistical"] * stat_normalized
+                + thompson_weights["llm"] * llm_normalized
             )
 
             combined_scores[pair] = combined
@@ -615,7 +663,7 @@ class PairSelector:
             statistical_scores={},
             llm_votes={},
             combined_scores={},
-            metadata={'locked_only': True},
+            metadata={"locked_only": True},
         )
 
         return PairSelectionResult(
@@ -626,10 +674,10 @@ class PairSelector:
             detailed_metrics={},
             llm_votes={},
             combined_scores={},
-            thompson_weights={'statistical': 1.0, 'llm': 0.0},
+            thompson_weights={"statistical": 1.0, "llm": 0.0},
             selection_reasoning=f"Maintaining {len(locked_pairs)} pairs with open positions.",
             selection_id=selection_id,
-            metadata={'locked_only': True},
+            metadata={"locked_only": True},
         )
 
     def update_thompson_from_outcomes(self):
@@ -641,8 +689,8 @@ class PairSelector:
         recent = self.outcome_tracker.get_recent_selections(limit=10)
 
         for selection in recent:
-            selection_id = selection['selection_id']
-            
+            selection_id = selection["selection_id"]
+
             # Update Thompson based on performance
             self.thompson_optimizer.update_from_outcome(
                 selection_id=selection_id,

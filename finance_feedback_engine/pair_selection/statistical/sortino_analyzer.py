@@ -37,6 +37,7 @@ class SortinoScore:
         negative_return_count: Number of negative return periods
         total_return_count: Total number of return periods
     """
+
     composite_score: float
     window_scores: Dict[int, float]
     downside_deviation: float
@@ -62,7 +63,7 @@ class SortinoAnalyzer:
         self,
         windows_days: List[int] = None,
         weights: List[float] = None,
-        risk_free_rate: float = 0.0
+        risk_free_rate: float = 0.0,
     ):
         """
         Initialize Sortino Analyzer.
@@ -83,12 +84,20 @@ class SortinoAnalyzer:
                 f"number of weights ({len(self.weights)})"
             )
 
-        if not np.isclose(sum(self.weights), 1.0):
-            logger.warning(
-                f"Weights sum to {sum(self.weights):.3f}, not 1.0. "
-                "Normalizing weights."
+        total = sum(self.weights)
+
+        if np.isclose(total, 0.0):
+            raise ValueError(
+                "Weights sum to zero; provide non-zero weights for normalization."
             )
-            total = sum(self.weights)
+
+        if any(w < 0 for w in self.weights):
+            raise ValueError("Weights must be non-negative for Sortino analysis.")
+
+        if not np.isclose(total, 1.0):
+            logger.warning(
+                f"Weights sum to {total:.3f}, not 1.0. " "Normalizing weights."
+            )
             self.weights = [w / total for w in self.weights]
 
         logger.info(
@@ -97,9 +106,7 @@ class SortinoAnalyzer:
         )
 
     def calculate_multi_timeframe_sortino(
-        self,
-        asset_pair: str,
-        data_provider
+        self, asset_pair: str, data_provider
     ) -> Optional[SortinoScore]:
         """
         Calculate Sortino Ratio across multiple timeframes.
@@ -121,9 +128,7 @@ class SortinoAnalyzer:
             try:
                 # Fetch historical daily data
                 candles, provider = data_provider.get_candles(
-                    asset_pair=asset_pair,
-                    granularity="1d",
-                    limit=window_days
+                    asset_pair=asset_pair, granularity="1d", limit=window_days
                 )
 
                 if not candles or len(candles) < 2:
@@ -148,7 +153,9 @@ class SortinoAnalyzer:
                 sortino = self._calculate_sortino_ratio(returns)
                 scores[window_days] = sortino
 
-                all_returns.extend(returns)
+                # Track returns from longest window only for aggregate stats
+                if window_days == max(self.windows_days):
+                    all_returns = returns
                 total_negative_returns += sum(1 for r in returns if r < 0)
                 total_returns_count += len(returns)
 
@@ -161,7 +168,7 @@ class SortinoAnalyzer:
                 logger.error(
                     f"Error calculating Sortino for {asset_pair} "
                     f"(window={window_days}d): {e}",
-                    exc_info=True
+                    exc_info=True,
                 )
                 scores[window_days] = 0.0
 
@@ -178,7 +185,9 @@ class SortinoAnalyzer:
         # Calculate aggregate statistics
         mean_return = np.mean(all_returns) if all_returns else 0.0
         downside_returns = [r for r in all_returns if r < self.risk_free_rate]
-        downside_dev = np.std(downside_returns) if downside_returns else 0.0
+        downside_dev = (
+            np.std(downside_returns, ddof=1) if len(downside_returns) > 1 else 0.0
+        )
 
         result = SortinoScore(
             composite_score=composite,
@@ -186,7 +195,7 @@ class SortinoAnalyzer:
             downside_deviation=downside_dev,
             mean_return=mean_return,
             negative_return_count=total_negative_returns,
-            total_return_count=total_returns_count
+            total_return_count=total_returns_count,
         )
 
         logger.info(
@@ -211,14 +220,14 @@ class SortinoAnalyzer:
 
         returns = []
         for i in range(1, len(candles)):
-            prev_close = candles[i - 1].get('close')
-            curr_close = candles[i].get('close')
+            prev_close = candles[i - 1].get("close")
+            curr_close = candles[i].get("close")
 
             if prev_close is None or curr_close is None:
                 continue
 
             if prev_close == 0:
-                logger.warning(f"Zero price encountered, skipping return calculation")
+                logger.warning("Zero price encountered, skipping return calculation")
                 continue
 
             # Calculate percentage return
@@ -252,8 +261,8 @@ class SortinoAnalyzer:
             # No losses - infinite Sortino ratio (cap at high value)
             return 10.0
 
-        # Calculate downside deviation
-        downside_dev = np.std(downside_returns)
+        # Calculate downside deviation for losses only (ddof=1 for sample std if enough points)
+        downside_dev = np.std(downside_returns) if len(downside_returns) > 1 else 0.0
 
         if downside_dev == 0:
             # No variability in downside returns

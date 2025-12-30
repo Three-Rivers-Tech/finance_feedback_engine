@@ -264,8 +264,9 @@ class CoinbaseDataProvider:
 
             # Filter to only online products
             online_products = [
-                p for p in products
-                if p.get('status') == 'online' and not p.get('trading_disabled', False)
+                p
+                for p in products
+                if p.get("status") == "online" and not p.get("trading_disabled", False)
             ]
 
             logger.info(

@@ -5,14 +5,15 @@ Integrates with existing EnsembleDecisionManager to query LLM providers
 and aggregate their votes on trading pair candidates.
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from .prompt_templates import (
-    build_pair_evaluation_prompt,
     build_pair_description_prompt,
+    build_pair_evaluation_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ class EnsembleVote:
         reasoning: Aggregated reasoning from providers
         vote_score: Numeric score for ranking (-1 to 2)
     """
+
     vote: str
     confidence: int
     provider_votes: Dict[str, str]
@@ -48,12 +50,7 @@ class PairEnsembleVoter:
     """
 
     # Vote to numeric score mapping
-    VOTE_SCORES = {
-        "STRONG_BUY": 2.0,
-        "BUY": 1.0,
-        "NEUTRAL": 0.0,
-        "AVOID": -1.0
-    }
+    VOTE_SCORES = {"STRONG_BUY": 2.0, "BUY": 1.0, "NEUTRAL": 0.0, "AVOID": -1.0}
 
     def __init__(self, ai_decision_manager):
         """
@@ -69,10 +66,10 @@ class PairEnsembleVoter:
     async def get_ensemble_votes(
         self,
         candidates: Dict[str, float],
-        candidate_metrics: Dict[str, Dict[str, any]],
+        candidate_metrics: Dict[str, Dict[str, Any]],
         market_context: Dict[str, Any],
         available_slots: int,
-        enabled_providers: Optional[List[str]] = None
+        enabled_providers: Optional[List[str]] = None,
     ) -> Dict[str, EnsembleVote]:
         """
         Query LLM ensemble for pair evaluation votes.
@@ -97,13 +94,12 @@ class PairEnsembleVoter:
             candidates=candidates,
             candidate_metrics=candidate_metrics,
             portfolio_context=market_context,
-            available_slots=available_slots
+            available_slots=available_slots,
         )
 
         # Query providers
         provider_responses = await self._query_providers(
-            prompt=prompt,
-            enabled_providers=enabled_providers
+            prompt=prompt, enabled_providers=enabled_providers
         )
 
         if not provider_responses:
@@ -113,7 +109,7 @@ class PairEnsembleVoter:
         # Aggregate votes across providers
         aggregated_votes = self._aggregate_provider_votes(
             provider_responses=provider_responses,
-            candidate_pairs=list(candidates.keys())
+            candidate_pairs=list(candidates.keys()),
         )
 
         logger.info(
@@ -127,7 +123,7 @@ class PairEnsembleVoter:
         selected_pairs: List[str],
         statistical_scores: Dict[str, float],
         llm_votes: Dict[str, EnsembleVote],
-        enabled_providers: Optional[List[str]] = None
+        enabled_providers: Optional[List[str]] = None,
     ) -> str:
         """
         Generate human-readable reasoning for pair selections.
@@ -146,9 +142,9 @@ class PairEnsembleVoter:
         # Build description prompt
         llm_votes_dict = {
             pair: {
-                'vote': vote.vote,
-                'confidence': vote.confidence,
-                'reasoning': vote.reasoning
+                "vote": vote.vote,
+                "confidence": vote.confidence,
+                "reasoning": vote.reasoning,
             }
             for pair, vote in llm_votes.items()
         }
@@ -156,7 +152,7 @@ class PairEnsembleVoter:
         prompt = build_pair_description_prompt(
             selected_pairs=selected_pairs,
             statistical_scores=statistical_scores,
-            llm_votes=llm_votes_dict
+            llm_votes=llm_votes_dict,
         )
 
         # Query single provider for description (use first enabled)
@@ -165,8 +161,7 @@ class PairEnsembleVoter:
 
         if not enabled_providers:
             return self._generate_fallback_description(
-                selected_pairs,
-                statistical_scores
+                selected_pairs, statistical_scores
             )
 
         # Use first available provider
@@ -174,8 +169,7 @@ class PairEnsembleVoter:
 
         try:
             response = await self._query_single_provider(
-                provider=provider,
-                prompt=prompt
+                provider=provider, prompt=prompt
             )
 
             # Extract text from response
@@ -190,18 +184,14 @@ class PairEnsembleVoter:
 
         except Exception as e:
             logger.warning(
-                f"Failed to generate reasoning with {provider}: {e}. "
-                "Using fallback."
+                f"Failed to generate reasoning with {provider}: {e}. " "Using fallback."
             )
             return self._generate_fallback_description(
-                selected_pairs,
-                statistical_scores
+                selected_pairs, statistical_scores
             )
 
     async def _query_providers(
-        self,
-        prompt: str,
-        enabled_providers: Optional[List[str]] = None
+        self, prompt: str, enabled_providers: Optional[List[str]] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Query multiple LLM providers in parallel.
@@ -222,35 +212,37 @@ class PairEnsembleVoter:
 
         provider_responses = {}
 
-        for provider in enabled_providers:
-            try:
-                response = await self._query_single_provider(
-                    provider=provider,
-                    prompt=prompt
-                )
+        tasks = {
+            provider: asyncio.create_task(
+                self._query_single_provider(provider=provider, prompt=prompt)
+            )
+            for provider in enabled_providers
+        }
 
-                # Parse JSON response
-                parsed = self._parse_provider_response(response, provider)
+        results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+
+        for provider, result in zip(tasks.keys(), results):
+            if isinstance(result, Exception):
+                logger.warning(
+                    f"Provider '{provider}' failed pair evaluation: {result}"
+                )
+                continue
+
+            try:
+                parsed = self._parse_provider_response(result, provider)
 
                 if parsed:
                     provider_responses[provider] = parsed
                     logger.debug(
-                        f"Provider '{provider}' evaluated "
-                        f"{len(parsed)} pairs"
+                        f"Provider '{provider}' evaluated " f"{len(parsed)} pairs"
                     )
 
             except Exception as e:
-                logger.warning(
-                    f"Provider '{provider}' failed pair evaluation: {e}"
-                )
+                logger.warning(f"Provider '{provider}' failed pair evaluation: {e}")
 
         return provider_responses
 
-    async def _query_single_provider(
-        self,
-        provider: str,
-        prompt: str
-    ) -> str:
+    async def _query_single_provider(self, provider: str, prompt: str) -> str:
         """
         Query a single LLM provider.
 
@@ -263,17 +255,12 @@ class PairEnsembleVoter:
         """
         # Use AI decision manager's query_ai method
         # This handles the provider-specific API calls
-        response = await self.ai_manager.query_ai(
-            prompt=prompt,
-            provider=provider
-        )
+        response = await self.ai_manager.query_ai(prompt=prompt, provider=provider)
 
         return response
 
     def _parse_provider_response(
-        self,
-        response: str,
-        provider: str
+        self, response: str, provider: str
     ) -> Optional[Dict[str, Dict[str, Any]]]:
         """
         Parse JSON response from provider.
@@ -322,9 +309,7 @@ class PairEnsembleVoter:
             return None
 
     def _aggregate_provider_votes(
-        self,
-        provider_responses: Dict[str, Dict[str, Any]],
-        candidate_pairs: List[str]
+        self, provider_responses: Dict[str, Dict[str, Any]], candidate_pairs: List[str]
     ) -> Dict[str, EnsembleVote]:
         """
         Aggregate votes across providers using weighted voting.
@@ -351,9 +336,9 @@ class PairEnsembleVoter:
                 if not pair_eval:
                     continue
 
-                vote = pair_eval.get('vote', 'NEUTRAL')
-                confidence = pair_eval.get('confidence', 50)
-                reasoning = pair_eval.get('reasoning', '')
+                vote = pair_eval.get("vote", "NEUTRAL")
+                confidence = pair_eval.get("confidence", 50)
+                reasoning = pair_eval.get("reasoning", "")
 
                 votes.append(vote)
                 confidences.append(confidence)
@@ -363,11 +348,11 @@ class PairEnsembleVoter:
             if not votes:
                 # No votes for this pair - use neutral
                 aggregated[pair] = EnsembleVote(
-                    vote='NEUTRAL',
+                    vote="NEUTRAL",
                     confidence=50,
                     provider_votes={},
-                    reasoning='No provider votes received',
-                    vote_score=0.0
+                    reasoning="No provider votes received",
+                    vote_score=0.0,
                 )
                 continue
 
@@ -396,7 +381,7 @@ class PairEnsembleVoter:
                 confidence=final_confidence,
                 provider_votes=provider_votes,
                 reasoning=combined_reasoning,
-                vote_score=avg_score
+                vote_score=avg_score,
             )
 
         return aggregated
@@ -423,7 +408,7 @@ class PairEnsembleVoter:
             List of enabled provider names (e.g., ['local', 'gemini', 'qwen'])
         """
         # Try to query AI manager for enabled providers
-        if self.ai_manager and hasattr(self.ai_manager, 'enabled_providers'):
+        if self.ai_manager and hasattr(self.ai_manager, "enabled_providers"):
             providers = self.ai_manager.enabled_providers
             if providers and isinstance(providers, list):
                 logger.debug(f"Using enabled providers from AI manager: {providers}")
@@ -431,34 +416,33 @@ class PairEnsembleVoter:
 
         # Fallback to common providers if not available
         logger.debug("AI manager doesn't have enabled_providers, using fallback list")
-        return ['local', 'qwen', 'gemini', 'cli']
+        return ["local", "qwen", "gemini", "cli"]
 
     def _generate_neutral_votes(
-        self,
-        candidate_pairs: List[str]
+        self, candidate_pairs: List[str]
     ) -> Dict[str, EnsembleVote]:
         """Generate neutral votes as fallback."""
         return {
             pair: EnsembleVote(
-                vote='NEUTRAL',
+                vote="NEUTRAL",
                 confidence=50,
                 provider_votes={},
-                reasoning='No LLM responses available',
-                vote_score=0.0
+                reasoning="No LLM responses available",
+                vote_score=0.0,
             )
             for pair in candidate_pairs
         }
 
     def _generate_fallback_description(
-        self,
-        selected_pairs: List[str],
-        statistical_scores: Dict[str, float]
+        self, selected_pairs: List[str], statistical_scores: Dict[str, float]
     ) -> str:
         """Generate simple fallback description without LLM."""
-        avg_score = sum(
-            statistical_scores.get(pair, 0.0)
-            for pair in selected_pairs
-        ) / len(selected_pairs) if selected_pairs else 0.0
+        avg_score = (
+            sum(statistical_scores.get(pair, 0.0) for pair in selected_pairs)
+            / len(selected_pairs)
+            if selected_pairs
+            else 0.0
+        )
 
         pairs_str = ", ".join(selected_pairs)
 
@@ -478,9 +462,9 @@ class PairEnsembleVoter:
         if text.startswith("```"):
             lines = text.split("\n")
             # Remove first and last lines if they're code fences
-            if lines[0].startswith("```"):
+            if lines:
                 lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
+            if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
 

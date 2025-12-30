@@ -1,8 +1,10 @@
 """Redis auto-setup and management for Finance Feedback Engine."""
 
 import logging
+import os
 import platform
 import subprocess
+import sys
 import time
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,28 @@ class RedisManager:
         Returns:
             True if user approves installation, False otherwise
         """
+        # Non-interactive environments (e.g., pytest) should not block on input.
+        # Honor environment overrides:
+        # - FFE_NON_INTERACTIVE=1: never prompt
+        # - FFE_AUTO_INSTALL_REDIS=1: auto-approve installation without prompting
+        try:
+            non_interactive_env = os.environ.get("FFE_NON_INTERACTIVE") == "1"
+            auto_install_env = os.environ.get("FFE_AUTO_INSTALL_REDIS") in (
+                "1",
+                "true",
+                "yes",
+                "True",
+            )
+            stdin_is_tty = (
+                hasattr(sys, "stdin") and sys.stdin is not None and sys.stdin.isatty()
+            )
+
+            if non_interactive_env or not stdin_is_tty:
+                return bool(auto_install_env)
+        except Exception:
+            # If any detection fails, fall back to prompting below
+            pass
+
         try:
             from rich.prompt import Confirm
 

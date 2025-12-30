@@ -405,13 +405,17 @@ async def pause_agent() -> AgentStatusResponse:
             # Return current status
             uptime = None
             if hasattr(_agent_instance, "start_time"):
-                uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+                uptime = (
+                    datetime.utcnow() - _agent_instance.start_time
+                ).total_seconds()
 
             return AgentStatusResponse(
                 state=BotState.STOPPED,
-                agent_ooda_state=_agent_instance.state.name
-                if _agent_instance and hasattr(_agent_instance, "state")
-                else None,
+                agent_ooda_state=(
+                    _agent_instance.state.name
+                    if _agent_instance and hasattr(_agent_instance, "state")
+                    else None
+                ),
                 uptime_seconds=uptime,
                 config={"paused": True},
             )
@@ -466,13 +470,17 @@ async def resume_agent() -> AgentStatusResponse:
             # Return current status
             uptime = None
             if hasattr(_agent_instance, "start_time"):
-                uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+                uptime = (
+                    datetime.utcnow() - _agent_instance.start_time
+                ).total_seconds()
 
             return AgentStatusResponse(
                 state=BotState.RUNNING,
-                agent_ooda_state=_agent_instance.state.name
-                if _agent_instance and hasattr(_agent_instance, "state")
-                else None,
+                agent_ooda_state=(
+                    _agent_instance.state.name
+                    if _agent_instance and hasattr(_agent_instance, "state")
+                    else None
+                ),
                 uptime_seconds=uptime,
                 config={"paused": False},
             )

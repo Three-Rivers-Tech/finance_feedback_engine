@@ -106,7 +106,21 @@ class TestValidateDataFreshness:
             fresh_ts, "stocks", timeframe="daily"
         )
         assert is_fresh is True
-        # May have warning (> 4 hour warning threshold) but still usable
+        # Warns when > 4 hours old but remains usable
+        assert "WARNING" in warning
+        assert "Stock daily data is" in warning
+        assert "4 hours" in warning
+
+    @freeze_time("2024-01-15 12:00:00")
+    def test_stock_daily_no_warning_under_4_hours(self):
+        """Stock daily data under 4 hours should have no warning."""
+        ts = "2024-01-15T09:00:00Z"  # 3 hours ago
+
+        is_fresh, age_str, warning = validate_data_freshness(
+            ts, "stocks", timeframe="daily"
+        )
+        assert is_fresh is True
+        assert warning == ""
 
     def test_timestamp_with_z_suffix(self):
         """Should handle ISO 8601 with 'Z' UTC indicator."""

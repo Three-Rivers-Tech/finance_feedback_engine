@@ -1733,22 +1733,26 @@ def _save_approval_response(
     if not sanitized_id:
         raise ValueError("Invalid decision_id: contains no valid characters")
 
+    decision = decision or {}
+
+    status = "approved" if approved else "rejected"
+    if modified:
+        status = "modified"
+
     approval_data = {
         "decision_id": decision_id,
+        "status": status,
         "approved": approved,
         "modified": modified,
         "timestamp": datetime.now().isoformat(),
         "source": "cli",
+        "approval_notes": decision.get("approval_notes", ""),
     }
 
     if modified:
         approval_data["modified_decision"] = decision
 
     # Save to file
-    status = "approved" if approved else "rejected"
-    if modified:
-        status = "modified"
-
     approval_file = approvals_dir / f"{sanitized_id}_{status}.json"
 
     # Security check: ensure the resolved path is within approvals_dir

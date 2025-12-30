@@ -548,14 +548,78 @@ pair_selection:
   # Pair universe discovery
   universe:
     # Auto-discover pairs from exchanges
-    auto_discover: true
+    # CRITICAL: Disabled by default to prevent low-liquidity/manipulated pairs
+    # When enabled, discovery filters MUST be applied (see discovery_filters below)
+    auto_discover: false
+
+    # Whitelist mode: Only trade pairs in this curated list (recommended)
+    # When enabled, whitelist takes precedence over blacklist and discovery filters
+    whitelist_enabled: true
+
+    # Whitelist of trusted pairs (only used when whitelist_enabled: true)
+    # Manually curated for liquidity, listing age, and track record
+    whitelist_entries:
+      - BTCUSD      # Bitcoin: Highest liquidity, established
+      - ETHUSD      # Ethereum: High liquidity, established
+      - EURUSD      # Forex: Institutional liquidity
+      - GBPUSD      # Forex: High volume
+      - USDJPY      # Forex: Major pair
+      # Add pairs only after manual vetting of:
+      # - 24h volume > 100M USD equivalent
+      # - Listed for 2+ years on major exchange
+      # - Bid-ask spread < 0.1% in normal conditions
+      # - Depth (level 2) support available
 
     # Pairs to exclude from selection (blacklist)
+    # Used when whitelist_enabled: false to filter out problematic pairs
     blacklist: []
     # Example: blacklist: ["SHIBUSD", "DOGEUSD"]
 
     # Cache TTL for discovered pairs (hours)
     cache_ttl_hours: 24
+
+    # Discovery filters (only applied when auto_discover: true)
+    # These safeguards prevent adding low-quality or manipulated pairs
+    discovery_filters:
+      # Enable discovery filters
+      enabled: true
+
+      # Minimum 24-hour volume threshold (in USD)
+      # Filters out thinly-traded pairs
+      # Crypto: Recommend >= 50M USD
+      # Forex: Recommend >= 1B USD
+      volume_threshold_usd: 50000000  # 50M USD
+
+      # Minimum listing age (in days)
+      # Filters out pump-and-dump schemes and new scams
+      # Recommend: >= 365 days (1 year) for crypto
+      min_listing_age_days: 365
+
+      # Maximum bid-ask spread threshold (as percentage)
+      # Filters out illiquid pairs with wide spreads
+      # Recommend: <= 0.1% (0.001) for major pairs
+      max_spread_pct: 0.001
+
+      # Minimum order book depth (in USD)
+      # Ensures sufficient liquidity at market depth
+      # Recommend: >= 10M USD for 1% impact depth
+      min_depth_usd: 10000000
+
+      # Exclude pairs with known manipulation indicators
+      # If true, flags pairs with:
+      # - Unusual volume spikes (>10x average)
+      # - Extreme price volatility (>50% in 24h)
+      # - Low venue count (< 2 major exchanges)
+      exclude_suspicious_patterns: true
+
+      # Maximum number of venues required
+      # Pairs on 3+ major exchanges have lower manipulation risk
+      min_venue_count: 2
+
+      # Auto-update whitelist from discovery results
+      # When true, pairs passing discovery_filters are added to whitelist
+      # When false, discovered pairs require manual approval (safer)
+      auto_add_to_whitelist: false
 
   # Statistical metrics configuration
   statistical:

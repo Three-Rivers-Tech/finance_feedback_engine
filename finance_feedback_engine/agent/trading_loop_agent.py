@@ -148,66 +148,149 @@ class TradingLoopAgent:
         # Pair selection system (optional)
         self.pair_selector = None
         self.pair_scheduler = None
-        
+
         # Initialize pair selection if configured
-        if hasattr(config, 'pair_selection') and config.pair_selection.get('enabled', False):
+        if hasattr(config, "pair_selection") and config.pair_selection.get(
+            "enabled", False
+        ):
             try:
                 from finance_feedback_engine.pair_selection import (
-                    PairSelector,
                     PairSelectionConfig,
+                    PairSelector,
+                )
+                from finance_feedback_engine.pair_selection.core.discovery_filters import (
+                    DiscoveryFilterConfig,
+                    WhitelistConfig,
                 )
                 from finance_feedback_engine.pair_selection.core.selection_scheduler import (
                     PairSelectionScheduler,
                 )
-                
+
                 # Build PairSelectionConfig from dict config
                 ps_config = config.pair_selection
+
+                # Load discovery filter configuration from YAML
+                discovery_filters_cfg = ps_config.get("universe", {}).get(
+                    "discovery_filters", {}
+                )
+                discovery_filter_config = DiscoveryFilterConfig(
+                    enabled=discovery_filters_cfg.get("enabled", True),
+                    volume_threshold_usd=discovery_filters_cfg.get(
+                        "volume_threshold_usd", 50_000_000
+                    ),
+                    min_listing_age_days=discovery_filters_cfg.get(
+                        "min_listing_age_days", 365
+                    ),
+                    max_spread_pct=discovery_filters_cfg.get(
+                        "max_spread_pct", 0.001
+                    ),
+                    min_depth_usd=discovery_filters_cfg.get(
+                        "min_depth_usd", 10_000_000
+                    ),
+                    exclude_suspicious_patterns=discovery_filters_cfg.get(
+                        "exclude_suspicious_patterns", True
+                    ),
+                    min_venue_count=discovery_filters_cfg.get(
+                        "min_venue_count", 2
+                    ),
+                    auto_add_to_whitelist=discovery_filters_cfg.get(
+                        "auto_add_to_whitelist", False
+                    ),
+                )
+
+                # Load whitelist configuration from YAML
+                whitelist_cfg = ps_config.get("universe", {})
+                whitelist_config = WhitelistConfig(
+                    enabled=whitelist_cfg.get("whitelist_enabled", True),
+                    whitelist_entries=whitelist_cfg.get(
+                        "whitelist_entries",
+                        ["BTCUSD", "ETHUSD", "EURUSD", "GBPUSD", "USDJPY"],
+                    ),
+                )
+
                 pair_selection_config = PairSelectionConfig(
-                    target_pair_count=ps_config.get('target_pair_count', 5),
-                    candidate_oversampling=ps_config.get('llm', {}).get('candidate_oversampling', 3),
-                    sortino_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('sortino', 0.4),
-                    diversification_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('diversification', 0.35),
-                    volatility_weight=ps_config.get('statistical', {}).get('aggregation_weights', {}).get('volatility', 0.25),
-                    sortino_windows_days=ps_config.get('statistical', {}).get('sortino', {}).get('windows_days', [7, 30, 90]),
-                    sortino_window_weights=ps_config.get('statistical', {}).get('sortino', {}).get('weights', [0.5, 0.3, 0.2]),
-                    correlation_lookback_days=ps_config.get('statistical', {}).get('correlation', {}).get('lookback_days', 30),
-                    garch_p=ps_config.get('statistical', {}).get('garch', {}).get('p', 1),
-                    garch_q=ps_config.get('statistical', {}).get('garch', {}).get('q', 1),
-                    garch_forecast_horizon_days=ps_config.get('statistical', {}).get('garch', {}).get('forecast_horizon_days', 7),
-                    garch_fitting_window_days=ps_config.get('statistical', {}).get('garch', {}).get('fitting_window_days', 90),
-                    thompson_enabled=ps_config.get('thompson_sampling', {}).get('enabled', True),
-                    thompson_success_threshold=ps_config.get('thompson_sampling', {}).get('success_threshold', 0.55),
-                    thompson_failure_threshold=ps_config.get('thompson_sampling', {}).get('failure_threshold', 0.45),
-                    thompson_min_trades=ps_config.get('thompson_sampling', {}).get('min_trades_for_update', 3),
-                    universe_cache_ttl_hours=ps_config.get('universe', {}).get('cache_ttl_hours', 24),
-                    pair_blacklist=ps_config.get('universe', {}).get('blacklist', []),
-                    llm_enabled=ps_config.get('llm', {}).get('enabled', True),
+                    target_pair_count=ps_config.get("target_pair_count", 5),
+                    candidate_oversampling=ps_config.get("llm", {}).get(
+                        "candidate_oversampling", 3
+                    ),
+                    sortino_weight=ps_config.get("statistical", {})
+                    .get("aggregation_weights", {})
+                    .get("sortino", 0.4),
+                    diversification_weight=ps_config.get("statistical", {})
+                    .get("aggregation_weights", {})
+                    .get("diversification", 0.35),
+                    volatility_weight=ps_config.get("statistical", {})
+                    .get("aggregation_weights", {})
+                    .get("volatility", 0.25),
+                    sortino_windows_days=ps_config.get("statistical", {})
+                    .get("sortino", {})
+                    .get("windows_days", [7, 30, 90]),
+                    sortino_window_weights=ps_config.get("statistical", {})
+                    .get("sortino", {})
+                    .get("weights", [0.5, 0.3, 0.2]),
+                    correlation_lookback_days=ps_config.get("statistical", {})
+                    .get("correlation", {})
+                    .get("lookback_days", 30),
+                    garch_p=ps_config.get("statistical", {})
+                    .get("garch", {})
+                    .get("p", 1),
+                    garch_q=ps_config.get("statistical", {})
+                    .get("garch", {})
+                    .get("q", 1),
+                    garch_forecast_horizon_days=ps_config.get("statistical", {})
+                    .get("garch", {})
+                    .get("forecast_horizon_days", 7),
+                    garch_fitting_window_days=ps_config.get("statistical", {})
+                    .get("garch", {})
+                    .get("fitting_window_days", 90),
+                    thompson_enabled=ps_config.get("thompson_sampling", {}).get(
+                        "enabled", True
+                    ),
+                    thompson_success_threshold=ps_config.get(
+                        "thompson_sampling", {}
+                    ).get("success_threshold", 0.55),
+                    thompson_failure_threshold=ps_config.get(
+                        "thompson_sampling", {}
+                    ).get("failure_threshold", 0.45),
+                    thompson_min_trades=ps_config.get("thompson_sampling", {}).get(
+                        "min_trades_for_update", 3
+                    ),
+                    universe_cache_ttl_hours=ps_config.get("universe", {}).get(
+                        "cache_ttl_hours", 24
+                    ),
+                    pair_blacklist=ps_config.get("universe", {}).get("blacklist", []),
+                    auto_discover=ps_config.get("universe", {}).get(
+                        "auto_discover", False
+                    ),
+                    discovery_filter_config=discovery_filter_config,
+                    whitelist_config=whitelist_config,
+                    llm_enabled=ps_config.get("llm", {}).get("enabled", True),
                     llm_enabled_providers=None,  # Will use all enabled
                 )
-                
+
                 # Initialize pair selector
                 self.pair_selector = PairSelector(
                     data_provider=engine.data_provider,
                     config=pair_selection_config,
-                    ai_decision_manager=getattr(engine, 'ai_decision_manager', None),
+                    ai_decision_manager=getattr(engine, "ai_decision_manager", None),
                 )
-                
+
                 # Initialize scheduler
                 def on_selection_callback(result):
                     """Update agent's asset_pairs when selection completes."""
                     self.config.asset_pairs = result.selected_pairs
                     logger.info(f"Updated active pairs: {result.selected_pairs}")
-                
+
                 self.pair_scheduler = PairSelectionScheduler(
                     pair_selector=self.pair_selector,
                     trade_monitor=trade_monitor,
                     portfolio_memory=portfolio_memory,
-                    interval_hours=ps_config.get('rotation_interval_hours', 1.0),
+                    interval_hours=ps_config.get("rotation_interval_hours", 1.0),
                     on_selection_callback=on_selection_callback,
                 )
-                
+
                 logger.info("✓ Pair selection system initialized")
-                
+
             except ImportError as e:
                 logger.warning(f"Pair selection disabled: Import error - {e}")
                 self.pair_selector = None
@@ -1873,11 +1956,12 @@ class TradingLoopAgent:
         logger.info("Stopping autonomous trading agent...")
         self.is_running = False
         self.stop_requested = True
-        
+
         # Stop pair selection scheduler if running
         if self.pair_scheduler and self.pair_scheduler.is_running:
             try:
                 import asyncio
+
                 asyncio.create_task(self.pair_scheduler.stop())
                 logger.info("Stopping pair selection scheduler...")
             except Exception as e:

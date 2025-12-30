@@ -1946,19 +1946,20 @@ class PortfolioMemoryEngine:
 
         # Calculate cutoff timestamp
         cutoff_date = datetime.utcnow() - timedelta(days=lookback_days)
-        cutoff_timestamp = cutoff_date.timestamp()
 
         # Get recent trades
         recent_trades = [
             outcome
-            for outcome in self.trade_history
-            if outcome.entry_timestamp >= cutoff_timestamp
+            for outcome in self.trade_outcomes
+            if outcome.exit_timestamp
+            and datetime.fromisoformat(outcome.exit_timestamp.replace("Z", "+00:00"))
+            >= cutoff_date
         ]
 
         # Calculate overall metrics
         total_trades = len(recent_trades)
         if total_trades > 0:
-            total_pnl = sum(t.realized_pnl for t in recent_trades)
+            total_pnl = sum(t.realized_pnl or 0 for t in recent_trades)
             winning_trades = sum(1 for t in recent_trades if t.was_profitable)
             win_rate = (winning_trades / total_trades) * 100
 
@@ -1966,7 +1967,7 @@ class PortfolioMemoryEngine:
             holding_periods = [
                 t.holding_period_hours
                 for t in recent_trades
-                if t.holding_period_hours > 0
+                if t.holding_period_hours is not None and t.holding_period_hours > 0
             ]
             avg_holding_hours = (
                 sum(holding_periods) / len(holding_periods) if holding_periods else 0.0
@@ -1983,28 +1984,29 @@ class PortfolioMemoryEngine:
         regime_performance = self._calculate_regime_performance(recent_trades)
 
         # Get active pairs
-        active_pairs = list(self.active_positions.keys())
+        # Note: active positions are not tracked yet; placeholder until implemented
+        active_pairs = []
 
         return {
-            'current_regime': current_regime,
-            'regime_performance': regime_performance,
-            'recent_trades': [
+            "current_regime": current_regime,
+            "regime_performance": regime_performance,
+            "recent_trades": [
                 {
-                    'asset_pair': t.asset_pair,
-                    'realized_pnl': t.realized_pnl,
-                    'was_profitable': t.was_profitable,
-                    'holding_period_hours': t.holding_period_hours,
+                    "asset_pair": t.asset_pair,
+                    "realized_pnl": t.realized_pnl,
+                    "was_profitable": t.was_profitable,
+                    "holding_period_hours": t.holding_period_hours,
                 }
                 for t in recent_trades[-20:]  # Last 20 trades
             ],
-            'active_pairs': active_pairs,
-            'total_pnl': total_pnl,
-            'win_rate': win_rate,
-            'total_trades': total_trades,
-            'avg_holding_hours': avg_holding_hours,
+            "active_pairs": active_pairs,
+            "total_pnl": total_pnl,
+            "win_rate": win_rate,
+            "total_trades": total_trades,
+            "avg_holding_hours": avg_holding_hours,
         }
 
-    def _detect_market_regime(self, trades: List['TradeOutcome']) -> str:
+    def _detect_market_regime(self, trades: List["TradeOutcome"]) -> str:
         """
         Detect current market regime from recent trade patterns.
 
@@ -2020,12 +2022,14 @@ class PortfolioMemoryEngine:
             Regime classification string
         """
         if len(trades) < 5:
-            return 'unknown'
+            return "unknown"
 
-        # Calculate return volatility
-        returns = [t.realized_pnl for t in trades[-20:]]  # Last 20 trades
-        if not returns:
-            return 'unknown'
+        # Calculate return volatility using only trades with numeric PnL
+        returns = [
+            t.realized_pnl for t in trades[-20:] if t.realized_pnl is not None
+        ]  # Last 20 trades
+        if len(returns) < 3:
+            return "unknown"
 
         import numpy as np
 
@@ -2034,19 +2038,19 @@ class PortfolioMemoryEngine:
 
         # Classify based on volatility relative to mean absolute return
         if avg_abs_return == 0:
-            return 'ranging'
+            return "ranging"
 
         volatility_ratio = volatility / avg_abs_return
 
         if volatility_ratio < 0.5:
-            return 'trending'
+            return "trending"
         elif volatility_ratio < 1.2:
-            return 'ranging'
+            return "ranging"
         else:
-            return 'volatile'
+            return "volatile"
 
     def _calculate_regime_performance(
-        self, trades: List['TradeOutcome']
+        self, trades: List["TradeOutcome"]
     ) -> Dict[str, Dict[str, float]]:
         """
         Calculate performance metrics by market regime.
@@ -2058,7 +2062,7 @@ class PortfolioMemoryEngine:
             Dict mapping regime to performance stats
         """
         # Group trades by regime (simplified - using volatility buckets)
-        regime_trades = {'trending': [], 'ranging': [], 'volatile': []}
+        regime_trades = {"trending": [], "ranging": [], "volatile": []}
 
         # Classify each trade based on its local volatility context
         window_size = 5
@@ -2071,41 +2075,52 @@ class PortfolioMemoryEngine:
             if len(window) < 3:
                 continue
 
-            import numpy as np
+            returns = [t.realized_pnl for t in window if t.realized_pnl is not None]
+            if len(returns) < 3:
+                continue
 
-            returns = [t.realized_pnl for t in window]
             volatility = np.std(returns)
             avg_abs_return = np.mean(np.abs(returns))
 
             if avg_abs_return == 0:
-                regime = 'ranging'
+                regime = "ranging"
             else:
                 vol_ratio = volatility / avg_abs_return
                 if vol_ratio < 0.5:
-                    regime = 'trending'
+                    regime = "trending"
                 elif vol_ratio < 1.2:
-                    regime = 'ranging'
+                    regime = "ranging"
                 else:
-                    regime = 'volatile'
+                    regime = "volatile"
 
-            regime_trades[regime].append(trade)
+            if trade.realized_pnl is not None:
+                regime_trades[regime].append(trade)
 
         # Calculate stats for each regime
         performance = {}
         for regime, regime_list in regime_trades.items():
             if regime_list:
-                winning = sum(1 for t in regime_list if t.was_profitable)
-                total = len(regime_list)
+                numeric_trades = [t for t in regime_list if t.realized_pnl is not None]
+                total = len(numeric_trades)
+                winning = sum(1 for t in numeric_trades if t.was_profitable)
                 win_rate = (winning / total) if total > 0 else 0.0
-                avg_pnl = sum(t.realized_pnl for t in regime_list) / total
+                avg_pnl = (
+                    (sum(t.realized_pnl for t in numeric_trades) / total)
+                    if total > 0
+                    else 0.0
+                )
 
                 performance[regime] = {
-                    'win_rate': win_rate,
-                    'avg_pnl': avg_pnl,
-                    'trade_count': total,
+                    "win_rate": win_rate,
+                    "avg_pnl": avg_pnl,
+                    "trade_count": total,
                 }
             else:
-                performance[regime] = {'win_rate': 0.0, 'avg_pnl': 0.0, 'trade_count': 0}
+                performance[regime] = {
+                    "win_rate": 0.0,
+                    "avg_pnl": 0.0,
+                    "trade_count": 0,
+                }
 
         return performance
 
@@ -2131,16 +2146,16 @@ class PortfolioMemoryEngine:
         """
         # Store in metadata for future analysis
         selection_record = {
-            'selection_id': selection_id,
-            'timestamp': datetime.utcnow().isoformat(),
-            'selected_pairs': selected_pairs,
-            'statistical_scores': statistical_scores,
-            'llm_votes': llm_votes,
-            'metadata': metadata,
+            "selection_id": selection_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "selected_pairs": selected_pairs,
+            "statistical_scores": statistical_scores,
+            "llm_votes": llm_votes,
+            "metadata": metadata,
         }
 
         # Could extend to persist selection history
-        logger.debug(f"Recorded pair selection {selection_id}: {selected_pairs}")
+        logger.debug(f"Recorded pair selection: {selection_record}")
 
     def generate_learning_validation_metrics(
         self, asset_pair: Optional[str] = None

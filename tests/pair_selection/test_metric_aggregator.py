@@ -5,13 +5,20 @@ Tests weighted combination of Sortino, Correlation, and GARCH metrics.
 """
 
 import pytest
-from finance_feedback_engine.pair_selection.statistical.metric_aggregator import (
-    MetricAggregator,
-    AggregatedMetrics,
+
+from finance_feedback_engine.pair_selection.statistical.correlation_matrix import (
+    CorrelationScore,
 )
-from finance_feedback_engine.pair_selection.statistical.sortino_analyzer import SortinoScore
-from finance_feedback_engine.pair_selection.statistical.correlation_matrix import CorrelationScore
-from finance_feedback_engine.pair_selection.statistical.garch_volatility import GARCHForecast
+from finance_feedback_engine.pair_selection.statistical.garch_volatility import (
+    GARCHForecast,
+)
+from finance_feedback_engine.pair_selection.statistical.metric_aggregator import (
+    AggregatedMetrics,
+    MetricAggregator,
+)
+from finance_feedback_engine.pair_selection.statistical.sortino_analyzer import (
+    SortinoScore,
+)
 
 
 class TestMetricAggregator:
@@ -21,11 +28,7 @@ class TestMetricAggregator:
     def aggregator(self):
         """Create MetricAggregator with default weights."""
         return MetricAggregator(
-            weights={
-                'sortino': 0.4,
-                'diversification': 0.35,
-                'volatility': 0.25
-            }
+            weights={"sortino": 0.4, "diversification": 0.35, "volatility": 0.25}
         )
 
     @pytest.fixture
@@ -37,7 +40,7 @@ class TestMetricAggregator:
             mean_return=0.05,
             downside_deviation=0.025,
             negative_return_count=5,
-            total_return_count=30
+            total_return_count=30,
         )
 
     @pytest.fixture
@@ -46,9 +49,9 @@ class TestMetricAggregator:
         return CorrelationScore(
             diversification_score=0.7,
             max_correlation=0.3,
-            correlation_matrix={'EURUSD': 0.3, 'ETHUSD': 0.2},
+            correlation_matrix={"EURUSD": 0.3, "ETHUSD": 0.2},
             warnings=[],
-            sample_size=30
+            sample_size=30,
         )
 
     @pytest.fixture
@@ -56,11 +59,11 @@ class TestMetricAggregator:
         """Create sample GARCHForecast."""
         return GARCHForecast(
             forecasted_vol=0.15,
-            model_params={'omega': 0.01, 'alpha': 0.1, 'beta': 0.85},
-            volatility_regime='medium',
+            model_params={"omega": 0.01, "alpha": 0.1, "beta": 0.85},
+            volatility_regime="medium",
             historical_vol=0.12,
-            confidence_intervals={'lower': 0.10, 'upper': 0.20},
-            persistence=0.95
+            confidence_intervals={"lower": 0.10, "upper": 0.20},
+            persistence=0.95,
         )
 
     def test_aggregate_metrics_balanced_scores(
@@ -68,9 +71,7 @@ class TestMetricAggregator:
     ):
         """Test aggregation with balanced (medium) scores."""
         result = aggregator.aggregate_metrics(
-            sortino=sample_sortino,
-            correlation=sample_correlation,
-            garch=sample_garch
+            sortino=sample_sortino, correlation=sample_correlation, garch=sample_garch
         )
 
         assert isinstance(result, AggregatedMetrics)

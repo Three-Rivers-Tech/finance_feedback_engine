@@ -4,9 +4,10 @@ Unit tests for CorrelationAnalyzer.
 Tests portfolio correlation analysis and diversification scoring.
 """
 
+from unittest.mock import MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock
 
 from finance_feedback_engine.pair_selection.statistical.correlation_matrix import (
     CorrelationAnalyzer,
@@ -34,9 +35,7 @@ class TestCorrelationAnalyzer:
     ):
         """Test correlation calculation when there are no active positions."""
         result = analyzer.calculate_correlation_score(
-            candidate="BTCUSD",
-            active_positions=[],
-            data_provider=mock_data_provider
+            candidate="BTCUSD", active_positions=[], data_provider=mock_data_provider
         )
 
         # With no active positions, should get perfect diversification score
@@ -67,9 +66,9 @@ class TestCorrelationAnalyzer:
         score = CorrelationScore(
             diversification_score=0.75,
             max_correlation=0.25,
-            correlation_matrix={'EURUSD': 0.25, 'ETHUSD': 0.15},
+            correlation_matrix={"EURUSD": 0.25, "ETHUSD": 0.15},
             warnings=[],
-            sample_size=30
+            sample_size=30,
         )
 
         assert score.diversification_score == 0.75
