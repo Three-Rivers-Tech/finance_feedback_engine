@@ -49,10 +49,19 @@ export class ConfigLoader {
    * Load configuration from environment variables
    */
   loadFromEnv(): AppConfig {
+    // Determine appropriate default baseUrl based on environment
+    const getDefaultBaseUrl = (): string => {
+      if (this.environment === 'development') {
+        return 'http://localhost:8000'; // Safe default for local development
+      }
+      // Staging and production must explicitly set this
+      return '';
+    };
+
     const rawConfig = {
       api: {
         baseUrl:
-          import.meta.env.VITE_API_BASE_URL || '',
+          import.meta.env.VITE_API_BASE_URL || getDefaultBaseUrl(),
         timeout: 30000,
         apiKey: this.loadApiKey(),
       },
@@ -84,7 +93,24 @@ export class ConfigLoader {
 
     // Log validation results
     if (!result.valid) {
+      // Special handling for empty baseUrl
+      const hasEmptyBaseUrl = result.errors?.some(
+        (e) => e.path === 'api.baseUrl' && e.message?.includes('empty')
+      );
+
       console.error('Configuration validation failed:', result.errors);
+
+      // Provide helpful guidance for missing baseUrl
+      if (hasEmptyBaseUrl) {
+        console.error(
+          `\n⚠️  API Base URL not configured!\n` +
+          `Set the VITE_API_BASE_URL environment variable:\n` +
+          `  • For development: http://localhost:8000\n` +
+          `  • For staging: https://api-staging.example.com\n` +
+          `  • For production: https://api.example.com\n` +
+          `See frontend/ENVIRONMENT_SETUP.md for detailed instructions.`
+        );
+      }
 
       // In production, throw error for critical issues
       if (this.environment === 'production') {

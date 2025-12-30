@@ -600,6 +600,58 @@ def run_agent(
 
     try:
         engine = FinanceFeedbackEngine(config)
+
+        # Test platform connection before starting agent
+        console.print("\n[bold cyan]🔍 Validating Platform Connection...[/bold cyan]")
+        try:
+            platform = engine.trading_platform
+            connection_results = platform.test_connection()
+
+            # Display validation checklist
+            validation_table = Table(title="Platform Connection Validation", show_header=True)
+            validation_table.add_column("Check", style="cyan")
+            validation_table.add_column("Status", style="bold")
+            validation_table.add_column("Result")
+
+            check_names = {
+                "api_auth": "API Authentication",
+                "account_active": "Account Active",
+                "trading_enabled": "Trading Enabled",
+                "balance_available": "Balance Available",
+                "market_data_access": "Market Data Access",
+            }
+
+            for check_key, passed in connection_results.items():
+                check_name = check_names.get(check_key, check_key)
+                status_icon = "✓" if passed else "✗"
+                status_color = "green" if passed else "red"
+                validation_table.add_row(
+                    check_name,
+                    f"[{status_color}]{status_icon}[/{status_color}]",
+                    f"[{status_color}]{'Passed' if passed else 'Failed'}[/{status_color}]"
+                )
+
+            console.print(validation_table)
+
+            # Check if all validations passed
+            all_passed = all(connection_results.values())
+            if not all_passed:
+                failed_checks = [check_names.get(k, k) for k, v in connection_results.items() if not v]
+                console.print(f"\n[bold red]❌ Connection validation failed:[/bold red] {', '.join(failed_checks)}")
+                console.print("[yellow]Please check your API credentials and platform configuration.[/yellow]")
+                raise click.Abort()
+
+            console.print("\n[bold green]✓ Platform connection validated successfully[/bold green]")
+
+        except click.Abort:
+            raise
+        except Exception as e:
+            console.print(f"\n[bold red]❌ Connection validation failed:[/bold red] {str(e)}")
+            if ctx.obj.get("verbose"):
+                console.print(traceback.format_exc())
+            console.print("[yellow]Ensure your platform credentials are correct and the platform is accessible.[/yellow]")
+            raise click.Abort()
+
         agent = _initialize_agent(
             config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs
         )

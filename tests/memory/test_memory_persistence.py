@@ -12,6 +12,7 @@ Tests cover:
 
 import json
 import pytest
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -310,6 +311,7 @@ class TestListSnapshots:
                 timestamp=f"2024-01-0{i+1}T12:00:00", total_trades=i
             )
             persistence.save_snapshot(snapshot)
+            time.sleep(0.01)  # Ensure different modified times
 
         snapshots = persistence.list_snapshots()
 
