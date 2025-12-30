@@ -57,6 +57,14 @@ def validate_credentials(config: Dict[str, Any]) -> None:
         oanda_token = platform_creds.get("api_key", "")
         account_id = platform_creds.get("account_id", "")
 
+        if isinstance(oanda_token, str) and oanda_token.startswith("YOUR_"):
+            errors.append(
+                "❌ Oanda API token is a placeholder: "
+                f"'{oanda_token}'\n"
+                "   Get credentials at: https://www.oanda.com/\n"
+                "   Set via environment variable: export OANDA_API_TOKEN=your_actual_token"
+            )
+
         # Only check Oanda if it's likely being used (account_id present)
         if isinstance(account_id, str) and account_id.startswith("YOUR_"):
             errors.append(

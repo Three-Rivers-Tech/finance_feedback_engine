@@ -110,8 +110,18 @@ class PairSelectionOutcomeTracker:
         # Store in memory
         self.selection_history[selection_id] = record
 
-        # Persist to disk
-        self._save_history()
+        # Persist to disk (raise_on_error=True ensures persistence is tracked)
+        try:
+            self._save_history(raise_on_error=True)
+        except Exception as e:
+            logger.error(
+                f"Failed to persist selection {selection_id} to disk; "
+                f"data may be lost on restart: {e}"
+            )
+            # Still return selection_id, but warn caller that persistence failed
+            raise ValueError(
+                f"Failed to persist selection record to disk: {e}"
+            ) from e
 
         logger.info(
             f"Recorded selection {selection_id}: "
@@ -155,8 +165,17 @@ class PairSelectionOutcomeTracker:
                     "recorded_at": datetime.utcnow().isoformat() + "Z",
                 }
 
-                # Persist to disk
-                self._save_history()
+                # Persist to disk (raise_on_error=True ensures persistence is tracked)
+                try:
+                    self._save_history(raise_on_error=True)
+                except Exception as e:
+                    logger.error(
+                        f"Failed to persist trade outcome for {asset_pair} to disk; "
+                        f"Thompson Sampling feedback loop may be corrupted: {e}"
+                    )
+                    raise ValueError(
+                        f"Failed to persist trade outcome to disk: {e}"
+                    ) from e
 
                 logger.info(
                     f"Linked trade outcome for {asset_pair} to selection {sel_id} "
@@ -337,11 +356,22 @@ class PairSelectionOutcomeTracker:
             logger.error(f"Failed to load selection history: {e}")
             return {}
 
-    def _save_history(self):
-        """Save selection history to disk."""
+    def _save_history(self, raise_on_error: bool = False):
+        """Save selection history to disk.
+
+        Uses atomic write-to-temp-then-rename pattern to prevent corruption
+        if process crashes mid-write.
+
+        Args:
+            raise_on_error: If True, propagate exceptions to caller.
+                           If False (default), log errors silently.
+        """
         try:
-            with open(self.history_file, "w") as f:
+            # Write to temp file first, then atomically rename
+            temp_file = self.history_file.with_suffix('.tmp')
+            with open(temp_file, 'w') as f:
                 json.dump(self.selection_history, f, indent=2)
+            temp_file.replace(self.history_file)
 
             logger.debug(
                 f"Saved {len(self.selection_history)} selection records to disk"
@@ -349,3 +379,5 @@ class PairSelectionOutcomeTracker:
 
         except Exception as e:
             logger.error(f"Failed to save selection history: {e}")
+            if raise_on_error:
+                raise

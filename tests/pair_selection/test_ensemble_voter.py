@@ -89,3 +89,59 @@ class TestPairEnsembleVoter:
         assert vote.confidence == 90
         assert len(vote.provider_votes) == 2
         assert vote.vote_score == 2.0
+
+    def test_score_to_vote_with_default_thresholds(self, mock_ai_manager):
+        """Test _score_to_vote uses DEFAULT_VOTE_THRESHOLDS when config not provided."""
+        voter = PairEnsembleVoter(ai_decision_manager=mock_ai_manager)
+
+        # Test various scores with default thresholds
+        assert voter._score_to_vote(2.0) == "STRONG_BUY"
+        assert voter._score_to_vote(1.5) == "STRONG_BUY"
+        assert voter._score_to_vote(1.0) == "BUY"
+        assert voter._score_to_vote(0.5) == "BUY"
+        assert voter._score_to_vote(0.0) == "NEUTRAL"
+        assert voter._score_to_vote(-0.5) == "NEUTRAL"
+        assert voter._score_to_vote(-1.0) == "AVOID"
+
+    def test_score_to_vote_with_custom_config(self, mock_ai_manager):
+        """Test _score_to_vote uses custom thresholds from provided config."""
+        custom_config = {
+            "ensemble": {
+                "vote_thresholds": {
+                    "strong_buy": 2.0,
+                    "buy": 1.0,
+                    "neutral": 0.0,
+                }
+            }
+        }
+        voter = PairEnsembleVoter(ai_decision_manager=mock_ai_manager, config=custom_config)
+
+        # Test with custom thresholds
+        assert voter._score_to_vote(2.5) == "STRONG_BUY"
+        assert voter._score_to_vote(2.0) == "STRONG_BUY"
+        assert voter._score_to_vote(1.5) == "BUY"
+        assert voter._score_to_vote(1.0) == "BUY"
+        assert voter._score_to_vote(0.5) == "NEUTRAL"
+        assert voter._score_to_vote(0.0) == "NEUTRAL"
+        assert voter._score_to_vote(-0.5) == "AVOID"
+
+    def test_config_fallback_from_ai_manager(self, mock_ai_manager):
+        """Test config is loaded from ai_manager if available."""
+        ai_manager_config = {
+            "ensemble": {
+                "vote_thresholds": {
+                    "strong_buy": 1.75,
+                    "buy": 0.75,
+                    "neutral": -0.25,
+                }
+            }
+        }
+        mock_ai_manager.config = ai_manager_config
+
+        voter = PairEnsembleVoter(ai_decision_manager=mock_ai_manager)
+
+        # Verify config was loaded from ai_manager
+        assert voter.config == ai_manager_config
+        assert voter._score_to_vote(1.75) == "STRONG_BUY"
+        assert voter._score_to_vote(0.75) == "BUY"
+

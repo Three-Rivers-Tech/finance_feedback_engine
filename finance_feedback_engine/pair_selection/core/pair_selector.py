@@ -178,7 +178,9 @@ class PairSelector:
 
         # Initialize LLM voting
         if config.llm_enabled and ai_decision_manager:
-            self.llm_voter = PairEnsembleVoter(ai_decision_manager)
+            # Convert config dataclass to dict for passing to PairEnsembleVoter
+            config_dict = vars(config) if hasattr(config, "__dict__") else config
+            self.llm_voter = PairEnsembleVoter(ai_decision_manager, config=config_dict)
         else:
             self.llm_voter = None
 
@@ -520,17 +522,17 @@ class PairSelector:
         }
 
         # Get portfolio context
-        if hasattr(portfolio_memory, "get_pair_selection_context"):
+        if hasattr(portfolio_memory, 'get_pair_selection_context'):
             market_context = portfolio_memory.get_pair_selection_context()
         else:
             # Fallback context if method doesn't exist yet
             market_context = {
-                "current_regime": "unknown",
-                "regime_performance": {},
-                "active_pairs": [],
-                "total_pnl": 0.0,
-                "win_rate": 0.0,
-                "total_trades": 0,
+                'current_regime': 'unknown',
+                'regime_performance': {},
+                'active_pairs': list(locked_pairs),
+                'total_pnl': 0.0,
+                'win_rate': 0.0,
+                'total_trades': 0,
             }
 
         # Query ensemble
@@ -560,12 +562,25 @@ class PairSelector:
 
         combined_scores = {}
 
+        # Min-max normalize statistical scores across all top candidates
+        stat_values = [statistical_scores.get(pair, 0.0) for pair in top_candidates.keys()]
+        if stat_values:
+            min_stat = min(stat_values)
+            max_stat = max(stat_values)
+            stat_range = max_stat - min_stat
+        else:
+            min_stat = max_stat = stat_range = 0.0
+
         # Combine scores for top candidates
         for pair in top_candidates.keys():
             stat_score = statistical_scores.get(pair, 0.0)
 
-            # Normalize statistical score to [0, 1]
-            stat_normalized = stat_score
+            # Normalize statistical score to [0, 1] via min-max normalization
+            if stat_range > 0:
+                stat_normalized = (stat_score - min_stat) / stat_range
+            else:
+                # All scores are equal; assign neutral value
+                stat_normalized = 0.5
 
             # Get LLM vote score
             if pair in llm_votes:

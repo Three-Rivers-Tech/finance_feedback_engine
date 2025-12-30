@@ -8,6 +8,7 @@ and aggregate their votes on trading pair candidates.
 import asyncio
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,13 @@ from .prompt_templates import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Default vote thresholds used when config is not available
+DEFAULT_VOTE_THRESHOLDS = {
+    "strong_buy": 1.5,
+    "buy": 0.5,
+    "neutral": -0.5,
+}
 
 
 @dataclass
@@ -52,15 +60,36 @@ class PairEnsembleVoter:
     # Vote to numeric score mapping
     VOTE_SCORES = {"STRONG_BUY": 2.0, "BUY": 1.0, "NEUTRAL": 0.0, "AVOID": -1.0}
 
-    def __init__(self, ai_decision_manager):
+    def __init__(self, ai_decision_manager, config: Optional[Mapping[str, Any]] = None):
         """
         Initialize Pair Ensemble Voter.
 
         Args:
             ai_decision_manager: AIDecisionManager instance from decision engine
                                 (has query_ai method for provider interaction)
+            config: Optional configuration mapping containing vote thresholds.
+                   If not provided, will attempt to load from ai_decision_manager
+                   or use DEFAULT_VOTE_THRESHOLDS.
         """
         self.ai_manager = ai_decision_manager
+
+        # Initialize config with fallback chain:
+        # 1. Use provided config
+        # 2. Try to get from ai_manager via getattr or get_config method
+        # 3. Fall back to empty dict (will use DEFAULT_VOTE_THRESHOLDS in _score_to_vote)
+        if config is not None:
+            self.config = config
+        elif ai_decision_manager and hasattr(ai_decision_manager, "config"):
+            self.config = getattr(ai_decision_manager, "config", {})
+        elif ai_decision_manager and hasattr(ai_decision_manager, "get_config"):
+            try:
+                self.config = ai_decision_manager.get_config() or {}
+            except Exception as e:
+                logger.warning(f"Failed to get config from ai_manager: {e}")
+                self.config = {}
+        else:
+            self.config = {}
+
         logger.info("PairEnsembleVoter initialized")
 
     async def get_ensemble_votes(
@@ -388,11 +417,18 @@ class PairEnsembleVoter:
 
     def _score_to_vote(self, score: float) -> str:
         """Map numeric score to categorical vote using config thresholds."""
-        # Get thresholds from config (with defaults)
-        thresholds = self.config.get("ensemble", {}).get("vote_thresholds", {})
-        strong_buy = thresholds.get("strong_buy", 1.5)
-        buy = thresholds.get("buy", 0.5)
-        neutral = thresholds.get("neutral", -0.5)
+        # Get thresholds from config with safe fallback to DEFAULT_VOTE_THRESHOLDS
+        thresholds = {}
+        try:
+            if isinstance(self.config, dict):
+                thresholds = self.config.get("ensemble", {}).get("vote_thresholds", {})
+        except (AttributeError, TypeError):
+            pass
+
+        # Use defaults if thresholds not found in config
+        strong_buy = thresholds.get("strong_buy", DEFAULT_VOTE_THRESHOLDS["strong_buy"])
+        buy = thresholds.get("buy", DEFAULT_VOTE_THRESHOLDS["buy"])
+        neutral = thresholds.get("neutral", DEFAULT_VOTE_THRESHOLDS["neutral"])
 
         if score >= strong_buy:
             return "STRONG_BUY"

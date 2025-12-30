@@ -1365,8 +1365,7 @@ classDiagram
 
     BaseDataProvider <|-- AlphaVantageProvider
     BaseDataProvider <|-- CoinbaseDataProvider
-    CoinbaseDataProvider <|-- OandaDataProvider
-
+    BaseDataProvider <|-- OandaDataProvider
     UnifiedDataProvider --> AlphaVantageProvider
     UnifiedDataProvider --> CoinbaseDataProvider
     UnifiedDataProvider --> OandaDataProvider

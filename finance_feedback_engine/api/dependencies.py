@@ -1,6 +1,7 @@
 """FastAPI dependency injection for shared resources."""
 
 import logging
+from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -60,7 +61,7 @@ def get_auth_manager() -> AuthManager:
 
 
 def verify_api_key(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     request: Request = None,
     auth_manager: AuthManager = Depends(get_auth_manager),
 ) -> str:

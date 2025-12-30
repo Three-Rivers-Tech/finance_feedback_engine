@@ -85,7 +85,7 @@ jobs:
           # Fail on high severity issues only (-lll)
           # Medium severity issues are informational but don't fail the build
           bandit -c pyproject.toml -r finance_feedback_engine/ -lll -f screen
-          bandit -c pyproject.toml -r finance_feedback_engine/ -ll -f json -o bandit-report.json
+          bandit -c pyproject.toml -r finance_feedback_engine/ -l -f json -o bandit-report.json || true
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4

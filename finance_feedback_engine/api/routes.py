@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from ..core import FinanceFeedbackEngine
 from .dependencies import get_engine
@@ -63,6 +63,24 @@ def _pseudonymize_user_id(user_id: str) -> str:
         hashlib.sha256,
     )
     return h.hexdigest()
+
+
+def _sanitize_decision_id(decision_id: str) -> str:
+    """
+    Sanitize decision ID for safe filename usage.
+
+    Removes or replaces special characters that could cause path traversal or
+    filename conflicts. Only allows alphanumeric characters, hyphens, and underscores.
+
+    Args:
+        decision_id: The raw decision ID to sanitize
+
+    Returns:
+        Sanitized decision ID safe for use in filenames
+    """
+    import re
+
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
 
 
 def _validate_webhook_token(request: Request) -> bool:
@@ -920,15 +938,59 @@ approval_router = APIRouter(prefix="/api/v1", tags=["approvals"])
 
 
 class ApprovalRequest(BaseModel):
-    """Request model for recording an approval decision."""
+    """Request model for recording an approval decision.
 
-    decision_id: str
-    status: str  # "approved" or "rejected"
-    user_id: Optional[str] = None
-    user_name: Optional[str] = None
-    approval_notes: Optional[str] = None
-    modifications: Optional[Dict[str, Any]] = None
-    original_decision: Optional[Dict[str, Any]] = None
+    Validates:
+    - status: Constrained to "approved" or "rejected"
+    - decision_id: Max 255 characters (filesystem safe)
+    - user_id: Max 255 characters (will be pseudonymized)
+    - user_name: Max 255 characters (will be pseudonymized)
+    - approval_notes: Max 2000 characters (prevents disk exhaustion)
+    """
+
+    decision_id: str = Field(..., max_length=255, description="Decision ID to approve/reject")
+    status: str = Field(..., description="Approval status: 'approved' or 'rejected'")
+    user_id: Optional[str] = Field(None, max_length=255, description="User ID (will be pseudonymized for storage)")
+    user_name: Optional[str] = Field(None, max_length=255, description="User name (will be pseudonymized for storage)")
+    approval_notes: Optional[str] = Field(None, max_length=2000, description="Approval notes or comments")
+    modifications: Optional[Dict[str, Any]] = Field(None, description="Proposed trade modifications")
+    original_decision: Optional[Dict[str, Any]] = Field(None, description="Original decision snapshot")
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        """Validate status field is one of allowed values.
+
+        Args:
+            v: The status string to validate
+
+        Returns:
+            Normalized (lowercase) status string
+
+        Raises:
+            ValueError: If status is not 'approved' or 'rejected'
+        """
+        if v.lower() not in ["approved", "rejected"]:
+            raise ValueError("Status must be 'approved' or 'rejected'")
+        return v.lower()
+
+    @field_validator("decision_id")
+    @classmethod
+    def validate_decision_id(cls, v: str) -> str:
+        """Validate decision_id is not empty and safe for filesystem.
+
+        Args:
+            v: The decision_id to validate
+
+        Returns:
+            The decision_id (unchanged if valid)
+
+        Raises:
+            ValueError: If decision_id is empty or invalid
+        """
+        if not v or not v.strip():
+            raise ValueError("decision_id cannot be empty")
+        return v
 
 
 class ApprovalResponse(BaseModel):
@@ -950,6 +1012,8 @@ async def record_approval(
     Record an approval decision for a trading decision.
 
     Persists approval data to filesystem with metadata and timestamps.
+    Implements file locking for concurrent write safety and pseudonymizes
+    sensitive user information.
 
     Args:
         request: Approval details (decision_id, status, user info, notes)
@@ -957,22 +1021,44 @@ async def record_approval(
 
     Returns:
         Confirmation of approval persistence with approval_id and timestamp
+
+    Security:
+        - Validates all input fields (status, lengths, format)
+        - Pseudonymizes user_id and user_name before storage
+        - Uses atomic writes (temp file + rename) for concurrent safety
+        - Specifies UTF-8 encoding to prevent platform-specific encoding errors
     """
     import json
     import uuid
+    import tempfile
+    import shutil
     from datetime import datetime
     from pathlib import Path
 
     try:
         approval_id = str(uuid.uuid4())
 
-        # Create approval data structure
+        # Pseudonymize sensitive user information
+        pseudonymized_user_id = None
+        pseudonymized_user_name = None
+
+        if request.user_id:
+            pseudonymized_user_id = _pseudonymize_user_id(request.user_id)
+            logger.debug(f"Pseudonymized user_id for approval tracking")
+
+        if request.user_name:
+            # Pseudonymize user_name using same mechanism
+            pseudonymized_user_name = _pseudonymize_user_id(request.user_name)
+            logger.debug(f"Pseudonymized user_name for approval tracking")
+
+        # Create approval data structure with pseudonymized user info
         approval_data = {
+            "approval_id": approval_id,
             "decision_id": request.decision_id,
             "status": request.status,
             "timestamp": datetime.utcnow().isoformat() + "Z",
-            "user_id": request.user_id,
-            "user_name": request.user_name,
+            "user_id_hash": pseudonymized_user_id,  # Pseudonymized
+            "user_name_hash": pseudonymized_user_name,  # Pseudonymized
             "original_decision": request.original_decision or {},
             "modifications": request.modifications or {},
             "approval_notes": request.approval_notes or "",
@@ -983,21 +1069,25 @@ async def record_approval(
         approval_dir.mkdir(parents=True, exist_ok=True)
 
         # Sanitize filename (prevent path traversal)
-        def _sanitize_id(decision_id: str) -> str:
-            """Sanitize ID for safe filename."""
-            import re
-
-            return re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
-
-        safe_decision_id = _sanitize_id(request.decision_id)
+        safe_decision_id = _sanitize_decision_id(request.decision_id)
         approval_filename = f"{safe_decision_id}_{request.status}.json"
         approval_file = approval_dir / approval_filename
 
-        # Write approval to file
-        with open(approval_file, "w") as f:
-            json.dump(approval_data, f, indent=2)
+        # Write approval to file with atomic write using temp file + rename
+        # This prevents concurrent writes from corrupting the file
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=approval_dir,
+            delete=False,
+            suffix=".json",
+        ) as tmp_file:
+            json.dump(approval_data, tmp_file, indent=2)
+            tmp_path = tmp_file.name
 
-        logger.info(f"Recorded approval: {approval_file}")
+        # Atomically rename temp file to target (POSIX atomic on most filesystems)
+        shutil.move(tmp_path, str(approval_file))
+        logger.info(f"Recorded approval: {approval_file} (atomic write)")
 
         return ApprovalResponse(
             approval_id=approval_id,
@@ -1007,11 +1097,17 @@ async def record_approval(
             message=f"Approval recorded for decision {request.decision_id}",
         )
 
+    except ValueError as e:
+        logger.warning(f"Validation error in approval request: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid approval request: {str(e)}",
+        )
     except Exception as e:
         logger.error(f"Error recording approval: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error recording approval: {str(e)}",
+            detail="Error recording approval",
         )
 
 
@@ -1024,38 +1120,82 @@ async def get_approval(
     Retrieve an approval record by decision ID.
 
     Looks for approval files matching the decision ID in data/approvals/.
+    Implements input validation and safe file I/O with UTF-8 encoding.
 
     Args:
-        decision_id: The decision ID to look up
+        decision_id: The decision ID to look up (max 255 chars)
         engine: Engine instance from dependency injection
 
     Returns:
         Approval data (approved or rejected) or 404 if not found
+
+    Security:
+        - Validates decision_id length to prevent filesystem attacks
+        - Sanitizes decision_id to prevent path traversal
+        - Uses UTF-8 encoding for consistent cross-platform file reading
+        - Validates JSON structure before returning
     """
     import json
-    import re
     from pathlib import Path
 
     try:
+        # Validate decision_id length
+        if not decision_id or len(decision_id) > 255:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid decision_id: must be 1-255 characters",
+            )
+
         approval_dir = Path("data/approvals")
 
         # Sanitize the decision_id for filename matching
-        safe_decision_id = re.sub(r"[^a-zA-Z0-9_-]", "_", decision_id)
+        safe_decision_id = _sanitize_decision_id(decision_id)
 
-        # Look for matching approval files (both approved and rejected)
-        approved_file = approval_dir / f"{safe_decision_id}_approved.json"
-        rejected_file = approval_dir / f"{safe_decision_id}_rejected.json"
+        # Look for matching approval files dynamically using glob
+        matching_files = list(approval_dir.glob(f"{safe_decision_id}_*.json"))
 
-        if approved_file.exists():
-            with open(approved_file, "r") as f:
-                return json.load(f)
-        elif rejected_file.exists():
-            with open(rejected_file, "r") as f:
-                return json.load(f)
-        else:
+        if not matching_files:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Approval record not found for decision {decision_id}",
+                detail="Approval record not found",
+            )
+
+        # Load the first matching approval file with JSON validation
+        approval_file = matching_files[0]
+        try:
+            # Use UTF-8 encoding explicitly for cross-platform compatibility
+            with open(approval_file, "r", encoding="utf-8") as f:
+                approval_data = json.load(f)
+
+            # Validate essential fields exist
+            if "decision_id" not in approval_data or "status" not in approval_data:
+                logger.error(
+                    f"Approval file missing required fields: {approval_file}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Corrupted approval record",
+                )
+
+            return approval_data
+
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"Corrupted approval file (invalid JSON): {approval_file} - {e}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Corrupted approval record",
+            )
+        except UnicodeDecodeError as e:
+            logger.error(
+                f"Encoding error reading approval file: {approval_file} - {e}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error reading approval record (encoding)",
             )
 
     except HTTPException:
@@ -1064,5 +1204,5 @@ async def get_approval(
         logger.error(f"Error retrieving approval: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving approval: {str(e)}",
+            detail="Error retrieving approval",
         )

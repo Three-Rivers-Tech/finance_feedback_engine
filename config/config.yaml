@@ -249,9 +249,9 @@ decision_engine:
   model_name: "llama3.2:3b-instruct-fp16"
 
   # Default position sizing and retry configuration
-  default_position_size: 0.1  # Default position size (10% of balance) when LLM doesn't specify
+  default_position_size: 0.03  # Default position size (3% of balance) when LLM doesn't specify - conservative fallback
   max_retries: 3  # Maximum retry attempts for LLM queries
-  ensemble_timeout: 30  # Timeout in seconds for ensemble decision aggregation
+  ensemble_timeout: 120  # Timeout in seconds for ensemble decision aggregation (must exceed llm_debate timeout)
 
   # Local models list for ensemble (optional, defaults to auto-discovery)
   # local_models: ["llama3.2:3b-instruct-fp16", "mistral:7b-instruct"]
@@ -655,7 +655,7 @@ agent:
   asset_pairs:
     - BTCUSD
     - ETHUSD
-    - EURUSD
+    - EUR_USD
 
 # ============================================
 # Autonomous Pair Selection System [DEFERRED]
@@ -782,6 +782,12 @@ pair_selection:
       # When true, pairs passing discovery_filters are added to whitelist
       # When false, discovered pairs require manual approval (safer)
       auto_add_to_whitelist: false
+
+      # Accept pairs when metrics are unavailable (fail-open vs fail-closed)
+      # False (default, recommended): Reject pairs without metrics (fail-closed, more conservative)
+      # True: Accept pairs without metrics (fail-open, less conservative, legacy behavior)
+      # Use false for production to ensure only properly vetted pairs are traded
+      accept_without_metrics: false
 
   # Statistical metrics configuration
   statistical:

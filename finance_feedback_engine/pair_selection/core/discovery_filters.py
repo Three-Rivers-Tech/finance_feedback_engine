@@ -13,7 +13,7 @@ from entering the trading universe. Enforces filters for:
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,11 @@ class DiscoveryFilterConfig:
 
     # Auto-add discovered pairs to whitelist
     auto_add_to_whitelist: bool = False
+
+    # Accept pairs when metrics are unavailable (fail-open vs fail-closed)
+    # False (default): Reject pairs without metrics (fail-closed, more conservative)
+    # True: Accept pairs without metrics (fail-open, more permissive)
+    accept_without_metrics: bool = False
 
 
 @dataclass
@@ -208,10 +213,14 @@ class PairDiscoveryFilter:
         Returns:
             Rejection reason if pair fails filters, None if accepted
         """
-        # If metrics not available, use basic blacklist/whitelist only
+        # If metrics not available, behavior controlled by accept_without_metrics flag
         if pair_metrics is None or pair not in pair_metrics:
-            # No metrics available - accept pair if discovery filters allow
-            return None
+            if self.discovery_config.accept_without_metrics:
+                # Fail-open: Accept pair without metrics
+                return None
+            else:
+                # Fail-closed: Reject pair without metrics (default)
+                return "METRICS_UNAVAILABLE"
 
         metrics = pair_metrics[pair]
 

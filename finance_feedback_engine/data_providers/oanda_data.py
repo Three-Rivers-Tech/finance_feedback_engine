@@ -311,6 +311,9 @@ class OandaDataProvider:
         """
         import requests
 
+        if not self.account_id:
+            raise ValueError("Oanda account_id is required to fetch instruments")
+
         # Oanda instruments endpoint
         url = f"{self.base_url}/v3/accounts/{self.account_id}/instruments"
 

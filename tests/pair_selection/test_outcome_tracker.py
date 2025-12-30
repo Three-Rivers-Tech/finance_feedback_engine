@@ -4,7 +4,6 @@ Unit tests for PairSelectionOutcomeTracker.
 Tests selection history tracking and trade outcome linkage.
 """
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -64,12 +63,14 @@ class TestPairSelectionOutcomeTracker:
             combined_scores={"BTCUSD": 0.88},
         )
 
-        # Mock trade outcome
+        # Mock trade outcome with all required attributes for JSON serialization
         trade_outcome = MagicMock()
         trade_outcome.decision_id = "DEC_123"
         trade_outcome.realized_pnl = 125.50
         trade_outcome.was_profitable = True
         trade_outcome.holding_period_hours = 48.5
+        trade_outcome.entry_price = 45000.00
+        trade_outcome.exit_price = 45280.00
 
         # Record trade outcome
         result_id = tracker.record_trade_outcome(
@@ -90,13 +91,18 @@ class TestPairSelectionOutcomeTracker:
             combined_scores={},
         )
 
-        # Record trade outcomes
-        for pair, pnl, profitable in [("BTCUSD", 125.50, True), ("ETHUSD", 50.0, True)]:
+        # Record trade outcomes with all required attributes for JSON serialization
+        for pair, pnl, profitable, entry, exit_price in [
+            ("BTCUSD", 125.50, True, 45000.00, 45280.00),
+            ("ETHUSD", 50.0, True, 1.0800, 1.0850),
+        ]:
             trade_outcome = MagicMock()
             trade_outcome.realized_pnl = pnl
             trade_outcome.was_profitable = profitable
             trade_outcome.holding_period_hours = 24.0
             trade_outcome.decision_id = f"DEC_{pair}"
+            trade_outcome.entry_price = entry
+            trade_outcome.exit_price = exit_price
             tracker.record_trade_outcome(pair, trade_outcome)
 
         # Get performance
@@ -107,22 +113,18 @@ class TestPairSelectionOutcomeTracker:
         assert perf["win_rate"] == 100.0  # Both wins
         assert perf["completed_trades"] == 2
 
-    def test_get_stats(self):
+    def test_get_stats(self, tracker):
         """Test overall tracker statistics."""
-        # Create fresh tracker for this test
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tracker = PairSelectionOutcomeTracker(storage_path=tmpdir)
+        # Record exactly two selections
+        for i in range(2):
+            tracker.record_selection(
+                selected_pairs=["BTCUSD"],
+                statistical_scores={},
+                llm_votes={},
+                combined_scores={},
+            )
 
-            # Record selections
-            for i in range(2):
-                tracker.record_selection(
-                    selected_pairs=["BTCUSD"],
-                    statistical_scores={},
-                    llm_votes={},
-                    combined_scores={},
-                )
+        stats = tracker.get_stats()
 
-            stats = tracker.get_stats()
-
-            # Just verify we got selections recorded
-            assert stats["total_selections"] >= 1
+        # Verify exact count of selections recorded
+        assert stats["total_selections"] == 2

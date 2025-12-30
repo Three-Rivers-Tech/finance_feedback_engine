@@ -7,7 +7,7 @@ Uses time-to-live (TTL) caching with configurable expiration.
 
 import logging
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,8 @@ class PairUniverseCache:
         Args:
             ttl_hours: Cache time-to-live in hours (default: 24)
         """
+        if ttl_hours <= 0:
+            raise ValueError(f"ttl_hours must be positive, got {ttl_hours}")
         self.ttl_seconds = ttl_hours * 3600
         self.cache: Dict[str, Tuple[List[str], float]] = {}
 

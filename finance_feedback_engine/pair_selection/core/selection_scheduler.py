@@ -5,6 +5,7 @@ Manages autonomous pair rotation in the background while the trading loop operat
 """
 
 import asyncio
+import inspect
 import logging
 from datetime import datetime
 from typing import Optional
@@ -37,12 +38,29 @@ class PairSelectionScheduler:
             pair_selector: PairSelector instance
             trade_monitor: TradeMonitor for position locking
             portfolio_memory: PortfolioMemoryEngine for context
-            interval_hours: Hours between selections (default: 1.0)
-            on_selection_callback: Optional callback(result) after each selection
+            interval_hours: Hours between selections (default: 1.0, must be > 0)
+            on_selection_callback: Optional callback(result) after each selection.
+                Can be either:
+                - Synchronous callable: def callback(result) -> None
+                - Asynchronous callable: async def callback(result) -> None
+                Async callbacks are awaited if the caller is async, or scheduled
+                with asyncio.create_task when an event loop is running.
+
+        Raises:
+            ValueError: If interval_hours is not positive
         """
+        # Validate interval_hours to prevent busy-loops
+        if interval_hours <= 0:
+            raise ValueError(
+                f"interval_hours must be positive, got {interval_hours}. "
+                "This would cause asyncio.sleep to be called with non-positive seconds."
+            )
+
         self.pair_selector = pair_selector
         self.trade_monitor = trade_monitor
         self.portfolio_memory = portfolio_memory
+
+        # Compute interval_seconds only after validation
         self.interval_seconds = interval_hours * 3600
         self.on_selection_callback = on_selection_callback
 
@@ -51,7 +69,10 @@ class PairSelectionScheduler:
         self._last_selection_time: Optional[datetime] = None
         self._selection_count = 0
 
-        logger.info(f"PairSelectionScheduler initialized (interval: {interval_hours}h)")
+        logger.info(
+            f"PairSelectionScheduler initialized with validated interval: "
+            f"{interval_hours}h ({self.interval_seconds}s)"
+        )
 
     async def start(self):
         """Start the background scheduler task."""
@@ -140,7 +161,15 @@ class PairSelectionScheduler:
             # Trigger callback if provided
             if self.on_selection_callback:
                 try:
-                    self.on_selection_callback(result)
+                    # Check if callback is a coroutine function (async def)
+                    if inspect.iscoroutinefunction(self.on_selection_callback):
+                        await self.on_selection_callback(result)
+                    else:
+                        # Call synchronous callback
+                        callback_result = self.on_selection_callback(result)
+                        # If the callback returns a coroutine, await it
+                        if inspect.iscoroutine(callback_result):
+                            await callback_result
                 except Exception as e:
                     logger.error(f"Selection callback failed: {e}", exc_info=True)
 
