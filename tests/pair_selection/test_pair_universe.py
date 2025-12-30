@@ -84,3 +84,46 @@ class TestPairUniverseCache:
 
         # cache2 should not have this data
         assert cache2.get("coinbase") is None
+
+    def test_ttl_expiration(self, monkeypatch):
+        """Test that cache entries expire after TTL."""
+        # Create cache with 1-hour TTL (3600 seconds)
+        cache = PairUniverseCache(ttl_hours=1)
+        pairs = ["BTCUSD", "ETHUSD", "SOLUSD"]
+
+        # Mock time.time() to control time progression
+        base_time = 1000000.0
+        current_time = base_time
+
+        def mock_time():
+            return current_time
+
+        monkeypatch.setattr(time, "time", mock_time)
+
+        # Set cache at base_time
+        cache.set("coinbase", pairs)
+
+        # Immediately after setting, should be retrievable
+        assert cache.get("coinbase") == pairs
+
+        # Advance time by 30 minutes (1800s) - still within TTL
+        current_time = base_time + 1800
+        assert cache.get("coinbase") == pairs
+
+        # Advance time to just before expiration (3599s) - still valid
+        current_time = base_time + 3599
+        assert cache.get("coinbase") == pairs
+
+        # Advance time past TTL (3601s > 3600s) - should expire
+        current_time = base_time + 3601
+        result = cache.get("coinbase")
+        assert result is None
+
+        # Verify the expired entry was removed from cache
+        assert "coinbase" not in cache.cache
+
+        # New set should work after expiration
+        new_pairs = ["ADAUSD", "XRPUSD"]
+        current_time = base_time + 4000
+        cache.set("coinbase", new_pairs)
+        assert cache.get("coinbase") == new_pairs

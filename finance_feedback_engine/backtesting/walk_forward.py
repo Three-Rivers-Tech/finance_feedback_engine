@@ -23,11 +23,10 @@ class WalkForwardAnalyzer:
     This prevents overfitting by validating on truly unseen data.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize walk-forward analyzer.
 
-        Sets up internal state for conducting walk-forward analyses.
         The analyzer is stateless and reusable for multiple backtests.
         """
         logger.info("Walk-forward analyzer initialized")

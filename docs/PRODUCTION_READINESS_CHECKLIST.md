@@ -22,7 +22,7 @@
 | **Infrastructure as Code** | ❌ NOT READY | @DevOps | 2025-01-27 | No Terraform/Ansible; deploy scripts don't exist |
 | **Security Hardening** | ⚠️ PARTIAL | @Security | 2025-01-31 | JSON-only (pickle migration pending); auth/SSL guides needed |
 | **Disaster Recovery** | ❌ NOT READY | @DevOps | 2025-02-03 | No backup automation, rollback procedures, RTO/RPO SLAs |
-| ****OVERALL READINESS** | **⚠️ READY FOR SINGLE-NODE MVP** | — | 2025-01-10 | Safe for **live trading on one machine** with manual ops |
+| **OVERALL READINESS** | **⚠️ READY FOR SINGLE-NODE MVP** | — | 2026-01-10 | Safe for **live trading on one machine** with manual ops |
 
 ---
 

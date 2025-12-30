@@ -268,9 +268,17 @@ Missing metrics for:
    )
 
    # Usage
-   with decision_latency.record_time():
+   import time
+   
+   start_time = time.perf_counter()
+   try:
        decision = await self._generate_decision(...)
-   decision_counter.add(1, {"asset": asset_pair, "action": decision.action})
+   finally:
+       duration = time.perf_counter() - start_time
+       attributes = {"asset": asset_pair, "action": decision.action if decision else "error"}
+       decision_latency.record(duration, attributes)
+       if decision:
+           decision_counter.add(1, attributes)
    ```
 
 2. **Add metrics to decision_engine.py**:

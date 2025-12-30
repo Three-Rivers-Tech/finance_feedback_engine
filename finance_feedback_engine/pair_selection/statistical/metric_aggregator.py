@@ -76,13 +76,25 @@ class MetricAggregator:
         if missing_keys:
             raise ValueError(f"Missing required weight keys: {missing_keys}")
 
-        # Validate weights
-        if not np.isclose(sum(self.weights.values()), 1.0):
+        # Check for negative weights
+        negative_weights = {k: v for k, v in self.weights.items() if v < 0}
+        if negative_weights:
+            raise ValueError(
+                f"Negative weights are not allowed: {negative_weights}"
+            )
+
+        # Validate weights sum and normalize if needed
+        total = sum(self.weights.values())
+        if total == 0:
+            raise ValueError(
+                "Weights sum to zero; at least one weight must be positive"
+            )
+
+        if not np.isclose(total, 1.0):
             logger.warning(
-                f"Weights sum to {sum(self.weights.values()):.3f}, not 1.0. "
+                f"Weights sum to {total:.3f}, not 1.0. "
                 "Normalizing weights."
             )
-            total = sum(self.weights.values())
             self.weights = {k: v / total for k, v in self.weights.items()}
 
         logger.info(f"Metric Aggregator initialized with weights: {self.weights}")

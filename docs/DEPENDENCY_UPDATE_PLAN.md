@@ -134,7 +134,7 @@ kill $SERVER_PID
 
 **Update Command:**
 ```bash
-pip install --upgrade "numpy>=2.2.0,<2.4.0"
+pip install --upgrade "numpy==2.4.0"
 ```
 
 **Breaking Changes to Check:**

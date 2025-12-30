@@ -29,7 +29,7 @@ Algorithm:
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -72,6 +72,14 @@ class PairSelectionThompsonOptimizer:
         """
         self.stats_file = Path(stats_file)
         self.stats_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Validate thresholds
+        if not (0 <= success_threshold <= 1):
+            raise ValueError("success_threshold must be in [0,1]")
+        if not (0 <= failure_threshold <= 1):
+            raise ValueError("failure_threshold must be in [0,1]")
+        if success_threshold <= failure_threshold:
+            raise ValueError("success_threshold must be greater than failure_threshold")
 
         self.success_threshold = success_threshold
         self.failure_threshold = failure_threshold

@@ -262,7 +262,7 @@ class SortinoAnalyzer:
             return 10.0
 
         # Calculate downside deviation for losses only (ddof=1 for sample std if enough points)
-        downside_dev = np.std(downside_returns) if len(downside_returns) > 1 else 0.0
+        downside_dev = np.std(downside_returns, ddof=1) if len(downside_returns) > 1 else 0.0
 
         if downside_dev == 0:
             # No variability in downside returns

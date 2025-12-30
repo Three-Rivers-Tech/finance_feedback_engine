@@ -769,7 +769,6 @@ def config_editor(ctx, output):
     if base_path.exists():
         try:
             base_config = load_config(str(base_path))
-            base_config = load_config(str(base_path))
         except Exception as e:
             console.print(
                 f"[yellow]Warning: could not read base config: " f"{e}[/yellow]"
@@ -993,11 +992,12 @@ def config_editor(ctx, output):
 
 
 @cli.command(name="validate-config")
+@cli.command(name="validate-config")
 @click.option(
     "--config-path",
     "-c",
     default="config/config.yaml",
-    type=click.Path(exists=True),
+    type=click.Path(),
     help="Path to config file to validate",
 )
 @click.option(
@@ -1005,7 +1005,8 @@ def config_editor(ctx, output):
     is_flag=True,
     help="Exit with error code on validation failures (instead of warnings)",
 )
-def validate_config_cmd(config_path, strict):
+@click.pass_context
+def validate_config_cmd(ctx, config_path, strict):
     """Validate configuration file against schema without starting the engine.
 
     Checks for:
@@ -1022,11 +1023,9 @@ def validate_config_cmd(config_path, strict):
     import yaml
     from finance_feedback_engine.utils.config_schema_validator import validate_config
 
-    console = Console()
-
     try:
         config_file = Path(config_path)
-        with open(config_file, "r") as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         console.print(f"\n[bold]Validating {config_file}...[/bold]\n")
@@ -1035,7 +1034,7 @@ def validate_config_cmd(config_path, strict):
 
         if not messages:
             console.print("✅ [green]Config validation passed - no issues found[/green]\n")
-            return 0
+            return
 
         # Display messages
         for msg in messages:
@@ -1048,23 +1047,20 @@ def validate_config_cmd(config_path, strict):
 
         if strict and any("❌" in msg or "CRITICAL" in msg for msg in messages):
             console.print("[red]❌ Validation failed (strict mode)[/red]\n")
-            return 1
+            ctx.exit(1)
         else:
             console.print("[yellow]⚠️  Warnings found (non-blocking)[/yellow]\n")
-            return 0
 
     except FileNotFoundError:
         console.print(f"[red]❌ Config file not found: {config_path}[/red]\n")
-        return 1
+        ctx.exit(1)
     except yaml.YAMLError as e:
         console.print(f"[red]❌ YAML parsing error: {e}[/red]\n")
-        return 1
+        ctx.exit(1)
     except Exception as e:
         console.print(f"[red]❌ Validation error: {e}[/red]\n")
         if strict:
-            return 1
-        return 0
-
+            ctx.exit(1)
 
 @cli.command(name="install-deps")
 @click.option(

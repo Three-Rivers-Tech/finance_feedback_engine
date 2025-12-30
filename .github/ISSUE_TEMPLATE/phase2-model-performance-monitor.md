@@ -86,6 +86,7 @@ for metric_value in performance_stream:
 - Triggers on statistically significant increase
 - Simpler than ADWIN; good for binary outcomes
 - Reference: Gama et al. (2004)
+- **Threshold hierarchy**: `drift_level > warning_level` (drift is the stricter threshold)
 
 ```python
 # Pseudo-code for DDM
@@ -97,10 +98,11 @@ n = sample_count
 m_p = p + 2 * np.sqrt((p * (1 - p)) / n)
 m_p_prime = p - 2 * np.sqrt((p * (1 - p)) / n)
 
-if m_p > warning_level:
-    warning_triggered = True
-elif m_p > drift_level:
+# Check strict drift condition first, then less-severe warning
+if m_p > drift_level:
     drift_detected = True
+elif m_p > warning_level:
+    warning_triggered = True
 ```
 
 ### 2. Multi-Metric Drift Detection

@@ -4,7 +4,7 @@
 
 Concise, actionable guidance for AI coding agents. Focus on minimal, targeted edits. Reference concrete files, commands, and project-specific conventions.
 
-**Last Updated:** December 2025. Version: 0.9.9. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode), portfolio monitoring, web API, Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard.
+**Last Updated:** December 2025. Version: 0.9.10. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode), portfolio monitoring, web API, React frontend (Vite/TypeScript), Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard, OpenTelemetry observability.
 
 ## Big Picture Architecture
 
@@ -93,9 +93,20 @@ Alpha Vantage (6 timeframes) + Sentiment
 
 **CLI & Configuration:**
 - `finance_feedback_engine/cli/main.py`: 20+ commands via Click; integrated config editor; supports interactive approval prompts; help text auto-generated
-- `config/config.yaml`: Default template; all platform credentials, ensemble weights, risk limits, timeouts, logging
+- `finance_feedback_engine/cli/commands/`: Modular command structure (agent.py, analysis.py, backtest.py, demo.py, experiment.py, frontend.py, memory.py, platform.py, positions.py, serve.py, setup.py)
+- `config/config.yaml`: Default template; all platform credentials, ensemble weights, risk limits, timeouts, logging; environment variable substitution
 - `config/config.local.yaml`: User overrides (git-ignored); env vars override this layer
 - `config/config.backtest.yaml`: Backtest preset (debate ON, local AI, cache enabled, memory isolation, no balance requirements)
+
+**Frontend (React + TypeScript + Vite):**
+- `frontend/src/`: React 19 + TypeScript frontend; Vite build system; Zustand state management; React Router v6
+- `frontend/src/api/`: Axios-based API client; connects to FastAPI backend on port 8000
+- `frontend/src/components/`: Reusable UI components; form validation with react-hook-form + zod
+- `frontend/src/pages/`: Route-based pages (Dashboard, Analysis, Positions, Config)
+- `frontend/package.json`: Scripts: `dev` (frontend only), `dev:all` (concurrently runs API + frontend), `build`, `test` (Vitest), `validate-config`
+- `frontend/vite.config.ts`: Vite configuration; proxy setup for backend API (/api → localhost:8000)
+- **Build**: `cd frontend && npm run build` → outputs to `frontend/dist/`
+- **Development**: `npm run dev:all` (runs both backend + frontend) or `npm run dev` (frontend only, assumes backend running)
 
 ## Developer Workflows
 
@@ -185,6 +196,17 @@ pytest tests/test_phase1_integration.py  # Core suite
 pytest -v --tb=short                  # Verbose
 pytest --cov=finance_feedback_engine   # Coverage (enforced ≥70%)
 pytest --cov-report=html               # HTML report (htmlcov/)
+pytest -m "not slow"                  # Skip slow tests
+pytest -m "not external_service"      # Skip tests requiring external services (ollama, redis, docker, telegram, APIs)
+```
+
+**Frontend Testing:**
+```bash
+cd frontend
+npm run test                          # Run Vitest tests
+npm run test:ui                       # Visual test runner
+npm run test:coverage                 # Coverage report
+npm run type-check                    # TypeScript type checking
 ```
 
 **Code Quality:**
@@ -343,7 +365,20 @@ pytest --cov=finance_feedback_engine --cov-fail-under=70
 pytest tests/test_api*.py                  # For API changes
 pytest tests/test_ensemble_tiers.py        # For ensemble changes
 pytest tests/test_integrations_telegram_redis.py  # For integrations
+cd frontend && npm run test && npm run type-check  # For frontend changes
 ```
+
+**Test Structure & Patterns:**
+- `tests/conftest.py`: Shared fixtures (mock config, mock providers, async helpers)
+- `tests/fixtures/`: Test data files (sample decisions, market data, config templates)
+- `tests/mocks/`: Mock implementations (MockPlatform, MockProvider, MockRedis)
+- `tests/integration/`: End-to-end workflow tests
+- `tests/unit/`: Isolated unit tests for pure functions
+- **Async Tests**: Use `pytest-asyncio` (`@pytest.mark.asyncio`) for async/await code
+- **External Service Markers**: `@pytest.mark.external_service` for tests requiring ollama, redis, docker, telegram, alpha_vantage, coinbase, oanda
+- **Slow Test Markers**: `@pytest.mark.slow` for tests >2s (can skip with `-m "not slow"`)
+- **Mocking Pattern**: Mock at boundary (API calls, I/O) not internal logic; use `pytest-mock` fixtures
+- **Coverage Pragmas**: Use `# pragma: no cover` only for defensive error handling (e.g., except ImportError for optional deps)
 
 **Debugging Checklist:**
 - Stale decision cache? → `rm data/backtest_cache.db`
@@ -367,6 +402,7 @@ pytest tests/test_integrations_telegram_redis.py  # For integrations
 ---
 
 **Version History:**
+- **0.9.10** (Dec 2025): Frontend React migration (Vite + TypeScript + Zustand), enhanced test coverage, OpenTelemetry observability, pair discovery safeguards
 - **0.9.9** (Dec 2025): Risk module separation, learning feedback, FastAPI + Redis approval flows, portfolio dashboard, VaR/correlation analysis, enhanced decision schema
 - **0.9.0** (Nov 2025): Debate mode, ensemble fallback tiers, backtesting framework, market regime detection
 - **2.0.0** (Initial): Core trading engine, multi-platform support, CLI interface

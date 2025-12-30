@@ -229,8 +229,7 @@ ignored-modules = [
 [tool.bandit]
 exclude_dirs = ["tests", "examples", "scripts", "experiments"]
 # B101: Allow assert statements in production code for invariant checking
-# B608: False positive in validator.py - error message formatting mistaken for SQL
-skips = ["B101", "B608"]
+skips = ["B101"]
 
 [tool.pydocstyle]
 convention = "google"
