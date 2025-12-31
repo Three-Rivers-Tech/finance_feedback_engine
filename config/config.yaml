@@ -23,11 +23,10 @@
 alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
 
 # Trading Platform Configuration
-# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'mock', 'unified'
+# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'unified'
 # - coinbase/coinbase_advanced: Crypto trading with futures portfolio tracking
 # - oanda: Forex trading with position & margin tracking
-# - mock: Testing without real API (simulated data)
-# - unified: Multi-platform mode (configure 'platforms' list below)
+# - unified: Multi-platform mode (configure 'platforms' list below) - RECOMMENDED
 #
 # Single Platform Mode: Set one platform name (legacy)
 trading_platform: "coinbase_advanced"
@@ -63,10 +62,10 @@ platform_credentials:
   # environment: "practice"  # 'practice' for demo, 'live' for real money
 
   # ============================================
-  # Option 3: Mock Platform (Testing)
+  # Option 3: Unified Platform (Multi-Asset)
   # ============================================
-  # No credentials needed - uses simulated data
-  # Set trading_platform: "mock" above
+  # Configure platform routing for different asset types
+  # Set trading_platform: "unified" above
 
 # ============================================
 # Data Providers (UnifiedDataProvider Credentials)

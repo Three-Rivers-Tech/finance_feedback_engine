@@ -5,8 +5,9 @@ Provides detailed health information about all components.
 """
 
 import logging
+import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from ..core import FinanceFeedbackEngine
 
@@ -14,6 +15,139 @@ logger = logging.getLogger(__name__)
 
 # Track startup time
 _startup_time = datetime.utcnow()
+
+
+def check_ollama_status_sync() -> Dict[str, Any]:
+    """
+    Check Ollama service availability and model status (synchronous version).
+
+    Returns:
+        Dictionary with Ollama status, available models, and any issues
+    """
+    import requests
+
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    required_models = ["mistral", "neural-chat", "orca-mini"]
+
+    status = {
+        "available": False,
+        "host": ollama_host,
+        "models_loaded": [],
+        "models_missing": [],
+        "error": None,
+        "warning": None
+    }
+
+    try:
+        # Try to connect to Ollama API
+        response = requests.get(f"{ollama_host}/api/tags", timeout=3)
+
+        if response.status_code == 200:
+            data = response.json()
+            models = data.get("models", [])
+
+            # Extract model names (base name without tag)
+            available_models = [
+                m.get("name", "").split(":")[0]
+                for m in models
+            ]
+
+            status["available"] = True
+
+            # Check which required models are present
+            for model in required_models:
+                if model in available_models:
+                    status["models_loaded"].append(model)
+                else:
+                    status["models_missing"].append(model)
+
+            # Set warnings if models are missing
+            if status["models_missing"]:
+                status["warning"] = (
+                    f"Ollama is running but missing required models: "
+                    f"{', '.join(status['models_missing'])}. "
+                    f"Run: ./scripts/pull-ollama-models.sh"
+                )
+        else:
+            status["error"] = f"Ollama API returned status {response.status_code}"
+
+    except requests.exceptions.ConnectionError:
+        status["error"] = (
+            "Cannot connect to Ollama. "
+            "Debate mode unavailable. "
+            "Install with: ./scripts/setup-ollama.sh"
+        )
+    except Exception as e:
+        status["error"] = f"Ollama check failed: {str(e)}"
+
+    return status
+
+
+async def check_ollama_status() -> Dict[str, Any]:
+    """
+    Check Ollama service availability and model status.
+
+    Returns:
+        Dictionary with Ollama status, available models, and any issues
+    """
+    ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    required_models = ["mistral", "neural-chat", "orca-mini"]
+
+    status = {
+        "available": False,
+        "host": ollama_host,
+        "models_loaded": [],
+        "models_missing": [],
+        "error": None,
+        "warning": None
+    }
+
+    try:
+        # Try to connect to Ollama API
+        import aiohttp
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(f"{ollama_host}/api/tags") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = data.get("models", [])
+
+                    # Extract model names (base name without tag)
+                    available_models = [
+                        m.get("name", "").split(":")[0]
+                        for m in models
+                    ]
+
+                    status["available"] = True
+
+                    # Check which required models are present
+                    for model in required_models:
+                        if model in available_models:
+                            status["models_loaded"].append(model)
+                        else:
+                            status["models_missing"].append(model)
+
+                    # Set warnings if models are missing
+                    if status["models_missing"]:
+                        status["warning"] = (
+                            f"Ollama is running but missing required models: "
+                            f"{', '.join(status['models_missing'])}. "
+                            f"Run: ./scripts/pull-ollama-models.sh"
+                        )
+                else:
+                    status["error"] = f"Ollama API returned status {response.status}"
+
+    except Exception as e:
+        if "ClientConnectorError" in str(type(e).__name__):
+            status["error"] = (
+                "Cannot connect to Ollama. "
+                "Debate mode unavailable. "
+                "Install with: ./scripts/setup-ollama.sh"
+            )
+        else:
+            status["error"] = f"Ollama check failed: {str(e)}"
+
+    return status
 
 
 def _safe_json(value: Any) -> Any:
@@ -173,6 +307,38 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
             "error": str(e),
         }
         health_status = "degraded"
+
+    # Check Ollama status (for debate mode)
+    try:
+        ollama_status = check_ollama_status_sync()
+
+        components["ollama"] = {
+            "status": "healthy" if ollama_status["available"] and not ollama_status["models_missing"]
+                      else "degraded" if ollama_status["available"]
+                      else "unavailable",
+            "available": ollama_status["available"],
+            "models_loaded": ollama_status["models_loaded"],
+            "models_missing": ollama_status["models_missing"],
+            "host": ollama_status["host"],
+            "error": ollama_status.get("error"),
+            "warning": ollama_status.get("warning"),
+        }
+
+        # Degrade overall status if Ollama has issues
+        if ollama_status.get("error") or ollama_status.get("models_missing"):
+            if health_status == "healthy":
+                health_status = "degraded"
+                health_status = "degraded"
+    except Exception as e:
+        logger.error(f"Ollama health check failed: {e}")
+        components["ollama"] = {
+            "status": "unavailable",
+            "error": str(e),
+        }
+        if health_status == "healthy":
+            health_status = "degraded"
+        if health_status == "healthy":
+            health_status = "degraded"
 
     health = {
         "status": health_status,
