@@ -6,10 +6,13 @@ import { AgentControlPanel } from '../components/agent/AgentControlPanel';
 import { CircuitBreakerStatus } from '../components/agent/CircuitBreakerStatus';
 import { AgentMetricsDashboard } from '../components/agent/AgentMetricsDashboard';
 import { useAgentStream } from '../api/hooks/useAgentStream';
+import { OllamaStatusAlert } from '../components/common/OllamaStatusAlert';
+import { useHealth } from '../api/hooks/useHealth';
 
 export const AgentControl: React.FC = () => {
   const { status: liveStatus, events, isConnected, error: streamError } = useAgentStream();
   const [manualStatus, setManualStatus] = useState<AgentStatus | null>(null);
+  const { data: health, isLoading: healthLoading } = useHealth();
 
   const refreshStatus = useCallback(async () => {
     const response = await apiClient.get('/api/v1/bot/status');
@@ -31,6 +34,12 @@ export const AgentControl: React.FC = () => {
       <h1 className="text-2xl font-mono font-bold text-accent-cyan uppercase">
         Agent Control
       </h1>
+
+      {/* Ollama status warning for debate mode */}
+      {!healthLoading && health?.components?.ollama && (
+        <OllamaStatusAlert ollama={health.components.ollama} />
+      )}
+
       {streamError && (
         <div className="p-4 border-3 border-accent-red bg-accent-red bg-opacity-10 text-xs font-mono text-accent-red">
           Live stream error: {streamError}

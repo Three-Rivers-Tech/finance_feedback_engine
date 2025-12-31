@@ -715,6 +715,7 @@ class TradingLoopAgent:
                             "take_profit_pct": 0.05,
                             "reasoning": f"Recovered existing {pos['side']} position from {pos['platform']} platform",
                             "market_regime": "unknown",
+                            "ai_provider": "recovery",
                             "ensemble_metadata": {
                                 "providers_used": ["recovery"],
                                 "providers_failed": [],

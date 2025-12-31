@@ -2,6 +2,29 @@ version: '3.8'
 
 services:
   # =============================================================================
+  # Ollama - Local LLM Service for Debate Mode (ESSENTIAL)
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ffe-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      # Persistent model storage
+      - ollama-data:/root/.ollama
+    networks:
+      - ffe-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
   # Backend API Service - FastAPI + Uvicorn
   # =============================================================================
   backend:
@@ -34,6 +57,9 @@ services:
       - ffe-logs:/app/logs
     networks:
       - ffe-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
@@ -47,9 +73,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    depends_on:
-      prometheus:
-        condition: service_healthy
 
   # =============================================================================
   # Frontend Service - React SPA + Nginx
@@ -183,6 +206,8 @@ volumes:
   ffe-data:
     driver: local
   ffe-logs:
+    driver: local
+  ollama-data:
     driver: local
   prometheus-data:
     driver: local

@@ -56,10 +56,39 @@ export interface PortfolioStatus {
   error?: string;
 }
 
+export interface OllamaComponent {
+  status: 'healthy' | 'degraded' | 'unavailable';
+  available: boolean;
+  models_loaded: string[];
+  models_missing: string[];
+  host: string;
+  error?: string | null;
+  warning?: string | null;
+}
+
+export interface HealthComponents {
+  platform?: {
+    status: string;
+    name?: string;
+    balance?: number;
+  };
+  data_provider?: {
+    status: string;
+    message?: string;
+  };
+  decision_store?: {
+    status: string;
+    recent_decisions?: number;
+  };
+  ollama?: OllamaComponent;
+}
+
 export interface HealthStatus {
   status: 'healthy' | 'degraded' | 'unhealthy';
   uptime_seconds: number;
   portfolio_balance: number | null;
+  timestamp?: string;
+  components?: HealthComponents;
   circuit_breakers?: Record<string, {
     state: string;
     failure_count: number;
