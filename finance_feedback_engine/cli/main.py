@@ -1104,6 +1104,11 @@ def install_deps(ctx, auto_install):
 
         console.print(table)
         console.print()
+
+        # Note: Ollama must be installed separately for debate mode
+        console.print("[yellow]Note:[/yellow] Ollama must be installed separately for LLM debate mode.")
+        console.print("Run: [bold cyan]./scripts/install-ollama.sh[/bold cyan]\n")
+
         # Early exit to keep tests simple and environment-agnostic
         return
 

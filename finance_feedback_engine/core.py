@@ -630,6 +630,7 @@ class FinanceFeedbackEngine:
                 "amount": 0,
                 "asset_pair": asset_pair,
                 "timestamp": datetime.now().isoformat(),
+                "ai_provider": self.decision_engine.ai_provider,
                 "ensemble_metadata": {
                     "error_type": "quorum_failure",
                     "error_message": str(e),
