@@ -145,7 +145,7 @@ services:
       retries: 3
       start_period: 20s
     profiles:
-      - monitoring  # Start with: docker-compose -f docker-compose.test.yml --profile monitoring up
+      - monitoring  # Start with: docker compose -f docker-compose.test.yml --profile monitoring up
 
   # =============================================================================
   # Redis - Caching Layer
