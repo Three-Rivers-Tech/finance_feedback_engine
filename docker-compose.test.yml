@@ -1,0 +1,191 @@
+# Docker Compose configuration for CI/Testing
+# Simplified version without GPU requirements and with faster startup
+# Note: version field is obsolete in modern Docker Compose
+
+services:
+  # =============================================================================
+  # Ollama - Local LLM Service for Debate Mode
+  # =============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ffe-ollama-test
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama-test-data:/root/.ollama
+    networks:
+      - ffe-test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # =============================================================================
+  # Backend API Service - FastAPI + Uvicorn
+  # =============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=3.13
+    container_name: ffe-backend-test
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=INFO
+      - MONITORING_ENABLED=true
+      - OLLAMA_HOST=http://ollama:11434
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "8000:8000"
+    volumes:
+      - test-data:/app/data
+      - ./config/config.yaml:/app/config/config.yaml:ro
+      - test-logs:/app/logs
+    networks:
+      - ffe-test-network
+    depends_on:
+      ollama:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # =============================================================================
+  # Frontend Service - React SPA + Nginx
+  # =============================================================================
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: ffe-frontend-test
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - ffe-test-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # Prometheus - Metrics Collection
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ffe-prometheus-test
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=1d'  # Shorter retention for tests
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-test-data:/prometheus
+    networks:
+      - ffe-test-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =============================================================================
+  # Grafana - Metrics Visualization (Optional for tests)
+  # =============================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ffe-grafana-test
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=test
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-test-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - ffe-test-network
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    profiles:
+      - monitoring  # Start with: docker compose -f docker-compose.test.yml --profile monitoring up
+
+  # =============================================================================
+  # Redis - Caching Layer
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: ffe-redis-test
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-test-data:/data
+    networks:
+      - ffe-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  ffe-test-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes - Ephemeral Test Data
+# =============================================================================
+volumes:
+  test-data:
+    driver: local
+  test-logs:
+    driver: local
+  ollama-test-data:
+    driver: local
+  prometheus-test-data:
+    driver: local
+  grafana-test-data:
+    driver: local
+  redis-test-data:
+    driver: local
