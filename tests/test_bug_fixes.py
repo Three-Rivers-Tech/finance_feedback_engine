@@ -200,12 +200,18 @@ class TestOODALoopBugFixes:
         
         assert agent.is_autonomous_enabled is True
         
-        # Test legacy format (autonomous_execution)
-        config2 = Mock(spec=TradingAgentConfig)
-        config2.asset_pairs = ["BTCUSD"]
-        config2.core_pairs = ["BTCUSD"]
-        config2.autonomous_execution = False
-        delattr(config2, 'autonomous')
+        # Test legacy format (autonomous_execution) - use a simple class instead of Mock
+        class LegacyConfig:
+            asset_pairs = ["BTCUSD"]
+            core_pairs = ["BTCUSD"]
+            autonomous_execution = False
+            kill_switch_loss_pct = None
+            max_daily_trades = 10
+            
+            def get(self, key, default=None):
+                return getattr(self, key, default)
+        
+        config2 = LegacyConfig()
         
         agent2 = TradingLoopAgent(
             config=config2,
