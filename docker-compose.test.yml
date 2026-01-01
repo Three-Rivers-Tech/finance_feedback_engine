@@ -32,7 +32,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - PYTHON_VERSION=3.12
+        - PYTHON_VERSION=3.13
     container_name: ffe-backend-test
     extra_hosts:
       - "host.docker.internal:host-gateway"
