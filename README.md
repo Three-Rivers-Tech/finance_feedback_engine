@@ -2,6 +2,8 @@
 
 [![Test Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
 [![Tests](https://img.shields.io/badge/tests-598%20passed-success)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
+[![CI](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/ci.yml)
+[![Staging](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/staging.yml/badge.svg)](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/staging.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
 The Finance Feedback Engine is a Python-based tool designed to provide validation and feedback for financial data processing, particularly for applications interacting with market data APIs like Alpha Vantage.
@@ -1334,6 +1336,18 @@ docker compose --env-file .env.production ps
 
 **Automated Workflows:**
 
+- **CI/CD Pipeline**: Comprehensive testing on every push ([`ci.yml`](.github/workflows/ci.yml))
+  - Pre-commit checks (linting, formatting, type checking)
+  - Unit tests with 70% coverage requirement
+  - Security scanning (Bandit, secret detection)
+  
+- **Staging Environment**: Full-stack integration testing ([`staging.yml`](.github/workflows/staging.yml))
+  - Docker Compose-based testing with all services
+  - Health checks for all components (Backend, Frontend, Ollama, Redis, Prometheus)
+  - Integration tests in production-like environment
+  - API endpoint validation
+  - See [Staging Workflow Guide](docs/STAGING_WORKFLOW_QUICKREF.md) for details
+
 - **Build & Test**: Automatically builds Docker images on every push to `main` or `develop`
 - **Security Scanning**: Trivy scans for vulnerabilities in all images
 - **Multi-Architecture**: Builds for `linux/amd64` (add `linux/arm64` if needed)
@@ -1341,8 +1355,12 @@ docker compose --env-file .env.production ps
 
 **Deployment Pipeline:**
 
-- **Staging**: Auto-deploys on every push to `main`
+- **Staging**: Auto-deploys on every push to `main` (after all checks pass)
 - **Production**: Manual approval required via GitHub Actions
+
+**Documentation:**
+- Complete CI/CD documentation: [docs/CI_CD_PIPELINE.md](docs/CI_CD_PIPELINE.md)
+- Staging workflow guide: [docs/STAGING_WORKFLOW_QUICKREF.md](docs/STAGING_WORKFLOW_QUICKREF.md)
 
 ### Monitoring & Observability
 
