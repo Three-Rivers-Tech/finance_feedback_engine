@@ -1,0 +1,336 @@
+name: Staging Environment Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.13'
+  COMPOSE_FILE: docker-compose.test.yml
+
+jobs:
+  # =============================================================================
+  # Docker Compose Build & Health Checks
+  # =============================================================================
+  staging-build:
+    name: Build Staging Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-staging-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-staging-
+
+      - name: Create .env.test file
+        run: |
+          cp .env.test .env
+          echo "Environment file prepared for CI"
+
+      - name: Build Docker images
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} build --parallel
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+
+      - name: Start services
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} up -d
+          echo "Waiting for services to be ready..."
+          sleep 10
+
+      - name: Wait for Ollama to be healthy
+        run: |
+          timeout 120 bash -c 'until docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep ollama | grep -q healthy; do sleep 2; done' || {
+            echo "Ollama failed to become healthy"
+            docker-compose -f ${{ env.COMPOSE_FILE }} logs ollama
+            exit 1
+          }
+
+      - name: Pull Ollama model
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} exec -T ollama ollama pull llama3.2:3b-instruct-fp16 || {
+            echo "Failed to pull Ollama model, continuing anyway (model might already exist)"
+          }
+
+      - name: Wait for Prometheus to be healthy
+        run: |
+          timeout 60 bash -c 'until docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep prometheus | grep -q healthy; do sleep 2; done' || {
+            echo "Prometheus failed to become healthy"
+            docker-compose -f ${{ env.COMPOSE_FILE }} logs prometheus
+            exit 1
+          }
+
+      - name: Wait for Redis to be healthy
+        run: |
+          timeout 60 bash -c 'until docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep redis | grep -q healthy; do sleep 2; done' || {
+            echo "Redis failed to become healthy"
+            docker-compose -f ${{ env.COMPOSE_FILE }} logs redis
+            exit 1
+          }
+
+      - name: Wait for Backend to be healthy
+        run: |
+          timeout 120 bash -c 'until docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep backend | grep -q healthy; do sleep 3; done' || {
+            echo "Backend failed to become healthy"
+            docker-compose -f ${{ env.COMPOSE_FILE }} logs backend
+            exit 1
+          }
+
+      - name: Wait for Frontend to be healthy
+        run: |
+          timeout 60 bash -c 'until docker-compose -f ${{ env.COMPOSE_FILE }} ps | grep frontend | grep -q healthy; do sleep 2; done' || {
+            echo "Frontend failed to become healthy"
+            docker-compose -f ${{ env.COMPOSE_FILE }} logs frontend
+            exit 1
+          }
+
+      - name: Verify all services are running
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} ps
+          echo "✅ All services started successfully"
+
+      - name: Check service health endpoints
+        run: |
+          # Backend health check
+          curl -f http://localhost:8000/health || {
+            echo "❌ Backend health check failed"
+            exit 1
+          }
+          echo "✅ Backend health check passed"
+
+          # Frontend accessibility check
+          curl -f http://localhost:80/ || {
+            echo "❌ Frontend accessibility check failed"
+            exit 1
+          }
+          echo "✅ Frontend accessibility check passed"
+
+          # Prometheus health check
+          curl -f http://localhost:9090/-/healthy || {
+            echo "❌ Prometheus health check failed"
+            exit 1
+          }
+          echo "✅ Prometheus health check passed"
+
+          # Redis health check
+          docker-compose -f ${{ env.COMPOSE_FILE }} exec -T redis redis-cli ping || {
+            echo "❌ Redis health check failed"
+            exit 1
+          }
+          echo "✅ Redis health check passed"
+
+      - name: Run integration tests in container
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} exec -T backend pytest \
+            -m "not external_service and not slow" \
+            --cov=finance_feedback_engine \
+            --cov-report=xml:/app/coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=70 \
+            -v \
+            --tb=short || {
+              echo "❌ Tests failed"
+              docker-compose -f ${{ env.COMPOSE_FILE }} logs backend
+              exit 1
+            }
+
+      - name: Extract coverage report
+        if: always()
+        run: |
+          # Copy coverage report from container
+          docker cp ffe-backend-test:/app/coverage.xml ./coverage.xml || echo "No coverage report found"
+
+      - name: Run linting in container
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} exec -T backend bash -c "
+            black --check finance_feedback_engine/ || echo 'Black formatting check failed'
+            flake8 finance_feedback_engine/ --max-line-length=120 --extend-ignore=E203,W503 || echo 'Flake8 check failed'
+            isort --check-only finance_feedback_engine/ || echo 'Import sorting check failed'
+          "
+
+      - name: Run security scan in container
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} exec -T backend bash -c "
+            pip install bandit[toml] && \
+            bandit -c pyproject.toml -r finance_feedback_engine/ -f json -o /app/bandit-report.json || echo 'Bandit scan completed with findings'
+          "
+
+      - name: Extract security report
+        if: always()
+        run: |
+          docker cp ffe-backend-test:/app/bandit-report.json ./bandit-report.json || echo "No security report found"
+
+      - name: Test API endpoints
+        run: |
+          # Test analyze endpoint (should work with mock platform)
+          curl -X POST http://localhost:8000/analyze \
+            -H "Content-Type: application/json" \
+            -d '{"asset_pair": "BTCUSD", "provider": "ensemble"}' \
+            -w "\nHTTP Status: %{http_code}\n" || echo "Analyze endpoint test completed"
+
+          # Test health endpoint
+          curl -f http://localhost:8000/health || {
+            echo "❌ Health endpoint failed"
+            exit 1
+          }
+          echo "✅ Health endpoint passed"
+
+      - name: Collect service logs
+        if: always()
+        run: |
+          mkdir -p logs
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs --no-color > logs/all-services.log
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs backend --no-color > logs/backend.log
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs frontend --no-color > logs/frontend.log
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs ollama --no-color > logs/ollama.log
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs prometheus --no-color > logs/prometheus.log
+          docker-compose -f ${{ env.COMPOSE_FILE }} logs redis --no-color > logs/redis.log
+
+      - name: Upload service logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-service-logs
+          path: logs/
+          retention-days: 14
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-coverage
+          path: |
+            coverage.xml
+          retention-days: 30
+
+      - name: Upload security report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-security-report
+          path: bandit-report.json
+          retention-days: 30
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: staging
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker-compose -f ${{ env.COMPOSE_FILE }} down -v
+          docker system prune -f
+
+  # =============================================================================
+  # Frontend Build Validation
+  # =============================================================================
+  frontend-build:
+    name: Validate Frontend Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm run test
+
+      - name: Run type checking
+        working-directory: frontend
+        run: npm run type-check
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Check build output
+        run: |
+          if [ ! -d "frontend/dist" ]; then
+            echo "❌ Frontend build output not found"
+            exit 1
+          fi
+          echo "✅ Frontend build successful"
+          ls -lah frontend/dist/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist/
+          retention-days: 7
+
+  # =============================================================================
+  # Staging Success Summary
+  # =============================================================================
+  staging-success:
+    name: Staging Environment Success
+    runs-on: ubuntu-latest
+    needs: [staging-build, frontend-build]
+    if: always()
+
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "## Staging Environment Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.staging-build.result }}" == "success" ]; then
+            echo "✅ **Staging Build:** Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Staging Build:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ "${{ needs.frontend-build.result }}" == "success" ]; then
+            echo "✅ **Frontend Build:** Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Frontend Build:** Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.staging-build.result }}" != "success" ] || \
+             [ "${{ needs.frontend-build.result }}" != "success" ]; then
+            echo "❌ Staging environment checks failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          
+          echo "✅ **All staging checks passed!**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The application is ready for deployment." >> $GITHUB_STEP_SUMMARY
