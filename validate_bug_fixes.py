@@ -131,13 +131,33 @@ def check_autonomous_property():
     with open(file_path) as f:
         content = f.read()
     
-    has_property = "def is_autonomous_enabled(self) -> bool:" in content
-    has_decorator = "@property" in content and \
-                   content.find("@property", 0, content.find("def is_autonomous_enabled")) > 0
+    # Find the is_autonomous_enabled function definition and ensure it is
+    # declared as a @property (decorator must be immediately above it,
+    # ignoring blank lines).
+    content_lines = content.splitlines()
+    prop_index = None
+    for idx, line in enumerate(content_lines):
+        if "def is_autonomous_enabled" in line:
+            prop_index = idx
+            break
     
-    if has_property:
-        print("  ✅ PASS: is_autonomous_enabled property exists")
+    has_property = prop_index is not None
+    has_decorator = False
+    
+    if has_property and prop_index > 0:
+        # Look at the closest non-empty line above the function definition
+        decorator_idx = prop_index - 1
+        while decorator_idx >= 0 and content_lines[decorator_idx].strip() == "":
+            decorator_idx -= 1
+        if decorator_idx >= 0 and content_lines[decorator_idx].lstrip().startswith("@property"):
+            has_decorator = True
+    
+    if has_property and has_decorator:
+        print("  ✅ PASS: is_autonomous_enabled property exists with @property decorator")
         return True
+    elif has_property and not has_decorator:
+        print("  ❌ FAIL: is_autonomous_enabled exists but is missing @property decorator")
+        return False
     else:
         print("  ❌ FAIL: is_autonomous_enabled property not found")
         return False
