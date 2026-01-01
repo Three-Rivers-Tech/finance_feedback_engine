@@ -213,7 +213,22 @@ npm run preview
 
 Build output: `dist/` directory
 
-**Deployment:**
+**Docker Deployment:**
+```bash
+# Build Docker image (from repository root)
+docker build -t finance-feedback-engine-frontend:latest -f frontend/Dockerfile frontend/
+
+# Or using docker-compose
+docker-compose build frontend
+```
+
+**Important Notes:**
+- The Dockerfile uses `frontend/` as the build context for self-contained builds
+- `nginx.conf` is copied from the parent `docker/nginx.conf` directory for consistency
+- When using docker-compose, the `docker/nginx.conf` is mounted as a volume for development convenience
+- Keep `docker/nginx.conf` as the source of truth; copy changes to `frontend/nginx.conf` when needed
+
+**Static Hosting Deployment:**
 - Serve with nginx, Vercel, Netlify, or any static host
 - Configure nginx reverse proxy to backend API
 - Update `VITE_API_BASE_URL` to production API URL
