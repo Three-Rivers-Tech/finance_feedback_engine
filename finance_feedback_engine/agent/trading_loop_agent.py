@@ -313,16 +313,25 @@ class TradingLoopAgent:
                     
                     # Thread-safe update using asyncio.create_task with lock
                     async def update_pairs():
-                        async with self._asset_pairs_lock:
-                            self.config.asset_pairs = final_pairs
-                            logger.info(
-                                f"✓ Updated active pairs: {final_pairs} "
-                                f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
-                            )
+                        try:
+                            async with self._asset_pairs_lock:
+                                self.config.asset_pairs = final_pairs
+                                logger.info(
+                                    f"✓ Updated active pairs: {final_pairs} "
+                                    f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
+                                )
+                        except Exception as e:
+                            logger.error(f"Error updating asset pairs: {e}", exc_info=True)
                     
                     # Schedule the update in the event loop
                     try:
-                        asyncio.create_task(update_pairs())
+                        task = asyncio.create_task(update_pairs())
+                        # Store task reference to prevent it from being garbage collected
+                        # and to ensure exceptions are not silently lost
+                        if not hasattr(self, '_background_tasks'):
+                            self._background_tasks = set()
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
                     except RuntimeError:
                         # If no event loop is running in this thread, we cannot safely update under the async lock.
                         # This should not occur in normal agent operation; log and skip the update to avoid races.
