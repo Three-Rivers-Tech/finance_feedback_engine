@@ -357,6 +357,23 @@ class TradingLoopAgent:
             return None
         return datetime.datetime.fromtimestamp(self._start_time)
 
+    @property
+    def is_autonomous_enabled(self) -> bool:
+        """
+        Check if autonomous execution mode is enabled.
+        
+        Checks both new config format (autonomous.enabled) and legacy format
+        (autonomous_execution) for backward compatibility.
+        
+        Returns:
+            bool: True if autonomous execution is enabled
+        """
+        if hasattr(self.config, "autonomous") and hasattr(
+            self.config.autonomous, "enabled"
+        ):
+            return self.config.autonomous.enabled
+        return getattr(self.config, "autonomous_execution", False)
+
     def supports_signal_only_mode(self) -> bool:
         """
         Check if this agent implementation supports signal-only mode.
@@ -391,14 +408,8 @@ class TradingLoopAgent:
         """
         errors = []
 
-        # Check if signal-only mode is enabled
-        autonomous_enabled = getattr(self.config, "autonomous", None)
-        if autonomous_enabled and hasattr(autonomous_enabled, "enabled"):
-            autonomous_enabled = autonomous_enabled.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
-
-        if autonomous_enabled:
+        # Check if autonomous mode is enabled (no notifications needed)
+        if self.is_autonomous_enabled:
             return True, []  # Autonomous mode doesn't need notifications
 
         # Validate Telegram configuration
@@ -1045,9 +1056,11 @@ class TradingLoopAgent:
                     timeout=90,  # Timeout after 90 seconds
                 )
 
-                # Reset failure count and timestamp on success
-                self.analysis_failures[failure_key] = 0
-                self.analysis_failure_timestamps[failure_key] = current_time
+                # Reset failure count on success - remove from dict to prevent unbounded growth
+                if failure_key in self.analysis_failures:
+                    del self.analysis_failures[failure_key]
+                if failure_key in self.analysis_failure_timestamps:
+                    del self.analysis_failure_timestamps[failure_key]
 
                 if decision and decision.get("action") in ["BUY", "SELL"]:
                     if await self._should_execute(decision):
@@ -1302,14 +1315,8 @@ class TradingLoopAgent:
             await self._transition_to(AgentState.IDLE)
             return
 
-        # Check if autonomous execution is enabled (prioritize autonomous.enabled over legacy autonomous_execution)
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
-
+        # Use property for cleaner autonomous mode check
+        autonomous_enabled = self.is_autonomous_enabled
         logger.info(f"Autonomous execution mode: {autonomous_enabled}")
 
         if autonomous_enabled:
@@ -1896,13 +1903,8 @@ class TradingLoopAgent:
             )
             return False
 
-        # Check autonomous execution setting
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
+        # Use property for cleaner autonomous mode check
+        autonomous_enabled = self.is_autonomous_enabled
 
         # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
