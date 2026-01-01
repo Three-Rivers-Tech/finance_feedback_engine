@@ -6,6 +6,7 @@ import logging
 import queue
 import time
 from enum import Enum, auto
+from typing import Any, Dict
 
 from opentelemetry import metrics, trace
 
@@ -87,8 +88,10 @@ class TradingLoopAgent:
         self.is_running = False
         self._paused = False
         self.state = AgentState.IDLE
-        self._current_decision = None
-        self._current_decisions = []  # New: to store multiple decisions
+        self._current_decisions = []  # Store multiple decisions for batch processing
+        
+        # Lock for protecting asset_pairs list from concurrent modification
+        self._asset_pairs_lock = asyncio.Lock()
         # Track analysis failures and their timestamps for time-based decay
         self.analysis_failures = {}  # {failure_key: count}
         self.analysis_failure_timestamps = {}  # {failure_key: last_failure_datetime}
@@ -308,11 +311,34 @@ class TradingLoopAgent:
                         if pair not in final_pairs:
                             final_pairs.append(pair)
                     
-                    self.config.asset_pairs = final_pairs
-                    logger.info(
-                        f"✓ Updated active pairs: {final_pairs} "
-                        f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
-                    )
+                    # Thread-safe update using asyncio.create_task with lock
+                    async def update_pairs():
+                        try:
+                            async with self._asset_pairs_lock:
+                                self.config.asset_pairs = final_pairs
+                                logger.info(
+                                    f"✓ Updated active pairs: {final_pairs} "
+                                    f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
+                                )
+                        except Exception as e:
+                            logger.error(f"Error updating asset pairs: {e}", exc_info=True)
+                    
+                    # Schedule the update in the event loop
+                    try:
+                        task = asyncio.create_task(update_pairs())
+                        # Store task reference to prevent it from being garbage collected
+                        # and to ensure exceptions are not silently lost
+                        if not hasattr(self, '_background_tasks'):
+                            self._background_tasks = set()
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
+                    except RuntimeError:
+                        # If no event loop is running in this thread, we cannot safely update under the async lock.
+                        # This should not occur in normal agent operation; log and skip the update to avoid races.
+                        logger.error(
+                            "Unable to schedule asset pair update: no running event loop. "
+                            f"Intended active pairs were: {final_pairs}"
+                        )
 
                 self.pair_scheduler = PairSelectionScheduler(
                     pair_selector=self.pair_selector,
@@ -339,6 +365,23 @@ class TradingLoopAgent:
         if self._start_time is None:
             return None
         return datetime.datetime.fromtimestamp(self._start_time)
+
+    @property
+    def is_autonomous_enabled(self) -> bool:
+        """
+        Check if autonomous execution mode is enabled.
+        
+        Checks both new config format (autonomous.enabled) and legacy format
+        (autonomous_execution) for backward compatibility.
+        
+        Returns:
+            bool: True if autonomous execution is enabled
+        """
+        if hasattr(self.config, "autonomous") and hasattr(
+            self.config.autonomous, "enabled"
+        ):
+            return self.config.autonomous.enabled
+        return getattr(self.config, "autonomous_execution", False)
 
     def supports_signal_only_mode(self) -> bool:
         """
@@ -374,14 +417,8 @@ class TradingLoopAgent:
         """
         errors = []
 
-        # Check if signal-only mode is enabled
-        autonomous_enabled = getattr(self.config, "autonomous", None)
-        if autonomous_enabled and hasattr(autonomous_enabled, "enabled"):
-            autonomous_enabled = autonomous_enabled.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
-
-        if autonomous_enabled:
+        # Check if autonomous mode is enabled (no notifications needed)
+        if self.is_autonomous_enabled:
             return True, []  # Autonomous mode doesn't need notifications
 
         # Validate Telegram configuration
@@ -532,12 +569,15 @@ class TradingLoopAgent:
         The sleep between cycles is now handled externally (in run() or by the backtester),
         so this state simply logs and returns, allowing the cycle to complete.
         The next cycle will start from LEARNING state after the external sleep.
+        
+        IMPORTANT: This state should NOT auto-transition. The run() method or backtester
+        will explicitly transition to LEARNING after the configured sleep interval.
         """
         with tracer.start_as_current_span("agent.ooda.idle"):
             logger.info("State: IDLE - Cycle complete, waiting for next interval...")
             # Note: Sleep is handled externally in run() or by backtester
             # This state just marks the end of the cycle
-            await self._transition_to(AgentState.LEARNING)
+            # DO NOT auto-transition here - let external controller handle timing
 
     async def handle_recovering_state(self):
         """
@@ -832,6 +872,9 @@ class TradingLoopAgent:
         logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
         logger.info("=" * 80)
 
+        # --- Cleanup rejected decisions cache (prevent memory leak) ---
+        self._cleanup_rejected_cache()
+
         # --- Safety Check: Portfolio Kill Switch ---
         if (
             self.config.kill_switch_loss_pct is not None
@@ -929,23 +972,27 @@ class TradingLoopAgent:
         logger.info("State: REASONING - Running DecisionEngine...")
         logger.info("=" * 80)
 
-        # Guard against empty or missing core pairs
-        core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
-        if not self.config.asset_pairs:
-            logger.error(
-                "CRITICAL: No asset pairs configured! Restoring core pairs."
-            )
-            self.config.asset_pairs = core_pairs
-        
-        # Validate core pairs are present
-        missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
-        if missing_core_pairs:
-            logger.warning(
-                f"Core pairs missing from asset_pairs: {missing_core_pairs}. Restoring them."
-            )
-            self.config.asset_pairs.extend(missing_core_pairs)
+        # Guard against empty or missing core pairs (with lock protection)
+        async with self._asset_pairs_lock:
+            core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
+            if not self.config.asset_pairs:
+                logger.error(
+                    "CRITICAL: No asset pairs configured! Restoring core pairs."
+                )
+                self.config.asset_pairs = core_pairs
+            
+            # Validate core pairs are present
+            missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
+            if missing_core_pairs:
+                logger.warning(
+                    f"Core pairs missing from asset_pairs: {missing_core_pairs}. Restoring them."
+                )
+                self.config.asset_pairs.extend(missing_core_pairs)
 
-        logger.info(f"Analyzing {len(self.config.asset_pairs)} pairs: {self.config.asset_pairs}")
+            # Create a snapshot copy for iteration (prevents race conditions)
+            asset_pairs_snapshot = list(self.config.asset_pairs)
+        
+        logger.info(f"Analyzing {len(asset_pairs_snapshot)} pairs: {asset_pairs_snapshot}")
 
         MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
 
@@ -967,7 +1014,7 @@ class TradingLoopAgent:
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
-        for asset_pair in self.config.asset_pairs:
+        for asset_pair in asset_pairs_snapshot:  # Iterate over snapshot, not live list
             logger.info(f">>> Starting analysis for {asset_pair}")
             failure_key = f"analysis:{asset_pair}"
 
@@ -1018,9 +1065,11 @@ class TradingLoopAgent:
                     timeout=90,  # Timeout after 90 seconds
                 )
 
-                # Reset failure count and timestamp on success
-                self.analysis_failures[failure_key] = 0
-                self.analysis_failure_timestamps[failure_key] = current_time
+                # Reset failure count on success - remove from dict to prevent unbounded growth
+                if failure_key in self.analysis_failures:
+                    del self.analysis_failures[failure_key]
+                if failure_key in self.analysis_failure_timestamps:
+                    del self.analysis_failure_timestamps[failure_key]
 
                 if decision and decision.get("action") in ["BUY", "SELL"]:
                     if await self._should_execute(decision):
@@ -1057,7 +1106,7 @@ class TradingLoopAgent:
 
             # Add delay between pairs to avoid Alpha Vantage rate limits
             # Only delay if there are more pairs to analyze
-            if asset_pair != self.config.asset_pairs[-1]:
+            if asset_pair != asset_pairs_snapshot[-1]:
                 logger.info(f"    → Waiting 15s before analyzing next pair (rate limit protection)...")
                 await asyncio.sleep(15)
 
@@ -1186,7 +1235,7 @@ class TradingLoopAgent:
             await self._transition_to(AgentState.IDLE)
 
     def _check_performance_based_risks(
-        self, decision: dict[str, any]
+        self, decision: Dict[str, Any]
     ) -> tuple[bool, str]:
         """
         Check additional performance-based risk conditions.
@@ -1275,14 +1324,8 @@ class TradingLoopAgent:
             await self._transition_to(AgentState.IDLE)
             return
 
-        # Check if autonomous execution is enabled (prioritize autonomous.enabled over legacy autonomous_execution)
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
-
+        # Use property for cleaner autonomous mode check
+        autonomous_enabled = self.is_autonomous_enabled
         logger.info(f"Autonomous execution mode: {autonomous_enabled}")
 
         if autonomous_enabled:
@@ -1513,6 +1556,9 @@ class TradingLoopAgent:
         logger.info("State: LEARNING - Processing closed trades for feedback...")
         logger.info("=" * 80)
 
+        # --- Cleanup rejected decisions cache (prevent memory leak) ---
+        self._cleanup_rejected_cache()
+
         closed_trades = self.trade_monitor.get_closed_trades()
         if not closed_trades:
             logger.info("No closed trades to process.")
@@ -1530,7 +1576,7 @@ class TradingLoopAgent:
         # After processing, transition to perception to gather fresh market data
         await self._transition_to(AgentState.PERCEPTION)
 
-    def _update_performance_metrics(self, trade_outcome: dict[str, any]) -> None:
+    def _update_performance_metrics(self, trade_outcome: Dict[str, Any]) -> None:
         """
         Update performance metrics based on a completed trade.
 
@@ -1722,7 +1768,7 @@ class TradingLoopAgent:
         except Exception as e:
             logger.error(f"Error during batch review: {e}", exc_info=True)
 
-    def get_performance_summary(self) -> dict[str, any]:
+    def get_performance_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the agent's performance.
 
@@ -1866,13 +1912,8 @@ class TradingLoopAgent:
             )
             return False
 
-        # Check autonomous execution setting
-        if hasattr(self.config, "autonomous") and hasattr(
-            self.config.autonomous, "enabled"
-        ):
-            autonomous_enabled = self.config.autonomous.enabled
-        else:
-            autonomous_enabled = getattr(self.config, "autonomous_execution", False)
+        # Use property for cleaner autonomous mode check
+        autonomous_enabled = self.is_autonomous_enabled
 
         # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
@@ -1930,9 +1971,9 @@ class TradingLoopAgent:
 
         try:
             # Start from current state (RECOVERING on first cycle, LEARNING thereafter)
-            # If state is already set (e.g., RECOVERING), keep it; otherwise start from LEARNING
+            # If state is IDLE (from previous cycle), transition to LEARNING to start new cycle
             if self.state == AgentState.IDLE:
-                self.state = AgentState.LEARNING
+                await self._transition_to(AgentState.LEARNING)
 
             # Execute state machine until we return to IDLE or encounter error
             max_iterations = 10  # Prevent infinite loops in one cycle
@@ -1990,14 +2031,19 @@ class TradingLoopAgent:
                 # Check if there's a running event loop
                 try:
                     loop = asyncio.get_running_loop()
-                    # Schedule the coroutine in the running loop
+                    # Schedule the coroutine in the running loop and wait for completion
                     if loop.is_running():
-                        asyncio.run_coroutine_threadsafe(
+                        future = asyncio.run_coroutine_threadsafe(
                             self.pair_scheduler.stop(), loop
                         )
-                        logger.info(
-                            "Scheduled pair selection scheduler stop in running event loop"
-                        )
+                        # Wait up to 5 seconds for graceful shutdown
+                        try:
+                            future.result(timeout=5.0)
+                            logger.info("✓ Pair selection scheduler stopped successfully")
+                        except TimeoutError:
+                            logger.warning(
+                                "Pair scheduler stop timed out after 5s; may still be running"
+                            )
                     else:
                         logger.warning(
                             "Event loop exists but is not running; cannot stop pair scheduler gracefully"
