@@ -134,7 +134,7 @@ graph TB
 ## 📋 Requirements
 
 ### Core Requirements
-- Python 3.10+
+- Python 3.13
 - Alpha Vantage API key (premium recommended)
 - Trading platform credentials (Coinbase, Oanda, etc.)
 
