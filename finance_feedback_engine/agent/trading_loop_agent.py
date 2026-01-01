@@ -324,11 +324,11 @@ class TradingLoopAgent:
                     try:
                         asyncio.create_task(update_pairs())
                     except RuntimeError:
-                        # If no event loop, update synchronously (shouldn't happen in async context)
-                        self.config.asset_pairs = final_pairs
-                        logger.info(
-                            f"✓ Updated active pairs: {final_pairs} "
-                            f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
+                        # If no event loop is running in this thread, we cannot safely update under the async lock.
+                        # This should not occur in normal agent operation; log and skip the update to avoid races.
+                        logger.error(
+                            "Unable to schedule asset pair update: no running event loop. "
+                            f"Intended active pairs were: {final_pairs}"
                         )
 
                 self.pair_scheduler = PairSelectionScheduler(
