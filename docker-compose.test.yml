@@ -1,7 +1,6 @@
-version: '3.8'
-
 # Docker Compose configuration for CI/Testing
 # Simplified version without GPU requirements and with faster startup
+# Note: version field is obsolete in modern Docker Compose
 
 services:
   # =============================================================================
