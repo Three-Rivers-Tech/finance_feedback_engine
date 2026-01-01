@@ -3,7 +3,6 @@
 Simple validation script to check bug fixes without full test suite.
 """
 
-import ast
 import sys
 from pathlib import Path
 
