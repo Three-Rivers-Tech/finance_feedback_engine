@@ -298,7 +298,7 @@ The staging environment runs the following services:
    - Max memory: 128MB (tests)
 
 6. **Grafana** (Port 3001) - Optional metrics visualization
-   - Health check: `curl http://localhost:3000/api/health`
+   - Health check (from host): `curl http://localhost:3001/api/health` (container listens on 3000, mapped as 3001:3000)
    - Start with: `docker compose -f docker-compose.test.yml --profile monitoring up`
 
 ### Troubleshooting Staging Issues
