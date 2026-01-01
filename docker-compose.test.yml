@@ -34,7 +34,6 @@ services:
       args:
         - PYTHON_VERSION=3.12
     container_name: ffe-backend-test
-    image: finance-feedback-engine-test:latest
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -76,7 +75,6 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: ffe-frontend-test
-    image: finance-feedback-engine-frontend-test:latest
     ports:
       - "80:80"
     volumes:
