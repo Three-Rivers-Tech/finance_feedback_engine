@@ -141,17 +141,27 @@ export class ConfigValidator {
     // Check API key length
     if (config.api.apiKey) {
       if (config.api.apiKey.length < rules.minApiKeyLength) {
-        warnings.push({
-          path: 'api.apiKey',
-          message: `API key should be at least ${rules.minApiKeyLength} characters in ${this.environment}`,
-          severity: 'high',
-          rule: 'min_api_key_length',
-        });
+        // Push to errors in staging/production, warnings in development
+        if (this.environment === 'development') {
+          warnings.push({
+            path: 'api.apiKey',
+            message: `API key should be at least ${rules.minApiKeyLength} characters in ${this.environment}`,
+            severity: 'high',
+            rule: 'min_api_key_length',
+          });
+        } else {
+          errors.push({
+            path: 'api.apiKey',
+            message: `API key must be at least ${rules.minApiKeyLength} characters in ${this.environment}`,
+            severity: 'high',
+            rule: 'min_api_key_length',
+          });
+        }
       }
 
-      // Check for weak/example API keys
+      // Check for weak/example API keys - ALWAYS errors (all environments)
       if (this.isWeakApiKey(config.api.apiKey)) {
-        warnings.push({
+        errors.push({
           path: 'api.apiKey',
           message:
             'API key appears to be a placeholder or example value',

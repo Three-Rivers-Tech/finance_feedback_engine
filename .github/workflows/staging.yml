@@ -139,7 +139,10 @@ jobs:
           echo "✅ Redis health check passed"
 
       - name: Run integration tests in container
+        id: integration-tests
+        continue-on-error: true
         run: |
+          set +e
           docker compose -f ${{ env.COMPOSE_FILE }} exec -T backend pytest \
             -m "not external_service and not slow" \
             --cov=finance_feedback_engine \
@@ -147,17 +150,34 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=70 \
             -v \
-            --tb=short || {
-              echo "❌ Tests failed"
-              docker compose -f ${{ env.COMPOSE_FILE }} logs backend
-              exit 1
-            }
+            --tb=short
+          TEST_EXIT_CODE=$?
+          echo "test_exit_code=$TEST_EXIT_CODE" >> $GITHUB_OUTPUT
+          echo "Tests completed with exit code: $TEST_EXIT_CODE"
+          if [ "$TEST_EXIT_CODE" != "0" ]; then
+            echo "❌ Tests failed"
+            docker compose -f ${{ env.COMPOSE_FILE }} logs backend
+          fi
+          exit 0
 
       - name: Extract coverage report
         if: always()
         run: |
-          # Copy coverage report from container
-          docker cp ffe-backend-test:/app/coverage.xml ./coverage.xml || echo "No coverage report found"
+          # Check if container exists and file exists
+          if docker ps -a --format '{{.Names}}' | grep -q '^ffe-backend-test$'; then
+            echo "Container found, checking for coverage.xml..."
+            if docker exec ffe-backend-test test -f /app/coverage.xml 2>/dev/null; then
+              echo "Coverage file found, extracting..."
+              docker cp ffe-backend-test:/app/coverage.xml ./coverage.xml
+              echo "✅ Coverage report extracted"
+            else
+              echo "⚠️  No coverage.xml found in container"
+              echo '<?xml version="1.0" ?><coverage version="7.0" />' > ./coverage.xml
+            fi
+          else
+            echo "⚠️  Container ffe-backend-test not found"
+            echo '<?xml version="1.0" ?><coverage version="7.0" />' > ./coverage.xml
+          fi
 
       - name: Run linting in container
         run: |
@@ -168,16 +188,39 @@ jobs:
           "
 
       - name: Run security scan in container
+        id: security-scan
+        continue-on-error: true
         run: |
+          set +e
           docker compose -f ${{ env.COMPOSE_FILE }} exec -T backend bash -c "
             pip install bandit[toml] && \
-            bandit -c pyproject.toml -r finance_feedback_engine/ -f json -o /app/bandit-report.json || echo 'Bandit scan completed with findings'
+            bandit -c pyproject.toml -r finance_feedback_engine/ -f json -o /app/bandit-report.json
           "
+          BANDIT_EXIT=$?
+          echo "bandit_exit_code=$BANDIT_EXIT" >> $GITHUB_OUTPUT
+          # Exit 0 = no issues, Exit 1 = findings detected (expected), Exit >1 = error
+          if [ $BANDIT_EXIT -gt 1 ]; then
+            echo "❌ Bandit scan failed with error"
+            exit 1
+          fi
+          echo "Bandit scan completed (exit code: $BANDIT_EXIT)"
+          exit 0
 
       - name: Extract security report
         if: always()
         run: |
-          docker cp ffe-backend-test:/app/bandit-report.json ./bandit-report.json || echo "No security report found"
+          if docker ps -a --format '{{.Names}}' | grep -q '^ffe-backend-test$'; then
+            if docker exec ffe-backend-test test -f /app/bandit-report.json 2>/dev/null; then
+              docker cp ffe-backend-test:/app/bandit-report.json ./bandit-report.json
+              echo "✅ Security report extracted"
+            else
+              echo "⚠️  No bandit-report.json found"
+              echo '{"results": [], "metrics": {}}' > ./bandit-report.json
+            fi
+          else
+            echo "⚠️  Container not found"
+            echo '{"results": [], "metrics": {}}' > ./bandit-report.json
+          fi
 
       - name: Test API endpoints
         run: |
@@ -238,6 +281,16 @@ jobs:
           flags: staging
           fail_ci_if_error: false
           verbose: true
+
+      - name: Check test results
+        if: always()
+        run: |
+          TEST_EXIT=${{ steps.integration-tests.outputs.test_exit_code }}
+          if [ "$TEST_EXIT" != "0" ] && [ "$TEST_EXIT" != "" ]; then
+            echo "❌ Integration tests failed with exit code: $TEST_EXIT"
+            exit 1
+          fi
+          echo "✅ All tests passed"
 
       - name: Cleanup
         if: always()

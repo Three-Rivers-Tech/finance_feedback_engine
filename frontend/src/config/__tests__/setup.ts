@@ -23,9 +23,9 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
-// Mock import.meta.env
-vi.mock('import.meta', () => ({
-  env: {
+// Mock import.meta.env - use Object.defineProperty for proper mocking
+Object.defineProperty(import.meta, 'env', {
+  value: {
     MODE: 'development',
     VITE_API_BASE_URL: 'http://localhost:8000',
     VITE_GRAFANA_URL: 'http://localhost:3001',
@@ -33,4 +33,6 @@ vi.mock('import.meta', () => ({
     VITE_POLLING_INTERVAL_MEDIUM: '5000',
     VITE_API_KEY: 'myvalidkey12345',
   },
-}));
+  writable: true,
+  configurable: true,
+});
