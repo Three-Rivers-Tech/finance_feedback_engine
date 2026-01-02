@@ -14,6 +14,27 @@ from ..exceptions import InsufficientProvidersError
 
 logger = logging.getLogger(__name__)
 
+# Canonical asset types (must match provider_tiers.py expectations)
+CANONICAL_ASSET_TYPES = {"crypto", "forex", "stock"}
+
+# Normalization mapping: common variations -> canonical type
+ASSET_TYPE_NORMALIZATION = {
+    "cryptocurrency": "crypto",
+    "cryptocurrencies": "crypto",
+    "digital_currency": "crypto",
+    "digital": "crypto",
+    "btc": "crypto",
+    "eth": "crypto",
+    "foreign_exchange": "forex",
+    "fx": "forex",
+    "currency": "forex",
+    "currency_pair": "forex",
+    "equities": "stock",
+    "equity": "stock",
+    "shares": "stock",
+    "stocks": "stock",
+}
+
 
 class TwoPhaseAggregator:
     """
@@ -79,27 +100,6 @@ class TwoPhaseAggregator:
         from ..utils.cost_tracker import check_budget, log_premium_call
 
         # ===== EARLY ASSET_TYPE VALIDATION AND NORMALIZATION =====
-        # Define canonical asset types (must match provider_tiers.py expectations)
-        CANONICAL_ASSET_TYPES = {"crypto", "forex", "stock"}
-
-        # Normalization mapping: common variations -> canonical type
-        ASSET_TYPE_NORMALIZATION = {
-            "cryptocurrency": "crypto",
-            "cryptocurrencies": "crypto",
-            "digital_currency": "crypto",
-            "digital": "crypto",
-            "btc": "crypto",
-            "eth": "crypto",
-            "foreign_exchange": "forex",
-            "fx": "forex",
-            "currency": "forex",
-            "currency_pair": "forex",
-            "equities": "stock",
-            "equity": "stock",
-            "shares": "stock",
-            "stocks": "stock",
-        }
-
         # Extract raw asset_type from market_data
         raw_asset_type = market_data.get("type", None)
 
