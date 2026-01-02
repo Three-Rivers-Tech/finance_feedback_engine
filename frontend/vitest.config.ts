@@ -7,6 +7,14 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/config/__tests__/setup.ts'],
+    env: {
+      MODE: 'development',
+      VITE_API_BASE_URL: 'http://localhost:8000',
+      VITE_GRAFANA_URL: 'http://localhost:3001',
+      VITE_POLLING_INTERVAL_CRITICAL: '3000',
+      VITE_POLLING_INTERVAL_MEDIUM: '5000',
+      VITE_API_KEY: 'myvalidkey12345',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
