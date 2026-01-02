@@ -1,8 +1,6 @@
 # Finance Feedback Engine 2.0 - Development Docker Compose
 # Hot reload for both backend and frontend
 
-version: '3.8'
-
 services:
   # =============================================================================
   # Ollama - Local LLM Service for Debate Mode (ESSENTIAL)
