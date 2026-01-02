@@ -20,6 +20,12 @@ def validate_credentials(config: Dict[str, Any]) -> None:
     Raises:
         ValueError: If placeholder credentials are detected
     """
+    # Skip validation in test/CI environments
+    environment = config.get("environment", "").lower()
+    if environment in ("test", "ci", "testing"):
+        logger.debug("✅ Credential validation skipped (test environment)")
+        return
+
     errors: List[str] = []
 
     # Check Alpha Vantage API key
