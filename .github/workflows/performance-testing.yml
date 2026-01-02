@@ -211,6 +211,8 @@ jobs:
           EOF
 
       - name: Start application
+        env:
+          ENVIRONMENT: ci
         run: |
           # Start the application in background
           uvicorn finance_feedback_engine.api.app:app --host 0.0.0.0 --port 8000 &
@@ -319,6 +321,8 @@ jobs:
           pip install httpx
 
       - name: Start API server
+        env:
+          ENVIRONMENT: ci
         run: |
           uvicorn finance_feedback_engine.api.app:app --host 0.0.0.0 --port 8000 &
           sleep 10
