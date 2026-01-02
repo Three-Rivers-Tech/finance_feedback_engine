@@ -127,7 +127,8 @@ jobs:
     name: Security Scan
     needs: [build-backend, build-frontend]
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    # Only run on pushes to main/develop branches and tags (not PRs)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       security-events: write
       actions: read
@@ -148,14 +149,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/main ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Pull image
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:latest
+          docker pull ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:${{ steps.tag.outputs.tag }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:${{ steps.tag.outputs.tag }}
           format: 'sarif'
           output: 'trivy-results-${{ matrix.image }}.sarif'
           severity: 'CRITICAL,HIGH'
@@ -170,7 +182,7 @@ jobs:
       - name: Generate Trivy report (human-readable)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.image }}:${{ steps.tag.outputs.tag }}
           format: 'table'
           severity: 'CRITICAL,HIGH'
 
