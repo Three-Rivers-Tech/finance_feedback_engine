@@ -46,7 +46,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     setIsStarting(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/start', {
+      await apiClient.post('/v1/bot/start', {
         autonomous: startMode === 'autonomous',
         // Default core pairs - pair selection will add more
         asset_pairs: ['BTCUSD', 'ETHUSD', 'EURUSD'],
@@ -63,7 +63,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     setIsStopping(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/stop');
+      await apiClient.post('/v1/bot/stop');
       await refresh();
     } catch (err) {
       setError(handleApiError(err));
@@ -76,7 +76,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     setIsPausing(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/pause');
+      await apiClient.post('/v1/bot/pause');
       await refresh();
     } catch (err) {
       setError(handleApiError(err));
@@ -89,7 +89,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     setIsResuming(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/resume');
+      await apiClient.post('/v1/bot/resume');
       await refresh();
     } catch (err) {
       setError(handleApiError(err));
@@ -121,7 +121,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         position_size_pct: configForm.position_size_pct ? Number(configForm.position_size_pct) : undefined,
         confidence_threshold: configForm.confidence_threshold ? Number(configForm.confidence_threshold) : undefined,
       };
-      await apiClient.patch('/api/v1/bot/config', payload);
+      await apiClient.patch('/v1/bot/config', payload);
       await refresh();
     } catch (err) {
       setError(handleApiError(err));
@@ -141,7 +141,7 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         size: tradeForm.size ? Number(tradeForm.size) : undefined,
         price: tradeForm.price ? Number(tradeForm.price) : undefined,
       };
-      await apiClient.post('/api/v1/bot/manual-trade', payload);
+      await apiClient.post('/v1/bot/manual-trade', payload);
       setTradeForm({ ...tradeForm, price: '', size: '' });
       await refresh();
     } catch (err) {

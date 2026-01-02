@@ -539,27 +539,55 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         # Get balance and active positions from trading platform
         if hasattr(engine, "trading_platform") and engine.trading_platform:
             balance_info = await engine.trading_platform.aget_balance()
-            # Normalize balance to a canonical shape expected by frontend
-            total = None
-            try:
-                total = float(balance_info.get("total"))
-            except Exception:
-                pass
-            if total is None:
+            
+            # For UnifiedTradingPlatform, provide breakdown by platform
+            platform_class_name = engine.trading_platform.__class__.__name__
+            
+            if platform_class_name == "UnifiedTradingPlatform":
+                # Parse platform-prefixed balances (e.g., coinbase_FUTURES_USD, oanda_USD)
+                platform_balances = {}
+                total = 0.0
+                
+                for key, value in balance_info.items():
+                    if isinstance(value, (int, float)):
+                        # Extract platform name (e.g., "coinbase" from "coinbase_FUTURES_USD")
+                        if "_" in key:
+                            platform_name = key.split("_")[0]
+                            if platform_name not in platform_balances:
+                                platform_balances[platform_name] = 0.0
+                            platform_balances[platform_name] += float(value)
+                        total += float(value)
+                
+                status_data["balance"] = {
+                    "total": total,
+                    "available": total,
+                    "currency": "USD",
+                    "platforms": platform_balances  # NEW: breakdown by platform
+                }
+            else:
+                # Single platform - normalize to canonical shape
+                total = None
                 try:
-                    total = sum(
-                        float(v)
-                        for v in balance_info.values()
-                        if isinstance(v, (int, float))
-                    )
+                    total = float(balance_info.get("total"))
                 except Exception:
-                    total = 0.0
-            status_data["balance"] = {
-                "total": total,
-                "available": total,
-                "currency": "USD",
-            }
-            status_data["platform"] = engine.trading_platform.__class__.__name__
+                    pass
+                if total is None:
+                    try:
+                        total = sum(
+                            float(v)
+                            for v in balance_info.values()
+                            if isinstance(v, (int, float))
+                        )
+                    except Exception:
+                        total = 0.0
+                
+                status_data["balance"] = {
+                    "total": total,
+                    "available": total,
+                    "currency": "USD",
+                }
+            
+            status_data["platform"] = platform_class_name
 
             # Active positions count via standardized interface
             if hasattr(engine.trading_platform, "get_active_positions"):
