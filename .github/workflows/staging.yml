@@ -222,6 +222,36 @@ jobs:
             echo '{"results": [], "metrics": {}}' > ./bandit-report.json
           fi
 
+      - name: Process security findings
+        if: always()
+        run: |
+          BANDIT_EXIT="${{ steps.security-scan.outputs.bandit_exit_code }}"
+
+          if [ "$BANDIT_EXIT" = "1" ]; then
+            # Bandit found security issues (informational for staging, non-blocking)
+            ISSUE_COUNT=$(jq '.results | length' ./bandit-report.json || echo "0")
+            echo "::warning::Bandit security scan found $ISSUE_COUNT issue(s). Review bandit-report.json artifact for details. This is informational only for staging pipeline."
+
+            # Add to job summary for visibility
+            {
+              echo "## ⚠️ Security Scan Results"
+              echo ""
+              echo "Bandit detected **$ISSUE_COUNT** security issue(s)."
+              echo ""
+              echo "### Next Steps:"
+              echo "- Review the **staging-security-report** artifact (bandit-report.json)"
+              echo "- Address high-severity findings before promoting to production"
+              echo "- This report is for informational purposes in staging"
+            } >> $GITHUB_STEP_SUMMARY
+          elif [ "$BANDIT_EXIT" = "0" ]; then
+            echo "✅ Bandit security scan completed with no findings"
+            echo "## ✅ Security Scan Passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No security issues detected." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️  Bandit exit code: $BANDIT_EXIT (unexpected value)"
+          fi
+
       - name: Test API endpoints
         run: |
           # Test analyze endpoint (should work with mock platform)
@@ -363,27 +393,27 @@ jobs:
         run: |
           echo "## Staging Environment Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.staging-build.result }}" == "success" ]; then
             echo "✅ **Staging Build:** Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Staging Build:** Failed" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [ "${{ needs.frontend-build.result }}" == "success" ]; then
             echo "✅ **Frontend Build:** Passed" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ **Frontend Build:** Failed" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ "${{ needs.staging-build.result }}" != "success" ] || \
              [ "${{ needs.frontend-build.result }}" != "success" ]; then
             echo "❌ Staging environment checks failed" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
-          
+
           echo "✅ **All staging checks passed!**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The application is ready for deployment." >> $GITHUB_STEP_SUMMARY
