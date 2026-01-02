@@ -224,9 +224,9 @@ docker-compose build frontend
 
 **Important Notes:**
 - The Dockerfile uses `frontend/` as the build context for self-contained builds
-- `nginx.conf` is copied from the parent `docker/nginx.conf` directory for consistency
+- `nginx.conf` in this directory is a copy that should be kept in sync with `docker/nginx.conf` (the source of truth)
 - When using docker-compose, the `docker/nginx.conf` is mounted as a volume for development convenience
-- Keep `docker/nginx.conf` as the source of truth; copy changes to `frontend/nginx.conf` when needed
+- To synchronize after making changes to `docker/nginx.conf`, run: `cp docker/nginx.conf frontend/nginx.conf`
 
 **Static Hosting Deployment:**
 - Serve with nginx, Vercel, Netlify, or any static host
