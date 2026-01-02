@@ -35,14 +35,18 @@ class BacktestOrchestrator:
         historical_data_provider: HistoricalDataProvider,
         decision_engine: DecisionEngine,
         config: Optional[Dict[str, Any]] = None,
+        max_workers: int = 4,
     ):
         self.historical_data_provider = historical_data_provider
         self.decision_engine = decision_engine
         self.config_manager = BacktestConfigurationManager()
         self.config = config or {}
 
+        # Store max_workers value for property access
+        self._max_workers = max_workers
+
         # Thread pool for parallel backtesting
-        self.executor = ThreadPoolExecutor(max_workers=4)
+        self.executor = ThreadPoolExecutor(max_workers=self._max_workers)
 
     @property
     def max_workers(self) -> int:
@@ -52,7 +56,7 @@ class BacktestOrchestrator:
         Returns:
             Number of worker threads configured in the thread pool executor
         """
-        return self.executor._max_workers
+        return self._max_workers
 
     def run_single_backtest(
         self, configuration: BacktestConfiguration
