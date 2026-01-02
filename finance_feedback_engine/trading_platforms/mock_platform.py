@@ -656,3 +656,22 @@ class MockTradingPlatform(BaseTradingPlatform):
                     current_price,
                     pos["unrealized_pnl"],
                 )
+
+    def test_connection(self) -> Dict[str, bool]:
+        """
+        Test mock platform connectivity - always returns success for testing.
+
+        Returns:
+            Dictionary with all validation checks passing
+        """
+        return {
+            "api_auth": True,
+            "account_active": True,
+            "trading_enabled": True,
+            "balance_available": True,
+            "market_data_access": True,
+        }
+
+    async def atest_connection(self) -> Dict[str, bool]:
+        """Async version of test_connection."""
+        return self.test_connection()
