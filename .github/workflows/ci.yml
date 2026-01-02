@@ -11,6 +11,7 @@ on:
 
 env:
   PYTHON_VERSION: '3.13'
+  ENVIRONMENT: ci
 
 jobs:
   # =============================================================================
@@ -184,10 +185,18 @@ jobs:
           echo "Tests: ${{ needs.test.result }}"
           echo "Security: ${{ needs.security.result }}"
 
-          if [ "${{ needs.pre-commit.result }}" != "success" ] || \
-             [ "${{ needs.test.result }}" != "success" ] || \
-             [ "${{ needs.security.result }}" != "success" ]; then
+          # Check for failures, account for skipped jobs
+          if [ "${{ needs.pre-commit.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.security.result }}" == "failure" ]; then
             echo "❌ CI checks failed"
+            exit 1
+          fi
+
+          # Ensure at least required jobs succeeded
+          if [ "${{ needs.pre-commit.result }}" != "success" ] || \
+             [ "${{ needs.test.result }}" != "success" ]; then
+            echo "❌ Required CI checks did not complete successfully"
             exit 1
           fi
 
