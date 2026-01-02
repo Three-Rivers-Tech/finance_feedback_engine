@@ -16,10 +16,16 @@ RUN npm ci
 
 # Copy application source and build configuration
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html ./
+COPY postcss.config.js tailwind.config.js ./
 COPY src ./src
 COPY public ./public
 
+# Copy production environment file for Vite to load automatically
+# Vite will read this during build and bake values into the bundle
+COPY .env.production ./
+
 # Build production bundle with Vite
+# Environment variables are loaded from .env.production automatically
 RUN npm run build
 
 # =============================================================================

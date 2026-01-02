@@ -39,7 +39,7 @@ export function useAgentStream(): AgentStreamState {
           headers.Authorization = `Bearer ${apiKey}`;
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/v1/bot/stream`, {
+        const response = await fetch(`${API_BASE_URL}/v1/bot/stream`, {
           method: 'GET',
           headers,
           signal: controller.signal,

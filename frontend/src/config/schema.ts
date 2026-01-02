@@ -11,14 +11,12 @@ const httpsUrlSchema = z.string().url().startsWith('https://');
 const relativeUrlSchema = z.string().regex(/^\/.+$/);  // Paths starting with / (no empty strings)
 
 // Create conditional URL schema based on environment
+// This accepts HTTP, HTTPS, and relative URLs (like /api for proxying)
 const apiUrlSchema = z.union([
   httpUrlSchema,
   httpsUrlSchema,
   relativeUrlSchema,
-]).refine(
-  (url) => url.length > 0,
-  'API base URL is required and cannot be empty'
-);
+]);
 
 // Polling interval validation (in milliseconds)
 const pollingIntervalSchema = z
