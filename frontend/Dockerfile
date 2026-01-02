@@ -9,17 +9,15 @@ FROM node:20-alpine AS builder
 WORKDIR /build
 
 # Copy package files for dependency installation
-COPY frontend/package.json frontend/package-lock.json ./
+COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci --only=production=false
+# Install dependencies (including dev dependencies for build)
+RUN npm ci
 
-# Copy source code
-COPY frontend/ .
-
-# Copy production environment configuration
-# This ensures Vite uses /api (Nginx proxy) instead of http://localhost:8000
-COPY frontend/.env.production .env
+# Copy application source and build configuration
+COPY tsconfig.json vite.config.ts index.html ./
+COPY src ./src
+COPY public ./public
 
 # Build production bundle with Vite
 RUN npm run build
@@ -33,9 +31,9 @@ FROM nginx:1.25-alpine
 COPY --from=builder /build/dist /usr/share/nginx/html
 
 # Copy Nginx configuration
-# NOTE: docker/nginx.conf must be in build context (set in docker-compose.yml)
-# This is the single source of truth for Nginx config
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# NOTE: nginx.conf is in frontend directory for self-contained builds
+# This is copied from docker/nginx.conf for consistency
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Create non-root nginx user and set permissions
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

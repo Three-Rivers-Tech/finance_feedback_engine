@@ -1,0 +1,55 @@
+# Dependencies (exclude from context, npm ci will install)
+# Note: node_modules is commented out due to npm ci bug in Alpine
+# The build relies on copying node_modules from host until npm ci is fixed
+# node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# Testing
+coverage/
+.nyc_output/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+__tests__/
+__mocks__/
+
+# Build artifacts (not needed in build context)
+dist/
+build/
+.vite/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Configuration examples (not needed in build)
+.env.*.example
+.env.local.example
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Misc
+.editorconfig
+.prettierrc
+.eslintrc*
+vitest.config.ts
