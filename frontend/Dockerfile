@@ -14,8 +14,10 @@ COPY package.json package-lock.json ./
 # Install dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy source code (includes .env.production)
-COPY . .
+# Copy application source and build configuration
+COPY tsconfig.json vite.config.ts index.html ./
+COPY src ./src
+COPY public ./public
 
 # Build production bundle with Vite
 RUN npm run build
