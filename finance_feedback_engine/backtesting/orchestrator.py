@@ -44,6 +44,16 @@ class BacktestOrchestrator:
         # Thread pool for parallel backtesting
         self.executor = ThreadPoolExecutor(max_workers=4)
 
+    @property
+    def max_workers(self) -> int:
+        """
+        Get the number of worker threads in the executor.
+
+        Returns:
+            Number of worker threads configured in the thread pool executor
+        """
+        return self.executor._max_workers
+
     def run_single_backtest(
         self, configuration: BacktestConfiguration
     ) -> Dict[str, Any]:
