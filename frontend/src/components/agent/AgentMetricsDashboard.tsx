@@ -69,7 +69,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
     setCloseError(null);
     setClosingIds((prev) => new Set(prev).add(positionId));
     try {
-      await apiClient.post(`/api/v1/bot/positions/${positionId}/close`);
+      await apiClient.post(`/v1/bot/positions/${positionId}/close`);
       await refetchPositions();
     } catch (err) {
       setCloseError(handleApiError(err));
