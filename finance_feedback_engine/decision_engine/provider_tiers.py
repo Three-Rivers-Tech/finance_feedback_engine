@@ -131,13 +131,31 @@ def is_ollama_model(provider_name: str) -> bool:
     """
     Check if provider is an Ollama model (vs CLI provider).
 
+    Supports both:
+    - Hardcoded model names in MODEL_VRAM_REQUIREMENTS
+    - Arbitrary Ollama model tags (e.g., "mistral:7b", "llama2:13b")
+    - Model names containing Ollama-specific keywords
+
     Args:
         provider_name: Name of the provider
 
     Returns:
         True if Ollama model, False otherwise
     """
-    return provider_name in MODEL_VRAM_REQUIREMENTS
+    if provider_name in MODEL_VRAM_REQUIREMENTS:
+        return True
+
+    # Check for Ollama model tag format (contains ':' for version/variant)
+    if ":" in provider_name:
+        return True
+
+    # Check for common Ollama model keywords
+    ollama_keywords = ["llama", "mistral", "deepseek", "gemma", "phi", "qwen", "codellama", "vicuna", "orca"]
+    provider_lower = provider_name.lower()
+    if any(keyword in provider_lower for keyword in ollama_keywords):
+        return True
+
+    return False
 
 
 def get_total_vram_required() -> float:

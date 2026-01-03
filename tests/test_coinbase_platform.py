@@ -17,10 +17,9 @@ def mock_coinbase_client():
     # Mock get_futures_balance_summary response (object with attributes)
     futures_response = MagicMock()
     balance_summary = {
-        "total_usd_balance": {"value": "10000.0"},
+        "futures_buying_power": {"value": "10000.0"},
         "unrealized_pnl": {"value": "400.0"},
         "daily_realized_pnl": {"value": "100.0"},
-        "futures_buying_power": {"value": "5000.0"},
         "initial_margin": {"value": "1000.0"},
     }
     futures_response.balance_summary = balance_summary

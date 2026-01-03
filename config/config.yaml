@@ -22,6 +22,32 @@
 # Load from environment variable: ALPHA_VANTAGE_API_KEY
 alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
 
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+# PostgreSQL connection settings for production deployments
+# SQLite is NOT recommended for multi-worker scenarios
+#
+# Connection pooling tuning:
+# - pool_size: Number of persistent connections (default 20)
+# - max_overflow: Additional connections under load (default 10)
+# - pool_recycle: Recycle connections after N seconds (default 3600 = 1 hour)
+# - pool_timeout: Wait time for available connection (default 30 seconds)
+# - echo: Enable SQL query logging (default false, set true for debugging)
+#
+# Override via environment variables:
+# - DATABASE_URL (format: postgresql+psycopg2://user:password@host:port/database)
+# - DB_POOL_SIZE, DB_POOL_OVERFLOW, DB_POOL_RECYCLE, DB_POOL_TIMEOUT, DB_ECHO
+#
+database:
+  url: "${DATABASE_URL:postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}"
+  pool_size: ${DB_POOL_SIZE:20}
+  max_overflow: ${DB_POOL_OVERFLOW:10}
+  pool_recycle: ${DB_POOL_RECYCLE:3600}
+  pool_timeout: ${DB_POOL_TIMEOUT:30}
+  echo: ${DB_ECHO:false}
+  isolation_level: "READ_COMMITTED"
+
 # Trading Platform Configuration
 # Options: 'coinbase', 'coinbase_advanced', 'oanda', 'unified'
 # - coinbase/coinbase_advanced: Crypto trading with futures portfolio tracking
@@ -29,10 +55,10 @@ alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
 # - unified: Multi-platform mode (configure 'platforms' list below) - RECOMMENDED
 #
 # Single Platform Mode: Set one platform name (legacy)
-trading_platform: "coinbase_advanced"
+# trading_platform: "coinbase_advanced"
 #
 # Multi-Platform Mode: Use 'unified' and configure platforms list below
-# trading_platform: "unified"
+trading_platform: "unified"
 
 # Platform-specific credentials
 # Uncomment and configure based on your chosen platform
@@ -94,18 +120,18 @@ providers:
 # 2. Uncomment and configure platforms list below
 # 3. Dashboard aggregates portfolio across all platforms
 #
-# platforms:
-#   - name: "coinbase_advanced"
-#     credentials:
-#       api_key: "YOUR_COINBASE_API_KEY"
-#       api_secret: "YOUR_COINBASE_API_SECRET"
-#       use_sandbox: false
-#
-#   - name: "oanda"
-#     credentials:
-#       api_key: "YOUR_OANDA_API_TOKEN"
-#       account_id: "YOUR_OANDA_ACCOUNT_ID"
-#       environment: "practice"
+platforms:
+  - name: "coinbase_advanced"
+    credentials:
+      api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
+      api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
+      use_sandbox: false
+
+  - name: "oanda"
+    credentials:
+      api_key: "${OANDA_API_KEY:YOUR_OANDA_API_KEY}"
+      account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
+      environment: "${OANDA_ENVIRONMENT:practice}"
 #
 # NOTE: When using unified platform mode:
 # - Execute trades on specific platform: specify platform_name in decision
@@ -311,11 +337,28 @@ ensemble:
   debate_mode: true
 
   # Debate providers: Specify which providers play which roles
-  # Default: Uses all local providers for zero-cost multi-model consensus
+  # BYOM (Bring Your Own Model): You can assign specific Ollama model tags to each seat
+  # Examples:
+  #   - Use "local" to let the system choose the default model
+  #   - Use explicit Ollama tags like "mistral:7b-instruct" for precise control
+  #   - Mix cloud providers (gemini, qwen) with local models
+  # IMPORTANT: Ollama must be running and specified models must be installed
+  #   Run: ollama pull <model-tag> to download missing models
   debate_providers:
-    bull: "local"     # Provider for bullish case
-    bear: "local"     # Provider for bearish case
-    judge: "local"    # Provider for final judgment
+    bull: "local"     # Provider for bullish case (e.g., "mistral:7b-instruct", "llama2:13b")
+    bear: "local"     # Provider for bearish case (e.g., "deepseek-r1:8b", "qwen2.5:7b")
+    judge: "local"    # Provider for final judgment (e.g., "codellama:34b", "gemma2:9b")
+
+  # Example BYOM configurations:
+  # debate_providers:
+  #   bull: "mistral:7b-instruct"     # Fast, aggressive local model
+  #   bear: "llama2:13b"              # Larger, more conservative local model
+  #   judge: "deepseek-r1:8b"         # Balanced reasoning model
+  #
+  # debate_providers:
+  #   bull: "gemini"                  # Cloud provider for bull case
+  #   bear: "qwen2.5:7b-instruct"     # Local model for bear case
+  #   judge: "local"                  # Default local model for judgment
 
   # Minimum agreement threshold (0.0-1.0)
   # Higher = requires more consensus between providers
@@ -513,10 +556,10 @@ telegram:
 
   # Telegram Bot API token (from @BotFather)
   # Get one at: https://t.me/BotFather
-  bot_token: "8442805316:AAHBiqBHfM14EhjfK0CJ8SC0lOde3flT6bQ"
+  bot_token: "${TELEGRAM_BOT_TOKEN:YOUR_TELEGRAM_BOT_TOKEN}"
 
   # Telegram chat ID (your user ID or group ID)
-  chat_id: "1864198449"
+  chat_id: "${TELEGRAM_CHAT_ID:YOUR_TELEGRAM_CHAT_ID}"
 
 # ============================================
 # Backtesting (Experimental)
@@ -638,6 +681,11 @@ agent:
     enabled: true        # Set to false and enable telegram for signal-only mode
     profit_target: 0.05   # 5%
     stop_loss: 0.02       # 2%
+
+  # Resilience and observability
+  # Queue size auto-tunes by environment when set to 0 (dev=50, staging=200, prod=1000)
+  max_retries_per_cycle: 3
+  dashboard_event_queue_size: 50
 
   # Webhook configuration for trading signals
   webhook:

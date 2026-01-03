@@ -4,6 +4,9 @@ import { Dashboard } from './pages/Dashboard';
 import { AgentControl } from './pages/AgentControl';
 import { Analytics } from './pages/Analytics';
 import { Optimization } from './pages/Optimization';
+import { Models } from './pages/Models';
+
+
 
 function App() {
   return (
@@ -14,6 +17,7 @@ function App() {
           <Route path="agent" element={<AgentControl />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="optimization" element={<Optimization />} />
+          <Route path="models" element={<Models />} />
         </Route>
       </Routes>
     </BrowserRouter>

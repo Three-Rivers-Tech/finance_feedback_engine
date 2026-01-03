@@ -386,16 +386,29 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 balance_summary = getattr(futures_summary, "balance_summary", None)
 
                 if balance_summary:
-                    # balance_summary supports dict-style access
-                    total_usd_balance = balance_summary["total_usd_balance"]
-                    if isinstance(total_usd_balance, dict):
-                        futures_usd = float(total_usd_balance.get("value", 0) or 0)
-                    else:
-                        futures_usd = float(getattr(total_usd_balance, "value", 0) or 0)
-
-                    if futures_usd > 0:
-                        balances["FUTURES_USD"] = futures_usd
-                        logger.info("Futures balance: $%.2f USD", futures_usd)
+                    # Use futures_buying_power as it represents actual available collateral
+                    # (includes spot USD/USDC that can be used for futures trading)
+                    # total_usd_balance only shows active futures positions
+                    
+                    # Helper function to safely get attribute from object or dict
+                    def _get_attr_value(obj: Any, attr: str, default: Any = None) -> Any:
+                        """Safely get attribute from object or dict."""
+                        if isinstance(obj, dict):
+                            return obj.get(attr, default)
+                        return getattr(obj, attr, default)
+                    
+                    # Helper function to convert value to float
+                    def _to_float_value(v: Any) -> float:
+                        if isinstance(v, dict):
+                            return float(v.get("value", 0) or 0)
+                        return float(getattr(v, "value", 0) or 0)
+                    
+                    futures_buying_power = _get_attr_value(balance_summary, "futures_buying_power")
+                    if futures_buying_power:
+                        futures_usd = _to_float_value(futures_buying_power)
+                        if futures_usd > 0:
+                            balances["FUTURES_USD"] = futures_usd
+                            logger.info("Futures buying power: $%.2f USD", futures_usd)
 
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
@@ -605,7 +618,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             return getattr(obj, attr, default)
 
                         futures_value_usd = _to_float_value(
-                            _get_attr_value(balance_summary, "total_usd_balance", 0)
+                            _get_attr_value(balance_summary, "futures_buying_power", 0)
                         )
                         futures_summary = {
                             "total_balance_usd": futures_value_usd,

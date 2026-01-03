@@ -25,9 +25,19 @@ class AlphaVantageProvider:
 
     BASE_URL = "https://www.alphavantage.co/query"
 
+    async def _ensure_session_lock(self):
+        """Ensure asyncio.Lock is initialized in async context."""
+        if self._session_lock is None:
+            with self._lock_init_lock:  # Thread-safe check-and-set
+                if self._session_lock is None:
+                    import asyncio
+
+                    self._session_lock = asyncio.Lock()
+        return self._session_lock
+
     def __post_init_session_lock(self):
         # Helper to ensure the session lock exists (for pickling/compatibility)
-        if not hasattr(self, "_session_lock"):
+        if self._session_lock is None:
             import asyncio
 
             self._session_lock = asyncio.Lock()
@@ -62,9 +72,12 @@ class AlphaVantageProvider:
         # Ensure rate limiter is always active - create default if not provided
         self.rate_limiter = rate_limiter or self._create_default_rate_limiter()
         self._owned_session = False
-        import asyncio
+        import threading
 
-        self._session_lock = asyncio.Lock()
+        # Defer asyncio.Lock initialization to first async call to avoid
+        # event loop dependency in sync context
+        self._session_lock = None
+        self._lock_init_lock = threading.Lock()  # Thread-safe guard for lock initialization
         self._context_count = 0  # Track active async context manager entries
 
         # Simple in-memory cache for API responses
@@ -143,7 +156,8 @@ class AlphaVantageProvider:
 
         Supports nested async with usage: only closes session when all contexts exit.
         """
-        async with self._session_lock:
+        lock = await self._ensure_session_lock()
+        async with lock:
             await self._ensure_session()
             self._context_count += 1
         return self
@@ -314,9 +328,9 @@ class AlphaVantageProvider:
         """
         Ensure that self.session is initialized, guarded by a lock to prevent race conditions.
         """
-        # Defensive: allow for possible missing lock (e.g., after unpickling)
-        self.__post_init_session_lock()
-        async with self._session_lock:
+        # Ensure lock is properly initialized in async context
+        lock = await self._ensure_session_lock()
+        async with lock:
             if self.session is None:
                 self.session = aiohttp.ClientSession()
                 self._owned_session = True

@@ -55,7 +55,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
       })
       .filter((v) => v !== null && v > 0) as number[];
 
-    return confidences.length
+    return confidences && confidences.length
       ? confidences.reduce((acc, v) => acc + v, 0) / confidences.length
       : null;
   }, [events]);
@@ -69,7 +69,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
     setCloseError(null);
     setClosingIds((prev) => new Set(prev).add(positionId));
     try {
-      await apiClient.post(`/v1/bot/positions/${positionId}/close`);
+      await apiClient.post(`/api/v1/bot/positions/${positionId}/close`);
       await refetchPositions();
     } catch (err) {
       setCloseError(handleApiError(err));
@@ -120,10 +120,10 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
         <div className="space-y-3">
           <p className="text-sm font-mono text-text-secondary">Recent Decisions</p>
           <div className="space-y-2">
-            {recentDecisions.length === 0 && (
+            {recentDecisions && recentDecisions.length === 0 && (
               <p className="text-xs font-mono text-text-muted">No recent decisions</p>
             )}
-            {recentDecisions.map((evt, idx) => (
+            {recentDecisions && recentDecisions.map((evt, idx) => (
               <div
                 key={`${evt.event}-${idx}`}
                 className="flex items-center justify-between rounded border border-border px-3 py-2"
@@ -184,10 +184,10 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         <div className="space-y-2">
           <p className="text-sm font-mono text-text-secondary">Signal Delivery Alerts</p>
-          {signalAlerts.length === 0 && (
+          {signalAlerts && signalAlerts.length === 0 && (
             <p className="text-xs font-mono text-text-muted">No signal delivery issues</p>
           )}
-          {signalAlerts.map((evt, idx) => (
+          {signalAlerts && signalAlerts.map((evt, idx) => (
             <div
               key={`alert-${idx}`}
               className="rounded border border-accent-red px-3 py-2 bg-accent-red bg-opacity-10"

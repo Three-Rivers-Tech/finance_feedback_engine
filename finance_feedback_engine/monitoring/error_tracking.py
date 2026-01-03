@@ -1,14 +1,20 @@
-"""Centralized error tracking with Sentry integration and logging fallback.
+"""Centralized error tracking with Sentry integration, logging fallback, and crash dumps.
 
 This module provides a unified interface for error tracking that:
 - Integrates with Sentry for production error monitoring
 - Falls back to structured logging when Sentry is unavailable
 - Captures rich context (asset pairs, operations, correlation IDs)
+- Writes crash dumps in development for fast debugging (auto-cleaned)
 - Supports graceful degradation if dependencies are missing
 """
 
 import logging
+import traceback
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+from finance_feedback_engine.utils.environment import is_development
 
 try:
     from finance_feedback_engine.monitoring.logging_config import PIIRedactionFilter
@@ -83,6 +89,109 @@ class ErrorTracker:
         except Exception as e:
             logger.error(f"Failed to initialize Sentry: {e}", exc_info=True)
             self.backend = "logging"
+
+    def capture_crash_dump(
+        self,
+        error: Exception,
+        context: Optional[Dict[str, Any]] = None,
+        include_locals: bool = False,
+        max_files: int = 100,
+        max_age_days: int = 7,
+    ) -> Optional[str]:
+        """Create a structured crash dump in development environments.
+
+        The crash dump is JSON with sanitized context, traceback, and optional locals.
+        Auto-clean keeps at most ``max_files`` dumps and deletes dumps older than
+        ``max_age_days``.
+
+        Returns the dump file path when written, otherwise ``None`` (e.g., prod).
+        """
+
+        # Only emit crash dumps in development; production still routes to Sentry/logging
+        if not is_development():
+            self.capture_exception(error, context=context)
+            return None
+
+        crash_dir = Path("data/crash_dumps")
+        crash_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean up old dumps before writing a new one
+        self._cleanup_old_crash_dumps(crash_dir, max_files=max_files, max_age_days=max_age_days)
+
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        error_type = type(error).__name__
+        dump_path = crash_dir / f"crash_{timestamp}_{error_type}.json"
+
+        sanitized_context = self._sanitize_context(context or {})
+
+        dump_payload: Dict[str, Any] = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "error_type": error_type,
+            "error_message": str(error),
+            "traceback": traceback.format_exc(),
+            "context": sanitized_context,
+        }
+
+        if include_locals:
+            dump_payload["stack_frames"] = self._extract_locals_from_traceback(max_length=200)
+
+        try:
+            import json
+
+            with dump_path.open("w", encoding="utf-8") as f:
+                json.dump(dump_payload, f, indent=2, default=str)
+            logger.info(f"💾 Crash dump saved: {dump_path}")
+            return str(dump_path)
+        except Exception as dump_error:  # pragma: no cover - defensive
+            logger.error(f"Failed to write crash dump: {dump_error}", exc_info=True)
+            return None
+
+    def _cleanup_old_crash_dumps(
+        self, crash_dir: Path, max_files: int = 100, max_age_days: int = 7
+    ) -> None:
+        """Remove crash dumps older than ``max_age_days`` and keep only ``max_files`` most recent."""
+
+        try:
+            if not crash_dir.exists():
+                return
+
+            now = datetime.utcnow()
+            cutoff = now - timedelta(days=max_age_days)
+            dumps = sorted(
+                [p for p in crash_dir.glob("crash_*.json") if p.is_file()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+
+            # Remove old files by age
+            for dump in list(dumps):
+                mtime = datetime.utcfromtimestamp(dump.stat().st_mtime)
+                if mtime < cutoff:
+                    dump.unlink(missing_ok=True)
+                    dumps.remove(dump)
+
+            # Trim to max_files most recent
+            for stale in dumps[max_files:]:
+                stale.unlink(missing_ok=True)
+        except Exception as cleanup_error:  # pragma: no cover - defensive
+            logger.debug(f"Crash dump cleanup failed: {cleanup_error}", exc_info=True)
+
+    def _extract_locals_from_traceback(self, max_length: int = 200) -> list[Dict[str, Any]]:
+        """Extract locals from the current traceback for debugging (development only)."""
+
+        frames: list[Dict[str, Any]] = []
+        tb = traceback.extract_stack()
+        for frame in tb:
+            frames.append(
+                {
+                    "filename": frame.filename,
+                    "lineno": frame.lineno,
+                    "name": frame.name,
+                    # Truncate to avoid massive payloads
+                    "line": (frame.line or "")[:max_length],
+                }
+            )
+        return frames
 
     def capture_exception(
         self,

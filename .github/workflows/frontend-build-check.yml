@@ -123,11 +123,13 @@ jobs:
           echo "✅ JS file size: $size bytes"
 
           # Check that API key from .env.production is baked in
-          if ! grep -q "dev-key-12345" "$js_file"; then
-            echo "⚠️  Warning: API key from .env.production not found in bundle"
-            echo "This may indicate .env.production was not copied during build"
+          # Extract API key from .env.production and check if it's in the bundle
+          api_key=$(grep "VITE_API_KEY" .env.production | cut -d '=' -f 2 | tr -d '"' | tr -d "'")
+          if [ -n "$api_key" ] && ! grep -q "$api_key" "$js_file"; then
+            echo "⚠️  Warning: VITE_API_KEY from .env.production not found in bundle"
+            echo "This may indicate .env.production was not processed during build"
           else
-            echo "✅ API key from .env.production found in bundle"
+            echo "✅ Environment variables from .env.production appear to be processed"
           fi
 
       - name: Build summary
