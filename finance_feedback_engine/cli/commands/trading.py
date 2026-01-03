@@ -170,5 +170,123 @@ def execute(ctx, decision_id):
         raise click.Abort()
 
 
+@click.command(name="check-ollama")
+@click.pass_context
+def check_ollama(ctx):
+    """Check Ollama service status and installed models."""
+    import os
+    from rich.panel import Panel
+    from rich.text import Text
+
+    try:
+        from finance_feedback_engine.utils.ollama_readiness import (
+            OllamaReadinessChecker,
+        )
+
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        checker = OllamaReadinessChecker(ollama_host)
+
+        console.print(
+            Panel(
+                f"[bold cyan]Ollama Service Diagnostics[/bold cyan]\n"
+                f"Host: {ollama_host}",
+                title="🔍 Ollama Health Check",
+                border_style="cyan",
+            )
+        )
+
+        # Check service availability
+        service_ok, service_err = checker.check_service_available()
+
+        if service_ok:
+            console.print("[bold green]✓ Ollama service is running[/bold green]\n")
+
+            # List installed models
+            models = checker.get_available_models()
+            if models:
+                console.print(f"[bold cyan]Installed Models ({len(models)}):[/bold cyan]")
+                table = Table(show_header=True, header_style="bold cyan")
+                table.add_column("#", style="dim", width=4)
+                table.add_column("Model Tag", style="green")
+
+                for idx, model in enumerate(models, 1):
+                    table.add_row(str(idx), model)
+
+                console.print(table)
+            else:
+                console.print("[yellow]No models installed yet[/yellow]")
+                console.print(
+                    "\n[cyan]To download models, run:[/cyan]\n"
+                    "  ollama pull llama3.2:3b-instruct-fp16\n"
+                    "  ollama pull mistral:7b-instruct"
+                )
+        else:
+            console.print(f"[bold red]✗ Ollama service unavailable[/bold red]")
+            console.print(f"[red]{service_err}[/red]\n")
+            console.print(
+                "[yellow]To start Ollama:[/yellow]\n"
+                "  1. Install: https://ollama.ai/download\n"
+                "  2. Start service: ollama serve\n"
+                "  3. Or set OLLAMA_HOST env var to remote instance"
+            )
+            raise click.Abort()
+
+        # Check debate mode configuration
+        config = ctx.obj.get("config", {})
+        ensemble_config = config.get("ensemble", {})
+        debate_mode = ensemble_config.get("debate_mode", False)
+        debate_providers = ensemble_config.get(
+            "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
+        )
+
+        if debate_mode:
+            console.print(
+                "\n[bold cyan]Debate Mode Configuration:[/bold cyan]"
+            )
+            ready, seat_status, missing = checker.check_debate_readiness(
+                debate_providers
+            )
+
+            debate_table = Table(show_header=True, header_style="bold cyan")
+            debate_table.add_column("Seat", style="cyan")
+            debate_table.add_column("Provider", style="yellow")
+            debate_table.add_column("Status", style="bold")
+
+            for seat, provider in debate_providers.items():
+                status_icon = "✓" if provider not in missing else "✗"
+                status_color = "green" if provider not in missing else "red"
+                debate_table.add_row(
+                    seat.capitalize(),
+                    provider,
+                    f"[{status_color}]{status_icon}[/{status_color}]",
+                )
+
+            console.print(debate_table)
+
+            if not ready:
+                console.print(
+                    f"\n[bold red]Missing debate models:[/bold red] {', '.join(missing)}"
+                )
+                hints = checker.get_remediation_hints(missing)
+                console.print(f"[yellow]{hints}[/yellow]")
+            else:
+                console.print("\n[bold green]✓ All debate seats ready[/bold green]")
+
+    except ImportError as e:
+        console.print(
+            f"[bold red]Error: Ollama readiness checker not available[/bold red]\n{e}"
+        )
+        raise click.Abort()
+    except click.Abort:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        if ctx.obj.get("verbose"):
+            import traceback
+
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
 # Export commands for registration in main.py
-commands = [balance, execute]
+commands = [balance, execute, check_ollama]

@@ -46,7 +46,7 @@ export const Optimization: React.FC = () => {
         multi_objective: multiObjective,
       };
 
-      const response = await apiClient.post('/v1/optimization/experiment', request);
+      const response = await apiClient.post('/api/v1/optimization/experiment', request);
       setResult(response.data);
     } catch (err) {
       setError(handleApiError(err));

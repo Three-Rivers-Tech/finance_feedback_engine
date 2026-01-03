@@ -7,6 +7,7 @@ export const Header: React.FC = () => {
   const { data: health } = useHealth();
 
   const statusVariant = health?.status === 'healthy' ? 'success' : health?.status === 'degraded' ? 'warning' : 'danger';
+  const statusLabel = health?.status ? health.status.toUpperCase() : 'UNKNOWN';
 
   return (
     <header className="bg-bg-secondary border-b-3 border-border-primary px-6 py-4">
@@ -22,7 +23,7 @@ export const Header: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="text-xs text-text-secondary font-mono">API STATUS</span>
               <Badge variant={statusVariant}>
-                {health.status.toUpperCase()}
+                {statusLabel}
               </Badge>
             </div>
           )}

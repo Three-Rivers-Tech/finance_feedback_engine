@@ -5,14 +5,17 @@ import datetime
 import logging
 import queue
 import time
+import uuid
 from enum import Enum, auto
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from opentelemetry import metrics, trace
 
 from finance_feedback_engine.monitoring.prometheus import (
+    increment_dashboard_events_dropped,
     update_agent_state,
     update_decision_confidence,
+    update_dashboard_queue_metrics,
 )
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
@@ -20,6 +23,7 @@ from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngin
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+from finance_feedback_engine.utils.environment import is_development, is_production
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -89,7 +93,7 @@ class TradingLoopAgent:
         self._paused = False
         self.state = AgentState.IDLE
         self._current_decisions = []  # Store multiple decisions for batch processing
-        
+
         # Lock for protecting asset_pairs list from concurrent modification
         self._asset_pairs_lock = asyncio.Lock()
         # Track analysis failures and their timestamps for time-based decay
@@ -129,11 +133,20 @@ class TradingLoopAgent:
         # Dashboard event queue for real-time updates
         import queue
 
-        self._dashboard_event_queue = queue.Queue(
-            maxsize=100
-        )  # Dashboard event queue with reasonable limit
+        resolved_queue_size = getattr(self.config, "dashboard_event_queue_size", 0)
+        if not resolved_queue_size:
+            # Environment-based defaults (fail-safe to 100 if detection fails)
+            if is_production():
+                resolved_queue_size = 1000
+            else:
+                # Treat anything not explicitly production as dev/staging-sized
+                resolved_queue_size = 50
+
+        self._dashboard_event_queue = queue.Queue(maxsize=resolved_queue_size)
         self._cycle_count = 0
         self._start_time = None  # Will be set in run()
+        self._current_cycle_id: str | None = None
+        self._cycle_retry_budget: dict[str, int] = {}
 
         # Property for dashboard to track if stop was requested
         self.stop_requested = False
@@ -157,6 +170,47 @@ class TradingLoopAgent:
             raise ValueError(error_msg)
 
         logger.info("✓ Notification delivery validated: Telegram configured")
+
+        # Validate Ollama readiness for local/debate mode
+        self._validate_ollama_readiness()
+
+        # Validate Ollama readiness for local/debate mode
+        decision_engine_config = config.get("decision_engine", {})
+        ai_provider = decision_engine_config.get("ai_provider", "local")
+        ensemble_config = config.get("ensemble", {})
+        debate_mode = ensemble_config.get("debate_mode", False)
+        debate_providers = ensemble_config.get(
+            "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
+        )
+
+        requires_ollama = (
+            ai_provider == "local" or ai_provider == "ensemble" or debate_mode
+        )
+
+        if requires_ollama:
+            try:
+                from finance_feedback_engine.utils.ollama_readiness import (
+                    verify_ollama_for_agent,
+                )
+
+                ollama_ready, ollama_err = verify_ollama_for_agent(
+                    config, debate_mode, debate_providers
+                )
+                if not ollama_ready:
+                    logger.error(f"Ollama readiness check failed: {ollama_err}")
+                    raise ValueError(
+                        f"Agent requires Ollama but service is unavailable:\n{ollama_err}\n"
+                        "Please start Ollama and ensure required models are installed."
+                    )
+                logger.info("✓ Ollama readiness validated")
+            except ImportError:
+                logger.warning(
+                    "Ollama readiness checker not available; skipping validation"
+                )
+            except ValueError:
+                raise  # Re-raise readiness failures
+            except Exception as e:
+                logger.warning(f"Ollama readiness check encountered error: {e}")
 
         # State machine handler map
         self.state_handlers = {
@@ -303,14 +357,14 @@ class TradingLoopAgent:
                     """Update agent's asset_pairs when selection completes."""
                     # Always preserve core pairs (BTCUSD, ETHUSD, EURUSD)
                     core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
-                    
+
                     # Merge selected pairs with core pairs (union, preserving order)
                     # Core pairs come first, then any additional selected pairs
                     final_pairs = list(core_pairs)  # Start with core pairs
                     for pair in result.selected_pairs:
                         if pair not in final_pairs:
                             final_pairs.append(pair)
-                    
+
                     # Thread-safe update using asyncio.create_task with lock
                     async def update_pairs():
                         try:
@@ -322,7 +376,7 @@ class TradingLoopAgent:
                                 )
                         except Exception as e:
                             logger.error(f"Error updating asset pairs: {e}", exc_info=True)
-                    
+
                     # Schedule the update in the event loop
                     try:
                         task = asyncio.create_task(update_pairs())
@@ -370,10 +424,10 @@ class TradingLoopAgent:
     def is_autonomous_enabled(self) -> bool:
         """
         Check if autonomous execution mode is enabled.
-        
+
         Checks both new config format (autonomous.enabled) and legacy format
         (autonomous_execution) for backward compatibility.
-        
+
         Returns:
             bool: True if autonomous execution is enabled
         """
@@ -407,6 +461,54 @@ class TradingLoopAgent:
 
         # All requirements met
         return True
+
+    def _validate_ollama_readiness(self) -> None:
+        """
+        Validate Ollama is running and models are available.
+
+        Raises:
+            ValueError: If Ollama check fails
+        """
+        try:
+            from finance_feedback_engine.utils.ollama_readiness import verify_ollama_for_agent
+
+            # Get full config from engine (includes decision_engine and ensemble sections)
+            # TradingAgentConfig only has agent-specific settings
+            full_config = getattr(self.engine, 'config', {}) if hasattr(self, 'engine') else {}
+
+            if not full_config:
+                logger.debug("Engine config not available; skipping Ollama validation")
+                return
+
+            # Extract decision_engine and ensemble config safely
+            decision_engine = full_config.get("decision_engine", {})
+            if not isinstance(decision_engine, dict):
+                decision_engine = {}
+
+            ensemble_config = full_config.get("ensemble", {})
+            if not isinstance(ensemble_config, dict):
+                ensemble_config = {}
+
+            ai_provider = decision_engine.get("ai_provider", "local")
+            debate_mode = ensemble_config.get("debate_mode", False)
+            debate_providers = ensemble_config.get(
+                "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
+            )
+
+            requires_ollama = (
+                ai_provider == "local"
+                or ai_provider == "ensemble"
+                or debate_mode
+            )
+
+            if requires_ollama:
+                ollama_ready, ollama_err = verify_ollama_for_agent(
+                    full_config, debate_mode, debate_providers
+                )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.warning(f"Ollama readiness check failed: {e}; proceeding anyway")
 
     def _validate_notification_config(self) -> tuple[bool, list[str]]:
         """
@@ -550,17 +652,98 @@ class TradingLoopAgent:
             event: Event dictionary with type, timestamp, and event-specific fields
         """
         if hasattr(self, "_dashboard_event_queue"):
+            queue_name = "dashboard"
+            q = self._dashboard_event_queue
             try:
-                self._dashboard_event_queue.put_nowait(event)
+                q.put_nowait(event)
             except queue.Full:
-                # Queue is full - log with size info and drop event
-                queue_size = self._dashboard_event_queue.qsize()
-                logger.warning(
-                    f"Dashboard event queue is full ({queue_size} events), dropping event. Consider increasing maxsize or processing events faster."
-                )
-            except Exception as e:
+                # Production: drop oldest to preserve most recent events; Dev: drop newest
+                try:
+                    if is_production():
+                        # Drop oldest and attempt to enqueue new event
+                        q.get_nowait()
+                        increment_dashboard_events_dropped(queue_name)
+                        q.put_nowait(event)
+                    else:
+                        increment_dashboard_events_dropped(queue_name)
+                        logger.warning(
+                            f"Dashboard event queue is full ({q.qsize()} events), dropping newest event."
+                        )
+                except Exception as inner_exc:  # noqa: BLE001
+                    increment_dashboard_events_dropped(queue_name)
+                    logger.warning(f"Failed to enqueue dashboard event: {inner_exc}")
+            except Exception as e:  # noqa: BLE001
                 # Other exception during queue operation - log it
                 logger.warning(f"Failed to emit dashboard event: {e}")
+            finally:
+                try:
+                    update_dashboard_queue_metrics(queue_name, q.qsize(), q.maxsize)
+                except Exception:
+                    logger.debug("Unable to update dashboard queue metrics", exc_info=True)
+
+    def _ensure_cycle_budget(self) -> None:
+        """Initialize cycle id and retry budget if not already set."""
+
+        if not self._current_cycle_id:
+            self._current_cycle_id = uuid.uuid4().hex[:8]
+            self._cycle_retry_budget[self._current_cycle_id] = getattr(
+                self.config, "max_retries_per_cycle", 3
+            )
+
+    def _consume_cycle_retry_budget(self) -> int:
+        """Decrement retry budget for current cycle and return remaining retries."""
+
+        if not self._current_cycle_id:
+            return 0
+
+        remaining = self._cycle_retry_budget.get(
+            self._current_cycle_id, getattr(self.config, "max_retries_per_cycle", 3)
+        )
+        if remaining > 0:
+            remaining -= 1
+            self._cycle_retry_budget[self._current_cycle_id] = remaining
+        return remaining
+
+    def _reset_cycle_budget(self) -> None:
+        """Clear cycle id and retry budget (end of cycle)."""
+
+        if self._current_cycle_id:
+            self._cycle_retry_budget.pop(self._current_cycle_id, None)
+            self._current_cycle_id = None
+
+    def _handle_state_exception(self, error: Exception, state_name: str) -> Optional[str]:
+        """Emit crash diagnostics and return crash dump path if available."""
+
+        dump_path = None
+        tracker = getattr(self.engine, "error_tracker", None)
+        context = {
+            "state": state_name,
+            "cycle_id": self._current_cycle_id,
+            "retry_budget": self._cycle_retry_budget.get(self._current_cycle_id, 0)
+            if self._current_cycle_id
+            else 0,
+            "asset_pairs": getattr(self.config, "asset_pairs", []),
+        }
+
+        if tracker and hasattr(tracker, "capture_crash_dump"):
+            try:
+                dump_path = tracker.capture_crash_dump(
+                    error, context=context, include_locals=True
+                )
+            except Exception:  # pragma: no cover - defensive
+                logger.debug("Crash dump capture failed", exc_info=True)
+
+        self._emit_dashboard_event(
+            {
+                "type": "agent_crashed",
+                "state": state_name,
+                "error": str(error),
+                "cycle_id": self._current_cycle_id,
+                "dump_path": dump_path,
+                "timestamp": time.time(),
+            }
+        )
+        return dump_path
 
     async def handle_idle_state(self):
         """
@@ -569,7 +752,7 @@ class TradingLoopAgent:
         The sleep between cycles is now handled externally (in run() or by the backtester),
         so this state simply logs and returns, allowing the cycle to complete.
         The next cycle will start from LEARNING state after the external sleep.
-        
+
         IMPORTANT: This state should NOT auto-transition. The run() method or backtester
         will explicitly transition to LEARNING after the configured sleep interval.
         """
@@ -980,7 +1163,7 @@ class TradingLoopAgent:
                     "CRITICAL: No asset pairs configured! Restoring core pairs."
                 )
                 self.config.asset_pairs = core_pairs
-            
+
             # Validate core pairs are present
             missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
             if missing_core_pairs:
@@ -991,7 +1174,7 @@ class TradingLoopAgent:
 
             # Create a snapshot copy for iteration (prevents race conditions)
             asset_pairs_snapshot = list(self.config.asset_pairs)
-        
+
         logger.info(f"Analyzing {len(asset_pairs_snapshot)} pairs: {asset_pairs_snapshot}")
 
         MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
@@ -1973,7 +2156,12 @@ class TradingLoopAgent:
             # Start from current state (RECOVERING on first cycle, LEARNING thereafter)
             # If state is IDLE (from previous cycle), transition to LEARNING to start new cycle
             if self.state == AgentState.IDLE:
+                self._reset_cycle_budget()
+                self._ensure_cycle_budget()
                 await self._transition_to(AgentState.LEARNING)
+            else:
+                # Ensure budget exists for mid-cycle recoveries (e.g., after errors)
+                self._ensure_cycle_budget()
 
             # Execute state machine until we return to IDLE or encounter error
             max_iterations = 10  # Prevent infinite loops in one cycle
@@ -1990,7 +2178,35 @@ class TradingLoopAgent:
                         cycle_span.add_event(
                             "state_handler_start", {"state": self.state.name}
                         )
-                        await handler()
+                        try:
+                            await handler()
+                        except Exception as handler_err:
+                            dump_path = self._handle_state_exception(
+                                handler_err, self.state.name
+                            )
+                            if is_development():
+                                # Hard crash in dev to surface issues
+                                raise
+
+                            remaining = self._consume_cycle_retry_budget()
+                            if remaining > 0:
+                                logger.warning(
+                                    "State %s failed; retrying within cycle (remaining=%s)",
+                                    self.state.name,
+                                    remaining,
+                                )
+                                continue
+
+                            logger.error(
+                                "State handler failed; retry budget exhausted; aborting cycle",
+                                exc_info=True,
+                            )
+                            if dump_path:
+                                logger.error(
+                                    "Crash dump captured at %s", dump_path
+                                )
+                            self._reset_cycle_budget()
+                            return False
                         cycle_span.add_event(
                             "state_handler_end", {"state": self.state.name}
                         )
@@ -2004,7 +2220,12 @@ class TradingLoopAgent:
                     logger.warning(
                         "process_cycle exceeded max iterations, possible infinite loop"
                     )
+                    self._reset_cycle_budget()
                     return False
+
+            # Clear cycle budget when returning to IDLE
+            if self.state == AgentState.IDLE:
+                self._reset_cycle_budget()
 
             return True
 
@@ -2013,6 +2234,7 @@ class TradingLoopAgent:
             return False
         except Exception as e:
             logger.error(f"Error in process_cycle: {e}", exc_info=True)
+            self._reset_cycle_budget()
             return False
 
     def stop(self):

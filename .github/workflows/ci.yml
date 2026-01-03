@@ -171,12 +171,141 @@ jobs:
           retention-days: 30
 
   # =============================================================================
+  # Memory Leak Detection (Memray)
+  # =============================================================================
+  memray:
+    name: Memory Leak Detection
+    runs-on: ubuntu-latest
+    env:
+      MEMRAY_ALLOC_THRESHOLD: 1000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run memory profiling with memray
+        run: |
+          mkdir -p htmlcov/memray
+          # Run tests with memray profiling
+          pytest tests/ \
+            -m "not external_service and not slow" \
+            --memray \
+            --memray-bin-path=/tmp/memray \
+            -v \
+            --tb=short \
+            2>&1 | tee memray_output.log
+
+      - name: Analyze memray results
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          threshold = int(os.environ.get("MEMRAY_ALLOC_THRESHOLD", "1000"))
+          memray_dir = Path("/tmp/memray")
+          memray_bins = sorted(memray_dir.glob("*.bin")) if memray_dir.exists() else []
+
+          if not memray_bins:
+            print("⚠️ No memray binaries found. Memray may not be installed or tests didn't run.")
+            sys.exit(0)
+
+          print(f"📊 Found {len(memray_bins)} memray traces")
+          violations = []
+
+          for bin_file in memray_bins:
+            try:
+              # memray stats --json outputs allocation stats; parse total allocations
+              result = subprocess.run(
+                ["memray", "stats", "--json", str(bin_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+              )
+              data = json.loads(result.stdout)
+              total_allocs = data.get("total_allocations") or data.get("total_allocation_count")
+              if total_allocs is None:
+                print(f"ℹ️ No allocation count found in {bin_file.name}; skipping threshold check.")
+                continue
+              print(f"  - {bin_file.name}: {total_allocs} allocations")
+              if total_allocs > threshold:
+                violations.append((bin_file.name, total_allocs))
+            except Exception as exc:  # pragma: no cover - CI diagnostics
+              print(f"⚠️ Unable to parse {bin_file}: {exc}")
+
+          if violations:
+            print("❌ Allocation threshold exceeded:")
+            for name, count in violations:
+              print(f"   * {name}: {count} allocations (threshold {threshold})")
+            sys.exit(1)
+
+          print("✅ Memray allocation thresholds OK")
+          PYEOF
+
+      - name: Generate memray HTML reports
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -d "/tmp/memray" ]; then
+            for bin_file in /tmp/memray/*.bin; do
+              if [ -f "$bin_file" ]; then
+                memray table "$bin_file" > "htmlcov/memray/$(basename $bin_file).txt" 2>/dev/null || true
+              fi
+            done
+          fi
+
+      - name: Upload memray reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memray-reports
+          path: |
+            /tmp/memray/
+            htmlcov/memray/
+            memray_output.log
+          retention-days: 30
+
+      - name: Comment on PR with memray results
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.existsSync('memray_output.log')
+              ? fs.readFileSync('memray_output.log', 'utf8')
+              : 'No memray output available';
+
+            const summary = output.includes('PASSED')
+              ? '✅ Memory leak detection completed. Check artifacts for details.'
+              : '⚠️ Memory leak detection had warnings. Review artifacts.';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🧠 Memory Leak Detection\n\n${summary}\n\n[View memray reports](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`
+            });
+
+  # =============================================================================
   # CI Status Check (for branch protection)
   # =============================================================================
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [pre-commit, test, security]
+    needs: [pre-commit, test, security, memray]
     if: always()
     steps:
       - name: Check all jobs
@@ -184,17 +313,19 @@ jobs:
           echo "Pre-commit: ${{ needs.pre-commit.result }}"
           echo "Tests: ${{ needs.test.result }}"
           echo "Security: ${{ needs.security.result }}"
+          echo "Memory Leak Detection: ${{ needs.memray.result }}"
 
           # Check for failures, account for skipped jobs
           if [ "${{ needs.pre-commit.result }}" == "failure" ] || \
              [ "${{ needs.test.result }}" == "failure" ] || \
-             [ "${{ needs.security.result }}" == "failure" ]; then
+             [ "${{ needs.security.result }}" == "failure" ] || \
+             [ "${{ needs.memray.result }}" == "failure" ]; then
             echo "❌ CI checks failed"
             exit 1
           fi
 
           # Ensure at least required jobs succeeded
-          if [ "${{ needs.pre-commit.result }}" != "success" ] || \
+           if [ "${{ needs.pre-commit.result }}" != "success" ] || \
              [ "${{ needs.test.result }}" != "success" ]; then
             echo "❌ Required CI checks did not complete successfully"
             exit 1

@@ -39,7 +39,13 @@ export function useAgentStream(): AgentStreamState {
           headers.Authorization = `Bearer ${apiKey}`;
         }
 
-        const response = await fetch(`${API_BASE_URL}/v1/bot/stream`, {
+        // Normalize base URL to avoid double /api when using Vite proxy (e.g., baseUrl="/api")
+        const normalizedBase = API_BASE_URL.replace(/\/+$/, '');
+        const streamUrl = normalizedBase.endsWith('/api')
+          ? `${normalizedBase}/v1/bot/stream`
+          : `${normalizedBase}/api/v1/bot/stream`;
+
+        const response = await fetch(streamUrl, {
           method: 'GET',
           headers,
           signal: controller.signal,

@@ -33,7 +33,7 @@ export const PortfolioOverview: React.FC = () => {
       />
       <MetricCard
         label="Active Positions"
-        value={positions?.length || 0}
+        value={positions && positions.length ? positions.length : 0}
         suffix={`/ ${portfolio?.max_concurrent_trades || 2}`}
         status="neutral"
       />

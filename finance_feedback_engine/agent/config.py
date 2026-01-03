@@ -267,3 +267,7 @@ class TradingAgentConfig(BaseModel):
     reasoning_retry_delay_seconds: int = 60
     reasoning_failure_decay_seconds: int = 3600
     main_loop_error_backoff_seconds: int = 300
+
+    # --- Resilience & Observability ---
+    max_retries_per_cycle: int = 3
+    dashboard_event_queue_size: int = 0  # 0 = auto-size by environment

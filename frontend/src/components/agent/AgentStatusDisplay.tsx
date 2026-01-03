@@ -66,7 +66,7 @@ export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false,
         <div>
           <p className="text-xs text-text-secondary mb-2">STATE</p>
           <Badge variant={getStateVariant(status.state)}>
-            {status.state.toUpperCase()}
+            {(status.state || 'unknown').toUpperCase()}
           </Badge>
         </div>
         <div>

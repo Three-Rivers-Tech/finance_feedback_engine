@@ -4,6 +4,31 @@
 
 services:
   # =============================================================================
+  # PostgreSQL - Test Database Service
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ffe-postgres-test
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: ffe_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - ffe-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d ffe_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # =============================================================================
   # Ollama - Local LLM Service for Debate Mode
   # =============================================================================
   ollama:
@@ -45,6 +70,11 @@ services:
       - OLLAMA_HOST=http://ollama:11434
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - DATABASE_URL=postgresql+psycopg2://test_user:test_password@postgres:5432/ffe_test
+      - DB_POOL_SIZE=5
+      - DB_POOL_OVERFLOW=2
+      - DB_POOL_RECYCLE=3600
+      - DB_POOL_TIMEOUT=30
     ports:
       - "8000:8000"
     volumes:
@@ -54,6 +84,8 @@ services:
     networks:
       - ffe-test-network
     depends_on:
+      postgres:
+        condition: service_healthy
       prometheus:
         condition: service_healthy
       redis:
@@ -175,6 +207,8 @@ networks:
 # Volumes - Ephemeral Test Data
 # =============================================================================
 volumes:
+  postgres-test-data:
+    driver: local
   test-data:
     driver: local
   test-logs:

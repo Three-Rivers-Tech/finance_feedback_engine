@@ -1,5 +1,33 @@
 services:
   # =============================================================================
+  # PostgreSQL - Primary Database Service
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ffe-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ffe_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-ffe}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # Persistent data directory
+      - postgres-data:/var/lib/postgresql/data
+      # Initialization scripts (run on first startup)
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - ffe-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ffe_user} -d ${POSTGRES_DB:-ffe}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # =============================================================================
   # Ollama - Local LLM Service for Debate Mode (ESSENTIAL)
   # =============================================================================
   ollama:
@@ -43,6 +71,11 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-ffe_user}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-ffe}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
+      - DB_POOL_OVERFLOW=${DB_POOL_OVERFLOW:-10}
+      - DB_POOL_RECYCLE=${DB_POOL_RECYCLE:-3600}
+      - DB_POOL_TIMEOUT=${DB_POOL_TIMEOUT:-30}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -56,6 +89,8 @@ services:
     networks:
       - ffe-network
     depends_on:
+      postgres:
+        condition: service_healthy
       prometheus:
         condition: service_healthy
     deploy:
@@ -201,6 +236,8 @@ networks:
 # Volumes - Persistent Data Storage
 # =============================================================================
 volumes:
+  postgres-data:
+    driver: local
   ffe-data:
     driver: local
   ffe-logs:

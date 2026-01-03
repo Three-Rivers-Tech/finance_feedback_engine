@@ -15,7 +15,7 @@ export const AgentControl: React.FC = () => {
   const { data: health, isLoading: healthLoading } = useHealth();
 
   const refreshStatus = useCallback(async () => {
-    const response = await apiClient.get('/v1/bot/status');
+    const response = await apiClient.get('/api/v1/bot/status');
     setManualStatus(response.data as AgentStatus);
   }, []);
 

@@ -229,10 +229,16 @@ class OptunaOptimizer:
                 try:
                     asyncio.run(engine.close())
                 except RuntimeError:
-                    # If already in an event loop, best-effort schedule cleanup.
+                    # If already in an event loop, properly await cleanup.
                     try:
                         loop = asyncio.get_event_loop()
-                        loop.create_task(engine.close())
+                        if loop.is_running():
+                            # Schedule as task and wait via run_until_complete in new loop
+                            import concurrent.futures
+                            with concurrent.futures.ThreadPoolExecutor() as executor:
+                                executor.submit(asyncio.run, engine.close())
+                        else:
+                            loop.run_until_complete(engine.close())
                     except Exception:
                         pass
 

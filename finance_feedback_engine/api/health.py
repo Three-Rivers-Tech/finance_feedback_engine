@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from ..core import FinanceFeedbackEngine
+from ..database import check_database_health
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,37 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         "status": "healthy",  # Will be updated at end
         "timestamp": datetime.now().isoformat(),
         "uptime_seconds": uptime_seconds,
+        "database": {},
         "circuit_breakers": {},
         "last_decision_at": None,
         "portfolio_balance": None,
     }
+
+    # Check database health
+    try:
+        db_health = check_database_health()
+        health_data["database"] = db_health
+
+        # If database unavailable, mark as unhealthy
+        if not db_health.get("available", False):
+            logger.error(f"Database health check failed: {db_health.get('error')}")
+            status = "unhealthy"
+        elif db_health.get("latency_ms", 0) > 1000:
+            # Database is slow, degrade status
+            logger.warning(f"Database latency high: {db_health.get('latency_ms')}ms")
+            status = "degraded" if status == "healthy" else status
+    except Exception as e:
+        logger.exception("Failed to check database health")
+        health_data["database"] = {
+            "available": False,
+            "error": str(e),
+            "latency_ms": 0,
+            "schema_version": None,
+            "tables": [],
+            "connections": 0,
+            "pool_size": None,
+        }
+        status = "unhealthy"
 
     # Get circuit breaker states from data providers
     try:

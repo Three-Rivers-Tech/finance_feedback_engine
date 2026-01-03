@@ -598,6 +598,30 @@ def run_agent(
     environment = get_environment_name()
     _validate_config_on_startup(config_path, environment)
 
+    # Check Ollama readiness if debate mode is enabled
+    console.print("\n[bold cyan]🔍 Validating Ollama Readiness...[/bold cyan]")
+    ensemble_config = config.get("ensemble", {})
+    debate_mode = ensemble_config.get("debate_mode", False)
+    if debate_mode:
+        from finance_feedback_engine.utils.ollama_readiness import verify_ollama_for_agent
+
+        debate_providers = ensemble_config.get(
+            "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
+        )
+        is_ready, error_msg = verify_ollama_for_agent(
+            config, debate_mode=True, debate_providers=debate_providers
+        )
+        if not is_ready:
+            console.print(f"[bold red]❌ Ollama readiness check failed:[/bold red]")
+            console.print(f"[red]{error_msg}[/red]")
+            console.print(
+                "\n[yellow]To use debate mode, ensure Ollama is running and required models are installed.[/yellow]"
+            )
+            raise click.Abort()
+        console.print("[bold green]✓ Ollama readiness validated[/bold green]")
+    else:
+        console.print("[cyan]Debate mode disabled; skipping Ollama check[/cyan]")
+
     try:
         engine = FinanceFeedbackEngine(config)
 
@@ -650,6 +674,52 @@ def run_agent(
             if ctx.obj.get("verbose"):
                 console.print(traceback.format_exc())
             console.print("[yellow]Ensure your platform credentials are correct and the platform is accessible.[/yellow]")
+            raise click.Abort()
+
+        # Check Ollama readiness before starting agent
+        console.print("\n[bold cyan]🔍 Validating Ollama Service...[/bold cyan]")
+        try:
+            from finance_feedback_engine.utils.ollama_readiness import verify_ollama_for_agent
+
+            # Check if using local/debate mode
+            ai_provider = config.get("decision_engine", {}).get("ai_provider", "local")
+            ensemble_config = config.get("ensemble", {})
+            debate_mode = ensemble_config.get("debate_mode", False)
+            debate_providers = ensemble_config.get(
+                "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
+            )
+
+            # Only enforce Ollama check if using local providers or debate mode
+            requires_ollama = (
+                ai_provider == "local"
+                or ai_provider == "ensemble"
+                or debate_mode
+            )
+
+            if requires_ollama:
+                ollama_ready, ollama_err = verify_ollama_for_agent(
+                    config, debate_mode, debate_providers
+                )
+                if not ollama_ready:
+                    console.print(f"\n[bold red]❌ Ollama readiness check failed:[/bold red]")
+                    console.print(f"[red]{ollama_err}[/red]")
+                    console.print(
+                        "\n[yellow]Ensure Ollama is running and required models are installed:[/yellow]"
+                    )
+                    console.print(f"  [cyan]1. Start Ollama: ollama serve[/cyan]")
+                    console.print(f"  [cyan]2. Pull models as shown above[/cyan]")
+                    raise click.Abort()
+
+                console.print("[bold green]✓ Ollama service validated successfully[/bold green]")
+            else:
+                console.print("[yellow]ℹ Skipping Ollama check (using cloud providers)[/yellow]")
+
+        except click.Abort:
+            raise
+        except Exception as e:
+            console.print(f"\n[bold red]❌ Ollama validation failed:[/bold red] {str(e)}")
+            if ctx.obj.get("verbose"):
+                console.print(traceback.format_exc())
             raise click.Abort()
 
         agent = _initialize_agent(
@@ -842,4 +912,87 @@ def metrics(ctx):
 
 
 # Export commands for registration in main.py
-commands = [run_agent, monitor]
+@click.command()
+@click.pass_context
+def check_ollama(ctx):
+    """Check Ollama service status and installed models."""
+    from finance_feedback_engine.utils.ollama_readiness import OllamaReadinessChecker
+    from rich.table import Table
+
+    console.print("\n[bold cyan]🔍 Ollama Service Diagnostics[/bold cyan]\n")
+
+    try:
+        checker = OllamaReadinessChecker()
+
+        # Check service
+        service_ok, service_err = checker.check_service_available()
+        if not service_ok:
+            console.print(f"[bold red]✗ Service:[/bold red] {service_err}")
+            console.print("\n[yellow]Start Ollama with:[/yellow] ollama serve")
+            return
+
+        console.print(f"[bold green]✓ Service:[/bold green] Connected to {checker.ollama_host}")
+
+        # List models
+        models = checker.get_available_models()
+        if not models:
+            console.print("\n[yellow]⚠ No models installed[/yellow]")
+            console.print("\n[cyan]Install models with:[/cyan]")
+            console.print("  ollama pull llama3.2:3b-instruct-fp16")
+            console.print("  ollama pull mistral:latest")
+            return
+
+        console.print(f"\n[bold green]✓ Models installed:[/bold green] {len(models)}")
+
+        table = Table(title="Installed Models", show_header=True)
+        table.add_column("Model", style="cyan")
+        table.add_column("Status", style="green")
+
+        for model in models:
+            table.add_row(model, "✓ Available")
+
+        console.print(table)
+
+        # Check debate readiness if config available
+        config = ctx.obj.get("config")
+        if config:
+            ensemble_config = config.get("ensemble", {})
+            debate_mode = ensemble_config.get("debate_mode", False)
+            if debate_mode:
+                debate_providers = ensemble_config.get(
+                    "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
+                )
+                ready, seat_status, missing = checker.check_debate_readiness(debate_providers)
+
+                console.print("\n[bold cyan]Debate Mode Configuration:[/bold cyan]")
+                debate_table = Table(show_header=True)
+                debate_table.add_column("Seat", style="cyan")
+                debate_table.add_column("Provider/Model", style="yellow")
+                debate_table.add_column("Status")
+
+                for seat, provider in debate_providers.items():
+                    status_icon = "✓" if provider not in missing else "✗"
+                    status_color = "green" if provider not in missing else "red"
+                    debate_table.add_row(
+                        seat.capitalize(),
+                        provider,
+                        f"[{status_color}]{status_icon}[/{status_color}]"
+                    )
+
+                console.print(debate_table)
+
+                if not ready:
+                    console.print(f"\n[bold red]⚠ Missing models for debate mode:[/bold red]")
+                    hints = checker.get_remediation_hints(missing)
+                    console.print(f"[yellow]{hints}[/yellow]")
+
+        console.print("\n[bold green]✓ Ollama is ready[/bold green]")
+
+    except Exception as e:
+        console.print(f"\n[bold red]✖ Error:[/bold red] {str(e)}")
+        if ctx.obj.get("verbose"):
+            import traceback
+            console.print(traceback.format_exc())
+
+
+commands = [run_agent, monitor, check_ollama]

@@ -26,7 +26,7 @@ export const OllamaStatusAlert: React.FC<OllamaStatusAlertProps> = ({ ollama }) 
       };
     }
 
-    if (ollama.status === 'degraded' || ollama.models_missing.length > 0) {
+    if (ollama.status === 'degraded' || (ollama.models_missing && ollama.models_missing.length > 0)) {
       return {
         icon: AlertTriangle,
         bgColor: 'bg-yellow-900/20',
@@ -67,7 +67,7 @@ export const OllamaStatusAlert: React.FC<OllamaStatusAlertProps> = ({ ollama }) 
             <code className="text-xs bg-black/30 px-3 py-2 rounded font-mono text-accent-cyan">
               {config.action}
             </code>
-            {ollama.models_loaded.length > 0 && (
+            {ollama.models_loaded && ollama.models_loaded.length > 0 && (
               <div className="text-xs text-gray-400 flex items-center gap-2">
                 <CheckCircle className="w-3 h-3 text-green-400" />
                 <span>Models loaded: {ollama.models_loaded.join(', ')}</span>

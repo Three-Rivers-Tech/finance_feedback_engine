@@ -34,8 +34,15 @@ class RedisManager:
             client = redis.Redis(
                 host="localhost", port=6379, socket_connect_timeout=2, password=password
             )
-            client.ping()
-            return True
+            try:
+                client.ping()
+                return True
+            finally:
+                # Ensure connection is closed (industry standard: always close)
+                try:
+                    client.close()
+                except Exception:
+                    pass
         except Exception as e:
             logger.debug(f"Redis not accessible: {e}")
             return False

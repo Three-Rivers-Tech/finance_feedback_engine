@@ -7,6 +7,7 @@ Provides detailed health information about all components.
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 from ..core import FinanceFeedbackEngine
@@ -17,6 +18,27 @@ logger = logging.getLogger(__name__)
 _startup_time = datetime.utcnow()
 
 
+def _get_config_path() -> str:
+    """
+    Get the config file path, preferring config.local.yaml over config.yaml.
+
+    Returns:
+        Path to the config file as a string
+    """
+    config_dir = Path(__file__).parent.parent.parent / "config"
+    local_config_path = config_dir / "config.local.yaml"
+    base_config_path = config_dir / "config.yaml"
+
+    # Prefer local config if it exists, otherwise use base config
+    if local_config_path.exists():
+        return str(local_config_path)
+    elif base_config_path.exists():
+        return str(base_config_path)
+    else:
+        # If neither exists, return base config path (will fail gracefully in load_config)
+        return str(base_config_path)
+
+
 def check_ollama_status_sync() -> Dict[str, Any]:
     """
     Check Ollama service availability and model status (synchronous version).
@@ -25,9 +47,19 @@ def check_ollama_status_sync() -> Dict[str, Any]:
         Dictionary with Ollama status, available models, and any issues
     """
     import requests
+    from ..utils.config_loader import load_config
 
     ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    required_models = ["mistral", "neural-chat", "orca-mini"]
+
+    # Load required models from config
+    try:
+        config = load_config(_get_config_path())
+        required_models = config.get("decision_engine", {}).get("local_models", [])
+        # Extract base model names (remove version tags like :3b-instruct-fp16)
+        required_models = [m.split(":")[0] for m in required_models]
+    except Exception as e:
+        logger.warning(f"Could not load local_models from config: {e}")
+        required_models = []
 
     status = {
         "available": False,
@@ -88,16 +120,35 @@ async def check_ollama_status() -> Dict[str, Any]:
     Check Ollama service availability and model status.
 
     Returns:
-        Dictionary with Ollama status, available models, and any issues
+        Dictionary with Ollama status, available models, debate config, and any issues
     """
+    from ..utils.config_loader import load_config
+
     ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-    required_models = ["mistral", "neural-chat", "orca-mini"]
+
+    # Load required models and debate config from config
+    try:
+        config = load_config(_get_config_path())
+        required_models = config.get("decision_engine", {}).get("local_models", [])
+        # Extract base model names (remove version tags like :3b-instruct-fp16)
+        required_models = [m.split(":")[0] for m in required_models]
+
+        # Get debate configuration
+        ensemble_config = config.get("ensemble", {})
+        debate_providers = ensemble_config.get("debate_providers", {})
+    except Exception as e:
+        logger.warning(f"Could not load config: {e}")
+        required_models = []
+        debate_providers = {}
 
     status = {
         "available": False,
         "host": ollama_host,
+        "models": [],  # Full model list with tags
         "models_loaded": [],
         "models_missing": [],
+        "debate_config": debate_providers if debate_providers else None,
+        "missing_debate_models": [],
         "error": None,
         "warning": None
     }
@@ -112,23 +163,50 @@ async def check_ollama_status() -> Dict[str, Any]:
                     data = await response.json()
                     models = data.get("models", [])
 
-                    # Extract model names (base name without tag)
-                    available_models = [
-                        m.get("name", "").split(":")[0]
-                        for m in models
-                    ]
+                    # Extract model names (full names with tags)
+                    available_model_names = [m.get("name", "") for m in models]
+                    status["models"] = available_model_names
+
+                    # Extract base names for matching
+                    available_base_names = [name.split(":")[0] for name in available_model_names]
 
                     status["available"] = True
 
                     # Check which required models are present
                     for model in required_models:
-                        if model in available_models:
+                        if model in available_base_names:
                             status["models_loaded"].append(model)
                         else:
                             status["models_missing"].append(model)
 
+                    # Check debate seat models
+                    if debate_providers:
+                        for seat, provider in debate_providers.items():
+                            # Check if provider is an Ollama model (not "local" or cloud providers)
+                            is_ollama = ":" in provider or any(
+                                kw in provider.lower()
+                                for kw in ["llama", "mistral", "deepseek", "gemma", "phi", "qwen"]
+                            )
+
+                            if is_ollama and provider not in ["local"]:
+                                # Check if model is installed
+                                provider_base = provider.split(":")[0].lower()
+                                found = any(
+                                    provider.lower() in avail.lower() or
+                                    provider_base in avail.lower().split(":")[0]
+                                    for avail in available_model_names
+                                )
+                                if not found:
+                                    status["missing_debate_models"].append(provider)
+
                     # Set warnings if models are missing
-                    if status["models_missing"]:
+                    if status["missing_debate_models"]:
+                        status["warning"] = (
+                            f"Debate models missing: "
+                            f"{', '.join(status['missing_debate_models'])}. "
+                            f"Pull with: ollama pull <model>"
+                        )
+                    elif status["models_missing"]:
                         status["warning"] = (
                             f"Ollama is running but missing required models: "
                             f"{', '.join(status['models_missing'])}. "
@@ -356,9 +434,13 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     """
     Check if the application is ready to serve requests.
 
+    Validates database connectivity, schema version, and critical components.
+
     Returns:
-        Readiness status
+        Readiness status with database and component health
     """
+    from ..database import check_database_health
+
     # Check if we've been running for at least 10 seconds
     uptime = (datetime.utcnow() - _startup_time).total_seconds()
 
@@ -371,7 +453,26 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     # Check critical components
     try:
-        # Platform must be accessible
+        # 1. Database must be available and schema must be initialized
+        db_health = check_database_health()
+        if not db_health.get("available", False):
+            return {
+                "ready": False,
+                "reason": f"Database not available: {db_health.get('error', 'unknown error')}",
+                "uptime_seconds": uptime,
+                "database": db_health,
+            }
+
+        # 2. Schema version must be set (migrations must have run)
+        if not db_health.get("schema_version"):
+            return {
+                "ready": False,
+                "reason": "Database schema not initialized (migrations not run)",
+                "uptime_seconds": uptime,
+                "database": db_health,
+            }
+
+        # 3. Platform must be accessible
         if hasattr(engine, "platform"):
             _safe_json(engine.platform.get_balance())
 
@@ -380,12 +481,18 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
             "ready": True,
             "uptime_seconds": uptime,
             "timestamp": datetime.utcnow().isoformat(),
+            "database": {
+                "available": True,
+                "schema_version": db_health.get("schema_version"),
+                "latency_ms": db_health.get("latency_ms", 0),
+                "connections": db_health.get("connections", 0),
+            },
         }
 
     except Exception as e:
         return {
             "ready": False,
-            "reason": f"Platform not ready: {str(e)}",
+            "reason": f"Critical component not ready: {str(e)}",
             "uptime_seconds": uptime,
         }
 
