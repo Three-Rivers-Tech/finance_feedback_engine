@@ -86,8 +86,11 @@ EXPOSE 8000 9090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command: run API server
-# Use --workers 1 for single-instance (SQLite limitation)
-CMD ["uvicorn", "finance_feedback_engine.api.app:app", \
-     "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1", "--log-level", "info"]
+# Default command: run migrations, then start API server
+# Note: Uvicorn now runs with multiple workers for PostgreSQL support
+CMD ["sh", "-c", \
+     "alembic upgrade head && \
+      uvicorn finance_feedback_engine.api.app:app \
+      --host 0.0.0.0 --port 8000 \
+      --workers 4 \
+      --log-level info"]

@@ -194,7 +194,7 @@ class TestCoinbaseResponseErrors:
 
         # Futures succeeds
         futures_response = MagicMock()
-        balance_summary = {"total_usd_balance": {"value": "5000.0"}}
+        balance_summary = {"futures_buying_power": {"value": "5000.0"}}
         type(futures_response).balance_summary = PropertyMock(
             return_value=balance_summary
         )
@@ -214,7 +214,7 @@ class TestCoinbaseResponseErrors:
 
         # Futures with zero balance
         futures_response = MagicMock()
-        balance_summary = {"total_usd_balance": {"value": "0.0"}}
+        balance_summary = {"futures_buying_power": {"value": "0.0"}}
         type(futures_response).balance_summary = PropertyMock(
             return_value=balance_summary
         )
@@ -362,7 +362,6 @@ class TestCoinbasePortfolioBreakdown:
         # Futures summary with balance but no positions
         futures_response = MagicMock()
         balance_summary = {
-            "total_usd_balance": {"value": "1000.0"},
             "unrealized_pnl": {"value": "0.0"},
             "daily_realized_pnl": {"value": "0.0"},
             "futures_buying_power": {"value": "10000.0"},
@@ -556,7 +555,7 @@ class TestErrorRecovery:
 
         # Futures succeeds
         futures_response = MagicMock()
-        balance_summary = {"total_usd_balance": {"value": "3000.0"}}
+        balance_summary = {"futures_buying_power": {"value": "3000.0"}}
         type(futures_response).balance_summary = PropertyMock(
             return_value=balance_summary
         )
@@ -576,7 +575,7 @@ class TestErrorRecovery:
 
         # First call fails, second succeeds
         futures_response = MagicMock()
-        balance_summary = {"total_usd_balance": {"value": "5000.0"}}
+        balance_summary = {"futures_buying_power": {"value": "5000.0"}}
         type(futures_response).balance_summary = PropertyMock(
             return_value=balance_summary
         )

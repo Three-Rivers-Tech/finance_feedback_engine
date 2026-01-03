@@ -63,7 +63,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 balances = platform.get_balance()
                 for asset, balance in balances.items():
                     combined_balances[f"{name}_{asset}"] = balance
-            except (ValueError, TypeError, KeyError) as e:
+            except Exception as e:
                 logger.error("Failed to get balance from %s: %s", name, e)
 
         return combined_balances

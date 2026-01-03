@@ -120,6 +120,17 @@ async def lifespan(app: FastAPI):
         app_state["engine"] = engine
         logger.info("✅ Engine initialized successfully")
 
+        # Initialize PostgreSQL database connection pool and schema
+        try:
+            from ..database import DatabaseConfig, init_db
+
+            db_config = DatabaseConfig.from_env()
+            init_db(db_config)
+            logger.info("✅ PostgreSQL database initialized and migrations completed")
+        except Exception as e:
+            logger.error(f"❌ Database initialization failed: {e}")
+            raise RuntimeError(f"Cannot start application without database: {e}") from e
+
         # Initialize Authentication Manager with secure API key validation
         logger.info("🔐 Initializing secure authentication manager...")
 
@@ -177,11 +188,21 @@ async def lifespan(app: FastAPI):
     finally:
         # Cleanup on shutdown
         logger.info("🛑 Shutting down Finance Feedback Engine API...")
+
+        # Close database connections
+        try:
+            from ..database import DatabaseEngine
+            DatabaseEngine.dispose()
+            logger.info("✅ Database connections closed")
+        except Exception as e:
+            logger.warning(f"⚠️  Database cleanup error: {e}")
+
         if "engine" in app_state:
             # Close any async resources
             engine = app_state["engine"]
             if hasattr(engine, "close"):
                 await engine.close()
+
         app_state.clear()
         logger.info("✅ Shutdown complete")
 

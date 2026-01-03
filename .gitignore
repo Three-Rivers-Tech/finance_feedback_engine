@@ -47,6 +47,14 @@ logs/
 *.sqlite3
 qdrant_storage/
 
+# PostgreSQL data directory (used by Docker Compose)
+postgres-data/
+postgres-test-data/
+
+# Backups (keep locally, don't version)
+backups/
+*.sql.gz
+
 # Trading data (not versioned)
 data/decisions/
 data/decisions_test/

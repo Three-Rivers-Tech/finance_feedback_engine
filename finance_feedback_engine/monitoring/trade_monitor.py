@@ -92,6 +92,7 @@ class TradeMonitor:
 
         # State tracking
         self.active_trackers: Dict[str, TradeTrackerThread] = {}
+        self._executor_shutdown = False  # Track executor shutdown state
         self.tracked_trade_ids: Set[str] = set()
         self.pending_queue: Queue = Queue()
         self.closed_trades_queue: Queue = Queue()  # For agent to consume
@@ -120,6 +121,15 @@ class TradeMonitor:
             f"TradeMonitor initialized | Max concurrent: {self.MAX_CONCURRENT_TRADES} | "
             f"Detection interval: {detection_interval}s | Pulse interval: {pulse_interval}s"
         )
+
+    def __del__(self):
+        """Cleanup resources on garbage collection."""
+        try:
+            if not self._executor_shutdown and self.executor:
+                self.executor.shutdown(wait=True, cancel_futures=True)
+                self._executor_shutdown = True
+        except Exception:
+            pass  # Silence errors during GC
 
     def start(self):
         """Start the trade monitoring system."""

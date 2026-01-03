@@ -73,6 +73,19 @@ class TelegramApprovalBot:
 
         logger.info("✅ Telegram approval bot initialized")
 
+    def __del__(self):
+        """Cleanup resources on garbage collection."""
+        try:
+            if self.redis_client:
+                self.redis_client.close()
+        except Exception:
+            pass  # Silence errors during GC
+        try:
+            if self.tunnel_manager:
+                self.tunnel_manager.close()
+        except Exception:
+            pass  # Silence errors during GC
+
     def _init_redis(self):
         """Initialize Redis connection for approval queue."""
         try:

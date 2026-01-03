@@ -6,18 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/health': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/metrics': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+      '/health': { target: 'http://localhost:8000', changeOrigin: true },
+      '/metrics': { target: 'http://localhost:8000', changeOrigin: true },
+      // Proxy Ollama locally for BYOM UI
+      '/ollama': { target: 'http://localhost:11434', changeOrigin: true },
     },
   },
 })

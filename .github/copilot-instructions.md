@@ -406,6 +406,7 @@ cd frontend && npm run test && npm run type-check  # For frontend changes
 - **Slow Test Markers**: `@pytest.mark.slow` for tests >2s (can skip with `-m "not slow"`)
 - **Mocking Pattern**: Mock at boundary (API calls, I/O) not internal logic; use `pytest-mock` fixtures
 - **Coverage Pragmas**: Use `# pragma: no cover` only for defensive error handling (e.g., except ImportError for optional deps)
+- **Resource Cleanup (Tests)**: Always close async sessions, Redis clients, and ThreadPoolExecutors in fixture finalizers; prefer context managers; add `__del__` as a last resort and force `gc.collect()` when diagnosing leaks.
 
 **Debugging Checklist:**
 - Stale decision cache? → `rm data/backtest_cache.db`

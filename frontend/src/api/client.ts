@@ -1,8 +1,17 @@
 import axios, { AxiosError } from 'axios';
 import { API_BASE_URL } from '../utils/constants';
 
+// Normalize base URL to avoid double /api when endpoints already include the /api prefix
+const normalizedBaseUrl = (() => {
+  const trimmed = API_BASE_URL.replace(/\/+$/, '');
+  if (trimmed.toLowerCase().endsWith('/api')) {
+    return trimmed.slice(0, -4);
+  }
+  return trimmed;
+})();
+
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: normalizedBaseUrl,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

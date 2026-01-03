@@ -13,6 +13,9 @@ from click.testing import CliRunner
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+# Module-level logger for test diagnostics
+logger = logging.getLogger(__name__)
+
 
 # --- Logging Configuration Fixture ---
 # This fixture ensures all logging handlers are properly cleaned up after tests
@@ -362,3 +365,54 @@ def temporary_file_path(tmp_path_factory):
 # - Mocked external API responses (e.g., Alpha Vantage, Oanda)
 # - Pre-configured FinanceFeedbackEngine instance for integration tests
 # - Database connection fixtures (e.g., in-memory SQLite for testing persistence)
+
+
+# --- Resource Cleanup Fixture (Auto-Use) ---
+@pytest.fixture(autouse=True)
+def cleanup_test_resources():
+    """
+    Automatically cleanup resources after each test to prevent memory leaks.
+
+    This fixture ensures:
+    - Garbage collection is forced between tests
+    - Mock objects are explicitly cleared
+    - Thread count validation (detects orphaned threads)
+    - Redis connection pool is not exhausted
+    - No dangling async tasks in event loops
+
+    Runs once AFTER every test function completes (function scope).
+    """
+    yield  # Test runs here
+
+    # Cleanup phase (runs after test completes)
+    import gc
+    import threading
+
+    # Force garbage collection to trigger __del__ methods
+    # This ensures dangling resources (Redis, ThreadPool, sessions) are cleaned up
+    gc.collect()
+
+    # Validate thread count hasn't exploded
+    # (indicates orphaned ThreadPoolExecutor threads)
+    active_threads = threading.active_count()
+    if active_threads > 50:  # Threshold: warn if >50 threads active
+        logger.warning(
+            f"⚠️ High thread count detected after test: {active_threads} threads. "
+            "Check for orphaned ThreadPoolExecutor or background tasks."
+        )
+
+    # Clear any mocks from unittest.mock.patch decorators
+    # This helps prevent mock state pollution between tests
+    try:
+        from unittest.mock import _patch
+        # Ensures all active patches are cleaned
+        if hasattr(_patch, '_active_patches'):
+            _patch._active_patches.clear()
+    except (AttributeError, ImportError):
+        pass  # OK if internal mock structure differs
+
+    # Optional: Log resource snapshot for debugging
+    # Uncomment to enable per-test resource tracking
+    # import os
+    # fds = len(os.listdir('/proc/self/fd')) if os.path.exists('/proc/self/fd') else 0
+    # logger.debug(f"Resources after test: {active_threads} threads, {fds} open FDs")

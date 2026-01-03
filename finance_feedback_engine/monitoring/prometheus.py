@@ -91,6 +91,25 @@ decision_confidence = Gauge(
     ["asset_pair", "action"],
 )
 
+# Dashboard event queue depth/utilization
+dashboard_queue_depth = Gauge(
+    "ffe_dashboard_queue_depth",
+    "Current dashboard SSE event queue depth",
+    ["queue"],
+)
+
+dashboard_queue_utilization = Gauge(
+    "ffe_dashboard_queue_utilization_pct",
+    "Dashboard SSE event queue utilization percentage",
+    ["queue"],
+)
+
+dashboard_events_dropped_total = Counter(
+    "ffe_dashboard_events_dropped_total",
+    "Total dashboard SSE events dropped due to queue overflow",
+    ["queue"],
+)
+
 
 def generate_metrics() -> str:
     """
@@ -195,3 +214,23 @@ def update_decision_confidence(asset_pair: str, action: str, confidence: float):
         decision_confidence.labels(asset_pair=asset_pair, action=action).set(confidence)
     except Exception as e:
         logger.error(f"Error updating decision confidence: {e}")
+
+
+def update_dashboard_queue_metrics(queue_name: str, depth: int, max_size: int) -> None:
+    """Update dashboard SSE queue depth and utilization metrics."""
+
+    try:
+        dashboard_queue_depth.labels(queue=queue_name).set(depth)
+        utilization = (depth / max_size) * 100 if max_size else 0
+        dashboard_queue_utilization.labels(queue=queue_name).set(utilization)
+    except Exception as e:  # pragma: no cover - metrics failures should not break flow
+        logger.debug(f"Failed to update dashboard queue metrics: {e}")
+
+
+def increment_dashboard_events_dropped(queue_name: str) -> None:
+    """Increment dropped events counter for dashboard SSE queue."""
+
+    try:
+        dashboard_events_dropped_total.labels(queue=queue_name).inc()
+    except Exception as e:  # pragma: no cover - metrics failures should not break flow
+        logger.debug(f"Failed to increment dashboard events dropped: {e}")
