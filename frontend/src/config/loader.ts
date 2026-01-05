@@ -98,10 +98,15 @@ export class ConfigLoader {
         (e) => e.path === 'api.baseUrl' && e.message?.includes('empty')
       );
 
-      console.error('Configuration validation failed:', result.errors);
+      // In development, only log errors without blocking - use fallback config
+      if (this.environment === 'development') {
+        console.debug(`Configuration: ${result.errors?.length || 0} validation error(s) in dev mode (not blocking)`);
+      } else {
+        console.error('Configuration validation failed:', result.errors);
+      }
 
       // Provide helpful guidance for missing baseUrl
-      if (hasEmptyBaseUrl) {
+      if (hasEmptyBaseUrl && this.environment !== 'development') {
         console.error(
           `\n⚠️  API Base URL not configured!\n` +
           `Set the VITE_API_BASE_URL environment variable:\n` +
@@ -127,9 +132,14 @@ export class ConfigLoader {
       }
     }
 
-    // Log warnings
+    // Log warnings (suppress in development to reduce console noise)
     if (result.warnings && result.warnings.length > 0) {
-      console.warn('Configuration warnings:', result.warnings);
+      if (this.environment !== 'development') {
+        console.warn('Configuration warnings:', result.warnings);
+      } else {
+        // In dev mode, just log count of warnings to reduce noise
+        console.debug(`Configuration: ${result.warnings.length} dev-mode warning(s) suppressed`);
+      }
     }
 
     this.config = result.config || (rawConfig as AppConfig);

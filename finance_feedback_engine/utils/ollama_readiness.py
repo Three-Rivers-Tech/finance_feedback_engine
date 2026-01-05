@@ -7,7 +7,7 @@ Provides diagnostics and remediation guidance.
 
 import logging
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import ollama
@@ -191,8 +191,9 @@ def verify_ollama_for_agent(
 
     # If debate mode, check debate seat models
     if debate_mode and debate_providers:
+        resolved_debate = resolve_debate_providers(debate_providers, config)
         ready, seat_status, missing = checker.check_debate_readiness(
-            debate_providers
+            resolved_debate
         )
         if not ready:
             hints = checker.get_remediation_hints(missing)
@@ -203,3 +204,76 @@ def verify_ollama_for_agent(
             return False, err
 
     return True, None
+
+
+def resolve_debate_providers(
+    debate_providers: Dict[str, str], config: Dict[str, Any]
+) -> Dict[str, str]:
+    """
+    Resolve placeholder/local debate providers into concrete model tags.
+
+    - If a provider is "local" or blank, use configured decision_engine.local_models
+      as the source of real tags.
+    - Falls back to LocalLLMProvider defaults when local_models is empty.
+
+    Args:
+        debate_providers: Raw debate provider mapping from config
+        config: Full config dict for fallback local model hints
+
+    Returns:
+        Dict of resolved debate providers with real model tags where possible
+    """
+
+    try:
+        from finance_feedback_engine.decision_engine.local_llm_provider import (
+            LocalLLMProvider,
+        )
+    except Exception:
+        LocalLLMProvider = None
+
+    # Ordered list of candidates pulled from config.local_models, else hard defaults
+    local_models: List[str] = (
+        config.get("decision_engine", {}).get("local_models", []) or []
+    )
+
+    fallback_models: List[str] = []
+    if LocalLLMProvider:
+        fallback_models = [
+            LocalLLMProvider.DEFAULT_MODEL,
+            LocalLLMProvider.SECONDARY_MODEL,
+            LocalLLMProvider.FALLBACK_MODEL,
+        ]
+
+    # Ensure we have at least three candidates to map bull/bear/judge
+    candidates = [m for m in local_models if m] or fallback_models
+    if not candidates:
+        candidates = [
+            "mistral:7b-instruct",
+            "llama3.2:3b-instruct-fp16",
+            "deepseek-r1:8b",
+        ]
+
+    resolved: Dict[str, str] = {}
+    used = set()
+    candidate_idx = 0
+
+    for seat, provider in debate_providers.items():
+        provider_str = str(provider).strip()
+        if provider_str and provider_str.lower() != "local":
+            resolved[seat] = provider_str
+            used.add(provider_str.lower())
+            continue
+
+        # Map "local"/blank to next available candidate, avoiding duplicates where possible
+        while candidate_idx < len(candidates):
+            candidate = candidates[candidate_idx]
+            candidate_idx += 1
+            if candidate and candidate.lower() not in used:
+                resolved[seat] = candidate
+                used.add(candidate.lower())
+                break
+        else:
+            # Fallback: reuse first candidate if we ran out (should be rare)
+            resolved[seat] = candidates[0]
+
+    return resolved

@@ -4,7 +4,27 @@
 
 Concise, actionable guidance for AI coding agents. Focus on minimal, targeted edits. Reference concrete files, commands, and project-specific conventions.
 
-**Last Updated:** December 30, 2025. Version: 0.9.11. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode + Thompson Sampling), pair selection (statistical + LLM), portfolio monitoring, web API, React frontend (Vite/TypeScript), Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard, sentiment veto, learning validation, OpenTelemetry observability.
+**Last Updated:** January 4, 2026. Version: 0.9.12. Covers: 10+ subsystems, multi-platform trading (Coinbase/Oanda), ensemble AI (debate mode + Thompson Sampling), pair selection (statistical + LLM), portfolio monitoring, web API, React frontend (Vite/TypeScript), Telegram/Redis integrations, backtesting with decision caching, portfolio dashboard, sentiment veto, learning validation, OpenTelemetry observability, Linear-based documentation workflow.
+
+## Documentation & Project Management Conventions
+
+**Linear as Source of Truth:**
+- **DO NOT** create markdown summary files (e.g., `CHANGES_SUMMARY.md`, `IMPLEMENTATION_SUMMARY.md`, `SESSION_REPORT.md`) after completing work
+- **DO** log all findings, summaries, implementation details, and progress reports in Linear issues
+- Use Linear issue descriptions and comments to document:
+  - Implementation details and architectural decisions
+  - Bug analysis and root cause summaries
+  - Test coverage reports and validation results
+  - Deployment checklists and readiness assessments
+  - Session progress and work completed
+- Create Linear issues for:
+  - New features/enhancements (with full context in description)
+  - Bugs discovered during development
+  - Technical debt items
+  - Documentation updates needed
+- Update existing Linear issues with progress comments rather than creating separate markdown files
+- Exception: Keep essential technical documentation in `docs/` directory (architecture guides, API references, quick-start guides) — these are living documents, not work summaries
+- Clean up legacy markdown summary files when safe to do so (verify no active references first)
 
 ## Big Picture Architecture
 
@@ -492,6 +512,7 @@ cd frontend && npm run test && npm run type-check  # For frontend changes
 ---
 
 **Version History:**
+- **0.9.12** (Jan 2026): Linear workflow integration, documentation consolidation
 - **0.9.11** (Dec 2025): Thompson Sampling for ensemble weights + pair selection, veto system, pair discovery safety, learning validation metrics, enhanced memory architecture
 - **0.9.10** (Dec 2025): Frontend React migration (Vite + TypeScript + Zustand), enhanced test coverage, OpenTelemetry observability, pair discovery safeguards
 - **0.9.9** (Dec 2025): Risk module separation, learning feedback, FastAPI + Redis approval flows, portfolio dashboard, VaR/correlation analysis, enhanced decision schema

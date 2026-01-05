@@ -1,21 +1,33 @@
 import React, { useMemo, useState } from 'react';
-import apiClient, { handleApiError } from '../../api/client';
 import type { AgentStatus } from '../../api/types';
 import { Button } from '../common/Button';
 import { Card } from '../common/Card';
+import {
+  mapMutationError,
+  useEmergencyStopAgent,
+  useManualTrade,
+  usePauseAgent,
+  useResumeAgent,
+  useStartAgent,
+  useStopAgent,
+  useUpdateAgentConfig,
+} from '../../api/mutations/useAgentControl';
 
 type Props = {
   status: AgentStatus | null | undefined;
-  onRefresh?: () => Promise<void>;
+  onRefresh?: () => Promise<unknown>;
+  onStartViaSocket?: (payload: { autonomous: boolean; asset_pairs: string[] }) => Promise<void>;
+  socketReady?: boolean;
+  socketStartInFlight?: boolean;
 };
 
-export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
-  const [isStarting, setIsStarting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
-  const [isPausing, setIsPausing] = useState(false);
-  const [isResuming, setIsResuming] = useState(false);
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
-  const [isSendingTrade, setIsSendingTrade] = useState(false);
+export const AgentControlPanel: React.FC<Props> = ({
+  status,
+  onRefresh,
+  onStartViaSocket,
+  socketReady = false,
+  socketStartInFlight = false,
+}) => {
   const [error, setError] = useState<string | null>(null);
 
   const [configForm, setConfigForm] = useState({
@@ -33,8 +45,17 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
 
   const [startMode, setStartMode] = useState<'autonomous' | 'telegram'>('autonomous');
 
+  const startAgent = useStartAgent();
+  const stopAgent = useStopAgent();
+  const pauseAgent = usePauseAgent();
+  const resumeAgent = useResumeAgent();
+  const emergencyStop = useEmergencyStopAgent();
+  const updateConfig = useUpdateAgentConfig();
+  const manualTrade = useManualTrade();
+
   const isRunning = status?.state === 'running';
   const isPaused = useMemo(() => status?.config?.paused === true, [status]);
+  const isStartPending = startAgent.isPending || socketStartInFlight;
 
   const refresh = async () => {
     if (onRefresh) {
@@ -43,58 +64,53 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
   };
 
   const handleStart = async () => {
-    setIsStarting(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/start', {
+      if (onStartViaSocket && socketReady) {
+        await onStartViaSocket({
+          autonomous: startMode === 'autonomous',
+          asset_pairs: ['BTCUSD', 'ETHUSD', 'EURUSD'],
+        });
+        return;
+      }
+
+      await startAgent.mutateAsync({
         autonomous: startMode === 'autonomous',
-        // Default core pairs - pair selection will add more
         asset_pairs: ['BTCUSD', 'ETHUSD', 'EURUSD'],
       });
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsStarting(false);
+      setError(mapMutationError(err));
     }
   };
 
   const handleStop = async () => {
-    setIsStopping(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/stop');
+      await stopAgent.mutateAsync();
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsStopping(false);
+      setError(mapMutationError(err));
     }
   };
 
   const handlePause = async () => {
-    setIsPausing(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/pause');
+      await pauseAgent.mutateAsync();
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsPausing(false);
+      setError(mapMutationError(err));
     }
   };
 
   const handleResume = async () => {
-    setIsResuming(true);
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/resume');
+      await resumeAgent.mutateAsync();
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsResuming(false);
+      setError(mapMutationError(err));
     }
   };
 
@@ -104,16 +120,15 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
     }
     setError(null);
     try {
-      await apiClient.post('/api/v1/bot/emergency-stop?close_positions=true');
+      await emergencyStop.mutateAsync();
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
+      setError(mapMutationError(err));
     }
   };
 
   const handleConfigSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSavingConfig(true);
     setError(null);
     try {
       const payload = {
@@ -121,18 +136,15 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         position_size_pct: configForm.position_size_pct ? Number(configForm.position_size_pct) : undefined,
         confidence_threshold: configForm.confidence_threshold ? Number(configForm.confidence_threshold) : undefined,
       };
-      await apiClient.patch('/api/v1/bot/config', payload);
+      await updateConfig.mutateAsync(payload);
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsSavingConfig(false);
+      setError(mapMutationError(err));
     }
   };
 
   const handleTradeSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    setIsSendingTrade(true);
     setError(null);
     try {
       const payload = {
@@ -141,13 +153,11 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         size: tradeForm.size ? Number(tradeForm.size) : undefined,
         price: tradeForm.price ? Number(tradeForm.price) : undefined,
       };
-      await apiClient.post('/api/v1/bot/manual-trade', payload);
+      await manualTrade.mutateAsync(payload);
       setTradeForm({ ...tradeForm, price: '', size: '' });
       await refresh();
     } catch (err) {
-      setError(handleApiError(err));
-    } finally {
-      setIsSendingTrade(false);
+      setError(mapMutationError(err));
     }
   };
 
@@ -199,12 +209,12 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
 
       <div className="flex flex-wrap gap-3 mb-6">
         {!isRunning ? (
-          <Button variant="primary" onClick={handleStart} disabled={isStarting}>
-            {isStarting ? 'Starting...' : `Start Agent (${startMode === 'autonomous' ? 'Autonomous' : 'Signal-Only'})`}
+          <Button variant="primary" onClick={handleStart} disabled={isStartPending}>
+            {isStartPending ? 'Starting...' : `Start Agent (${startMode === 'autonomous' ? 'Autonomous' : 'Signal-Only'})`}
           </Button>
         ) : (
-          <Button variant="secondary" onClick={handleStop} disabled={isStopping}>
-            {isStopping ? 'Stopping...' : 'Stop Agent'}
+          <Button variant="secondary" onClick={handleStop} disabled={stopAgent.isPending}>
+            {stopAgent.isPending ? 'Stopping...' : 'Stop Agent'}
           </Button>
         )}
 
@@ -215,17 +225,17 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
         <Button
           variant="secondary"
           onClick={handlePause}
-          disabled={!isRunning || isPaused || isPausing}
+          disabled={!isRunning || isPaused || pauseAgent.isPending}
         >
-          {isPausing ? 'Pausing...' : 'Pause'}
+          {pauseAgent.isPending ? 'Pausing...' : 'Pause'}
         </Button>
 
         <Button
           variant="primary"
           onClick={handleResume}
-          disabled={!isPaused || isResuming}
+          disabled={!isPaused || resumeAgent.isPending}
         >
-          {isResuming ? 'Resuming...' : 'Resume'}
+          {resumeAgent.isPending ? 'Resuming...' : 'Resume'}
         </Button>
       </div>
 
@@ -271,8 +281,8 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
               />
             </label>
           </div>
-          <Button type="submit" variant="primary" disabled={isSavingConfig}>
-            {isSavingConfig ? 'Saving...' : 'Save Config'}
+          <Button type="submit" variant="primary" disabled={updateConfig.isPending}>
+            {updateConfig.isPending ? 'Saving...' : 'Save Config'}
           </Button>
         </form>
 
@@ -325,8 +335,8 @@ export const AgentControlPanel: React.FC<Props> = ({ status, onRefresh }) => {
               />
             </label>
           </div>
-          <Button type="submit" variant="secondary" disabled={isSendingTrade}>
-            {isSendingTrade ? 'Sending...' : 'Send Trade'}
+          <Button type="submit" variant="secondary" disabled={manualTrade.isPending}>
+            {manualTrade.isPending ? 'Sending...' : 'Send Trade'}
           </Button>
         </form>
       </div>

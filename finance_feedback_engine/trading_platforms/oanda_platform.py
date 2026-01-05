@@ -244,6 +244,9 @@ class OandaPlatform(BaseTradingPlatform):
 
         Returns:
             Dictionary of currency balances (e.g., {'USD': 50000.0})
+
+        Raises:
+            TradingError: If credentials are invalid or API call fails
         """
         logger.info("Fetching Oanda balances")
 
@@ -266,6 +269,14 @@ class OandaPlatform(BaseTradingPlatform):
             if balance > 0:
                 balances[currency] = balance
                 logger.info("Oanda balance: %.2f %s", balance, currency)
+            else:
+                logger.warning(
+                    "No Oanda balance found. This may indicate:\n"
+                    "  1. Invalid/expired API credentials\n"
+                    "  2. Account has $0 balance\n"
+                    "  3. Account access token insufficient permissions\n"
+                    "  Check credentials in config/config.local.yaml or environment variables"
+                )
 
             return balances
 
@@ -278,8 +289,17 @@ class OandaPlatform(BaseTradingPlatform):
                 "oandapyV20 library not available. Install with: pip install oandapyV20"
             )
         except Exception as e:
-            logger.error("Error fetching Oanda balances: %s", e)
-            raise
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['auth', 'unauthorized', '401', 'permission', 'api key', 'token']):
+                logger.error(
+                    "Authentication error fetching Oanda balance. "
+                    "Check API credentials (access_token, account_id) in config."
+                )
+                from ..exceptions import TradingError
+                raise TradingError(f"Oanda authentication failed: {e}")
+            else:
+                logger.error("Error fetching Oanda balances: %s", e)
+                raise
 
     def test_connection(self) -> Dict[str, bool]:
         """
@@ -1115,9 +1135,17 @@ class OandaPlatform(BaseTradingPlatform):
                         client_request_id,
                     )
                     if attempt < max_attempts:
-                        wait_time = min(2**attempt, 15)  # Exponential backoff
+                        wait_time = min(2**attempt, 15)  # Exponential backoff with 15s cap
                         logger.info("Retrying after %.1f seconds...", wait_time)
                         time.sleep(wait_time)
+                    else:
+                        # Max attempts reached, break retry loop
+                        logger.error(
+                            "Max retry attempts (%d) exceeded for connection errors (clientRequestID=%s)",
+                            max_attempts,
+                            client_request_id,
+                        )
+                        break
                     continue
 
                 except TimeoutError as e:

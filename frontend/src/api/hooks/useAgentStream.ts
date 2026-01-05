@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { API_BASE_URL } from '../../utils/constants';
+import { getWebSocketService, type WebSocketMessage } from '../../services/websocket';
 import type { AgentStatus } from '../types';
 
 export type AgentStreamEvent = {
@@ -12,6 +12,10 @@ interface AgentStreamState {
   events: AgentStreamEvent[];
   isConnected: boolean;
   error: string | null;
+  canSendCommands: boolean;
+  startInFlight: boolean;
+  lastStartAck: AgentStreamEvent | null;
+  sendStart?: (payload: { autonomous: boolean; asset_pairs: string[] }) => Promise<void>;
 }
 
 export function useAgentStream(): AgentStreamState {
@@ -19,102 +23,152 @@ export function useAgentStream(): AgentStreamState {
   const [events, setEvents] = useState<AgentStreamEvent[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const retryRef = useRef<number | null>(null);
+  const [canSendCommands, setCanSendCommands] = useState(false);
+  const [startInFlight, setStartInFlight] = useState(false);
+  const [lastStartAck, setLastStartAck] = useState<AgentStreamEvent | null>(null);
+  const unsubscribersRef = useRef<(() => void)[]>([]);
+  const wsServiceRef = useRef(getWebSocketService());
 
   useEffect(() => {
     let isCancelled = false;
-    const controller = new AbortController();
+    const service = wsServiceRef.current;
 
-    const connect = async () => {
-      // Clear any pending retry timers
-      if (retryRef.current) {
-        clearTimeout(retryRef.current);
-        retryRef.current = null;
+    // Clean up previous subscriptions
+    unsubscribersRef.current.forEach((unsub) => unsub());
+    unsubscribersRef.current = [];
+
+    // Connect and set up event listeners
+    service.connect().catch((err) => {
+      if (!isCancelled) {
+        console.error('Failed to connect:', err);
+        setError(err.message || 'Failed to connect');
       }
+    });
 
-      try {
-        const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
-        const headers: Record<string, string> = {};
-        if (apiKey) {
-          headers.Authorization = `Bearer ${apiKey}`;
+    // Subscribe to connection events
+    unsubscribersRef.current.push(
+      service.on('connected', () => {
+        if (!isCancelled) {
+          setIsConnected(true);
+          setCanSendCommands(true);
+          setError(null);
         }
+      })
+    );
 
-        // Normalize base URL to avoid double /api when using Vite proxy (e.g., baseUrl="/api")
-        const normalizedBase = API_BASE_URL.replace(/\/+$/, '');
-        const streamUrl = normalizedBase.endsWith('/api')
-          ? `${normalizedBase}/v1/bot/stream`
-          : `${normalizedBase}/api/v1/bot/stream`;
-
-        const response = await fetch(streamUrl, {
-          method: 'GET',
-          headers,
-          signal: controller.signal,
-        });
-
-        if (!response.ok || !response.body) {
-          throw new Error(`Stream error: ${response.status}`);
+    unsubscribersRef.current.push(
+      service.on('disconnected', () => {
+        if (!isCancelled) {
+          setIsConnected(false);
+          setCanSendCommands(false);
         }
+      })
+    );
 
-        setIsConnected(true);
-        setError(null);
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        while (!isCancelled) {
-          const { value, done } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const chunks = buffer.split('\n\n');
-          buffer = chunks.pop() ?? '';
-
-          for (const chunk of chunks) {
-            const line = chunk.trim();
-            if (!line.startsWith('data:')) continue;
-            const payload = line.replace(/^data:\s*/, '');
-            try {
-              const parsed: AgentStreamEvent = JSON.parse(payload);
-              if (parsed.event === 'status') {
-                setStatus(parsed.data as AgentStatus);
-                continue;
-              }
-              if (parsed.event === 'heartbeat') {
-                continue;
-              }
-              setEvents((prev) => {
-                const next = [...prev, parsed];
-                // Keep a rolling window of the last 50 events
-                return next.slice(-50);
-              });
-            } catch (err) {
-              console.warn('Failed to parse stream payload', err);
-            }
-          }
+    unsubscribersRef.current.push(
+      service.on('error', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setError(msg.data?.message || 'WebSocket error');
         }
-      } catch (err) {
-        if (isCancelled || controller.signal.aborted) {
-          return;
-        }
-        setIsConnected(false);
-        setError((err as Error).message);
-        // Retry with backoff
-        retryRef.current = window.setTimeout(connect, 3000);
-      }
-    };
+      })
+    );
 
-    connect();
+    unsubscribersRef.current.push(
+      service.on('connection_failed', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setError(msg.data?.message || 'Failed to connect after max retries');
+        }
+      })
+    );
+
+    // Subscribe to agent-specific events
+    unsubscribersRef.current.push(
+      service.on('status', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setStatus(msg.data as AgentStatus);
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('start_ack', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setLastStartAck({ event: 'start_ack', data: msg.data });
+          setStartInFlight(false);
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('state_transition', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setEvents((prev) => {
+            const next = [...prev, { event: 'state_transition', data: msg.data }];
+            return next.slice(-50);
+          });
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('decision_made', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setEvents((prev) => {
+            const next = [...prev, { event: 'decision_made', data: msg.data }];
+            return next.slice(-50);
+          });
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('trade_executed', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setEvents((prev) => {
+            const next = [...prev, { event: 'trade_executed', data: msg.data }];
+            return next.slice(-50);
+          });
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('position_closed', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setEvents((prev) => {
+            const next = [...prev, { event: 'position_closed', data: msg.data }];
+            return next.slice(-50);
+          });
+        }
+      })
+    );
+
+    unsubscribersRef.current.push(
+      service.on('error', (msg: WebSocketMessage) => {
+        if (!isCancelled) {
+          setEvents((prev) => {
+            const next = [...prev, { event: 'error', data: msg.data }];
+            return next.slice(-50);
+          });
+        }
+      })
+    );
 
     return () => {
       isCancelled = true;
-      controller.abort();
-      if (retryRef.current) {
-        clearTimeout(retryRef.current);
-        retryRef.current = null;
-      }
+      // Unsubscribe from all events but keep service alive
+      unsubscribersRef.current.forEach((unsub) => unsub());
+      unsubscribersRef.current = [];
     };
   }, []);
 
-  return { status, events, isConnected, error };
+  const sendStart = async (payload: { autonomous: boolean; asset_pairs: string[] }) => {
+    if (!isConnected) {
+      throw new Error('WebSocket not connected');
+    }
+    setStartInFlight(true);
+    wsServiceRef.current.send('start', payload);
+  };
+
+  return { status, events, isConnected, error, canSendCommands, startInFlight, lastStartAck, sendStart };
 }

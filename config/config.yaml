@@ -20,7 +20,20 @@
 # Alpha Vantage API Configuration
 # Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
 # Load from environment variable: ALPHA_VANTAGE_API_KEY
-alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
+alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:-YOUR_ALPHA_VANTAGE_API_KEY}"
+
+# ============================================================================
+# DATA PROVIDERS CONFIGURATION
+# ============================================================================
+# Configure cache TTL and behavior for different data providers
+data_providers:
+  # Unified data provider (Coinbase/Oanda for real-time prices)
+  unified:
+    cache_ttl: 120  # 2-minute cache for real-time price monitoring
+
+  # Alpha Vantage provider (sentiment, macro, comprehensive analysis)
+  alpha_vantage:
+    cache_ttl: 300  # 5-minute cache for comprehensive data (rate limit friendly)
 
 # ============================================================================
 # DATABASE CONFIGURATION
@@ -40,12 +53,12 @@ alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
 # - DB_POOL_SIZE, DB_POOL_OVERFLOW, DB_POOL_RECYCLE, DB_POOL_TIMEOUT, DB_ECHO
 #
 database:
-  url: "${DATABASE_URL:postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}"
-  pool_size: ${DB_POOL_SIZE:20}
-  max_overflow: ${DB_POOL_OVERFLOW:10}
-  pool_recycle: ${DB_POOL_RECYCLE:3600}
-  pool_timeout: ${DB_POOL_TIMEOUT:30}
-  echo: ${DB_ECHO:false}
+  url: "${DATABASE_URL:-postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}"
+  pool_size: ${DB_POOL_SIZE:-20}
+  max_overflow: ${DB_POOL_OVERFLOW:-10}
+  pool_recycle: ${DB_POOL_RECYCLE:-3600}
+  pool_timeout: ${DB_POOL_TIMEOUT:-30}
+  echo: ${DB_ECHO:-false}
   isolation_level: "READ_COMMITTED"
 
 # Trading Platform Configuration
@@ -68,8 +81,8 @@ platform_credentials:
   # ============================================
   # Get your API keys from: https://www.coinbase.com/settings/api
   # Load from environment variables: COINBASE_API_KEY, COINBASE_API_SECRET
-  api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
-  api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
+  api_key: "${COINBASE_API_KEY:-YOUR_COINBASE_API_KEY}"
+  api_secret: "${COINBASE_API_SECRET:-YOUR_COINBASE_API_SECRET}"
   use_sandbox: false  # true for testing, false for production
   # passphrase: "${COINBASE_PASSPHRASE}"  # optional, for legacy API only
 
@@ -303,19 +316,17 @@ ensemble:
   enabled_providers:
     - llama3.2:3b-instruct-fp16
     - deepseek-r1:8b
-    - mistral:7b-instruct
-    - qwen2.5:7b-instruct
+    - mistral:latest
     - gemma2:9b
-    - qwen
+    - gemma3:4b
 
   # Initial weights for each provider (must sum to 1.0)
   provider_weights:
-    llama3.2:3b-instruct-fp16: 0.16666667
-    deepseek-r1:8b: 0.16666667
-    mistral:7b-instruct: 0.16666667
-    qwen2.5:7b-instruct: 0.16666667
-    gemma2:9b: 0.16666667
-    qwen: 0.16666666
+    llama3.2:3b-instruct-fp16: 0.20
+    deepseek-r1:8b: 0.20
+    mistral:latest: 0.20
+    gemma2:9b: 0.20
+    gemma3:4b: 0.20
     # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
     # they are used conditionally in asset_routing for Phase 2 escalation
 
@@ -345,9 +356,9 @@ ensemble:
   # IMPORTANT: Ollama must be running and specified models must be installed
   #   Run: ollama pull <model-tag> to download missing models
   debate_providers:
-    bull: "local"     # Provider for bullish case (e.g., "mistral:7b-instruct", "llama2:13b")
-    bear: "local"     # Provider for bearish case (e.g., "deepseek-r1:8b", "qwen2.5:7b")
-    judge: "local"    # Provider for final judgment (e.g., "codellama:34b", "gemma2:9b")
+    bull: "mistral:7b-instruct"     # Bullish provider
+    bear: "llama3.2:3b-instruct-fp16"    # Bearish provider
+    judge: "deepseek-r1:8b"    # Judge provider
 
   # Example BYOM configurations:
   # debate_providers:
@@ -610,7 +621,7 @@ circuit_breaker:
 # Signal-Only Mode
 # ============================================
 # Force signal-only mode globally (no position sizing or execution)
-# signal_only_default: false
+signal_only_default: false  # Enable real trading execution
 
 # ============================================
 # Logging Configuration (Optional)
@@ -746,8 +757,8 @@ agent:
 # RECOMMENDATION: Keep disabled until Q3 2026, use manual agent.asset_pairs
 #
 pair_selection:
-  # Enable autonomous pair selection (IMPORTANT: Start disabled for safety)
-  enabled: false
+  # Enable autonomous pair selection (IMPORTANT: Enabled by default with discovery filters)
+  enabled: true
 
   # Target number of active pairs to maintain
   target_pair_count: 5
@@ -759,13 +770,14 @@ pair_selection:
   # Pair universe discovery
   universe:
     # Auto-discover pairs from exchanges
-    # CRITICAL: Disabled by default to prevent low-liquidity/manipulated pairs
-    # When enabled, discovery filters MUST be applied (see discovery_filters below)
-    auto_discover: false
+    # CRITICAL: Enabled by default with discovery filters applied (see discovery_filters below)
+    # Discovery filters enforce minimum volume, listing age, spread, and venue count
+    auto_discover: true
 
-    # Whitelist mode: Only trade pairs in this curated list (recommended)
-    # When enabled, whitelist takes precedence over blacklist and discovery filters
-    whitelist_enabled: true
+    # Whitelist mode: Only trade whitelisted pairs (used alongside auto-discovery)
+    # When enabled, whitelist acts as secondary filter; discovery results are added via filters
+    # When disabled, all pairs passing discovery filters are eligible
+    whitelist_enabled: false
 
     # Whitelist of trusted pairs (only used when whitelist_enabled: true)
     # Manually curated for liquidity, listing age, and track record
@@ -1075,8 +1087,8 @@ api_timeouts:
   platform_connection: 3   # Initial connection establishment
 
   # AI providers (NEW)
-  llm_query: 45           # LLM decision generation
-  llm_debate: 90          # Debate mode (multiple LLM calls)
+  llm_query: 120          # LLM decision generation (120s for CPU-based Ollama)
+  llm_debate: 180         # Debate mode (multiple LLM calls)
   llm_connection: 5       # Provider connection timeout
 
   # External services (NEW)

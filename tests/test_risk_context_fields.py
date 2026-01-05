@@ -29,12 +29,12 @@ async def test_risk_context_fields():
 
     # Load test config
     config_path = Path("config/config.test.mock.yaml")
-    if not config_path.exists():
-        print("⚠️  Test config not found, using default config")
-        config_path = Path("config/config.yaml")
-
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    if config_path.exists():
+        with open(config_path, encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+    else:
+        print("⚠️  Test config not found, using in-memory defaults")
+        config = {}
 
     # Enable backtest mode for testing (allows mock data generation)
     config["is_backtest"] = True

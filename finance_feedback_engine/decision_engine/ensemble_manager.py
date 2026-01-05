@@ -124,25 +124,15 @@ class EnsembleDecisionManager:
             "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
         )
 
-        # Validate debate providers are enabled when debate mode is active
-        # Allow BYOM: accept arbitrary Ollama model tags (containing ':') without requiring them in enabled_providers
+        # Validate debate providers are non-empty when debate mode is active.
+        # Allow BYOM: accept any provider tag, even if not in enabled_providers.
         if self.debate_mode:
-            missing_providers = []
-            for role, provider in self.debate_providers.items():
-                # Skip validation for Ollama model tags (e.g., "mistral:7b", "llama2:13b")
-                is_ollama_tag = ":" in provider or any(
-                    kw in provider.lower()
-                    for kw in ["llama", "mistral", "deepseek", "gemma", "phi", "qwen"]
-                )
-                if not is_ollama_tag and provider not in self.enabled_providers:
-                    missing_providers.append(f"{role}={provider}")
-
-            if missing_providers:
+            blank_providers = [r for r, p in self.debate_providers.items() if not str(p).strip()]
+            if blank_providers:
                 raise ValueError(
-                    f"Debate mode is enabled but the following debate providers are not in enabled_providers or valid Ollama tags: {missing_providers}. "
-                    f"Please add them to enabled_providers, use valid Ollama model tags (e.g., 'mistral:7b'), or disable debate_mode. "
-                    f"Current enabled_providers: {self.enabled_providers}"
+                    f"Debate mode enabled but the following seats are missing providers: {blank_providers}"
                 )
+            logger.info("Debate mode active with custom providers: %s", self.debate_providers)
 
         # Local-First settings
         self.local_keywords = [

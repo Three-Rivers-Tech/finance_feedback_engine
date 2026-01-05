@@ -175,9 +175,11 @@ class TradingLoopAgent:
         self._validate_ollama_readiness()
 
         # Validate Ollama readiness for local/debate mode
-        decision_engine_config = config.get("decision_engine", {})
+        # Get full config from engine (includes decision_engine and ensemble sections)
+        engine_config = self.engine.config
+        decision_engine_config = engine_config.get("decision_engine", {})
         ai_provider = decision_engine_config.get("ai_provider", "local")
-        ensemble_config = config.get("ensemble", {})
+        ensemble_config = engine_config.get("ensemble", {})
         debate_mode = ensemble_config.get("debate_mode", False)
         debate_providers = ensemble_config.get(
             "debate_providers", {"bull": "local", "bear": "local", "judge": "local"}
@@ -194,7 +196,7 @@ class TradingLoopAgent:
                 )
 
                 ollama_ready, ollama_err = verify_ollama_for_agent(
-                    config, debate_mode, debate_providers
+                    engine_config, debate_mode, debate_providers
                 )
                 if not ollama_ready:
                     logger.error(f"Ollama readiness check failed: {ollama_err}")
@@ -1328,7 +1330,7 @@ class TradingLoopAgent:
 
                 # Enrich context with safety thresholds from config
                 # These are used by RiskGatekeeper._validate_leverage_and_concentration()
-                safety_config = self.config.get("safety", {})
+                safety_config = self.engine.config.get("safety", {})
                 monitoring_context["max_leverage"] = safety_config.get(
                     "max_leverage", 5.0
                 )
@@ -1532,12 +1534,19 @@ class TradingLoopAgent:
                             decision_id, asset_pair
                         )
                     else:
+                        error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
                         logger.error(
-                            f"Trade execution failed for {asset_pair}: {execution_result.get('message')}."
+                            f"Trade execution failed for {asset_pair}: {error_msg}. Full result: {execution_result}"
                         )
+                except asyncio.CancelledError:
+                    logger.warning(
+                        f"Trade execution cancelled for decision {decision_id} (agent shutdown?)"
+                    )
+                    raise  # Re-raise to allow proper cleanup
                 except Exception as e:
                     logger.error(
-                        f"Exception during trade execution for decision {decision_id}: {e}"
+                        f"Exception during trade execution for decision {decision_id}: {e}",
+                        exc_info=True
                     )
         else:
             # Signal-only mode: send to Telegram for approval

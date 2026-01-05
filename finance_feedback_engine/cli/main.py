@@ -70,50 +70,12 @@ CONFIG_MODE_TIERED = "tiered"
 
 
 def _validate_config_on_startup(config_path: str, environment: str = "development"):
-    """
-    Validate configuration file before engine initialization.
-
-    Args:
-        config_path: Path to configuration file or CONFIG_MODE_TIERED for tiered loading
-        environment: Runtime environment (production, staging, development, test)
-
-    Raises:
-        click.ClickException: If validation fails with critical/high severity issues
-    """
-    from finance_feedback_engine.utils.config_validator import (
-        print_validation_results,
-        validate_config_file,
+    """No-op validator for env-only configuration."""
+    logger.debug(
+        "Skipping YAML validation (env-only configuration active: path=%s, env=%s)",
+        config_path,
+        environment,
     )
-
-    # Validate environment argument
-    ALLOWED_ENVIRONMENTS = ("production", "staging", "development", "test")
-    if environment not in ALLOWED_ENVIRONMENTS:
-        raise click.ClickException(
-            f"Invalid environment '{environment}'. Must be one of: {', '.join(ALLOWED_ENVIRONMENTS)}"
-        )
-
-    # Skip validation for tiered loading (no single file to validate)
-    # Tiered loading validates at load time
-    if config_path == CONFIG_MODE_TIERED:
-        return
-
-    try:
-        result = validate_config_file(config_path, environment)
-    except Exception as e:
-        raise click.ClickException(f"Configuration validation error: {e}")
-
-    # If there are critical or high severity errors, fail startup
-    if result.has_errors():
-        console.print("[bold red]Configuration validation failed![/bold red]")
-        print_validation_results(result, verbose=True)
-        raise click.ClickException(
-            "Invalid configuration detected. Fix errors above and retry."
-        )
-
-    # If there are warnings, show them but allow startup
-    if result.issues:
-        console.print("[yellow]Configuration validation passed with warnings:[/yellow]")
-        print_validation_results(result, verbose=False)
 
 
 def _display_pulse_data(engine, asset_pair: str):
@@ -489,44 +451,10 @@ def _deep_fill_missing(target: dict, source: dict) -> dict:
 
 
 def load_tiered_config() -> dict:
-    """
-    Loads configuration from multiple sources with a tiered precedence:
-    1. config/config.local.yaml (local overrides - highest file priority)
-    2. config/config.yaml (base defaults used only where local is missing)
-    3. Environment variables (highest overall precedence)
-    """
-    import logging
+    """Environment-only configuration loader (single source of truth)."""
+    from finance_feedback_engine.utils.config_loader import load_env_config
 
-    from finance_feedback_engine.utils.config_loader import (
-        load_config as load_config_with_env,
-    )
-
-    logger = logging.getLogger(__name__)
-
-    base_config_path = Path("config/config.yaml")
-    local_config_path = Path("config/config.local.yaml")
-
-    # Prefer local config as the primary file so local values take precedence.
-    # Start with local (if present) then fill missing values from base config.
-    config = {}
-    # 1. Load local config first (preferred) - this now handles .env loading and ${VAR} substitution
-    if local_config_path.exists():
-        config = load_config_with_env(str(local_config_path))
-
-    # 2. Load base config and fill missing keys from it
-    # Base config uses plain placeholder strings, not ${VAR} syntax, so use raw YAML loading
-    if base_config_path.exists():
-        with open(base_config_path, "r", encoding="utf-8") as f:
-            base_config = yaml.safe_load(f)
-            if base_config:
-                _deep_fill_missing(config, base_config)
-    else:
-        logger.warning(f"Base config file not found: {base_config_path}")
-
-    # Environment variables are already handled by load_config_with_env via .env file
-    # No need for manual env var mapping anymore
-
-    return config
+    return load_env_config()
 
 
 def load_config(config_path: str) -> dict:
@@ -602,16 +530,11 @@ def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
 
     # If a specific config file is provided by the user
     if config:
-        # Use the old load_config
-        final_config = load_config(config)
-        # Store the path for other commands
-        ctx.obj["config_path"] = config
-    # Use tiered loading
-    else:
-        final_config = load_tiered_config()
-        # Indicate that tiered loading was used, might not have a single path
-        # Set a placeholder
-        ctx.obj["config_path"] = CONFIG_MODE_TIERED
+        raise click.ClickException(
+            "File-based configuration is disabled. Use .env as the single source of truth."
+        )
+    final_config = load_tiered_config()
+    ctx.obj["config_path"] = ".env"
 
     # Override tracing settings from CLI flags
     if trace:
@@ -759,245 +682,20 @@ def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
 def config_editor(ctx, output):
     """Interactive helper to capture API keys and core settings.
 
-    Writes a focused overlay file (defaults to config/config.local.yaml)
-    so your secrets are kept separate from base defaults.
+    Disabled for env-only configuration. Use .env (see .env.example) instead of YAML overlays.
     """
-    base_path = Path("config/config.yaml")
-    target_path = Path(output)
-
-    base_config = {}
-    if base_path.exists():
-        try:
-            base_config = load_config(str(base_path))
-        except Exception as e:
-            console.print(
-                f"[yellow]Warning: could not read base config: " f"{e}[/yellow]"
-            )
-
-    existing_config = {}
-    if target_path.exists():
-        try:
-            existing_config = load_config(str(target_path))
-        except Exception as e:
-            console.print(
-                f"[yellow]Warning: could not read existing "
-                f"{target_path}: {e}[/yellow]"
-            )
-
-    # Start from existing overlay so we don't drop user-specific keys
-    updated_config = copy.deepcopy(existing_config)
-
-    def current(keys, fallback=None):
-        return _get_nested(
-            existing_config, keys, _get_nested(base_config, keys, fallback)
-        )
-
-    def prompt_text(label, keys, secret=False, allow_empty=True):
-        default_val = current(keys, "")
-        show_default = bool(default_val)
-        val = click.prompt(
-            label,
-            default=default_val,
-            show_default=show_default,
-            hide_input=secret,
-        )
-        if isinstance(val, str) and not val and default_val and not allow_empty:
-            val = default_val
-        _set_nested(updated_config, keys, val)
-
-    def prompt_choice(label, keys, choices):
-        default_val = current(keys, choices[0])
-        val = click.prompt(
-            label,
-            type=click.Choice(choices, case_sensitive=False),
-            default=default_val,
-            show_default=True,
-        )
-        _set_nested(updated_config, keys, val)
-        return val
-
-    def prompt_bool(label, keys, default=None):
-        cur_val = current(keys, False)
-        if isinstance(cur_val, str):
-            default_val = cur_val.lower() == "true"
-        else:
-            default_val = bool(cur_val)
-        if default is not None:
-            default_val = default
-        val = click.confirm(label, default=default_val, show_default=True)
-        _set_nested(updated_config, keys, val)
-        return val
-
-    try:
-        console.print("\n[bold cyan]Config Editor[/bold cyan]")
-        console.print(
-            "Quick setup for API keys and core settings. "
-            "Press Enter to keep defaults.\n"
-        )
-
-        # API keys
-        prompt_text("Alpha Vantage API key", ("alpha_vantage_api_key",), secret=True)
-
-        platform = prompt_choice(
-            "Trading platform",
-            ("trading_platform",),
-            ["coinbase_advanced", "oanda", "mock", "unified"],
-        )
-
-        if platform in {"coinbase", "coinbase_advanced"}:
-            console.print("\n[bold]Coinbase credentials[/bold]")
-            prompt_text("API key", ("platform_credentials", "api_key"), secret=True)
-            prompt_text(
-                "API secret", ("platform_credentials", "api_secret"), secret=True
-            )
-            prompt_bool("Use sandbox?", ("platform_credentials", "use_sandbox"))
-        elif platform == "oanda":
-            console.print("\n[bold]Oanda credentials[/bold]")
-            prompt_text("API token", ("platform_credentials", "api_key"), secret=True)
-            prompt_text("Account ID", ("platform_credentials", "account_id"))
-            prompt_choice(
-                "Environment",
-                ("platform_credentials", "environment"),
-                ["practice", "live"],
-            )
-        elif platform == "mock":
-            console.print("\n[yellow]Mock platform — no credentials needed.[/yellow]")
-        elif platform == "unified":
-            console.print(
-                "\n[yellow]Unified mode. Configure per-platform entries in config YAML manually.[/yellow]"
-            )
-
-        # Decision engine
-        console.print("\n[bold]Decision engine[/bold]")
-        ai_choice = prompt_choice(
-            "AI provider",
-            ("decision_engine", "ai_provider"),
-            ["ensemble", "local", "cli", "gemini"],
-        )
-
-        if ai_choice == "ensemble":
-            console.print("Using ensemble mode (default: free local models)")
-            _set_nested(updated_config, ("ensemble", "enabled_providers"), ["local"])
-            _set_nested(updated_config, ("ensemble", "voting_strategy"), "weighted")
-            _set_nested(updated_config, ("ensemble", "adaptive_learning"), True)
-
-        # Autonomous agent
-        console.print("\n[bold]Autonomous agent[/bold]")
-        prompt_bool("Enable autonomous trading?", ("agent", "autonomous", "enabled"))
-
-        # Telegram notifications setup
-        console.print("\n[bold cyan]📱 Telegram Notifications[/bold cyan]")
-        console.print(
-            "[dim]Telegram is used for manual trade approval when autonomous trading is disabled[/dim]"
-        )
-
-        # Check if autonomous trading was just disabled
-        autonomous_enabled = _get_nested(
-            updated_config, ("agent", "autonomous", "enabled"), False
-        )
-
-        # Prompt for Telegram - make it clear it's required if autonomous is off
-        if not autonomous_enabled:
-            console.print(
-                "[yellow]⚠️  Autonomous trading is disabled - Telegram notifications are REQUIRED[/yellow]"
-            )
-            telegram_enabled = prompt_bool(
-                "Enable Telegram notifications?", ("telegram", "enabled")
-            )
-        else:
-            telegram_enabled = prompt_bool(
-                "Enable Telegram notifications? (optional)", ("telegram", "enabled")
-            )
-
-        if telegram_enabled:
-            console.print("\n[bold]Telegram Bot Setup Instructions:[/bold]")
-            console.print("1. Open Telegram and message @BotFather")
-            console.print("2. Send /newbot and follow instructions to create a bot")
-            console.print("3. Copy the bot token provided by @BotFather")
-            console.print("4. Message @userinfobot to get your chat_id")
-            console.print("5. Start a conversation with your new bot\n")
-
-            prompt_text(
-                "Bot token (from @BotFather)", ("telegram", "bot_token"), secret=True
-            )
-            prompt_text("Chat ID (from @userinfobot)", ("telegram", "chat_id"))
-        else:
-            # If they said no to Telegram, set it to disabled explicitly
-            _set_nested(updated_config, ("telegram", "enabled"), False)
-
-        # Logging
-        console.print("\n[bold]Logging[/bold]")
-        prompt_choice(
-            "Log level",
-            ("logging", "level"),
-            ["INFO", "DEBUG", "WARNING", "ERROR"],
-        )
-
-        # Validate: autonomous trading OR Telegram must be configured
-        console.print("\n[bold cyan]🔍 Validating Configuration...[/bold cyan]")
-
-        autonomous_enabled = _get_nested(
-            updated_config, ("agent", "autonomous", "enabled"), False
-        )
-        telegram_enabled = _get_nested(updated_config, ("telegram", "enabled"), False)
-        telegram_has_token = bool(
-            _get_nested(updated_config, ("telegram", "bot_token"))
-        )
-        telegram_has_chat_id = bool(
-            _get_nested(updated_config, ("telegram", "chat_id"))
-        )
-        telegram_configured = (
-            telegram_enabled and telegram_has_token and telegram_has_chat_id
-        )
-
-        if not autonomous_enabled and not telegram_configured:
-            console.print("\n[bold red]❌ Configuration Error[/bold red]")
-            console.print(
-                "[yellow]You must configure at least ONE of the following:[/yellow]"
-            )
-            console.print(
-                "  1. [bold]Autonomous trading[/bold] (for fully automated execution)"
-            )
-            console.print(
-                "  2. [bold]Telegram notifications[/bold] (for manual approval of signals)"
-            )
-            console.print("\n[yellow]Current status:[/yellow]")
-            console.print(
-                f"  • Autonomous trading: [red]{'✓ Enabled' if autonomous_enabled else '✗ Disabled'}[/red]"
-            )
-            console.print(
-                f"  • Telegram configured: [red]{'✓ Yes' if telegram_configured else '✗ No'}[/red]"
-            )
-            console.print(
-                "\n[dim]The agent cannot run without either autonomous trading or notification channels.[/dim]"
-            )
-
-            raise click.ClickException(
-                "Configuration incomplete: Enable autonomous trading or configure Telegram notifications."
-            )
-
-        console.print("[green]✓ Configuration validated successfully[/green]")
-
-        # Write config
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(target_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(updated_config, f, sort_keys=False)
-
-        console.print(
-            f"\n[bold green]✓ Configuration saved to {target_path}[/bold green]"
-        )
-    except click.Abort:
-        console.print("[yellow]Cancelled.[/yellow]")
-        return
+    raise click.ClickException(
+        "config-editor is disabled: configuration is .env-only. Copy .env.example to .env and edit it instead."
+    )
 
 
 @cli.command(name="validate-config")
 @click.option(
     "--config-path",
     "-c",
-    default="config/config.yaml",
+    default=".env",
     type=click.Path(),
-    help="Path to config file to validate",
+    help="Path to configuration file (env-only)",
 )
 @click.option(
     "--strict",
@@ -1006,60 +704,13 @@ def config_editor(ctx, output):
 )
 @click.pass_context
 def validate_config_cmd(ctx, config_path, strict):
-    """Validate configuration file against schema without starting the engine.
+    """Disabled: configuration is env-only.
 
-    Checks for:
-    - Missing required fields
-    - Invalid value ranges (e.g., thresholds 0.0-1.0)
-    - Semantic errors (e.g., ensemble mode without providers)
-    - Type mismatches
-
-    Examples:
-        python main.py validate-config
-        python main.py validate-config --config-path config/config.local.yaml
-        python main.py validate-config --strict  # Exit code 1 on errors
+    Use the provided .env.example as a template and manage settings via environment variables.
     """
-    import yaml
-    from finance_feedback_engine.utils.config_schema_validator import validate_config
-
-    try:
-        config_file = Path(config_path)
-        with open(config_file, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
-        console.print(f"\n[bold]Validating {config_file}...[/bold]\n")
-
-        messages = validate_config(config, strict=strict)
-
-        if not messages:
-            console.print("✅ [green]Config validation passed - no issues found[/green]\n")
-            return
-
-        # Display messages
-        for msg in messages:
-            if "CRITICAL" in msg or "❌" in msg:
-                console.print(f"[red]{msg}[/red]")
-            else:
-                console.print(f"[yellow]{msg}[/yellow]")
-
-        console.print()
-
-        if strict and any("❌" in msg or "CRITICAL" in msg for msg in messages):
-            console.print("[red]❌ Validation failed (strict mode)[/red]\n")
-            ctx.exit(1)
-        else:
-            console.print("[yellow]⚠️  Warnings found (non-blocking)[/yellow]\n")
-
-    except FileNotFoundError:
-        console.print(f"[red]❌ Config file not found: {config_path}[/red]\n")
-        ctx.exit(1)
-    except yaml.YAMLError as e:
-        console.print(f"[red]❌ YAML parsing error: {e}[/red]\n")
-        ctx.exit(1)
-    except Exception as e:
-        console.print(f"[red]❌ Validation error: {e}[/red]\n")
-        if strict:
-            ctx.exit(1)
+    raise click.ClickException(
+        "validate-config is disabled: configuration is .env-only. Copy .env.example to .env and update environment variables instead."
+    )
 
 @cli.command(name="install-deps")
 @click.option(

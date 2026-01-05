@@ -83,6 +83,7 @@ class CircuitBreaker:
         self._sync_lock = threading.Lock()
         # Lazy init: create async lock on first async use to bind to correct event loop
         self._async_lock = None
+        self._async_lock_initialized = False
 
         logger.info(
             "%s initialized: threshold=%d, timeout=%.1fs",
@@ -91,10 +92,24 @@ class CircuitBreaker:
             recovery_timeout,
         )
 
+    def _ensure_async_lock(self):
+        """Lazy initialize async lock to bind to current event loop."""
+        if not self._async_lock_initialized:
+            try:
+                # Get current running loop to bind lock correctly
+                loop = asyncio.get_running_loop()
+                self._async_lock = asyncio.Lock()
+                self._async_lock_initialized = True
+            except RuntimeError:
+                # No running loop - will be initialized when async call is made
+                pass
+
     async def call(self, func: Callable, *args, **kwargs) -> Any:
         """
         Execute function with circuit breaker protection (async version).
         """
+        # Ensure async lock is initialized in the correct event loop
+        self._ensure_async_lock()
         if asyncio.iscoroutinefunction(func):
 
             async def async_runner():

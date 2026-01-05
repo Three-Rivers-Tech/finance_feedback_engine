@@ -1,120 +1,116 @@
 import React, { useEffect, useState } from 'react';
-import { listOllamaModels, pullOllamaModel, type PullProgress } from '../api/ollama';
-
-interface DebateConfig {
-  bull: string;
-  bear: string;
-  judge: string;
-}
-
-interface OllamaStatus {
-  available: boolean;
-  error?: string;
-  models: string[];
-  debateConfig?: DebateConfig;
-  missing: string[];
-}
+import { type PullProgress } from '../api/ollama';
+import { useOllamaModels, useOllamaStatus, usePullOllamaModel, useUpdateDebateProviders } from '../api/mutations/useOllamaModels';
 
 export const Models: React.FC = () => {
-  const [models, setModels] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [pulling, setPulling] = useState(false);
+  // React Query hooks
+  const { data: modelsData = [], isLoading, refetch } = useOllamaModels();
+  const { data: ollamaStatus, isLoading: configLoading } = useOllamaStatus();
+  const pullModel = usePullOllamaModel();
+  const updateDebate = useUpdateDebateProviders();
+
+  // Local state for UI
   const [modelName, setModelName] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [debateConfig, setDebateConfig] = useState<DebateConfig>({ bull: '', bear: '', judge: '' });
-  const [configLoading, setConfigLoading] = useState(true);
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [debateProviders, setDebateProviders] = useState({ bull: '', bear: '', judge: '' });
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
-  const checkOllamaStatus = async () => {
-    try {
-      const res = await fetch('/api/health');
-      if (!res.ok) throw new Error(`Health check failed: ${res.status}`);
-      const health = await res.json();
+  // Extract model names from query data
+  const models = modelsData.map((m: any) => m.name);
+  const canSaveDebate = Object.values(debateProviders).every((v) => v.trim().length > 0);
 
-      const ollama = health.ollama || {};
-      const status: OllamaStatus = {
-        available: ollama.available || false,
-        error: ollama.error,
-        models: ollama.models || [],
-        debateConfig: ollama.debate_config,
-        missing: ollama.missing_debate_models || []
-      };
-
-      setOllamaStatus(status);
-
-      // Load current debate config
-      if (ollama.debate_config) {
-        setDebateConfig(ollama.debate_config);
-      }
-    } catch (e) {
-      console.error('Failed to check Ollama status', e);
-      setOllamaStatus({
-        available: false,
-        error: String(e),
-        models: [],
-        missing: []
-      });
-    } finally {
-      setConfigLoading(false);
-    }
+  const updateSeat = (seat: 'bull' | 'bear' | 'judge', value: string) => {
+    setDebateProviders((prev) => ({ ...prev, [seat]: value }));
   };
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const tags = await listOllamaModels();
-      setModels(tags.map(t => t.name));
-      await checkOllamaStatus();
-    } catch (e) {
-      console.warn('Failed to load Ollama models', e);
-      setModels([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Sync debate providers from status when it changes
   useEffect(() => {
-    void refresh();
-  }, []);
+    if (ollamaStatus?.debateConfig) {
+      setDebateProviders({
+        bull: ollamaStatus.debateConfig.bull || '',
+        bear: ollamaStatus.debateConfig.bear || '',
+        judge: ollamaStatus.debateConfig.judge || '',
+      });
+    }
+  }, [ollamaStatus?.debateConfig]);
 
   const onPull = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const name = modelName.trim();
     if (!name) return;
+
     setLogs([]);
-    setPulling(true);
-    try {
-      await pullOllamaModel(name, (p: PullProgress) => {
-        const pct = p.total && p.completed ? ` (${Math.floor((p.completed / p.total) * 100)}%)` : '';
-        const line = p.error ? `ERROR: ${p.error}` : `${p.status || 'update'}${pct}`;
-        setLogs(prev => [...prev, line].slice(-200));
-      });
-      setLogs(prev => [...prev, 'Done']);
-      await refresh();
-    } catch (err: any) {
-      setLogs(prev => [...prev, `Failed: ${err?.message || String(err)}`]);
-    } finally {
-      setPulling(false);
-    }
+    setPullError(null);
+
+    pullModel.mutate(
+      {
+        name,
+        onProgress: (p: PullProgress) => {
+          const pct = p.total && p.completed ? ` (${Math.floor((p.completed / p.total) * 100)}%)` : '';
+          const line = p.error ? `ERROR: ${p.error}` : `${p.status || 'update'}${pct}`;
+          setLogs(prev => [...prev, line].slice(-200));
+        },
+      },
+      {
+        onSuccess: () => {
+          setLogs(prev => [...prev, 'Done - model installed successfully']);
+          setModelName(''); // Clear input on success
+        },
+        onError: (error: any) => {
+          const errorMsg = error?.message || String(error);
+          setLogs(prev => [...prev, `Failed: ${errorMsg}`]);
+          setPullError(errorMsg);
+        },
+      }
+    );
   };
 
   const quickPull = async (model: string) => {
     setModelName(model);
     setLogs([`Pulling ${model}...`]);
-    setPulling(true);
-    try {
-      await pullOllamaModel(model, (p: PullProgress) => {
-        const pct = p.total && p.completed ? ` (${Math.floor((p.completed / p.total) * 100)}%)` : '';
-        const line = p.error ? `ERROR: ${p.error}` : `${p.status || 'update'}${pct}`;
-        setLogs(prev => [...prev, line].slice(-200));
-      });
-      setLogs(prev => [...prev, 'Done']);
-      await refresh();
-    } catch (err: any) {
-      setLogs(prev => [...prev, `Failed: ${err?.message || String(err)}`]);
-    } finally {
-      setPulling(false);
-    }
+    setPullError(null);
+
+    pullModel.mutate(
+      {
+        name: model,
+        onProgress: (p: PullProgress) => {
+          const pct = p.total && p.completed ? ` (${Math.floor((p.completed / p.total) * 100)}%)` : '';
+          const line = p.error ? `ERROR: ${p.error}` : `${p.status || 'update'}${pct}`;
+          setLogs(prev => [...prev, line].slice(-200));
+        },
+      },
+      {
+        onSuccess: () => {
+          setLogs(prev => [...prev, 'Done - model installed successfully']);
+        },
+        onError: (error: any) => {
+          const errorMsg = error?.message || String(error);
+          setLogs(prev => [...prev, `Failed: ${errorMsg}`]);
+          setPullError(errorMsg);
+        },
+      }
+    );
+  };
+
+  const onSaveDebateProviders = async () => {
+    setSaveNotice(null);
+    updateDebate.mutate(
+      {
+        bull: debateProviders.bull,
+        bear: debateProviders.bear,
+        judge: debateProviders.judge,
+      },
+      {
+        onSuccess: () => {
+          setSaveNotice('Saved to config.local.yaml. In production, restart the backend to ensure the new models are active.');
+        },
+        onError: (error: any) => {
+          const msg = error?.message || 'Failed to save debate providers';
+          setSaveNotice(msg);
+        },
+      }
+    );
   };
 
   return (
@@ -149,12 +145,9 @@ export const Models: React.FC = () => {
           <h2 className="font-mono font-bold text-accent-cyan mb-3">Debate Mode Configuration</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {(['bull', 'bear', 'judge'] as const).map((seat) => {
-              const provider = debateConfig[seat];
-              const isInstalled = ollamaStatus.models.some(m =>
-                m.toLowerCase().includes(provider.toLowerCase()) ||
-                provider.toLowerCase().includes(m.toLowerCase().split(':')[0])
-              );
+              const provider = ollamaStatus.debateConfig![seat];
               const isMissing = ollamaStatus.missing.includes(provider);
+              const isInstalled = Boolean(provider) && !isMissing;
 
               return (
                 <div key={seat} className="border-2 border-border-secondary rounded p-3">
@@ -168,12 +161,13 @@ export const Models: React.FC = () => {
                   {isMissing && (
                     <button
                       onClick={() => quickPull(provider)}
-                      disabled={pulling}
+                      disabled={pullModel.isPending}
                       className="text-xs px-2 py-1 border-2 border-accent-cyan rounded hover:bg-accent-cyan/20 disabled:opacity-50"
                     >
                       Pull Model
                     </button>
                   )}
+
                 </div>
               );
             })}
@@ -188,6 +182,69 @@ export const Models: React.FC = () => {
               </p>
             </div>
           )}
+
+          <div className="mt-4 border-2 border-border-secondary rounded p-3 bg-bg-secondary/50">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-mono font-bold text-accent-cyan">Override Debate Providers</h3>
+              <span className="text-[10px] uppercase text-text-secondary">Writes to config.local.yaml</span>
+            </div>
+            <p className="text-xs text-text-secondary mb-3">
+              Choose any installed model tag (or type a custom one). Changes persist to config.local.yaml; in production, restart the backend to apply.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(['bull', 'bear', 'judge'] as const).map((seat) => (
+                <div key={seat} className="flex flex-col gap-2">
+                  <label className="text-[11px] uppercase font-mono text-text-secondary">{seat}</label>
+                  <input
+                    list="ollama-model-options"
+                    value={debateProviders[seat]}
+                    onChange={(e) => updateSeat(seat, e.target.value)}
+                    placeholder="e.g. mistral:latest"
+                    className="px-2 py-2 bg-bg-secondary border-2 border-border-primary rounded text-xs font-mono"
+                  />
+                </div>
+              ))}
+            </div>
+            <datalist id="ollama-model-options">
+              {models.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onSaveDebateProviders}
+                disabled={!canSaveDebate || updateDebate.isPending}
+                className={`px-4 py-2 border-3 rounded font-mono text-xs ${
+                  updateDebate.isPending ? 'opacity-60 cursor-not-allowed' : 'hover:border-accent-cyan'
+                } border-border-primary text-text-primary`}
+              >
+                {updateDebate.isPending ? 'Saving…' : 'Save Debate Providers'}
+              </button>
+              <p className="text-[11px] text-text-secondary">
+                Dev note: writing to config.local.yaml from the UI is intended for development; secure this endpoint for production.
+              </p>
+            </div>
+            {saveNotice && (
+              <div className="mt-2 text-xs text-text-secondary">
+                {saveNotice}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Error Toast */}
+      {pullError && (
+        <div className="border-3 border-red-600 bg-red-900/20 rounded p-4">
+          <h3 className="text-red-400 font-mono font-bold mb-2">⚠ Pull Failed</h3>
+          <p className="text-sm text-text-secondary">{pullError}</p>
+          <button
+            onClick={() => refetch()}
+            className="mt-2 text-xs px-3 py-1 border-2 border-accent-cyan rounded hover:bg-accent-cyan/20"
+          >
+            Try Manual Refresh
+          </button>
         </div>
       )}
 
@@ -200,20 +257,20 @@ export const Models: React.FC = () => {
         />
         <button
           type="submit"
-          disabled={pulling}
+          disabled={pullModel.isPending}
           className={`px-4 py-2 border-3 rounded font-mono text-sm ${
-            pulling ? 'opacity-60 cursor-not-allowed' : 'hover:border-accent-cyan'
+            pullModel.isPending ? 'opacity-60 cursor-not-allowed' : 'hover:border-accent-cyan'
           } border-border-primary text-text-primary`}
         >
-          {pulling ? 'Pulling…' : 'Pull Model'}
+          {pullModel.isPending ? 'Pulling…' : 'Pull Model'}
         </button>
         <button
           type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
+          onClick={() => void refetch()}
+          disabled={isLoading}
           className="px-3 py-2 border-3 rounded font-mono text-sm border-border-primary hover:border-accent-cyan"
         >
-          {loading ? 'Refreshing…' : 'Refresh'}
+          {isLoading ? 'Refreshing…' : 'Refresh'}
         </button>
       </form>
 
@@ -230,14 +287,14 @@ export const Models: React.FC = () => {
                 <div className="mt-2 space-x-2">
                   <button
                     onClick={() => quickPull('llama3.2:3b-instruct-fp16')}
-                    disabled={pulling}
+                    disabled={pullModel.isPending}
                     className="text-xs px-2 py-1 border-2 border-border-primary rounded hover:border-accent-cyan disabled:opacity-50"
                   >
                     llama3.2:3b
                   </button>
                   <button
                     onClick={() => quickPull('mistral:latest')}
-                    disabled={pulling}
+                    disabled={pullModel.isPending}
                     className="text-xs px-2 py-1 border-2 border-border-primary rounded hover:border-accent-cyan disabled:opacity-50"
                   >
                     mistral

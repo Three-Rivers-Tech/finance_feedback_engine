@@ -543,31 +543,17 @@ class ConfigValidator:
                     suggestion="Use relative path: data/decisions",
                 )
 
-        # Check for common typos in provider names
+        # Check that provider entries are non-empty strings; allow BYOM without hardcoded allow-lists
         if "ensemble" in config and "enabled_providers" in config["ensemble"]:
-            valid_providers = {
-                "local",
-                "cli",
-                "codex",
-                "qwen",
-                "gemini",
-                "llama3.2:3b-instruct-fp16",
-                "deepseek-r1:8b",
-                "mistral:7b-instruct",
-                "qwen2.5:7b-instruct",
-                "gemma2:9b",
-            }
             for provider in config["ensemble"]["enabled_providers"]:
-                if isinstance(provider, str) and provider not in valid_providers:
-                    # Check if it looks like a model name (contains colon)
-                    if ":" not in provider and provider != "mock":
-                        result.add_issue(
-                            Severity.LOW,
-                            "unknown_provider",
-                            f"Unknown provider name: {provider}",
-                            config_path,
-                            suggestion=f'Valid providers: {", ".join(sorted(valid_providers))}',
-                        )
+                if not isinstance(provider, str) or not provider.strip():
+                    result.add_issue(
+                        Severity.LOW,
+                        "invalid_provider_entry",
+                        "Ensemble enabled_providers must be non-empty strings",
+                        config_path,
+                        suggestion="Remove empty entries or provide model/provider identifiers",
+                    )
 
     def _check_logging_configuration(
         self, config: Dict, config_path: str, result: ValidationResult

@@ -1,33 +1,37 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import apiClient from '../api/client';
+import React, { useMemo } from 'react';
 import type { AgentStatus } from '../api/types';
 import { AgentStatusDisplay } from '../components/agent/AgentStatusDisplay';
 import { AgentControlPanel } from '../components/agent/AgentControlPanel';
-import { CircuitBreakerStatus } from '../components/agent/CircuitBreakerStatus';
+import { AgentActivityFeed } from '../components/agent/AgentActivityFeed';
 import { AgentMetricsDashboard } from '../components/agent/AgentMetricsDashboard';
 import { useAgentStream } from '../api/hooks/useAgentStream';
 import { OllamaStatusAlert } from '../components/common/OllamaStatusAlert';
 import { useHealth } from '../api/hooks/useHealth';
+import { useAgentStatus } from '../api/hooks/useAgentStatus';
 
 export const AgentControl: React.FC = () => {
-  const { status: liveStatus, events, isConnected, error: streamError } = useAgentStream();
-  const [manualStatus, setManualStatus] = useState<AgentStatus | null>(null);
+  const {
+    status: liveStatus,
+    events,
+    isConnected,
+    error: streamError,
+    sendStart,
+    canSendCommands,
+    startInFlight,
+  } = useAgentStream();
   const { data: health, isLoading: healthLoading } = useHealth();
+  const {
+    data: snapshotStatus,
+    isLoading: statusLoading,
+    isFetching: statusFetching,
+    refetch: refetchStatus,
+  } = useAgentStatus();
 
-  const refreshStatus = useCallback(async () => {
-    const response = await apiClient.get('/api/v1/bot/status');
-    setManualStatus(response.data as AgentStatus);
-  }, []);
-
-  useEffect(() => {
-    if (liveStatus) {
-      // Prefer live stream updates over manual snapshots
-      setManualStatus(null);
-    }
-  }, [liveStatus]);
-
-  const status = useMemo(() => manualStatus ?? liveStatus, [manualStatus, liveStatus]);
-  const isLoading = !status && !streamError;
+  const status = useMemo<AgentStatus | null | undefined>(
+    () => liveStatus ?? snapshotStatus,
+    [liveStatus, snapshotStatus]
+  );
+  const isLoading = !status && !streamError && (statusLoading || statusFetching);
 
   return (
     <div className="space-y-6">
@@ -47,9 +51,15 @@ export const AgentControl: React.FC = () => {
       )}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AgentStatusDisplay status={status} isLoading={isLoading} isLive={isConnected} />
-        <CircuitBreakerStatus />
+        <AgentActivityFeed events={events} isConnected={isConnected} isLoading={isLoading} />
       </div>
-      <AgentControlPanel status={status} onRefresh={refreshStatus} />
+      <AgentControlPanel
+        status={status}
+        onRefresh={refetchStatus}
+        onStartViaSocket={sendStart}
+        socketReady={canSendCommands}
+        socketStartInFlight={startInFlight}
+      />
       <AgentMetricsDashboard
         status={status}
         events={events}

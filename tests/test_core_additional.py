@@ -55,7 +55,7 @@ def engine_with_mocks(minimal_config):
          patch("finance_feedback_engine.core.validate_at_startup"), \
          patch("finance_feedback_engine.core.AlphaVantageProvider") as mock_av, \
          patch("finance_feedback_engine.core.HistoricalDataProvider") as mock_hist:
-        
+
         # Configure the mock AlphaVantageProvider
         mock_av_instance = Mock()
         mock_av_instance.get_market_data = Mock(return_value={})
@@ -63,17 +63,17 @@ def engine_with_mocks(minimal_config):
         # Make async method return AsyncMock
         mock_av_instance.get_comprehensive_market_data = AsyncMock(return_value={})
         mock_av.return_value = mock_av_instance
-        
+
         # Configure the mock HistoricalDataProvider
         mock_hist_instance = Mock()
         mock_hist.return_value = mock_hist_instance
-        
+
         # Create engine
         engine = FinanceFeedbackEngine(minimal_config)
-        
+
         # Replace data_provider with our mock for easier access in tests
         engine.data_provider = mock_av_instance
-        
+
         return engine
 
 
@@ -153,7 +153,14 @@ class TestAnalyzeAsset:
             "volume": 1000000,
             "trend": "bullish"
         })
-        engine.trading_platform.get_balance = Mock(return_value={"USD": 10000})
+        # Mock get_portfolio_breakdown (replaces separate get_balance() call)
+        engine.get_portfolio_breakdown = Mock(return_value={
+            "total_value_usd": 10000,
+            "futures_value_usd": 5000,
+            "spot_value_usd": 5000,
+            "num_assets": 1,
+            "positions": []
+        })
         engine.decision_engine.generate_decision = AsyncMock(return_value={
             "action": "BUY",
             "confidence": 75,
@@ -178,7 +185,14 @@ class TestAnalyzeAsset:
             "current_price": 50000,
             "volume": 1000000
         })
-        engine.trading_platform.get_balance = Mock(return_value={"USD": 10000})
+        # Mock get_portfolio_breakdown (replaces separate get_balance() call)
+        engine.get_portfolio_breakdown = Mock(return_value={
+            "total_value_usd": 10000,
+            "futures_value_usd": 5000,
+            "spot_value_usd": 5000,
+            "num_assets": 1,
+            "positions": []
+        })
         engine.decision_engine.generate_decision = AsyncMock(return_value={
             "action": "BUY",
             "confidence": 80,
@@ -214,7 +228,14 @@ class TestAnalyzeAsset:
         engine.data_provider.get_comprehensive_market_data = AsyncMock(return_value={
             "current_price": 50000
         })
-        engine.trading_platform.get_balance = Mock(return_value={"USD": 10000})
+        # Mock get_portfolio_breakdown (replaces separate get_balance() call)
+        engine.get_portfolio_breakdown = Mock(return_value={
+            "total_value_usd": 10000,
+            "futures_value_usd": 5000,
+            "spot_value_usd": 5000,
+            "num_assets": 1,
+            "positions": []
+        })
         engine.memory_engine = Mock()
         engine.memory_engine.generate_context = Mock(return_value={
             "win_rate": 65.0,
@@ -598,11 +619,17 @@ class TestEdgeCases:
         """Test analyze_asset_async when balance is empty."""
         engine = engine_with_mocks
 
-        # Mock empty balance
-        engine.data_provider.get_market_data = Mock(return_value={
+        # Mock empty portfolio balance
+        engine.data_provider.get_comprehensive_market_data = AsyncMock(return_value={
             "current_price": 50000
         })
-        engine.trading_platform.get_balance = Mock(return_value={})
+        engine.get_portfolio_breakdown = Mock(return_value={
+            "total_value_usd": 0,
+            "futures_value_usd": 0,
+            "spot_value_usd": 0,
+            "num_assets": 0,
+            "positions": []
+        })
         engine.decision_engine.generate_decision = AsyncMock(return_value={
             "action": "HOLD",
             "confidence": 30,

@@ -34,8 +34,8 @@ class LocalLLMProvider:
     """
 
     # Model selection based on research
-    DEFAULT_MODEL = "llama3.2:3b-instruct-fp16"
-    FALLBACK_MODEL = "llama3.2:1b-instruct-fp16"  # Ultra-compact fallback
+    DEFAULT_MODEL = "llama3.2:3b-instruct-q4_0"
+    FALLBACK_MODEL = "llama3.2:1b-instruct-q4_0"  # Ultra-compact fallback
     # Enforce at least one secondary model for robustness
     SECONDARY_MODEL = "deepseek-r1:8b"
 
@@ -92,6 +92,9 @@ class LocalLLMProvider:
         # Verify Ollama installation (auto-install if needed)
         if not self._check_ollama_installed():
             raise RuntimeError("Failed to install or verify Ollama")
+
+        # Check GPU capability and warn about model compatibility
+        self._check_gpu_compatibility()
 
         # Ensure model is available (auto-download if needed)
         self._ensure_model_available()
@@ -161,6 +164,52 @@ class LocalLLMProvider:
                 "Make sure Ollama is running and OLLAMA_HOST environment variable is set correctly"
             )
             return False
+
+    def _check_gpu_compatibility(self) -> None:
+        """
+        Check GPU compute capability and warn about model compatibility.
+
+        CUDA fp16 models require compute capability ≥ 5.3 for stable operation.
+        Quantized models (q4_0, q8_0) are more compatible across GPU generations.
+
+        Logs warnings if fp16 models are used with potentially incompatible GPUs.
+        """
+        try:
+            # Check if model uses fp16
+            if 'fp16' in self.model_name.lower():
+                logger.warning(
+                    f"Using fp16 model: {self.model_name}. "
+                    "This requires CUDA compute capability ≥ 5.3 and may cause segfaults on older GPUs."
+                )
+
+                # Try to detect GPU compute capability (best effort)
+                try:
+                    result = subprocess.run(
+                        ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        compute_caps = [float(cap) for cap in result.stdout.strip().split('\n')]
+                        min_compute_cap = min(compute_caps)
+
+                        if min_compute_cap < 5.3:
+                            logger.error(
+                                f"GPU compute capability {min_compute_cap} is below minimum 5.3 for fp16 models. "
+                                f"Segmentation faults likely. Recommend using quantized model: "
+                                f"llama3.2:3b-instruct-q4_0"
+                            )
+                        else:
+                            logger.info(f"GPU compute capability {min_compute_cap} is sufficient for fp16 models")
+                except FileNotFoundError:
+                    logger.info("nvidia-smi not found, skipping GPU capability check (CPU mode or non-NVIDIA GPU)")
+                except Exception as e:
+                    logger.debug(f"Could not detect GPU compute capability: {e}")
+            else:
+                logger.info(f"Using quantized model: {self.model_name} (GPU-compatible)")
+        except Exception as e:
+            logger.debug(f"GPU compatibility check failed (non-critical): {e}")
 
     def _install_ollama(self) -> bool:
         """
@@ -233,16 +282,13 @@ class LocalLLMProvider:
             else:
                 raise RuntimeError(f"Unsupported platform: {system}")
 
-            # Verify installation
-            verify_result = subprocess.run(
-                ["ollama", "--version"], capture_output=True, text=True, timeout=5
-            )
-
-            if verify_result.returncode == 0:
-                logger.info("Installation verified: %s" % verify_result.stdout.strip())
+            # Verify installation by checking if Ollama service responds
+            try:
+                self.ollama_client.list()
+                logger.info("Installation verified: Ollama service is responding")
                 return True
-            else:
-                raise RuntimeError("Ollama installed but verification failed")
+            except Exception as e:
+                raise RuntimeError(f"Ollama installed but service verification failed: {e}")
 
         except subprocess.TimeoutExpired:
             raise RuntimeError("Ollama installation timed out (>5 minutes)")
@@ -346,18 +392,8 @@ class LocalLLMProvider:
         try:
             logger.info(f"Deleting model {model_name}...")
 
-            result = subprocess.run(
-                ["ollama", "rm", model_name],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-
-            if result.returncode != 0:
-                error_msg = result.stderr or result.stdout
-                logger.warning(f"Failed to delete model {model_name}: {error_msg}")
-                return False
+            # Use HTTP API to delete the model
+            self.ollama_client.delete(model_name)
 
             # Verify deletion
             if self._is_model_available(model_name):
@@ -369,9 +405,6 @@ class LocalLLMProvider:
             )
             return True
 
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Model {model_name} deletion timeout")
-            return False
         except Exception as e:
             logger.warning(f"Failed to delete model {model_name}: {e}")
             return False
@@ -382,30 +415,13 @@ class LocalLLMProvider:
 
         This is called after each query to allow sequential loading
         of different models without memory conflicts.
+
+        Note: In Docker/HTTP mode, Ollama manages model memory automatically.
+        This is a no-op when using the HTTP API.
         """
-        try:
-            logger.debug(f"Unloading model {self.model_name} from memory")
-
-            result = subprocess.run(
-                ["ollama", "stop", self.model_name],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-
-            if result.returncode == 0:
-                logger.debug(f"Successfully unloaded model {self.model_name}")
-            else:
-                logger.debug(
-                    f"Model {self.model_name} may not have been loaded: "
-                    f"{result.stderr.strip()}"
-                )
-
-        except subprocess.TimeoutExpired:
-            logger.warning(f"Timeout unloading model {self.model_name}")
-        except Exception as e:
-            logger.warning(f"Error unloading model {self.model_name}: {e}")
+        # Ollama HTTP API doesn't expose a stop/unload endpoint
+        # The Ollama server manages model memory automatically
+        logger.debug(f"Model {self.model_name} memory managed by Ollama (no explicit unload needed)")
 
     def _is_model_available(self, model_name: str) -> bool:
         """Check if model is available locally via HTTP API."""
@@ -445,25 +461,11 @@ class LocalLLMProvider:
             bool: True if connection is healthy, False otherwise
         """
         try:
-            # Simple health check - verify Ollama is responsive
-            result = subprocess.run(
-                ["ollama", "list"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-            )
+            # Simple health check - verify Ollama is responsive via HTTP API
+            self.ollama_client.list()
+            logger.debug("LLM connection health check: OK")
+            return True
 
-            if result.returncode == 0:
-                logger.debug("LLM connection health check: OK")
-                return True
-            else:
-                logger.warning(f"LLM connection unhealthy: {result.stderr}")
-                return False
-
-        except subprocess.TimeoutExpired:
-            logger.warning("LLM connection health check timeout")
-            return False
         except Exception as e:
             logger.warning(f"LLM connection health check failed: {e}")
             return False
@@ -525,16 +527,41 @@ class LocalLLMProvider:
                     f"{prompt}"
                 )
 
-                # Call Ollama via HTTP API
-                response = self.ollama_client.generate(
-                    model=self.model_name,
-                    prompt=full_prompt,
-                    format="json",
-                    options={
-                        "temperature": 0.7,
-                        "top_p": 0.9,
-                    },
-                )
+                # Call Ollama via HTTP API with timeout protection
+                import asyncio
+                from concurrent.futures import ThreadPoolExecutor
+
+                # Get LLM timeout from config (default 120s for CPU-based Ollama)
+                # CPU inference can take 45-120s for complex prompts
+                llm_timeout = self.config.get("api_timeouts", {}).get("llm_query", 120)
+
+                try:
+                    # Run synchronous Ollama call with timeout
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(
+                            self.ollama_client.generate,
+                            model=self.model_name,
+                            prompt=full_prompt,
+                            format="json",
+                            options={
+                                "temperature": 0.7,
+                                "top_p": 0.9,
+                            },
+                        )
+                        try:
+                            response = future.result(timeout=llm_timeout)
+                        except Exception as e:
+                            future.cancel()
+                            raise
+                except TimeoutError:
+                    logger.error(f"Local LLM query timed out after {llm_timeout}s on attempt {attempt + 1}")
+                    if attempt == max_retries - 1:
+                        return build_fallback_decision(
+                            f"Local LLM timed out after {llm_timeout}s, using fallback decision."
+                        )
+                    import time
+                    time.sleep(2 * (attempt + 1))
+                    continue
 
                 response_text = response.get("response", "").strip()
 
@@ -596,22 +623,6 @@ class LocalLLMProvider:
                 self._unload_model()
                 return self._parse_text_response(response_text)
 
-            except subprocess.TimeoutExpired:
-                logger.error(
-                    f"Local LLM inference timeout (>90s) on attempt {attempt + 1}"
-                )
-
-                # If this is the last attempt, return fallback
-                if attempt == max_retries - 1:
-                    return build_fallback_decision(
-                        "Local LLM timeout after multiple attempts, using fallback decision."
-                    )
-
-                # Retry with a brief delay
-                import time
-
-                time.sleep(2 * (attempt + 1))
-
             except Exception as e:
                 logger.error(f"Local LLM error on attempt {attempt + 1}: {e}")
 
@@ -666,25 +677,16 @@ class LocalLLMProvider:
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the loaded model."""
         try:
-            result = subprocess.run(
-                ["ollama", "show", self.model_name],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
+            # Use HTTP API to get model information
+            result = self.ollama_client.show(self.model_name)
 
-            if result.returncode == 0:
-                return {
-                    "model_name": self.model_name,
-                    "status": "available",
-                    "info": result.stdout,
-                }
+            # Convert result to string format for consistency
+            info_str = str(result) if result else "No information available"
 
             return {
                 "model_name": self.model_name,
-                "status": "error",
-                "info": result.stderr,
+                "status": "available",
+                "info": info_str,
             }
 
         except Exception as e:

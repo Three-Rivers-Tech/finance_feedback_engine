@@ -343,6 +343,8 @@ def mock_trading_platform():
     }
     mock.get_portfolio_breakdown.return_value = {
         "total_value_usd": 10000.0,
+        "futures_value_usd": 5000.0,
+        "spot_value_usd": 5000.0,
         "positions": [],
     }
     mock.get_account_info.return_value = {"max_leverage": 10.0}
