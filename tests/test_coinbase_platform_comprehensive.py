@@ -595,7 +595,9 @@ class TestExecuteTrade:
 
     def test_execute_trade_buy_success(self, platform, mock_client):
         """Test successful BUY trade execution."""
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-123",
             "status": "FILLED",
@@ -629,7 +631,9 @@ class TestExecuteTrade:
         product.price = "50000.0"
         mock_client.get_product.return_value = product
 
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-456",
             "status": "FILLED",
@@ -720,7 +724,9 @@ class TestExecuteTrade:
         product.price = "40000.0"  # Current BTC price
         mock_client.get_product.return_value = product
 
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-sell-123",
             "status": "FILLED"
@@ -790,7 +796,9 @@ class TestExecuteTrade:
 
     def test_execute_trade_formats_product_id(self, platform, mock_client):
         """Test that product ID is formatted correctly."""
-        order_result = {"success": True, "order_id": "order-format"}
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {"success": True, "order_id": "order-format"}
         mock_client.market_order_buy.return_value = order_result
         mock_client.list_orders.return_value = []
 
@@ -1367,8 +1375,10 @@ class TestTradeExecutionEdgeCases:
         """Test that unique client_order_id is generated for each trade."""
         mock_client.list_orders.return_value = []
         order_response = MagicMock()
-        order_response.order_id = "order-123"
-        order_response.success = True
+        order_response.to_dict.return_value = {
+            "order_id": "order-123",
+            "success": True
+        }
         mock_client.market_order_buy.return_value = order_response
         platform._client = mock_client
 
@@ -1385,7 +1395,7 @@ class TestTradeExecutionEdgeCases:
         # Verify client_order_id was generated
         call_args = mock_client.market_order_buy.call_args
         assert "client_order_id" in call_args[1]
-        assert call_args[1]["client_order_id"].startswith("dec-client-id")
+        assert call_args[1]["client_order_id"].startswith("ffe-dec-client-id")
 
 
 # ============================================================================
