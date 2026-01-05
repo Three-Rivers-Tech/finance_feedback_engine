@@ -1,15 +1,10 @@
-import { usePolling } from './usePolling';
-import apiClient from '../client';
-import type { PortfolioStatus } from '../types';
-import { POLL_INTERVALS } from '../../utils/constants';
+/**
+ * @deprecated Use usePortfolioRealTime from useRealTime.ts instead
+ * This maintains backward compatibility but uses WebSocket-backed real-time updates
+ */
+
+import { usePortfolioRealTime } from './useRealTime';
 
 export function usePortfolio(enabled: boolean = true) {
-  return usePolling<PortfolioStatus>(
-    async () => {
-      const response = await apiClient.get('/api/v1/status');
-      return response.data;
-    },
-    POLL_INTERVALS.MEDIUM,
-    enabled
-  );
+  return usePortfolioRealTime(enabled);
 }

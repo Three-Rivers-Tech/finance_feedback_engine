@@ -78,7 +78,7 @@ class HistoricalDataProvider:
         Fetch real historical OHLC data via Alpha Vantage provider.
 
         Returns a DataFrame indexed by timestamp with columns: open, high, low, close, volume (if available).
-        Includes simple file-based caching to reduce repeated API calls.
+        Includes simple file-based caching with TTL to reduce repeated API calls.
         """
         # Build cache key (include timeframe in cache key)
         cache_file = None
@@ -90,15 +90,37 @@ class HistoricalDataProvider:
                 / f"{asset_pair}_{timeframe}_{start_str}_{end_str}.parquet"
             )
             if cache_file.exists():
-                df = pd.read_parquet(cache_file)
-                # Ensure datetime index
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    df.index = pd.to_datetime(df.index, utc=True)
-                df.index.name = "timestamp"
-                logger.info(
-                    f"Loaded historical cache for {asset_pair} (timeframe: {timeframe}) {start_str}->{end_str}"
-                )
-                return df
+                # Check cache freshness based on file modification time
+                import time
+                cache_age_seconds = time.time() - cache_file.stat().st_mtime
+                
+                # Define TTL based on timeframe and API rate limits
+                # With 3 assets × 6 timeframes = 18 API calls at 5/min = ~4 minutes to refresh all
+                # Intraday data: 10 minutes TTL (600 seconds) - gives buffer for rate limiting
+                # Daily data: 24 hours (86400 seconds) for longer-term analysis
+                if timeframe in ["1m", "5m", "15m", "30m", "1h"]:
+                    ttl_seconds = 600  # 10 minutes for intraday
+                else:
+                    ttl_seconds = 86400  # 24 hours for daily+
+                
+                if cache_age_seconds < ttl_seconds:
+                    df = pd.read_parquet(cache_file)
+                    # Ensure datetime index
+                    if not isinstance(df.index, pd.DatetimeIndex):
+                        df.index = pd.to_datetime(df.index, utc=True)
+                    df.index.name = "timestamp"
+                    cache_age_minutes = cache_age_seconds / 60
+                    logger.info(
+                        f"Loaded historical cache for {asset_pair} (timeframe: {timeframe}) {start_str}->{end_str} "
+                        f"(age: {cache_age_minutes:.1f} minutes, TTL: {ttl_seconds/60:.0f} minutes)"
+                    )
+                    return df
+                else:
+                    cache_age_hours = cache_age_seconds / 3600
+                    logger.info(
+                        f"Cache expired for {asset_pair} (timeframe: {timeframe}): "
+                        f"age {cache_age_hours:.1f} hours > TTL {ttl_seconds/3600:.1f} hours. Fetching fresh data..."
+                    )
         except Exception as e:
             logger.debug(f"Historical cache load skipped: {e}")
 
@@ -106,25 +128,33 @@ class HistoricalDataProvider:
         provider = AlphaVantageProvider(api_key=self.api_key)
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = end_date.strftime("%Y-%m-%d")
+        logger.info(
+            f"📡 FETCHING: {asset_pair} ({timeframe}) from {start_str} to {end_str}"
+        )
 
         candles: list = []
         try:
             import asyncio
+            import concurrent.futures
 
+            coro = provider.get_historical_data(
+                asset_pair, start=start_str, end=end_str, timeframe=timeframe
+            )
+            
             try:
-                asyncio.get_running_loop()
-                # If already in an event loop, we cannot run; log and return empty
-                logger.warning(
-                    "Async historical fetch in running loop is unsupported in this context"
-                )
-                candles = []
+                # Check if we're in an event loop
+                loop = asyncio.get_running_loop()
+                # We're in an event loop - run in a separate thread to avoid blocking
+                logger.debug(f"Fetching {asset_pair} ({timeframe}) data via thread pool")
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, coro)
+                    candles = future.result()
             except RuntimeError:
-                coro = provider.get_historical_data(
-                    asset_pair, start=start_str, end=end_str, timeframe=timeframe
-                )
+                # No event loop running - create one
+                logger.debug(f"Fetching {asset_pair} ({timeframe}) data in new event loop")
                 candles = asyncio.run(coro)
         except Exception as e:
-            logger.error(f"Error fetching historical data: {e}")
+            logger.error(f"Error fetching historical data: {e}", exc_info=True)
             candles = []
 
         if not candles:
@@ -132,6 +162,11 @@ class HistoricalDataProvider:
                 f"No historical candles fetched for {asset_pair} (timeframe: {timeframe}) between {start_str} and {end_str}"
             )
             return pd.DataFrame()
+        
+        logger.info(
+            f"✅ RECEIVED: {len(candles)} candles for {asset_pair} ({timeframe}). "
+            f"First: {candles[0].get('date', 'N/A')}, Last: {candles[-1].get('date', 'N/A')}"
+        )
 
         # Convert list of dicts to DataFrame; AlphaVantage returns keys: date, open, high, low, close
         df = pd.DataFrame(candles)

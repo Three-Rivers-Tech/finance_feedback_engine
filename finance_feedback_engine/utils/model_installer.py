@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -375,6 +376,15 @@ class ModelInstaller:
 
         if not required_models:
             logger.info("No Ollama models required")
+            return True
+
+        # Skip local installation when a remote Ollama host is configured
+        ollama_host = os.environ.get("OLLAMA_HOST", "").strip()
+        if ollama_host:
+            logger.info(
+                "OLLAMA_HOST=%s set; assuming remote Ollama and skipping local install check",
+                ollama_host,
+            )
             return True
 
         # Check Ollama installation

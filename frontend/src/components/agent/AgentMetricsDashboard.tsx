@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import type { AgentStatus } from '../../api/types';
+import type { AgentStatus, Position, Decision } from '../../api/types';
 import type { AgentStreamEvent } from '../../api/hooks/useAgentStream';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
 import { usePositions } from '../../api/hooks/usePositions';
 import { useDecisions } from '../../api/hooks/useDecisions';
-import apiClient, { handleApiError } from '../../api/client';
+import { mapMutationError, useClosePosition } from '../../api/mutations/useAgentControl';
 
 interface Props {
   status: AgentStatus | null | undefined;
@@ -15,11 +15,12 @@ interface Props {
 
 export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConnected }) => {
   const { data: positionsData, refetch: refetchPositions } = usePositions();
-  const positions = positionsData ?? [];
+  const positions: Position[] = positionsData ?? [];
   const { data: decisionsData } = useDecisions(5);
-  const decisions = decisionsData ?? [];
+  const decisions: Decision[] = decisionsData ?? [];
   const [closeError, setCloseError] = useState<string | null>(null);
   const [closingIds, setClosingIds] = useState<Set<string>>(new Set());
+  const closePosition = useClosePosition();
 
   // Helper to normalize confidence values to 0-100 range
   const normalizeConfidence = (value: number | undefined): number | null => {
@@ -61,7 +62,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
   }, [events]);
 
   const totalUnrealized = useMemo(
-    () => positions.reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0),
+    () => (Array.isArray(positions) ? positions : []).reduce((acc, pos) => acc + (pos.unrealized_pnl || 0), 0),
     [positions]
   );
 
@@ -69,10 +70,10 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
     setCloseError(null);
     setClosingIds((prev) => new Set(prev).add(positionId));
     try {
-      await apiClient.post(`/api/v1/bot/positions/${positionId}/close`);
+      await closePosition.mutateAsync(positionId);
       await refetchPositions();
     } catch (err) {
-      setCloseError(handleApiError(err));
+      setCloseError(mapMutationError(err));
     } finally {
       setClosingIds((prev) => {
         const next = new Set(prev);
@@ -152,7 +153,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
             {positions.length === 0 && (
               <p className="text-xs font-mono text-text-muted">No active positions</p>
             )}
-            {positions.map((pos) => (
+            {Array.isArray(positions) && positions.map((pos) => (
               <div
                 key={pos.id}
                 className="flex items-center justify-between rounded border border-border px-3 py-2"
@@ -205,7 +206,7 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
           {decisions.length === 0 && (
             <p className="text-xs font-mono text-text-muted">No recent decisions</p>
           )}
-          {decisions.map((decision) => (
+          {Array.isArray(decisions) && decisions.map((decision) => (
             <div
               key={decision.decision_id}
               className="flex items-center justify-between rounded border border-border px-3 py-2"

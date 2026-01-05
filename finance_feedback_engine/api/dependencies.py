@@ -60,6 +60,109 @@ def get_auth_manager() -> AuthManager:
     return auth_manager
 
 
+def get_auth_manager_instance() -> AuthManager:
+    """
+    Get the shared AuthManager instance without dependency injection.
+    Used for WebSocket endpoints where dependency injection doesn't work properly.
+
+    Returns:
+        AuthManager: The authentication manager instance
+
+    Raises:
+        RuntimeError: If auth manager is not initialized
+    """
+    auth_manager = app_state.get("auth_manager")
+    if auth_manager is None:
+        raise RuntimeError("Authentication service not initialized")
+    return auth_manager
+
+
+def verify_api_key_or_dev(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    request: Request = None,
+    auth_manager: AuthManager = Depends(get_auth_manager),
+) -> str:
+    """
+    Verify API key from Authorization header with secure validation.
+
+    In development mode, allows requests without API key.
+    In production, strictly enforces API key validation.
+
+    Args:
+        credentials: HTTP authorization credentials (Bearer token)
+        request: FastAPI request object for IP extraction
+        auth_manager: Injected authentication manager
+
+    Returns:
+        str: The API key name if valid, or "dev-user" in development
+
+    Raises:
+        HTTPException: If API key is invalid in production
+    """
+    import os
+
+    # In development, allow unauthenticated access
+    dev_mode = os.getenv("ENVIRONMENT", "development").lower() == "development"
+
+    # HTTPBearer with auto_error=False returns None when credentials missing
+    if credentials is None or not credentials.credentials:
+        if dev_mode:
+            logger.debug("⚠️  Development mode: allowing unauthenticated request")
+            return "dev-user"
+
+        logger.warning("❌ Authentication attempt with missing credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required in Authorization header (Bearer <key>)",
+        )
+
+    # Extract client IP for logging
+    client_ip = None
+    if request:
+        # Try X-Forwarded-For first (for proxies)
+        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        # Fall back to direct client
+        if not client_ip:
+            client_ip = request.client.host if request.client else None
+
+    # Extract user agent for logging
+    user_agent = request.headers.get("user-agent") if request else None
+
+    api_key = credentials.credentials
+
+    try:
+        # Validate API key with rate limiting and logging
+        is_valid, key_name, metadata = auth_manager.validate_api_key(
+            api_key=api_key, ip_address=client_ip, user_agent=user_agent
+        )
+
+        if not is_valid:
+            logger.warning(
+                f"❌ Invalid API key attempt from {client_ip} "
+                f"(rate limit: {metadata.get('remaining_requests', 'N/A')} remaining)"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or inactive API key",
+            )
+
+        logger.debug(
+            f"✅ Authenticated as '{key_name}' from {client_ip} "
+            f"(rate limit: {metadata.get('remaining_requests', 'N/A')} remaining)"
+        )
+
+        # Return key name for downstream use
+        return key_name
+
+    except ValueError as e:
+        # Rate limiting error
+        logger.warning(f"⚠️  Rate limit triggered from {client_ip}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many authentication attempts. Please try again later.",
+        )
+
+
 def verify_api_key(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     request: Request = None,

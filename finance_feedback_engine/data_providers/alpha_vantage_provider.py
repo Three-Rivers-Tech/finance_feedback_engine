@@ -223,9 +223,9 @@ class AlphaVantageProvider:
                 await self.rate_limiter.acquire()
                 rate_limiter_acquired = True
                 rate_limiter_release = self.rate_limiter.release
-            elif hasattr(self.rate_limiter, "wait"):
-                # Wait-based interface
-                await self.rate_limiter.wait()
+            elif hasattr(self.rate_limiter, "wait_for_token_async"):
+                # Wait-based interface (RateLimiter)
+                await self.rate_limiter.wait_for_token_async()
             elif callable(self.rate_limiter):
                 # Direct callable - check if it returns awaitable
                 result = self.rate_limiter()
@@ -536,6 +536,14 @@ class AlphaVantageProvider:
                             break
 
             if not time_series:
+                # Log the Information message if present (often contains rate limit or error details)
+                if "Information" in data:
+                    logger.warning(
+                        "Alpha Vantage response for %s (timeframe: %s): %s",
+                        asset_pair,
+                        timeframe,
+                        data["Information"],
+                    )
                 logger.warning(
                     "Historical data unexpected format for %s (timeframe: %s, expected key: %s, available keys: %s)",
                     asset_pair,
@@ -554,12 +562,31 @@ class AlphaVantageProvider:
                 # Intraday format: YYYY-MM-DD HH:MM:SS
                 date_format = "%Y-%m-%d %H:%M:%S"
 
+            # Staleness validation thresholds (minutes)
+            staleness_thresholds = {
+                "1m": 15,   # 1-minute data must be <15min old
+                "5m": 15,   # 5-minute data must be <15min old
+                "15m": 30,  # 15-minute data must be <30min old
+                "30m": 60,  # 30-minute data must be <60min old
+                "1h": 120,  # 1-hour data must be <120min old
+                "1d": None  # Daily data doesn't need real-time staleness checks
+            }
+
+            staleness_threshold = staleness_thresholds.get(timeframe)
+            latest_timestamp = None
+
             for timestamp_str, candle_data in time_series.items():
                 try:
                     if timeframe == "1d":
                         candle_dt = datetime.strptime(timestamp_str, date_format).date()
                     else:
-                        candle_dt = datetime.strptime(timestamp_str, date_format).date()
+                        # Parse full timestamp for intraday data
+                        candle_timestamp = datetime.strptime(timestamp_str, date_format)
+                        candle_dt = candle_timestamp.date()
+
+                        # Track latest timestamp for staleness check
+                        if latest_timestamp is None or candle_timestamp > latest_timestamp:
+                            latest_timestamp = candle_timestamp
 
                     # Filter by date range
                     if candle_dt < start_dt or candle_dt > end_dt:
@@ -600,6 +627,49 @@ class AlphaVantageProvider:
 
             # Sort ascending by date
             candles.sort(key=lambda x: x["date"])
+
+            # Validate data staleness for intraday timeframes
+            if staleness_threshold and latest_timestamp:
+                now = datetime.utcnow()
+                staleness_minutes = (now - latest_timestamp).total_seconds() / 60
+
+                # Record staleness metric
+                if hasattr(self, '_meter'):
+                    try:
+                        staleness_gauge = self._meter.create_gauge(
+                            name="data_staleness_seconds",
+                            description="Age of most recent market data in seconds",
+                            unit="s"
+                        )
+                        staleness_gauge.set(staleness_minutes * 60, {
+                            "asset_pair": asset_pair,
+                            "timeframe": timeframe
+                        })
+                    except Exception as metric_error:
+                        logger.debug(f"Failed to record staleness metric: {metric_error}")
+
+                if staleness_minutes > staleness_threshold:
+                    logger.error(
+                        "Stale market data for %s (timeframe: %s): Latest timestamp %s is %.1f minutes old "
+                        "(threshold: %d minutes). Rejecting data.",
+                        asset_pair,
+                        timeframe,
+                        latest_timestamp,
+                        staleness_minutes,
+                        staleness_threshold
+                    )
+                    raise ValueError(
+                        f"Market data for {asset_pair} is {staleness_minutes:.1f} minutes old "
+                        f"(threshold: {staleness_threshold} min). Data too stale for {timeframe} trading."
+                    )
+                else:
+                    logger.info(
+                        "Data freshness OK for %s (timeframe: %s): %.1f minutes old (threshold: %d min)",
+                        asset_pair,
+                        timeframe,
+                        staleness_minutes,
+                        staleness_threshold
+                    )
 
             if not candles:
                 logger.warning(
@@ -1393,7 +1463,7 @@ class AlphaVantageProvider:
         return results
 
     async def _get_crypto_data(
-        self, asset_pair: str, force_refresh: bool = False
+        self, asset_pair: str, force_refresh: bool = False, timeframe: str = "60min"
     ) -> Dict[str, Any]:
         """
         Fetch cryptocurrency data with retry and circuit breaker.
@@ -1401,6 +1471,7 @@ class AlphaVantageProvider:
         Args:
             asset_pair: Crypto pair (e.g., 'BTCUSD')
             force_refresh: If True, bypass cache and force fresh API call
+            timeframe: Data interval ('60min' for hourly, 'daily' for daily)
 
         Returns:
             Dictionary containing crypto market data
@@ -1409,7 +1480,7 @@ class AlphaVantageProvider:
             ValueError: If data is stale and cannot be refreshed
         """
         # Check cache first (5 min TTL)
-        cache_key = f"crypto_{asset_pair}_daily"
+        cache_key = f"crypto_{asset_pair}_{timeframe}"
         if not force_refresh:
             cached = self._get_from_cache(cache_key, ttl_seconds=300)
             if cached:
@@ -1424,12 +1495,27 @@ class AlphaVantageProvider:
             symbol = asset_pair[:3]
             market = asset_pair[3:]
 
-        params = {
-            "function": "DIGITAL_CURRENCY_DAILY",
-            "symbol": symbol,
-            "market": market,
-            "apikey": self.api_key,
-        }
+        # Choose API function based on timeframe
+        if timeframe == "daily":
+            params = {
+                "function": "DIGITAL_CURRENCY_DAILY",
+                "symbol": symbol,
+                "market": market,
+                "apikey": self.api_key,
+            }
+            series_key = "Time Series (Digital Currency Daily)"
+            date_format = "%Y-%m-%d"
+        else:
+            # Intraday (default to 60min for real-time trading)
+            params = {
+                "function": "CRYPTO_INTRADAY",
+                "symbol": symbol,
+                "market": market,
+                "interval": timeframe,
+                "apikey": self.api_key,
+            }
+            series_key = f"Time Series Crypto ({timeframe})"
+            date_format = "%Y-%m-%d %H:%M:%S"
 
         try:
             # Use circuit breaker for API call
@@ -1440,10 +1526,14 @@ class AlphaVantageProvider:
 
             data = await self.circuit_breaker.call(api_call)
 
-            if "Time Series (Digital Currency Daily)" in data:
-                time_series = data["Time Series (Digital Currency Daily)"]
+            if series_key in data:
+                time_series = data[series_key]
                 latest_date = list(time_series.keys())[0]
                 latest_data = time_series[latest_date]
+                logger.info(
+                    f"📅 CRYPTO DATA ({timeframe}): {asset_pair} latest_date={latest_date}, "
+                    f"num_candles={len(time_series)}"
+                )
 
                 # Try different field name formats (API response varies)
                 open_price = float(
@@ -1468,22 +1558,30 @@ class AlphaVantageProvider:
                     from ..utils.market_schedule import MarketSchedule
                     from ..utils.validation import validate_data_freshness
 
-                    # Parse the date and create an ISO timestamp at market close (assume 23:59 UTC)
-                    data_date = datetime.strptime(latest_date, "%Y-%m-%d")
-                    data_timestamp = (
-                        data_date.replace(hour=23, minute=59, second=0).isoformat()
-                        + "Z"
-                    )
+                    # Parse the date and create an ISO timestamp
+                    data_date = datetime.strptime(latest_date, date_format)
+                    if timeframe == "daily":
+                        # Daily: use end of day
+                        data_timestamp = (
+                            data_date.replace(hour=23, minute=59, second=0).isoformat()
+                            + "Z"
+                        )
+                    else:
+                        # Intraday: use exact timestamp from API
+                        data_timestamp = data_date.isoformat() + "Z"
 
                     # Get market status for context-aware validation
                     market_status = MarketSchedule.get_market_status(
                         asset_pair=asset_pair, asset_type="crypto", now_utc=None
                     )
 
+                    # Determine validation timeframe
+                    validation_timeframe = "daily" if timeframe == "daily" else "intraday"
+
                     is_fresh, age_str, freshness_msg = validate_data_freshness(
                         data_timestamp,
                         asset_type="crypto",
-                        timeframe="daily",
+                        timeframe=validation_timeframe,
                         market_status=market_status,
                     )
 

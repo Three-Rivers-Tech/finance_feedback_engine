@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Decision } from '../../api/types';
 import { useDecisions } from '../../api/hooks/useDecisions';
 import { Card } from '../common/Card';
 import { Spinner } from '../common/Spinner';
@@ -6,7 +7,8 @@ import { Badge } from '../common/Badge';
 import { formatRelativeTime } from '../../services/formatters';
 
 export const RecentDecisions: React.FC = () => {
-  const { data: decisions, isLoading } = useDecisions(10);
+  const { data: decisionsData, isLoading } = useDecisions(10);
+  const decisions: Decision[] | undefined = decisionsData;
 
   if (isLoading) {
     return (
@@ -36,7 +38,7 @@ export const RecentDecisions: React.FC = () => {
         Recent AI Decisions
       </h2>
       <div className="space-y-4">
-        {decisions.map((decision, index) => (
+        {Array.isArray(decisions) && decisions.map((decision, index) => (
           <div
             key={decision.decision_id || `decision-${index}`}
             className="border-l-3 border-border-primary pl-4 hover:border-accent-cyan transition-colors"

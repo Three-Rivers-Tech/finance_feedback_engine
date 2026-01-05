@@ -80,7 +80,7 @@ active_trades_total = Gauge(
 # Agent state gauge
 agent_state = Gauge(
     "ffe_agent_state",
-    "Current OODA loop state (0=IDLE, 1=LEARNING, 2=PERCEPTION, 3=REASONING, 4=RISK_CHECK, 5=EXECUTION)",
+    "Current OODA loop state (0=IDLE, 1=RECOVERING, 2=LEARNING, 3=PERCEPTION, 4=REASONING, 5=RISK_CHECK, 6=EXECUTION)",
     [],
 )
 

@@ -146,7 +146,7 @@ class TimeSeriesDataStore:
             timeframe: Timeframe (e.g., '1h', '1d')
 
         Returns:
-            DataFrame if found, None otherwise
+            DataFrame if found and fresh, None otherwise
         """
         try:
             filepath = self._get_dataframe_filepath(
@@ -156,6 +156,27 @@ class TimeSeriesDataStore:
             if not filepath.exists():
                 return None
 
+            # Check cache freshness based on file modification time
+            import time
+            cache_age_seconds = time.time() - filepath.stat().st_mtime
+            
+            # Define TTL based on timeframe and API rate limits
+            # With 3 assets × 6 timeframes = 18 API calls at 5/min = ~4 minutes to refresh all
+            # Intraday data: 10 minutes TTL (600 seconds) - gives buffer for rate limiting
+            # Daily data: 24 hours (86400 seconds) for longer-term analysis
+            if timeframe in ["1m", "5m", "15m", "30m", "1h"]:
+                ttl_seconds = 600  # 10 minutes for intraday
+            else:
+                ttl_seconds = 86400  # 24 hours for daily+
+            
+            if cache_age_seconds >= ttl_seconds:
+                cache_age_hours = cache_age_seconds / 3600
+                logger.info(
+                    f"TimeSeriesDataStore cache expired for {asset_pair} (timeframe: {timeframe}): "
+                    f"age {cache_age_hours:.1f} hours > TTL {ttl_seconds/3600:.1f} hours"
+                )
+                return None
+
             df = pd.read_parquet(filepath)
 
             # Ensure datetime index
@@ -163,8 +184,10 @@ class TimeSeriesDataStore:
                 df.index = pd.to_datetime(df.index, utc=True)
             df.index.name = "timestamp"
 
+            cache_age_minutes = cache_age_seconds / 60
             logger.info(
-                f"✅ Loaded {len(df)} candles for {asset_pair} ({timeframe}) from cache"
+                f"✅ Loaded {len(df)} candles for {asset_pair} ({timeframe}) from TimeSeriesDataStore cache "
+                f"(age: {cache_age_minutes:.1f} minutes, TTL: {ttl_seconds/60:.0f} minutes)"
             )
             return df
 

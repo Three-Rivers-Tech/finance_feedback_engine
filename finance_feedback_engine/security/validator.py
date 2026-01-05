@@ -228,7 +228,7 @@ def validate_at_startup(config_path: Path, raise_on_error: bool = False) -> bool
 if __name__ == "__main__":
     # Example usage
     logging.basicConfig(level=logging.DEBUG)
-    config_path = Path("config/config.yaml")
+    config_path = Path(".env")
     is_valid, messages = SecurityValidator().validate_all(config_path)
     print(f"\nValidation Result: {'✅ PASS' if is_valid else '❌ FAIL'}")
     if messages:

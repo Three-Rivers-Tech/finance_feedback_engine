@@ -48,7 +48,7 @@ def start_interactive_session(main_cli):
     ctx.ensure_object(dict)
 
     # Set up config path like in main cli
-    config_path = "config/config.yaml"
+    config_path = ".env"
     local_path = Path("config/config.local.yaml")
     if local_path.exists():
         config_path = str(local_path)

@@ -44,7 +44,7 @@ def demo(mode: str, asset: str) -> None:
         config = ctx.obj.get("config")
     if not config:
         # Try to get config path from context, otherwise use default
-        config_path = "config/config.yaml"
+        config_path = ".env"
         if ctx is not None and isinstance(getattr(ctx, "obj", None), dict):
             ctx_path = ctx.obj.get("config_path")
             if ctx_path and ctx_path != "TIERED":

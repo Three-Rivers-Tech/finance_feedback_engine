@@ -36,6 +36,7 @@ class UnifiedDataProvider:
         coinbase_credentials: Optional[Dict[str, Any]] = None,
         oanda_credentials: Optional[Dict[str, Any]] = None,
         config: Optional[Dict[str, Any]] = None,
+        cache_ttl: int = 120,
     ):
         """
         Initialize unified data provider.
@@ -45,6 +46,7 @@ class UnifiedDataProvider:
             coinbase_credentials: Coinbase credentials (optional for public data)
             oanda_credentials: Oanda credentials
             config: Additional configuration
+            cache_ttl: Cache TTL in seconds (default 120s = 2 minutes for real-time price monitoring)
         """
         self.config = config or {}
 
@@ -88,9 +90,9 @@ class UnifiedDataProvider:
                 logger.warning(f"Failed to initialize Oanda data: {e}")
 
         # In-memory cache: {(asset_pair, granularity): (candles, provider_name)}
-        self._cache = TTLCache(maxsize=1000, ttl=300)  # 5 minutes TTL, thread-safe
+        self._cache = TTLCache(maxsize=1000, ttl=cache_ttl)  # Configurable TTL, thread-safe
 
-        logger.info("UnifiedDataProvider initialized with cascading fallback")
+        logger.info(f"UnifiedDataProvider initialized with cascading fallback (cache TTL: {cache_ttl}s)")
 
     def _is_crypto(self, asset_pair: str) -> bool:
         """Check if asset pair is crypto."""
@@ -236,17 +238,17 @@ class UnifiedDataProvider:
         else:
             # Cascading fallback based on asset type
             if is_crypto:
-                # Crypto: Alpha Vantage → Coinbase
-                if self.alpha_vantage:
-                    providers.append(("alpha_vantage", self.alpha_vantage))
+                # Crypto: Coinbase (exchange real-time data) → Alpha Vantage (fallback)
                 if self.coinbase:
                     providers.append(("coinbase", self.coinbase))
-            elif is_forex:
-                # Forex: Alpha Vantage → Oanda
                 if self.alpha_vantage:
                     providers.append(("alpha_vantage", self.alpha_vantage))
+            elif is_forex:
+                # Forex: Oanda (exchange real-time data) → Alpha Vantage (fallback)
                 if self.oanda:
                     providers.append(("oanda", self.oanda))
+                if self.alpha_vantage:
+                    providers.append(("alpha_vantage", self.alpha_vantage))
             else:
                 # Unknown: try all in order
                 if self.alpha_vantage:
@@ -257,6 +259,7 @@ class UnifiedDataProvider:
                     providers.append(("oanda", self.oanda))
 
         # Try each provider in order
+        provider_errors = {}
         last_error = None
         for provider_name, provider in providers:
             try:
@@ -267,9 +270,9 @@ class UnifiedDataProvider:
                     candles = provider.get_candles(asset_pair, granularity, limit)
                 else:
                     # Alpha Vantage doesn't have get_candles yet, skip for now
-                    logger.debug(
-                        f"Provider {provider_name} doesn't support get_candles"
-                    )
+                    error_msg = f"Provider {provider_name} doesn't support get_candles"
+                    logger.debug(error_msg)
+                    provider_errors[provider_name] = error_msg
                     continue
 
                 if candles:
@@ -280,17 +283,34 @@ class UnifiedDataProvider:
                     )
                     return candles, provider_name
 
-            except CircuitBreakerOpenError:
-                logger.warning(f"Circuit breaker open for {provider_name}")
-                last_error = f"{provider_name} circuit breaker open"
+            except CircuitBreakerOpenError as e:
+                import traceback
+                error_msg = f"{provider_name} circuit breaker open"
+                stack_trace = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+                logger.warning(f"{error_msg}\nFull stack trace:\n{stack_trace}")
+                provider_errors[provider_name] = f"{error_msg} (circuit breaker protection)"
+                last_error = error_msg
                 continue
             except Exception as e:
-                logger.warning(f"Provider {provider_name} failed: {e}")
-                last_error = str(e)
+                import traceback
+                error_msg = f"{provider_name} error: {type(e).__name__}: {str(e)}"
+                stack_trace = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
+                logger.error(
+                    f"{error_msg}\nFull stack trace:\n{stack_trace}",
+                    exc_info=False  # Already included full trace above
+                )
+                provider_errors[provider_name] = f"{error_msg} | Stack: {stack_trace[:200]}..."
+                last_error = error_msg
                 continue
 
-        # All providers failed
-        error_msg = f"All providers failed for {asset_pair}. Last error: {last_error}"
+        # All providers failed - log detailed error context
+        error_details = "\n".join(
+            [f"  - {name}: {error}" for name, error in provider_errors.items()]
+        )
+        error_msg = (
+            f"All providers failed for {asset_pair}. Provider errors:\n{error_details}\n"
+            f"Last error: {last_error if last_error else 'No error details available'}"
+        )
         logger.error(error_msg)
         raise ValueError(error_msg)
 
@@ -405,6 +425,61 @@ class UnifiedDataProvider:
             result["metadata"]["cache_hit_rate"] = cache_hits / len(timeframes)
 
         return result
+
+    def get_current_price(self, asset_pair: str) -> Optional[Dict[str, Any]]:
+        """
+        Get current real-time price from platform APIs (Coinbase/Oanda).
+
+        Fetches the latest 1-minute candle and extracts the close price.
+        This provides real-time data (1-2 minutes old) for monitoring and
+        comparison against potentially stale Alpha Vantage data.
+
+        Args:
+            asset_pair: Asset pair (e.g., 'BTCUSD', 'EURUSD')
+
+        Returns:
+            Dict with keys: asset_pair, price, timestamp, provider
+            Returns None if fetch fails or no data available
+        """
+        try:
+            # Fetch latest 1-minute candle
+            candles, provider = self.get_candles(asset_pair, granularity="1m")
+
+            if not candles or len(candles) == 0:
+                logger.debug(f"No 1m candles available for {asset_pair}")
+                return None
+
+            # Extract latest candle (most recent)
+            latest_candle = candles[-1]
+            close_price = latest_candle.get("close")
+            timestamp = latest_candle.get("date")
+
+            if close_price is None:
+                logger.warning(f"Latest candle for {asset_pair} missing close price")
+                return None
+
+            return {
+                "asset_pair": asset_pair,
+                "price": close_price,
+                "timestamp": timestamp,
+                "provider": provider,
+            }
+
+        except ValueError as e:
+            # All providers failed - this is the main provider failure case
+            logger.error(
+                f"Failed to fetch current price for {asset_pair}: {e}",
+                exc_info=False
+            )
+            return None
+        except Exception as e:
+            # Unexpected errors
+            logger.error(
+                f"Unexpected error fetching current price for {asset_pair}: "
+                f"{type(e).__name__}: {e}",
+                exc_info=True
+            )
+            return None
 
     def discover_available_pairs(
         self, exchanges: Optional[List[str]] = None

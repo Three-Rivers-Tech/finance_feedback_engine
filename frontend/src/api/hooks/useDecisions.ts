@@ -1,17 +1,10 @@
-import { usePolling } from './usePolling';
-import apiClient from '../client';
-import type { Decision } from '../types';
-import { POLL_INTERVALS } from '../../utils/constants';
+/**
+ * @deprecated Use useDecisionsRealTime from useRealTime.ts instead
+ * This maintains backward compatibility but uses WebSocket-backed real-time updates
+ */
+
+import { useDecisionsRealTime } from './useRealTime';
 
 export function useDecisions(limit: number = 10, enabled: boolean = true) {
-  return usePolling<Decision[]>(
-    async () => {
-      const response = await apiClient.get(`/v1/decisions?limit=${limit}`);
-      // API returns { decisions: Decision[], count: number }
-      // Extract the decisions array
-      return response.data.decisions || [];
-    },
-    POLL_INTERVALS.MEDIUM,
-    enabled
-  );
+  return useDecisionsRealTime(enabled, limit);
 }

@@ -160,7 +160,7 @@ def create_gauges(meter: metrics.Meter) -> dict:
     return {
         "ffe_agent_state": meter.create_observable_gauge(
             name="ffe_agent_state",
-            description="Current agent state (0=IDLE, 1=LEARNING, 2=PERCEPTION, 3=REASONING, 4=RISK_CHECK, 5=EXECUTION)",
+            description="Current agent state (0=IDLE, 1=RECOVERING, 2=LEARNING, 3=PERCEPTION, 4=REASONING, 5=RISK_CHECK, 6=EXECUTION)",
             unit="1",
         ),
         "ffe_active_positions": meter.create_observable_gauge(
@@ -212,4 +212,39 @@ def create_histograms(meter: metrics.Meter) -> dict:
             description="Latency of decision generation (from context creation to final decision)",
             unit="s",
         ),
+        "ffe_price_divergence_percent": meter.create_histogram(
+            name="ffe_price_divergence_percent",
+            description="Percentage divergence between Alpha Vantage and platform prices (Coinbase/Oanda)",
+            unit="%",
+        ),
     }
+
+
+# Global histogram instances (lazy init)
+_price_divergence_histogram = None
+
+
+def record_price_divergence(asset_pair: str, provider: str, divergence_pct: float) -> None:
+    """
+    Record price divergence metric between Alpha Vantage and platform data.
+
+    Args:
+        asset_pair: Asset pair (e.g., 'BTCUSD')
+        provider: Data provider name (e.g., 'coinbase', 'oanda')
+        divergence_pct: Percentage divergence (0-100)
+    """
+    global _price_divergence_histogram
+
+    if _price_divergence_histogram is None:
+        meter = get_meter(__name__)
+        histograms = create_histograms(meter)
+        _price_divergence_histogram = histograms.get("ffe_price_divergence_percent")
+
+    if _price_divergence_histogram:
+        try:
+            _price_divergence_histogram.record(
+                divergence_pct,
+                {"asset_pair": asset_pair, "provider": provider}
+            )
+        except Exception as e:
+            logger.debug(f"Failed to record price divergence metric: {e}")
