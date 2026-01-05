@@ -367,6 +367,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             - 'FUTURES_USD': total futures account balance
             - 'SPOT_USD': spot USD balance (if any)
             - 'SPOT_USDC': spot USDC balance (if any)
+
+        Raises:
+            TradingError: If credentials are invalid or API call fails
         """
         logger.info("Fetching account balances (futures + spot USD/USDC)")
 
@@ -389,20 +392,20 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     # Use futures_buying_power as it represents actual available collateral
                     # (includes spot USD/USDC that can be used for futures trading)
                     # total_usd_balance only shows active futures positions
-                    
+
                     # Helper function to safely get attribute from object or dict
                     def _get_attr_value(obj: Any, attr: str, default: Any = None) -> Any:
                         """Safely get attribute from object or dict."""
                         if isinstance(obj, dict):
                             return obj.get(attr, default)
                         return getattr(obj, attr, default)
-                    
+
                     # Helper function to convert value to float
                     def _to_float_value(v: Any) -> float:
                         if isinstance(v, dict):
                             return float(v.get("value", 0) or 0)
                         return float(getattr(v, "value", 0) or 0)
-                    
+
                     futures_buying_power = _get_attr_value(balance_summary, "futures_buying_power")
                     if futures_buying_power:
                         futures_usd = _to_float_value(futures_buying_power)
@@ -412,6 +415,15 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
             except Exception as e:
                 logger.warning("Could not fetch futures balance: %s", e)
+                # Check if this is an authentication error
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ['auth', 'permission', 'credential', 'api key', 'unauthorized', '401']):
+                    logger.error(
+                        "Authentication error fetching Coinbase futures balance. "
+                        "Check API credentials (api_key, api_secret, private_key_path) in config."
+                    )
+                    from ..exceptions import TradingError
+                    raise TradingError(f"Coinbase authentication failed: {e}")
 
             # Get spot balances via accounts endpoint (preferred in unit tests)
             try:
@@ -431,6 +443,25 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         logger.info("Spot %s: $%.2f", currency, spot_amount)
             except Exception as e:
                 logger.warning("Could not fetch spot balances: %s", e)
+                # Check if this is an authentication error
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ['auth', 'permission', 'credential', 'api key', 'unauthorized', '401']):
+                    logger.error(
+                        "Authentication error fetching Coinbase spot balance. "
+                        "Check API credentials (api_key, api_secret, private_key_path) in config."
+                    )
+                    from ..exceptions import TradingError
+                    raise TradingError(f"Coinbase authentication failed: {e}")
+
+            # Validate we got at least some balance
+            if not balances:
+                logger.warning(
+                    "No Coinbase balances returned. This may indicate:\n"
+                    "  1. Invalid/expired API credentials\n"
+                    "  2. Account has $0 balance\n"
+                    "  3. API permissions insufficient (needs 'wallet:accounts:read' scope)\n"
+                    "  Check credentials in config/config.local.yaml or environment variables"
+                )
 
             return balances
 
@@ -1043,6 +1074,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         raise ValueError(
                             f"Invalid price for {product_id}: {current_price}"
                         )
+                    # Validate size_in_usd before division
+                    if float(size_in_usd) <= 0:
+                        raise ValueError(
+                            f"Invalid USD size for SELL order: {size_in_usd}"
+                        )
                     base_size_value = float(size_in_usd) / current_price
                     # Format with appropriate precision (8 decimals is standard for crypto)
                     base_size = f"{base_size_value:.8f}"
@@ -1052,6 +1088,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         current_price,
                         size_in_usd,
                     )
+                except ValueError as e:
+                    logger.error("Validation error calculating base_size for SELL: %s", e)
+                    raise
                 except Exception as e:
                     logger.error("Failed to calculate base_size for SELL: %s", e)
                     raise
@@ -1064,13 +1103,16 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
             latency = time.time() - start_time
             logger.info("Coinbase API call latency: %.2f seconds", latency)
-            logger.info("Trade execution result: %s", order_result)
+
+            # Convert CreateOrderResponse to dict
+            order_result_dict = order_result.to_dict()
+            logger.info("Trade execution result: %s", order_result_dict)
 
             # Log order details
-            order_id = order_result.get("order_id")
-            order_status = order_result.get("status")
-            filled_size = order_result.get("filled_size")
-            total_value = order_result.get("total_value")
+            order_id = order_result_dict.get("order_id")
+            order_status = order_result_dict.get("status")
+            filled_size = order_result_dict.get("filled_size")
+            total_value = order_result_dict.get("total_value")
             logger.info(
                 "Order details - ID: %s, Status: %s, Filled Size: %s, Total Value: %s",
                 order_id,
@@ -1079,20 +1121,20 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 total_value,
             )
 
-            success = order_result.get("success", False)
+            success = order_result_dict.get("success", False)
             if success:
                 return {
                     "success": True,
                     "platform": "coinbase_advanced",
                     "decision_id": decision.get("id"),
-                    "order_id": order_result.get("order_id"),
-                    "order_status": order_result.get("status"),
+                    "order_id": order_result_dict.get("order_id"),
+                    "order_status": order_result_dict.get("status"),
                     "latency_seconds": latency,
-                    "response": order_result,
+                    "response": order_result_dict,
                     "timestamp": decision.get("timestamp"),
                 }
             else:
-                error_details = order_result.get("error_details", "No error details")
+                error_details = order_result_dict.get("error_details", "No error details")
                 logger.error("Trade execution failed: %s", error_details)
                 return {
                     "success": False,
@@ -1101,6 +1143,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "error": "Order creation failed",
                     "error_details": error_details,
                     "latency_seconds": latency,
+                    "response": order_result_dict,
                     "response": order_result,
                     "timestamp": decision.get("timestamp"),
                 }

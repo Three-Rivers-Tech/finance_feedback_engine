@@ -157,7 +157,7 @@ def backtest(
         # Validate configuration before engine initialization
         from finance_feedback_engine.cli.main import _validate_config_on_startup
 
-        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        config_path = ctx.obj.get("config_path", ".env")
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 
@@ -358,7 +358,7 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
         # Validate configuration before engine initialization
         from finance_feedback_engine.cli.main import _validate_config_on_startup
 
-        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        config_path = ctx.obj.get("config_path", ".env")
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 
@@ -514,7 +514,7 @@ def monte_carlo(
         # Validate configuration before engine initialization
         from finance_feedback_engine.cli.main import _validate_config_on_startup
 
-        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        config_path = ctx.obj.get("config_path", ".env")
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 

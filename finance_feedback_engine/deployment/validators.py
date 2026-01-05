@@ -158,15 +158,6 @@ class ConfigValidator:
 
         return True
 
-    def validate_config_yaml_exists(self) -> bool:
-        """Check if config.yaml exists."""
-        config_file = self.project_root / "config" / "config.yaml"
-        if not config_file.exists():
-            raise ValidationError(
-                f"config/config.yaml not found in {self.project_root}"
-            )
-        return True
-
     def validate_dockerfile_exists(self) -> bool:
         """Check if Dockerfile exists."""
         dockerfile = self.project_root / "Dockerfile"
@@ -187,7 +178,6 @@ class ConfigValidator:
         """Run all configuration validations."""
         self.validate_env_file_exists(environment)
         self.validate_env_variables(environment)
-        self.validate_config_yaml_exists()
         self.validate_dockerfile_exists()
         self.validate_docker_compose_exists()
         return True

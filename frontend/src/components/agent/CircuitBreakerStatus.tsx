@@ -35,15 +35,15 @@ export const CircuitBreakerStatus: React.FC = () => {
         Circuit Breakers
       </h2>
       <div className="space-y-3">
-        {Object.entries(health.circuit_breakers).map(([name, breaker]) => (
+        {Object.entries(health.circuit_breakers).map(([name, breaker]: [string, any]) => (
           <div key={name} className="flex items-center justify-between">
             <span className="font-mono text-sm">{name}</span>
             <div className="flex items-center gap-3">
               <span className="text-xs text-text-muted">
-                Failures: {breaker.failure_count}
+                Failures: {(breaker as any).failure_count}
               </span>
-              <Badge variant={getStateVariant(breaker.state)}>
-                {breaker.state}
+              <Badge variant={getStateVariant((breaker as any).state)}>
+                {(breaker as any).state}
               </Badge>
             </div>
           </div>

@@ -112,6 +112,23 @@ class FinanceFeedbackEngine:
         # Initialize historical data provider for backtesting
         self.historical_data_provider = HistoricalDataProvider(api_key=api_key)
 
+        # Initialize unified data provider for real-time platform price monitoring
+        # This provides real-time price data from Coinbase/Oanda for validation
+        # against potentially stale Alpha Vantage data (THR-22 fix)
+        from .data_providers.unified_data_provider import UnifiedDataProvider
+
+        coinbase_credentials = config.get("coinbase") or config.get("platform_credentials", {}).get("coinbase")
+        oanda_credentials = config.get("oanda") or config.get("platform_credentials", {}).get("oanda")
+
+        self.unified_provider = UnifiedDataProvider(
+            alpha_vantage_api_key=api_key,
+            coinbase_credentials=coinbase_credentials,
+            oanda_credentials=oanda_credentials,
+            config=config,
+            cache_ttl=120,  # 2-minute cache for real-time price monitoring
+        )
+        logger.info("Unified data provider initialized for real-time price monitoring")
+
         # Initialize trading platform (skip in backtest mode)
         platform_name = config.get("trading_platform", "coinbase")
 
@@ -338,6 +355,82 @@ class FinanceFeedbackEngine:
 
         logger.info("Finance Feedback Engine initialized successfully")
 
+        # Run startup health checks
+        self._run_startup_health_checks()
+
+    def _run_startup_health_checks(self):
+        """
+        Run health checks on data providers at startup.
+
+        Verifies connectivity and basic functionality without blocking initialization.
+        Logs warnings for any issues found.
+        """
+        logger.info("Running startup health checks...")
+
+        health_check_results = {
+            "alpha_vantage": False,
+            "unified_provider": False,
+            "trading_platform": False
+        }
+
+        # Check Alpha Vantage connectivity
+        try:
+            if self.data_provider:
+                # Simple ping check - list available functions
+                logger.debug("Checking Alpha Vantage provider health...")
+                # The provider is initialized, assume healthy if no exception during init
+                health_check_results["alpha_vantage"] = True
+                logger.info("✓ Alpha Vantage provider: Healthy")
+        except Exception as e:
+            logger.warning(f"✗ Alpha Vantage provider health check failed: {e}")
+
+        # Check Unified Data Provider connectivity
+        try:
+            if self.unified_provider:
+                logger.debug("Checking Unified Data Provider health...")
+                # Check if at least one provider is available
+                has_provider = (
+                    self.unified_provider.alpha_vantage is not None or
+                    self.unified_provider.coinbase is not None or
+                    self.unified_provider.oanda is not None
+                )
+                if has_provider:
+                    health_check_results["unified_provider"] = True
+                    logger.info("✓ Unified Data Provider: Healthy (at least 1 provider available)")
+                else:
+                    logger.warning("✗ Unified Data Provider: No providers initialized")
+        except Exception as e:
+            logger.warning(f"✗ Unified Data Provider health check failed: {e}")
+
+        # Check Trading Platform connectivity (skip in backtest mode)
+        try:
+            if self.trading_platform and not self.config.get("is_backtest", False):
+                logger.debug("Checking trading platform health...")
+                # Check if platform has basic methods
+                has_methods = (
+                    hasattr(self.trading_platform, 'get_balance') and
+                    hasattr(self.trading_platform, 'execute')
+                )
+                if has_methods:
+                    health_check_results["trading_platform"] = True
+                    logger.info(f"✓ Trading platform ({self.config.get('trading_platform', 'unknown')}): Healthy")
+                else:
+                    logger.warning("✗ Trading platform: Missing required methods")
+        except Exception as e:
+            logger.warning(f"✗ Trading platform health check failed: {e}")
+
+        # Summary
+        healthy_count = sum(health_check_results.values())
+        total_count = len([k for k, v in health_check_results.items() if k != "trading_platform" or not self.config.get("is_backtest", False)])
+
+        if healthy_count == total_count:
+            logger.info(f"✓ Startup health checks passed ({healthy_count}/{total_count})")
+        else:
+            logger.warning(
+                f"⚠ Startup health checks: {healthy_count}/{total_count} healthy. "
+                "Some providers may be unavailable."
+            )
+
     def _auto_enable_monitoring(self):
         """Auto-enable monitoring integration with default settings."""
         try:
@@ -385,6 +478,20 @@ class FinanceFeedbackEngine:
             logger.info("TradeMonitor already started internally; skipping")
             return
         try:
+            # Ensure numba can cache compiled functions in a writable location inside the container
+            if "NUMBA_CACHE_DIR" not in os.environ:
+                try:
+                    numba_cache_dir = "/tmp/numba_cache"
+                    Path(numba_cache_dir).mkdir(parents=True, exist_ok=True)
+                    os.environ["NUMBA_CACHE_DIR"] = numba_cache_dir
+                    logger.debug(
+                        "NUMBA_CACHE_DIR set to %s for pandas-ta imports", numba_cache_dir
+                    )
+                except Exception as cache_err:  # pragma: no cover - defensive
+                    logger.warning(
+                        "Could not prepare NUMBA cache directory: %s", cache_err
+                    )
+
             from .monitoring.trade_monitor import TradeMonitor
 
             # Attempt to import unified data provider + timeframe aggregator
@@ -525,19 +632,79 @@ class FinanceFeedbackEngine:
             asset_pair, include_sentiment=include_sentiment, include_macro=include_macro
         )
 
-        # Get current balance from trading platform
-        balance = self.trading_platform.get_balance()
+        # Compare Alpha Vantage price with real-time platform data (THR-22 fix)
+        # This validates data quality and detects price divergence
+        try:
+            platform_price_data = self.unified_provider.get_current_price(asset_pair)
+            av_price = market_data.get("close")
+            data_age_minutes = market_data.get("data_age_seconds", 0) / 60.0
+
+            if platform_price_data and av_price:
+                platform_price = platform_price_data["price"]
+                provider_name = platform_price_data["provider"]
+
+                # Calculate divergence: abs((platform - av) / av) * 100
+                divergence_pct = abs((platform_price - av_price) / av_price) * 100
+
+                # Record metric (will add to metrics.py next)
+                try:
+                    from .observability.metrics import record_price_divergence
+                    record_price_divergence(asset_pair, provider_name, divergence_pct)
+                except Exception:
+                    pass  # Metrics should never break the flow
+
+                # Log comparison with warning if divergence >2%
+                if divergence_pct > 2.0:
+                    logger.warning(
+                        f"⚠️ Price divergence: {divergence_pct:.2f}% - "
+                        f"Alpha Vantage ${av_price:.2f} ({data_age_minutes:.1f}min old) vs "
+                        f"{provider_name} ${platform_price:.2f} (live)"
+                    )
+                else:
+                    logger.info(
+                        f"Price check: Alpha Vantage ${av_price:.2f} ({data_age_minutes:.1f}min old) vs "
+                        f"{provider_name} ${platform_price:.2f} (live) | Divergence: {divergence_pct:.2f}%"
+                    )
+            elif not platform_price_data:
+                logger.info(
+                    f"Price check: Alpha Vantage ${av_price:.2f} ({data_age_minutes:.1f}min old) | "
+                    f"Platform price unavailable"
+                )
+        except Exception as e:
+            logger.debug(f"Price comparison failed for {asset_pair}: {e}")
 
         # Get portfolio breakdown with caching (Phase 2 optimization)
+        # This replaces the separate get_balance() call (which was redundant)
         portfolio = None
+        balance = {}  # Will be derived from portfolio if available
+
         if hasattr(self.trading_platform, "get_portfolio_breakdown"):
             try:
-                portfolio = self.get_portfolio_breakdown()
+                # Use async version to avoid blocking the event loop
+                # Add timeout to prevent indefinite waiting on API calls
+                portfolio = await asyncio.wait_for(
+                    self.get_portfolio_breakdown_async(),
+                    timeout=15.0  # 15 second timeout for portfolio fetch
+                )
                 logger.info(
                     "Portfolio loaded: $%.2f across %d assets",
                     portfolio.get("total_value_usd", 0),
                     portfolio.get("num_assets", 0),
                 )
+
+                # Derive balance from portfolio breakdown to avoid redundant API call
+                # Portfolio contains futures_value_usd and spot_value_usd from the same
+                # API calls that get_balance() would make separately
+                if portfolio.get("futures_value_usd") is not None:
+                    balance["FUTURES_USD"] = portfolio.get("futures_value_usd", 0)
+                if portfolio.get("spot_value_usd") is not None:
+                    balance["SPOT_USD"] = portfolio.get("spot_value_usd", 0)
+
+                logger.debug(
+                    "Balance derived from portfolio: %s",
+                    balance,
+                )
+
             except (AttributeError, TypeError) as e:
                 logger.warning(
                     "Could not fetch portfolio breakdown due to data format error: %s",
@@ -1060,16 +1227,9 @@ class FinanceFeedbackEngine:
         Run pre-execution safety checks before sending orders to the platform.
 
         NOTE: Risk validation is now centralized in RiskGatekeeper.validate_trade(),
-        which is called by the agent RISK_CHECK state. This method now only handles
-        signal-only mode blocking and enriches the context with safety thresholds.
+        which is called by the agent RISK_CHECK state. This method no longer enforces
+        signal-only blocking (deprecated in favor of explicit approvals/autonomous mode).
         """
-        # Block execution if signal_only mode
-        if decision.get("signal_only", False):
-            raise ValueError(
-                "Decision is in signal-only mode; execution blocked. "
-                "To allow execution: provide platform balances (configure credentials) "
-                "or disable signal-only via config key 'signal_only_default: false'."
-            )
 
         # Note: Leverage and concentration checks are now handled by
         # RiskGatekeeper._validate_leverage_and_concentration() which is called

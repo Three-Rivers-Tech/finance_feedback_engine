@@ -113,9 +113,16 @@ export class ConfigValidator {
 
     // Check HTTPS requirement
     if (rules.requireHttps) {
+      const apiUrl = config.api.baseUrl;
+      const isRelativeApiUrl = apiUrl.startsWith('/');
+
+      // Allow relative URLs in production/staging because the SPA is served via
+      // the same origin and nginx proxies /api → backend. Otherwise, enforce HTTPS
+      // unless explicitly using localhost for dev.
       if (
-        config.api.baseUrl.startsWith('http://') &&
-        !this.isLocalhostUrl(config.api.baseUrl)
+        !isRelativeApiUrl &&
+        apiUrl.startsWith('http://') &&
+        !this.isLocalhostUrl(apiUrl)
       ) {
         errors.push({
           path: 'api.baseUrl',

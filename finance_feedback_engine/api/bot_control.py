@@ -20,7 +20,16 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
@@ -29,33 +38,11 @@ from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
 from ..memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from ..monitoring.trade_monitor import TradeMonitor
-from .dependencies import get_engine, verify_api_key
+from .dependencies import get_auth_manager, get_engine, verify_api_key_or_dev
 
 logger = logging.getLogger(__name__)
 
-# Router for bot control endpoints
-# API authentication enabled for production security
-bot_control_router = APIRouter(
-    prefix="/api/v1/bot",
-    tags=["bot-control"],
-    dependencies=[Depends(verify_api_key)],  # Authentication required
-)
-
-# Global agent instance management
-_agent_instance: Optional[TradingLoopAgent] = None
-_agent_task: Optional[asyncio.Task] = None
-_agent_lock = asyncio.Lock()
-
-
-def is_agent_running() -> bool:
-    """Return True if the trading agent is currently running."""
-    return (
-        _agent_instance is not None
-        and _agent_task is not None
-        and not _agent_task.done()
-    )
-
-
+# ===== Model Definitions (must be defined before use in type hints) =====
 class BotState(str, Enum):
     """Bot operational states."""
 
@@ -81,6 +68,30 @@ class AgentControlRequest(BaseModel):
     )
     max_concurrent_trades: Optional[int] = Field(
         None, ge=1, le=10, description="Maximum concurrent trades"
+    )
+
+
+# ===== Router & Global State =====
+# Router for bot control endpoints
+# Note: Authentication is handled per-endpoint (WebSocket needs special handling)
+bot_control_router = APIRouter(
+    prefix="/api/v1/bot",
+    tags=["bot-control"],
+)
+
+# Global agent instance management
+_agent_instance: Optional[TradingLoopAgent] = None
+_agent_task: Optional[asyncio.Task] = None
+_agent_lock = asyncio.Lock()
+_queued_start_request: Optional[AgentControlRequest] = None
+
+
+def is_agent_running() -> bool:
+    """Return True if the trading agent is currently running."""
+    return (
+        _agent_instance is not None
+        and _agent_task is not None
+        and not _agent_task.done()
     )
 
 
@@ -143,6 +154,165 @@ class ConfigUpdateRequest(BaseModel):
         return v
 
 
+# ==========================================================================
+# Internal helpers
+# ==========================================================================
+
+
+async def _start_queued_if_any(engine: FinanceFeedbackEngine) -> None:
+    """Start the next queued agent request once the agent becomes idle."""
+    global _queued_start_request
+
+    try:
+        async with _agent_lock:
+            if _queued_start_request is None:
+                return
+            if is_agent_running():
+                return
+
+            # Coalesce to the latest queued request
+            request = _queued_start_request
+            _queued_start_request = None
+
+        await _start_agent_from_request(request, engine)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to start queued agent: %s", exc, exc_info=True)
+
+
+async def _start_agent_from_request(
+    request: AgentControlRequest,
+    engine: FinanceFeedbackEngine,
+) -> AgentStatusResponse:
+    """Create and launch the trading agent from the provided request."""
+    global _agent_instance, _agent_task
+
+    logger.info("Starting trading agent from request (queued=%s)", False)
+
+    # Create config from request
+    config_snapshot = copy.deepcopy(engine.config)
+    agent_cfg_data = config_snapshot.get("agent", {})
+
+    # Ensure agent_cfg_data is a dict (handle case where it might be a TradingAgentConfig object)
+    if isinstance(agent_cfg_data, TradingAgentConfig):
+        agent_cfg_data = agent_cfg_data.model_dump()
+    elif not isinstance(agent_cfg_data, dict):
+        agent_cfg_data = {}
+
+    agent_config = TradingAgentConfig(**agent_cfg_data)
+
+    if request.asset_pairs:
+        agent_config.asset_pairs = request.asset_pairs
+        agent_config.watchlist = request.asset_pairs
+
+    if request.max_concurrent_trades:
+        agent_config.max_daily_trades = request.max_concurrent_trades
+
+    if request.autonomous:
+        agent_config.autonomous.enabled = True
+
+    take_profit = float(request.take_profit or 0.0)
+    stop_loss = float(request.stop_loss or 0.0)
+
+    portfolio_memory = engine.memory_engine or PortfolioMemoryEngineAdapter(
+        config_snapshot
+    )
+    engine.memory_engine = portfolio_memory
+
+    trade_monitor = engine.trade_monitor
+    if trade_monitor is None:
+        trade_monitor = TradeMonitor(
+            platform=engine.trading_platform,
+            portfolio_memory=portfolio_memory,
+            portfolio_take_profit_percentage=take_profit,
+            portfolio_stop_loss_percentage=stop_loss,
+        )
+        if hasattr(engine, "enable_monitoring_integration"):
+            engine.enable_monitoring_integration(trade_monitor=trade_monitor)
+        trade_monitor.start()
+
+    # Initialize agent
+    _agent_instance = TradingLoopAgent(
+        config=agent_config,
+        engine=engine,
+        trade_monitor=trade_monitor,
+        portfolio_memory=portfolio_memory,
+        trading_platform=engine.trading_platform,
+    )
+
+    # Start agent in background
+    async def run_agent() -> None:
+        global _agent_instance, _agent_task
+        try:
+            await _agent_instance.run()
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Agent crashed: {e}", exc_info=True)
+        finally:
+            # Clean up global state when agent stops (gracefully or via crash)
+            logger.info("Cleaning up agent state...")
+            _agent_instance = None
+            _agent_task = None
+
+    _agent_task = asyncio.create_task(run_agent())
+
+    # When the agent stops, automatically launch any queued start request
+    _agent_task.add_done_callback(
+        lambda _: asyncio.create_task(_start_queued_if_any(engine))
+    )
+
+    logger.info("✅ Trading agent started successfully")
+
+    return AgentStatusResponse(
+        state=BotState.RUNNING,
+        agent_ooda_state=(_agent_instance.state.name if _agent_instance else None),
+        uptime_seconds=0.0,
+        config={
+            "asset_pairs": request.asset_pairs,
+            "autonomous": request.autonomous,
+        },
+    )
+
+
+async def _enqueue_or_start_agent(
+    request: AgentControlRequest,
+    engine: FinanceFeedbackEngine,
+) -> tuple[Optional[AgentStatusResponse], bool]:
+    """Start the agent immediately or queue the latest start request."""
+    global _queued_start_request
+
+    async with _agent_lock:
+        if is_agent_running():
+            logger.info("Agent already running; queuing start request for later")
+            _queued_start_request = request
+            return None, True
+
+        response = await _start_agent_from_request(request, engine)
+        return response, False
+
+
+def _extract_bearer_from_websocket(websocket: WebSocket) -> tuple[Optional[str], Optional[str]]:
+    """Extract bearer token and selected subprotocol from WebSocket handshake headers or query params."""
+
+    # Try Authorization header first
+    auth_header = websocket.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:], None
+
+    # Try query parameter (token=...)
+    query_params = websocket.query_params
+    if "token" in query_params:
+        return query_params["token"], None
+
+    # Try Sec-WebSocket-Protocol header (legacy support)
+    protocol_header = websocket.headers.get("sec-websocket-protocol", "")
+    protocols = [p.strip() for p in protocol_header.split(",") if p.strip()]
+    for proto in protocols:
+        if proto.lower().startswith("bearer "):
+            # Return the first bearer token and echo it as accepted subprotocol
+            return proto[7:], proto
+
+    return None, protocols[0] if protocols else None
+
+
 # ============================================================================
 # BOT CONTROL ENDPOINTS
 # ============================================================================
@@ -164,84 +334,24 @@ async def start_agent(
     try:
         logger.info("Starting trading agent via API...")
 
-        async with _agent_lock:
-            if (
-                _agent_instance is not None
-                and _agent_task is not None
-                and not _agent_task.done()
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Agent is already running. Stop it first before starting again.",
-                )
-
-            # Create config from request
-            config_snapshot = copy.deepcopy(engine.config)
-            agent_cfg_data = config_snapshot.get("agent", {})
-            agent_config = TradingAgentConfig(**agent_cfg_data)
-
-            if request.asset_pairs:
-                agent_config.asset_pairs = request.asset_pairs
-                agent_config.watchlist = request.asset_pairs
-
-            if request.max_concurrent_trades:
-                agent_config.max_concurrent_trades = request.max_concurrent_trades
-
-            if request.autonomous:
-                agent_config.autonomous.enabled = True
-
-            take_profit = float(request.take_profit or 0.0)
-            stop_loss = float(request.stop_loss or 0.0)
-
-            portfolio_memory = engine.memory_engine or PortfolioMemoryEngineAdapter(
-                config_snapshot
-            )
-            engine.memory_engine = portfolio_memory
-
-            trade_monitor = engine.trade_monitor
-            if trade_monitor is None:
-                trade_monitor = TradeMonitor(
-                    platform=engine.trading_platform,
-                    portfolio_memory=portfolio_memory,
-                    portfolio_take_profit_percentage=take_profit,
-                    portfolio_stop_loss_percentage=stop_loss,
-                )
-                if hasattr(engine, "enable_monitoring_integration"):
-                    engine.enable_monitoring_integration(trade_monitor=trade_monitor)
-                trade_monitor.start()
-
-            # Initialize agent
-            _agent_instance = TradingLoopAgent(
-                config=agent_config,
-                engine=engine,
-                trade_monitor=trade_monitor,
-                portfolio_memory=portfolio_memory,
-                trading_platform=engine.trading_platform,
-            )
-
-            # Start agent in background
-            async def run_agent() -> None:
-                try:
-                    await _agent_instance.run()
-                except Exception as e:  # noqa: BLE001
-                    logger.error(f"Agent crashed: {e}", exc_info=True)
-
-            _agent_task = asyncio.create_task(run_agent())
-
-            logger.info("✅ Trading agent started successfully")
-
+        response, queued = await _enqueue_or_start_agent(request, engine)
+        if queued:
             return AgentStatusResponse(
-                state=BotState.RUNNING,
-                agent_ooda_state=(
-                    _agent_instance.state.name if _agent_instance else None
-                ),
-                uptime_seconds=0.0,
+                state=BotState.STARTING,
+                agent_ooda_state=None,
+                uptime_seconds=None,
                 config={
+                    "queued": True,
                     "asset_pairs": request.asset_pairs,
                     "autonomous": request.autonomous,
                 },
             )
 
+        return response
+
+    except HTTPException:
+        # Re-raise HTTPExceptions with their original status codes
+        raise
     except Exception as e:
         logger.error(f"Failed to start agent: {e}", exc_info=True)
         raise HTTPException(
@@ -289,6 +399,9 @@ async def stop_agent() -> Dict[str, str]:
 
         return {"status": "stopped", "message": "Agent stopped successfully"}
 
+    except HTTPException:
+        # Re-raise HTTPExceptions with their original status codes
+        raise
     except Exception as e:
         logger.error(f"Error stopping agent: {e}", exc_info=True)
         raise HTTPException(
@@ -542,6 +655,15 @@ async def get_agent_status(
         if hasattr(_agent_instance, "start_time"):
             uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
 
+        # Safe access to agent config (handle both dict and object forms)
+        agent_cfg = engine.config.get("agent", {})
+        if isinstance(agent_cfg, TradingAgentConfig):
+            asset_pairs = agent_cfg.asset_pairs
+        elif isinstance(agent_cfg, dict):
+            asset_pairs = agent_cfg.get("asset_pairs", [])
+        else:
+            asset_pairs = []
+
         return AgentStatusResponse(
             state=BotState.RUNNING,
             agent_ooda_state=agent_state.name if agent_state else None,
@@ -550,7 +672,7 @@ async def get_agent_status(
             portfolio_value=portfolio_value,
             current_asset_pair=getattr(_agent_instance, "current_asset_pair", None),
             config={
-                "asset_pairs": engine.config.get("agent", {}).get("asset_pairs", []),
+                "asset_pairs": asset_pairs,
                 "autonomous": True,
             },
         )
@@ -558,6 +680,58 @@ async def get_agent_status(
     except Exception as e:
         logger.error(f"Error getting agent status: {e}", exc_info=True)
         return AgentStatusResponse(state=BotState.ERROR, error_message=str(e))
+
+
+async def _build_stream_payload(
+    engine: FinanceFeedbackEngine, last_status_sent: float
+) -> tuple[Dict[str, Any], float]:
+    """Construct the next stream payload (dashboard event, status, or heartbeat)."""
+
+    event_payload = None
+
+    # Drain dashboard queue (non-blocking)
+    if _agent_instance is not None and hasattr(_agent_instance, "_dashboard_event_queue"):
+        try:
+            loop = asyncio.get_running_loop()
+
+            def _get_queue_item_nowait():
+                try:
+                    return _agent_instance._dashboard_event_queue.get_nowait()
+                except queue.Empty:
+                    return None
+
+            queue_item = await asyncio.wait_for(
+                loop.run_in_executor(None, _get_queue_item_nowait),
+                timeout=3.0,
+            )
+
+            if queue_item is not None:
+                event_payload = {
+                    "event": queue_item.get("type", "event"),
+                    "data": queue_item,
+                }
+        except asyncio.TimeoutError:
+            event_payload = None
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Dashboard event stream read failed: %s", exc, exc_info=True)
+            event_payload = None
+
+    # If no queue event, emit periodic status + heartbeat
+    if event_payload is None:
+        now = time.time()
+        if now - last_status_sent >= 5:
+            status_payload = await get_agent_status(engine)
+            status_data = (
+                status_payload.model_dump()
+                if hasattr(status_payload, "model_dump")
+                else status_payload.__dict__
+            )
+            event_payload = {"event": "status", "data": status_data}
+            last_status_sent = now
+        else:
+            event_payload = {"event": "heartbeat", "data": {}}
+
+    return event_payload, last_status_sent
 
 
 @bot_control_router.get("/stream")
@@ -576,55 +750,9 @@ async def stream_agent_events(
                 logger.info("Client disconnected from /api/v1/bot/stream")
                 break
 
-            event_payload = None
-
-            # Drain dashboard queue (non-blocking with short-lived executor thread)
-            if _agent_instance is not None and hasattr(
-                _agent_instance, "_dashboard_event_queue"
-            ):
-                try:
-                    loop = asyncio.get_running_loop()
-
-                    def _get_queue_item_nowait():
-                        """Non-blocking queue get for executor (never blocks indefinitely)."""
-                        try:
-                            return _agent_instance._dashboard_event_queue.get_nowait()
-                        except queue.Empty:
-                            return None
-
-                    queue_item = await asyncio.wait_for(
-                        loop.run_in_executor(None, _get_queue_item_nowait),
-                        timeout=3.0,
-                    )
-
-                    if queue_item is not None:
-                        event_payload = {
-                            "event": queue_item.get("type", "event"),
-                            "data": queue_item,
-                        }
-                except asyncio.TimeoutError:
-                    # Executor thread returned within timeout but found no event
-                    event_payload = None
-                except Exception as e:  # noqa: BLE001
-                    logger.debug(
-                        f"Dashboard event stream read failed: {e}", exc_info=True
-                    )
-                    event_payload = None
-
-            # If no queue event, emit periodic status + heartbeat
-            if event_payload is None:
-                now = time.time()
-                if now - last_status_sent >= 5:
-                    status_payload = await get_agent_status(engine)
-                    status_data = (
-                        status_payload.model_dump()
-                        if hasattr(status_payload, "model_dump")
-                        else status_payload.__dict__
-                    )
-                    event_payload = {"event": "status", "data": status_data}
-                    last_status_sent = now
-                else:
-                    event_payload = {"event": "heartbeat", "data": {}}
+            event_payload, last_status_sent = await _build_stream_payload(
+                engine, last_status_sent
+            )
 
             yield f"data: {json.dumps(event_payload, default=str)}\n\n"
 
@@ -637,6 +765,131 @@ async def stream_agent_events(
     }
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
+
+
+@bot_control_router.websocket("/ws")
+async def agent_websocket(
+    websocket: WebSocket,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """WebSocket endpoint for live agent control and streaming events."""
+
+    token, selected_protocol = _extract_bearer_from_websocket(websocket)
+    if not token:
+        await websocket.close(code=1008, reason="Missing bearer token")
+        return
+
+    # Get auth manager from engine (avoid dependency injection issues with WebSocket)
+    from .dependencies import get_auth_manager_instance
+    auth_manager = get_auth_manager_instance()
+
+    client_ip = websocket.client.host if websocket.client else None
+    user_agent = websocket.headers.get("user-agent")
+
+    # Check if in development mode (skip auth)
+    import os
+    environment = os.getenv("ENVIRONMENT", "production").lower()
+    if environment == "development":
+        # Development mode: skip authentication
+        pass
+    else:
+        # Production mode: validate API key
+        try:
+            is_valid, _, _ = auth_manager.validate_api_key(
+                api_key=token, ip_address=client_ip, user_agent=user_agent
+            )
+            if not is_valid:
+                await websocket.close(code=1008, reason="Invalid API key")
+                return
+        except ValueError:
+            await websocket.close(code=1013, reason="Rate limited")
+            return
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("WebSocket auth failed: %s", exc)
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+
+    await websocket.accept(subprotocol=selected_protocol)
+
+    stop_event = asyncio.Event()
+
+    async def sender() -> None:
+        last_status_sent = 0.0
+        while not stop_event.is_set():
+            try:
+                payload, last_status_sent = await _build_stream_payload(
+                    engine, last_status_sent
+                )
+                await websocket.send_json(payload)
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("WebSocket sender error: %s", exc, exc_info=True)
+                stop_event.set()
+            await asyncio.sleep(0.5)
+
+    async def receiver() -> None:
+        while not stop_event.is_set():
+            try:
+                message = await websocket.receive_json()
+            except WebSocketDisconnect:
+                stop_event.set()
+                return
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("WebSocket receive error: %s", exc, exc_info=True)
+                stop_event.set()
+                return
+
+            action = message.get("action")
+            if action == "start":
+                payload = message.get("payload") or {}
+                try:
+                    request_model = AgentControlRequest(**payload)
+                except Exception as exc:  # noqa: BLE001
+                    await websocket.send_json(
+                        {
+                            "event": "error",
+                            "data": {"message": f"Invalid start payload: {exc}"},
+                        }
+                    )
+                    continue
+
+                response, queued = await _enqueue_or_start_agent(
+                    request_model, engine
+                )
+                await websocket.send_json(
+                    {
+                        "event": "start_ack",
+                        "data": {
+                            "queued": queued,
+                            "state": response.state.value if response else BotState.STARTING.value,
+                        },
+                    }
+                )
+            else:
+                await websocket.send_json(
+                    {
+                        "event": "error",
+                        "data": {"message": f"Unknown action: {action}"},
+                    }
+                )
+
+    await websocket.send_json(
+        {"event": "start_ack", "data": {"message": "connected", "queued": False}}
+    )
+
+    sender_task = asyncio.create_task(sender())
+    receiver_task = asyncio.create_task(receiver())
+
+    done, pending = await asyncio.wait(
+        {sender_task, receiver_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+    stop_event.set()
+
+    for task in pending:
+        task.cancel()
+
+    logger.info("Client disconnected from /api/v1/bot/ws")
 
 
 @bot_control_router.patch("/config")
@@ -1004,3 +1257,280 @@ async def close_position(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Position close failed: {str(e)}",
         )
+
+
+# ============================================================================
+# REAL-TIME DATA STREAMING WEBSOCKETS
+# ============================================================================
+
+
+@bot_control_router.websocket("/ws/portfolio")
+async def portfolio_stream_websocket(
+    websocket: WebSocket,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """
+    WebSocket endpoint for real-time portfolio updates.
+
+    Sends portfolio status updates as they change.
+    """
+    token, selected_protocol = _extract_bearer_from_websocket(websocket)
+    if not token:
+        await websocket.close(code=1008, reason="Missing bearer token")
+        return
+
+    from .dependencies import get_auth_manager_instance
+    auth_manager = get_auth_manager_instance()
+
+    client_ip = websocket.client.host if websocket.client else None
+    user_agent = websocket.headers.get("user-agent")
+
+    import os
+    environment = os.getenv("ENVIRONMENT", "production").lower()
+    if environment != "development":
+        try:
+            is_valid, _, _ = auth_manager.validate_api_key(
+                api_key=token, ip_address=client_ip, user_agent=user_agent
+            )
+            if not is_valid:
+                await websocket.close(code=1008, reason="Invalid API key")
+                return
+        except ValueError:
+            await websocket.close(code=1013, reason="Rate limited")
+            return
+        except Exception as exc:
+            logger.warning("WebSocket auth failed: %s", exc)
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+
+    await websocket.accept(subprotocol=selected_protocol)
+
+    stop_event = asyncio.Event()
+    last_portfolio = None
+
+    async def sender() -> None:
+        nonlocal last_portfolio
+        while not stop_event.is_set():
+            try:
+                from ..api.routes import get_portfolio_status
+                portfolio = await get_portfolio_status(engine)
+
+                # Only send if data changed
+                portfolio_dict = (
+                    portfolio.model_dump() if hasattr(portfolio, "model_dump")
+                    else (portfolio.__dict__ if hasattr(portfolio, "__dict__") else portfolio)
+                )
+
+                if last_portfolio != portfolio_dict:
+                    await websocket.send_json({
+                        "event": "portfolio_update",
+                        "data": portfolio_dict
+                    })
+                    last_portfolio = portfolio_dict
+
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception as exc:
+                logger.debug("Portfolio WebSocket sender error: %s", exc)
+                stop_event.set()
+
+            await asyncio.sleep(2)  # Send updates every 2 seconds
+
+    sender_task = asyncio.create_task(sender())
+
+    try:
+        # Keep connection alive, close on client disconnect
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(websocket.receive_json(), timeout=30)
+            except asyncio.TimeoutError:
+                continue
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception:
+                stop_event.set()
+    finally:
+        stop_event.set()
+        sender_task.cancel()
+        logger.info("Client disconnected from portfolio stream")
+
+
+@bot_control_router.websocket("/ws/positions")
+async def positions_stream_websocket(
+    websocket: WebSocket,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """
+    WebSocket endpoint for real-time position updates.
+
+    Sends position updates (open, update, close) as they occur.
+    """
+    token, selected_protocol = _extract_bearer_from_websocket(websocket)
+    if not token:
+        await websocket.close(code=1008, reason="Missing bearer token")
+        return
+
+    from .dependencies import get_auth_manager_instance
+    auth_manager = get_auth_manager_instance()
+
+    client_ip = websocket.client.host if websocket.client else None
+    user_agent = websocket.headers.get("user-agent")
+
+    import os
+    environment = os.getenv("ENVIRONMENT", "production").lower()
+    if environment != "development":
+        try:
+            is_valid, _, _ = auth_manager.validate_api_key(
+                api_key=token, ip_address=client_ip, user_agent=user_agent
+            )
+            if not is_valid:
+                await websocket.close(code=1008, reason="Invalid API key")
+                return
+        except ValueError:
+            await websocket.close(code=1013, reason="Rate limited")
+            return
+        except Exception as exc:
+            logger.warning("WebSocket auth failed: %s", exc)
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+
+    await websocket.accept(subprotocol=selected_protocol)
+
+    stop_event = asyncio.Event()
+    last_positions = None
+
+    async def sender() -> None:
+        nonlocal last_positions
+        while not stop_event.is_set():
+            try:
+                # Get current positions from platform
+                platform = getattr(engine, "trading_platform", None)
+                if platform and hasattr(platform, "aget_portfolio_breakdown"):
+                    breakdown = await asyncio.wait_for(
+                        platform.aget_portfolio_breakdown(), timeout=3.0
+                    )
+                    positions = breakdown.get("positions", [])
+
+                    # Check if positions changed
+                    positions_snapshot = str(positions)  # Simple change detection
+                    if last_positions != positions_snapshot:
+                        await websocket.send_json({
+                            "event": "positions_update",
+                            "data": {"positions": positions}
+                        })
+                        last_positions = positions_snapshot
+
+            except WebSocketDisconnect:
+                stop_event.set()
+            except asyncio.TimeoutError:
+                pass  # Timeout is acceptable, just skip this update
+            except Exception as exc:
+                logger.debug("Positions WebSocket sender error: %s", exc)
+
+            await asyncio.sleep(2)  # Send updates every 2 seconds
+
+    sender_task = asyncio.create_task(sender())
+
+    try:
+        # Keep connection alive
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(websocket.receive_json(), timeout=30)
+            except asyncio.TimeoutError:
+                continue
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception:
+                stop_event.set()
+    finally:
+        stop_event.set()
+        sender_task.cancel()
+        logger.info("Client disconnected from positions stream")
+
+
+@bot_control_router.websocket("/ws/decisions")
+async def decisions_stream_websocket(
+    websocket: WebSocket,
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """
+    WebSocket endpoint for real-time decision updates.
+
+    Sends new decisions and decision events in real-time.
+    """
+    token, selected_protocol = _extract_bearer_from_websocket(websocket)
+    if not token:
+        await websocket.close(code=1008, reason="Missing bearer token")
+        return
+
+    from .dependencies import get_auth_manager_instance
+    auth_manager = get_auth_manager_instance()
+
+    client_ip = websocket.client.host if websocket.client else None
+    user_agent = websocket.headers.get("user-agent")
+
+    import os
+    environment = os.getenv("ENVIRONMENT", "production").lower()
+    if environment != "development":
+        try:
+            is_valid, _, _ = auth_manager.validate_api_key(
+                api_key=token, ip_address=client_ip, user_agent=user_agent
+            )
+            if not is_valid:
+                await websocket.close(code=1008, reason="Invalid API key")
+                return
+        except ValueError:
+            await websocket.close(code=1013, reason="Rate limited")
+            return
+        except Exception as exc:
+            logger.warning("WebSocket auth failed: %s", exc)
+            await websocket.close(code=1008, reason="Authentication failed")
+            return
+
+    await websocket.accept(subprotocol=selected_protocol)
+
+    stop_event = asyncio.Event()
+    last_decision_count = 0
+
+    async def sender() -> None:
+        nonlocal last_decision_count
+        while not stop_event.is_set():
+            try:
+                # Get recent decisions
+                if hasattr(engine, "decision_store"):
+                    decisions = engine.decision_store.get_recent_decisions(limit=1)
+
+                    if decisions and len(decisions) > last_decision_count:
+                        # Send new decision
+                        latest = decisions[0]
+                        await websocket.send_json({
+                            "event": "decision_made",
+                            "data": latest
+                        })
+                        last_decision_count = len(decisions)
+
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception as exc:
+                logger.debug("Decisions WebSocket sender error: %s", exc)
+
+            await asyncio.sleep(1)  # Check for new decisions every second
+
+    sender_task = asyncio.create_task(sender())
+
+    try:
+        # Keep connection alive
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(websocket.receive_json(), timeout=30)
+            except asyncio.TimeoutError:
+                continue
+            except WebSocketDisconnect:
+                stop_event.set()
+            except Exception:
+                stop_event.set()
+    finally:
+        stop_event.set()
+        sender_task.cancel()
+        logger.info("Client disconnected from decisions stream")
+

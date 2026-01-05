@@ -4,10 +4,19 @@ import { API_BASE_URL } from '../utils/constants';
 // Normalize base URL to avoid double /api when endpoints already include the /api prefix
 const normalizedBaseUrl = (() => {
   const trimmed = API_BASE_URL.replace(/\/+$/, '');
-  if (trimmed.toLowerCase().endsWith('/api')) {
+
+  // Only strip trailing /api for absolute URLs to avoid removing the
+  // relative /api proxy path used in production nginx.
+  const isAbsolute = /^https?:\/\//i.test(trimmed);
+  if (!isAbsolute && trimmed === '/api') {
+    // Base is the proxy root already; avoid double /api when endpoints include it
+    return '';
+  }
+  if (isAbsolute && trimmed.toLowerCase().endsWith('/api')) {
     return trimmed.slice(0, -4);
   }
-  return trimmed;
+
+  return trimmed || '/';
 })();
 
 const apiClient = axios.create({
@@ -18,8 +27,13 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor - add auth header
+// Request interceptor - normalize URL and add auth header
 apiClient.interceptors.request.use((config) => {
+  // Avoid double /api when baseURL already points to /api proxy
+  if (config.url?.startsWith('/api/api/')) {
+    config.url = config.url.replace(/^\/api\/api\//, '/api/');
+  }
+
   // Try localStorage first, then environment variable
   const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
   if (apiKey && config.headers) {

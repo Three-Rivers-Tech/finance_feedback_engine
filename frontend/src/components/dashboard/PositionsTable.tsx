@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Position } from '../../api/types';
 import { usePositions } from '../../api/hooks/usePositions';
 import { Card } from '../common/Card';
 import { Spinner } from '../common/Spinner';
@@ -6,7 +7,8 @@ import { Badge } from '../common/Badge';
 import { formatCurrency, formatPercent } from '../../services/formatters';
 
 export const PositionsTable: React.FC = () => {
-  const { data: positions, isLoading, error } = usePositions();
+  const { data: positionsData, isLoading, error } = usePositions();
+  const positions: Position[] | undefined = positionsData;
 
   if (isLoading) {
     return (
@@ -62,7 +64,7 @@ export const PositionsTable: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {positions.map((position) => (
+            {Array.isArray(positions) && positions.map((position) => (
               <tr
                 key={position.id}
                 className="border-b border-border-primary hover:bg-bg-tertiary transition-colors"

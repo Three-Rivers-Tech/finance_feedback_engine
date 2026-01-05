@@ -5,10 +5,10 @@ import hashlib
 import hmac
 import logging
 import os
+from pathlib import Path
 import secrets
 import time
 from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
@@ -321,8 +321,62 @@ telegram_router = APIRouter()
 decisions_router = APIRouter()
 status_router = APIRouter()
 
+
+class DebateProvidersPayload(BaseModel):
+    bull: str = Field(..., min_length=1)
+    bear: str = Field(..., min_length=1)
+    judge: str = Field(..., min_length=1)
+
+    @field_validator("bull", "bear", "judge")
+    @classmethod
+    def _strip_and_validate(cls, v: str) -> str:
+        value = v.strip()
+        if not value:
+            raise ValueError("Provider value cannot be empty")
+        return value
+
+
 # Shared Telegram bot reference for patching in tests
 telegram_bot = None
+
+
+def _persist_env_updates(env_updates: Dict[str, str]) -> Optional[str]:
+    """Persist debate provider env vars into project .env for future restarts."""
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    try:
+        env_path.touch(exist_ok=True)
+        lines = env_path.read_text().splitlines()
+        new_lines: List[str] = []
+
+        # Track which keys we handled to append missing ones later
+        remaining = dict(env_updates)
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                new_lines.append(line)
+                continue
+
+            key, sep, value = line.partition("=")
+            if not sep:
+                new_lines.append(line)
+                continue
+
+            k = key.strip()
+            if k in remaining:
+                new_lines.append(f"{k}=\"{remaining[k]}\"")
+                remaining.pop(k, None)
+            else:
+                new_lines.append(line)
+
+        for k, v in remaining.items():
+            new_lines.append(f"{k}=\"{v}\"")
+
+        env_path.write_text("\n".join(new_lines) + "\n")
+        return str(env_path)
+    except Exception as e:
+        logger.warning(f"Failed to persist debate providers to .env: {e}")
+        return None
 
 
 # Health endpoints
@@ -407,7 +461,7 @@ async def telegram_webhook(
         if telegram_bot is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Telegram bot not initialized. Check config/telegram.yaml",
+                detail="Telegram bot not initialized. Check .env Telegram settings",
             )
 
         update_data = await request.json()
@@ -625,6 +679,43 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
         return status_data
 
 
+@status_router.post("/debate/providers", status_code=status.HTTP_200_OK)
+async def set_debate_providers(
+    payload: DebateProvidersPayload, engine: FinanceFeedbackEngine = Depends(get_engine)
+):
+    """
+    Update debate seat providers (bull/bear/judge) for the current process.
+
+    This applies overrides in-memory and updates process environment variables
+    (ENSEMBLE_DEBATE_BULL_PROVIDER, ENSEMBLE_DEBATE_BEAR_PROVIDER,
+    ENSEMBLE_DEBATE_JUDGE_PROVIDER) so subsequent requests pick up the change
+    without requiring config files.
+    """
+    persisted_path = None
+    try:
+        # Update in-memory config
+        engine.config.setdefault("ensemble", {}).update(
+            {"debate_mode": True, "debate_providers": payload.model_dump()}
+        )
+
+        # Update process environment so subsequent loads see the new providers
+        os.environ["ENSEMBLE_DEBATE_BULL_PROVIDER"] = payload.bull
+        os.environ["ENSEMBLE_DEBATE_BEAR_PROVIDER"] = payload.bear
+        os.environ["ENSEMBLE_DEBATE_JUDGE_PROVIDER"] = payload.judge
+
+        persisted_path = _persist_env_updates(
+            {
+                "ENSEMBLE_DEBATE_BULL_PROVIDER": payload.bull,
+                "ENSEMBLE_DEBATE_BEAR_PROVIDER": payload.bear,
+                "ENSEMBLE_DEBATE_JUDGE_PROVIDER": payload.judge,
+            }
+        )
+    except Exception as e:
+        logger.warning(f"Could not update debate providers: {e}")
+
+    return {"debate_providers": payload.model_dump(), "persisted": persisted_path}
+
+
 # Alert webhook (from Prometheus Alertmanager)
 alerts_router = APIRouter()
 
@@ -694,8 +785,8 @@ async def handle_alert_webhook(payload: AlertmanagerWebhook, request: Request):
                 # Fallback: create bot with config from environment/settings
                 from ..integrations.telegram_bot import TelegramBot
 
-                # TelegramBot reads config from config/telegram.yaml or env vars
-                bot = TelegramBot({})  # Empty dict triggers config loading from files
+                # TelegramBot reads config from environment variables via loader
+                bot = TelegramBot({})  # Empty dict triggers env-based loading
                 logger.debug("Created new Telegram bot instance for alerts")
 
         except Exception as e:

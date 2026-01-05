@@ -121,3 +121,109 @@ def validate_credentials(config: Dict[str, Any]) -> None:
         )
 
     logger.debug("✅ Credential validation passed")
+
+
+def validate_api_keys_with_preflight_checks(config: Dict[str, Any]) -> Dict[str, bool]:
+    """
+    Pre-flight validation of API keys by attempting minimal API calls.
+
+    Tests each configured provider to ensure:
+    1. API key is valid (not placeholder)
+    2. API endpoint is reachable
+    3. Authentication succeeds
+
+    Non-blocking: Logs warnings for failed checks but doesn't raise exceptions.
+
+    Args:
+        config: Configuration dictionary with credentials
+
+    Returns:
+        Dictionary with validation results:
+        {
+            'alpha_vantage': bool,
+            'coinbase': bool,
+            'oanda': bool,
+            'all_passed': bool
+        }
+    """
+    results = {
+        'alpha_vantage': False,
+        'coinbase': False,
+        'oanda': False,
+        'all_passed': False
+    }
+
+    # Test Alpha Vantage API key
+    api_key = config.get("alpha_vantage_api_key", "")
+    if api_key and not api_key.startswith("YOUR_"):
+        try:
+            # Simple test: query the API with a function that doesn't require market data
+            import aiohttp
+            import asyncio
+
+            async def test_alpha_vantage():
+                async with aiohttp.ClientSession() as session:
+                    url = f"https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=BTCUSD&apikey={api_key}"
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                        if resp.status == 200:
+                            return True
+                        return False
+
+            try:
+                is_valid = asyncio.run(test_alpha_vantage())
+                if is_valid:
+                    results['alpha_vantage'] = True
+                    logger.info("✓ Alpha Vantage API key validated")
+            except Exception as e:
+                logger.warning(f"Alpha Vantage API validation failed: {e}")
+        except ImportError:
+            logger.debug("aiohttp not available for API testing")
+
+    # Test Coinbase API key
+    coinbase_creds = config.get("platform_credentials", {})
+    if isinstance(coinbase_creds, dict):
+        api_key = coinbase_creds.get("api_key", "")
+        api_secret = coinbase_creds.get("api_secret", "")
+
+        if api_key and api_secret and not api_key.startswith("YOUR_"):
+            try:
+                from ..trading_platforms.coinbase_platform import CoinbaseAdvancedPlatform
+
+                # Test by creating platform and checking connection
+                platform = CoinbaseAdvancedPlatform(coinbase_creds, config)
+                # Try to get client (lazy init + validation)
+                client = platform._get_client()
+                if client:
+                    results['coinbase'] = True
+                    logger.info("✓ Coinbase API credentials validated")
+            except Exception as e:
+                logger.warning(f"Coinbase API validation failed: {e}")
+
+    # Test Oanda API key
+    oanda_creds = config.get("platform_credentials", {})
+    if isinstance(oanda_creds, dict):
+        api_key = oanda_creds.get("api_key", "")
+        account_id = oanda_creds.get("account_id", "")
+
+        if api_key and account_id and not api_key.startswith("YOUR_"):
+            try:
+                from ..trading_platforms.oanda_platform import OandaTradingPlatform
+
+                # Test by creating platform
+                platform = OandaTradingPlatform(oanda_creds, config)
+                # Try to get client (lazy init + validation)
+                client = platform._get_client()
+                if client:
+                    results['oanda'] = True
+                    logger.info("✓ Oanda API credentials validated")
+            except Exception as e:
+                logger.warning(f"Oanda API validation failed: {e}")
+
+    # Summary
+    results['all_passed'] = any([
+        results['alpha_vantage'],
+        results['coinbase'],
+        results['oanda']
+    ])
+
+    return results

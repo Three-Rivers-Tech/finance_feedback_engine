@@ -771,25 +771,6 @@ def test_config_editor_command():
     """Test config-editor basic invocation with mocked prompts."""
     runner = CliRunner()
 
-    with runner.isolated_filesystem():
-        Path("config").mkdir()
-        Path("config/config.yaml").write_text("trading_platform: mock\n")
-
-        with patch(
-            "finance_feedback_engine.cli.main.load_config",
-            return_value={"trading_platform": "mock"},
-        ):
-            # config-editor uses click.prompt / click.confirm, not Rich Prompt.
-            # Return the provided default to keep the flow non-interactive and valid for Choice prompts.
-            with patch("click.prompt", side_effect=lambda *a, **kw: kw.get("default")):
-                with patch(
-                    "click.confirm",
-                    side_effect=lambda *a, **kw: kw.get("default", False),
-                ):
-                    with patch(
-                        "finance_feedback_engine.cli.main.console.input",
-                        return_value="n",
-                    ):  # Don't save
-                        res = runner.invoke(cli, ["config-editor"])
-                        # Command may exit with 0 or 1 depending on save choice
-                        assert res.exit_code in [0, 1], res.output
+    res = runner.invoke(cli, ["config-editor"])
+    assert res.exit_code == 1
+    assert "config-editor is disabled" in res.output

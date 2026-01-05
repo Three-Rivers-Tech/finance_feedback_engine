@@ -23,7 +23,7 @@ def balance(ctx):
         # Validate configuration before engine initialization
         from finance_feedback_engine.cli.main import _validate_config_on_startup
 
-        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        config_path = ctx.obj.get("config_path", ".env")
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 
@@ -57,7 +57,7 @@ def execute(ctx, decision_id):
         # Validate configuration before engine initialization
         from finance_feedback_engine.cli.main import _validate_config_on_startup
 
-        config_path = ctx.obj.get("config_path", "config/config.yaml")
+        config_path = ctx.obj.get("config_path", ".env")
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 

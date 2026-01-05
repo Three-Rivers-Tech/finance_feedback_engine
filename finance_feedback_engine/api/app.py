@@ -8,13 +8,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict
 
-import yaml
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..auth import AuthManager
 from ..core import FinanceFeedbackEngine
-from ..utils.config_loader import load_config
+from ..utils.config_loader import load_env_config
 
 logger = logging.getLogger(__name__)
 
@@ -23,56 +22,8 @@ app_state: Dict[str, Any] = {}
 
 
 def load_tiered_config() -> dict:
-    """
-    Load configuration with tiered fallback: local → base config.
-    This matches the CLI's config loading behavior.
-    """
-    config_dir = Path(__file__).parent.parent.parent / "config"
-    local_config_path = config_dir / "config.local.yaml"
-    base_config_path = config_dir / "config.yaml"
-
-    config: Dict[str, Any] = {}
-
-    # 1. Load local config first (preferred)
-    if local_config_path.exists():
-        try:
-            local_config = load_config(str(local_config_path))
-            if local_config:
-                config.update(local_config)
-        except (OSError, IOError) as e:
-            raise RuntimeError(
-                f"Error loading local config from {local_config_path}: {e}"
-            ) from e
-        except yaml.YAMLError as e:
-            raise RuntimeError(
-                f"YAML error in local config {local_config_path}: {e}"
-            ) from e
-
-    # 2. Load base config and fill missing keys
-    if base_config_path.exists():
-        try:
-            base_config = load_config(str(base_config_path))
-            if base_config:
-                # Fill missing keys from base config
-                for key, value in base_config.items():
-                    if key not in config:
-                        config[key] = value
-        except (OSError, IOError) as e:
-            raise RuntimeError(
-                f"Error loading base config from {base_config_path}: {e}"
-            ) from e
-        except yaml.YAMLError as e:
-            raise RuntimeError(
-                f"YAML error in base config {base_config_path}: {e}"
-            ) from e
-
-    # Validate that at least one config is loaded
-    if not config:
-        raise ValueError(
-            "No valid configuration loaded from local or base config files."
-        )
-
-    return config
+    """Environment-only configuration loader for the API process."""
+    return load_env_config()
 
 
 @asynccontextmanager

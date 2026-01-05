@@ -136,7 +136,7 @@ def optimize(
         # Try to get config path from context, otherwise use default
         config_path = ctx.obj.get("config_path") if ctx.obj else None
         if not config_path or config_path == "TIERED":
-            config_path = "config/config.yaml"
+            config_path = ".env"
         config = load_config(config_path)
     except Exception as e:
         console.print(f"[bold red]Error loading config:[/bold red] {e}")

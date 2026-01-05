@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from ..core import FinanceFeedbackEngine
+from ..utils.ollama_readiness import resolve_debate_providers
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +26,24 @@ def _get_config_path() -> str:
     Returns:
         Path to the config file as a string
     """
-    config_dir = Path(__file__).parent.parent.parent / "config"
+    project_root = Path(__file__).parent.parent.parent
+    config_dir = project_root / "config"
+    data_dir = project_root / "data"
+
+    runtime_config_path = data_dir / "config.local.runtime.yaml"
     local_config_path = config_dir / "config.local.yaml"
     base_config_path = config_dir / "config.yaml"
 
-    # Prefer local config if it exists, otherwise use base config
+    # Prefer runtime overlay, then local, then base
+    if runtime_config_path.exists():
+        return str(runtime_config_path)
     if local_config_path.exists():
         return str(local_config_path)
-    elif base_config_path.exists():
+    if base_config_path.exists():
         return str(base_config_path)
-    else:
-        # If neither exists, return base config path (will fail gracefully in load_config)
-        return str(base_config_path)
+
+    # If none exist, fall back to base (will fail gracefully in load_config)
+    return str(base_config_path)
 
 
 def check_ollama_status_sync() -> Dict[str, Any]:
@@ -57,15 +64,27 @@ def check_ollama_status_sync() -> Dict[str, Any]:
         required_models = config.get("decision_engine", {}).get("local_models", [])
         # Extract base model names (remove version tags like :3b-instruct-fp16)
         required_models = [m.split(":")[0] for m in required_models]
+        ensemble_config = config.get("ensemble", {})
+        debate_providers = ensemble_config.get("debate_providers", {})
+        resolved_debate_providers = resolve_debate_providers(debate_providers, config)
     except Exception as e:
         logger.warning(f"Could not load local_models from config: {e}")
         required_models = []
+        debate_providers = {}
+        resolved_debate_providers = {}
 
     status = {
         "available": False,
         "host": ollama_host,
+        "models": [],
         "models_loaded": [],
         "models_missing": [],
+        "debate_config": (
+            resolved_debate_providers
+            if resolved_debate_providers
+            else (debate_providers if debate_providers else None)
+        ),
+        "missing_debate_models": [],
         "error": None,
         "warning": None
     }
@@ -79,22 +98,46 @@ def check_ollama_status_sync() -> Dict[str, Any]:
             models = data.get("models", [])
 
             # Extract model names (base name without tag)
-            available_models = [
-                m.get("name", "").split(":")[0]
-                for m in models
-            ]
+            available_model_names = [m.get("name", "") for m in models]
+            available_base_names = [name.split(":")[0] for name in available_model_names]
+
+            status["models"] = available_model_names
 
             status["available"] = True
 
             # Check which required models are present
             for model in required_models:
-                if model in available_models:
+                if model in available_base_names:
                     status["models_loaded"].append(model)
                 else:
                     status["models_missing"].append(model)
 
+            # Check debate seat models
+            if resolved_debate_providers:
+                for seat, provider in resolved_debate_providers.items():
+                    is_ollama = ":" in provider or any(
+                        kw in provider.lower()
+                        for kw in ["llama", "mistral", "deepseek", "gemma", "phi", "qwen"]
+                    )
+
+                    if is_ollama and provider not in ["local"]:
+                        provider_base = provider.split(":")[0].lower()
+                        found = any(
+                            provider.lower() in avail.lower() or
+                            provider_base in avail.lower().split(":")[0]
+                            for avail in available_model_names
+                        )
+                        if not found:
+                            status["missing_debate_models"].append(provider)
+
             # Set warnings if models are missing
-            if status["models_missing"]:
+            if status["missing_debate_models"]:
+                status["warning"] = (
+                    f"Debate models missing: "
+                    f"{', '.join(status['missing_debate_models'])}. "
+                    f"Pull with: ollama pull <model>"
+                )
+            elif status["models_missing"]:
                 status["warning"] = (
                     f"Ollama is running but missing required models: "
                     f"{', '.join(status['models_missing'])}. "
@@ -136,10 +179,12 @@ async def check_ollama_status() -> Dict[str, Any]:
         # Get debate configuration
         ensemble_config = config.get("ensemble", {})
         debate_providers = ensemble_config.get("debate_providers", {})
+        resolved_debate_providers = resolve_debate_providers(debate_providers, config)
     except Exception as e:
         logger.warning(f"Could not load config: {e}")
         required_models = []
         debate_providers = {}
+        resolved_debate_providers = {}
 
     status = {
         "available": False,
@@ -147,7 +192,11 @@ async def check_ollama_status() -> Dict[str, Any]:
         "models": [],  # Full model list with tags
         "models_loaded": [],
         "models_missing": [],
-        "debate_config": debate_providers if debate_providers else None,
+        "debate_config": (
+            resolved_debate_providers
+            if resolved_debate_providers
+            else (debate_providers if debate_providers else None)
+        ),
         "missing_debate_models": [],
         "error": None,
         "warning": None
@@ -180,8 +229,8 @@ async def check_ollama_status() -> Dict[str, Any]:
                             status["models_missing"].append(model)
 
                     # Check debate seat models
-                    if debate_providers:
-                        for seat, provider in debate_providers.items():
+                    if resolved_debate_providers:
+                        for seat, provider in resolved_debate_providers.items():
                             # Check if provider is an Ollama model (not "local" or cloud providers)
                             is_ollama = ":" in provider or any(
                                 kw in provider.lower()
@@ -395,9 +444,12 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
                       else "degraded" if ollama_status["available"]
                       else "unavailable",
             "available": ollama_status["available"],
+            "models": ollama_status.get("models", []),
             "models_loaded": ollama_status["models_loaded"],
             "models_missing": ollama_status["models_missing"],
             "host": ollama_status["host"],
+            "debate_config": ollama_status.get("debate_config"),
+            "missing_debate_models": ollama_status.get("missing_debate_models", []),
             "error": ollama_status.get("error"),
             "warning": ollama_status.get("warning"),
         }
@@ -441,6 +493,27 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     """
     from ..database import check_database_health
 
+    def _is_missing(value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            trimmed = value.strip()
+            if not trimmed:
+                return True
+            placeholder_tokens = ("YOUR_", "changeme", "CHANGEME")
+            return any(token in trimmed for token in placeholder_tokens)
+        return False
+
+    def _fail(reason: str, extra: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        payload = {
+            "ready": False,
+            "reason": reason,
+            "uptime_seconds": uptime,
+        }
+        if extra:
+            payload.update(extra)
+        return payload
+
     # Check if we've been running for at least 10 seconds
     uptime = (datetime.utcnow() - _startup_time).total_seconds()
 
@@ -456,23 +529,73 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         # 1. Database must be available and schema must be initialized
         db_health = check_database_health()
         if not db_health.get("available", False):
-            return {
-                "ready": False,
-                "reason": f"Database not available: {db_health.get('error', 'unknown error')}",
-                "uptime_seconds": uptime,
-                "database": db_health,
-            }
+            return _fail(
+                f"Database not available: {db_health.get('error', 'unknown error')}",
+                {"database": db_health},
+            )
 
         # 2. Schema version must be set (migrations must have run)
         if not db_health.get("schema_version"):
-            return {
-                "ready": False,
-                "reason": "Database schema not initialized (migrations not run)",
-                "uptime_seconds": uptime,
-                "database": db_health,
-            }
+            return _fail(
+                "Database schema not initialized (migrations not run)",
+                {"database": db_health},
+            )
 
-        # 3. Platform must be accessible
+        # 3. Validate required provider credentials (fail closed)
+        config = getattr(engine, "config", {}) or {}
+
+        alpha_key = (
+            config.get("providers", {})
+            .get("alpha_vantage", {})
+            .get("api_key")
+            or config.get("alpha_vantage_api_key")
+        )
+        if _is_missing(alpha_key):
+            return _fail("Alpha Vantage API key missing or placeholder")
+
+        trading_platform = config.get("trading_platform")
+        if _is_missing(trading_platform):
+            return _fail("Trading platform not configured")
+
+        def _credentials_valid(name: str, creds: Dict[str, Any]) -> bool:
+            if not isinstance(creds, dict):
+                return False
+            required_keys = ["api_key"]
+            if "coinbase" in str(name):
+                required_keys.append("api_secret")
+            if "oanda" in str(name):
+                required_keys.append("account_id")
+            for key in required_keys:
+                if _is_missing(creds.get(key)):
+                    return False
+            return True
+
+        if str(trading_platform).lower() == "unified":
+            platforms = config.get("platforms", []) or []
+            if not platforms:
+                return _fail("Unified platform selected but no platforms configured")
+
+            valid_platforms = [
+                p
+                for p in platforms
+                if _credentials_valid(p.get("name"), p.get("credentials", {}))
+            ]
+
+            if not valid_platforms:
+                return _fail(
+                    "Unified platform selected but no platform credentials are valid",
+                    {
+                        "platforms": [p.get("name") or "unknown" for p in platforms],
+                    },
+                )
+        else:
+            platform_creds = config.get("platform_credentials", {})
+            if not _credentials_valid(trading_platform, platform_creds):
+                return _fail(
+                    f"Platform '{trading_platform}' credentials missing or placeholder"
+                )
+
+        # 4. Platform must be accessible
         if hasattr(engine, "platform"):
             _safe_json(engine.platform.get_balance())
 
@@ -487,6 +610,7 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
                 "latency_ms": db_health.get("latency_ms", 0),
                 "connections": db_health.get("connections", 0),
             },
+            "trading_platform": trading_platform,
         }
 
     except Exception as e:
