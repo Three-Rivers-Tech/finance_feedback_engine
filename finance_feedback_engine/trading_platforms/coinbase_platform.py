@@ -632,21 +632,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                 try:
                     futures_response = client.get_futures_balance_summary()
-                    balance_summary = getattr(futures_response, "balance_summary", None)
+                    # Use helper function to handle both object and dict formats
+                    def _get_attr_value(
+                        obj: Any, attr: str, default: Any = 0
+                    ) -> Any:
+                        """Safely get attribute from object or dict."""
+                        if isinstance(obj, dict):
+                            return obj.get(attr, default)
+                        return getattr(obj, attr, default)
+                    
+                    balance_summary = _get_attr_value(futures_response, "balance_summary", None)
                     if balance_summary:
 
                         def _to_float_value(v: Any) -> float:
                             if isinstance(v, dict):
                                 return float(v.get("value", 0) or 0)
                             return float(getattr(v, "value", v) or 0)
-
-                        def _get_attr_value(
-                            obj: Any, attr: str, default: Any = 0
-                        ) -> Any:
-                            """Safely get attribute from object or dict."""
-                            if isinstance(obj, dict):
-                                return obj.get(attr, default)
-                            return getattr(obj, attr, default)
 
                         futures_value_usd = _to_float_value(
                             _get_attr_value(balance_summary, "futures_buying_power", 0)
