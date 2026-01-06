@@ -1472,7 +1472,7 @@ class TestBalanceAndConnectionEdgeCases:
         platform._client = mock_client
 
         # Should handle missing methods gracefully (correct method is test_connection)
-        result = platform.test_connection()
+        platform.test_connection()
         # Validation might fail or succeed with warnings depending on implementation
 
     def test_get_minimum_order_size_product_missing_quote_min_size(self, platform, mock_client):
