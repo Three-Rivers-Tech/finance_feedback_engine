@@ -1391,7 +1391,7 @@ class TestTradeExecutionEdgeCases:
             "timestamp": "2024-01-01T12:34:56Z"
         }
 
-        result = platform.execute_trade(decision)
+        platform.execute_trade(decision)
 
         # Verify client_order_id was generated
         call_args = mock_client.market_order_buy.call_args
