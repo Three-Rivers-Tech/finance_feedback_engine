@@ -14,6 +14,38 @@ from .retry_handler import platform_retry, get_timeout_config, standardize_platf
 logger = logging.getLogger(__name__)
 
 
+def _get_attr_value(obj: Any, attr: str, default: Any = None) -> Any:
+    """
+    Safely get attribute from object or dict.
+    
+    Args:
+        obj: Object or dict to get attribute from
+        attr: Attribute name
+        default: Default value if attribute not found
+        
+    Returns:
+        Attribute value or default
+    """
+    if isinstance(obj, dict):
+        return obj.get(attr, default)
+    return getattr(obj, attr, default)
+
+
+def _to_float_value(v: Any) -> float:
+    """
+    Convert value to float, handling both dict and object formats.
+    
+    Args:
+        v: Value to convert (can be dict with 'value' key, object with 'value' attr, or direct number)
+        
+    Returns:
+        Float value
+    """
+    if isinstance(v, dict):
+        return float(v.get("value", 0) or 0)
+    return float(getattr(v, "value", v) or 0)
+
+
 class CoinbaseAdvancedPlatform(BaseTradingPlatform):
     """
     Coinbase Advanced trading platform integration.
@@ -393,19 +425,6 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     # (includes spot USD/USDC that can be used for futures trading)
                     # total_usd_balance only shows active futures positions
 
-                    # Helper function to safely get attribute from object or dict
-                    def _get_attr_value(obj: Any, attr: str, default: Any = None) -> Any:
-                        """Safely get attribute from object or dict."""
-                        if isinstance(obj, dict):
-                            return obj.get(attr, default)
-                        return getattr(obj, attr, default)
-
-                    # Helper function to convert value to float
-                    def _to_float_value(v: Any) -> float:
-                        if isinstance(v, dict):
-                            return float(v.get("value", 0) or 0)
-                        return float(getattr(v, "value", 0) or 0)
-
                     futures_buying_power = _get_attr_value(balance_summary, "futures_buying_power")
                     if futures_buying_power:
                         futures_usd = _to_float_value(futures_buying_power)
@@ -632,21 +651,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                 try:
                     futures_response = client.get_futures_balance_summary()
-                    balance_summary = getattr(futures_response, "balance_summary", None)
+                    # Use module-level helper function to handle both object and dict formats
+                    balance_summary = _get_attr_value(futures_response, "balance_summary", None)
                     if balance_summary:
-
-                        def _to_float_value(v: Any) -> float:
-                            if isinstance(v, dict):
-                                return float(v.get("value", 0) or 0)
-                            return float(getattr(v, "value", v) or 0)
-
-                        def _get_attr_value(
-                            obj: Any, attr: str, default: Any = 0
-                        ) -> Any:
-                            """Safely get attribute from object or dict."""
-                            if isinstance(obj, dict):
-                                return obj.get(attr, default)
-                            return getattr(obj, attr, default)
 
                         futures_value_usd = _to_float_value(
                             _get_attr_value(balance_summary, "futures_buying_power", 0)
