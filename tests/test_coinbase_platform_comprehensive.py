@@ -92,15 +92,14 @@ def mock_client():
     position = MagicMock()
     position.product_id = "BTC-USD-PERP"
     position.side = "LONG"
-    position.number_of_contracts = "1.5"
-    position.contracts = 1.5  # Numeric version for PositionInfo conversion
+    position.number_of_contracts = "1.5"  # API returns string
     position.avg_entry_price = "50000.0"
     position.current_price = "51000.0"
     position.unrealized_pnl = "750.0"
     position.daily_realized_pnl = "50.0"
     position.created_at = "2024-01-01T00:00:00Z"
     position.id = "pos-123"
-    position.leverage = 10.0  # Max leverage for futures
+    position.leverage = "10.0"  # API returns string, will be converted to float
     # Support dict-like access for .get() calls
     position.__getitem__ = lambda self, key: getattr(position, key, None)
     position.get = lambda key, default=None: getattr(position, key, default)
@@ -596,7 +595,9 @@ class TestExecuteTrade:
 
     def test_execute_trade_buy_success(self, platform, mock_client):
         """Test successful BUY trade execution."""
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-123",
             "status": "FILLED",
@@ -630,7 +631,9 @@ class TestExecuteTrade:
         product.price = "50000.0"
         mock_client.get_product.return_value = product
 
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-456",
             "status": "FILLED",
@@ -721,7 +724,9 @@ class TestExecuteTrade:
         product.price = "40000.0"  # Current BTC price
         mock_client.get_product.return_value = product
 
-        order_result = {
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
             "success": True,
             "order_id": "order-sell-123",
             "status": "FILLED"
@@ -791,7 +796,9 @@ class TestExecuteTrade:
 
     def test_execute_trade_formats_product_id(self, platform, mock_client):
         """Test that product ID is formatted correctly."""
-        order_result = {"success": True, "order_id": "order-format"}
+        # Create mock order result with to_dict() method
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {"success": True, "order_id": "order-format"}
         mock_client.market_order_buy.return_value = order_result
         mock_client.list_orders.return_value = []
 
@@ -1090,3 +1097,436 @@ class TestEdgeCases:
 
         # Should fall through to normal execution or return error
         assert "success" in result
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Client Initialization & Error Paths
+# ============================================================================
+
+
+class TestClientInitializationEdgeCases:
+    """Test client initialization error paths and edge cases."""
+
+    def test_get_client_import_error_raises_trading_error(self, credentials):
+        """Test that ImportError during client init raises TradingError."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        # Patch the specific coinbase.rest module import to raise ImportError
+        with patch('finance_feedback_engine.trading_platforms.coinbase_platform.RESTClient', side_effect=ImportError("coinbase.rest not found")):
+            with pytest.raises(Exception) as exc_info:
+                platform._get_client()
+            # Should raise TradingError with "not available" message
+            assert "not available" in str(exc_info.value).lower()
+
+    def test_get_client_handles_client_init_exception(self, credentials):
+        """Test handling of exceptions during REST client initialization."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        # Patch RESTClient to raise exception during init
+        with patch('coinbase.rest.RESTClient', side_effect=RuntimeError("Auth failed")):
+            with pytest.raises(RuntimeError):
+                platform._get_client()
+
+    def test_get_client_trace_headers_none(self, credentials):
+        """Test client init when trace headers return None."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        mock_rest_client = MagicMock()
+        mock_rest_client.session = MagicMock()
+        mock_rest_client.session.headers = {}
+
+        with patch('coinbase.rest.RESTClient', return_value=mock_rest_client):
+            with patch('finance_feedback_engine.trading_platforms.coinbase_platform.get_trace_headers', return_value=None):
+                client = platform._get_client()
+                assert client is not None
+                # Headers should not be updated when trace headers are None
+
+    def test_get_client_trace_headers_empty_dict(self, credentials):
+        """Test client init when trace headers return empty dict."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        mock_rest_client = MagicMock()
+        mock_rest_client.session = MagicMock()
+        mock_rest_client.session.headers = {}
+
+        with patch('coinbase.rest.RESTClient', return_value=mock_rest_client):
+            with patch('finance_feedback_engine.trading_platforms.coinbase_platform.get_trace_headers', return_value={}):
+                client = platform._get_client()
+                assert client is not None
+
+    def test_get_client_no_session_attribute(self, credentials):
+        """Test client init when client has no session attribute."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        mock_rest_client = MagicMock(spec=['get_product'])  # No session attribute
+
+        with patch('coinbase.rest.RESTClient', return_value=mock_rest_client):
+            with patch('finance_feedback_engine.trading_platforms.coinbase_platform.get_trace_headers', return_value={"X-Trace-ID": "123"}):
+                client = platform._get_client()
+                assert client is not None
+                # Should log warning but not fail
+
+    def test_get_client_session_headers_not_dict_like(self, credentials):
+        """Test client init when session.headers doesn't support update()."""
+        platform = CoinbaseAdvancedPlatform(credentials)
+
+        mock_rest_client = MagicMock()
+        mock_rest_client.session = MagicMock()
+        # Headers is a string (not dict-like)
+        mock_rest_client.session.headers = "not-a-dict"
+
+        with patch('coinbase.rest.RESTClient', return_value=mock_rest_client):
+            with patch('finance_feedback_engine.trading_platforms.coinbase_platform.get_trace_headers', return_value={"X-Trace-ID": "123"}):
+                client = platform._get_client()
+                assert client is not None
+                # Should handle gracefully
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Portfolio Breakdown Edge Cases
+# ============================================================================
+
+
+class TestPortfolioBreakdownEdgeCases:
+    """Test portfolio breakdown alternative paths and edge cases."""
+
+    def test_portfolio_breakdown_futures_balance_network_error_propagates(self, platform, mock_client):
+        """Test that network errors in futures balance propagate."""
+        from requests.exceptions import RequestException
+
+        mock_client.get_futures_balance_summary.side_effect = RequestException("Network error")
+        platform._client = mock_client
+
+        with pytest.raises(RequestException):
+            platform.get_portfolio_breakdown()
+
+    def test_portfolio_breakdown_positions_network_error_propagates(self, platform, mock_client):
+        """Test that network errors in positions listing propagate."""
+        from requests.exceptions import RequestException
+
+        # Balance summary succeeds
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="10000.0")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        # Positions list fails with network error
+        mock_client.list_futures_positions.side_effect = RequestException("Network error")
+        platform._client = mock_client
+
+        with pytest.raises(RequestException):
+            platform.get_portfolio_breakdown()
+
+    def test_portfolio_breakdown_spot_accounts_network_error_propagates(self, platform, mock_client):
+        """Test that network errors in spot accounts propagate."""
+        from requests.exceptions import RequestException
+
+        # Futures data succeeds
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="10000.0")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        positions_response = MagicMock()
+        positions_response.positions = []
+        mock_client.list_futures_positions.return_value = positions_response
+
+        # Accounts fails with network error
+        mock_client.get_accounts.side_effect = RequestException("Network error")
+        platform._client = mock_client
+
+        with pytest.raises(RequestException):
+            platform.get_portfolio_breakdown()
+
+    def test_portfolio_breakdown_missing_balance_summary_attribute(self, platform, mock_client):
+        """Test handling when futures response has no balance_summary attribute."""
+        futures_response = MagicMock(spec=[])  # No balance_summary attribute
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        positions_response = MagicMock()
+        positions_response.positions = []
+        mock_client.list_futures_positions.return_value = positions_response
+
+        accounts_response = MagicMock()
+        accounts_response.accounts = []
+        mock_client.get_accounts.return_value = accounts_response
+
+        platform._client = mock_client
+        result = platform.get_portfolio_breakdown()
+
+        # Should handle gracefully with default values
+        assert "futures_value_usd" in result
+        assert "futures_summary" in result
+
+    def test_portfolio_breakdown_dict_response_format(self, platform, mock_client):
+        """Test portfolio breakdown with dict-based API responses."""
+        # Simulate dict-based response format (alternative API structure)
+        futures_response = {
+            "balance_summary": {
+                "futures_buying_power": {"value": "5000.0"},
+                "unrealized_pnl": {"value": "100.0"},
+                "daily_realized_pnl": {"value": "50.0"},
+                "initial_margin": {"value": "200.0"}
+            }
+        }
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        positions_response = {"positions": []}
+        mock_client.list_futures_positions.return_value = positions_response
+
+        accounts_response = {"accounts": []}
+        mock_client.get_accounts.return_value = accounts_response
+
+        platform._client = mock_client
+
+        # Implementation should handle both object and dict formats
+        result = platform.get_portfolio_breakdown()
+        assert "futures_summary" in result
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Trade Execution Edge Cases
+# ============================================================================
+
+
+class TestTradeExecutionEdgeCases:
+    """Test trade execution error paths and edge cases."""
+
+    def test_execute_trade_sell_price_lookup_network_error(self, platform, mock_client):
+        """Test SELL order when price lookup fails with network error."""
+        from requests.exceptions import RequestException
+
+        mock_client.get_product.side_effect = RequestException("Price API down")
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-sell-error",
+            "action": "SELL",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z"
+        }
+
+        # Should handle error and return failure
+        result = platform.execute_trade(decision)
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_execute_trade_sell_price_zero_raises_error(self, platform, mock_client):
+        """Test SELL order with zero price raises appropriate error."""
+        product = MagicMock()
+        product.price = "0.0"  # Zero price
+        mock_client.get_product.return_value = product
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-zero-price",
+            "action": "SELL",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z"
+        }
+
+        result = platform.execute_trade(decision)
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_execute_trade_sell_price_none_raises_error(self, platform, mock_client):
+        """Test SELL order with None price raises appropriate error."""
+        product = MagicMock()
+        product.price = None
+        mock_client.get_product.return_value = product
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-none-price",
+            "action": "SELL",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z"
+        }
+
+        result = platform.execute_trade(decision)
+        assert result["success"] is False
+
+    def test_execute_trade_order_submission_timeout(self, platform, mock_client):
+        """Test handling of timeout during order submission."""
+        from requests.exceptions import Timeout
+
+        mock_client.list_orders.return_value = []  # No existing orders
+        mock_client.market_order_buy.side_effect = Timeout("Order submission timeout")
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-timeout",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z"
+        }
+
+        result = platform.execute_trade(decision)
+        assert result["success"] is False
+        assert "timeout" in result.get("error", "").lower()
+
+    def test_execute_trade_client_id_generation(self, platform, mock_client):
+        """Test that unique client_order_id is generated for each trade."""
+        mock_client.list_orders.return_value = []
+        order_response = MagicMock()
+        order_response.to_dict.return_value = {
+            "order_id": "order-123",
+            "success": True
+        }
+        mock_client.market_order_buy.return_value = order_response
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-client-id",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T12:34:56Z"
+        }
+
+        platform.execute_trade(decision)
+
+        # Verify client_order_id was generated
+        call_args = mock_client.market_order_buy.call_args
+        assert "client_order_id" in call_args[1]
+        assert call_args[1]["client_order_id"].startswith("ffe-dec-client-id")
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Product ID Formatting Edge Cases
+# ============================================================================
+
+
+class TestProductIDFormattingEdgeCases:
+    """Test product ID formatting with unusual inputs."""
+
+    def test_format_product_id_multiple_hyphens(self, platform):
+        """Test product ID with multiple hyphens."""
+        # Some exchanges use formats like BTC-USD-PERP
+        result = platform._format_product_id("BTC-USD-PERP")
+        # Should preserve existing format
+        assert result == "BTC-USD-PERP"
+
+    def test_format_product_id_mixed_separators(self, platform):
+        """Test product ID with mixed separators."""
+        result = platform._format_product_id("BTC/USD-PERP")
+        # Should normalize to hyphenated format
+        assert "-" in result
+
+    def test_format_product_id_trailing_whitespace(self, platform):
+        """Test product ID with trailing whitespace."""
+        result = platform._format_product_id("  BTC-USD  ")
+        assert result == "BTC-USD"
+        assert not result.startswith(" ")
+        assert not result.endswith(" ")
+
+    def test_format_product_id_special_characters(self, platform):
+        """Test product ID strips special characters appropriately."""
+        result = platform._format_product_id("BTC_USD")
+        # Should handle underscore separator
+        assert "BTC" in result and "USD" in result
+
+    def test_format_product_id_numeric_in_symbol(self, platform):
+        """Test product ID with numeric characters (e.g., USDT2)."""
+        result = platform._format_product_id("BTC-USDC")
+        assert result == "BTC-USDC"
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Balance & Connection Edge Cases
+# ============================================================================
+
+
+class TestBalanceAndConnectionEdgeCases:
+    """Test balance and connection validation edge cases."""
+
+    def test_get_balance_partial_failure_returns_available_data(self, platform, mock_client):
+        """Test that partial failures still return available balance data."""
+        # Futures succeeds
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="5000.0")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        # Spot fails with non-network error
+        mock_client.get_accounts.side_effect = ValueError("Invalid account data")
+        platform._client = mock_client
+
+        result = platform.get_balance()
+
+        # Should return futures balance even though spot failed (correct key is FUTURES_USD)
+        assert result.get("FUTURES_USD", 0) > 0
+
+    def test_validate_connection_missing_client_methods(self, platform, mock_client):
+        """Test connection validation when client is missing expected methods."""
+        # Remove some expected methods from client
+        del mock_client.get_futures_balance_summary
+        platform._client = mock_client
+
+        # Should handle missing methods gracefully (correct method is test_connection)
+        # The test_connection method should raise an exception when methods are missing
+        with pytest.raises(Exception):
+            platform.test_connection()
+
+    def test_get_minimum_order_size_product_missing_quote_min_size(self, platform, mock_client):
+        """Test minimum order size when product is missing quote_min_size field."""
+        product = MagicMock(spec=['quote_increment'])  # No quote_min_size
+        mock_client.get_product.return_value = product
+        platform._client = mock_client
+
+        result = platform.get_minimum_order_size("BTC-USD")
+
+        # Should fall back to a sensible default value
+        assert result > 0
+
+
+# ============================================================================
+# ADDITIONAL COVERAGE TESTS - Account Info Edge Cases
+# ============================================================================
+
+
+class TestAccountInfoEdgeCases:
+    """Test account info edge cases and error handling."""
+
+    def test_get_account_info_no_futures_positions_defaults_leverage(self, platform, mock_client):
+        """Test account info when no futures positions exist uses default leverage."""
+        # Empty positions
+        positions_response = MagicMock()
+        positions_response.positions = []
+        mock_client.list_futures_positions.return_value = positions_response
+
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="1000.0")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+
+        accounts_response = MagicMock()
+        accounts_response.accounts = []
+        mock_client.get_accounts.return_value = accounts_response
+
+        platform._client = mock_client
+        result = platform.get_account_info()
+
+        # Should default to a reasonable spot leverage value when no futures positions exist
+        assert isinstance(result["max_leverage"], (int, float))
+        assert result["max_leverage"] >= 1.0
+
+    def test_get_account_info_portfolio_error_returns_error_status(self, platform, mock_client):
+        """Test account info returns error status when portfolio breakdown fails."""
+        mock_client.get_futures_balance_summary.side_effect = Exception("API error")
+        platform._client = mock_client
+
+        result = platform.get_account_info()
+
+        # Should return error status when portfolio breakdown fails
+        assert result["status"] == "error"
+        assert "error" in result
+        assert "API error" in str(result["error"])
