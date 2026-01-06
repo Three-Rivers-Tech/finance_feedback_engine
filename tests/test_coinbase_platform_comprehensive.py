@@ -1260,7 +1260,6 @@ class TestPortfolioBreakdownEdgeCases:
         assert "futures_value_usd" in result
         assert "futures_summary" in result
 
-    @pytest.mark.external_service
     def test_portfolio_breakdown_dict_response_format(self, platform, mock_client):
         """Test portfolio breakdown with dict-based API responses."""
         # Simulate dict-based response format (alternative API structure)
@@ -1472,8 +1471,9 @@ class TestBalanceAndConnectionEdgeCases:
         platform._client = mock_client
 
         # Should handle missing methods gracefully (correct method is test_connection)
-        platform.test_connection()
-        # Validation might fail or succeed with warnings depending on implementation
+        # The test_connection method should raise an exception when methods are missing
+        with pytest.raises(Exception):
+            platform.test_connection()
 
     def test_get_minimum_order_size_product_missing_quote_min_size(self, platform, mock_client):
         """Test minimum order size when product is missing quote_min_size field."""
