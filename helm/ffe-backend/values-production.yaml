@@ -1,0 +1,176 @@
+# Production Environment Values
+# Use: helm install ffe helm/ffe-backend -f helm/ffe-backend/values-production.yaml
+
+replicaCount: 3
+
+image:
+  repository: finance-feedback-engine
+  pullPolicy: Always
+  tag: latest
+
+# Service
+service:
+  type: ClusterIP
+  port: 8000
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+# Ingress enabled with production domains + TLS
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+  hosts:
+    - host: ffe.three-rivers-tech.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: api.ffe.three-rivers-tech.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: ffe-tls
+      hosts:
+        - ffe.three-rivers-tech.com
+        - api.ffe.three-rivers-tech.com
+
+# Resources - High for production
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Autoscaling enabled with strict thresholds
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 75
+
+# Strict health checks
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 2
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 1
+
+# Environment
+env:
+  LOGGING_LEVEL: WARN
+  ENVIRONMENT: production
+  MONITORING_ENABLED: "true"
+
+# Database (external managed Postgres)
+database:
+  external: true
+  # Set via helm install: --set database.url="postgresql+psycopg2://user:pass@postgres.prod:5432/ffe"
+
+# Vault enabled (required for production)
+vault:
+  enabled: true
+  role: ffe-backend
+  secretPath: secret/data/production/app
+  agentInject: true
+  agentInjectStatus: update
+  agentInjectTemplate: |
+    {{- with secret "secret/data/production/app" -}}
+    export DATABASE_URL="postgresql+psycopg2://ffe_user:{{ .Data.data.db_password }}@postgres-prod:5432/ffe"
+    export ALPHA_VANTAGE_API_KEY="{{ .Data.data.alpha_vantage_api_key }}"
+    export COINBASE_API_KEY="{{ .Data.data.coinbase_api_key }}"
+    export OANDA_API_KEY="{{ .Data.data.oanda_api_key }}"
+    {{- end }}
+
+# Persistence enabled with larger size
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: fast-ssd
+  mountPath: /app/data
+
+# Pod disruption budget required for HA
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Security context stricter
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Strong anti-affinity + node selector for prod nodes
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - ffe-backend
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - production
+
+nodeSelector:
+  node-type: production
+
+# Tolerations for dedicated nodes (optional)
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: production
+    effect: NoSchedule
+
+# Secrets from Vault (do NOT hardcode)
+secrets:
+  create: true
+  data: {}

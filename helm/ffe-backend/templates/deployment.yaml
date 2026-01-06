@@ -1,0 +1,188 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ffe-backend.fullname" . }}
+  labels:
+    {{- include "ffe-backend.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ffe-backend.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      annotations:
+        {{- include "ffe-backend.labels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "ffe-backend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ffe-backend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      # Init container: Wait for database and run migrations
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
+
+        - name: alembic-migrate
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/scripts/run_migrations.sh"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-db
+                  key: url
+            {{- if .Values.vault.enabled }}
+            - name: VAULT_ADDR
+              value: http://vault:8200
+            - name: VAULT_ROLE
+              value: {{ .Values.vault.role }}
+            {{- end }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 8000
+              protocol: TCP
+
+          # Vault Secret Agent Injection (if enabled)
+          {{- if .Values.vault.enabled }}
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "source /vault/secrets/config && exec /app/scripts/start.sh"]
+          {{- end }}
+
+          # Environment Variables
+          envFrom:
+            - configMapRef:
+                name: {{ include "ffe-backend.fullname" . }}-config
+          env:
+            # Database URL (from Secret or Vault)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-db
+                  key: url
+
+            # API Keys and Secrets (from Vault Secret injection or Secret)
+            - name: ALPHA_VANTAGE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-secrets
+                  key: alpha_vantage_api_key
+                  optional: true
+
+            - name: COINBASE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-secrets
+                  key: coinbase_api_key
+                  optional: true
+
+            - name: OANDA_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-secrets
+                  key: oanda_api_key
+                  optional: true
+
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-secrets
+                  key: telegram_bot_token
+                  optional: true
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ffe-backend.fullname" . }}-secrets
+                  key: jwt_secret
+                  optional: true
+
+          # Health Checks
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+
+          # Resource Limits
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # Volume Mounts
+          volumeMounts:
+            - name: app-data
+              mountPath: /app/data
+            {{- if .Values.vault.enabled }}
+            - name: vault-token
+              mountPath: /vault/secrets
+              readOnly: true
+            {{- end }}
+
+      # Pod Volumes
+      volumes:
+        - name: app-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "ffe-backend.fullname" . }}-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.vault.enabled }}
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: vault
+                  expirationSeconds: 3600
+                  path: vault-token
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

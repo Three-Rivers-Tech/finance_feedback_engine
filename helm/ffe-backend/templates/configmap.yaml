@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ffe-backend.fullname" . }}-config
+  labels:
+    {{- include "ffe-backend.labels" . | nindent 4 }}
+data:
+  # Application configuration
+  PYTHONUNBUFFERED: "1"
+  LOGGING_LEVEL: {{ .Values.env.LOGGING_LEVEL | quote }}
+  MONITORING_ENABLED: {{ .Values.env.MONITORING_ENABLED | quote }}
+  ENVIRONMENT: {{ .Values.env.ENVIRONMENT | quote }}
+
+  # Port configuration
+  PORT: "8000"
+  HOST: "0.0.0.0"
+
+  # Database configuration (URL passed via Secret or Vault injection)
+  # DATABASE_URL is set via Secret or Vault agent injection
+  DB_POOL_SIZE: "20"
+  DB_POOL_OVERFLOW: "5"
+  DB_POOL_TIMEOUT: "30"
+  DB_POOL_RECYCLE: "3600"
+
+  # Server configuration
+  UVICORN_WORKERS: "4"
+  UVICORN_RELOAD: "false"
+
+  # Prometheus metrics
+  PROMETHEUS_ENABLED: "true"
+  PROMETHEUS_PORT: "8000"
+  PROMETHEUS_PATH: "/metrics"
+
+  {{- if .Values.configMap.data }}
+  # Additional configuration from values
+  {{- toYaml .Values.configMap.data | nindent 2 }}
+  {{- end }}

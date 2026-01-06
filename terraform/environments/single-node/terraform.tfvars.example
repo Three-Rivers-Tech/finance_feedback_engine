@@ -1,0 +1,113 @@
+# =============================================================================
+# Single-Node Environment - Example Configuration
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values
+# NEVER commit terraform.tfvars to version control!
+# =============================================================================
+
+# Environment
+environment  = "dev"
+cluster_name = "ffe-dev"
+namespace    = "ffe"
+
+# =============================================================================
+# COMPUTE CONFIGURATION
+# =============================================================================
+
+master_ip            = "192.168.1.100"  # Your Ubuntu server IP
+worker_ips           = []                # Empty for single-node
+ssh_user             = "ubuntu"
+ssh_private_key_path = "~/.ssh/id_rsa"
+k3s_version          = "v1.29.0+k3s1"
+
+# =============================================================================
+# GPU CONFIGURATION (REQUIRED)
+# =============================================================================
+# List ALL nodes with NVIDIA GPUs - this is critical for AI/ML workloads!
+# For single-node deployment, this should contain just your master_ip
+
+gpu_node_ips          = ["192.168.1.100"]  # Match master_ip if GPU is on master
+nvidia_driver_version = "545"               # Supports RTX 30/40 series, A100, H100
+
+# =============================================================================
+# NETWORKING CONFIGURATION
+# =============================================================================
+
+domain_names = [
+  "ffe-dev.three-rivers-tech.com",
+  "api-dev.ffe.three-rivers-tech.com"
+]
+
+network_cidr       = "10.42.0.0/16"
+ingress_ip         = "192.168.1.100"  # Usually same as master_ip for single-node
+dns_servers        = ["8.8.8.8", "8.8.4.4"]
+manage_firewall    = true             # Enable UFW management
+cloudflare_zone_id = ""               # Optional: Cloudflare zone ID for DNS automation
+
+# =============================================================================
+# VAULT CONFIGURATION
+# =============================================================================
+
+vault_version      = "1.17"
+vault_helm_version = "0.27.0"
+acme_email         = "your-email@example.com"  # Required for Let's Encrypt
+
+# =============================================================================
+# APPLICATION CONFIGURATION
+# =============================================================================
+
+ffe_app_version = "0.1.0"
+deploy_postgres = true
+
+# Database Configuration
+postgres_password     = "changeme-secure-password"  # CHANGE THIS!
+postgres_helm_version = "13.2.0"
+postgres_volume_size  = "20Gi"
+
+# If using external database (deploy_postgres = false):
+# database_url = "postgresql://user:password@host:5432/ffe"
+
+# Kubernetes Components
+cert_manager_version  = "v1.19.2"
+nginx_ingress_version = "4.10.0"
+
+# =============================================================================
+# TAGS
+# =============================================================================
+
+tags = {
+  Project     = "Finance Feedback Engine"
+  Environment = "development"
+  ManagedBy   = "Terraform"
+  GPU         = "nvidia"
+  CreatedBy   = "your-name"
+}
+
+# =============================================================================
+# IMPORTANT NOTES
+# =============================================================================
+#
+# 1. GPU Setup:
+#    - Verify GPU detection: ssh ubuntu@192.168.1.100 "lspci | grep -i nvidia"
+#    - Ensure NVIDIA drivers installed or let Terraform install them
+#    - Check GPU memory: nvidia-smi
+#
+# 2. Network Setup:
+#    - Update /etc/hosts or DNS with domain names pointing to ingress_ip
+#    - Ensure ports 6443, 80, 443 are open in firewall
+#
+# 3. Storage:
+#    - For production, use dedicated SSD for database (/var/lib/rancher/k3s)
+#    - Ensure sufficient disk space (100GB+ recommended)
+#
+# 4. Security:
+#    - Change postgres_password to a strong password
+#    - Use SSH key authentication (disable password auth)
+#    - Rotate credentials regularly
+#
+# 5. GPU Verification After Deployment:
+#    export KUBECONFIG=../../modules/compute/kubeconfig.yaml
+#    kubectl run gpu-test --rm -it --image=nvidia/cuda:12.0-base --restart=Never -- nvidia-smi
+#    kubectl get nodes -o custom-columns=NAME:.metadata.name,GPU:.status.allocatable."nvidia\.com/gpu"
+#
+# =============================================================================
