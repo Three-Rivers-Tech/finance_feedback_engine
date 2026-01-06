@@ -1,0 +1,65 @@
+# =============================================================================
+# Example Terraform Variables (Single-Node Development)
+# =============================================================================
+# Copy this file to terraform.tfvars and customize for your environment
+# Usage: terraform plan -var-file=terraform.tfvars
+# =============================================================================
+
+# Environment Configuration
+environment  = "dev"
+cluster_name = "ffe-dev"
+namespace    = "ffe"
+
+# Kubernetes Configuration
+kubeconfig_path = "~/.kube/config"  # Or leave empty to use current context
+
+# Networking
+domain_names = [
+  "ffe.three-rivers-tech.com",
+  "api.ffe.three-rivers-tech.com"
+]
+network_cidr = "10.0.0.0/16"
+dns_servers  = ["8.8.8.8", "8.8.4.4"]
+
+# ACME/TLS
+acme_email = "cpenrod@three-rivers-tech.com"
+
+# Database (PostgreSQL)
+postgres_bundled = false  # Set to true to deploy Postgres via Helm
+postgres_endpoint = "postgres.example.com:5432"
+database_url = "postgresql+psycopg2://ffe_user:CHANGEME@postgres:5432/ffe"
+
+# Sensitive: Use environment variables or Vault for these
+# export TF_VAR_postgres_password="..."
+# export TF_VAR_postgres_replication_password="..."
+# export TF_VAR_database_url="..."
+
+# Application
+ffe_app_version = "latest"
+ffe_replicas    = 1
+
+# Vault
+vault_version    = "1.17"
+vault_ha_enabled = false  # Set to true for production HA
+
+# Storage
+storage_classes = {
+  fast-ssd = {
+    provisioner = "kubernetes.io/no-provisioner"
+    type        = "ssd"
+  }
+  standard = {
+    provisioner = "kubernetes.io/no-provisioner"
+    type        = "hdd"
+  }
+}
+
+backup_retention_days = 30
+
+# Tags
+tags = {
+  Project     = "Finance-Feedback-Engine"
+  Environment = "dev"
+  ManagedBy   = "Terraform"
+  Team        = "Three-Rivers-Tech"
+}

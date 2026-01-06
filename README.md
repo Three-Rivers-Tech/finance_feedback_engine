@@ -142,6 +142,25 @@ graph TB
 
 **Sentiment Source:** News sentiment uses Alpha Vantage `NEWS_SENTIMENT`; no Twitter or on-chain dependencies are required.
 
+### GPU Requirements for AI/ML 🚀 **CRITICAL**
+- **NVIDIA GPU**: RTX 30/40 series, A100, H100, or equivalent
+- **CUDA**: Version 12.0+ (installed automatically via Terraform)
+- **VRAM**: 8GB minimum, 16GB+ recommended for production workloads
+- **Driver**: NVIDIA 545+ (RTX 30/40), 535+ (A100/H100)
+
+The Finance Feedback Engine requires GPU acceleration for:
+- Local AI model inference (Ollama, Gemma)
+- Real-time sentiment analysis
+- Trading decision ensemble processing
+- Portfolio optimization calculations
+
+**Deployment Options:**
+- **Kubernetes (Recommended)**: Automated GPU setup via Terraform - see [Terraform + Helm Quick Start](docs/TERRAFORM_HELM_QUICKSTART.md)
+- **Docker**: Manual GPU passthrough with nvidia-docker
+- **Bare Metal**: Python with CUDA toolkit
+
+For detailed GPU setup, see [GPU Setup Guide](docs/GPU_SETUP_GUIDE.md).
+
 ### Optional Web Service (Telegram Approvals) 🆕
 - Redis 5.x+ (auto-setup available)
 - Telegram bot token (from @BotFather)
