@@ -1,0 +1,228 @@
+# Helm Values - Finance Feedback Engine Backend
+# Default values for ffe-backend chart.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# ============================================================================
+# IMAGE CONFIGURATION
+# ============================================================================
+image:
+  repository: finance-feedback-engine
+  pullPolicy: IfNotPresent
+  tag: latest  # Overridden per environment (dev, staging, prod)
+
+imagePullSecrets: []
+
+# ============================================================================
+# DEPLOYMENT CONFIGURATION
+# ============================================================================
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1  # Overridden per environment
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Security Context
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# ============================================================================
+# SERVICE & NETWORKING
+# ============================================================================
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  annotations: {}
+
+# ============================================================================
+# INGRESS & TLS (cert-manager + Let's Encrypt)
+# ============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: ffe.three-rivers-tech.com
+      paths:
+        - path: /
+          pathType: Prefix
+    - host: api.ffe.three-rivers-tech.com
+      paths:
+        - path: /api
+          pathType: Prefix
+  tls:
+    - secretName: ffe-tls
+      hosts:
+        - ffe.three-rivers-tech.com
+        - api.ffe.three-rivers-tech.com
+
+# ============================================================================
+# RESOURCES (Requests & Limits)
+# ============================================================================
+resources:
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+# ============================================================================
+# AUTOSCALING
+# ============================================================================
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# ============================================================================
+# HEALTH CHECKS (Liveness & Readiness Probes)
+# ============================================================================
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+database:
+  # External Postgres (recommended for production)
+  external: true
+  url: ""  # Set via environment or Vault Secret injection
+
+  # Optional: Bundled PostgreSQL (via subchart)
+  # Set external: false and configure postgresql.*
+  postgresql:
+    enabled: false
+    auth:
+      username: ffe_user
+      password: ""  # Use Vault Secret injection
+      database: ffe
+    primary:
+      persistence:
+        size: 10Gi
+
+# ============================================================================
+# VAULT SECRET INJECTION (Optional but Recommended)
+# ============================================================================
+vault:
+  enabled: false
+  role: ffe-backend
+  secretPath: secret/data/production/app
+  agentInject: true
+  agentInjectStatus: update
+  agentInjectTemplate: |
+    {{- with secret "secret/data/production/app" -}}
+    export DATABASE_URL="postgresql+psycopg2://ffe_user:{{ .Data.data.db_password }}@postgres:5432/ffe"
+    export ALPHA_VANTAGE_API_KEY="{{ .Data.data.alpha_vantage_api_key }}"
+    {{- end }}
+
+# ============================================================================
+# ENVIRONMENT VARIABLES (Non-Secret)
+# ============================================================================
+env:
+  PYTHONUNBUFFERED: "1"
+  LOGGING_LEVEL: INFO
+  MONITORING_ENABLED: "true"
+  ENVIRONMENT: "development"
+
+# ============================================================================
+# CONFIG MAP & SECRETS
+# ============================================================================
+configMap:
+  # Non-sensitive configuration
+  data:
+    config.yaml: |
+      # Config will be generated from config/config.yaml
+      # Override specific sections per environment
+
+secrets:
+  # Sensitive values (should come from Vault or external Secret provider)
+  # DO NOT hardcode secrets in values.yaml
+  create: true
+  data: {}
+
+# ============================================================================
+# VOLUME & PERSISTENCE
+# ============================================================================
+persistence:
+  enabled: false
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  mountPath: /app/data
+
+# ============================================================================
+# POD DISRUPTION BUDGET (HA)
+# ============================================================================
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1  # Use one or the other
+
+# ============================================================================
+# NODE AFFINITY & SCHEDULING
+# ============================================================================
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  # Pod anti-affinity: spread replicas across nodes
+  # podAntiAffinity:
+  #   requiredDuringSchedulingIgnoredDuringExecution:
+  #     - labelSelector:
+  #         matchExpressions:
+  #           - key: app.kubernetes.io/name
+  #             operator: In
+  #             values:
+  #               - ffe-backend
+  #       topologyKey: kubernetes.io/hostname
+
+# ============================================================================
+# NOTES FOR ENVIRONMENT OVERRIDES
+# ============================================================================
+# values-dev.yaml: Low resource limits, 1 replica, debug logging
+# values-staging.yaml: Medium resources, 2 replicas, relaxed health checks
+# values-production.yaml: High resources, 3+ replicas, strict health checks, HPA enabled

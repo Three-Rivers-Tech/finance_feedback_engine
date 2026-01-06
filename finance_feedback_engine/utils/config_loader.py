@@ -176,9 +176,12 @@ def load_env_config() -> Dict[str, Any]:
         "max_daily_trades": _env_int("AGENT_MAX_DAILY_TRADES", 5),
         "strategic_goal": _env_str("AGENT_STRATEGIC_GOAL", "balanced"),
         "risk_appetite": _env_str("AGENT_RISK_APPETITE", "medium"),
-        "autonomous_enabled": _env_bool("AGENT_AUTONOMOUS_ENABLED", False),
-        "autonomous_profit_target": _env_float("AGENT_AUTONOMOUS_PROFIT_TARGET", 0.05),
-        "autonomous_stop_loss": _env_float("AGENT_AUTONOMOUS_STOP_LOSS", 0.02),
+        # Nested autonomous config (required by TradingAgentConfig)
+        "autonomous": {
+            "enabled": _env_bool("AGENT_AUTONOMOUS_ENABLED", False),
+            "profit_target": _env_float("AGENT_AUTONOMOUS_PROFIT_TARGET", 0.05),
+            "stop_loss": _env_float("AGENT_AUTONOMOUS_STOP_LOSS", 0.02),
+        },
         "correlation_threshold": _env_float("AGENT_CORRELATION_THRESHOLD", 0.7),
         "max_correlated_assets": _env_int("AGENT_MAX_CORRELATED_ASSETS", 2),
         "max_var_pct": _env_float("AGENT_MAX_VAR_PCT", 0.05),

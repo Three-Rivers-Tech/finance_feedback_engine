@@ -1,0 +1,77 @@
+# Development Environment Values
+# Use: helm install ffe helm/ffe-backend -f helm/ffe-backend/values-dev.yaml
+
+replicaCount: 1
+
+image:
+  repository: finance-feedback-engine
+  pullPolicy: IfNotPresent
+  tag: dev
+
+# Service
+service:
+  type: ClusterIP
+  port: 8000
+
+# Ingress (disabled in dev, use port-forward)
+ingress:
+  enabled: false
+
+# Resources - Minimal for development
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Autoscaling disabled
+autoscaling:
+  enabled: false
+
+# Relaxed health checks for development
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Environment
+env:
+  LOGGING_LEVEL: DEBUG
+  ENVIRONMENT: development
+
+# Database
+database:
+  external: true
+  url: "postgresql+psycopg2://ffe_user:changeme@postgres:5432/ffe"
+
+# Vault disabled in dev
+vault:
+  enabled: false
+
+# No persistence needed
+persistence:
+  enabled: false
+
+# Pod disruption budget disabled
+podDisruptionBudget:
+  enabled: false
+
+# Secrets (use defaults from config)
+secrets:
+  create: true
+  data: {}

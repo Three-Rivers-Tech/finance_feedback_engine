@@ -1,9 +1,9 @@
 # Finance Feedback Engine 2.0 - On-Premises Deployment Readiness Assessment
 
-**Assessment Date:** 2025-12-27
-**Version:** 0.9.9
-**Assessor:** Claude Code
-**Overall Readiness:** ⚠️ **Partially Ready** - Requires Critical Gaps to be Addressed
+**Assessment Date:** 2025-12-27 (updated 2026-01-06)
+**Version:** 1.0.0-pre
+**Assessor:** Claude Code (update by Copilot)
+**Overall Readiness:** ⚠️ **Partially Ready** - Terraform + Helm + Vault rollout in progress
 
 ---
 
@@ -31,12 +31,27 @@ The Finance Feedback Engine 2.0 is a sophisticated AI-powered trading decision s
 
 ## 1. Current State Analysis
 
+### 0. Action Plan (Terraform + Helm, On-Prem, Vault)
+- **Ingress/TLS:** Nginx ingress + cert-manager (ACME) on `ffe.three-rivers-tech.com` (UI) and `api.ffe.three-rivers-tech.com` (API); rolling updates as default strategy.
+- **Terraform (on-prem Ubuntu):** modules for hosts/network/firewall, Nginx LB (80/443), storage for Postgres/backups, Vault bootstrap (paths: `secret/<env>/app/*`, `database/<env>/ffe`, `pki/ffe`, `transit/ffe`), single-node + HA variants.
+- **Helm:** charts/values for backend/worker + Postgres dependency or external DSN, ingress rules with `ffe-tls` secret, Vault Secret injection, health probes, resource limits, optional dev hot-reload frontend.
+- **CI/CD:** add Terraform plan/apply, Helm install/upgrade per env, Alembic migrations via `DATABASE_URL`, health checks, backup/restore hooks (`scripts/backup.sh`, `scripts/restore.sh`), actionlint and tag-aware scans per [GITHUB_WORKFLOWS_ANALYSIS.md](GITHUB_WORKFLOWS_ANALYSIS.md).
+- **Security/ops:** nginx TLS config updates, firewall defaults, DR/rollback runbooks, mTLS-ready monitoring (Prometheus scrape), secret/cert rotation steps tied to Vault.
+
+**Linear tickets to file:**
+1) Terraform on-prem baseline (Ubuntu, LB, storage, Vault bootstrap, DNS for ffe/api subdomains).
+2) Helm charts/values (nginx ingress, cert-manager issuer, Postgres dependency, Vault secret injection, rolling updates).
+3) CI/CD wiring (Terraform plan/apply, Helm deploy, Alembic migrate, health checks, backup/restore, actionlint, tag-aware security scans).
+4) TLS/ingress hardening + Cloudflare DNS + cert-manager issuer for `ffe.three-rivers-tech.com` / `api.ffe.three-rivers-tech.com`.
+5) Vault layout + secret rotation + mTLS monitoring runbook.
+6) Docs refresh (this assessment, frontend guide TLS notes, graduation path) to remove SQLite references and align with Postgres-only defaults.
+
 ### 1.1 Technology Stack
 
 **Backend:**
 - FastAPI 0.120+ with Uvicorn
 - Python 3.10-3.12
-- SQLite (default) with PostgreSQL support
+- PostgreSQL (default, docker-compose postgres service) with SQLite only for local caches/backtest artifacts
 - Redis (optional caching)
 - Apache Spark, Airflow, dbt (data pipelines)
 
@@ -87,46 +102,37 @@ The Finance Feedback Engine 2.0 is a sophisticated AI-powered trading decision s
 
 ### 1.3 Critical Gaps
 
-❌ **Missing Deployment Scripts** (BLOCKER)
-- GitHub Actions workflow references `./scripts/deploy.sh`, `./scripts/backup.sh`, `./scripts/build.sh`
-- **None of these scripts exist in the repository**
-- The `scripts/` directory does not exist at all
-- Deployment workflow will fail if executed
+❌ **Deployment Automation Gaps** (BLOCKER)
+- Deployment scripts now exist (`scripts/deploy.sh`, `scripts/backup.sh`, `scripts/restore.sh`), but GitHub Actions still references stale paths/assumptions and lacks Terraform/Helm integration.
+- No environment-specific rollout logic (staging/prod) wired to Helm values.
+- No blue/green or rollback automation yet.
 
-❌ **No Infrastructure as Code** (BLOCKER)
-- No Terraform, Ansible, Helm, or CloudFormation
-- No systemd service files for Linux
-- No init.d scripts
-- No package manager integration (RPM, DEB)
+❌ **Infrastructure as Code** (BLOCKER)
+- Terraform + Helm on-prem baseline not yet committed (planned: Ubuntu targets, Nginx ingress, cert-manager, Vault).
+- No systemd service files for non-containerized control (acceptable once K8s/Helm is primary).
 
-❌ **Database Limitations** (CRITICAL)
-- SQLite is single-worker only (Uvicorn --workers 1)
-- No PostgreSQL migration guide
-- No database backup automation
-- No replication/failover setup
-- No schema management (Alembic/Flyway)
+❌ **Database Readiness** (CRITICAL)
+- PostgreSQL is default and runs in docker-compose, Alembic wiring exists, but CI/CD does not run migrations or enforce `DATABASE_URL` per env.
+- Backup/restore scripts exist but are not yet integrated into workflows or documented for operators.
+- No replication/failover or PgBouncer yet; Vault-based credentials not wired.
 
 ❌ **High Availability Not Supported**
-- Single-node architecture only
-- No load balancer configuration
-- No multi-instance deployment strategy
-- No sticky session handling
+- Single-node architecture only today; Terraform + Helm (Nginx ingress) planned for HA.
+- No LB/ingress TLS termination in production; cert-manager/ACME planned for `ffe.three-rivers-tech.com` and `api.ffe.three-rivers-tech.com`.
+- No multi-instance rollout or sticky session handling yet (will rely on Kubernetes/Helm rolling updates).
 
 ### 1.4 Moderate Gaps
 
 ⚠️ **Incomplete Documentation**
-- No on-premises installation guide
-- No troubleshooting runbook
-- No disaster recovery procedures
-- No performance tuning guide
-- Referenced scripts are documented but don't exist
+- On-prem Terraform + Helm path not documented (in progress).
+- Troubleshooting and DR procedures need to reference new backup/restore scripts and Helm releases.
+- TLS/ingress (Nginx + cert-manager) flow needs operator guide.
 
 ⚠️ **Security Hardening**
-- No SSL/TLS setup guide
-- No firewall rules examples
-- No VPN/tunnel configuration
-- No secrets management system (Vault, etc.)
-- No audit logging implementation
+- TLS/cert-manager and ingress hardening pending; nginx currently HTTP-only.
+- Firewall/VPN patterns not documented for on-prem.
+- Vault adoption planned (paths: `secret/<env>/app/*`, `database/<env>/ffe`, `pki/ffe`, `transit/ffe`).
+- Audit logging guidance still missing.
 
 ⚠️ **Operational Gaps**
 - No rollback procedures
@@ -141,32 +147,32 @@ The Finance Feedback Engine 2.0 is a sophisticated AI-powered trading decision s
 
 ### 2.1 Docker & Container Setup
 
-**File:** `/docker-compose.yml` (179 lines)
+**File:** `/docker-compose.yml` (277 lines)
 
-**Status:** ✅ Excellent
+**Status:** ✅ Solid baseline (needs Helm/ingress/TLS alignment)
 
 **Services Defined:**
 ```yaml
-- backend:       FastAPI + Uvicorn (port 8000)
+- postgres:      Primary database (ports 5432, healthchecked)
+- backend:       FastAPI + Uvicorn (port 8000, depends on postgres)
 - frontend:      React SPA + Nginx (ports 80, 443)
 - prometheus:    Metrics collection (port 9090)
 - grafana:       Dashboards (port 3001)
 - redis:         Optional caching (port 6379, --profile full)
+- ollama:        Local LLM (port 11434)
 ```
 
 **Strengths:**
-- All services have health checks
-- Proper restart policies (`unless-stopped`)
-- Named volumes for persistence
-- Custom network (172.28.0.0/16)
-- Environment file support (`.env.production`)
-- Read-only config mounts in production
+- All core services have health checks and restart policies
+- Named volumes for data/logs/metrics, Postgres initialized via `scripts/init-db.sql`
+- Environment-file driven (`.env.*`) with DB defaults set to Postgres
+- Consolidated compose for dev/test/prod with profile toggles
 
-**Weaknesses:**
-- No PostgreSQL service defined (SQLite only)
-- SSL/TLS certificates volume commented out (line 59)
-- Redis is optional (requires `--profile full`)
-- No database initialization/migration service
+**Weaknesses / Gaps to Close:**
+- TLS not wired in Nginx; 443 exposed but no certs/secret mounts
+- No migration/backup steps in CI/CD; scripts exist but workflows ignore them
+- No ingress/LB abstraction; will move to Nginx ingress via Helm
+- Redis optional; Helm profile should clarify cache usage
 
 ### 2.2 GitHub Actions Deployment Workflow
 
@@ -224,33 +230,27 @@ Line 101: ./scripts/build.sh production             # DOES NOT EXIST
 ### 2.4 Database Architecture
 
 **Current Setup:**
-- Default: SQLite (single-file, embedded)
-- Optional: PostgreSQL (psycopg2 installed)
-- No connection pooling (PgBouncer)
-- No migration framework (Alembic/Flyway)
+- Default: PostgreSQL via docker-compose `postgres` service and `DATABASE_URL` defaults
+- SQLite: only used for local caches/backtest artifacts
+- Alembic present; migrations exist but not enforced in CI/CD
+- No PgBouncer yet
 
-**Status:** ⚠️ Limited for Production
+**Status:** ⚠️ Needs workflow integration and HA
 
 **Issues:**
-1. **SQLite Limitations:**
-   - Single-writer at a time
-   - Uvicorn must run with `--workers 1`
-   - No horizontal scaling possible
-   - Limited concurrent connections
+1. **Migration + Deployment:**
+    - CI/CD does not run Alembic migrations; `DATABASE_URL` not enforced per environment
+    - No rollback path for failed migrations
 
-2. **No Migration Management:**
-   - No schema versioning
-   - No automated migrations
-   - No rollback capability
-   - Manual schema changes only
+2. **Backups/Restores:**
+    - `scripts/backup.sh` and `scripts/restore.sh` exist but are not scheduled or documented in ops runbooks
+    - No pg_dump/pg_restore validation in pipelines
 
-3. **No Backup Strategy:**
-   - `./scripts/backup.sh` referenced but doesn't exist
-   - No automated backup schedule
-   - No backup verification
-   - No restore procedures
+3. **Scaling:**
+    - No PgBouncer, replicas, or failover
+    - Vault-based credentials not wired; static `.env` secrets only
 
-**Recommendation:** Implement PostgreSQL with Alembic migrations and pg_dump backups.
+**Recommendation:** Wire Alembic into CI/CD, add PgBouncer/HA in Helm, schedule validated backups, and move secrets to Vault.
 
 ### 2.5 Monitoring & Observability
 
