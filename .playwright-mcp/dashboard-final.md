@@ -1,0 +1,71 @@
+### Page state
+- Page URL: http://localhost:5175/
+- Page Title: frontend
+- Page Snapshot:
+```yaml
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - generic [ref=e6]:
+          - heading "FINANCE FEEDBACK ENGINE" [level=1] [ref=e7]
+          - paragraph [ref=e8]: v1.0.0
+        - generic [ref=e43]:
+          - generic [ref=e44]: API STATUS
+          - generic [ref=e45]: HEALTHY
+    - generic [ref=e9]:
+      - complementary [ref=e10]:
+        - navigation [ref=e11]:
+          - list [ref=e12]:
+            - listitem [ref=e13]:
+              - link "▣Dashboard" [ref=e14] [cursor=pointer]:
+                - /url: /
+            - listitem [ref=e15]:
+              - link "⚙Agent Control" [ref=e16] [cursor=pointer]:
+                - /url: /agent
+            - listitem [ref=e17]:
+              - link "📊Analytics" [ref=e18] [cursor=pointer]:
+                - /url: /analytics
+            - listitem [ref=e19]:
+              - link "🔬Optimization" [ref=e20] [cursor=pointer]:
+                - /url: /optimization
+            - listitem [ref=e21]:
+              - link "⬇Models" [ref=e22] [cursor=pointer]:
+                - /url: /models
+            - listitem [ref=e23]:
+              - link "✓Self-Check" [ref=e24] [cursor=pointer]:
+                - /url: /self-check
+      - main [ref=e25]:
+        - generic [ref=e27]:
+          - heading "Dashboard" [level=1] [ref=e28]
+          - generic [ref=e46]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: Portfolio Value
+              - generic [ref=e49]: $0.00
+            - generic [ref=e50]:
+              - generic [ref=e51]: Unrealized P&L
+              - generic [ref=e52]: $0.00
+              - generic [ref=e53]: +0.00%
+            - generic [ref=e54]:
+              - generic [ref=e55]: Active Positions
+              - generic [ref=e56]: 0/ 2
+          - generic [ref=e31]:
+            - heading "Active Positions" [level=2] [ref=e57]
+            - table [ref=e59]:
+              - rowgroup [ref=e60]:
+                - row "Pair Side Size Entry Current P&L P&L %" [ref=e61]:
+                  - columnheader "Pair" [ref=e62]
+                  - columnheader "Side" [ref=e63]
+                  - columnheader "Size" [ref=e64]
+                  - columnheader "Entry" [ref=e65]
+                  - columnheader "Current" [ref=e66]
+                  - columnheader "P&L" [ref=e67]
+                  - columnheader "P&L %" [ref=e68]
+              - rowgroup
+          - heading "Recent AI Decisions" [level=2] [ref=e69]
+  - generic [ref=e71]: Live Updates
+  - generic [ref=e72]:
+    - img [ref=e74]
+    - button "Open Tanstack query devtools" [ref=e122] [cursor=pointer]:
+      - img [ref=e123]
+```

@@ -103,7 +103,7 @@ export const SelfCheck: React.FC = () => {
     setStopping(true);
     setStopMessage(null);
     try {
-      const res = await apiClient.post('/api/v1/bot/stop');
+      await apiClient.post('/api/v1/bot/stop');
       setStopMessage('Stop request accepted');
       // Refresh status after stop
       await refreshBotStatus();
