@@ -1,7 +1,9 @@
 """Tests for backtesting configuration manager."""
 
 import pytest
-from datetime import datetime
+import pytest
+
+from finance_feedback_engine.backtesting.config_manager import (
 
 from finance_feedback_engine.backtesting.config_manager import (
     BacktestConfiguration,

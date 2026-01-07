@@ -2,10 +2,20 @@
 """Quick coverage analysis - extract just summary data."""
 
 import json
+import os
 import sys
+from pathlib import Path
+
+# Resolve coverage.json path: check environment variable, fall back to repository-relative path
+COVERAGE_PATH = os.environ.get('COVERAGE_PATH')
+if not COVERAGE_PATH:
+    # Fall back to repository-relative path
+    COVERAGE_PATH = Path(__file__).resolve().parent / 'coverage.json'
+else:
+    COVERAGE_PATH = Path(COVERAGE_PATH)
 
 # Read coverage.json
-with open('/home/cmp6510/finance_feedback_engine/coverage.json', 'r') as f:
+with open(COVERAGE_PATH, 'r') as f:
     data = json.load(f)
 
 modules = []

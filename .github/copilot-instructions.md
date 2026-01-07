@@ -17,25 +17,7 @@
 - **Web API**: FastAPI server in `finance_feedback_engine/api/app.py` with optional Telegram approval flow
 
 ### Live Trading Data Flow
-```
-Alpha Vantage API
-    ↓
-Multi-Timeframe Pulse (utils/timeframe_aggregator.py)
-    ↓
-Market Regime Detection (utils/market_regime_detector.py via ADX/ATR)
-    ↓
-DecisionEngine prompt building (decision_engine/engine.py)
-    ↓
-EnsembleManager multi-provider voting (decision_engine/ensemble_manager.py)
-    ↓
-RiskGatekeeper validation (risk/gatekeeper.py): drawdown/VaR/concentration/correlation
-    ↓
-PlatformFactory with CircuitBreaker (trading_platforms/platform_factory.py → utils/circuit_breaker.py)
-    ↓
-Trade execution: Coinbase/Oanda/Mock platforms
-    ↓
-TradeMonitor live tracking + PortfolioMemory learning (memory/portfolio_memory.py)
-```
+
 
 ## Critical Patterns & Safety Guards
 
@@ -132,13 +114,8 @@ cd frontend && npm run test && npm run type-check
 | Telegram bot silent | Check Redis & Telegram credentials; ensure `python main.py setup-redis` was run |
 | Dashboard empty | Max 2 concurrent trades limit; check trade monitor logs |
 | Sentiment blocks all buys | Tune `config.decision_engine.sentiment.veto_threshold` |
-| CI failures (pre-commit) | Run `black` + `isort` locally: `black .` && `isort .` |
+### Before Committing
 
-## Code Editing Rules
-
-1. **Keep public APIs stable**: Config keys, FinanceFeedbackEngine methods, CLI command names.
-2. **Schema/config/tests must sync**: When adding decision fields, update validator, config examples, and tests.
-3. **Prefer config flags over hardcoding**: Use `config.yaml` for behavior toggles.
 4. **Never disable debate mode or risk gates** for live trading.
 5. **Close async clients**: `aiohttp.ClientSession`, Redis connections. Honor circuit breaker wrappers.
 6. **Platform additions**: Attach circuit breaker in `platform_factory`; update ensemble weights; test fallback tiers.

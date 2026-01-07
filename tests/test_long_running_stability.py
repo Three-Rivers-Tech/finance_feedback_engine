@@ -105,7 +105,7 @@ class TestLongRunningStability:
     """Long-running stability tests."""
 
     @pytest.mark.asyncio
-    async def test_30_minute_stability(self, stability_test_config):
+    async def test_30_minute_stability(self, stability_test_config: Dict[str, Any]) -> None:
         """
         Test: Bot runs for 30 minutes without crashes or memory leaks.
 
@@ -329,6 +329,11 @@ class TestLongRunningStability:
         except asyncio.TimeoutError:
             bot.is_running = False
             logger.warning("Bot stop timeout, cancelling...")
+            bot_task.cancel()
+            try:
+                await bot_task
+            except asyncio.CancelledError:
+                pass
         except Exception as e:
             bot.is_running = False
             logger.error(f"Quick stability test failed: {e}")

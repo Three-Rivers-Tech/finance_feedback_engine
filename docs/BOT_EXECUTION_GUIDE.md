@@ -112,7 +112,7 @@ curl -X POST http://localhost:8000/api/v1/bot/start
 
 ### Expected Initialization Output
 
-```
+```text
 🚀 Initializing Autonomous Agent...
 
 ╭────────────────────────────────────────╮
@@ -543,7 +543,7 @@ Before running the bot with real money:
 
 For issues or questions:
 - GitHub Issues: https://github.com/Three-Rivers-Tech/finance-feedback-engine/issues
-- Documentation: `/home/cmp6510/finance_feedback_engine/docs/`
-- Logs: `/home/cmp6510/finance_feedback_engine/data/logs/`
+- Documentation: `docs/`
+- Logs: `data/logs`
 
 **Emergency Contact:** If bot is behaving unexpectedly with real funds, stop immediately and document all logs before seeking help.
