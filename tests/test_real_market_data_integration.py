@@ -177,7 +177,6 @@ class TestRealMarketDataIntegration:
                 raise
 
     @pytest.mark.asyncio
-    @pytest.mark.asyncio
     async def test_rate_limiting_respected(self):
         """Test: Alpha Vantage rate limiting is respected."""
         if not ALPHA_VANTAGE_API_KEY:
