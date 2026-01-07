@@ -140,7 +140,7 @@ class MockTradingPlatform(BaseTradingPlatform):
         logger.debug("MockPlatform.get_balance() called: %s", self._balance)
         # Ensure a base currency key exists for callers/tests expecting it.
         result = self._balance.copy()
-        if "USD" not in result:
+        if "USD" not in result and "SPOT_USD" not in result:
             result["USD"] = float(result.get("SPOT_USD", 0) or 0)
         return result
 

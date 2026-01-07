@@ -8,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ..auth import AuthManager
 from ..core import FinanceFeedbackEngine
-from .app import app_state
+from .state import app_state
 
 logger = logging.getLogger(__name__)
 

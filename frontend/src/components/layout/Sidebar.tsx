@@ -7,6 +7,7 @@ const navItems = [
   { path: '/analytics', label: 'Analytics', icon: '📊' },
   { path: '/optimization', label: 'Optimization', icon: '🔬' },
   { path: '/models', label: 'Models', icon: '⬇' },
+  { path: '/self-check', label: 'Self-Check', icon: '✓' },
 ];
 
 export const Sidebar: React.FC = () => {

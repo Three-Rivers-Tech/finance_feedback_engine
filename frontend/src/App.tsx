@@ -9,6 +9,7 @@ import { Analytics } from './pages/Analytics';
 import { Optimization } from './pages/Optimization';
 import { Models } from './pages/Models';
 import { queryClient } from './api/queryClient';
+import { SelfCheck } from './pages/SelfCheck';
 
 
 
@@ -22,6 +23,7 @@ function AppContent() {
           <Route path="analytics" element={<Analytics />} />
           <Route path="optimization" element={<Optimization />} />
           <Route path="models" element={<Models />} />
+          <Route path="self-check" element={<SelfCheck />} />
         </Route>
       </Routes>
       <FloatingConnectionStatus />

@@ -176,7 +176,11 @@ class TradingLoopAgent:
 
         # Validate Ollama readiness for local/debate mode
         # Get full config from engine (includes decision_engine and ensemble sections)
-        engine_config = self.engine.config
+        engine_config = getattr(self.engine, "config", {})
+        # In unit tests, engine may be an AsyncMock; avoid touching awaitables here.
+        if not isinstance(engine_config, dict):
+            engine_config = {}
+
         decision_engine_config = engine_config.get("decision_engine", {})
         ai_provider = decision_engine_config.get("ai_provider", "local")
         ensemble_config = engine_config.get("ensemble", {})
@@ -1181,6 +1185,13 @@ class TradingLoopAgent:
 
         MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
 
+        # If we've already hit the daily trade cap, only inspect the first pair
+        limit_reached = (
+            self.config.max_daily_trades > 0
+            and self.daily_trade_count >= self.config.max_daily_trades
+        )
+        processed_pairs = 0
+
         # --- Cleanup expired entries from rejection cache ---
         self._cleanup_rejected_cache()
 
@@ -1200,6 +1211,11 @@ class TradingLoopAgent:
                 self.analysis_failure_timestamps.pop(key, None)
 
         for asset_pair in asset_pairs_snapshot:  # Iterate over snapshot, not live list
+            if limit_reached and processed_pairs >= 1:
+                logger.info(
+                    "Daily trade limit reached; skipping analysis for remaining pairs."
+                )
+                break
             logger.info(f">>> Starting analysis for {asset_pair}")
             failure_key = f"analysis:{asset_pair}"
 
@@ -1288,6 +1304,8 @@ class TradingLoopAgent:
                     f"It will be skipped for a while.",
                     exc_info=True,
                 )
+
+            processed_pairs += 1
 
             # Add delay between pairs to avoid Alpha Vantage rate limits
             # Only delay if there are more pairs to analyze
