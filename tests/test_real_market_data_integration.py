@@ -25,10 +25,9 @@ load_dotenv()
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
 
 if ALPHA_VANTAGE_API_KEY:
-    logger.info(f"✓ Alpha Vantage API key loaded: {ALPHA_VANTAGE_API_KEY[:10]}...")
+    logger.info("✓ Alpha Vantage API key loaded from environment")
 else:
     logger.warning("⚠ ALPHA_VANTAGE_API_KEY not found in environment")
-
 
 @pytest.fixture
 def real_market_data_config():
@@ -122,6 +121,8 @@ class TestRealMarketDataIntegration:
                 logger.error(f"❌ Comprehensive data fetch failed: {e}")
                 raise
 
+    @pytest.mark.external_service
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_engine_with_real_data(self, real_market_data_config):
         """Test: Engine initializes and can analyze with real market data."""
@@ -176,6 +177,7 @@ class TestRealMarketDataIntegration:
                 raise
 
     @pytest.mark.asyncio
+    @pytest.mark.asyncio
     async def test_rate_limiting_respected(self):
         """Test: Alpha Vantage rate limiting is respected."""
         if not ALPHA_VANTAGE_API_KEY:
@@ -192,6 +194,8 @@ class TestRealMarketDataIntegration:
                     price = market_data.get("close")
                     prices.append(price)
                     logger.info(f"Call {i+1}: ${price:,.2f}")
+                    if i < 2:  # Don't sleep after last call
+                        await asyncio.sleep(1)  # Small delay between calls
 
                 # Should not crash or hit rate limit for 3 calls
                 assert len(prices) == 3, "Should complete 3 calls"
@@ -202,7 +206,5 @@ class TestRealMarketDataIntegration:
             except Exception as e:
                 logger.error(f"❌ Rate limiting test failed: {e}")
                 raise
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])

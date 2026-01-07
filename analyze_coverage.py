@@ -53,9 +53,14 @@ def analyze_coverage(coverage_file: Path) -> List[Dict]:
 if __name__ == '__main__':
     coverage_file = Path('coverage.json')
 
+import sys
+from pathlib import Path
+from typing import List, Dict
+...
+
     if not coverage_file.exists():
         print(f"Error: {coverage_file} not found")
-        exit(1)
+        sys.exit(1)
 
     modules = analyze_coverage(coverage_file)
 
@@ -81,5 +86,7 @@ if __name__ == '__main__':
     print(f"Total modules analyzed: {len(modules)}")
     print(f"Modules with 0% coverage: {sum(1 for m in modules if m['coverage_pct'] == 0)}")
     print(f"Modules with <50% coverage: {sum(1 for m in modules if m['coverage_pct'] < 50)}")
-    print(f"Average coverage: {sum(m['coverage_pct'] for m in modules) / len(modules):.2f}%")
-    print()
+    if modules:
+        print(f"Average coverage: {sum(m['coverage_pct'] for m in modules) / len(modules):.2f}%")
+    else:
+        print("Average coverage: N/A (no modules found)")

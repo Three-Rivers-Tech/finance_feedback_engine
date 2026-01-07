@@ -1,5 +1,6 @@
 """Tests for correlation analyzer."""
 
+import hashlib
 import pytest
 
 from finance_feedback_engine.risk.correlation_analyzer import CorrelationAnalyzer
@@ -209,8 +210,10 @@ class TestCorrelationAnalyzer:
         base_prices = [100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150]
 
         for asset in holdings.keys():
+            # Use deterministic multiplier derived from asset string for repeatability
+            stable_multiplier = int(hashlib.md5(asset.encode()).hexdigest(), 16) % 10
             price_history[asset] = [
-                {"date": f"2024-01-{i+1:02d}", "price": price * (1 + hash(asset) % 10 * 0.01)}
+                {"date": f"2024-01-{i+1:02d}", "price": price * (1 + stable_multiplier * 0.01)}
                 for i, price in enumerate(base_prices)
             ]
 
