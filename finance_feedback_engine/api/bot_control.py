@@ -322,6 +322,7 @@ def _extract_bearer_from_websocket(websocket: WebSocket) -> tuple[Optional[str],
 async def start_agent(
     request: AgentControlRequest,
     background_tasks: BackgroundTasks,
+    _api_user: str = Depends(verify_api_key_or_dev),
     engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> AgentStatusResponse:
     """
@@ -361,7 +362,9 @@ async def start_agent(
 
 
 @bot_control_router.post("/stop")
-async def stop_agent() -> Dict[str, str]:
+async def stop_agent(
+    _api_user: str = Depends(verify_api_key_or_dev),
+) -> Dict[str, str]:
     """
     Stop the trading agent.
 
@@ -412,7 +415,9 @@ async def stop_agent() -> Dict[str, str]:
 
 @bot_control_router.post("/emergency-stop")
 async def emergency_stop(
-    close_positions: bool = True, engine: FinanceFeedbackEngine = Depends(get_engine)
+    close_positions: bool = True,
+    _api_user: str = Depends(verify_api_key_or_dev),
+    engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
     """
     EMERGENCY STOP - Immediately halt all trading.
@@ -487,7 +492,9 @@ async def emergency_stop(
 
 
 @bot_control_router.post("/pause", response_model=AgentStatusResponse)
-async def pause_agent() -> AgentStatusResponse:
+async def pause_agent(
+    _api_user: str = Depends(verify_api_key_or_dev),
+) -> AgentStatusResponse:
     """
     Pause the trading agent.
 
@@ -546,7 +553,9 @@ async def pause_agent() -> AgentStatusResponse:
 
 
 @bot_control_router.post("/resume", response_model=AgentStatusResponse)
-async def resume_agent() -> AgentStatusResponse:
+async def resume_agent(
+    _api_user: str = Depends(verify_api_key_or_dev),
+) -> AgentStatusResponse:
     """
     Resume the trading agent.
 
@@ -611,6 +620,7 @@ async def resume_agent() -> AgentStatusResponse:
 
 @bot_control_router.get("/status", response_model=AgentStatusResponse)
 async def get_agent_status(
+    _api_user: str = Depends(verify_api_key_or_dev),
     engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> AgentStatusResponse:
     """
@@ -737,6 +747,7 @@ async def _build_stream_payload(
 @bot_control_router.get("/stream")
 async def stream_agent_events(
     request: Request,
+    _api_user: str = Depends(verify_api_key_or_dev),
     engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> StreamingResponse:
     """Server-Sent Events stream for live agent status and dashboard events."""
@@ -894,7 +905,9 @@ async def agent_websocket(
 
 @bot_control_router.patch("/config")
 async def update_config(
-    request: ConfigUpdateRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
+    request: ConfigUpdateRequest,
+    _api_user: str = Depends(verify_api_key_or_dev),
+    engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
     """
     Update agent configuration in real-time.
@@ -999,7 +1012,9 @@ async def update_config(
 
 @bot_control_router.post("/manual-trade")
 async def execute_manual_trade(
-    request: ManualTradeRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
+    request: ManualTradeRequest,
+    _api_user: str = Depends(verify_api_key_or_dev),
+    engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
     """
     Execute a manual trade, bypassing the autonomous agent.
@@ -1057,6 +1072,7 @@ async def execute_manual_trade(
 
 @bot_control_router.get("/positions")
 async def get_open_positions(
+    _api_user: str = Depends(verify_api_key_or_dev),
     engine: FinanceFeedbackEngine = Depends(get_engine),
 ) -> Dict[str, Any]:
     """
@@ -1198,7 +1214,9 @@ async def get_open_positions(
 
 @bot_control_router.post("/positions/{position_id}/close")
 async def close_position(
-    position_id: str, engine: FinanceFeedbackEngine = Depends(get_engine)
+    position_id: str,
+    _api_user: str = Depends(verify_api_key_or_dev),
+    engine: FinanceFeedbackEngine = Depends(get_engine),
 ):
     """
     Close a specific open position.

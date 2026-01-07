@@ -132,6 +132,13 @@ class FinanceFeedbackEngine:
         # Initialize trading platform (skip in backtest mode)
         platform_name = config.get("trading_platform", "coinbase")
 
+        paper_defaults = (config.get("paper_trading_defaults") or {})
+        paper_enabled = bool(paper_defaults.get("enabled"))
+        try:
+            paper_initial_cash = float(paper_defaults.get("initial_cash_usd", 10000.0))
+        except Exception:
+            paper_initial_cash = 10000.0
+
         # Initialize Delta Lake integration (if enabled)
         delta_lake_config = config.get("delta_lake", {})
         if delta_lake_config.get("enabled", False):
@@ -156,16 +163,17 @@ class FinanceFeedbackEngine:
         if not is_backtest and platform_name.lower() == "unified":
             # Convert platforms list to unified credentials format
             platforms_list = config.get("platforms", [])
-            if not platforms_list:
-                raise ValueError(
-                    "Unified platform mode requires 'platforms' list in config. "
-                    "Example:\n"
-                    "platforms:\n"
-                    "  - name: coinbase_advanced\n"
-                    "    credentials: {...}\n"
-                    "  - name: oanda\n"
-                    "    credentials: {...}"
-                )
+
+            def _build_paper_balance(cash: float) -> Dict[str, float]:
+                cash = float(cash)
+                return {
+                    "FUTURES_USD": round(cash * 0.6, 2),
+                    "SPOT_USD": round(cash * 0.3, 2),
+                    "SPOT_USDC": round(cash * 0.1, 2),
+                }
+
+            def _is_placeholder(value: Any) -> bool:
+                return isinstance(value, str) and value.startswith("YOUR_")
 
             # Transform platforms list into nested dict format
             unified_credentials = {}
@@ -200,13 +208,43 @@ class FinanceFeedbackEngine:
 
                 # Normalize key names (coinbase_advanced -> coinbase)
                 if platform_key in ["coinbase", "coinbase_advanced"]:
+                    if paper_enabled and (
+                        not platform_creds
+                        or any(_is_placeholder(v) for v in platform_creds.values())
+                    ):
+                        logger.info(
+                            "Skipping coinbase platform in sandbox mode (missing or placeholder credentials)."
+                        )
+                        continue
                     unified_credentials["coinbase"] = platform_creds
                 elif platform_key == "oanda":
+                    if paper_enabled and (
+                        not platform_creds
+                        or any(_is_placeholder(v) for v in platform_creds.values())
+                    ):
+                        logger.info(
+                            "Skipping oanda platform in sandbox mode (missing or placeholder credentials)."
+                        )
+                        continue
                     unified_credentials["oanda"] = platform_creds
+                elif platform_key in ["mock", "paper", "sandbox"]:
+                    # Paper/sandbox mode for unified platform
+                    paper_creds = dict(platform_creds)
+                    if "initial_balance" not in paper_creds:
+                        paper_creds["initial_balance"] = _build_paper_balance(
+                            paper_initial_cash
+                        )
+                    unified_credentials["paper"] = paper_creds
                 else:
                     logger.warning(
                         f"Unknown platform in unified config: {platform_key}"
                     )
+
+            # If no explicit platforms were provided, fall back to paper-trading defaults
+            if not unified_credentials and paper_enabled:
+                unified_credentials["paper"] = {
+                    "initial_balance": _build_paper_balance(paper_initial_cash)
+                }
 
             # Ensure we have at least one valid platform configured
             if not unified_credentials:

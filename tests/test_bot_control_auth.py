@@ -8,6 +8,14 @@ from fastapi.testclient import TestClient
 from finance_feedback_engine.api.app import app, app_state
 
 
+@pytest.fixture(autouse=True)
+def prod_env(monkeypatch):
+    """Force production mode to require API keys in tests."""
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    yield
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+
+
 @pytest.fixture
 def mock_engine():
     """Create a mock FinanceFeedbackEngine."""
@@ -168,9 +176,15 @@ class TestBotControlAuthenticationIntegrity:
         endpoints = [
             ("POST", "/api/v1/bot/start"),
             ("POST", "/api/v1/bot/stop"),
-            ("GET", "/api/v1/bot/status"),
+            ("POST", "/api/v1/bot/emergency-stop"),
             ("POST", "/api/v1/bot/pause"),
             ("POST", "/api/v1/bot/resume"),
+            ("GET", "/api/v1/bot/status"),
+            ("GET", "/api/v1/bot/stream"),
+            ("PATCH", "/api/v1/bot/config"),
+            ("POST", "/api/v1/bot/manual-trade"),
+            ("GET", "/api/v1/bot/positions"),
+            ("POST", "/api/v1/bot/positions/test-id/close"),
         ]
 
         for method, endpoint in endpoints:
@@ -180,6 +194,8 @@ class TestBotControlAuthenticationIntegrity:
                 response = client_with_auth.post(endpoint)
             elif method == "PUT":
                 response = client_with_auth.put(endpoint, json={})
+            elif method == "PATCH":
+                response = client_with_auth.patch(endpoint, json={})
 
             assert (
                 response.status_code == 401

@@ -237,22 +237,17 @@ class UnifiedDataProvider:
                 providers = [("oanda", self.oanda)]
         else:
             # Cascading fallback based on asset type
+            # Note: Alpha Vantage doesn't support get_candles method, only get_market_data
             if is_crypto:
-                # Crypto: Coinbase (exchange real-time data) → Alpha Vantage (fallback)
+                # Crypto: Coinbase only (exchange real-time candles)
                 if self.coinbase:
                     providers.append(("coinbase", self.coinbase))
-                if self.alpha_vantage:
-                    providers.append(("alpha_vantage", self.alpha_vantage))
             elif is_forex:
-                # Forex: Oanda (exchange real-time data) → Alpha Vantage (fallback)
+                # Forex: Oanda only (exchange real-time candles)
                 if self.oanda:
                     providers.append(("oanda", self.oanda))
-                if self.alpha_vantage:
-                    providers.append(("alpha_vantage", self.alpha_vantage))
             else:
-                # Unknown: try all in order
-                if self.alpha_vantage:
-                    providers.append(("alpha_vantage", self.alpha_vantage))
+                # Unknown: try exchange providers only
                 if self.coinbase:
                     providers.append(("coinbase", self.coinbase))
                 if self.oanda:

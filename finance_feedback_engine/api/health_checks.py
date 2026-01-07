@@ -302,11 +302,28 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     # Extract a simple, JSON-safe portfolio balance
     portfolio_balance = None
     try:
-        if hasattr(engine, "platform") and hasattr(engine.platform, "get_balance"):
-            balance_info = engine.platform.get_balance()
-            # Prefer a numeric total if present, otherwise keep raw value
-            if isinstance(balance_info, dict) and "total" in balance_info:
-                portfolio_balance = balance_info["total"]
+        # Prefer explicitly set attributes on engine to avoid Mock auto-attributes
+        platform_obj = None
+        eng_dict = getattr(engine, "__dict__", {}) or {}
+        if "platform" in eng_dict and eng_dict.get("platform") is not None:
+            platform_obj = eng_dict.get("platform")
+        elif "trading_platform" in eng_dict and eng_dict.get("trading_platform") is not None:
+            platform_obj = eng_dict.get("trading_platform")
+        else:
+            # Fallback for real engine instances
+            platform_obj = getattr(engine, "trading_platform", None) or getattr(
+                engine, "platform", None
+            )
+        if platform_obj is not None and hasattr(platform_obj, "get_balance"):
+            balance_info = platform_obj.get_balance()
+            # Prefer a numeric total if present, otherwise try common keys
+            if isinstance(balance_info, dict):
+                if "total" in balance_info:
+                    portfolio_balance = balance_info["total"]
+                elif "balance" in balance_info:
+                    portfolio_balance = balance_info["balance"]
+                else:
+                    portfolio_balance = _safe_json(balance_info)
             elif isinstance(balance_info, (int, float)):
                 portfolio_balance = balance_info
             else:
@@ -341,9 +358,9 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     # Data provider circuit breaker (Alpha Vantage)
     try:
         data_provider = getattr(engine, "data_provider", None)
-        alpha = getattr(data_provider, "alpha_vantage", None) if data_provider else None
-        if alpha is not None:
-            circuit_breakers["alpha_vantage"] = _circuit_state(alpha)
+        # AlphaVantageProvider exposes its circuit breaker directly
+        if data_provider is not None:
+            circuit_breakers["alpha_vantage"] = _circuit_state(data_provider)
     except Exception as e:
         logger.warning(f"Alpha Vantage circuit breaker check failed: {e}")
         circuit_breakers["alpha_vantage"] = {"state": "unknown", "error": str(e)}
@@ -351,7 +368,14 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     # Platform circuit breaker (if present)
     try:
-        platform = getattr(engine, "platform", None)
+        eng_dict = getattr(engine, "__dict__", {}) or {}
+        platform = None
+        if "trading_platform" in eng_dict and eng_dict.get("trading_platform") is not None:
+            platform = eng_dict.get("trading_platform")
+        elif "platform" in eng_dict and eng_dict.get("platform") is not None:
+            platform = eng_dict.get("platform")
+        else:
+            platform = getattr(engine, "trading_platform", None)
         if platform is not None and hasattr(platform, "_execute_breaker"):
             breaker = platform._execute_breaker
             state_value = getattr(breaker, "state", None)
@@ -369,8 +393,18 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     # Check platform connectivity (retained for observability endpoints)
     try:
-        if hasattr(engine, "platform"):
-            balance = _safe_json(engine.platform.get_balance())
+        eng_dict = getattr(engine, "__dict__", {}) or {}
+        platform_obj = None
+        if "platform" in eng_dict and eng_dict.get("platform") is not None:
+            platform_obj = eng_dict.get("platform")
+        elif "trading_platform" in eng_dict and eng_dict.get("trading_platform") is not None:
+            platform_obj = eng_dict.get("trading_platform")
+        else:
+            platform_obj = getattr(engine, "trading_platform", None) or getattr(
+                engine, "platform", None
+            )
+        if platform_obj is not None:
+            balance = _safe_json(platform_obj.get_balance())
             platform_name = None
             try:
                 platform_name = engine.config.get("trading_platform", "unknown")
