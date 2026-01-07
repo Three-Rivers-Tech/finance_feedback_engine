@@ -96,7 +96,12 @@ python main.py dashboard
 - **Core integration**: `tests/test_phase1_integration.py`, `tests/test_ensemble_tiers.py`.
 - **Frontend**: `npm run test && npm run type-check`.
 
+| Dashboard empty | Max 2 concurrent trades limit; check trade monitor logs |
+| Sentiment blocks all buys | Tune `config.decision_engine.sentiment.veto_threshold` |
+
 ### Before Committing
+
+4. **Never disable debate mode or risk gates** for live trading.
 ```bash
 pytest --cov=finance_feedback_engine --cov-fail-under=70
 pytest tests/test_api*.py tests/test_ensemble_tiers.py tests/test_integrations_telegram_redis.py
