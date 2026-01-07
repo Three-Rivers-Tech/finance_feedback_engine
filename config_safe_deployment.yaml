@@ -1,0 +1,30 @@
+# Safe Bot Configuration for Frontend Testing
+# Uses quicktest mode to avoid Alpha Vantage API timeout issues
+# Based on infrastructure robustness testing findings
+
+trading_platform: "unified"
+
+paper_trading_defaults:
+  enabled: true
+  initial_cash_usd: 10000.0
+
+platforms: []  # Paper trading only
+
+decision_engine:
+  use_ollama: true
+  model_name: "llama3.2:3b-instruct-fp16"
+  quicktest_mode: true  # CRITICAL: Avoid API timeout issue
+  debate_mode: false
+
+agent:
+  enabled: true
+  asset_pairs:
+    - BTCUSD
+  analysis_frequency_seconds: 60  # Check every minute
+  max_daily_trades: 10
+  autonomous:
+    enabled: true
+    profit_target: 0.03  # 3% profit target
+    stop_loss: 0.02      # 2% stop loss
+
+is_backtest: false

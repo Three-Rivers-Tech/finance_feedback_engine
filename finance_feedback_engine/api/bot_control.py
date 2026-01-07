@@ -618,13 +618,10 @@ async def resume_agent(
         )
 
 
-@bot_control_router.get("/status", response_model=AgentStatusResponse)
-async def get_agent_status(
-    _api_user: str = Depends(verify_api_key_or_dev),
-    engine: FinanceFeedbackEngine = Depends(get_engine),
-) -> AgentStatusResponse:
+async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStatusResponse:
     """
-    Get current agent status and performance metrics.
+    Internal helper to get agent status without dependency injection.
+    Used by both the API endpoint and internal callers.
     """
     global _agent_instance, _agent_task
 
@@ -692,6 +689,17 @@ async def get_agent_status(
         return AgentStatusResponse(state=BotState.ERROR, error_message=str(e))
 
 
+@bot_control_router.get("/status", response_model=AgentStatusResponse)
+async def get_agent_status(
+    _api_user: str = Depends(verify_api_key_or_dev),
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+) -> AgentStatusResponse:
+    """
+    Get current agent status and performance metrics.
+    """
+    return await _get_agent_status_internal(engine)
+
+
 async def _build_stream_payload(
     engine: FinanceFeedbackEngine, last_status_sent: float
 ) -> tuple[Dict[str, Any], float]:
@@ -730,9 +738,9 @@ async def _build_stream_payload(
     if event_payload is None:
         now = time.time()
         if now - last_status_sent >= 5:
-            status_payload = await get_agent_status(engine)
+            status_payload = await _get_agent_status_internal(engine)
             status_data = (
-                status_payload.model_dump()
+                status_payload.model_dump(mode='json')
                 if hasattr(status_payload, "model_dump")
                 else status_payload.__dict__
             )
@@ -833,9 +841,10 @@ async def agent_websocket(
                 )
                 await websocket.send_json(payload)
             except WebSocketDisconnect:
+                logger.info("WebSocket sender: client disconnected")
                 stop_event.set()
             except Exception as exc:  # noqa: BLE001
-                logger.debug("WebSocket sender error: %s", exc, exc_info=True)
+                logger.error(f"WebSocket sender error: {exc}", exc_info=True)
                 stop_event.set()
             await asyncio.sleep(0.5)
 
@@ -885,10 +894,7 @@ async def agent_websocket(
                     }
                 )
 
-    await websocket.send_json(
-        {"event": "start_ack", "data": {"message": "connected", "queued": False}}
-    )
-
+    # Start sender and receiver tasks immediately after accepting connection
     sender_task = asyncio.create_task(sender())
     receiver_task = asyncio.create_task(receiver())
 
