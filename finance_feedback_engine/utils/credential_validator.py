@@ -20,6 +20,13 @@ def validate_credentials(config: Dict[str, Any]) -> None:
     Raises:
         ValueError: If placeholder credentials are detected
     """
+    paper_defaults = (config or {}).get("paper_trading_defaults", {}) or {}
+    if bool(paper_defaults.get("enabled")):
+        logger.info(
+            "Paper trading defaults enabled; skipping strict credential placeholder validation."
+        )
+        return
+
     # Skip validation in test/CI environments
     environment = config.get("environment", "").lower()
     if environment in ("test", "ci", "testing"):

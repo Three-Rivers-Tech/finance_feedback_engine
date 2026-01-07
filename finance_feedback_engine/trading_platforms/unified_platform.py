@@ -9,6 +9,7 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .coinbase_platform import CoinbaseAdvancedPlatform
+from .mock_platform import MockTradingPlatform
 from .oanda_platform import OandaPlatform
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,41 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         if "oanda" in credentials and credentials["oanda"]:
             logger.info("Initializing Oanda platform for unified access.")
             self.platforms["oanda"] = OandaPlatform(credentials["oanda"])
+
+        paper_creds = credentials.get("paper") or credentials.get("mock") or credentials.get("sandbox")
+        if paper_creds is not None:
+            # Build a sane default balance when only cash is provided
+            initial_balance = None
+            if isinstance(paper_creds, dict):
+                initial_balance = paper_creds.get("initial_balance")
+                # Allow simple numeric cash override
+                if initial_balance is None:
+                    cash_val = paper_creds.get("initial_cash_usd") or paper_creds.get("cash")
+                    if isinstance(cash_val, (int, float)):
+                        initial_balance = {
+                            "FUTURES_USD": round(float(cash_val) * 0.6, 2),
+                            "SPOT_USD": round(float(cash_val) * 0.3, 2),
+                            "SPOT_USDC": round(float(cash_val) * 0.1, 2),
+                        }
+                # If no balance provided at all, seed with 10k split
+                if initial_balance is None:
+                    initial_balance = {
+                        "FUTURES_USD": 6000.0,
+                        "SPOT_USD": 3000.0,
+                        "SPOT_USDC": 1000.0,
+                    }
+            else:
+                initial_balance = {
+                    "FUTURES_USD": 6000.0,
+                    "SPOT_USD": 3000.0,
+                    "SPOT_USDC": 1000.0,
+                }
+
+            logger.info("Initializing paper trading platform for unified access.")
+            self.platforms["paper"] = MockTradingPlatform(
+                paper_creds if isinstance(paper_creds, dict) else {},
+                initial_balance=initial_balance,
+            )
 
         if not self.platforms:
             raise ValueError("No platforms were configured for UnifiedTradingPlatform.")

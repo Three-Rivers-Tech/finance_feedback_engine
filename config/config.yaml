@@ -73,6 +73,11 @@ database:
 # Multi-Platform Mode: Use 'unified' and configure platforms list below
 trading_platform: "unified"
 
+# Default paper-trading sandbox for unified platform
+paper_trading_defaults:
+  enabled: true
+  initial_cash_usd: 10000.0
+
 # Platform-specific credentials
 # Uncomment and configure based on your chosen platform
 platform_credentials:

@@ -14,11 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from ..auth import AuthManager
 from ..core import FinanceFeedbackEngine
 from ..utils.config_loader import load_env_config
+from .state import app_state
 
 logger = logging.getLogger(__name__)
-
-# Shared application state
-app_state: Dict[str, Any] = {}
 
 
 def load_tiered_config() -> dict:
@@ -71,16 +69,35 @@ async def lifespan(app: FastAPI):
         app_state["engine"] = engine
         logger.info("✅ Engine initialized successfully")
 
-        # Initialize PostgreSQL database connection pool and schema
+        # Initialize database connection pool and schema
+        # In development, allow API to start without a database so the frontend can run.
         try:
             from ..database import DatabaseConfig, init_db
 
             db_config = DatabaseConfig.from_env()
             init_db(db_config)
-            logger.info("✅ PostgreSQL database initialized and migrations completed")
+            logger.info("✅ Database initialized and migrations completed")
         except Exception as e:
-            logger.error(f"❌ Database initialization failed: {e}")
-            raise RuntimeError(f"Cannot start application without database: {e}") from e
+            # Determine if we can run without DB (dev convenience)
+            current_env = os.getenv("ENVIRONMENT", "development").lower()
+            allow_without_db = (
+                current_env != "production"
+                or os.getenv("ALLOW_API_WITHOUT_DB", "").lower() in {"1", "true", "yes"}
+            )
+            if allow_without_db:
+                logger.warning(
+                    "⚠️  Database initialization failed, continuing without DB (env=%s): %s",
+                    current_env,
+                    e,
+                )
+                logger.warning(
+                    "Some features that require the database will be disabled."
+                )
+            else:
+                logger.error(f"❌ Database initialization failed: {e}")
+                raise RuntimeError(
+                    f"Cannot start application without database: {e}"
+                ) from e
 
         # Initialize Authentication Manager with secure API key validation
         logger.info("🔐 Initializing secure authentication manager...")
