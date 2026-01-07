@@ -209,6 +209,10 @@ else:
         "http://127.0.0.1:3001",
         "http://localhost:5173",  # Vite dev server
         "http://127.0.0.1:5173",
+        "http://localhost:5174",  # Vite dev server (alt port)
+        "http://127.0.0.1:5174",
+        "http://localhost:5175",  # Vite dev server (alt port)
+        "http://127.0.0.1:5175",
     ]
 
 app.add_middleware(
