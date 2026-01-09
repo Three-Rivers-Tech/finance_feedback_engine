@@ -82,12 +82,40 @@ class TradingLoopAgent:
             except Exception:
                 return value
 
+        # Environment-aware risk configuration
+        import os
+        is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
+
+        # Get risk parameters: use development defaults if in dev mode, else use config
+        if is_development and hasattr(self.config, '__dict__'):
+            # In development mode, use relaxed defaults from config.development_risk_limits
+            # These allow portfolio building and testing without over-restrictive gates
+            dev_limits = getattr(self.config, 'development_risk_limits', {})
+            if isinstance(dev_limits, dict):
+                correlation_threshold = dev_limits.get('correlation_threshold', self.config.correlation_threshold)
+                max_correlated_assets = dev_limits.get('max_correlated_assets', self.config.max_correlated_assets)
+                max_var_pct = dev_limits.get('max_var_pct', self.config.max_var_pct)
+                var_confidence = dev_limits.get('var_confidence', self.config.var_confidence)
+                logger.info("RiskGatekeeper: Using development-mode relaxed constraints")
+            else:
+                # Fallback to config defaults
+                correlation_threshold = self.config.correlation_threshold
+                max_correlated_assets = self.config.max_correlated_assets
+                max_var_pct = self.config.max_var_pct
+                var_confidence = self.config.var_confidence
+        else:
+            # Production mode: use strict defaults from config
+            correlation_threshold = self.config.correlation_threshold
+            max_correlated_assets = self.config.max_correlated_assets
+            max_var_pct = self.config.max_var_pct
+            var_confidence = self.config.var_confidence
+
         self.risk_gatekeeper = RiskGatekeeper(
             max_drawdown_pct=_normalize_pct(self.config.max_drawdown_percent),
-            correlation_threshold=self.config.correlation_threshold,
-            max_correlated_assets=self.config.max_correlated_assets,
-            max_var_pct=_normalize_pct(self.config.max_var_pct),
-            var_confidence=self.config.var_confidence,
+            correlation_threshold=correlation_threshold,
+            max_correlated_assets=max_correlated_assets,
+            max_var_pct=_normalize_pct(max_var_pct),
+            var_confidence=var_confidence,
         )
         self.is_running = False
         self._paused = False
@@ -165,11 +193,31 @@ class TradingLoopAgent:
                 "Please either:\n"
                 "1. Configure Telegram notifications (telegram.enabled=true, bot_token, chat_id)\n"
                 "2. Enable autonomous mode (autonomous.enabled=true)\n"
+                "3. Set ENVIRONMENT=development for development without notifications\n"
+                "4. Enable signal-only mode with require_notifications_for_signal_only=false\n"
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        logger.info("✓ Notification delivery validated: Telegram configured")
+        logger.info("✓ Notification delivery validated")
+
+        # Validate agent readiness (ensemble config, risk limits, Ollama connectivity)
+        is_ready, readiness_errors = self.engine.validate_agent_readiness()
+        if not is_ready:
+            error_msg = (
+                "Cannot start agent - runtime validation failed.\n"
+                f"Validation errors ({len(readiness_errors)}):\n"
+            )
+            for i, err in enumerate(readiness_errors, 1):
+                error_msg += f"  {i}. {err}\n"
+            error_msg += (
+                "\nPlease fix the configuration issues above and try again. "
+                "Check config/config.yaml or config/config.local.yaml"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        logger.info("✓ Agent readiness validation passed")
 
         # Validate Ollama readiness for local/debate mode
         self._validate_ollama_readiness()
@@ -522,12 +570,38 @@ class TradingLoopAgent:
 
         Returns:
             (is_valid, list_of_errors)
+
+        Notifications are required unless:
+        - Autonomous mode is enabled (autonomous.enabled=true), OR
+        - Running in development environment (ENVIRONMENT=development), OR
+        - Signal-only mode is explicitly allowed without notifications
         """
+        import os
+
         errors = []
 
         # Check if autonomous mode is enabled (no notifications needed)
         if self.is_autonomous_enabled:
+            logger.info("Autonomous mode enabled - skipping notification validation")
             return True, []  # Autonomous mode doesn't need notifications
+
+        # Check if running in development environment (allow without notifications)
+        environment = os.getenv("ENVIRONMENT", "development").lower()
+        if environment == "development":
+            logger.info(
+                "Development environment detected - skipping notification validation"
+            )
+            return True, []
+
+        # Check if signal-only mode allows running without notifications
+        require_notifications = getattr(
+            self.config, "require_notifications_for_signal_only", True
+        )
+        if not require_notifications:
+            logger.info(
+                "Signal-only mode configured without notification requirement - skipping validation"
+            )
+            return True, []
 
         # Validate Telegram configuration
         telegram_config = getattr(self.config, "telegram", None)
