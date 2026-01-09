@@ -84,7 +84,7 @@ export class WebSocketService {
       this.socket.onopen = () => this._handleOpen();
       this.socket.onmessage = (event) => this._handleMessage(event);
       this.socket.onerror = () => this._handleError();
-      this.socket.onclose = () => this._handleClose();
+      this.socket.onclose = (event) => this._handleClose(event);
     } catch (err) {
       console.error('WebSocket connection error:', err);
       this._scheduleReconnect();
@@ -129,17 +129,37 @@ export class WebSocketService {
       retryCount: this.retryCount,
       maxRetries: this.maxRetries,
     });
-    this._emit('error', { 
-      message: 'WebSocket error', 
+    this._emit('error', {
+      message: 'WebSocket error',
       timestamp: Date.now(),
       readyState: this.socket?.readyState,
     });
   }
 
-  private _handleClose(): void {
-    console.log('[WebSocket] Disconnected');
+  private _handleClose(event?: CloseEvent): void {
+    console.log('[WebSocket] Disconnected', {
+      code: event?.code,
+      reason: event?.reason
+    });
     this._stopHeartbeat();
-    this._emit('disconnected', { timestamp: Date.now() });
+
+    // Check if this is an authentication failure (code 4001)
+    if (event?.code === 4001) {
+      console.error('[WebSocket] Authentication failed:', event.reason);
+      this._emit('auth_failed', {
+        message: event.reason || 'Unauthorized',
+        code: event.code,
+        timestamp: Date.now()
+      });
+      // Don't attempt to reconnect on auth failure
+      this.isIntentionallyClosed = true;
+    }
+
+    this._emit('disconnected', {
+      timestamp: Date.now(),
+      code: event?.code,
+      reason: event?.reason
+    });
 
     if (!this.isIntentionallyClosed) {
       this._scheduleReconnect();
@@ -191,7 +211,7 @@ export class WebSocketService {
     if (this.socket?.readyState === WebSocket.OPEN) {
       // Server expects { action, payload } for commands like 'start', 'stop', etc.
       // but sends { event, data } for broadcasts
-      const message = event === 'ping' 
+      const message = event === 'ping'
         ? { event, data }  // Keep heartbeat as { event, data }
         : { action: event, payload: data };  // Commands use { action, payload }
       this.socket.send(JSON.stringify(message));

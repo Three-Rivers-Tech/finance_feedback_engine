@@ -864,39 +864,40 @@ async def agent_websocket(
 ) -> None:
     """WebSocket endpoint for live agent control and streaming events."""
 
-    token, selected_protocol = _extract_bearer_from_websocket(websocket)
-    if not token:
-        await websocket.close(code=1008, reason="Missing bearer token")
-        return
-
-    # Get auth manager from engine (avoid dependency injection issues with WebSocket)
-    from .dependencies import get_auth_manager_instance
-    auth_manager = get_auth_manager_instance()
-
-    client_ip = websocket.client.host if websocket.client else None
-    user_agent = websocket.headers.get("user-agent")
-
     # Check if in development mode (skip auth)
     import os
     environment = os.getenv("ENVIRONMENT", "production").lower()
     if environment == "development":
         # Development mode: skip authentication
-        pass
+        logger.debug("WebSocket /ws connected in development mode (auth bypassed)")
+        selected_protocol = None
     else:
         # Production mode: validate API key
+        token, selected_protocol = _extract_bearer_from_websocket(websocket)
+        if not token:
+            await websocket.close(code=4001, reason="Unauthorized: Missing API key")
+            return
+
+        # Get auth manager from engine (avoid dependency injection issues with WebSocket)
+        from .dependencies import get_auth_manager_instance
+        auth_manager = get_auth_manager_instance()
+
+        client_ip = websocket.client.host if websocket.client else None
+        user_agent = websocket.headers.get("user-agent")
+
         try:
             is_valid, _, _ = auth_manager.validate_api_key(
                 api_key=token, ip_address=client_ip, user_agent=user_agent
             )
             if not is_valid:
-                await websocket.close(code=1008, reason="Invalid API key")
+                await websocket.close(code=4001, reason="Unauthorized: Invalid API key")
                 return
         except ValueError:
             await websocket.close(code=1013, reason="Rate limited")
             return
         except Exception as exc:  # noqa: BLE001
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=1008, reason="Authentication failed")
+            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1369,33 +1370,38 @@ async def portfolio_stream_websocket(
 
     Sends portfolio status updates as they change.
     """
-    token, selected_protocol = _extract_bearer_from_websocket(websocket)
-    if not token:
-        await websocket.close(code=1008, reason="Missing bearer token")
-        return
-
-    from .dependencies import get_auth_manager_instance
-    auth_manager = get_auth_manager_instance()
-
-    client_ip = websocket.client.host if websocket.client else None
-    user_agent = websocket.headers.get("user-agent")
-
+    # Check if in development mode (skip auth)
     import os
     environment = os.getenv("ENVIRONMENT", "production").lower()
-    if environment != "development":
+    if environment == "development":
+        logger.debug("WebSocket /ws/portfolio connected in development mode (auth bypassed)")
+        selected_protocol = None
+    else:
+        # Production mode: validate API key
+        token, selected_protocol = _extract_bearer_from_websocket(websocket)
+        if not token:
+            await websocket.close(code=4001, reason="Unauthorized: Missing API key")
+            return
+
+        from .dependencies import get_auth_manager_instance
+        auth_manager = get_auth_manager_instance()
+
+        client_ip = websocket.client.host if websocket.client else None
+        user_agent = websocket.headers.get("user-agent")
+
         try:
             is_valid, _, _ = auth_manager.validate_api_key(
                 api_key=token, ip_address=client_ip, user_agent=user_agent
             )
             if not is_valid:
-                await websocket.close(code=1008, reason="Invalid API key")
+                await websocket.close(code=4001, reason="Unauthorized: Invalid API key")
                 return
         except ValueError:
             await websocket.close(code=1013, reason="Rate limited")
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=1008, reason="Authentication failed")
+            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1460,33 +1466,38 @@ async def positions_stream_websocket(
 
     Sends position updates (open, update, close) as they occur.
     """
-    token, selected_protocol = _extract_bearer_from_websocket(websocket)
-    if not token:
-        await websocket.close(code=1008, reason="Missing bearer token")
-        return
-
-    from .dependencies import get_auth_manager_instance
-    auth_manager = get_auth_manager_instance()
-
-    client_ip = websocket.client.host if websocket.client else None
-    user_agent = websocket.headers.get("user-agent")
-
+    # Check if in development mode (skip auth)
     import os
     environment = os.getenv("ENVIRONMENT", "production").lower()
-    if environment != "development":
+    if environment == "development":
+        logger.debug("WebSocket /ws/positions connected in development mode (auth bypassed)")
+        selected_protocol = None
+    else:
+        # Production mode: validate API key
+        token, selected_protocol = _extract_bearer_from_websocket(websocket)
+        if not token:
+            await websocket.close(code=4001, reason="Unauthorized: Missing API key")
+            return
+
+        from .dependencies import get_auth_manager_instance
+        auth_manager = get_auth_manager_instance()
+
+        client_ip = websocket.client.host if websocket.client else None
+        user_agent = websocket.headers.get("user-agent")
+
         try:
             is_valid, _, _ = auth_manager.validate_api_key(
                 api_key=token, ip_address=client_ip, user_agent=user_agent
             )
             if not is_valid:
-                await websocket.close(code=1008, reason="Invalid API key")
+                await websocket.close(code=4001, reason="Unauthorized: Invalid API key")
                 return
         except ValueError:
             await websocket.close(code=1013, reason="Rate limited")
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=1008, reason="Authentication failed")
+            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1553,33 +1564,38 @@ async def decisions_stream_websocket(
 
     Sends new decisions and decision events in real-time.
     """
-    token, selected_protocol = _extract_bearer_from_websocket(websocket)
-    if not token:
-        await websocket.close(code=1008, reason="Missing bearer token")
-        return
-
-    from .dependencies import get_auth_manager_instance
-    auth_manager = get_auth_manager_instance()
-
-    client_ip = websocket.client.host if websocket.client else None
-    user_agent = websocket.headers.get("user-agent")
-
+    # Check if in development mode (skip auth)
     import os
     environment = os.getenv("ENVIRONMENT", "production").lower()
-    if environment != "development":
+    if environment == "development":
+        logger.debug("WebSocket /ws/decisions connected in development mode (auth bypassed)")
+        selected_protocol = None
+    else:
+        # Production mode: validate API key
+        token, selected_protocol = _extract_bearer_from_websocket(websocket)
+        if not token:
+            await websocket.close(code=4001, reason="Unauthorized: Missing API key")
+            return
+
+        from .dependencies import get_auth_manager_instance
+        auth_manager = get_auth_manager_instance()
+
+        client_ip = websocket.client.host if websocket.client else None
+        user_agent = websocket.headers.get("user-agent")
+
         try:
             is_valid, _, _ = auth_manager.validate_api_key(
                 api_key=token, ip_address=client_ip, user_agent=user_agent
             )
             if not is_valid:
-                await websocket.close(code=1008, reason="Invalid API key")
+                await websocket.close(code=4001, reason="Unauthorized: Invalid API key")
                 return
         except ValueError:
             await websocket.close(code=1013, reason="Rate limited")
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=1008, reason="Authentication failed")
+            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
             return
 
     await websocket.accept(subprotocol=selected_protocol)
