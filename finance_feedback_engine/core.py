@@ -608,6 +608,37 @@ class FinanceFeedbackEngine:
                 "(e.g., ['BTCUSD', 'ETHUSD']) or enable signal-only mode"
             )
 
+        # Phase 2 Pre-flight: Trading platform connectivity (lightweight)
+        try:
+            if hasattr(self, "trading_platform") and self.trading_platform:
+                has_methods = (
+                    hasattr(self.trading_platform, "get_balance")
+                    and hasattr(self.trading_platform, "execute")
+                )
+                if not has_methods:
+                    errors.append(
+                        "Trading platform missing required methods (get_balance/execute). "
+                        "Verify platform initialization and credentials."
+                    )
+        except Exception as e:
+            logger.debug(f"Trading platform readiness check failed: {e}")
+            errors.append(
+                "Failed to verify trading platform readiness. Check credentials and connectivity."
+            )
+
+        # Phase 2 Pre-flight: Data provider credentials present
+        try:
+            api_key = os.environ.get("ALPHA_VANTAGE_API_KEY") or self.config.get(
+                "alpha_vantage_api_key"
+            )
+            if not api_key:
+                errors.append(
+                    "Alpha Vantage API key missing. Set ALPHA_VANTAGE_API_KEY or configure in config.local.yaml."
+                )
+        except Exception:
+            # Non-fatal; init may succeed if alternative providers are wired later
+            logger.debug("Alpha Vantage key readiness check failed", exc_info=True)
+
         # Return results
         is_ready = len(errors) == 0
         if is_ready:

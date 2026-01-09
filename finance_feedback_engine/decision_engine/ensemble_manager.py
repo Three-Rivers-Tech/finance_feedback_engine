@@ -120,19 +120,53 @@ class EnsembleDecisionManager:
 
         # Debate mode settings
         self.debate_mode = ensemble_config.get("debate_mode", False)
-        self.debate_providers = ensemble_config.get(
-            "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
-        )
 
-        # Validate debate providers are non-empty when debate mode is active.
-        # Allow BYOM: accept any provider tag, even if not in enabled_providers.
+        # THR-63: Use curated debate seat resolver (prefers local Ollama models with cloud fallback)
+        if self.debate_mode:
+            from .debate_seat_resolver import resolve_debate_seats
+
+            explicit_seats = ensemble_config.get(
+                "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
+            )
+            self.debate_providers = resolve_debate_seats(
+                enabled_providers=self.enabled_providers,
+                explicit_debate_providers=explicit_seats
+            )
+        else:
+            # Non-debate mode: use config as-is
+            self.debate_providers = ensemble_config.get(
+                "debate_providers", {"bull": "gemini", "bear": "qwen", "judge": "local"}
+            )
+
+        # Validate debate providers are non-empty and in enabled_providers when debate mode is active.
         if self.debate_mode:
             blank_providers = [r for r, p in self.debate_providers.items() if not str(p).strip()]
             if blank_providers:
                 raise ValueError(
                     f"Debate mode enabled but the following seats are missing providers: {blank_providers}"
                 )
-            logger.info("Debate mode active with custom providers: %s", self.debate_providers)
+
+            # Validate all debate providers are in enabled_providers
+            # Note: Skip local Ollama models (contain ':') and cloud-only providers (cli, codex)
+            non_local_seats = {
+                role: provider
+                for role, provider in self.debate_providers.items()
+                if ":" not in str(provider)  # Not a local Ollama model
+            }
+
+            # Only validate non-local providers are in enabled_providers
+            if non_local_seats:
+                missing = [
+                    p for p in non_local_seats.values()
+                    if p not in self.enabled_providers and p not in ["cli", "codex"]
+                ]
+                if missing:
+                    raise ValueError(
+                        f"The following debate providers are not in enabled_providers: {missing}. "
+                        f"Enabled: {self.enabled_providers}"
+                    )
+
+            logger.info("Debate mode active with resolved providers: %s", self.debate_providers)
 
         # Local-First settings
         self.local_keywords = [
