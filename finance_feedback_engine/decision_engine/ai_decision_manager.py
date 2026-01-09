@@ -27,6 +27,22 @@ class AIDecisionManager:
         # Normalize config to handle nested/flat structures
         decision_config = normalize_decision_config(config)
         self.ai_provider = decision_config.get("ai_provider", "local")
+        # THR-63: Simplify model selection to debate-mode plug-in
+        # If debate_mode is enabled in ensemble config, force ensemble provider
+        try:
+            if (
+                isinstance(self.config.get("ensemble"), dict)
+                and self.config.get("ensemble", {}).get("debate_mode", False)
+            ):
+                if self.ai_provider != "ensemble":
+                    logger.info(
+                        "Debate mode enabled; overriding ai_provider '%s' -> 'ensemble'",
+                        self.ai_provider,
+                    )
+                self.ai_provider = "ensemble"
+        except Exception:
+            # Be permissive if config shape is unexpected
+            logger.debug("Debate-mode override check failed", exc_info=True)
         self.model_name = decision_config.get("model_name", "default")
         self.ensemble_timeout = decision_config.get("ensemble_timeout", 30)
 

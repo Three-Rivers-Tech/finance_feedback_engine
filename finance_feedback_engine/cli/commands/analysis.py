@@ -51,18 +51,27 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         environment = get_environment_name()
         _validate_config_on_startup(config_path, environment)
 
-        # Override provider if specified
+        # Override provider if specified, unless debate-mode is enabled (THR-63)
+        debate_mode = bool(config.get("ensemble", {}).get("debate_mode", False))
         if provider:
-            if "decision_engine" not in config:
-                config["decision_engine"] = {}
-            config["decision_engine"]["ai_provider"] = provider.lower()
-
-            if provider.lower() == "ensemble":
+            if debate_mode:
                 console.print(
-                    "[yellow]Using ensemble mode (multiple providers)[/yellow]"
+                    "[yellow]Debate mode active: ignoring --provider and using ensemble debate.[/yellow]"
                 )
+                if "decision_engine" not in config:
+                    config["decision_engine"] = {}
+                config["decision_engine"]["ai_provider"] = "ensemble"
             else:
-                console.print(f"[yellow]Using AI provider: {provider}[/yellow]")
+                if "decision_engine" not in config:
+                    config["decision_engine"] = {}
+                config["decision_engine"]["ai_provider"] = provider.lower()
+
+                if provider.lower() == "ensemble":
+                    console.print(
+                        "[yellow]Using ensemble mode (multiple providers)[/yellow]"
+                    )
+                else:
+                    console.print(f"[yellow]Using AI provider: {provider}[/yellow]")
 
         try:
             engine = FinanceFeedbackEngine(config)
