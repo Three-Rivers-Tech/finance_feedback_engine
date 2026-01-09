@@ -1,6 +1,15 @@
-from typing import List, Literal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class DevelopmentRiskLimitsConfig(BaseModel):
+    """Development/paper trading risk limits (relaxed constraints for sandbox testing)."""
+
+    correlation_threshold: float = Field(0.7, ge=0.0, le=1.0)
+    max_correlated_assets: int = Field(5, gt=0)  # 5x more permissive than production (5 vs 2)
+    max_var_pct: float = Field(0.10, ge=0.0, le=1.0)  # 10% (2x more than production 5%)
+    var_confidence: float = Field(0.90, gt=0.0, lt=1.0)  # 90% (lower precision acceptable in dev)
 
 
 class AutonomousAgentConfig(BaseModel):
@@ -9,6 +18,24 @@ class AutonomousAgentConfig(BaseModel):
     enabled: bool = False
     profit_target: float = 0.05  # 5%
     stop_loss: float = 0.02  # 2%
+
+    @model_validator(mode="after")
+    def validate_stop_loss_below_profit_target(self) -> "AutonomousAgentConfig":
+        """Validate that stop_loss is less than profit_target.
+
+        This ensures the risk/reward ratio is sensible: we should be willing
+        to lose less than we aim to gain on each trade.
+
+        Raises:
+            ValueError: If stop_loss >= profit_target.
+        """
+        if self.stop_loss >= self.profit_target:
+            raise ValueError(
+                f"stop_loss ({self.stop_loss}) must be strictly less than "
+                f"profit_target ({self.profit_target}). "
+                f"Example: stop_loss=0.02 (2%), profit_target=0.05 (5%)"
+            )
+        return self
 
 
 class PairSelectionStatisticalConfig(BaseModel):
@@ -157,12 +184,17 @@ class TradingAgentConfig(BaseModel):
     kill_switch_gain_pct: float = 0.05  # 5%
     kill_switch_loss_pct: float = 0.02  # 2%
     autonomous: AutonomousAgentConfig = Field(default_factory=AutonomousAgentConfig)
+    # Signal-only mode notification requirement: set to False to allow signal-only operation without Telegram
+    require_notifications_for_signal_only: bool = True
 
     # --- Strategic Goals ---
     strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"
     risk_appetite: Literal["low", "medium", "high"] = "medium"
     max_drawdown_percent: float = (
-        0.15  # Max drawdown threshold (auto-normalized: values >1 treated as percentages, <=1 as decimals)
+        0.15  # Max drawdown threshold - LIVE TRADING DEFAULT
+              # (auto-normalized: values >1 treated as percentages, <=1 as decimals)
+              # For development/paper trading: Set to 0.25 (25%) via config override
+              # to allow portfolio exploration and trade execution testing
     )
 
     # --- Risk Management ---
@@ -185,6 +217,11 @@ class TradingAgentConfig(BaseModel):
     max_correlated_assets: int = Field(2, gt=0)
     max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
     var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
+
+    # Development risk limits (auto-applied when ENVIRONMENT=development)
+    # Relaxes gatekeeper constraints for sandbox testing and portfolio building
+    # See: TradingLoopAgent.__init__ for environment detection and auto-selection
+    development_risk_limits: DevelopmentRiskLimitsConfig = Field(default_factory=DevelopmentRiskLimitsConfig)
 
     # Ensure field validators run for default values as well
     model_config = ConfigDict(validate_default=True)
@@ -249,6 +286,31 @@ class TradingAgentConfig(BaseModel):
             # Let other validators handle type errors
             return v
         return v
+
+    @model_validator(mode="after")
+    def validate_asset_pairs_or_signal_only(self) -> "TradingAgentConfig":
+        """Validate that asset_pairs is non-empty unless in signal-only mode.
+
+        Signal-only mode allows autonomous execution disabled (autonomous.enabled=false)
+        without requiring asset pairs. Regular trading requires at least one asset pair.
+
+        Raises:
+            ValueError: If asset_pairs is empty and not in signal-only mode.
+        """
+        # Signal-only mode: autonomous disabled and notifications not required
+        is_signal_only = (
+            not self.autonomous.enabled
+            and not self.require_notifications_for_signal_only
+        )
+
+        if not self.asset_pairs and not is_signal_only:
+            raise ValueError(
+                "asset_pairs cannot be empty unless in signal-only mode "
+                "(autonomous.enabled=false and require_notifications_for_signal_only=false). "
+                "Provide at least one trading pair (e.g., BTCUSD, ETHUSD) or configure signal-only mode."
+            )
+
+        return self
 
     # --- Data & Analysis Controls ---
     # Core pairs that are always active (never removed by pair selection)

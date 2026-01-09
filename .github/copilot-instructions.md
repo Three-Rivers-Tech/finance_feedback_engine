@@ -37,7 +37,12 @@
 
 ### Safety Limits
 - **Debate mode**: default; quicktest_mode only in tests.
-- **Risk gates**: drawdown/VaR/concentration/correlation checks; ≥0.7 correlation threshold.
+- **Risk gates**: drawdown/VaR/concentration/correlation checks enforced by RiskGatekeeper.
+  - **Production defaults**: max_drawdown=5%, correlation_threshold=0.7 (reject >0.7 correlated), max_correlated_assets=2, max_var_pct=5%, var_confidence=95%
+  - **Development defaults** (auto-applied when `ENVIRONMENT=development`): max_correlated_assets=5 (5x more permissive), max_var_pct=10% (2x), var_confidence=90%, correlation_threshold=0.7 (unchanged)
+  - **Implementation**: `TradingLoopAgent.__init__` reads `ENVIRONMENT` variable and applies `config.agent.development_risk_limits` if set to 'development'
+  - **Configuration**: See `config.agent.development_risk_limits` in `config/config.yaml` and `DevelopmentRiskLimitsConfig` in `finance_feedback_engine/agent/config.py`
+  - **Drawdown**: Controlled via `config.agent.max_drawdown_percent` (default 15% for live, 25% recommended for dev); auto-normalized (values >1 treated as percentages)
 - **Max concurrent trades**: 2; agent kill-switch via `config.agent.kill_switch`.
 - **Circuit breaker**: opens after 5 API failures, closes after 60s recovery timeout.
 

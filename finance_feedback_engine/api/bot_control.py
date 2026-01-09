@@ -81,7 +81,7 @@ bot_control_router = APIRouter(
 
 # Global agent instance management
 _agent_instance: Optional[TradingLoopAgent] = None
-_agent_task: Optional[asyncio.Task] = None
+_agent_task: Optional[asyncio.Task[None]] = None
 _agent_lock = asyncio.Lock()
 _queued_start_request: Optional[AgentControlRequest] = None
 
@@ -109,6 +109,9 @@ class AgentStatusResponse(BaseModel):
     last_decision_time: Optional[datetime] = None
     error_message: Optional[str] = None
     config: Dict[str, Any] = Field(default_factory=dict)
+    # Optional enriched portfolio payload (development mode)
+    balances: Optional[Dict[str, float]] = None
+    portfolio: Optional[Dict[str, Any]] = None
 
 
 class ManualTradeRequest(BaseModel):
@@ -243,6 +246,7 @@ async def _start_agent_from_request(
     async def run_agent() -> None:
         global _agent_instance, _agent_task
         try:
+            assert _agent_instance is not None  # Guaranteed by closure
             await _agent_instance.run()
         except Exception as e:  # noqa: BLE001
             logger.error(f"Agent crashed: {e}", exc_info=True)
@@ -337,6 +341,7 @@ async def start_agent(
 
         response, queued = await _enqueue_or_start_agent(request, engine)
         if queued:
+            assert response is None  # When queued, response is None
             return AgentStatusResponse(
                 state=BotState.STARTING,
                 agent_ooda_state=None,
@@ -348,6 +353,7 @@ async def start_agent(
                 },
             )
 
+        assert response is not None  # When not queued, response must be non-None
         return response
 
     except HTTPException:
@@ -626,32 +632,69 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
     global _agent_instance, _agent_task
 
     try:
-        # Check if agent is running
-        if _agent_instance is None or _agent_task is None or _agent_task.done():
-            return AgentStatusResponse(
-                state=BotState.STOPPED, total_trades=0, active_positions=0
-            )
+        # Determine environment
+        import os
+        is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
 
-        # Get agent state
-        agent_state = _agent_instance.state if _agent_instance else None
+        # Agent running state
+        agent_running = (
+            _agent_instance is not None and _agent_task is not None and not _agent_task.done()
+        )
+        agent_state = _agent_instance.state if (_agent_instance and agent_running) else None
 
-        # Get portfolio info
+        # Portfolio info (always attempt, even if agent is stopped)
         portfolio_value = None
         active_positions = 0
+        balances_payload: Optional[Dict[str, float]] = None
+        portfolio_payload: Optional[Dict[str, Any]] = None
 
         platform = getattr(engine, "trading_platform", None)
 
         if platform:
             try:
-                # Add timeout to prevent hanging on API calls
-                balance = await asyncio.wait_for(platform.aget_balance(), timeout=3.0)
-                portfolio_value = balance.get("total", balance.get("balance"))
+                # Try async balance first, fall back to sync via executor
+                if hasattr(platform, "aget_balance"):
+                    balance = await asyncio.wait_for(platform.aget_balance(), timeout=3.0)
+                else:
+                    loop = asyncio.get_running_loop()
+                    balance = await asyncio.wait_for(
+                        loop.run_in_executor(None, platform.get_balance), timeout=3.0
+                    )
 
+                if isinstance(balance, dict):
+                    balances_payload = balance
+                    portfolio_value = balance.get("total") or balance.get("balance")
+
+                # Get breakdown
+                breakdown = None
                 if hasattr(platform, "aget_portfolio_breakdown"):
                     breakdown = await asyncio.wait_for(
                         platform.aget_portfolio_breakdown(), timeout=3.0
                     )
-                    active_positions = len(breakdown.get("positions", []))
+                elif hasattr(platform, "get_portfolio_breakdown"):
+                    loop = asyncio.get_running_loop()
+                    breakdown = await asyncio.wait_for(
+                        loop.run_in_executor(None, platform.get_portfolio_breakdown),
+                        timeout=3.0,
+                    )
+
+                if isinstance(breakdown, dict):
+                    portfolio_payload = breakdown
+                    # Prefer explicit positions list if available, else derive
+                    positions = breakdown.get("positions") or breakdown.get("futures_positions") or []
+                    active_positions = len(positions)
+
+                    # Fallback: infer portfolio value from breakdown if balance lacks totals
+                    if portfolio_value is None:
+                        total_value = breakdown.get("total_value_usd")
+                        if isinstance(total_value, (int, float)):
+                            portfolio_value = float(total_value)
+
+                # Final fallback: sum numeric balances when no total provided
+                if portfolio_value is None and isinstance(balances_payload, dict):
+                    numeric_balances = [v for v in balances_payload.values() if isinstance(v, (int, float))]
+                    if numeric_balances:
+                        portfolio_value = float(sum(numeric_balances))
             except asyncio.TimeoutError:
                 logger.warning("Platform API call timed out after 3 seconds")
             except Exception as e:
@@ -659,8 +702,25 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
 
         # Calculate uptime
         uptime = None
-        if hasattr(_agent_instance, "start_time"):
+        if _agent_instance and hasattr(_agent_instance, "start_time"):
             uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+
+        # Fetch total trades and daily PnL from agent/monitor
+        total_trades = 0
+        daily_pnl = None
+        if _agent_instance:
+            # Try to get trade count from trade monitor
+            trade_monitor = getattr(_agent_instance, "trade_monitor", None)
+            if trade_monitor:
+                try:
+                    # Get today's trade count if available
+                    daily_trades = getattr(trade_monitor, "daily_trade_count", 0)
+                    total_trades = daily_trades
+                    # Get daily PnL if available
+                    if hasattr(trade_monitor, "get_daily_pnl"):
+                        daily_pnl = trade_monitor.get_daily_pnl()
+                except Exception:
+                    pass
 
         # Safe access to agent config (handle both dict and object forms)
         agent_cfg = engine.config.get("agent", {})
@@ -671,18 +731,28 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
         else:
             asset_pairs = []
 
-        return AgentStatusResponse(
-            state=BotState.RUNNING,
+        # Build response
+        resp = AgentStatusResponse(
+            state=BotState.RUNNING if agent_running else BotState.STOPPED,
             agent_ooda_state=agent_state.name if agent_state else None,
             uptime_seconds=uptime,
+            total_trades=total_trades,
             active_positions=active_positions,
             portfolio_value=portfolio_value,
+            daily_pnl=daily_pnl,
             current_asset_pair=getattr(_agent_instance, "current_asset_pair", None),
             config={
                 "asset_pairs": asset_pairs,
                 "autonomous": True,
             },
         )
+
+        # Enrich payload in development mode
+        if is_development:
+            resp.balances = balances_payload
+            resp.portfolio = portfolio_payload
+
+        return resp
 
     except Exception as e:
         logger.error(f"Error getting agent status: {e}", exc_info=True)
@@ -712,9 +782,10 @@ async def _build_stream_payload(
         try:
             loop = asyncio.get_running_loop()
 
-            def _get_queue_item_nowait():
+            def _get_queue_item_nowait() -> Optional[Dict[str, Any]]:
                 try:
-                    return _agent_instance._dashboard_event_queue.get_nowait()
+                    result = _agent_instance._dashboard_event_queue.get_nowait()
+                    return result if isinstance(result, dict) else None
                 except queue.Empty:
                     return None
 
@@ -790,7 +861,7 @@ async def stream_agent_events(
 async def agent_websocket(
     websocket: WebSocket,
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> None:
     """WebSocket endpoint for live agent control and streaming events."""
 
     token, selected_protocol = _extract_bearer_from_websocket(websocket)
@@ -1113,7 +1184,7 @@ async def get_open_positions(
                 # Extract size (contracts or units)
                 # Coinbase futures API returns 'number_of_contracts' or 'contracts'
                 # OANDA returns 'units'
-                def safe_get_field(obj, *keys):
+                def safe_get_field(obj: Any, *keys: str) -> Optional[Any]:
                     """Try multiple field names, supporting both dict and object access."""
                     for key in keys:
                         if isinstance(obj, dict):
@@ -1223,13 +1294,13 @@ async def close_position(
     position_id: str,
     _api_user: str = Depends(verify_api_key_or_dev),
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> Dict[str, Any]:
     """
     Close a specific open position.
     """
     try:
         # Get position details
-        breakdown = await engine.platform.aget_portfolio_breakdown()
+        breakdown = await engine.trading_platform.aget_portfolio_breakdown()
         positions = breakdown.get("positions", [])
 
         position = next((p for p in positions if p.get("id") == position_id), None)
@@ -1248,14 +1319,14 @@ async def close_position(
             )
 
         # Check platform availability
-        if not hasattr(engine, "platform"):
+        if not hasattr(engine, "trading_platform"):
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Trading platform is not available",
             )
 
         # Execute closing trade
-        result = await engine.platform.aexecute_trade(
+        result = await engine.trading_platform.aexecute_trade(
             {
                 "asset_pair": position["asset_pair"],
                 "action": "SELL" if position.get("side") == "LONG" else "BUY",
@@ -1292,7 +1363,7 @@ async def close_position(
 async def portfolio_stream_websocket(
     websocket: WebSocket,
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> None:
     """
     WebSocket endpoint for real-time portfolio updates.
 
@@ -1383,7 +1454,7 @@ async def portfolio_stream_websocket(
 async def positions_stream_websocket(
     websocket: WebSocket,
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> None:
     """
     WebSocket endpoint for real-time position updates.
 
@@ -1476,7 +1547,7 @@ async def positions_stream_websocket(
 async def decisions_stream_websocket(
     websocket: WebSocket,
     engine: FinanceFeedbackEngine = Depends(get_engine),
-):
+) -> None:
     """
     WebSocket endpoint for real-time decision updates.
 

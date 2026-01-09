@@ -75,6 +75,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: ${DOCKER_TARGET:-runtime}  # builder for dev, runtime for prod
+      network: host
     container_name: ${BACKEND_CONTAINER:-ffe-backend}
     image: finance-feedback-engine:latest
     restart: unless-stopped
@@ -121,6 +122,7 @@ services:
     build:
       context: ${FRONTEND_CONTEXT:-./frontend}
       dockerfile: ${FRONTEND_DOCKERFILE:-Dockerfile}
+      network: host
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
         VITE_API_KEY: ${VITE_API_KEY:-}

@@ -246,6 +246,13 @@ class FinanceFeedbackEngine:
                     "initial_balance": _build_paper_balance(paper_initial_cash)
                 }
 
+            # Priority 2: Auto-enable paper in development when no platforms configured
+            if not unified_credentials and os.environ.get("ENVIRONMENT", "").lower() == "development":
+                logger.info("Development environment detected with no platforms; auto-enabling paper trading")
+                unified_credentials["paper"] = {
+                    "initial_balance": _build_paper_balance(paper_initial_cash)
+                }
+
             # Ensure we have at least one valid platform configured
             if not unified_credentials:
                 logger.error(
@@ -493,18 +500,126 @@ class FinanceFeedbackEngine:
             )
         except ImportError as e:
             logger.warning(
-                "Could not auto-enable monitoring context due to import error: %s", e
-            )
-        except (AttributeError, ValueError, TypeError) as e:
-            logger.warning(
-                "Could not auto-enable monitoring context due to configuration error: %s",
-                e,
-                exc_info=True,
+                f"Failed to enable monitoring context (import error): {e}"
             )
         except Exception as e:
-            logger.warning(
-                "Could not auto-enable monitoring context: %s", e, exc_info=True
+            logger.error(
+                f"Failed to enable monitoring context: {e}", exc_info=True
             )
+
+    def validate_agent_readiness(self) -> tuple[bool, list[str]]:
+        """
+        Validate that all runtime dependencies are available before agent start.
+
+        Performs comprehensive pre-flight checks including:
+        - Ensemble provider configuration
+        - Risk limit validation
+        - Ollama connectivity (if local provider enabled)
+        - Asset pair validation
+
+        This method should be called by TradingLoopAgent before entering the OODA loop
+        to ensure all preconditions are met for autonomous trading.
+
+        Returns:
+            tuple[bool, list[str]]: (is_ready, error_messages)
+                - is_ready: True if all checks pass, False otherwise
+                - error_messages: List of human-readable error messages (empty if ready)
+
+        Example:
+            >>> engine = FinanceFeedbackEngine(config)
+            >>> is_ready, errors = engine.validate_agent_readiness()
+            >>> if not is_ready:
+            ...     for error in errors:
+            ...         print(f"ERROR: {error}")
+            ...     raise RuntimeError("Agent not ready for autonomous trading")
+        """
+        errors: List[str] = []
+
+        # Check 1: Ensemble provider configuration
+        ai_provider = self.config.get("decision_engine", {}).get("ai_provider", "local")
+        if ai_provider == "ensemble":
+            ensemble_config = self.config.get("ensemble", {})
+            enabled_providers = ensemble_config.get("enabled_providers") or ensemble_config.get("providers", [])
+
+            if not enabled_providers or len(enabled_providers) == 0:
+                errors.append(
+                    "Ensemble mode enabled but no providers configured. "
+                    "Add at least one provider to config.ensemble.enabled_providers "
+                    "(e.g., ['local', 'claude'])"
+                )
+
+            # Check 2: Ollama connectivity (if local provider enabled)
+            if enabled_providers and "local" in enabled_providers:
+                ollama_host = self.config.get("ollama", {}).get("host", "http://localhost:11434")
+                try:
+                    import socket
+                    import urllib.parse
+
+                    # Parse host URL to get hostname and port
+                    parsed = urllib.parse.urlparse(ollama_host)
+                    host = parsed.hostname or "localhost"
+                    port = parsed.port or 11434
+
+                    # Quick TCP connectivity check (don't make full HTTP request)
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2.0)  # 2 second timeout
+                    result = sock.connect_ex((host, port))
+                    sock.close()
+
+                    if result != 0:
+                        errors.append(
+                            f"Ollama not reachable at {ollama_host} (TCP connection failed). "
+                            f"Ensure Ollama is running: 'docker start ollama' or 'ollama serve'. "
+                            f"To disable local provider, remove 'local' from ensemble.enabled_providers"
+                        )
+                except Exception as e:
+                    logger.debug(f"Ollama connectivity check failed with exception: {e}")
+                    errors.append(
+                        f"Failed to check Ollama connectivity at {ollama_host}: {e}. "
+                        f"Ensure Ollama is accessible or remove 'local' from ensemble.enabled_providers"
+                    )
+
+        # Check 3: Risk limits validation
+        agent_config = self.config.get("agent", {})
+        max_drawdown = agent_config.get("max_drawdown_percent", 0.15)
+
+        # Normalize percentage notation (15 -> 0.15)
+        if max_drawdown > 1.0:
+            max_drawdown = max_drawdown / 100.0
+
+        if max_drawdown <= 0:
+            errors.append(
+                "max_drawdown_percent must be greater than 0 for risk management. "
+                "Set config.agent.max_drawdown_percent to a reasonable value "
+                "(e.g., 0.15 for 15% drawdown limit)"
+            )
+
+        # Check 4: Asset pairs validation (already handled by Pydantic validator in Phase 1)
+        # This check is redundant with the model validator but provides runtime verification
+        asset_pairs = agent_config.get("asset_pairs", [])
+        autonomous_enabled = agent_config.get("autonomous", {}).get("enabled", False)
+        require_notifications = agent_config.get("require_notifications_for_signal_only", True)
+        is_signal_only = not autonomous_enabled and not require_notifications
+
+        if not asset_pairs and not is_signal_only:
+            errors.append(
+                "No asset pairs configured and not in signal-only mode. "
+                "Add at least one trading pair to config.agent.asset_pairs "
+                "(e.g., ['BTCUSD', 'ETHUSD']) or enable signal-only mode"
+            )
+
+        # Return results
+        is_ready = len(errors) == 0
+        if is_ready:
+            logger.info("✅ Agent readiness validation passed - all checks OK")
+        else:
+            logger.error(
+                f"❌ Agent readiness validation failed with {len(errors)} error(s)"
+            )
+            for i, error in enumerate(errors, 1):
+                logger.error(f"  {i}. {error}")
+
+        return (is_ready, errors)
 
     def _auto_start_trade_monitor(self):
         """Start internal TradeMonitor if enabled in config.

@@ -106,6 +106,12 @@ def load_env_config() -> Dict[str, Any]:
 
     config["platforms"] = [
         {
+            "name": "paper",
+            "credentials": {
+                "initial_cash_usd": _env_float("PAPER_INITIAL_CASH_USD", 10000.0),
+            },
+        },
+        {
             "name": "coinbase_advanced",
             "credentials": {
                 "api_key": _env_str("COINBASE_API_KEY", ""),
