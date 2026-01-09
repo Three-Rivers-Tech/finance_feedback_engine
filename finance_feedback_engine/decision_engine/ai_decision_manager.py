@@ -476,6 +476,11 @@ class AIDecisionManager:
             "amount": 0.0,
         }
 
+    def get_circuit_breaker_stats(self) -> Dict[str, Any]:
+        """Expose circuit breaker stats for health monitoring (placeholder)."""
+        # No dedicated circuit breakers at the AI manager layer today.
+        return {}
+
     def _is_valid_provider_response(
         self, decision: Dict[str, Any], provider: str
     ) -> bool:

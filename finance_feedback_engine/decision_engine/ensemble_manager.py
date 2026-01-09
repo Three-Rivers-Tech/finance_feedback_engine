@@ -274,6 +274,70 @@ class EnsembleDecisionManager:
 
         return result
 
+    def _normalize_weights(self, weights: Dict[str, float]) -> Dict[str, float]:
+        """
+        Normalize provider weights safely.
+
+        Returns an equal distribution when the total is zero or when weights
+        are empty to avoid division-by-zero during failover.
+        """
+        if not weights:
+            return {}
+
+        total = sum(weights.values())
+        if total <= 0:
+            equal = 1.0 / len(weights)
+            return {provider: equal for provider in weights}
+
+        return {provider: value / total for provider, value in weights.items()}
+
+    def apply_failover(self, failed_provider: str, fallback_provider: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Apply failover by removing a failed provider and optionally inserting a fallback.
+
+        Args:
+            failed_provider: Provider to disable (e.g., "local" when Ollama is down)
+            fallback_provider: Optional provider to add/ensure in the active list
+
+        Returns:
+            Dict with the updated enabled_providers and normalized weights
+        """
+        # Remove failed provider from active set and weights
+        self.enabled_providers = [p for p in self.enabled_providers if p != failed_provider]
+        if failed_provider in self.base_weights:
+            self.base_weights.pop(failed_provider, None)
+
+        # Insert fallback if provided and not already active
+        if fallback_provider:
+            if fallback_provider not in self.enabled_providers:
+                self.enabled_providers.append(fallback_provider)
+            if fallback_provider not in self.base_weights:
+                # Give fallback a neutral starting weight; normalize afterwards
+                self.base_weights[fallback_provider] = 1.0
+
+        # Normalize weights to keep aggregator behavior predictable
+        self.base_weights = self._normalize_weights(self.base_weights)
+
+        logger.warning(
+            "Ensemble failover applied: removed '%s', fallback '%s', providers=%s",
+            failed_provider,
+            fallback_provider,
+            self.enabled_providers,
+        )
+
+        # Keep config in sync for downstream consumers
+        try:
+            ensemble_cfg = self.config.setdefault("ensemble", {})
+            ensemble_cfg["enabled_providers"] = list(self.enabled_providers)
+            ensemble_cfg["provider_weights"] = dict(self.base_weights)
+        except Exception:
+            logger.debug("Failed to sync ensemble config during failover", exc_info=True)
+
+        return {
+            "enabled_providers": list(self.enabled_providers),
+            "weights": dict(self.base_weights),
+        }
+
     async def aggregate_decisions(
         self,
         provider_decisions: Dict[str, Dict[str, Any]],

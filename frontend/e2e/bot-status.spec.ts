@@ -6,8 +6,10 @@ import type { AgentStatus } from '../src/types/agent';
  * Tests the full request/response cycle with real HTTP calls
  */
 test.describe('Bot Status API E2E', () => {
-  const API_KEY = 'dev-key-12345';
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_KEY = process.env.BOT_STATUS_API_KEY;
+  const API_BASE_URL = process.env.BOT_STATUS_API_BASE_URL || 'http://localhost:8000';
+
+  test.skip(!API_KEY, 'BOT_STATUS_API_KEY not set; skipping authenticated Bot Status tests');
 
   test('should fetch status with authentication', async ({ request }) => {
     const response = await request.get(`${API_BASE_URL}/api/v1/bot/status`, {

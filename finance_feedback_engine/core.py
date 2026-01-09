@@ -621,6 +621,255 @@ class FinanceFeedbackEngine:
 
         return (is_ready, errors)
 
+    def perform_health_check(self) -> tuple[bool, list[str]]:
+        """
+        Perform runtime health checks on critical systems.
+
+        This method is called periodically during agent operation (every N decisions)
+        to monitor system health and detect degradation. Unlike validate_agent_readiness(),
+        which is a blocking pre-flight check, health_check() is soft monitoring that
+        logs issues but doesn't interrupt agent operation.
+
+        Checks Performed:
+        1. Provider Availability: Verify at least one ensemble provider is responsive
+        2. Decision Engine Responsiveness: Check AI provider connectivity (non-blocking)
+        3. Trading Platform Connectivity: Verify platform API is reachable
+        4. Circuit Breaker Status: Alert if any circuit is OPEN for >5 minutes
+
+        Returns:
+            tuple[bool, list[str]]: (is_healthy, issues)
+                - is_healthy: True if all checks pass, False if issues detected
+                - issues: List of health issues (empty if healthy)
+                         Issues are informational (soft alerts) not blocking failures
+
+        Example:
+            >>> is_healthy, issues = engine.perform_health_check()
+            >>> if not is_healthy:
+            ...     logger.warning(f"Health issues detected: {issues}")
+            ...     # Continue operation but monitor closely
+        """
+        issues: List[str] = []
+
+        # Lazy init: track whether we've already performed Ollama failover
+        if not hasattr(self, "_ollama_failover_active"):
+            self._ollama_failover_active = False
+
+        # Check 1: Provider Availability
+        # Verify at least one ensemble provider is available
+        try:
+            enabled_providers = self.config.get("ensemble", {}).get("enabled_providers", [])
+            if not enabled_providers:
+                issues.append(
+                    "No ensemble providers configured (should not happen - caught in pre-flight validation)"
+                )
+            else:
+                # Check if any providers are available (non-blocking)
+                # This is best-effort; don't fail if we can't verify all providers
+                available_count = 0
+                unavailable_providers = []
+                local_unavailable = False
+
+                for provider in enabled_providers:
+                    if provider == "local":
+                        # Quick TCP check for Ollama (2s timeout, non-blocking)
+                        try:
+                            import socket
+                            import urllib.parse
+
+                            ollama_host = self.config.get("ollama", {}).get("host", "http://localhost:11434")
+                            parsed = urllib.parse.urlparse(ollama_host)
+                            host = parsed.hostname or "localhost"
+                            port = parsed.port or 11434
+
+                            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            sock.settimeout(1.0)  # 1s for periodic check (faster than pre-flight)
+                            result = sock.connect_ex((host, port))
+                            sock.close()
+
+                            if result == 0:
+                                available_count += 1
+                            else:
+                                unavailable_providers.append(f"local (Ollama at {ollama_host})")
+                                local_unavailable = True
+                        except Exception as e:
+                            unavailable_providers.append(f"local (connectivity check failed: {e})")
+                            local_unavailable = True
+                    else:
+                        # Cloud provider (openai, anthropic, etc.) - assume available
+                        # unless we have specific error tracking
+                        available_count += 1
+
+                if available_count == 0:
+                    issues.append(
+                        f"No ensemble providers available. Unavailable: {', '.join(unavailable_providers)}. "
+                        f"Agent may switch to fallback or degrade gracefully."
+                    )
+                    if local_unavailable:
+                        self._trigger_ollama_failover(unavailable_providers, issues)
+                elif unavailable_providers and available_count < len(enabled_providers):
+                    # Some providers available but some are down
+                    logger.warning(
+                        f"Partial provider availability: {available_count}/{len(enabled_providers)} available. "
+                        f"Unavailable: {', '.join(unavailable_providers)}"
+                    )
+                    # This is a warning but not a critical issue (other providers available)
+                    if local_unavailable:
+                        self._trigger_ollama_failover(unavailable_providers, issues)
+        except Exception as e:
+            issues.append(
+                f"Failed to check provider availability: {e}. "
+                f"Falling back to manual provider management."
+            )
+
+        # Check 2: Decision Engine Responsiveness
+        # Check if decision engine and its providers are accessible
+        try:
+            if hasattr(self, "decision_engine") and self.decision_engine:
+                if hasattr(self.decision_engine, "circuit_breaker_stats"):
+                    try:
+                        cb_stats = self.decision_engine.circuit_breaker_stats()
+                        self._collect_circuit_breaker_issues(
+                            component="decision_engine",
+                            stats=cb_stats,
+                            issues=issues,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to check circuit breaker stats: {e}")
+        except Exception as e:
+            logger.debug(f"Failed to check decision engine responsiveness: {e}")
+
+        # Check 2b: Data provider circuit breaker status (if available)
+        try:
+            if hasattr(self, "data_provider") and hasattr(
+                self.data_provider, "get_circuit_breaker_stats"
+            ):
+                dp_stats = self.data_provider.get_circuit_breaker_stats()
+                self._collect_circuit_breaker_issues(
+                    component="data_provider",
+                    stats=dp_stats if dp_stats else {},
+                    issues=issues,
+                )
+        except Exception as e:
+            logger.debug(f"Failed to check data provider circuit breaker stats: {e}")
+
+        # Check 3: Trading Platform Connectivity
+        # Verify platform API is reachable
+        try:
+            if hasattr(self, "trading_platform") and self.trading_platform:
+                platform_name = getattr(self.trading_platform, "name", "Unknown")
+                # Check if platform has a health check method
+                if hasattr(self.trading_platform, "health_check"):
+                    try:
+                        is_healthy, error_msg = self.trading_platform.health_check()
+                        if not is_healthy:
+                            issues.append(
+                                f"Trading platform '{platform_name}' health check failed: {error_msg}. "
+                                f"Orders may be temporarily unavailable."
+                            )
+                    except Exception as e:
+                        logger.debug(f"Failed to call platform health check: {e}")
+                # Circuit breaker stats on platforms (if implemented)
+                if hasattr(self.trading_platform, "get_circuit_breaker_stats"):
+                    try:
+                        tp_stats = self.trading_platform.get_circuit_breaker_stats()
+                        self._collect_circuit_breaker_issues(
+                            component="trading_platform",
+                            stats=tp_stats if tp_stats else {},
+                            issues=issues,
+                        )
+                    except Exception as e:
+                        logger.debug(f"Failed to fetch trading platform circuit stats: {e}")
+                # Otherwise, assume platform is OK (no health check method)
+        except Exception as e:
+            logger.debug(f"Failed to check trading platform connectivity: {e}")
+
+        # Check 4: Circuit Breaker Monitoring
+        # Already handled in Check 2 above
+
+        # Log results
+        is_healthy = len(issues) == 0
+        if is_healthy:
+            logger.debug("✅ System health check passed - all systems nominal")
+        else:
+            logger.warning(
+                f"⚠️  System health issues detected ({len(issues)} issue(s))"
+            )
+            for i, issue in enumerate(issues, 1):
+                logger.warning(f"  {i}. {issue}")
+
+        return (is_healthy, issues)
+
+    def _collect_circuit_breaker_issues(
+        self, component: str, stats: Dict[str, Any], issues: List[str]
+    ) -> None:
+        """Analyze circuit breaker stats and append any long-lived OPEN states."""
+        if not isinstance(stats, dict):
+            return
+
+        now = time.time()
+        for name, cb_stats in stats.items():
+            state = cb_stats.get("state")
+            if state == "OPEN":
+                last_failure = cb_stats.get("last_failure_time") or now
+                open_duration = now - last_failure
+                if open_duration >= 300:  # 5 minutes
+                    issues.append(
+                        f"Circuit breaker '{component}:{name}' OPEN for {open_duration:.0f}s. "
+                        "Service likely unavailable; consider failover or recovery actions."
+                    )
+            elif state == "HALF_OPEN":
+                issues.append(
+                    f"Circuit breaker '{component}:{name}' HALF_OPEN - monitoring recovery."
+                )
+
+    def _trigger_ollama_failover(
+        self, unavailable_providers: List[str], issues: List[str]
+    ) -> None:
+        """Switch ensemble away from local provider when Ollama is unavailable."""
+        if self._ollama_failover_active:
+            return
+
+        fallback_provider = self._select_fallback_provider(
+            self.config.get("ensemble", {}).get("enabled_providers", [])
+        )
+
+        if not fallback_provider:
+            issues.append(
+                "Ollama unavailable and no cloud providers configured for failover."
+            )
+            return
+
+        try:
+            ensemble_manager = getattr(self.decision_engine, "ensemble_manager", None)
+            if ensemble_manager and hasattr(ensemble_manager, "apply_failover"):
+                ensemble_manager.apply_failover("local", fallback_provider)
+                # Keep top-level config synchronized
+                self.config.setdefault("ensemble", {})["enabled_providers"] = list(
+                    ensemble_manager.enabled_providers
+                )
+                self.config["ensemble"]["provider_weights"] = dict(
+                    ensemble_manager.base_weights
+                )
+                self._ollama_failover_active = True
+                issues.append(
+                    f"Ollama unavailable; triggered failover to '{fallback_provider}'. "
+                    f"Unavailable: {', '.join(unavailable_providers)}"
+                )
+                logger.warning(
+                    "Ollama unavailable; triggered ensemble failover to '%s'. Unavailable: %s",
+                    fallback_provider,
+                    ", ".join(unavailable_providers),
+                )
+        except Exception as e:  # pragma: no cover - defensive
+            issues.append(f"Failed to apply Ollama failover: {e}")
+
+    def _select_fallback_provider(self, enabled_providers: List[str]) -> Optional[str]:
+        """Choose the first non-local provider as a failover target."""
+        for provider in enabled_providers:
+            if provider != "local":
+                return provider
+        return None
+
     def _auto_start_trade_monitor(self):
         """Start internal TradeMonitor if enabled in config.
 

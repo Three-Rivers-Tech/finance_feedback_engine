@@ -118,6 +118,10 @@ class TradingLoopAgent:
             var_confidence=var_confidence,
         )
         self.is_running = False
+
+        # Health check configuration
+        self._health_check_frequency = self.config.get("health_check_frequency_decisions", 10)
+        self._decisions_since_health_check = 0
         self._paused = False
         self.state = AgentState.IDLE
         self._current_decisions = []  # Store multiple decisions for batch processing
@@ -790,6 +794,35 @@ class TradingLoopAgent:
         if self._current_cycle_id:
             self._cycle_retry_budget.pop(self._current_cycle_id, None)
             self._current_cycle_id = None
+
+    def _perform_health_check(self) -> None:
+        """
+        Perform periodic health checks on system components.
+
+        This method is called every N decisions (configurable) to monitor
+        system health. Unlike validate_agent_readiness(), this is soft monitoring
+        that logs issues but doesn't interrupt agent operation.
+
+        Issues detected are logged as warnings; the agent continues operating
+        even if issues are present. This allows graceful degradation and
+        auto-recovery detection.
+        """
+        try:
+            is_healthy, issues = self.engine.perform_health_check()
+
+            if not is_healthy:
+                logger.warning(
+                    f"Health monitoring detected {len(issues)} issue(s) during cycle {self._current_cycle_id}"
+                )
+                for i, issue in enumerate(issues, 1):
+                    logger.warning(f"  Health Issue {i}: {issue}")
+
+                # TODO: Phase 3b - Add automatic recovery logic here
+                # For example: trigger Ollama failover, switch providers, etc.
+            else:
+                logger.debug("Periodic health check passed")
+        except Exception as e:
+            logger.warning(f"Health check encountered error: {e}", exc_info=True)
 
     def _handle_state_exception(self, error: Exception, state_name: str) -> Optional[str]:
         """Emit crash diagnostics and return crash dump path if available."""
@@ -2327,6 +2360,12 @@ class TradingLoopAgent:
             # Clear cycle budget when returning to IDLE
             if self.state == AgentState.IDLE:
                 self._reset_cycle_budget()
+
+                # Perform periodic health checks (every N decisions)
+                self._decisions_since_health_check += 1
+                if self._decisions_since_health_check >= self._health_check_frequency:
+                    self._perform_health_check()
+                    self._decisions_since_health_check = 0
 
             return True
 
