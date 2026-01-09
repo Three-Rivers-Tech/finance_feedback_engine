@@ -28,13 +28,22 @@
         const API_BASE = '/api/v1';
 
         function showStatus(message, type) {
-            document.getElementById('status').innerHTML =
-                `<div class="status ${type}">${message}</div>`;
+            const container = document.getElementById('status');
+            container.innerHTML = '';
+            const statusDiv = document.createElement('div');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            container.appendChild(statusDiv);
         }
 
         function showResult(title, data) {
             const div = document.getElementById('results');
-            div.innerHTML += `<h3>${title}</h3><pre>${JSON.stringify(data, null, 2)}</pre>`;
+            const header = document.createElement('h3');
+            header.textContent = title;
+            const pre = document.createElement('pre');
+            pre.textContent = JSON.stringify(data, null, 2);
+            div.appendChild(header);
+            div.appendChild(pre);
         }
 
         async function testAPI() {
