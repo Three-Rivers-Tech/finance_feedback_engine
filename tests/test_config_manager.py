@@ -3,10 +3,6 @@
 import pytest
 
 from finance_feedback_engine.backtesting.config_manager import (
-
-from finance_feedback_engine.backtesting.config_manager import (
-
-from finance_feedback_engine.backtesting.config_manager import (
     BacktestConfiguration,
 )
 

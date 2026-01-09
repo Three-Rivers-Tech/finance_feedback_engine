@@ -15,6 +15,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:config": "vitest run src/config",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "validate-config": "tsx scripts/validate-config.ts",
     "validate-config:prod": "tsx scripts/validate-config.ts --env production --strict",
     "validate-config:staging": "tsx scripts/validate-config.ts --env staging --strict"
@@ -37,6 +41,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",

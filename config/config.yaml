@@ -139,6 +139,15 @@ providers:
 # 3. Dashboard aggregates portfolio across all platforms
 #
 platforms:
+  # ============================================
+  # Paper Trading (Sandbox) - Default for Dev
+  # ============================================
+  # Enable paper trading for development, testing, and paper trade runs
+  # No credentials required - uses mock platform with seeded balance
+  - name: "paper"
+    credentials:
+      initial_cash_usd: 10000.0
+
   - name: "coinbase_advanced"
     credentials:
       api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
@@ -711,10 +720,22 @@ agent:
     timeout_seconds: 10     # Request timeout in seconds
 
   # RiskGatekeeper configuration (decimal fractions)
-  correlation_threshold: 0.7   # 70%
-  max_correlated_assets: 2
-  max_var_pct: 0.05            # 5%
-  var_confidence: 0.95         # 95%
+  # IMPORTANT: These defaults are for LIVE trading. For development/paper trading,
+  # see 'agent.development_risk_limits' section below which relaxes constraints.
+  correlation_threshold: 0.7   # 70% - correlated assets are rejected
+  max_correlated_assets: 2     # Blocks 2+ similar assets in same category
+  max_var_pct: 0.05            # 5% - max portfolio risk per day
+  var_confidence: 0.95         # 95% - VaR confidence level
+
+  # Development/Paper Trading Risk Limits
+  # Auto-applied when ENVIRONMENT=development (see FinanceFeedbackEngine.initialize_risk_gatekeeper)
+  # Relaxes constraints to allow portfolio building and experimentation in sandbox
+  development_risk_limits:
+    correlation_threshold: 0.7         # Same as production (correlation still matters)
+    max_correlated_assets: 5           # Allow 5 similar assets (5x more permissive than live)
+    max_var_pct: 0.10                  # 10% daily VaR (2x more permissive)
+    var_confidence: 0.90               # 90% confidence (lower precision acceptable in dev)
+    # Note: max_drawdown_percent is controlled by TradingAgentConfig, not here
 
   # Asset pairs for trading (can be overridden by pair_selection system)
   asset_pairs:
