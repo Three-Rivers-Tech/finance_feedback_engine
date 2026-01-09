@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import type { AgentStatus } from '../src/types/agent';
+import type { AgentStatus } from '../src/api/types';
 
 /**
  * E2E tests for the Bot Status API endpoint
