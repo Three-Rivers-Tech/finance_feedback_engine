@@ -252,6 +252,31 @@ class DecisionEngine:
         """
         self.ai_manager.ensemble_manager = value
 
+    def circuit_breaker_stats(self) -> Dict[str, Any]:
+        """Collect circuit breaker stats from subcomponents for health monitoring."""
+        stats: Dict[str, Any] = {}
+
+        try:
+            if hasattr(self.data_provider, "get_circuit_breaker_stats"):
+                dp_stats = self.data_provider.get_circuit_breaker_stats()
+                if dp_stats:
+                    stats["data_provider"] = dp_stats
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("Failed to collect data provider circuit breaker stats: %s", exc)
+
+        try:
+            if hasattr(self.ai_manager, "get_circuit_breaker_stats"):
+                ai_stats = self.ai_manager.get_circuit_breaker_stats()
+                if ai_stats:
+                    if isinstance(ai_stats, dict):
+                        stats.update(ai_stats)
+                    else:
+                        stats["ai_manager"] = ai_stats
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("Failed to collect AI manager circuit breaker stats: %s", exc)
+
+        return stats
+
     def _calculate_price_change(self, market_data: Dict[str, Any]) -> float:
         """Calculate price change percentage. Delegates to market analyzer."""
         if getattr(self, "market_analyzer", None) is None:
