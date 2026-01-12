@@ -26,14 +26,15 @@ from finance_feedback_engine.backtesting.backtester import Backtester, Position
 @pytest.fixture
 def mock_historical_data_provider():
     """Mock historical data provider."""
+    rng = np.random.default_rng(0)
     provider = MagicMock()
     provider.get_historical_data.return_value = pd.DataFrame({
         "timestamp": pd.date_range(start="2024-01-01", periods=100, freq="1h"),
-        "open": np.random.uniform(40000, 45000, 100),
-        "high": np.random.uniform(45000, 46000, 100),
-        "low": np.random.uniform(39000, 40000, 100),
-        "close": np.random.uniform(40000, 45000, 100),
-        "volume": np.random.uniform(100, 1000, 100),
+        "open": rng.uniform(40000, 45000, 100),
+        "high": rng.uniform(45000, 46000, 100),
+        "low": rng.uniform(39000, 40000, 100),
+        "close": rng.uniform(40000, 45000, 100),
+        "volume": rng.uniform(100, 1000, 100),
     })
     return provider
 

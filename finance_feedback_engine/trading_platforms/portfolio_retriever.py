@@ -8,6 +8,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from finance_feedback_engine.monitoring import error_tracking
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,6 +72,17 @@ class AbstractPortfolioRetriever(ABC):
             raise
         except Exception as e:
             logger.error(f"Portfolio retrieval failed: {e}", exc_info=True)
+
+            # Report to error tracker
+            try:
+                error_tracking.capture_exception(e, extra={
+                    "platform_name": self.platform_name,
+                    "stage": "get_portfolio_breakdown",
+                    "account_info_available": "account_info" in locals()
+                })
+            except Exception:
+                pass  # Don't fail on error tracking failure
+
             raise PortfolioRetrievingError(
                 f"Failed to retrieve {self.platform_name} portfolio: {str(e)}"
             ) from e

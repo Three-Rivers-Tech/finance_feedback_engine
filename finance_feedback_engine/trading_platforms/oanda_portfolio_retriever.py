@@ -3,15 +3,20 @@
 import logging
 from typing import Any, Dict, List
 
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from requests.exceptions import RequestException, Timeout, ConnectionError
+
 from .base_platform import PositionInfo
 from .portfolio_retriever import AbstractPortfolioRetriever, PortfolioRetrievingError
+from finance_feedback_engine.utils.validation import standardize_asset_pair
+from finance_feedback_engine.monitoring import error_tracking
 
 logger = logging.getLogger(__name__)
 
 
 class OandaPortfolioRetriever(AbstractPortfolioRetriever):
     """Portfolio retriever for Oanda trading platform.
-    
+
     Handles:
     - Open positions (realized/unrealized PnL)
     - Account balance and trading capital
@@ -22,22 +27,28 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
     def __init__(self, client: Any = None):
         """
         Initialize Oanda portfolio retriever.
-        
+
         Args:
             client: Oanda API client (from OandaPlatform)
         """
         super().__init__("oanda")
         self.client = client
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((RequestException, Timeout, ConnectionError, Exception)),
+        reraise=True
+    )
     def get_account_info(self) -> Dict[str, Any]:
         """
-        Fetch account information from Oanda API.
-        
+        Fetch account information from Oanda API with retry logic.
+
         Returns:
             Dictionary with account data (balance, positions, margin, etc.)
-            
+
         Raises:
-            PortfolioRetrievingError: If API call fails
+            PortfolioRetrievingError: If API call fails after retries
         """
         if not self.client:
             raise PortfolioRetrievingError("Oanda client not initialized")
@@ -48,15 +59,24 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                 raise PortfolioRetrievingError("No account info returned from Oanda API")
             return account_info
         except Exception as e:
+            # Capture error for monitoring
+            try:
+                error_tracking.capture_exception(e, extra={
+                    "platform": "oanda",
+                    "operation": "get_account_info",
+                    "client_initialized": self.client is not None
+                })
+            except Exception:
+                pass  # Don't fail on error tracking failure
             raise PortfolioRetrievingError(f"Failed to fetch Oanda account info: {e}") from e
 
     def parse_positions(self, account_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Parse open positions from account info.
-        
+
         Args:
             account_info: Result from get_account_info()
-            
+
         Returns:
             List of PositionInfo dictionaries
         """
@@ -74,6 +94,9 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                     if not instrument:
                         logger.warning("Position missing instrument")
                         continue
+
+                    # Normalize instrument identifier
+                    normalized_instrument = standardize_asset_pair(instrument)
 
                     # Get position details
                     long_units = self._safe_float(self._safe_get(pos, "long", {}).get("units", 0))
@@ -104,12 +127,21 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                     else:
                         continue
 
-                    current_price = self._safe_get(account_info, "prices", [{}])[0].get("closeoutBid", avg_price)
-                    current_price = self._safe_float(current_price, avg_price)
+                    # Safe price extraction
+                    prices = self._safe_get(account_info, "prices", [])
+                    if not prices:
+                        price_source = {}
+                    else:
+                        price_source = prices[0]
+
+                    current_price = self._safe_float(
+                        price_source.get("closeoutBid", avg_price),
+                        avg_price
+                    )
 
                     position_info = PositionInfo(
-                        id=f"{instrument}_{side}",
-                        instrument=instrument,
+                        id=f"{normalized_instrument}_{side}",
+                        instrument=normalized_instrument,
                         units=units if side == "LONG" else -units,
                         entry_price=avg_price,
                         current_price=current_price,
@@ -135,10 +167,10 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
     def parse_holdings(self, account_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Parse account balance/holdings from account info.
-        
+
         Args:
             account_info: Result from get_account_info()
-            
+
         Returns:
             List of holding dictionaries (for Oanda, just cash balance)
         """
@@ -167,12 +199,12 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
     ) -> Dict[str, Any]:
         """
         Assemble final portfolio breakdown.
-        
+
         Args:
             account_info: Raw account info
             positions: Parsed positions
             holdings: Parsed holdings
-            
+
         Returns:
             Portfolio breakdown dictionary
         """

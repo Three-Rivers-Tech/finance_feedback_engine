@@ -115,7 +115,8 @@ Successfully refactored portfolio retrieval across three trading platforms (Coin
 ## Code Quality Improvements
 
 ### Before (Without Abstract Base Class)
-```
+
+```text
 - CoinbaseAdvancedPlatform.get_portfolio_breakdown(): 388 LOC
 - OandaPlatform.get_portfolio_breakdown(): 200+ LOC
 - MockPlatform.get_portfolio_breakdown(): 135 LOC
@@ -123,7 +124,8 @@ Successfully refactored portfolio retrieval across three trading platforms (Coin
 ```
 
 ### After (With Abstract Base Class)
-```
+
+```text
 - AbstractPortfolioRetriever: 150 LOC (shared)
 - CoinbasePortfolioRetriever: 320 LOC (extracted)
 - OandaPortfolioRetriever: 200 LOC (extracted)

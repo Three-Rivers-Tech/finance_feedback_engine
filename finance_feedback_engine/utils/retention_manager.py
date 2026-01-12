@@ -8,7 +8,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -52,20 +52,23 @@ class RetentionPolicy:
 class RetentionManager:
     """Manages data and logs retention policies."""
 
-    def __init__(self):
-        """Initialize retention manager with default policies."""
+    def __init__(self, base_dir: Optional[Path] = None):
+        """Initialize retention manager with default policies.
+
+        Args:
+            base_dir: Optional base directory for policies. Defaults to repository root.
+        """
+        self.base_dir = base_dir or Path(__file__).parent.parent.parent
         self.policies: Dict[str, RetentionPolicy] = {}
         self._setup_default_policies()
 
     def _setup_default_policies(self) -> None:
         """Set up default retention policies for common directories."""
-        base_dir = Path(__file__).parent.parent.parent  # Repository root
-
         # Decision history (keep 30 days)
         self.add_policy(
             "decisions",
             RetentionPolicy(
-                directory=base_dir / "data" / "decisions",
+                directory=self.base_dir / "data" / "decisions",
                 max_age_days=30,
                 file_pattern="*.json",
                 max_total_size_mb=500,
@@ -76,7 +79,7 @@ class RetentionManager:
         self.add_policy(
             "logs",
             RetentionPolicy(
-                directory=base_dir / "logs",
+                directory=self.base_dir / "logs",
                 max_age_days=14,
                 file_pattern="*.log",
                 max_total_size_mb=1000,
@@ -87,7 +90,7 @@ class RetentionManager:
         self.add_policy(
             "backtest_cache",
             RetentionPolicy(
-                directory=base_dir / "data" / "backtest_cache",
+                directory=self.base_dir / "data" / "backtest_cache",
                 max_age_days=7,
                 file_pattern="*.db",
             ),
@@ -97,7 +100,7 @@ class RetentionManager:
         self.add_policy(
             "cache",
             RetentionPolicy(
-                directory=base_dir / "data" / "cache",
+                directory=self.base_dir / "data" / "cache",
                 max_age_days=3,
                 file_pattern="*.json",
             ),
@@ -137,24 +140,25 @@ class RetentionManager:
                 logger.debug(f"Policy '{name}' is disabled, skipping")
                 continue
 
-            deleted_files = self._cleanup_by_age(policy, dry_run)
-            deleted_by_size = self._cleanup_by_size(policy, dry_run)
+            deleted_files, bytes_deleted_age = self._cleanup_by_age(policy, dry_run)
+            deleted_by_size, bytes_deleted_size = self._cleanup_by_size(policy, dry_run)
 
             all_deleted = list(set(deleted_files + deleted_by_size))
+            total_bytes_deleted = bytes_deleted_age + bytes_deleted_size
             results[name] = all_deleted
 
             if all_deleted:
                 action = "Would delete" if dry_run else "Deleted"
                 logger.info(
                     f"✓ {action} {len(all_deleted)} files from '{name}' "
-                    f"({sum(Path(f).stat().st_size for f in all_deleted if Path(f).exists()) / 1024 / 1024:.1f} MB)"
+                    f"({total_bytes_deleted / 1024 / 1024:.1f} MB)"
                 )
             else:
                 logger.debug(f"No cleanup needed for policy '{name}'")
 
         return results
 
-    def _cleanup_by_age(self, policy: RetentionPolicy, dry_run: bool = False) -> List[str]:
+    def _cleanup_by_age(self, policy: RetentionPolicy, dry_run: bool = False) -> Tuple[List[str], int]:
         """
         Delete files older than max_age_days.
 
@@ -163,34 +167,47 @@ class RetentionManager:
             dry_run: If True, only log what would be deleted
 
         Returns:
-            List of deleted file paths
+            Tuple of (list of deleted file paths, total bytes deleted)
         """
         if not policy.directory.exists():
             logger.debug(f"Directory not found: {policy.directory}")
-            return []
+            return [], 0
 
         deleted = []
+        total_bytes = 0
         cutoff_time = datetime.now() - timedelta(days=policy.max_age_days)
 
+        # Collect metadata once to avoid TOCTOU races
+        files_with_stats = []
         for file_path in policy.directory.glob(policy.file_pattern):
             if not file_path.is_file():
                 continue
+            try:
+                stat_result = file_path.stat()
+                files_with_stats.append((file_path, stat_result))
+            except FileNotFoundError:
+                continue  # File vanished, skip it
 
-            file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+        for file_path, stat_result in files_with_stats:
+            file_mtime = datetime.fromtimestamp(stat_result.st_mtime)
             if file_mtime < cutoff_time:
+                file_size = stat_result.st_size
                 if not dry_run:
                     try:
                         file_path.unlink()
                         logger.debug(f"Deleted (age): {file_path}")
+                    except FileNotFoundError:
+                        continue  # Already deleted by another process
                     except OSError as e:
                         logger.warning(f"Failed to delete {file_path}: {e}")
                         continue
 
                 deleted.append(str(file_path))
+                total_bytes += file_size
 
-        return deleted
+        return deleted, total_bytes
 
-    def _cleanup_by_size(self, policy: RetentionPolicy, dry_run: bool = False) -> List[str]:
+    def _cleanup_by_size(self, policy: RetentionPolicy, dry_run: bool = False) -> Tuple[List[str], int]:
         """
         Delete oldest files if total directory size exceeds max_total_size_mb.
 
@@ -199,44 +216,54 @@ class RetentionManager:
             dry_run: If True, only log what would be deleted
 
         Returns:
-            List of deleted file paths
+            Tuple of (list of deleted file paths, total bytes deleted)
         """
         if not policy.max_total_size_mb or not policy.directory.exists():
-            return []
+            return [], 0
 
-        # Calculate current directory size
-        files = sorted(
-            policy.directory.glob(policy.file_pattern),
-            key=lambda p: p.stat().st_mtime,  # Oldest first
-        )
+        # Collect and cache metadata once
+        files_with_stats = []
+        for file_path in policy.directory.glob(policy.file_pattern):
+            if not file_path.is_file():
+                continue
+            try:
+                stat_result = file_path.stat()
+                files_with_stats.append((file_path, stat_result))
+            except FileNotFoundError:
+                continue
 
-        total_size_bytes = sum(f.stat().st_size for f in files if f.is_file())
+        # Sort by mtime (oldest first)
+        files_with_stats.sort(key=lambda x: x[1].st_mtime)
+
+        # Calculate total size
+        total_size_bytes = sum(stat.st_size for _, stat in files_with_stats)
         max_size_bytes = policy.max_total_size_mb * 1024 * 1024
         deleted = []
+        bytes_deleted = 0
 
         if total_size_bytes > max_size_bytes:
-            for file_path in files:
+            for file_path, stat_result in files_with_stats:
                 if total_size_bytes <= max_size_bytes:
                     break
 
-                if not file_path.is_file():
-                    continue
-
-                file_size = file_path.stat().st_size
+                file_size = stat_result.st_size
                 if not dry_run:
                     try:
                         file_path.unlink()
                         logger.debug(f"Deleted (size limit): {file_path}")
+                    except FileNotFoundError:
+                        continue  # Already deleted
                     except OSError as e:
                         logger.warning(f"Failed to delete {file_path}: {e}")
                         continue
 
                 deleted.append(str(file_path))
+                bytes_deleted += file_size
                 total_size_bytes -= file_size
 
-        return deleted
+        return deleted, bytes_deleted
 
-    def get_status(self) -> Dict[str, Dict[str, any]]:
+    def get_status(self) -> Dict[str, Dict[str, Any]]:
         """
         Get current status of all managed directories.
 
@@ -321,6 +348,13 @@ class RetentionManager:
         print("=" * 80 + "\n")
 
 
-def create_default_manager() -> RetentionManager:
-    """Create and return a retention manager with default policies."""
-    return RetentionManager()
+def create_default_manager(base_dir: Optional[Path] = None) -> RetentionManager:
+    """Create and return a retention manager with default policies.
+
+    Args:
+        base_dir: Optional base directory for policies. Defaults to repository root.
+
+    Returns:
+        RetentionManager instance
+    """
+    return RetentionManager(base_dir=base_dir)
