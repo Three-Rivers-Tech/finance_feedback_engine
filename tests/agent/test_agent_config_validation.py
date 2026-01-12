@@ -186,6 +186,7 @@ class TestMaxDrawdownPercentValidator:
         assert config.max_drawdown_percent == 1.0
 
 
+@pytest.mark.integration
 class TestIntegrationMultipleValidators:
     """Test interactions between multiple validators."""
 

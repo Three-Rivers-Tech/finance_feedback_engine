@@ -76,11 +76,13 @@ class MockPortfolioRetriever(AbstractPortfolioRetriever):
                     current_price = pos.get("current_price", entry_price * 1.01)
                     side = pos.get("side", "LONG")
 
-                    unrealized_pnl = (
-                        (current_price - entry_price)
-                        * contracts
-                        * contract_multiplier
-                    )
+                    # Calculate unrealized PnL with correct sign for shorts
+                    if side == "SHORT":
+                        price_delta = entry_price - current_price  # Inverted for shorts
+                    else:
+                        price_delta = current_price - entry_price  # Normal for longs
+
+                    unrealized_pnl = price_delta * contracts * contract_multiplier
 
                     signed_contracts = contracts if side == "LONG" else -contracts
 

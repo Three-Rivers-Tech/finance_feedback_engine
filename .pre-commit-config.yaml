@@ -120,7 +120,7 @@ repos:
       # Prevent __pycache__ and .pyc files from being committed
       - id: cache-cleanup
         name: Clean __pycache__ and .pyc files
-        entry: bash -c 'find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; find . -type f -name "*.pyc" -delete 2>/dev/null; find . -type f -name "*.pyo" -delete 2>/dev/null; true'
+        entry: bash -c 'find . -depth -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null; find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>/dev/null; true'
         language: system
         pass_filenames: false
         stages: [commit]

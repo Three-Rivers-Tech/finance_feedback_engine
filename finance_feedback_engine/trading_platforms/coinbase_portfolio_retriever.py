@@ -7,6 +7,7 @@ from requests.exceptions import RequestException
 
 from .base_platform import PositionInfo
 from .portfolio_retriever import AbstractPortfolioRetriever, PortfolioRetrievingError
+from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 logger = logging.getLogger(__name__)
 
@@ -180,63 +181,82 @@ class CoinbasePortfolioRetriever(AbstractPortfolioRetriever):
 
         return positions
 
+    def _parse_position_item(self, pos: Dict[str, Any], default_leverage: float) -> Optional[PositionInfo]:
+        """Parse a single position dictionary into PositionInfo.
+
+        Args:
+            pos: Position dictionary from API
+            default_leverage: Default leverage value if not present
+
+        Returns:
+            PositionInfo object or None if position should be skipped
+        """
+        try:
+            product_id = self._safe_get(pos, "product_id")
+            instrument = product_id or "UNKNOWN"
+
+            # Normalize asset pair
+            if instrument and instrument != "UNKNOWN":
+                instrument = standardize_asset_pair(instrument)
+                if product_id:
+                    product_id = standardize_asset_pair(product_id)
+
+            side = (self._safe_get(pos, "side", "") or "").upper()
+
+            # Try multiple field names for contract size
+            contracts = 0.0
+            for field_name in ["number_of_contracts", "amount", "size"]:
+                val = self._safe_get(pos, field_name)
+                if val:
+                    contracts = self._safe_float(val)
+                    if contracts != 0:
+                        break
+
+            if contracts == 0:
+                logger.debug(f"Position {instrument} has zero contracts")
+                return None
+
+            signed_contracts = contracts if side == "LONG" else -contracts
+            entry_price = self._safe_float(self._safe_get(pos, "avg_entry_price"))
+            current_price = self._safe_float(self._safe_get(pos, "current_price"))
+            unrealized_pnl = self._safe_float(self._safe_get(pos, "unrealized_pnl"))
+
+            # Try multiple leverage field names
+            leverage = self._get_first_matching(pos, [
+                "leverage", "leverage_ratio", "margin_leverage",
+                "leverage_level", "leverage_amount"
+            ], default_leverage)
+            leverage = self._safe_float(leverage, default_leverage)
+
+            return PositionInfo(
+                id=str(self._safe_get(pos, "id") or instrument),
+                instrument=instrument,
+                units=signed_contracts,
+                entry_price=entry_price,
+                current_price=current_price,
+                pnl=unrealized_pnl,
+                opened_at=self._safe_get(pos, "created_at") or self._safe_get(pos, "open_time"),
+                product_id=product_id,
+                side=side,
+                contracts=contracts,
+                unrealized_pnl=unrealized_pnl,
+                daily_pnl=self._safe_float(self._safe_get(pos, "daily_realized_pnl")),
+                leverage=leverage,
+            )
+
+        except Exception as e:
+            logger.warning(f"Error parsing position {self._safe_get(pos, 'product_id')}: {e}")
+            return None
+
     def _parse_stable_positions(self, positions_list: List[Any]) -> List[PositionInfo]:
         """Parse positions from stable API endpoint."""
         positions = []
         default_leverage = 10.0
 
         for pos in positions_list:
-            try:
-                product_id = self._safe_get(pos, "product_id")
-                instrument = product_id or "UNKNOWN"
-                side = (self._safe_get(pos, "side", "") or "").upper()
-
-                # Try multiple field names for contract size
-                contracts = 0.0
-                for field_name in ["number_of_contracts", "amount", "size"]:
-                    val = self._safe_get(pos, field_name)
-                    if val:
-                        contracts = self._safe_float(val)
-                        if contracts != 0:
-                            break
-
-                if contracts == 0:
-                    logger.debug(f"Position {instrument} has zero contracts")
-                    continue
-
-                signed_contracts = contracts if side == "LONG" else -contracts
-                entry_price = self._safe_float(self._safe_get(pos, "avg_entry_price"))
-                current_price = self._safe_float(self._safe_get(pos, "current_price"))
-                unrealized_pnl = self._safe_float(self._safe_get(pos, "unrealized_pnl"))
-
-                # Try multiple leverage field names
-                leverage = self._get_first_matching(pos, [
-                    "leverage", "leverage_ratio", "margin_leverage",
-                    "leverage_level", "leverage_amount"
-                ], default_leverage)
-                leverage = self._safe_float(leverage, default_leverage)
-
-                position_info = PositionInfo(
-                    id=str(self._safe_get(pos, "id") or instrument),
-                    instrument=instrument,
-                    units=signed_contracts,
-                    entry_price=entry_price,
-                    current_price=current_price,
-                    pnl=unrealized_pnl,
-                    opened_at=self._safe_get(pos, "created_at") or self._safe_get(pos, "open_time"),
-                    product_id=product_id,
-                    side=side,
-                    contracts=contracts,
-                    unrealized_pnl=unrealized_pnl,
-                    daily_pnl=self._safe_float(self._safe_get(pos, "daily_realized_pnl")),
-                    leverage=leverage,
-                )
-
+            position_info = self._parse_position_item(pos, default_leverage)
+            if position_info:
                 positions.append(position_info)
-
-            except Exception as e:
-                logger.warning(f"Error parsing position {self._safe_get(pos, 'product_id')}: {e}")
-                continue
 
         return positions
 
@@ -246,54 +266,9 @@ class CoinbasePortfolioRetriever(AbstractPortfolioRetriever):
         default_leverage = 10.0
 
         for pos in positions_list:
-            try:
-                product_id = self._safe_get(pos, "product_id")
-                instrument = product_id or "UNKNOWN"
-                side = (self._safe_get(pos, "side", "") or "").upper()
-
-                contracts = 0.0
-                for field_name in ["number_of_contracts", "amount", "size"]:
-                    val = self._safe_get(pos, field_name)
-                    if val:
-                        contracts = self._safe_float(val)
-                        if contracts != 0:
-                            break
-
-                if contracts == 0:
-                    continue
-
-                signed_contracts = contracts if side == "LONG" else -contracts
-                entry_price = self._safe_float(self._safe_get(pos, "avg_entry_price"))
-                current_price = self._safe_float(self._safe_get(pos, "current_price"))
-                unrealized_pnl = self._safe_float(self._safe_get(pos, "unrealized_pnl"))
-
-                leverage = self._get_first_matching(pos, [
-                    "leverage", "leverage_ratio", "margin_leverage",
-                    "leverage_level", "leverage_amount"
-                ], default_leverage)
-                leverage = self._safe_float(leverage, default_leverage)
-
-                position_info = PositionInfo(
-                    id=str(self._safe_get(pos, "id") or instrument),
-                    instrument=instrument,
-                    units=signed_contracts,
-                    entry_price=entry_price,
-                    current_price=current_price,
-                    pnl=unrealized_pnl,
-                    opened_at=self._safe_get(pos, "created_at") or self._safe_get(pos, "open_time"),
-                    product_id=product_id,
-                    side=side,
-                    contracts=contracts,
-                    unrealized_pnl=unrealized_pnl,
-                    daily_pnl=self._safe_float(self._safe_get(pos, "daily_realized_pnl")),
-                    leverage=leverage,
-                )
-
+            position_info = self._parse_position_item(pos, default_leverage)
+            if position_info:
                 positions.append(position_info)
-
-            except Exception as e:
-                logger.warning(f"Error parsing position: {e}")
-                continue
 
         logger.info(f"Parsed {len(positions)} active futures positions")
         return positions

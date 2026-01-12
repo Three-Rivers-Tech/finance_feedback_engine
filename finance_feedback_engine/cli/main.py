@@ -48,6 +48,7 @@ from finance_feedback_engine.cli.commands.memory import (
 from finance_feedback_engine.cli.commands.memory import (
     prune_memory as prune_memory_command,
 )
+from finance_feedback_engine.utils.retention_manager import create_default_manager
 from finance_feedback_engine.cli.commands.optimize import optimize as optimize_command
 from finance_feedback_engine.cli.commands.trading import balance as balance_command
 from finance_feedback_engine.cli.commands.trading import execute as execute_command
