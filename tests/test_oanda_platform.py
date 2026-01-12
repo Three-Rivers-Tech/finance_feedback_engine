@@ -17,6 +17,8 @@ import pytest
 from finance_feedback_engine.trading_platforms.oanda_platform import OandaPlatform
 from finance_feedback_engine.exceptions import TradingError
 
+pytestmark = pytest.mark.integration
+
 
 # =============================================================================
 # Fixtures
@@ -260,22 +262,10 @@ class TestOandaGetBalance:
 
     def test_get_balance_import_error(self, platform):
         """Should raise TradingError when library not installed."""
-        # Patch the specific import that happens inside get_balance
-        with patch.dict("sys.modules", {"oandapyV20": None, "oandapyV20.endpoints": None, "oandapyV20.endpoints.accounts": None}):
-            # Force re-import failure
-            import sys
-            if "oandapyV20" in sys.modules:
-                del sys.modules["oandapyV20"]
-            if "oandapyV20.endpoints" in sys.modules:
-                del sys.modules["oandapyV20.endpoints"]
-            if "oandapyV20.endpoints.accounts" in sys.modules:
-                del sys.modules["oandapyV20.endpoints.accounts"]
-
-            with patch("finance_feedback_engine.trading_platforms.oanda_platform.OandaPlatform._get_client") as mock_get_client:
-                mock_get_client.side_effect = TradingError("oandapyV20 library not available")
-                with pytest.raises(TradingError) as exc_info:
-                    platform.get_balance()
-                assert "oandapyV20 library not available" in str(exc_info.value)
+        with patch.object(platform, "_get_client", side_effect=TradingError("oandapyV20 library not available")):
+            with pytest.raises(TradingError) as exc_info:
+                platform.get_balance()
+            assert "oandapyV20 library not available" in str(exc_info.value)
 
     def test_get_balance_auth_error(self, platform_with_mock_client, mock_client):
         """Should raise TradingError on authentication failure."""

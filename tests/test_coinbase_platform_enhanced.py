@@ -9,6 +9,7 @@ import time
 from unittest.mock import MagicMock, patch, PropertyMock
 from finance_feedback_engine.trading_platforms.coinbase_platform import CoinbaseAdvancedPlatform
 from finance_feedback_engine.trading_platforms.base_platform import PositionInfo
+from finance_feedback_engine.exceptions import TradingError
 
 
 class TestCoinbaseAdvancedPlatformInit:
@@ -20,9 +21,9 @@ class TestCoinbaseAdvancedPlatformInit:
             "api_key": "test-api-key",
             "api_secret": "test-api-secret"
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         assert platform.api_key == "test-api-key"
         assert platform.api_secret == "test-api-secret"
         assert platform.use_sandbox is False
@@ -35,9 +36,9 @@ class TestCoinbaseAdvancedPlatformInit:
             "api_secret": "test-secret",
             "use_sandbox": True
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         assert platform.use_sandbox is True
 
     def test_initialization_with_passphrase(self):
@@ -47,9 +48,9 @@ class TestCoinbaseAdvancedPlatformInit:
             "api_secret": "test-secret",
             "passphrase": "test-passphrase"
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         assert platform.passphrase == "test-passphrase"
 
     def test_initialization_with_config(self):
@@ -64,18 +65,18 @@ class TestCoinbaseAdvancedPlatformInit:
                 "platform_execute": 30
             }
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials, config)
-        
+
         assert "platform_balance" in platform.timeout_config
         assert "platform_execute" in platform.timeout_config
 
     def test_initialization_missing_credentials(self):
         """Test initialization with missing credentials."""
         credentials = {}
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         # Should initialize with None values
         assert platform.api_key is None
         assert platform.api_secret is None
@@ -86,9 +87,9 @@ class TestCoinbaseAdvancedPlatformInit:
             "api_key": "test-key",
             "api_secret": "test-secret"
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         # Should have timeout config with defaults
         assert platform.timeout_config is not None
         assert isinstance(platform.timeout_config, dict)
@@ -104,9 +105,9 @@ class TestCoinbaseGetClient:
             "api_key": "test-key",
             "api_secret": "test-secret"
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         # Client should not be initialized yet
         assert platform._client is None
 
@@ -140,17 +141,17 @@ class TestCoinbaseGetClient:
         """Test that client instance is reused."""
         mock_client_instance = MagicMock()
         mock_rest_client.return_value = mock_client_instance
-        
+
         credentials = {
             "api_key": "test-key",
             "api_secret": "test-secret"
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         client1 = platform._get_client()
         client2 = platform._get_client()
-        
+
         # Should be same instance
         assert client1 is client2
         # REST client should only be called once
@@ -159,7 +160,6 @@ class TestCoinbaseGetClient:
     @patch('coinbase.rest.RESTClient')
     def test_get_client_import_error(self, mock_rest_client):
         """Test client initialization when coinbase package is not available."""
-        from finance_feedback_engine.exceptions import TradingError
         mock_rest_client.side_effect = ImportError("No module named 'coinbase'")
 
         credentials = {
@@ -472,9 +472,9 @@ class TestCoinbaseEdgeCases:
             "api_key": None,
             "api_secret": None
         }
-        
+
         platform = CoinbaseAdvancedPlatform(credentials)
-        
+
         assert platform.api_key is None
         assert platform.api_secret is None
 
