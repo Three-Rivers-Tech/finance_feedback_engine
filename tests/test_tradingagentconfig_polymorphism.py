@@ -57,7 +57,6 @@ class TestPositionSizingWithPolymorphicConfig:
             has_existing_position=False,
             relevant_balance={"USD": 10000},
             balance_source="test",
-            signal_only_default=False,
         )
 
         assert result is not None
@@ -75,7 +74,6 @@ class TestPositionSizingWithPolymorphicConfig:
             has_existing_position=False,
             relevant_balance={"USD": 10000},
             balance_source="test",
-            signal_only_default=False,
         )
 
         assert result is not None
@@ -91,7 +89,6 @@ class TestPositionSizingWithPolymorphicConfig:
             has_existing_position=False,
             relevant_balance={"USD": 10000},
             balance_source="test",
-            signal_only_default=False,
         )
 
         # Should use 0.02 (2%) from the TradingAgentConfig object
