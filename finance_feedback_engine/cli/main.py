@@ -1771,6 +1771,71 @@ def retrain_meta_learner(ctx, force):
 
 
 # ============================================
+# Data Retention Management
+# ============================================
+
+@cli.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.option(
+    '--policy',
+    default=None,
+    help='Specific policy to run (e.g., "decisions", "logs"). If not provided, runs all.'
+)
+@click.option(
+    '--dry-run',
+    is_flag=True,
+    default=False,
+    help='Show what would be deleted without actually deleting files.'
+)
+@click.option(
+    '--status',
+    is_flag=True,
+    default=False,
+    help='Show current status of all retention policies without cleanup.'
+)
+def cleanup_data(policy: str, dry_run: bool, status: bool):
+    """Manage data and logs retention policies.
+
+    Automatically cleans up old files based on configured retention policies:
+    - decisions: Keep 30 days (max 500 MB)
+    - logs: Keep 14 days (max 1000 MB)
+    - backtest_cache: Keep 7 days
+    - cache: Keep 3 days
+
+    Examples:
+        python main.py cleanup-data                    # Run all policies
+        python main.py cleanup-data --policy logs      # Cleanup logs only
+        python main.py cleanup-data --dry-run           # Preview what would be deleted
+        python main.py cleanup-data --status            # Show current status
+    """
+    try:
+        manager = create_default_manager()
+
+        if status:
+            manager.print_status()
+            return
+
+        console.print("[bold cyan]Data Retention Cleanup[/bold cyan]")
+        console.print()
+
+        if dry_run:
+            console.print("[bold yellow]DRY RUN MODE: No files will be deleted[/bold yellow]\n")
+
+        results = manager.cleanup(policy_name=policy, dry_run=dry_run)
+
+        if not results or all(not files for files in results.values()):
+            console.print("[bold green]✓ All directories are within retention policy limits[/bold green]")
+        else:
+            console.print(f"\n[bold green]✓ Cleanup complete[/bold green]")
+            for policy_name, deleted_files in results.items():
+                if deleted_files:
+                    console.print(f"  - {policy_name}: {len(deleted_files)} files removed")
+
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
+# ============================================
 # Command Modules Extracted
 # ============================================
 # Analysis & Trading commands: cli/commands/analysis.py, cli/commands/trading.py
