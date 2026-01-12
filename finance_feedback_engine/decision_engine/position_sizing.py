@@ -71,13 +71,22 @@ class PositionSizingCalculator:
 
         # Get risk parameters from agent config
         agent_config = self.config.get("agent", {})
-        risk_percentage = agent_config.get("risk_percentage", 0.01)
-        default_stop_loss = agent_config.get("sizing_stop_loss_percentage", 0.02)
-        use_dynamic_stop_loss = agent_config.get("use_dynamic_stop_loss", True)
+
+        # Helper function to safely get value from dict or object
+        def safe_get(config, key, default):
+            """Get value from dict or Pydantic object."""
+            if isinstance(config, dict):
+                return config.get(key, default)
+            else:
+                return getattr(config, key, default)
+
+        risk_percentage = safe_get(agent_config, "risk_percentage", 0.01)
+        default_stop_loss = safe_get(agent_config, "sizing_stop_loss_percentage", 0.02)
+        use_dynamic_stop_loss = safe_get(agent_config, "use_dynamic_stop_loss", True)
 
         # Check if Kelly Criterion should be used
-        use_kelly_criterion = agent_config.get("use_kelly_criterion", False)
-        kelly_config = agent_config.get("kelly_criterion", {})
+        use_kelly_criterion = safe_get(agent_config, "use_kelly_criterion", False)
+        kelly_config = safe_get(agent_config, "kelly_criterion", {})
 
         # Compatibility: Convert legacy percentage values (>1) to decimals
         if risk_percentage > 1:
@@ -99,9 +108,9 @@ class PositionSizingCalculator:
                 current_price=current_price,
                 context=context,
                 default_percentage=default_stop_loss,
-                atr_multiplier=agent_config.get("atr_multiplier", 2.0),
-                min_percentage=agent_config.get("min_stop_loss_pct", 0.01),
-                max_percentage=agent_config.get("max_stop_loss_pct", 0.05),
+                atr_multiplier=safe_get(agent_config, "atr_multiplier", 2.0),
+                min_percentage=safe_get(agent_config, "min_stop_loss_pct", 0.01),
+                max_percentage=safe_get(agent_config, "max_stop_loss_pct", 0.05),
             )
         else:
             sizing_stop_loss_percentage = default_stop_loss
