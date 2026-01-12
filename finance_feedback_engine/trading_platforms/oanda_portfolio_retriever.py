@@ -127,12 +127,13 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                     else:
                         continue
 
-                    # Safe price extraction
+                    # Safe price extraction - find matching instrument
                     prices = self._safe_get(account_info, "prices", [])
-                    if not prices:
-                        price_source = {}
-                    else:
-                        price_source = prices[0]
+                    price_source = {}
+                    for price_entry in prices:
+                        if self._safe_get(price_entry, "instrument") == instrument:
+                            price_source = price_entry
+                            break
 
                     current_price = self._safe_float(
                         price_source.get("closeoutBid", avg_price),

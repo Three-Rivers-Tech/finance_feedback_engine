@@ -6,7 +6,7 @@ This document lists deprecated features in Finance Feedback Engine 2.0 and their
 
 Deprecated features are marked with warnings but continue to function for backward compatibility. They will be removed in future major versions.
 
-**Last Updated:** January 12, 2026,  
+**Last Updated:** January 12, 2026  
 **Deprecation Phase:** 1 (warnings enabled, functionality maintained)  
 **Target Removal:** Version 2.0 (next major release)
 

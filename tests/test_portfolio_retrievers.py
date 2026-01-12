@@ -13,9 +13,16 @@ from finance_feedback_engine.trading_platforms import (
     PortfolioRetrieverFactory,
     CoinbasePortfolioRetriever,
     OandaPortfolioRetriever,
+from finance_feedback_engine.trading_platforms import (
+    PortfolioRetrieverFactory,
+    CoinbasePortfolioRetriever,
+    OandaPortfolioRetriever,
+    MockPortfolioRetriever,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.external_service]
-    MockPortfolioRetriever,
+
+from finance_feedback_engine.trading_platforms.portfolio_retriever import (
 )
 from finance_feedback_engine.trading_platforms.portfolio_retriever import (
     PortfolioRetrievingError,
