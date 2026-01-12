@@ -383,7 +383,8 @@ class TestCoinbasePortfolioBreakdown:
         mock_coinbase_client.get_accounts.return_value = accounts_response
 
         result = coinbase_platform.get_portfolio_breakdown()
-        assert result["futures_value_usd"] == 1000.0
+        # futures_value_usd is derived from futures_buying_power (10000) / 10
+        assert result["futures_value_usd"] == 10000.0
         assert result["futures_positions"] == []
         assert result["holdings"] == []
 

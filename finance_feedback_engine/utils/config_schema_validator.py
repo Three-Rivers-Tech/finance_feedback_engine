@@ -8,7 +8,7 @@ import logging
 import sys
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,7 @@ class DecisionEngineConfig(BaseModel):
     decision_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
     veto_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
 
-    class Config:
-        extra = "allow"  # Allow additional fields for flexibility
+    model_config = ConfigDict(extra="allow")  # Allow additional fields for flexibility
 
 
 class VoteThresholds(BaseModel):
@@ -57,6 +56,8 @@ class EnsembleConfig(BaseModel):
     agreement_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
     adaptive_learning: bool = Field(default=True)
 
+    model_config = ConfigDict(extra="allow")
+
     @model_validator(mode="after")
     def validate_provider_weights(self) -> "EnsembleConfig":
         """Validate provider weights sum to ~1.0."""
@@ -68,9 +69,6 @@ class EnsembleConfig(BaseModel):
                     "Weights will be normalized at runtime."
                 )
         return self
-
-    class Config:
-        extra = "allow"
 
 
 class RiskConfig(BaseModel):
@@ -114,6 +112,8 @@ class AgentConfig(BaseModel):
     )
     asset_pairs: List[str] = Field(default_factory=lambda: ["BTCUSD"])
 
+    model_config = ConfigDict(extra="allow")
+
     @field_validator("max_daily_trades")
     @classmethod
     def validate_max_trades(cls, v: int) -> int:
@@ -124,9 +124,6 @@ class AgentConfig(BaseModel):
                 "Consider 5-10 trades/day for most strategies."
             )
         return v
-
-    class Config:
-        extra = "allow"
 
 
 class CircuitBreakerConfig(BaseModel):
@@ -162,6 +159,8 @@ class FinanceFeedbackEngineConfig(BaseModel):
     # Circuit Breaker
     circuit_breaker: Optional[CircuitBreakerConfig] = None
 
+    model_config = ConfigDict(extra="allow")  # Allow additional fields not in schema
+
     @model_validator(mode="after")
     def validate_ensemble_required(self) -> "FinanceFeedbackEngineConfig":
         """Ensure ensemble config exists when ai_provider is 'ensemble'."""
@@ -171,9 +170,6 @@ class FinanceFeedbackEngineConfig(BaseModel):
                 "Add 'ensemble:' section to config.yaml"
             )
         return self
-
-    class Config:
-        extra = "allow"  # Allow additional fields not in schema
 
 
 def validate_config(config: Dict[str, Any], strict: bool = False) -> List[str]:

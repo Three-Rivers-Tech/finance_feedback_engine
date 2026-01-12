@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TradingPlatform(str, Enum):
@@ -361,11 +361,11 @@ class EngineConfig(BaseModel):
     monitoring_enabled: bool = Field(True, description="Enable monitoring/metrics")
     observability_enabled: bool = Field(True, description="Enable OpenTelemetry tracing")
 
-    class Config:
-        """Pydantic configuration."""
-        extra = "allow"  # Allow additional fields for forward compatibility
-        validate_assignment = True  # Validate on attribute assignment
-        use_enum_values = True  # Use enum values instead of enum objects
+    model_config = ConfigDict(
+        extra="allow",  # Allow additional fields for forward compatibility
+        validate_assignment=True,  # Validate on attribute assignment
+        use_enum_values=True  # Use enum values instead of enum objects
+    )
 
     @model_validator(mode="after")
     def validate_production_safety(self) -> "EngineConfig":
