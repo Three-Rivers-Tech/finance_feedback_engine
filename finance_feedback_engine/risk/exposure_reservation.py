@@ -31,7 +31,7 @@ class ReservedExposure:
     action: str  # BUY or SELL
     position_size: float  # In base currency units
     notional_value: float  # In USD
-    reserved_at: datetime = field(default_factory=datetime.now)
+    reserved_at: datetime = field(default_factory=datetime.utcnow)
     ttl_seconds: int = 300  # 5 minute expiry for stale reservations
 
 
@@ -236,6 +236,7 @@ class ExposureReservationManager:
             Dict mapping asset_pair to reserved concentration percentage
         """
         if portfolio_value <= 0:
+            logger.debug("Cannot calculate reserved concentration: portfolio_value=%s", portfolio_value)
             return {}
 
         _, by_asset = self.get_reserved_exposure()

@@ -1575,6 +1575,9 @@ class TradingLoopAgent:
                     )
                 except Exception as e:
                     logger.warning(f"Failed to reserve exposure for {decision_id}: {e}")
+                    tracker = getattr(self.engine, "error_tracker", None)
+                    if tracker:
+                        tracker.capture_error(e, context={"decision_id": decision_id, "phase": "reserve_exposure"})
 
                 # Record decision confidence for metrics dashboards
                 try:
