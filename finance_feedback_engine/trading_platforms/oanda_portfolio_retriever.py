@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from requests.exceptions import RequestException, Timeout, ConnectionError
+from requests.exceptions import RequestException, Timeout
 
 from .base_platform import PositionInfo
 from .portfolio_retriever import AbstractPortfolioRetriever, PortfolioRetrievingError
@@ -37,7 +37,7 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        retry=retry_if_exception_type((RequestException, Timeout, ConnectionError, Exception)),
+        retry=retry_if_exception_type((RequestException, Timeout, Exception)),
         reraise=True
     )
     def get_account_info(self) -> Dict[str, Any]:
@@ -54,7 +54,7 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
             raise PortfolioRetrievingError("Oanda client not initialized")
 
         try:
-            account_info = self.client.get_account()
+            account_info: dict[str, Any] = self.client.get_account()
             if not account_info:
                 raise PortfolioRetrievingError("No account info returned from Oanda API")
             return account_info
@@ -80,7 +80,7 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
         Returns:
             List of PositionInfo dictionaries
         """
-        positions = []
+        positions: list[dict[str, Any]] = []
 
         try:
             open_positions = self._safe_get(account_info, "openPositions", [])
