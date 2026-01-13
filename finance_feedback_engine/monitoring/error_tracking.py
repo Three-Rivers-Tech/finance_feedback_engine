@@ -458,3 +458,7 @@ class ErrorTracker:
                 logger.debug(f"Flushed Sentry events (timeout={timeout}s)")
             except Exception as e:
                 logger.error(f"Failed to flush Sentry events: {e}", exc_info=True)
+
+
+# Global error tracker instance (can be imported and used throughout the application)
+error_tracker = ErrorTracker()
