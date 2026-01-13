@@ -97,16 +97,21 @@ class KellyCriterionCalculator:
         # Apply Kelly Criterion formula
         kelly_fraction = (b * p - q) / b
 
-        # Ensure the fraction is non-negative (if negative, it means don't trade)
-        kelly_fraction = max(0, kelly_fraction)
+        # If Kelly is negative or zero, it means -EV or break-even trade - don't trade
+        if kelly_fraction <= 0:
+            logger.info(
+                f"Kelly fraction ({kelly_fraction:.4f}) indicates -EV or break-even trade, "
+                f"returning 0 to signal no trade"
+            )
+            return 0.0  # Return 0 to signal "don't trade" (not forced minimum)
 
-        # Apply safety constraints
+        # Apply safety constraints (only for positive Kelly)
         kelly_fraction = min(kelly_fraction, self.kelly_fraction_cap)
 
         # Apply multiplier for safety
         kelly_fraction = kelly_fraction * self.kelly_fraction_multiplier
 
-        # Ensure minimum fraction to avoid zero position sizes
+        # Ensure minimum fraction only for positive Kelly values
         kelly_fraction = max(kelly_fraction, self.min_kelly_fraction)
 
         return kelly_fraction
