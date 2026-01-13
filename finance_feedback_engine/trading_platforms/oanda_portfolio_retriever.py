@@ -9,7 +9,7 @@ from requests.exceptions import RequestException, Timeout
 from .base_platform import PositionInfo
 from .portfolio_retriever import AbstractPortfolioRetriever, PortfolioRetrievingError
 from finance_feedback_engine.utils.validation import standardize_asset_pair
-from finance_feedback_engine.monitoring import error_tracking
+from finance_feedback_engine.monitoring.error_tracking import error_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +59,15 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                 raise PortfolioRetrievingError("No account info returned from Oanda API")
             return account_info
         except Exception as e:
-            # Capture error for monitoring
-            try:
-                error_tracking.capture_exception(e, extra={
+            # Capture error for monitoring (let error tracking fail if it must)
+            error_tracker.capture_exception(
+                error=e,
+                context={
                     "platform": "oanda",
                     "operation": "get_account_info",
                     "client_initialized": self.client is not None
-                })
-            except Exception:
-                pass  # Don't fail on error tracking failure
+                }
+            )
             raise PortfolioRetrievingError(f"Failed to fetch Oanda account info: {e}") from e
 
     def parse_positions(self, account_info: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -106,7 +106,7 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                     net_units = long_units + short_units  # short_units will be negative
 
                     if net_units == 0:
-                        logger.debug(f"Position {instrument} has zero net units")
+                        logger.debug("Position %s has zero net units", instrument)
                         continue
 
                     # Get pricing information
@@ -151,18 +151,17 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                         unrealized_pnl=pnl,
                         opened_at=self._safe_get(pos, "openTime"),
                     )
+                    positions.append(dict(position_info))
 
-                    positions.append(position_info)
-
-                except Exception as e:
-                    logger.warning(f"Error parsing position {self._safe_get(pos, 'instrument')}: {e}")
+                except (KeyError, ValueError, TypeError) as e:
+                    logger.warning("Error parsing position %s: %s", self._safe_get(pos, 'instrument'), e)
                     continue
 
-            logger.info(f"Parsed {len(positions)} open positions")
+            logger.info("Parsed %d open positions", len(positions))
             return positions
 
-        except Exception as e:
-            logger.warning(f"Error parsing positions: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Error parsing positions: %s", e)
             return []
 
     def parse_holdings(self, account_info: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -188,8 +187,8 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
 
             return holdings
 
-        except Exception as e:
-            logger.warning(f"Error parsing holdings: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Error parsing holdings: %s", e)
             return []
 
     def assemble_result(
@@ -226,8 +225,8 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
             )
 
             logger.info(
-                f"Portfolio: balance ${balance:.2f}, equity ${equity:.2f}, "
-                f"positions ${positions_value:.2f}, NAV ${nav:.2f}"
+                "Portfolio: balance $%.2f, equity $%.2f, positions $%.2f, NAV $%.2f",
+                balance, equity, positions_value, nav
             )
 
             return {
@@ -246,8 +245,8 @@ class OandaPortfolioRetriever(AbstractPortfolioRetriever):
                 "platform": "oanda",
             }
 
-        except Exception as e:
-            logger.warning(f"Error assembling result: {e}")
+        except (KeyError, ValueError, TypeError) as e:
+            logger.warning("Error assembling result: %s", e)
             return {
                 "positions": positions,
                 "holdings": holdings,

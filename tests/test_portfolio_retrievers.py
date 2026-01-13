@@ -15,9 +15,7 @@ from finance_feedback_engine.trading_platforms import (
     OandaPortfolioRetriever,
     MockPortfolioRetriever,
 )
-from finance_feedback_engine.trading_platforms.portfolio_retriever import (
-    PortfolioRetrievingError,
-)
+
 
 pytestmark = [pytest.mark.integration, pytest.mark.external_service]
 
