@@ -287,12 +287,36 @@ class RiskGatekeeper:
                 logger.error(f"Invalid market data timestamp: {e}")
                 return False, f"Invalid timestamp: {str(e)}"
 
-        # 2. Max Drawdown Check
-        recent_perf = context.get("recent_performance", {})
-        total_pnl = recent_perf.get("total_pnl", 0.0)
-        if total_pnl < -self.max_drawdown_pct:
+        # 2. Max Drawdown Check (robust to dollars vs percent input)
+        drawdown_frac = 0.0
+        # Prefer explicit risk metric if provided (percent value like -30.0)
+        risk_metrics = context.get("risk_metrics", {})
+        unrealized_pnl_pct = risk_metrics.get("unrealized_pnl_percent")
+        if isinstance(unrealized_pnl_pct, (int, float)) and unrealized_pnl_pct is not None:
+            drawdown_frac = float(unrealized_pnl_pct) / 100.0
+        else:
+            # Fallback to recent performance total_pnl; may be decimal (e.g., -0.03) or dollars (e.g., -300.0)
+            recent_perf = context.get("recent_performance", {})
+            total_pnl = recent_perf.get("total_pnl", 0.0)
+            # If magnitude > 1, treat as dollars and attempt to normalize by current equity
+            if isinstance(total_pnl, (int, float)) and abs(total_pnl) > 1.0:
+                # Try to obtain current portfolio value from context
+                portfolio_value = (
+                    context.get("total_value_usd")
+                    or (context.get("portfolio_breakdown", {}) or {}).get("total_value_usd")
+                    or (context.get("portfolio_snapshot", {}) or {}).get("total_value_usd")
+                )
+                if isinstance(portfolio_value, (int, float)) and portfolio_value and portfolio_value > 0:
+                    drawdown_frac = float(total_pnl) / float(portfolio_value)
+                else:
+                    # As a last resort, assume decimal already; avoids falsely blocking trades
+                    drawdown_frac = float(total_pnl)
+            else:
+                drawdown_frac = float(total_pnl)
+
+        if drawdown_frac < -self.max_drawdown_pct:
             logger.warning(
-                f"Max drawdown exceeded: {total_pnl*100:.2f}% "
+                f"Max drawdown exceeded: {drawdown_frac*100:.2f}% "
                 f"(limit: {-self.max_drawdown_pct*100:.2f}%)"
             )
             # Record risk block metric
@@ -303,7 +327,7 @@ class RiskGatekeeper:
             self._metrics["ffe_risk_blocks_total"].add(
                 1, {"reason": "max_drawdown", "asset_type": asset_type}
             )
-            return False, f"Max drawdown exceeded ({total_pnl*100:.2f}%)"
+            return False, f"Max drawdown exceeded ({drawdown_frac*100:.2f}%)"
 
         # 3. Per-Platform Correlation Check (Enhanced)
         correlation_check_result = self._validate_correlation(decision, context)
