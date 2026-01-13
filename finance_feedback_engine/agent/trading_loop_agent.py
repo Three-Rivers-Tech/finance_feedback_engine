@@ -21,6 +21,7 @@ from finance_feedback_engine.monitoring.prometheus import (
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
 from finance_feedback_engine.utils.environment import is_development, is_production
@@ -1556,6 +1557,25 @@ class TradingLoopAgent:
                 )
                 approved_decisions.append(decision)
 
+                # THR-134: Reserve exposure for this approved trade
+                # This prevents subsequent trades from being approved if they would
+                # together exceed concentration limits
+                try:
+                    notional_value = decision.get("notional_value", 0) or (
+                        decision.get("recommended_position_size", 0)
+                        * decision.get("entry_price", 0)
+                    )
+                    exposure_manager = get_exposure_manager()
+                    exposure_manager.reserve_exposure(
+                        decision_id=decision_id,
+                        asset_pair=asset_pair,
+                        action=decision.get("action", "UNKNOWN"),
+                        position_size=decision.get("recommended_position_size", 0),
+                        notional_value=notional_value,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to reserve exposure for {decision_id}: {e}")
+
                 # Record decision confidence for metrics dashboards
                 try:
                     update_decision_confidence(
@@ -1724,21 +1744,45 @@ class TradingLoopAgent:
                         self.trade_monitor.associate_decision_to_trade(
                             decision_id, asset_pair
                         )
+                        # THR-134: Commit reservation - actual position now exists
+                        try:
+                            exposure_manager = get_exposure_manager()
+                            exposure_manager.commit_reservation(decision_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to commit reservation for {decision_id}: {e}")
                     else:
                         error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
                         logger.error(
                             f"Trade execution failed for {asset_pair}: {error_msg}. Full result: {execution_result}"
                         )
+                        # THR-134: Rollback reservation - trade didn't execute
+                        try:
+                            exposure_manager = get_exposure_manager()
+                            exposure_manager.rollback_reservation(decision_id)
+                        except Exception as e:
+                            logger.warning(f"Failed to rollback reservation for {decision_id}: {e}")
                 except asyncio.CancelledError:
                     logger.warning(
                         f"Trade execution cancelled for decision {decision_id} (agent shutdown?)"
                     )
+                    # THR-134: Rollback reservation on cancellation
+                    try:
+                        exposure_manager = get_exposure_manager()
+                        exposure_manager.rollback_reservation(decision_id)
+                    except Exception:
+                        pass
                     raise  # Re-raise to allow proper cleanup
                 except Exception as e:
                     logger.error(
                         f"Exception during trade execution for decision {decision_id}: {e}",
                         exc_info=True
                     )
+                    # THR-134: Rollback reservation on exception
+                    try:
+                        exposure_manager = get_exposure_manager()
+                        exposure_manager.rollback_reservation(decision_id)
+                    except Exception:
+                        pass
         else:
             # Signal-only mode: send to Telegram for approval
             logger.info(
@@ -1748,6 +1792,16 @@ class TradingLoopAgent:
 
         # Clear all decisions after processing
         self._current_decisions.clear()
+
+        # THR-134: Safety cleanup - clear any stale reservations
+        # This handles edge cases where reservations weren't properly committed/rolled back
+        try:
+            exposure_manager = get_exposure_manager()
+            cleared = exposure_manager.clear_stale_reservations()
+            if cleared > 0:
+                logger.warning(f"Cleared {cleared} stale exposure reservations after batch")
+        except Exception as e:
+            logger.warning(f"Failed to clear stale reservations: {e}")
 
         # After processing, transition to LEARNING
         await self._transition_to(AgentState.LEARNING)

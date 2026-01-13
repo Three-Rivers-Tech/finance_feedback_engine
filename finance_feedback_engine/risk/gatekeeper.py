@@ -6,6 +6,7 @@ import logging
 from typing import Dict, Tuple
 
 from finance_feedback_engine.observability.metrics import create_counters, get_meter
+from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
 
@@ -512,6 +513,9 @@ class RiskGatekeeper:
         Consolidated from core._preexecution_checks to centralize
         all risk validation in one place.
 
+        THR-134: Now accounts for reserved exposure from pending trades
+        to prevent multiple trades being approved that together exceed limits.
+
         Args:
             decision: Trade decision
             context: Portfolio context with risk_metrics and position_concentration
@@ -532,6 +536,18 @@ class RiskGatekeeper:
         max_leverage = context.get("max_leverage", 5.0)
         max_concentration = context.get("max_concentration", 25.0)
 
+        # THR-134: Get reserved exposure from pending trades in this batch
+        portfolio_value = context.get("total_value_usd", 0) or context.get(
+            "portfolio_breakdown", {}
+        ).get("total_value_usd", 0)
+
+        reserved_concentration = {}
+        if portfolio_value > 0:
+            exposure_manager = get_exposure_manager()
+            reserved_concentration = exposure_manager.get_reserved_concentration(
+                portfolio_value
+            )
+
         # Validate leverage
         if leverage and leverage > max_leverage:
             logger.warning(f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}")
@@ -544,12 +560,20 @@ class RiskGatekeeper:
             )
             return False, f"Leverage {leverage:.2f} exceeds max {max_leverage}"
 
-        # Validate concentration
-        if largest_pct and largest_pct > max_concentration:
+        # Validate concentration (including reserved exposure from pending trades)
+        asset_pair = decision.get("asset_pair", "UNKNOWN")
+        asset_reserved_pct = reserved_concentration.get(asset_pair, 0.0)
+
+        # Calculate effective concentration for this asset
+        # This includes existing position + reserved exposure from pending trades
+        effective_concentration = largest_pct + asset_reserved_pct
+
+        if effective_concentration > max_concentration:
             logger.warning(
-                f"Position concentration limit exceeded: {largest_pct:.1f}% > {max_concentration}%"
+                f"Position concentration limit exceeded (including reserved): "
+                f"{effective_concentration:.1f}% > {max_concentration}% "
+                f"(existing={largest_pct:.1f}%, reserved={asset_reserved_pct:.1f}%)"
             )
-            asset_pair = decision.get("asset_pair", "UNKNOWN")
             asset_type = (
                 "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
             )
@@ -557,11 +581,12 @@ class RiskGatekeeper:
                 1, {"reason": "concentration", "asset_type": asset_type}
             )
             return False, (
-                f"Largest position {largest_pct:.1f}% exceeds max {max_concentration}%"
+                f"Effective concentration {effective_concentration:.1f}% exceeds max {max_concentration}% "
+                f"(includes {asset_reserved_pct:.1f}% reserved from pending trades)"
             )
 
         logger.debug(
             f"Leverage/concentration check passed: leverage={leverage:.2f}, "
-            f"largest_position={largest_pct:.1f}%"
+            f"largest_position={largest_pct:.1f}%, reserved={asset_reserved_pct:.1f}%"
         )
         return True, "Leverage/concentration check passed"
