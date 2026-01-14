@@ -1,3 +1,151 @@
+# =========================================================================
+# TARGETED COVERAGE TESTS FOR EDGE/ERROR/FALLBACK BRANCHES
+# =========================================================================
+
+import logging
+
+class TestTargetedCoverageBranches:
+    def test_format_product_id_unexpected_exception(self, platform, monkeypatch):
+        # Simulate an unexpected exception in _format_product_id
+        def bad_replace(*args, **kwargs):
+            raise RuntimeError("replace failed")
+        monkeypatch.setattr(str, "replace", bad_replace)
+        # Should log error and return input
+        result = platform._format_product_id("BTCUSD")
+        assert result == "BTCUSD"
+
+    def test_format_product_id_empty_and_none(self, platform):
+        # Should raise ValueError for None or empty
+        import pytest
+        with pytest.raises(ValueError):
+            platform._format_product_id(None)
+        with pytest.raises(ValueError):
+            platform._format_product_id("")
+
+    def test_get_balance_futures_buying_power_zero(self, platform, mock_client):
+        # Should not add FUTURES_USD if value is zero
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="0")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+        accounts_response = MagicMock()
+        accounts_response.accounts = []
+        mock_client.get_accounts.return_value = accounts_response
+        platform._client = mock_client
+        result = platform.get_balance()
+        assert "FUTURES_USD" not in result
+
+    def test_get_balance_spot_balance_none(self, platform, mock_client):
+        # Should skip spot balances with None value
+        futures_response = MagicMock()
+        balance_summary = MagicMock()
+        balance_summary.futures_buying_power = MagicMock(value="1000")
+        futures_response.balance_summary = balance_summary
+        mock_client.get_futures_balance_summary.return_value = futures_response
+        usd_account = MagicMock()
+        usd_account.currency = "USD"
+        usd_account.available_balance = MagicMock(value=None)
+        accounts_response = MagicMock()
+        accounts_response.accounts = [usd_account]
+        mock_client.get_accounts.return_value = accounts_response
+        platform._client = mock_client
+        result = platform.get_balance()
+        # Should not include SPOT_USD if value is None
+        assert "SPOT_USD" not in result
+
+    def test_get_portfolio_breakdown_handles_unexpected_exception(self, platform, mock_client, caplog):
+        # Simulate unexpected error in portfolio breakdown
+        mock_client.get_futures_balance_summary.side_effect = Exception("fail")
+        platform._client = mock_client
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(Exception):
+                platform.get_portfolio_breakdown()
+            assert any("Error fetching futures data" in m for m in caplog.messages)
+
+    def test_execute_trade_handles_order_result_none(self, platform, mock_client):
+        # Simulate order_result is None (should handle gracefully)
+        mock_client.list_orders.return_value = []
+        mock_client.market_order_buy.return_value = None
+        platform._client = mock_client
+        decision = {"id": "dec-none-order", "action": "BUY", "asset_pair": "BTC-USD", "suggested_amount": 1000.0, "timestamp": "2024-01-01T00:00:00Z"}
+        result = platform.execute_trade(decision)
+        assert result["success"] is False or result.get("error")
+
+    def test_execute_trade_handles_order_result_dict_missing_fields(self, platform, mock_client):
+        # Simulate order_result.to_dict() missing expected fields
+        mock_client.list_orders.return_value = []
+        order_response = MagicMock()
+        order_response.to_dict.return_value = {"success": False}
+        mock_client.market_order_buy.return_value = order_response
+        platform._client = mock_client
+        decision = {"id": "dec-missing-fields", "action": "BUY", "asset_pair": "BTC-USD", "suggested_amount": 1000.0, "timestamp": "2024-01-01T00:00:00Z"}
+        result = platform.execute_trade(decision)
+        assert result["success"] is False
+import time
+from unittest.mock import patch, PropertyMock
+from finance_feedback_engine.exceptions import TradingError
+# Additional tests migrated from test_coinbase_platform_enhanced.py
+
+class TestCoinbaseGetClientEnhanced:
+    """Enhanced client initialization tests (from enhanced suite)."""
+
+    def test_get_client_lazy_loading(self, credentials):
+        platform = CoinbaseAdvancedPlatform(credentials)
+        assert platform._client is None
+
+    @patch('coinbase.rest.RESTClient')
+    @patch('finance_feedback_engine.trading_platforms.coinbase_platform.get_trace_headers')
+    def test_get_client_initialization(self, mock_trace_headers, mock_rest_client, credentials):
+        mock_trace_headers.return_value = {"X-Correlation-ID": "test-id"}
+        mock_client_instance = MagicMock()
+        mock_client_instance.session = MagicMock()
+        mock_client_instance.session.headers = MagicMock()
+        mock_rest_client.return_value = mock_client_instance
+        platform = CoinbaseAdvancedPlatform(credentials)
+        client = platform._get_client()
+        assert client is not None
+        mock_rest_client.assert_called_once_with(
+            api_key=credentials["api_key"],
+            api_secret=credentials["api_secret"]
+        )
+
+    @patch('coinbase.rest.RESTClient')
+    def test_get_client_reuses_instance(self, mock_rest_client, credentials):
+        mock_client_instance = MagicMock()
+        mock_rest_client.return_value = mock_client_instance
+        platform = CoinbaseAdvancedPlatform(credentials)
+        client1 = platform._get_client()
+        client2 = platform._get_client()
+        assert client1 is client2
+        mock_rest_client.assert_called_once()
+
+    @patch('coinbase.rest.RESTClient')
+    def test_get_client_import_error(self, mock_rest_client, credentials):
+        mock_rest_client.side_effect = ImportError("No module named 'coinbase'")
+        platform = CoinbaseAdvancedPlatform(credentials)
+        with pytest.raises(TradingError):
+            platform._get_client()
+
+class TestCoinbaseEdgeCasesEnhanced:
+    def test_concurrent_client_initialization(self, credentials):
+        platform = CoinbaseAdvancedPlatform(credentials)
+        with patch('coinbase.rest.RESTClient') as mock_client:
+            mock_instance = MagicMock()
+            mock_client.return_value = mock_instance
+            client1 = platform._get_client()
+            client2 = platform._get_client()
+            assert client1 is client2
+            assert mock_client.call_count == 1
+
+    def test_trace_headers_injection_failure(self, credentials):
+        platform = CoinbaseAdvancedPlatform(credentials)
+        with patch('coinbase.rest.RESTClient') as mock_client:
+            mock_instance = MagicMock()
+            mock_instance.session.headers.update.side_effect = Exception("Header update failed")
+            mock_client.return_value = mock_instance
+            client = platform._get_client()
+            assert client is not None
 """
 Comprehensive tests for Coinbase Advanced trading platform.
 
