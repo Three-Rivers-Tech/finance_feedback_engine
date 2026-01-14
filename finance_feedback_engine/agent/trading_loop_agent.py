@@ -62,9 +62,9 @@ class TradingLoopAgent:
     """
 
     def __init__(
-        self,
+        self: Any,
         config: TradingAgentConfig,
-        engine,  # FinanceFeedbackEngine
+        engine: Any,  # FinanceFeedbackEngine
         trade_monitor: TradeMonitor,
         portfolio_memory: PortfolioMemoryEngine,
         trading_platform: BaseTradingPlatform,
@@ -80,7 +80,7 @@ class TradingLoopAgent:
         def _normalize_pct(value: float) -> float:
             try:
                 return value / 100.0 if value > 1.0 else value
-            except Exception:
+            except Exception :
                 return value
 
         # Environment-aware risk configuration
@@ -900,7 +900,7 @@ class TradingLoopAgent:
         )
         return dump_path
 
-    async def handle_idle_state(self):
+    async def handle_idle_state(self) -> None:
         """
         IDLE: Marks the end of an OODA cycle.
 
@@ -917,7 +917,7 @@ class TradingLoopAgent:
             # This state just marks the end of the cycle
             # DO NOT auto-transition here - let external controller handle timing
 
-    async def handle_recovering_state(self):
+    async def handle_recovering_state(self) -> None:
         """
         RECOVERING: Recover existing positions from platform on startup.
 
@@ -946,7 +946,7 @@ class TradingLoopAgent:
             try:
                 # Query platform for current portfolio state
                 portfolio = await self.engine.get_portfolio_breakdown_async()
-                logger.info(f"Portfolio breakdown retrieved: {list(portfolio.keys())}")
+                logger.info("Portfolio breakdown retrieved: %s", portfolio)
 
                 # Extract positions from platform response
                 raw_positions = []
@@ -1027,7 +1027,7 @@ class TradingLoopAgent:
                 positions_to_keep = sorted_positions[:max_positions]
                 positions_to_close = sorted_positions[max_positions:]
 
-                logger.info(f"Found {len(active_positions)} positions: keeping {len(positions_to_keep)}, closing {len(positions_to_close)}")
+                logger.info("Found %d positions: keeping %d, closing %d", len(active_positions), len(positions_to_keep), len(positions_to_close))
 
                 # Close excess positions synchronously (all-or-nothing)
                 closed_positions = []
@@ -1035,17 +1035,20 @@ class TradingLoopAgent:
                     for pos in positions_to_close:
                         try:
                             asset_pair = standardize_asset_pair(pos["product_id"])
-                            logger.info(f"Closing excess position: {asset_pair} (P&L: ${pos['unrealized_pnl']:.2f})")
+                            logger.info("Closing excess position: %s (P&L: $%.2f)", asset_pair, pos["unrealized_pnl"])
 
                             # Close via platform
-                            close_result = await self.trading_platform.aclose_position(pos["product_id"])
+                            close_result = await self.trading_platform.close_position(pos["product_id"])
 
                             closed_positions.append({
                                 "asset_pair": asset_pair,
                                 "unrealized_pnl": pos["unrealized_pnl"],
                                 "reason": "exceeded_max_positions",
                             })
-                            logger.info(f"✓ Closed {asset_pair}")
+                            if close_result.get("status") == "success":
+                                logger.info("✓ Successfully closed position for %s", asset_pair)
+                            else:
+                                raise Exception(f"Platform close failed: {close_result}")
 
                         except Exception as e:
                             # All-or-nothing: if any close fails, abort entire recovery
@@ -1519,21 +1522,11 @@ class TradingLoopAgent:
                 monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
                     asset_pair=asset_pair
                 )
-
-                # Enrich context with safety thresholds from config
-                # These are used by RiskGatekeeper._validate_leverage_and_concentration()
                 safety_config = self.engine.config.get("safety", {})
-                monitoring_context["max_leverage"] = safety_config.get(
-                    "max_leverage", 5.0
-                )
-                monitoring_context["max_concentration"] = safety_config.get(
-                    "max_position_pct", 25.0
-                )
-
+                monitoring_context["max_leverage"] = safety_config.get("max_leverage", 5.0)
+                monitoring_context["max_concentration"] = safety_config.get("max_position_pct", 25.0)
             except Exception as e:
-                logger.warning(
-                    f"Failed to get monitoring context for risk validation: {e}"
-                )
+                logger.warning(f"Failed to get monitoring context for risk validation: {e}")
                 monitoring_context = {"max_leverage": 5.0, "max_concentration": 25.0}
 
             # First run the standard RiskGatekeeper validation
@@ -1552,14 +1545,27 @@ class TradingLoopAgent:
                     reason = performance_reason
 
             if approved:
+                # --- INJECT POSITION SIZING HERE ---
+                try:
+                    # Use the engine's position_sizing_calculator
+                    sizing = self.engine.position_sizing_calculator.calculate_position_sizing_params(
+                        context=decision,
+                        current_price=decision.get("entry_price", 0),
+                        action=decision.get("action", "UNKNOWN"),
+                        has_existing_position=decision.get("has_existing_position", False),
+                        relevant_balance=decision.get("relevant_balance", {}),
+                        balance_source=decision.get("balance_source", "unknown"),
+                    )
+                    decision["recommended_position_size"] = sizing.get("recommended_position_size")
+                except Exception as e:
+                    logger.warning(f"Failed to calculate position size for {decision_id}: {e}")
+
                 logger.info(
                     f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue."
                 )
                 approved_decisions.append(decision)
 
                 # THR-134: Reserve exposure for this approved trade
-                # This prevents subsequent trades from being approved if they would
-                # together exceed concentration limits
                 try:
                     notional_value = decision.get("notional_value", 0) or (
                         decision.get("recommended_position_size", 0)
@@ -1596,9 +1602,7 @@ class TradingLoopAgent:
                         "asset": asset_pair,
                         "action": decision.get("action", "UNKNOWN"),
                         "confidence": decision.get("confidence", 0),
-                        "reasoning": decision.get("reasoning", "")[
-                            :200
-                        ],  # First 200 chars
+                        "reasoning": decision.get("reasoning", "")[:200],
                         "timestamp": time.time(),
                     }
                 )

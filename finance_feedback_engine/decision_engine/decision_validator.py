@@ -89,9 +89,8 @@ class DecisionValidator:
         action = ai_response.get("action", "HOLD")
 
         # Extract position sizing results
-        recommended_position_size = position_sizing_result.get(
-            "recommended_position_size", 0
-        )
+        # During analysis, recommended_position_size should be None (will be set at execution)
+        recommended_position_size = None
         stop_loss_price = position_sizing_result.get("stop_loss_price")
         sizing_stop_loss_percentage = position_sizing_result.get(
             "sizing_stop_loss_percentage", 0
