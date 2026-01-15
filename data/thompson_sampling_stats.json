@@ -1,12 +1,12 @@
 {
   "provider_stats": {
     "test_provider": {
-      "alpha": 71,
-      "beta": 31
+      "alpha": 141,
+      "beta": 61
     }
   },
   "regime_multipliers": {
-    "trending": 840.9581787050935,
+    "trending": 0.1,
     "ranging": 1.0,
     "volatile": 1.0
   },

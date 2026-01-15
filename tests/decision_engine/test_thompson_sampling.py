@@ -320,10 +320,7 @@ class TestRegimeMultipliers:
 
     def test_update_regime_multiplier_win(self):
         """
-        Test that win in a regime increases that regime's multiplier by 1.1x.
-
-        This implements regime-specific learning: if a regime produces wins,
-        boost confidence in that regime.
+        Test that win in a regime increases that regime's multiplier by 1.1x, but clamps at 10.0.
         """
         from finance_feedback_engine.decision_engine.thompson_sampling import (
             ThompsonSamplingWeightOptimizer,
@@ -332,17 +329,21 @@ class TestRegimeMultipliers:
         providers = ["local"]
         optimizer = ThompsonSamplingWeightOptimizer(providers=providers)
 
-        initial_mult = optimizer.regime_multipliers["trending"]
-
+        # Test normal increase
+        optimizer.regime_multipliers["trending"] = 1.0
         optimizer.update_weights_from_outcome(
             provider="local", won=True, regime="trending"
         )
+        expected_mult = 1.0 * 1.1
+        assert optimizer.regime_multipliers["trending"] == pytest.approx(expected_mult, rel=1e-6)
 
-        # Multiplier should increase by factor of 1.1
-        expected_mult = initial_mult * 1.1
-        assert optimizer.regime_multipliers["trending"] == pytest.approx(
-            expected_mult, rel=1e-6
+        # Test clamping at upper bound
+        optimizer.regime_multipliers["trending"] = 10.0
+        optimizer.update_weights_from_outcome(
+            provider="local", won=True, regime="trending"
         )
+        # Should remain clamped at 10.0
+        assert optimizer.regime_multipliers["trending"] == 10.0
 
     def test_update_regime_multiplier_loss(self):
         """
@@ -368,6 +369,38 @@ class TestRegimeMultipliers:
         assert optimizer.regime_multipliers["trending"] == pytest.approx(
             expected_mult, rel=1e-6
         )
+
+    def test_regime_multiplier_clamping(self):
+        """
+        Test that the trending regime multiplier is clamped to [0.1, 10.0] and cannot grow unbounded.
+        """
+        from finance_feedback_engine.decision_engine.thompson_sampling import ThompsonSamplingWeightOptimizer
+
+        providers = ["local"]
+        optimizer = ThompsonSamplingWeightOptimizer(providers=providers)
+
+        # Force multiplier to near upper bound
+        optimizer.regime_multipliers["trending"] = 9.9
+        for _ in range(5):
+            optimizer.update_weights_from_outcome(provider="local", won=True, regime="trending")
+        # Should not exceed 10.0
+        assert optimizer.regime_multipliers["trending"] <= 10.0
+
+        # Force multiplier to near lower bound
+        optimizer.regime_multipliers["trending"] = 0.11
+        for _ in range(5):
+            optimizer.update_weights_from_outcome(provider="local", won=False, regime="trending")
+        # Should not go below 0.1
+        assert optimizer.regime_multipliers["trending"] >= 0.1
+
+        # Set to extreme outlier and update
+        optimizer.regime_multipliers["trending"] = 1000.0
+        optimizer.update_weights_from_outcome(provider="local", won=False, regime="trending")
+        assert optimizer.regime_multipliers["trending"] == 10.0
+
+        optimizer.regime_multipliers["trending"] = 0.00001
+        optimizer.update_weights_from_outcome(provider="local", won=True, regime="trending")
+        assert optimizer.regime_multipliers["trending"] == 0.1
 
 
 class TestPersistence:
