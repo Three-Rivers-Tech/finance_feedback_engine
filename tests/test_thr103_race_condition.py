@@ -9,6 +9,7 @@ import asyncio
 import random
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+import logging
 
 from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent, AgentState
 
@@ -86,9 +87,9 @@ async def test_concurrent_read_write_no_corruption(mock_agent):
                     # Verify list is not corrupted
                     if count > 0:
                         # Try to access first element
-                        _ = mock_agent._current_decisions[0]
             except (IndexError, RuntimeError) as e:
                 corruption_detected = True
+                # Error details will be shown in the assertion message
                 print(f"Corruption detected: {e}")
             await asyncio.sleep(0.001)
 
@@ -155,7 +156,8 @@ async def test_copy_and_clear_atomicity(mock_agent):
     remaining = len(mock_agent._current_decisions)
     total_accounted = decisions_executed + remaining
 
-    print(f"Added: {decisions_added}, Executed: {decisions_executed}, Remaining: {remaining}")
+    logger = logging.getLogger("test_thr103_race_condition")
+    logger.info(f"Added: {decisions_added}, Executed: {decisions_executed}, Remaining: {remaining}")
     assert total_accounted == decisions_added, \
         f"Lost decisions! Added {decisions_added}, but only {total_accounted} accounted for"
 
@@ -216,10 +218,7 @@ async def test_risk_check_isolation(mock_agent):
 async def test_no_deadlock_on_sequential_state_transitions(mock_agent):
     """
     Test that the lock doesn't deadlock when state transitions happen.
-
-     async def state_machine_cycle():
     """
-    mock_agent._transition_to = AsyncMock()
 
     async def state_machine_cycle():
         """Simulate a full OODA loop cycle."""
@@ -266,14 +265,15 @@ async def test_stress_1000_concurrent_operations(mock_agent):
     this should expose it.
     """
     operations_completed = 0
+    operations_completed = 0
     errors_detected = []
+    random.seed(42)  # Fixed seed for reproducibility
 
     async def random_operation(op_id):
         """Perform a random operation on _current_decisions."""
         nonlocal operations_completed
         try:
             op_type = random.choice(["append", "read", "write", "clear"])
-
             if op_type == "append":
                 async with mock_agent._current_decisions_lock:
                     mock_agent._current_decisions.append(
