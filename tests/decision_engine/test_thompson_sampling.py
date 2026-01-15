@@ -402,6 +402,19 @@ class TestRegimeMultipliers:
         optimizer.update_weights_from_outcome(provider="local", won=True, regime="trending")
         assert optimizer.regime_multipliers["trending"] == 0.1
 
+        # Test bidirectional behavior at exact bounds
+        # At upper bound, should decrease
+        optimizer.regime_multipliers["trending"] = 10.0
+        optimizer.update_weights_from_outcome(provider="local", won=False, regime="trending")
+        expected = 10.0 * 0.95
+        assert optimizer.regime_multipliers["trending"] == pytest.approx(expected, rel=1e-6)
+
+        # At lower bound, should increase
+        optimizer.regime_multipliers["trending"] = 0.1
+        optimizer.update_weights_from_outcome(provider="local", won=True, regime="trending")
+        expected = 0.1 * 1.1
+        assert optimizer.regime_multipliers["trending"] == pytest.approx(expected, rel=1e-6)
+
 
 class TestPersistence:
     """Tests for saving and loading provider statistics."""

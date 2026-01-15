@@ -343,7 +343,12 @@ class ThompsonSamplingWeightOptimizer:
                 loaded_regimes = data["regime_multipliers"]
                 for regime in self.regime_multipliers:
                     if regime in loaded_regimes:
-                        self.regime_multipliers[regime] = loaded_regimes[regime]
+                        # Clamp loaded value to [0.1, 10.0]
+                        val = loaded_regimes[regime]
+                        clamped = max(0.1, min(10.0, val))
+                        if clamped != val:
+                            logger.warning(f"Clamped regime multiplier '{regime}' from {val} to {clamped} (valid range: 0.1-10.0)")
+                        self.regime_multipliers[regime] = clamped
 
             logger.info(
                 f"Loaded Thompson Sampling stats from {self.persistence_path}: "

@@ -6,7 +6,7 @@
     }
   },
   "regime_multipliers": {
-    "trending": 0.1,
+    "trending": 0.11000000000000001,
     "ranging": 1.0,
     "volatile": 1.0
   },
