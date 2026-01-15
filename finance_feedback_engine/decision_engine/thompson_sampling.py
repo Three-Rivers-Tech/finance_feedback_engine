@@ -156,17 +156,29 @@ class ThompsonSamplingWeightOptimizer:
 
         # Update regime multiplier if regime is specified
         if regime and regime in self.regime_multipliers:
+            # Clamp bounds for multiplier
+            MIN_MULTIPLIER = 0.1
+            MAX_MULTIPLIER = 10.0
+            prev = self.regime_multipliers[regime]
             if won:
                 # Increase confidence in this regime by 10%
-                self.regime_multipliers[regime] *= 1.1
+                updated = prev * 1.1
             else:
                 # Decrease confidence by 5% (asymmetric - losses hurt less)
-                self.regime_multipliers[regime] *= 0.95
-
-            logger.debug(
-                f"Regime '{regime}' multiplier -> "
-                f"{self.regime_multipliers[regime]:.4f}"
-            )
+                updated = prev * 0.95
+            # Clamp to sensible bounds
+            updated = max(MIN_MULTIPLIER, min(MAX_MULTIPLIER, updated))
+            # Optional: log-scale normalization (prevent runaway growth)
+            # updated = math.copysign(min(MAX_MULTIPLIER, max(MIN_MULTIPLIER, abs(updated))), updated)
+            self.regime_multipliers[regime] = updated
+            if updated != prev:
+                logger.debug(
+                    f"Regime '{regime}' multiplier updated: {prev:.4f} -> {updated:.4f}"
+                )
+            else:
+                logger.debug(
+                    f"Regime '{regime}' multiplier unchanged (clamped): {updated:.4f}"
+                )
 
         # Auto-save after each update
         self._save_stats()

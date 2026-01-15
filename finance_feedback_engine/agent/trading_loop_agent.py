@@ -126,6 +126,8 @@ class TradingLoopAgent:
         self._paused = False
         self.state = AgentState.IDLE
         self._current_decisions = []  # Store multiple decisions for batch processing
+        # Lock for protecting current_decisions list from concurrent modification
+        self._current_decisions_lock = asyncio.Lock()
 
         # Lock for protecting asset_pairs list from concurrent modification
         self._asset_pairs_lock = asyncio.Lock()
@@ -1451,34 +1453,36 @@ class TradingLoopAgent:
 
                 if decision and decision.get("action") in ["BUY", "SELL"]:
                     if await self._should_execute(decision):
-                        self._current_decisions.append(decision)  # Collect decision
+                        async with self._current_decisions_lock:
+                            self._current_decisions.append(decision)
                         logger.info(
-                            f"Actionable decision collected for {asset_pair}: {decision['action']}"
+                            "Actionable decision collected for %s: %s", asset_pair, decision['action']
                         )
                     else:
                         logger.info(
-                            f"Decision to {decision['action']} {asset_pair} not executed due to policy or low confidence."
+                            "Decision to %s %s not executed due to policy or low confidence.",
+                            decision['action'], asset_pair
                         )
                 else:
-                    logger.info(f"Decision for {asset_pair}: HOLD. No action taken.")
+                    logger.info("Decision for %s: HOLD. No action taken.", asset_pair)
 
             except asyncio.TimeoutError:
                 logger.warning(
-                    f"Analysis for {asset_pair} timed out, skipping this cycle."
+                    "Analysis for %s timed out, skipping this cycle.", asset_pair
                 )
                 self.analysis_failure_timestamps[failure_key] = current_time
                 self.analysis_failures[failure_key] = (
                     self.analysis_failures.get(failure_key, 0) + 1
                 )
             except Exception as e:
-                logger.warning(f"Analysis for {asset_pair} failed: {e}")
+                logger.warning("Analysis for %s failed: %s", asset_pair, e)
                 self.analysis_failure_timestamps[failure_key] = current_time
                 self.analysis_failures[failure_key] = (
                     self.analysis_failures.get(failure_key, 0) + 1
                 )
                 logger.error(
-                    f"Persistent failure analyzing {asset_pair}. "
-                    f"It will be skipped for a while.",
+                    "Persistent failure analyzing %s. It will be skipped for a while.",
+                    asset_pair,
                     exc_info=True,
                 )
 
@@ -1487,13 +1491,17 @@ class TradingLoopAgent:
             # Add delay between pairs to avoid Alpha Vantage rate limits
             # Only delay if there are more pairs to analyze
             if asset_pair != asset_pairs_snapshot[-1]:
-                logger.info(f"    → Waiting 15s before analyzing next pair (rate limit protection)...")
+                logger.info("    → Waiting 15s before analyzing next pair (rate limit protection)...")
                 await asyncio.sleep(15)
 
         # After analyzing all assets, transition based on collected decisions
-        if self._current_decisions:
+        async with self._current_decisions_lock:
+            has_decisions = bool(self._current_decisions)
+            decisions_count = len(self._current_decisions)
+
+        if has_decisions:
             logger.info(
-                f"Collected {len(self._current_decisions)} actionable decisions. Proceeding to RISK_CHECK."
+                "Collected %s actionable decisions. Proceeding to RISK_CHECK.", decisions_count
             )
             await self._transition_to(AgentState.RISK_CHECK)
         else:
@@ -1507,13 +1515,22 @@ class TradingLoopAgent:
         """
         logger.info("State: RISK_CHECK - Running RiskGatekeeper...")
 
-        if not self._current_decisions:
+        async with self._current_decisions_lock:
+            if not self._current_decisions:
+                should_return_idle = True
+                decisions_to_check = []
+            else:
+                should_return_idle = False
+                decisions_to_check = self._current_decisions.copy()
+
+        if should_return_idle:
             logger.info("No decisions to risk check. Returning to IDLE.")
             await self._transition_to(AgentState.IDLE)
             return
 
+        # Process without lock
         approved_decisions = []
-        for decision in self._current_decisions:
+        for decision in decisions_to_check:
             decision_id = decision.get("id")
             asset_pair = decision.get("asset_pair")
 
@@ -1526,7 +1543,7 @@ class TradingLoopAgent:
                 monitoring_context["max_leverage"] = safety_config.get("max_leverage", 5.0)
                 monitoring_context["max_concentration"] = safety_config.get("max_position_pct", 25.0)
             except Exception as e:
-                logger.warning(f"Failed to get monitoring context for risk validation: {e}")
+                logger.warning("Failed to get monitoring context for risk validation: %s", e)
                 monitoring_context = {"max_leverage": 5.0, "max_concentration": 25.0}
 
             # First run the standard RiskGatekeeper validation
@@ -1556,16 +1573,17 @@ class TradingLoopAgent:
                         relevant_balance=decision.get("relevant_balance", {}),
                         balance_source=decision.get("balance_source", "unknown"),
                     )
-                    decision["recommended_position_size"] = sizing.get("recommended_position_size")
+                    if sizing:
+                        recommended_size = sizing.get("recommended_position_size")
+                        decision["recommended_position_size"] = recommended_size
                 except Exception as e:
-                    logger.warning(f"Failed to calculate position size for {decision_id}: {e}")
+                    logger.warning("Failed to calculate position size for %s: %s", decision_id, e)
 
                 logger.info(
-                    f"Trade for {asset_pair} approved by RiskGatekeeper. Adding to execution queue."
+                    "Trade for %s approved by RiskGatekeeper. Adding to execution queue.",
+                    asset_pair,
                 )
                 approved_decisions.append(decision)
-
-                # THR-134: Reserve exposure for this approved trade
                 try:
                     notional_value = decision.get("notional_value", 0) or (
                         decision.get("recommended_position_size", 0)
@@ -1580,7 +1598,7 @@ class TradingLoopAgent:
                         notional_value=notional_value,
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to reserve exposure for {decision_id}: {e}")
+                    logger.warning("Failed to reserve exposure for %s: %s", decision_id, e)
                     tracker = getattr(self.engine, "error_tracker", None)
                     if tracker:
                         tracker.capture_error(e, context={"decision_id": decision_id, "phase": "reserve_exposure"})
@@ -1608,14 +1626,14 @@ class TradingLoopAgent:
                 )
             else:
                 logger.info(
-                    f"Trade for {asset_pair} rejected by RiskGatekeeper: {reason}."
+                    "Trade for %s rejected by RiskGatekeeper: %s.", asset_pair, reason
                 )
                 self._rejected_decisions_cache[decision_id] = (
                     datetime.datetime.now(),
                     asset_pair,
                 )  # Add to cache
 
-                # Emit rejection event for dashboard
+                    # Emit rejection event for dashboard
                 self._emit_dashboard_event(
                     {
                         "type": "decision_rejected",
@@ -1626,11 +1644,14 @@ class TradingLoopAgent:
                     }
                 )
 
-        self._current_decisions = approved_decisions  # Keep only approved decisions
+        async with self._current_decisions_lock:
+            self._current_decisions = approved_decisions  # Keep only approved decisions
+            has_approved = bool(self._current_decisions)
+            approved_count = len(self._current_decisions)
 
-        if self._current_decisions:
+        if has_approved:
             logger.info(
-                f"Proceeding to EXECUTION with {len(self._current_decisions)} approved decisions."
+                "Proceeding to EXECUTION with %s approved decisions.", approved_count
             )
             await self._transition_to(AgentState.EXECUTION)
         else:
@@ -1720,21 +1741,24 @@ class TradingLoopAgent:
         """
         logger.info("State: EXECUTION - Processing decisions...")
 
-        if not self._current_decisions:
-            logger.warning(
-                "EXECUTION state reached without decisions. Returning to IDLE."
-            )
-            await self._transition_to(AgentState.IDLE)
-            return
+        async with self._current_decisions_lock:
+            if not self._current_decisions:
+                await self._transition_to(AgentState.IDLE)
+                logger.warning(
+                    "EXECUTION state reached without decisions. Returning to IDLE."
+                )
+                return
+            decisions_to_execute = self._current_decisions.copy()
+            self._current_decisions.clear()
 
         # Use property for cleaner autonomous mode check
         autonomous_enabled = self.is_autonomous_enabled
-        logger.info(f"Autonomous execution mode: {autonomous_enabled}")
+        logger.info("Autonomous execution mode: %s", autonomous_enabled)
 
         if autonomous_enabled:
             # Full autonomous mode: execute trades directly
             logger.info("Autonomous execution enabled - executing trades directly")
-            for decision in self._current_decisions:
+            for decision in decisions_to_execute:
                 decision_id = decision.get("id")
                 action = decision.get("action")
                 asset_pair = decision.get("asset_pair")
@@ -1745,7 +1769,9 @@ class TradingLoopAgent:
                     )
                     if execution_result.get("success"):
                         logger.info(
-                            f"Trade executed successfully for {action} {asset_pair}. Associating decision with monitor."
+                            "Trade executed successfully for %s %s. Associating decision with monitor.",
+                            action,
+                            asset_pair
                         )
                         self.daily_trade_count += 1
                         self.trade_monitor.associate_decision_to_trade(
@@ -1781,7 +1807,9 @@ class TradingLoopAgent:
                     raise  # Re-raise to allow proper cleanup
                 except Exception as e:
                     logger.error(
-                        f"Exception during trade execution for decision {decision_id}: {e}",
+                        "Exception during trade execution for decision %s: %s",
+                        decision_id,
+                        e,
                         exc_info=True
                     )
                     # THR-134: Rollback reservation on exception
@@ -1796,9 +1824,6 @@ class TradingLoopAgent:
                 "Autonomous execution disabled - sending signals to Telegram for approval"
             )
             await self._send_signals_to_telegram()
-
-        # Clear all decisions after processing
-        self._current_decisions.clear()
 
         # THR-134: Safety cleanup - clear any stale reservations
         # This handles edge cases where reservations weren't properly committed/rolled back
