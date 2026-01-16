@@ -2,6 +2,7 @@ import React from 'react';
 import type { AgentStatus } from '../../api/types';
 import { Card } from '../common/Card';
 import { Badge } from '../common/Badge';
+import type { BadgeVariant } from '../common/Badge';
 import { Spinner } from '../common/Spinner';
 import { formatUptime } from '../../services/formatters';
 
@@ -28,19 +29,20 @@ export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false,
     );
   }
 
-  const getUnifiedStateVariant = (unifiedStatus: string): string => {
+  const getUnifiedStateVariant = (unifiedStatus: string | undefined): BadgeVariant => {
     switch (unifiedStatus) {
       case 'ready':
       case 'active':
-        return 'success'; // Green
+        return 'success';
       case 'error':
-        return 'danger'; // Red
+        return 'danger';
       case 'transitioning':
       case 'initializing':
-        return 'warning'; // Yellow
+        return 'warning';
       case 'offline':
+      case undefined:
       default:
-        return 'neutral'; // Gray
+        return 'neutral';
     }
   };
 
@@ -80,6 +82,9 @@ export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false,
           {status.status_description && (
             <p className="text-xs text-text-secondary mt-1">
               {status.status_description}
+            </p>
+          )}
+        </div>
         <div>
           <p className="text-xs text-text-secondary mb-2">OPERATIONAL</p>
           <p className="font-mono">

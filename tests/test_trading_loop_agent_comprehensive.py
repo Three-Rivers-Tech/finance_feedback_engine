@@ -276,7 +276,7 @@ class TestStateMachineTransitions:
     """Test OODA state machine transitions."""
 
     @pytest.mark.asyncio
-    async def test_idle_to_learning_transition(
+    async def test_idle_state_remains_idle_before_startup_complete(
         self,
         minimal_config,
         mock_engine,
@@ -284,7 +284,7 @@ class TestStateMachineTransitions:
         mock_portfolio_memory,
         mock_trading_platform,
     ):
-        """Test IDLE state transitions to LEARNING."""
+        """Test IDLE state remains IDLE when startup is not complete."""
         agent = TradingLoopAgent(
             config=minimal_config,
             engine=mock_engine,
@@ -296,7 +296,38 @@ class TestStateMachineTransitions:
         agent.state = AgentState.IDLE
         await agent.handle_idle_state()
 
-        assert agent.state == AgentState.LEARNING
+        assert agent.state == AgentState.IDLE
+
+    @pytest.mark.asyncio
+    async def test_idle_to_learning_transition(
+        self,
+        minimal_config,
+        mock_engine,
+        mock_trade_monitor,
+        mock_portfolio_memory,
+        mock_trading_platform,
+    ):
+        """Test IDLE state remains IDLE even after startup is complete.
+        
+        IDLE is an end-of-cycle state that does NOT auto-transition.
+        The transition to LEARNING happens externally via process_cycle().
+        """
+        agent = TradingLoopAgent(
+            config=minimal_config,
+            engine=mock_engine,
+            trade_monitor=mock_trade_monitor,
+            portfolio_memory=mock_portfolio_memory,
+            trading_platform=mock_trading_platform,
+        )
+
+        # Simulate startup complete
+        agent._startup_complete.set()
+
+        agent.state = AgentState.IDLE
+        await agent.handle_idle_state()
+
+        # IDLE handler should NOT auto-transition, even after startup
+        assert agent.state == AgentState.IDLE
 
     @pytest.mark.asyncio
     async def test_learning_to_perception_transition(
