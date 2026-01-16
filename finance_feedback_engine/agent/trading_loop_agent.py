@@ -920,9 +920,9 @@ class TradingLoopAgent:
             # This state just marks the end of the cycle
             # DO NOT auto-transition here - let external controller handle timing
 
-    async def handle_recovering_state(self) -> None:
+    async def _recover_existing_positions(self) -> None:
         """
-        RECOVERING: Recover existing positions from platform on startup.
+        Recover existing positions from platform on startup.
 
         This method performs comprehensive position recovery with:
         1. Single API call to platform with one retry on failure
@@ -932,7 +932,7 @@ class TradingLoopAgent:
         5. All-or-nothing validation (fail entire recovery if any position fails)
 
         Emits recovery_complete or recovery_failed events with detailed metadata.
-        Transitions to LEARNING state on success or assumes clean slate on failure.
+        Sets _startup_complete event and transitions to LEARNING state.
         """
         import hashlib
         import uuid as uuid_module
@@ -1207,6 +1207,14 @@ class TradingLoopAgent:
                     self._startup_complete.set()
                     await self._transition_to(AgentState.LEARNING)
                     return
+
+    async def handle_recovering_state(self) -> None:
+        """
+        RECOVERING: Recover existing positions from platform on startup.
+
+        Delegates to _recover_existing_positions() for the actual recovery logic.
+        """
+        await self._recover_existing_positions()
 
     async def handle_perception_state(self):
         """
