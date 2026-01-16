@@ -38,10 +38,7 @@ Reference: /home/cmp6510/.claude/plans/declarative-sprouting-balloon.md (Phase 1
 
 from __future__ import annotations
 
-import json
 import logging
-import os
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from scipy.stats import beta
@@ -52,7 +49,9 @@ logger = logging.getLogger(__name__)
 
 
 class ThompsonSamplingWeightOptimizer:
-    """
+    MIN_MULTIPLIER = 0.1
+    MAX_MULTIPLIER = 10.0
+    '''
     Thompson Sampling for ensemble provider weight optimization.
 
     Uses Beta distributions to model provider success rates.
@@ -72,7 +71,7 @@ class ThompsonSamplingWeightOptimizer:
         >>> # Sample weights for next decision
         >>> weights = optimizer.sample_weights(market_regime="trending")
         >>> print(weights)  # e.g., {"local": 0.45, "qwen": 0.30, "gemini": 0.25}
-    """
+    '''
 
     def __init__(
         self,
@@ -91,13 +90,13 @@ class ThompsonSamplingWeightOptimizer:
 
         # Initialize Beta distribution parameters for each provider
         # Beta(1, 1) is uniform prior - no initial bias
-        self.provider_stats: Dict[str, Dict[str, int]] = {}
+        self.provider_stats = {}
         for provider in providers:
             self.provider_stats[provider] = {"alpha": 1, "beta": 1}
 
         # Initialize regime-based multipliers
         # These adjust sampling based on market conditions
-        self.regime_multipliers: Dict[str, float] = {
+        self.regime_multipliers = {
             "trending": 1.0,
             "ranging": 1.0,
             "volatile": 1.0,
@@ -157,8 +156,6 @@ class ThompsonSamplingWeightOptimizer:
         # Update regime multiplier if regime is specified
         if regime and regime in self.regime_multipliers:
             # Clamp bounds for multiplier
-            MIN_MULTIPLIER = 0.1
-            MAX_MULTIPLIER = 10.0
             prev = self.regime_multipliers[regime]
             if won:
                 # Increase confidence in this regime by 10%
@@ -166,10 +163,8 @@ class ThompsonSamplingWeightOptimizer:
             else:
                 # Decrease confidence by 5% (asymmetric - losses hurt less)
                 updated = prev * 0.95
-            # Clamp to sensible bounds
-            updated = max(MIN_MULTIPLIER, min(MAX_MULTIPLIER, updated))
-            # Optional: log-scale normalization (prevent runaway growth)
-            # updated = math.copysign(min(MAX_MULTIPLIER, max(MIN_MULTIPLIER, abs(updated))), updated)
+            # Clamp to sensible bounds using class constants
+            updated = max(self.__class__.MIN_MULTIPLIER, min(self.__class__.MAX_MULTIPLIER, updated))
             self.regime_multipliers[regime] = updated
             if updated != prev:
                 logger.debug(
@@ -343,11 +338,11 @@ class ThompsonSamplingWeightOptimizer:
                 loaded_regimes = data["regime_multipliers"]
                 for regime in self.regime_multipliers:
                     if regime in loaded_regimes:
-                        # Clamp loaded value to [0.1, 10.0]
+                        # Clamp loaded value to [MIN_MULTIPLIER, MAX_MULTIPLIER]
                         val = loaded_regimes[regime]
-                        clamped = max(0.1, min(10.0, val))
+                        clamped = max(self.__class__.MIN_MULTIPLIER, min(self.__class__.MAX_MULTIPLIER, val))
                         if clamped != val:
-                            logger.warning(f"Clamped regime multiplier '{regime}' from {val} to {clamped} (valid range: 0.1-10.0)")
+                            logger.warning(f"Clamped regime multiplier '{regime}' from {val} to {clamped} (valid range: {self.__class__.MIN_MULTIPLIER}-{self.__class__.MAX_MULTIPLIER})")
                         self.regime_multipliers[regime] = clamped
 
             logger.info(
@@ -378,9 +373,8 @@ class ThompsonSamplingWeightOptimizer:
             self.provider_stats[provider] = {"alpha": 1, "beta": 1}
 
         self.regime_multipliers = {
-            "trending": 1.0,
-            "ranging": 1.0,
-            "volatile": 1.0,
+            regime: max(self.__class__.MIN_MULTIPLIER, min(self.__class__.MAX_MULTIPLIER, 1.0))
+            for regime in ["trending", "ranging", "volatile"]
         }
 
         self._save_stats()
