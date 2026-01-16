@@ -1,7 +1,14 @@
 // API Response Types
 export interface AgentStatus {
+  // Legacy fields for backward compatibility
   state: 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
   agent_ooda_state: 'IDLE' | 'RECOVERING' | 'PERCEPTION' | 'REASONING' | 'RISK_CHECK' | 'EXECUTION' | 'LEARNING' | null;
+
+  // NEW: Unified status fields
+  unified_status: 'offline' | 'transitioning' | 'initializing' | 'ready' | 'active' | 'error';
+  status_description: string;
+  is_operational: boolean;
+  
   uptime_seconds: number | null;
   total_trades: number;
   active_positions: number;

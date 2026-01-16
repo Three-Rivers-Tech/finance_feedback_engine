@@ -28,11 +28,20 @@ export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false,
     );
   }
 
-  const getStateVariant = (state: string) => {
-    if (state === 'running') return 'success';
-    if (state === 'error') return 'danger';
-    if (state === 'starting' || state === 'stopping') return 'warning';
-    return 'neutral';
+  const getUnifiedStateVariant = (unifiedStatus: string): string => {
+    switch (unifiedStatus) {
+      case 'ready':
+      case 'active':
+        return 'success'; // Green
+      case 'error':
+        return 'danger'; // Red
+      case 'transitioning':
+      case 'initializing':
+        return 'warning'; // Yellow
+      case 'offline':
+      default:
+        return 'neutral'; // Gray
+    }
   };
 
   const getOodaStateDisplay = (oodaState: string | null) => {
@@ -64,14 +73,31 @@ export const AgentStatusDisplay: React.FC<Props> = ({ status, isLoading = false,
       </h2>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <p className="text-xs text-text-secondary mb-2">STATE</p>
-          <Badge variant={getStateVariant(status.state)}>
-            {(status.state || 'unknown').toUpperCase()}
+          <p className="text-xs text-text-secondary mb-2">STATUS</p>
+          <Badge variant={getUnifiedStateVariant(status.unified_status)}>
+            {(status.unified_status || 'unknown').toUpperCase()}
           </Badge>
+          {status.status_description && (
+            <p className="text-xs text-text-secondary mt-1">
+              {status.status_description}
+        <div>
+          <p className="text-xs text-text-secondary mb-2">OPERATIONAL</p>
+          <p className="font-mono">
+            {status.is_operational === true ? (
+              <span className="text-green-400">+ Yes</span>
+            ) : status.is_operational === false ? (
+              <span className="text-red-400">- No</span>
+            ) : (
+              <span className="text-text-secondary">Unknown</span>
+            )}
+          </p>
         </div>
         <div>
-          <p className="text-xs text-text-secondary mb-2">OODA STATE</p>
-          {getOodaStateDisplay(status.agent_ooda_state)}
+            <p className="text-xs text-text-secondary mb-2">
+                DETAILED STATE
+                <span className="ml-1 text-xs opacity-50">(advanced)</span>
+            </p>
+            {getOodaStateDisplay(status.agent_ooda_state)}
         </div>
         <div>
           <p className="text-xs text-text-secondary mb-2">UPTIME</p>

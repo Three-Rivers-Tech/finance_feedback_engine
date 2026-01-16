@@ -38,6 +38,7 @@ from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
 from ..memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from ..monitoring.trade_monitor import TradeMonitor
+from .unified_status import UnifiedAgentStatus, AgentStateMapper
 from .dependencies import get_auth_manager, get_engine, verify_api_key_or_dev
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,18 @@ class AgentStatusResponse(BaseModel):
 
     state: BotState
     agent_ooda_state: Optional[str] = None
+    unified_status: UnifiedAgentStatus = Field(
+        ...,
+        description="Clear, unified agent status for clients"
+    )
+    status_description: str = Field(
+        ...,
+        description="Human-readable description of the current status"
+    )
+    is_operational: bool = Field(
+        ...,
+        description="True if agent is ready or actively trading"
+    )
     uptime_seconds: Optional[float] = None
     total_trades: int = 0
     active_positions: int = 0
@@ -265,9 +278,15 @@ async def _start_agent_from_request(
 
     logger.info("✅ Trading agent started successfully")
 
+    unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, _agent_instance.state if _agent_instance else None)
+    status_description = AgentStateMapper.get_status_description(unified_status)
+    is_operational = AgentStateMapper.is_operational(unified_status)
     return AgentStatusResponse(
         state=BotState.RUNNING,
         agent_ooda_state=(_agent_instance.state.name if _agent_instance else None),
+        unified_status=unified_status,
+        status_description=status_description,
+        is_operational=is_operational,
         uptime_seconds=0.0,
         config={
             "asset_pairs": request.asset_pairs,
@@ -342,9 +361,15 @@ async def start_agent(
         response, queued = await _enqueue_or_start_agent(request, engine)
         if queued:
             assert response is None  # When queued, response is None
+            unified_status = AgentStateMapper.get_unified_status(BotState.STARTING, None)
+            status_description = AgentStateMapper.get_status_description(unified_status)
+            is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
                 state=BotState.STARTING,
                 agent_ooda_state=None,
+                unified_status=unified_status,
+                status_description=status_description,
+                is_operational=is_operational,
                 uptime_seconds=None,
                 config={
                     "queued": True,
@@ -537,6 +562,9 @@ async def pause_agent(
                     datetime.utcnow() - _agent_instance.start_time
                 ).total_seconds()
 
+            unified_status = AgentStateMapper.get_unified_status(BotState.STOPPED, _agent_instance.state if _agent_instance else None)
+            status_description = AgentStateMapper.get_status_description(unified_status)
+            is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
                 state=BotState.STOPPED,
                 agent_ooda_state=(
@@ -544,6 +572,9 @@ async def pause_agent(
                     if _agent_instance and hasattr(_agent_instance, "state")
                     else None
                 ),
+                unified_status=unified_status,
+                status_description=status_description,
+                is_operational=is_operational,
                 uptime_seconds=uptime,
                 config={"paused": True},
             )
@@ -603,6 +634,9 @@ async def resume_agent(
                     datetime.utcnow() - _agent_instance.start_time
                 ).total_seconds()
 
+            unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, _agent_instance.state if _agent_instance else None)
+            status_description = AgentStateMapper.get_status_description(unified_status)
+            is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
                 state=BotState.RUNNING,
                 agent_ooda_state=(
@@ -610,6 +644,9 @@ async def resume_agent(
                     if _agent_instance and hasattr(_agent_instance, "state")
                     else None
                 ),
+                unified_status=unified_status,
+                status_description=status_description,
+                is_operational=is_operational,
                 uptime_seconds=uptime,
                 config={"paused": False},
             )
@@ -731,10 +768,19 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
         else:
             asset_pairs = []
 
+        # Derive bot lifecycle state from agent_running
+        bot_state = BotState.RUNNING if agent_running else BotState.STOPPED
+
+        # Calculate unified status from both states
+        unified_status = AgentStateMapper.get_unified_status(bot_state, agent_state)
+
         # Build response
         resp = AgentStatusResponse(
-            state=BotState.RUNNING if agent_running else BotState.STOPPED,
-            agent_ooda_state=agent_state.name if agent_state else None,
+            state=bot_state, # For backward compatibility
+            agent_ooda_state=agent_state.name if agent_state else None, # For backward compatibility
+            unified_status=unified_status,
+            status_description=AgentStateMapper.get_status_description(unified_status),
+            is_operational=AgentStateMapper.is_operational(unified_status),
             uptime_seconds=uptime,
             total_trades=total_trades,
             active_positions=active_positions,
@@ -756,7 +802,16 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
 
     except Exception as e:
         logger.error(f"Error getting agent status: {e}", exc_info=True)
-        return AgentStatusResponse(state=BotState.ERROR, error_message=str(e))
+        # Return error status with all required fields
+        error_unified_status = UnifiedAgentStatus.ERROR
+        return AgentStatusResponse(
+            state=BotState.ERROR,
+            agent_ooda_state=None,
+            unified_status=error_unified_status,
+            status_description=AgentStateMapper.get_status_description(error_unified_status),
+            is_operational=False,
+            error_message=str(e)
+        )
 
 
 @bot_control_router.get("/status", response_model=AgentStatusResponse)
