@@ -278,12 +278,13 @@ async def _start_agent_from_request(
 
     logger.info("✅ Trading agent started successfully")
 
-    unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, _agent_instance.state if _agent_instance else None)
+    agent_state = _agent_instance.state if _agent_instance and hasattr(_agent_instance, "state") else None
+    unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, agent_state)
     status_description = AgentStateMapper.get_status_description(unified_status)
     is_operational = AgentStateMapper.is_operational(unified_status)
     return AgentStatusResponse(
         state=BotState.RUNNING,
-        agent_ooda_state=(_agent_instance.state.name if _agent_instance else None),
+        agent_ooda_state=(agent_state.name if agent_state else None),
         unified_status=unified_status,
         status_description=status_description,
         is_operational=is_operational,

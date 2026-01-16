@@ -49,6 +49,7 @@ def test_ready_status():
     assert AgentStateMapper.can_accept_commands(status)
 
 
+
 @pytest.mark.parametrize(
     "agent_state",
     [
@@ -66,25 +67,36 @@ def test_active_status(agent_state):
     )
     assert status == UnifiedAgentStatus.ACTIVE
     assert AgentStateMapper.is_operational(status)
+    # Assert can_accept_commands for ACTIVE
+    assert AgentStateMapper.can_accept_commands(status) is True
 
 
-def test_error_status():
-    """Test ERROR status takes precedence for all AgentState values."""
-    for agent_state in [
+
+@pytest.mark.parametrize(
+    "agent_state",
+    [
         None,
         AgentState.IDLE,
         AgentState.EXECUTION,
         AgentState.PERCEPTION,
-    ]:
-        status = AgentStateMapper.get_unified_status(
-            BotState.ERROR, agent_state
-        )
-        assert status == UnifiedAgentStatus.ERROR
-        assert not AgentStateMapper.is_operational(status)
+        AgentState.REASONING,
+        AgentState.RISK_CHECK,
+        AgentState.LEARNING,
+        AgentState.RECOVERING,
+    ]
+)
+def test_error_status(agent_state):
+    """Test ERROR status takes precedence for all AgentState values."""
+    status = AgentStateMapper.get_unified_status(
+        BotState.ERROR, agent_state
+    )
+    assert status == UnifiedAgentStatus.ERROR
+    assert not AgentStateMapper.is_operational(status)
+
 
 
 def test_status_descriptions():
-    """Test human-readable descriptions for all UnifiedAgentStatus values."""
+    """Test human-readable descriptions for all UnifiedAgentStatus values, including TRANSITIONING."""
     desc = AgentStateMapper.get_status_description(UnifiedAgentStatus.INITIALIZING)
     assert "initializing" in desc.lower()
     assert "positions" in desc.lower()
@@ -100,3 +112,7 @@ def test_status_descriptions():
 
     desc = AgentStateMapper.get_status_description(UnifiedAgentStatus.ERROR)
     assert any(kw in desc.lower() for kw in ["error", "failed", "failure"])
+
+    # Add coverage for TRANSITIONING
+    desc = AgentStateMapper.get_status_description(UnifiedAgentStatus.TRANSITIONING)
+    assert any(kw in desc.lower() for kw in ["transition", "transitioning", "starting", "switching"])
