@@ -59,6 +59,18 @@ def mock_trade_monitor():
     monitor.get_active_trades = Mock(return_value=[])
     monitor.get_closed_trades = Mock(return_value=[])
     monitor.start = Mock()
+
+    # Mock monitoring context provider for data freshness validation
+    monitor.monitoring_context_provider = Mock()
+    monitor.monitoring_context_provider.get_monitoring_context = Mock(
+        return_value={
+            "latest_market_data_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "asset_type": "crypto",
+            "timeframe": "intraday",
+            "market_status": {"is_open": True, "session": "Regular"},
+            "unrealized_pnl_percent": 0.0,
+        }
+    )
     return monitor
 
 
@@ -555,6 +567,10 @@ class TestKillSwitchProtection:
         # Mock large drawdown via monitoring context (30% loss, limit is 20%)
         mock_context_provider = Mock()
         mock_context_provider.get_monitoring_context.return_value = {
+            "latest_market_data_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "asset_type": "crypto",
+            "timeframe": "intraday",
+            "market_status": {"is_open": True, "session": "Regular"},
             "unrealized_pnl_percent": -30.0  # 30% loss exceeds 20% limit
         }
         mock_trade_monitor.monitoring_context_provider = mock_context_provider
