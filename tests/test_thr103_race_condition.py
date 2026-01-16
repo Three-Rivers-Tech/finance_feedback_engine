@@ -87,6 +87,7 @@ async def test_concurrent_read_write_no_corruption(mock_agent):
                     # Verify list is not corrupted
                     if count > 0:
                         # Try to access first element
+                        _ = mock_agent._current_decisions[0]
             except (IndexError, RuntimeError) as e:
                 corruption_detected = True
                 # Error details will be shown in the assertion message

@@ -1,5 +1,6 @@
 # tests/test_trading_loop_agent.py
 
+import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -23,7 +24,13 @@ def mock_dependencies():
 
     trade_monitor = MagicMock()
     trade_monitor.monitoring_context_provider = MagicMock()
-    trade_monitor.monitoring_context_provider.get_monitoring_context.return_value = {}
+    trade_monitor.monitoring_context_provider.get_monitoring_context.return_value = {
+        "latest_market_data_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "asset_type": "crypto",
+        "timeframe": "intraday",
+        "market_status": {"is_open": True, "session": "Regular"},
+        "unrealized_pnl_percent": 0.0,
+    }
 
     portfolio_memory = MagicMock()
     trading_platform = MagicMock()
