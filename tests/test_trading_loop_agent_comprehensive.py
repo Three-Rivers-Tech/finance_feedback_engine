@@ -564,16 +564,9 @@ class TestKillSwitchProtection:
             trading_platform=mock_trading_platform,
         )
 
-        # Mock large drawdown via monitoring context (30% loss, limit is 20%)
-        mock_context_provider = Mock()
-        mock_context_provider.get_monitoring_context.return_value = {
-            "latest_market_data_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "asset_type": "crypto",
-            "timeframe": "intraday",
-            "market_status": {"is_open": True, "session": "Regular"},
-            "unrealized_pnl_percent": -30.0  # 30% loss exceeds 20% limit
-        }
-        mock_trade_monitor.monitoring_context_provider = mock_context_provider
+        # Reuse the fixture's monitoring context and update only unrealized_pnl_percent
+        context = mock_trade_monitor.monitoring_context_provider.get_monitoring_context.return_value
+        context["unrealized_pnl_percent"] = -30.0  # 30% loss exceeds 20% limit
 
         agent.state = AgentState.PERCEPTION
         agent.is_running = True
