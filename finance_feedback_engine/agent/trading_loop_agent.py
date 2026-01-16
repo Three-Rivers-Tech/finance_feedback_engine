@@ -25,6 +25,7 @@ from finance_feedback_engine.risk.exposure_reservation import get_exposure_manag
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
 from finance_feedback_engine.utils.environment import is_development, is_production
+from finance_feedback_engine.utils import validate_data_freshness
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -1215,6 +1216,30 @@ class TradingLoopAgent:
         logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
         logger.info("=" * 80)
 
+        # --- Data Freshness Validation ---
+        # Fetch monitoring context and cache for reuse throughout PERCEPTION state
+        market_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+        data_timestamp = market_context.get("latest_market_data_timestamp")
+        asset_type = market_context.get("asset_type", "crypto")
+        timeframe = market_context.get("timeframe", "intraday")
+        market_status = market_context.get("market_status")
+        is_fresh, age_str, warning_msg = validate_data_freshness(
+            data_timestamp=data_timestamp,
+            asset_type=asset_type,
+            timeframe=timeframe,
+            market_status=market_status,
+        )
+        if not is_fresh:
+            logger.error("DATA FRESHNESS CHECK FAILED: %s (age: %s)", warning_msg, age_str)
+            self._emit_dashboard_event({
+                "type": "data_freshness_failed",
+                "reason": warning_msg,
+                "age": age_str,
+                "timestamp": time.time(),
+            })
+            # Optionally halt or retry, here we halt transition for safety
+            return
+
         # --- Cleanup rejected decisions cache (prevent memory leak) ---
         self._cleanup_rejected_cache()
 
@@ -1224,24 +1249,24 @@ class TradingLoopAgent:
             and self.config.kill_switch_loss_pct > 0
         ):
             try:
-                # Assuming get_monitoring_context() without args gives portfolio overview
-                portfolio_context = (
-                    self.trade_monitor.monitoring_context_provider.get_monitoring_context()
-                )
+                # Reuse cached monitoring context from data freshness check
                 # Assuming the context contains 'unrealized_pnl_percent'
-                portfolio_pnl_pct = portfolio_context.get("unrealized_pnl_percent", 0.0)
+                portfolio_pnl_pct = market_context.get("unrealized_pnl_percent", 0.0)
 
                 if portfolio_pnl_pct < -self.config.kill_switch_loss_pct:
                     logger.critical(
-                        f"PORTFOLIO KILL SWITCH TRIGGERED! "
-                        f"Current P&L ({portfolio_pnl_pct:.2f}%) has breached the threshold "
-                        f"(-{self.config.kill_switch_loss_pct:.2f}%). Stopping agent."
+                        "PORTFOLIO KILL SWITCH TRIGGERED! "
+                        "Current P&L (%s%%) has breached the threshold "
+                        "(-%s%%). Stopping agent.",
+                        portfolio_pnl_pct,
+                        self.config.kill_switch_loss_pct,
                     )
                     self.stop()
                     return  # Halt immediately
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 logger.error(
-                    f"Could not check portfolio kill switch due to an error: {e}",
+                    "Could not check portfolio kill switch due to an error: %s",
+                    e,
                     exc_info=True,
                 )
 
@@ -1251,8 +1276,9 @@ class TradingLoopAgent:
         current_streak = self._performance_metrics["current_streak"]
         if current_streak < -5:  # 6 or more consecutive losses
             logger.critical(
-                f"PERFORMANCE KILL SWITCH TRIGGERED! "
-                f"{abs(current_streak)} consecutive losses. Stopping agent."
+                "PERFORMANCE KILL SWITCH TRIGGERED! "
+                "%d consecutive losses. Stopping agent.",
+                abs(current_streak)
             )
             self.stop()
             return
@@ -1262,8 +1288,9 @@ class TradingLoopAgent:
             win_rate = self._performance_metrics["win_rate"]
             if win_rate < 25:  # Less than 25% win rate with sufficient history
                 logger.critical(
-                    f"PERFORMANCE KILL SWITCH TRIGGERED! "
-                    f"Win rate ({win_rate:.1f}%) is critically low. Stopping agent."
+                    "PERFORMANCE KILL SWITCH TRIGGERED! "
+                    "Win rate (%.1f%%) is critically low. Stopping agent.",
+                    win_rate
                 )
                 self.stop()
                 return
@@ -1280,8 +1307,9 @@ class TradingLoopAgent:
                 total_pnl < -balance_threshold
             ):  # Lost more than 15% of reference balance
                 logger.critical(
-                    f"PERFORMANCE KILL SWITCH TRIGGERED! "
-                    f"Total loss of ${abs(total_pnl):.2f} exceeds 15% of reference balance. Stopping agent."
+                    "PERFORMANCE KILL SWITCH TRIGGERED! "
+                    "Total loss of $%.2f exceeds 15%% of reference balance. Stopping agent.",
+                    abs(total_pnl)
                 )
                 self.stop()
                 return
@@ -1290,7 +1318,7 @@ class TradingLoopAgent:
         today = datetime.date.today()
         if today > self.last_trade_date:
             logger.info(
-                f"New day detected. Resetting daily trade count from {self.daily_trade_count} to 0."
+                "New day detected. Resetting daily trade count from %d to 0.", self.daily_trade_count
             )
             self.daily_trade_count = 0
             self.last_trade_date = today
@@ -1303,31 +1331,6 @@ class TradingLoopAgent:
         # The trade_monitor runs in a separate process, so we don't need to switch
         # to a monitoring state here. The DecisionEngine will get the monitoring
         # context and be aware of open positions.
-
-        # --- Data Freshness Validation ---
-        from finance_feedback_engine.utils import validate_data_freshness
-        # Example: get latest market data timestamp, asset type, and timeframe
-        market_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
-        data_timestamp = market_context.get("latest_market_data_timestamp")
-        asset_type = market_context.get("asset_type", "crypto")
-        timeframe = market_context.get("timeframe", "intraday")
-        market_status = market_context.get("market_status")
-        is_fresh, age_str, warning_msg = validate_data_freshness(
-            data_timestamp=data_timestamp,
-            asset_type=asset_type,
-            timeframe=timeframe,
-            market_status=market_status,
-        )
-        if not is_fresh:
-            logger.error(f"DATA FRESHNESS CHECK FAILED: {warning_msg} (age: {age_str})")
-            self._emit_dashboard_event({
-                "type": "data_freshness_failed",
-                "reason": warning_msg,
-                "age": age_str,
-                "timestamp": time.time(),
-            })
-            # Optionally halt or retry, here we halt transition for safety
-            return
 
         # Transition to reasoning after gathering market data
         await self._transition_to(AgentState.REASONING)
@@ -1342,7 +1345,7 @@ class TradingLoopAgent:
 
         # Guard against empty or missing core pairs (with lock protection)
         async with self._asset_pairs_lock:
-            core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
+            core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "EURUSD"])
             if not self.config.asset_pairs:
                 logger.error(
                     "CRITICAL: No asset pairs configured! Restoring core pairs."
@@ -1353,14 +1356,15 @@ class TradingLoopAgent:
             missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
             if missing_core_pairs:
                 logger.warning(
-                    f"Core pairs missing from asset_pairs: {missing_core_pairs}. Restoring them."
+                    "Core pairs missing from asset_pairs: %s. Restoring them.",
+                    missing_core_pairs
                 )
                 self.config.asset_pairs.extend(missing_core_pairs)
 
             # Create a snapshot copy for iteration (prevents race conditions)
             asset_pairs_snapshot = list(self.config.asset_pairs)
 
-        logger.info(f"Analyzing {len(asset_pairs_snapshot)} pairs: {asset_pairs_snapshot}")
+        logger.info("Analyzing %d pairs: %s", len(asset_pairs_snapshot), asset_pairs_snapshot)
 
         MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
 
@@ -1384,7 +1388,7 @@ class TradingLoopAgent:
                 > self.config.reasoning_failure_decay_seconds
             ):
                 logger.info(
-                    f"Resetting analysis_failures for {key} due to time-based decay."
+                    "Resetting analysis_failures for %s due to time-based decay.", key
                 )
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
@@ -1395,7 +1399,7 @@ class TradingLoopAgent:
                     "Daily trade limit reached; skipping analysis for remaining pairs."
                 )
                 break
-            logger.info(f">>> Starting analysis for {asset_pair}")
+            logger.info(">>> Starting analysis for %s", asset_pair)
             failure_key = f"analysis:{asset_pair}"
 
             # --- Check if asset was recently rejected ---
@@ -1403,7 +1407,7 @@ class TradingLoopAgent:
             for timestamp, cached_asset_pair in self._rejected_decisions_cache.values():
                 if asset_pair == cached_asset_pair:
                     logger.info(
-                        f"Skipping analysis for {asset_pair}: recently rejected. Cooldown active."
+                        "Skipping analysis for %s: recently rejected. Cooldown active.", asset_pair
                     )
                     asset_rejected = True
                     break
@@ -1412,7 +1416,8 @@ class TradingLoopAgent:
 
             if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
                 logger.warning(
-                    f"Skipping analysis for {asset_pair} due to repeated failures (will reset after decay or daily reset)."
+                    "Skipping analysis for %s due to repeated failures (will reset after decay or daily reset).",
+                    asset_pair
                 )
                 continue
 
