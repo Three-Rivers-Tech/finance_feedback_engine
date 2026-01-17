@@ -76,16 +76,42 @@ class KellyCriterionCalculator:
             Optimal Kelly fraction (0.0 to 1.0)
         """
         if payoff_ratio is None:
+            # Validate avg_win first
+            if avg_win <= 0:
+                logger.error(
+                    "Invalid avg_win=%s (<= 0). "
+                    "This indicates no winning trades or invalid parameters. "
+                    "Returning 0 to signal no trade.", avg_win
+                )
+                return 0.0  # Return 0 to signal "don't trade"
+
+            if avg_loss < 0:
+                logger.error(
+                    "Invalid avg_loss=%s (< 0). "
+                    "avg_loss should be a positive value. "
+                    "Returning 0 to signal no trade.", avg_loss
+                )
+                return 0.0
+
             if avg_loss == 0:
                 logger.warning("Average loss is zero, using large payoff ratio")
                 payoff_ratio = 10.0  # Large number to avoid division by zero
             else:
                 payoff_ratio = avg_win / avg_loss
 
+        # Validate payoff_ratio (whether calculated or explicitly provided)
+        if payoff_ratio <= 0:
+            logger.error(
+                "Invalid payoff_ratio=%s (<= 0). "
+                "This indicates avg_win <= 0 or invalid parameters. "
+                "Returning 0 to signal no trade.", payoff_ratio
+            )
+            return 0.0  # Return 0 to signal "don't trade"
+
         # Validate inputs
         if not (0 <= win_rate <= 1):
             logger.warning(
-                f"Win rate {win_rate} is outside valid range [0, 1], clipping to range"
+                "Win rate %s is outside valid range [0, 1], clipping to range", win_rate
             )
             win_rate = np.clip(win_rate, 0, 1)
 
@@ -94,14 +120,21 @@ class KellyCriterionCalculator:
         p = win_rate
         q = 1 - p
 
+        if b == 0:
+            logger.critical(
+                "Payoff ratio (b) is zero - this should have been caught earlier! "
+                "Returning 0 to prevent division by zero."
+            )
+            return 0.0  # Return 0 to signal "don't trade"
+
         # Apply Kelly Criterion formula
         kelly_fraction = (b * p - q) / b
 
         # If Kelly is negative or zero, it means -EV or break-even trade - don't trade
         if kelly_fraction <= 0:
             logger.info(
-                f"Kelly fraction ({kelly_fraction:.4f}) indicates -EV or break-even trade, "
-                f"returning 0 to signal no trade"
+                "Kelly fraction (%.4f) indicates -EV or break-even trade, "
+                "returning 0 to signal no trade", kelly_fraction
             )
             return 0.0  # Return 0 to signal "don't trade" (not forced minimum)
 
