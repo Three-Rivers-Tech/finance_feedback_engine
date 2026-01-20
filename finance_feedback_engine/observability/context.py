@@ -2,17 +2,70 @@
 
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable, TypeVar
+from functools import wraps
+from concurrent.futures import Future, ThreadPoolExecutor
+import contextvars
 
 from opentelemetry import trace
+from opentelemetry import context as otel_context
 from opentelemetry.trace import TraceFlags, Tracer
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 # Thread-local storage for correlation IDs (also used in logging_config.py)
 import threading
 
 _correlation_storage = threading.local()
+
+_correlation_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "correlation_id", default=None
+)
+
+
+def propagate_context(func: Callable[..., T]) -> Callable[..., T]:
+    """
+    Decorator that captures current OTel context and restores it in child thread.
+    Wrap callables submitted to ThreadPoolExecutor to ensure trace context propagation.
+
+    Args:
+        func: Callable to wrap
+
+    Returns:
+        Wrapped callable with context propagation
+    """
+    # Capture context at decoration time (when submit() is called)
+    ctx = otel_context.get_current()
+    correlation_id = _correlation_id_var.get()
+
+    @wraps(func)
+    def wrapper(*args, **kwargs) -> T:
+        # Restore context in child thread
+        token = otel_context.attach(ctx)
+        old_correlation_id = _correlation_id_var.set(correlation_id)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            _correlation_id_var.reset(old_correlation_id)
+            otel_context.detach(token)
+    return wrapper
+
+
+class ContextPropagatingExecutor:
+    """ThreadPoolExecutor wrapper that automatically propagates OTel context."""
+
+    def __init__(self, executor: ThreadPoolExecutor):
+        self._executor = executor
+
+    def submit(self, fn: Callable[..., T], *args, **kwargs) -> Future[T]:
+        """Submit with automatic context propagation."""
+        wrapped: Callable[..., T] = propagate_context(lambda: fn(*args, **kwargs))
+        return self._executor.submit(wrapped)
+
+    def __getattr__(self, name):
+        return getattr(self._executor, name)
 
 
 class OTelContextFilter(logging.Filter):
@@ -44,8 +97,8 @@ def with_span(
     tracer: Tracer,
     span_name: str,
     attributes: Optional[Dict[str, Any]] = None,
-    **context_kwargs,
-):
+    **context_kwargs: Any,
+) -> Any:
     """
     Context manager to create and record a span with standard attributes.
 
@@ -65,14 +118,6 @@ def with_span(
     attrs.update(context_kwargs)
 
     return tracer.start_as_current_span(span_name, attributes=attrs)
-
-
-import contextvars
-from typing import Any, Dict, Optional
-
-_correlation_id_var: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
-    "correlation_id", default=None
-)
 
 
 def set_correlation_id(correlation_id: str) -> None:

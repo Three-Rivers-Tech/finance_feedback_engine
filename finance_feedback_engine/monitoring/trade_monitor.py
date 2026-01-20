@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from .metrics_collector import TradeMetricsCollector
 from .trade_tracker import TradeTrackerThread
+from finance_feedback_engine.observability.context import ContextPropagatingExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +38,19 @@ class TradeMonitor:
 
     def __init__(
         self,
-        platform,
+        platform: Any = None,  # TradingPlatform instance
         metrics_collector: Optional[TradeMetricsCollector] = None,
-        portfolio_memory=None,  # PortfolioMemoryEngine instance
+        portfolio_memory: Any = None,  # PortfolioMemoryEngine instance
         detection_interval: int = 30,  # seconds between scans
         poll_interval: int = 30,  # seconds between position updates
         portfolio_initial_balance: float = 0.0,
         portfolio_stop_loss_percentage: float = 0.0,
         portfolio_take_profit_percentage: float = 0.0,
-        monitoring_context_provider=None,  # Optionally pass a pre-initialized provider
-        orchestrator=None,  # Orchestrator instance for control signals
+        monitoring_context_provider: Optional[Any] = None,  # Optionally pass a pre-initialized provider
+        orchestrator: Optional[Any] = None,  # Orchestrator instance for control signals
         # --- Multi-timeframe market pulse configuration ---
-        unified_data_provider=None,  # Instance of UnifiedDataProvider (optional)
-        timeframe_aggregator=None,  # Instance of TimeframeAggregator (optional)
+        unified_data_provider: Optional[Any] = None,  # Instance of UnifiedDataProvider (optional)
+        timeframe_aggregator: Optional[Any] = None,  # Instance of TimeframeAggregator (optional)
         pulse_interval: int = 300,  # 5-minute pulse for multi-timeframe updates
     ):
         """
@@ -86,16 +87,17 @@ class TradeMonitor:
             )
 
         # Thread management
-        self.executor = ThreadPoolExecutor(
+        self._raw_executor = ThreadPoolExecutor(
             max_workers=self.MAX_CONCURRENT_TRADES, thread_name_prefix="TradeMonitor"
         )
+        self.executor = ContextPropagatingExecutor(self._raw_executor)
 
         # State tracking
         self.active_trackers: Dict[str, TradeTrackerThread] = {}
         self._executor_shutdown = False  # Track executor shutdown state
         self.tracked_trade_ids: Set[str] = set()
-        self.pending_queue: Queue = Queue()
-        self.closed_trades_queue: Queue = Queue()  # For agent to consume
+        self.pending_queue: Queue[Dict[str, Any]] = Queue()
+        self.closed_trades_queue: Queue[Dict[str, Any]] = Queue()  # For agent to consume
         self.expected_trades: Dict[str, tuple[str, float]] = (
             {}
         )  # Maps asset_pair -> (decision_id, timestamp)
@@ -118,20 +120,22 @@ class TradeMonitor:
         self._multi_timeframe_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
 
         logger.info(
-            f"TradeMonitor initialized | Max concurrent: {self.MAX_CONCURRENT_TRADES} | "
-            f"Detection interval: {detection_interval}s | Pulse interval: {pulse_interval}s"
+            "TradeMonitor initialized | Max concurrent: %d | Detection interval: %ds | Pulse interval: %ds",
+            self.MAX_CONCURRENT_TRADES,
+            detection_interval,
+            pulse_interval,
         )
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Cleanup resources on garbage collection."""
         try:
-            if not self._executor_shutdown and self.executor:
-                self.executor.shutdown(wait=True, cancel_futures=True)
+            if hasattr(self, '_executor_shutdown') and not self._executor_shutdown and hasattr(self, '_raw_executor') and self._raw_executor:
+                self._raw_executor.shutdown(wait=True, cancel_futures=True)
                 self._executor_shutdown = True
         except Exception:
             pass  # Silence errors during GC
 
-    def start(self):
+    def start(self) -> None:
         """Start the trade monitoring system."""
         if self._running:
             logger.warning("TradeMonitor already running")
@@ -186,13 +190,14 @@ class TradeMonitor:
                 return False
 
         # Shutdown executor
-        self.executor.shutdown(wait=True, cancel_futures=True)
+        self._raw_executor.shutdown(wait=True, cancel_futures=True)
+        self._executor_shutdown = True
 
         self._running = False
         logger.info("TradeMonitor stopped")
         return True
 
-    def _monitoring_loop(self):
+    def _monitoring_loop(self) -> None:
         """Main monitoring loop - detects new trades and manages trackers."""
         logger.info("Main monitoring loop started")
 
@@ -462,7 +467,7 @@ class TradeMonitor:
             except Exception:
                 pass
 
-    def _process_pending_trades(self):
+    def _process_pending_trades(self) -> None:
         """Start tracking pending trades if slots available."""
         while len(self.active_trackers) < self.MAX_CONCURRENT_TRADES:
             try:
@@ -487,10 +492,12 @@ class TradeMonitor:
                 self.executor.submit(tracker.run)
 
                 self.active_trackers[trade_id] = tracker
-
                 logger.info(
-                    f"✅ Started tracking trade: {trade_id} | "
-                    f"Active trackers: {len(self.active_trackers)}/{self.MAX_CONCURRENT_TRADES}"
+                    "✅ Started tracking trade: %s | "
+                    "Active trackers: %d/%d",
+                    trade_id,
+                    len(self.active_trackers),
+                    self.MAX_CONCURRENT_TRADES,
                 )
 
                 # Update aggregated active trades gauge (low cardinality)
@@ -507,9 +514,9 @@ class TradeMonitor:
                 # No pending trades
                 break
             except Exception as e:
-                logger.error(f"Error starting trade tracker: {e}", exc_info=True)
+                logger.error("Error starting trade tracker: %s", e, exc_info=True)
 
-    def _on_trade_completed(self, metrics: Dict[str, Any]):
+    def _on_trade_completed(self, metrics: Dict[str, Any]) -> None:
         """
         Callback when trade tracking completes. This is part of the FEEDBACK loop.
 
@@ -519,9 +526,12 @@ class TradeMonitor:
         trade_id = metrics.get("trade_id", "unknown")
 
         logger.info(
-            f"📊 Trade completed: {trade_id} | "
-            f"PnL: ${metrics.get('realized_pnl', 0):.2f} | "
-            f"Duration: {metrics.get('holding_duration_hours', 0):.2f}h"
+            "📊 Trade completed: %s | "
+            "PnL: $%.2f | "
+            "Duration: %.2fh",
+            trade_id,
+            metrics.get("realized_pnl", 0),
+            metrics.get("holding_duration_hours", 0),
         )
 
         # Record metrics for long-term analysis
