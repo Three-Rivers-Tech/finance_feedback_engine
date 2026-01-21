@@ -1373,6 +1373,9 @@ class TradingLoopAgent:
             portfolio = await asyncio.get_event_loop().run_in_executor(None, get_portfolio)
         except Exception as e:
             logger.error("Failed to retrieve portfolio after retries: %s", e)
+            tracker = getattr(self.engine, "error_tracker", None)
+            if tracker:
+                tracker.capture_error(e, context={"phase": "mtm_portfolio_retrieval", "cycle_id": getattr(self, "_current_cycle_id", None)})
             return
 
         futures_positions = portfolio.get("futures_positions", [])
