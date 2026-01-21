@@ -1363,7 +1363,9 @@ class TradingLoopAgent:
         - Kill switch triggers
         - Risk metric calculations
         """
-        # Retry-wrapped portfolio retrieval
+        from finance_feedback_engine.utils.retry import async_exponential_backoff_retry
+        from finance_feedback_engine.monitoring.error_tracking import ErrorTracker
+
         retry_cfg = RetryConfig.get_config("API_CALL")
         @exponential_backoff_retry(**retry_cfg)
         def get_portfolio():
@@ -1374,8 +1376,8 @@ class TradingLoopAgent:
         except Exception as e:
             logger.error("Failed to retrieve portfolio after retries: %s", e)
             tracker = getattr(self.engine, "error_tracker", None)
-            if tracker:
-                tracker.capture_error(e, context={"phase": "mtm_portfolio_retrieval", "cycle_id": getattr(self, "_current_cycle_id", None)})
+            if tracker and hasattr(tracker, "capture_exception"):
+                tracker.capture_exception(e, context={"phase": "mtm_portfolio_retrieval", "cycle_id": getattr(self, "_current_cycle_id", None)})
             return
 
         futures_positions = portfolio.get("futures_positions", [])
@@ -1384,15 +1386,11 @@ class TradingLoopAgent:
 
         price_updates: Dict[str, float] = {}
 
-        # Retry-wrapped price fetcher
         price_retry_cfg = RetryConfig.get_config("API_CALL")
-        def sync_fetch_price(asset_pair):
-            # Synchronous wrapper for async price fetch
-            return asyncio.get_event_loop().run_until_complete(self._fetch_current_price(asset_pair))
 
-        @exponential_backoff_retry(**price_retry_cfg)
-        def get_price(asset_pair):
-            return sync_fetch_price(asset_pair)
+        @async_exponential_backoff_retry(**price_retry_cfg)
+        async def get_price_async(asset_pair):
+            return await self._fetch_current_price(asset_pair)
 
         for pos in futures_positions:
             asset_pair = pos.get("product_id") or pos.get("instrument")
@@ -1404,16 +1402,26 @@ class TradingLoopAgent:
                 logger.debug("Invalid asset pair %s: %s", asset_pair, e)
                 continue
             try:
-                # Use retry-wrapped price fetch
-                current_price = get_price(normalized_pair)
+                current_price = await get_price_async(normalized_pair)
                 if current_price and current_price > 0:
                     price_updates[normalized_pair] = current_price
             except Exception as e:
                 logger.debug("Could not fetch price for %s: %s", normalized_pair, e)
 
         if price_updates and hasattr(self.trading_platform, "update_position_prices"):
-            self.trading_platform.update_position_prices(price_updates)
-            logger.info("Updated MTM prices for %d positions", len(price_updates))
+            # Wrap update_position_prices in retry and error capture
+            update_retry_cfg = RetryConfig.get_config("API_CALL")
+            @exponential_backoff_retry(**update_retry_cfg)
+            def update_prices():
+                return self.trading_platform.update_position_prices(price_updates)
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, update_prices)
+                logger.info("Updated MTM prices for %d positions", len(price_updates))
+            except Exception as e:
+                logger.error("Failed to update position prices after retries: %s", e)
+                tracker = getattr(self.engine, "error_tracker", None)
+                if tracker and hasattr(tracker, "capture_exception"):
+                    tracker.capture_exception(e, context={"phase": "mtm_update_position_prices", "cycle_id": getattr(self, "_current_cycle_id", None)})
 
     async def _fetch_current_price(self, asset_pair: str) -> Optional[float]:
         """
@@ -1422,26 +1430,30 @@ class TradingLoopAgent:
         Returns:
             Current Price or None if unavailable.
         """
-        # Use the existing market data provider
+        from finance_feedback_engine.utils.retry import async_exponential_backoff_retry
+        retry_cfg = RetryConfig.get_config("API_CALL")
+        # Option 1: Use monitoring context if available, with retry
+        @async_exponential_backoff_retry(**retry_cfg)
+        async def get_monitoring_context():
+            return self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
         try:
-            # Option 1: Use monitoring context if available
-            context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
-                asset_pair=asset_pair
-            )
+            context = await get_monitoring_context()
             latest_price = context.get("latest_price") or context.get("current_price")
             if latest_price:
                 return float(latest_price)
-
-            # Option 2: Fetch from data provider directly
-            if hasattr(self.engine, "data_provider"):
-                from finance_feedback_engine.utils.retry import with_async_retry
-                price_data = await with_async_retry(
-                    self.engine.data_provider.get_latest_price)(asset_pair)
-                return float(price_data.get("price", 0))
-
         except Exception as e:
-            logger.debug("Error fetching current price for %s: %s", asset_pair, e)
+            logger.debug("Error fetching monitoring context for %s: %s", asset_pair, e)
 
+        # Option 2: Fetch from data provider directly, with retry
+        if hasattr(self.engine, "data_provider"):
+            @async_exponential_backoff_retry(**retry_cfg)
+            async def get_price():
+                return await self.engine.data_provider.get_latest_price(asset_pair)
+            try:
+                price_data = await get_price()
+                return float(price_data.get("price", 0))
+            except Exception as e:
+                logger.debug("Error fetching price from data provider for %s: %s", asset_pair, e)
         return None
 
     async def handle_reasoning_state(self) -> None:

@@ -317,13 +317,14 @@ class BaseTradingPlatform(ABC):
 
         Args:
             price_updates: Mapping of asset_pair -> current_market_price
+                Asset pairs must be normalized using standardize_asset_pair().
         """
         # Default no-op: real platforms fetch live prices from API
         pass
 
-    async def aupdate_position_prices(self, price_updates: Dict[str, float]) -> Any:
+    async def aupdate_position_prices(self, price_updates: Dict[str, float]) -> None:
         """Async adapter for update_position_prices."""
-        return await self._run_async(self.update_position_prices, price_updates)
+        await self._run_async(self.update_position_prices, price_updates)
 
     @abstractmethod
     def test_connection(self) -> Dict[str, bool]:
