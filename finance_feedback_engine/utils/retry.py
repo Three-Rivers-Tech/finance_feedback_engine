@@ -1,3 +1,59 @@
+import asyncio
+def _get_delay(attempt, base_delay, exponential_base, max_delay, jitter):
+    delay = min(base_delay * (exponential_base ** attempt), max_delay)
+    if jitter:
+        delay += random.uniform(0, delay * 0.1)
+    return delay
+
+def async_exponential_backoff_retry(
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 60.0,
+    exponential_base: float = 2.0,
+    jitter: bool = True,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+):
+    """
+    Async retry decorator with exponential backoff and jitter.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay in seconds
+        max_delay: Maximum delay cap in seconds
+        exponential_base: Base for exponential calculation (default: 2)
+        jitter: Add random jitter to prevent synchronized retries
+        exceptions: Tuple of exception types to catch and retry
+
+    Returns:
+        Decorated async function with retry logic
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            last_exception = None
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt == max_retries:
+                        logger.error(
+                            f"Max retries ({max_retries}) exceeded for "
+                            f"{func.__name__}: {e}"
+                        )
+                        raise
+                    delay = _get_delay(attempt, base_delay, exponential_base, max_delay, jitter)
+                    logger.warning(
+                        f"{func.__name__} failed "
+                        f"(attempt {attempt + 1}/{max_retries}), "
+                        f"retrying in {delay:.2f}s: "
+                        f"{type(e).__name__}: {str(e)}"
+                    )
+                    await asyncio.sleep(delay)
+            if last_exception:
+                raise last_exception
+        return wrapper
+    return decorator
 """Retry utilities with exponential backoff for API calls."""
 
 import logging
