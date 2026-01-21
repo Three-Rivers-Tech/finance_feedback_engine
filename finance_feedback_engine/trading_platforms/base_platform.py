@@ -306,6 +306,25 @@ class BaseTradingPlatform(ABC):
         """Async adapter for get_portfolio_breakdown."""
         return await self._run_async(self.get_portfolio_breakdown)
 
+    def update_position_prices(self, price_updates: Dict[str, float]) -> None:
+        """
+        Update current market prices for open positions (Mark-to-Market).
+
+        This enables accurate unrealized P&L calculation for risk management,
+        stop-loss triggers, and kill switches. Real platforms typically fetch
+        live prices on each portfolio query, so this defaults to a no-op.
+        Mock/backtest platforms should override this to update position prices.
+
+        Args:
+            price_updates: Mapping of asset_pair -> current_market_price
+        """
+        # Default no-op: real platforms fetch live prices from API
+        pass
+
+    async def aupdate_position_prices(self, price_updates: Dict[str, float]) -> Any:
+        """Async adapter for update_position_prices."""
+        return await self._run_async(self.update_position_prices, price_updates)
+
     @abstractmethod
     def test_connection(self) -> Dict[str, bool]:
         """

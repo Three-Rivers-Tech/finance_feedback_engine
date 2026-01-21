@@ -632,7 +632,7 @@ class MockTradingPlatform(BaseTradingPlatform):
 
         return {"positions": positions}
 
-    def update_position_prices(self, price_updates: Dict[str, float]):
+    def update_position_prices(self, price_updates: Dict[str, float]) -> None:
         """
         Update current prices for positions (useful for backtesting).
 

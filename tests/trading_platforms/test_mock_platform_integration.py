@@ -297,3 +297,173 @@ class TestMockPlatformIntegration:
         # Should have 2 positions
         positions = platform.get_positions()
         assert len(positions) == 2
+
+
+    def test_mtm_updates_unrealized_pnl(self):
+        """Test that mark-to-market updates correctly reflect unrealized P&L.
+
+        THR-89: Verifies that update_position_prices() properly updates
+        unrealized P&L for risk management calculations.
+        """
+        platform = MockTradingPlatform(
+            initial_balance={"FUTURES_USD": 10000.0}
+        )
+
+        # Open a position at $50,000
+        buy_decision = {
+            "id": "mtm-test-001",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 5000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        result = platform.execute_trade(buy_decision)
+        assert result["success"] is True
+
+        # Initial unrealized P&L should be near zero (only slippage/fees)
+        portfolio = platform.get_portfolio_breakdown()
+        initial_pnl = portfolio.get("unrealized_pnl", 0)
+
+        # Simulate 10% price increase
+        platform.update_position_prices({"BTC-USD": 55000.0})
+
+        # Unrealized P&L should now reflect the gain
+        portfolio_after = platform.get_portfolio_breakdown()
+        updated_pnl = portfolio_after.get("unrealized_pnl", 0)
+
+        # Should have significant positive P&L
+        assert updated_pnl > initial_pnl
+        assert updated_pnl > 0
+
+        # Verify position has correct current_price
+        btc_position = next(
+            p for p in portfolio_after["futures_positions"] if "BTC" in p["product_id"]
+        )
+        assert btc_position["current_price"] == 55000.0
+
+    def test_mtm_loss_scenario_for_stop_loss(self):
+        """Test MTM updates correctly show losses for stop-loss evaluation.
+
+        THR-89: Ensures unrealized P&L becomes negative when price drops,
+        enabling stop-loss triggers to work correctly.
+        """
+        platform = MockTradingPlatform(
+            initial_balance={"FUTURES_USD": 10000.0}
+        )
+
+        # Open a long position
+        buy_decision = {
+            "id": "stop-loss-test-001",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 5000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        result = platform.execute_trade(buy_decision)
+        assert result["success"] is True
+
+        # Simulate 15% price DROP (stop-loss territory)
+        platform.update_position_prices({"BTC-USD": 42500.0})
+
+        portfolio = platform.get_portfolio_breakdown()
+        unrealized_pnl = portfolio.get("unrealized_pnl", 0)
+
+        # Should have significant NEGATIVE P&L
+        assert unrealized_pnl < 0
+
+        # Verify position shows the loss
+        btc_position = next(
+            p for p in portfolio["futures_positions"] if "BTC" in p["product_id"]
+        )
+        assert btc_position["unrealized_pnl"] < 0
+        assert btc_position["current_price"] == 42500.0
+
+    def test_mtm_without_update_uses_stale_prices(self):
+        """Test that without MTM updates, unrealized P&L remains stale.
+
+        THR-89: Demonstrates the bug behavior before fix - without calling
+        update_position_prices(), the P&L doesn't reflect market changes.
+        """
+        platform = MockTradingPlatform(
+            initial_balance={"FUTURES_USD": 10000.0}
+        )
+
+        # Open a position
+        buy_decision = {
+            "id": "stale-test-001",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 5000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        platform.execute_trade(buy_decision)
+
+        # Get initial portfolio state
+        portfolio_before = platform.get_portfolio_breakdown()
+        pnl_before = portfolio_before.get("unrealized_pnl", 0)
+
+        # Without calling update_position_prices, the P&L should remain the same
+        # even if we call get_portfolio_breakdown multiple times
+        portfolio_after = platform.get_portfolio_breakdown()
+        pnl_after = portfolio_after.get("unrealized_pnl", 0)
+
+        # P&L should be the same (stale) without MTM update
+        assert abs(pnl_before - pnl_after) < 0.01
+
+    def test_mtm_multiple_positions(self):
+        """Test MTM updates work correctly with multiple positions.
+
+        THR-89: Verifies that update_position_prices can update
+        multiple positions simultaneously.
+        """
+        platform = MockTradingPlatform(
+            initial_balance={"FUTURES_USD": 20000.0}
+        )
+
+        # Open two positions
+        btc_decision = {
+            "id": "multi-001",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 5000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        eth_decision = {
+            "id": "multi-002",
+            "action": "BUY",
+            "asset_pair": "ETHUSD",
+            "suggested_amount": 3000.0,
+            "entry_price": 2500.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        platform.execute_trade(btc_decision)
+        platform.execute_trade(eth_decision)
+
+        # Update both prices: BTC +10%, ETH -5%
+        platform.update_position_prices({
+            "BTC-USD": 55000.0,  # +10%
+            "ETH-USD": 2375.0,   # -5%
+        })
+
+        portfolio = platform.get_portfolio_breakdown()
+
+        # Find positions
+        btc_pos = next(
+            p for p in portfolio["futures_positions"] if "BTC" in p["product_id"]
+        )
+        eth_pos = next(
+            p for p in portfolio["futures_positions"] if "ETH" in p["product_id"]
+        )
+
+        # BTC should have positive P&L
+        assert btc_pos["unrealized_pnl"] > 0
+        assert btc_pos["current_price"] == 55000.0
+
+        # ETH should have negative P&L
+        assert eth_pos["unrealized_pnl"] < 0
+        assert eth_pos["current_price"] == 2375.0
