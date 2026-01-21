@@ -301,7 +301,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                         realized_pnl = pnl
                         # Update balance with proceeds and realized P&L
                         self._balance["FUTURES_USD"] += (
-                            suggested_amount - fee_amount + realized_pnl
+                            suggested_amount - fee_amount
                         )
 
                         # Update position
