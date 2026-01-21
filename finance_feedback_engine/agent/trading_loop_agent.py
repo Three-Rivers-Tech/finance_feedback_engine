@@ -24,8 +24,11 @@ from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
+
 from finance_feedback_engine.utils.environment import is_development, is_production
 from finance_feedback_engine.utils import validate_data_freshness
+from finance_feedback_engine.utils.retry import exponential_backoff_retry, RetryConfig
+from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -1216,13 +1219,19 @@ class TradingLoopAgent:
         """
         await self._recover_existing_positions()
 
-    async def handle_perception_state(self):
-        """
-        PERCEPTION: Fetching market data, portfolio state, and performing safety checks.
-        """
+    async def handle_perception_state(self) -> None:
+        """PERCEPTION: Fetching market data, portfolio state, and performing safety checks."""
         logger.info("=" * 80)
         logger.info("State: PERCEPTION - Fetching data and performing safety checks...")
         logger.info("=" * 80)
+
+        try:
+            await self._update_position_mtm()
+        except Exception as e:
+            logger.warning("Failed to update position MTM: %s", e, exc_info=True)
+            tracker = getattr(self.engine, "error_tracker", None)
+            if tracker:
+                tracker.capture_error(e, context={"phase": "position_mtm_update", "cycle_id": self._current_cycle_id})
 
         # --- Data Freshness Validation ---
         # Fetch monitoring context and cache for reuse throughout PERCEPTION state
@@ -1343,7 +1352,96 @@ class TradingLoopAgent:
         # Transition to reasoning after gathering market data
         await self._transition_to(AgentState.REASONING)
 
-    async def handle_reasoning_state(self):
+
+
+    async def _update_position_mtm(self) -> None:
+        """
+        Mark-to-market: Update all open positions with current market prices.
+
+        This ensures unrealized P&L reflects actual market conditions for:
+        - Stop-loss/take-profit evaluation
+        - Kill switch triggers
+        - Risk metric calculations
+        """
+        # Retry-wrapped portfolio retrieval
+        retry_cfg = RetryConfig.get_config("API_CALL")
+        @exponential_backoff_retry(**retry_cfg)
+        def get_portfolio():
+            return self.engine.get_portfolio_breakdown()
+
+        try:
+            portfolio = await asyncio.get_event_loop().run_in_executor(None, get_portfolio)
+        except Exception as e:
+            logger.error("Failed to retrieve portfolio after retries: %s", e)
+            return
+
+        futures_positions = portfolio.get("futures_positions", [])
+        if not futures_positions:
+            return
+
+        price_updates: Dict[str, float] = {}
+
+        # Retry-wrapped price fetcher
+        price_retry_cfg = RetryConfig.get_config("API_CALL")
+        def sync_fetch_price(asset_pair):
+            # Synchronous wrapper for async price fetch
+            return asyncio.get_event_loop().run_until_complete(self._fetch_current_price(asset_pair))
+
+        @exponential_backoff_retry(**price_retry_cfg)
+        def get_price(asset_pair):
+            return sync_fetch_price(asset_pair)
+
+        for pos in futures_positions:
+            asset_pair = pos.get("product_id") or pos.get("instrument")
+            if not asset_pair:
+                continue
+            try:
+                normalized_pair = standardize_asset_pair(asset_pair)
+            except Exception as e:
+                logger.debug("Invalid asset pair %s: %s", asset_pair, e)
+                continue
+            try:
+                # Use retry-wrapped price fetch
+                current_price = get_price(normalized_pair)
+                if current_price and current_price > 0:
+                    price_updates[normalized_pair] = current_price
+            except Exception as e:
+                logger.debug("Could not fetch price for %s: %s", normalized_pair, e)
+
+        if price_updates and hasattr(self.trading_platform, "update_position_prices"):
+            self.trading_platform.update_position_prices(price_updates)
+            logger.info("Updated MTM prices for %d positions", len(price_updates))
+
+    async def _fetch_current_price(self, asset_pair: str) -> Optional[float]:
+        """
+        Fetch current market price for an asset pair.
+
+        Returns:
+            Current Price or None if unavailable.
+        """
+        # Use the existing market data provider
+        try:
+            # Option 1: Use monitoring context if available
+            context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
+                asset_pair=asset_pair
+            )
+            latest_price = context.get("latest_price") or context.get("current_price")
+            if latest_price:
+                return float(latest_price)
+
+            # Option 2: Fetch from data provider directly
+            if hasattr(self.engine, "data_provider"):
+                from finance_feedback_engine.utils.retry import with_async_retry
+                price_data = await with_async_retry(
+                    self.engine.data_provider.get_latest_price)(asset_pair)
+                return float(price_data.get("price", 0))
+
+        except Exception as e:
+            logger.debug("Error fetching current price for %s: %s", asset_pair, e)
+
+        return None
+
+    async def handle_reasoning_state(self) -> None:
         """
         REASONING: Running the DecisionEngine with retry logic for robustness.
         """
