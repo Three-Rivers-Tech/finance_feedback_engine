@@ -367,7 +367,7 @@ class TestContextPropagationIntegration:
 
         results = {}
 
-        def task_with_span(task_id):
+        def task_with_span(task_id) -> dict:
             current_span = trace.get_current_span()
             return {
                 "task_id": task_id,

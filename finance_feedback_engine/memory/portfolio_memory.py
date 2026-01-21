@@ -280,20 +280,38 @@ class PortfolioMemoryEngine:
         volatility = decision.get("volatility") or technical_data.get("volatility")
         price_trend = technical_data.get("price_trend")
 
+        # Extract transaction costs from decision (if available)
+        execution_result = decision.get("execution_result", {})
+
+        # Fee cost: check direct field first, then execution result
+        fee_cost = decision.get("fee_cost", 0) or execution_result.get("fee_amount", 0) or 0
+
+        # Slippage cost
+        slippage_cost = decision.get("slippage_cost", 0) or 0
+        if not slippage_cost and execution_result.get("slippage_pct"):
+            slippage_pct = execution_result.get("slippage_pct", 0)
+            notional_value = entry_price * position_size
+            slippage_cost = notional_value * abs(slippage_pct)
+
+        # Spread cost
+        spread_cost = decision.get("spread_cost", 0) or 0
+
+        # Total transaction cost
+        total_transaction_cost = fee_cost + slippage_cost + spread_cost
+
         # Calculate P&L
         if action == "BUY" or action == "LONG":
-            pnl = (exit_price - entry_price) * position_size
-            pnl_pct = (
-                (exit_price - entry_price) / entry_price * 100 if entry_price > 0 else 0
-            )
+            pnl = (exit_price - entry_price) * position_size - total_transaction_cost
+            position_value = entry_price * position_size
+            pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
         elif action == "SELL" or action == "SHORT":
-            pnl = (entry_price - exit_price) * position_size
-            pnl_pct = (
-                (entry_price - exit_price) / entry_price * 100 if entry_price > 0 else 0
-            )
+            pnl = (entry_price - exit_price) * position_size - total_transaction_cost
+            position_value = entry_price * position_size
+            pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
         else:  # HOLD
             pnl = 0
             pnl_pct = 0
+            position_value = 0
 
         # Calculate holding period
         exit_ts = exit_timestamp or datetime.utcnow().isoformat()
@@ -318,6 +336,13 @@ class PortfolioMemoryEngine:
             position_size=position_size,
             realized_pnl=pnl,
             pnl_percentage=pnl_pct,
+            slippage_cost=slippage_cost if slippage_cost else None,
+            fee_cost=fee_cost if fee_cost else None,
+            spread_cost=spread_cost if spread_cost else None,
+            total_transaction_cost=total_transaction_cost if total_transaction_cost else None,
+            cost_as_pct_of_position=(
+                (total_transaction_cost / position_value * 100) if position_value > 0 else None
+            ),
             holding_period_hours=holding_hours,
             ai_provider=ai_provider,
             ensemble_providers=ensemble_providers,
