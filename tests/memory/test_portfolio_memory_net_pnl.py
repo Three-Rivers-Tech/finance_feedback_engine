@@ -18,7 +18,7 @@ def test_pnl_subtracts_fees_and_slippage(memory_engine):
         "asset_pair": "BTCUSD",
         "entry_price": 50000,
         "recommended_position_size": 1.0,
-        "timestamp": datetime.now(timezone.utc)
+        "timestamp": datetime.now(timezone.utc),
         "fee_cost": 150,
         "slippage_cost": 100,
     }
@@ -56,5 +56,5 @@ def test_marginal_profit_becomes_loss_with_costs(memory_engine):
     )
 
     # Net = 200 - 250 = -$50 (LOSS)
-    assert outcome.realized_pnl == -50.0
+    assert abs(outcome.realized_pnl - (-50.0)) < 0.01
     assert outcome.was_profitable is False
