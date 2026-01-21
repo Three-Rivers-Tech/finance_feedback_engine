@@ -300,7 +300,12 @@ class PortfolioMemoryEngine:
         total_transaction_cost = fee_cost + slippage_cost + spread_cost
 
         # Calculate P&L
-        if action == "BUY" or action == "LONG":
+        if exit_price is None and action in ["BUY", "SELL", "LONG", "SHORT"]:
+            logger.warning(f"exit_price is None for {action} action on {decision_id}, skipping P&L calculation")
+            pnl = None
+            pnl_pct = None
+            position_value = entry_price * position_size if entry_price and position_size else 0
+        elif action == "BUY" or action == "LONG":
             pnl = (exit_price - entry_price) * position_size - total_transaction_cost
             position_value = entry_price * position_size
             pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
@@ -323,7 +328,7 @@ class PortfolioMemoryEngine:
             holding_hours = None
 
         # Create outcome record
-        was_profitable = pnl > 0
+        was_profitable = pnl is not None and pnl > 0
         veto_correct = self._evaluate_veto_outcome(veto_applied, was_profitable)
         outcome = TradeOutcome(
             decision_id=decision_id,
