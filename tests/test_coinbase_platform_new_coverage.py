@@ -14,7 +14,7 @@ Coverage Target: 54.74% → 70%+
 
 import logging
 from typing import Any, Dict
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 import pytest
 from requests.exceptions import RequestException, ConnectionError, Timeout
 
@@ -779,9 +779,8 @@ class TestTradeExecutionRetry:
         # After max retries, should raise TimeoutError
         with pytest.raises(TimeoutError):
             platform.execute_trade(decision)
-
         # Should have attempted multiple times (default is 3)
-        assert mock_client.market_order_buy.call_count >= 3
+        assert mock_client.market_order_buy.call_count == 3
 
     def test_execute_trade_no_retry_on_value_error(self, platform, mock_client):
         """Test that non-retryable errors don't trigger retry."""
@@ -833,8 +832,7 @@ class TestTraceHeaderFallback:
             platform._inject_trace_headers_per_request()
 
             # Verify headers were set (mock_headers dict should have the header)
-            # Due to the mock structure, we just verify no exception was raised
-            # In real code, this would set headers individually
+            assert mock_headers.get("X-Correlation-ID") == "test-123"
 
     def test_inject_trace_headers_no_session_attribute(self, platform):
         """Test graceful handling when client has no session."""
@@ -874,11 +872,11 @@ class TestTraceHeaderFallback:
             assert len(mock_client.session.headers) == 0
 
 
- # ============================================================================
+# ============================================================================
 # PHASE 6: INTEGRATION WORKFLOW TESTS
 # ============================================================================
 
-import pytest
+@pytest.mark.integration
 
 @pytest.mark.integration
 @pytest.mark.slow

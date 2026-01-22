@@ -22,7 +22,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-
 import numpy as np
 
 from .consistency import MemoryConsistencyManager
@@ -188,7 +187,16 @@ class PortfolioMemoryEngine:
         self.consistency_manager = MemoryConsistencyManager(self.storage_path)
 
         # Recover from any incomplete transactions
-        self.consistency_manager.recover_from_crash()
+        try:
+            self.consistency_manager.recover_from_crash()
+        except Exception as e:
+            logger.error(f"Failed to recover from crash: {e}")
+            # Import and track error for observability
+            try:
+                from finance_feedback_engine.monitoring.error_tracking import track_error
+                track_error("memory_crash_recovery_failed", str(e))
+            except ImportError:
+                pass  # Error tracking not available
 
         # Load existing memory
         self._load_memory()
@@ -1711,13 +1719,13 @@ class PortfolioMemoryEngine:
     def _load_memory(self) -> None:
         """
         Load historical outcomes and snapshots from disk with integrity checking.
-        
+
         Verifies manifest checksums to ensure data consistency after crashes.
         """
         try:
             # Load and verify manifest
             manifest = self.consistency_manager.load_manifest()
-            
+
             # Verify integrity of files
             if not self.consistency_manager.verify_integrity():
                 logger.warning(
@@ -1725,14 +1733,14 @@ class PortfolioMemoryEngine:
                 )
 
             # Load verified performance summaries from manifest
-            for logical_name in ["provider_performance", "regime_performance", 
+            for logical_name in ["provider_performance", "regime_performance",
                                  "strategy_performance", "veto_metrics"]:
                 if logical_name in manifest.files:
                     filepath = self.storage_path / manifest.files[logical_name].path
                     try:
                         with open(filepath, "r") as f:
                             data = json.load(f)
-                        
+
                         if logical_name == "provider_performance":
                             self.provider_performance.update(data)
                         elif logical_name == "regime_performance":
@@ -1741,7 +1749,7 @@ class PortfolioMemoryEngine:
                             self.strategy_performance.update(data)
                         elif logical_name == "veto_metrics":
                             self.veto_metrics.update(data)
-                            
+
                         logger.debug(f"Loaded {logical_name} from manifest")
                     except Exception as e:
                         logger.warning(f"Failed to load {logical_name}: {e}")
@@ -1798,7 +1806,7 @@ class PortfolioMemoryEngine:
     def save_memory(self) -> None:
         """
         Explicitly save all memory to disk with crash consistency.
-        
+
         Uses atomic multi-file save to ensure consistency even if
         the process crashes mid-save.
         """
@@ -1817,7 +1825,7 @@ class PortfolioMemoryEngine:
 
             # Save atomically with transaction log
             success = self.consistency_manager.save_files_atomic(files_to_save)
-            
+
             if success:
                 logger.info("Memory saved to disk (atomic)")
             else:
