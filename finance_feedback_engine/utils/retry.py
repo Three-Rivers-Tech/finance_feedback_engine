@@ -1,9 +1,27 @@
+"""Retry utilities with exponential backoff for API calls."""
+
 import asyncio
-def _get_delay(attempt, base_delay, exponential_base, max_delay, jitter):
+import logging
+import random
+import time
+from functools import wraps
+from typing import Any, Callable, Tuple, Type
+
+logger = logging.getLogger(__name__)
+
+
+def _get_delay(
+        attempt: int,
+        base_delay: float,
+        exponential_base: float,
+        max_delay: float,
+        jitter: bool
+        ) -> float:
     delay = min(base_delay * (exponential_base ** attempt), max_delay)
     if jitter:
         delay += random.uniform(0, delay * 0.1)
     return delay
+
 
 def async_exponential_backoff_retry(
     max_retries: int = 3,
@@ -54,15 +72,6 @@ def async_exponential_backoff_retry(
                 raise last_exception
         return wrapper
     return decorator
-"""Retry utilities with exponential backoff for API calls."""
-
-import logging
-import random
-import time
-from functools import wraps
-from typing import Any, Callable, Tuple, Type
-
-logger = logging.getLogger(__name__)
 
 
 def exponential_backoff_retry(
