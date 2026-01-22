@@ -123,10 +123,12 @@ WALEntry checksum field uses SHA256 for integrity and security. All writers/read
 - [ ] Create `_append_to_wal(operation, data)` method
 - [ ] Use append-only file writes (no atomic rename needed)
 - [ ] Assign a strictly increasing sequence number to each entry, persisted in memory and checkpoint metadata
-- [ ] Make fsync configurable via `wal_fsync` boolean config (default: false); log a clear durability warning if false
+- [ ] Make fsync configurable via `wal_fsync` boolean config (default: true); log a clear durability warning if false
 - [ ] Document fsync latency (1–10ms typical on HDDs) and trade-offs
-- [ ] Implement a buffer/flush mechanism for batched WAL writes (Phase 2), still assigning sequence numbers per entry and ensuring ordering before flush; keep option to force immediate fsync for tests/critical paths
-- [ ] In `_append_to_wal`, reject or log any WAL entry with sequence <= checkpoint sequence as a safety check
+- [ ] wal_fsync default is true (for durability, see config and Success Criteria)
+- [ ] Add basic batching infrastructure (disabled by default) to support Phase 5
+- [ ] In `_append_to_wal`, log a detailed warning and raise `StaleWALSequenceError` if WAL entry sequence <= checkpoint_sequence (fail-fast to prevent checkpoint corruption; see implementation for details)
+
 
 
 #### Step 2.3: Implement WAL Recovery
@@ -134,7 +136,7 @@ WALEntry checksum field uses SHA256 for integrity and security. All writers/read
 - [ ] On startup, initialize the in-memory sequence counter from the latest checkpoint value plus any replayed WAL entries
 - [ ] Read WAL entries since last checkpoint
 - [ ] Replay operations in sequence order
-- [ ] Handle partial/corrupted entries gracefully
+- WAL Corruption Policy: On detecting WAL corruption during recovery, use the "Truncate at corruption" strategy. If a corrupted entry is found, log a warning with the file offset and entry details, discard all subsequent entries, and continue recovery with only the valid prefix. Sequence/ordering is preserved for all valid entries. Failure is visible via error logs and a metric (e.g., `wal_recovery_truncated`). No attempt is made to skip or repair individual entries. Trade-offs: "Skip and continue" risks state divergence, "Abort recovery" can block startup, while "Truncate at corruption" maximizes recovery of valid data while preventing replay of ambiguous or partial operations. This is referenced as the "WAL corruption policy" throughout the codebase and documentation.
 
 
 #### Step 2.4: Modify `record_trade_outcome()`
@@ -195,15 +197,12 @@ def record_trade_outcome(self, ...):
 ```yaml
 portfolio_memory:
     checkpoint_interval: 100  # Operations between checkpoints (default: 100)
-    wal_enabled: false        # WAL is opt-in by default for gradual rollout (set true for immediate durability)
+        wal_enabled: true         # WAL is enabled by default for immediate durability and crash consistency
     wal_fsync: true           # fsync after each write (default: true for safety, but can be set false for performance)
 ```
 
 **Defaults and Migration Guidance:**
-- If config values are absent, use the above defaults.
-- On startup, validate existing configs (key: portfolio_memory), emit warnings if keys are missing.
-- Provide a one-time migration script or automated upgrade step to inject defaults into stored configs.
-- For `wal_enabled`, recommend phased rollout (feature-flag or cohort enablement with monitoring) and backward-compatibility testing.
+    - WAL is now enabled by default to guarantee crash consistency and durability. Migration scripts should ensure WAL is active unless explicitly disabled for legacy compatibility.
 
 **Tests to add**:
 - Test checkpoint creation and loading
