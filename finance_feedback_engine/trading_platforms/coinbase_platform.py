@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from requests.exceptions import RequestException
 
+from ..exceptions import APIConnectionError, APIRateLimitError
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo
 from .retry_handler import platform_retry, get_timeout_config, standardize_platform_error
@@ -1155,7 +1156,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "timestamp": decision.get("timestamp"),
                 }
 
-        except (RequestException, ConnectionError, TimeoutError):
+        except (RequestException, ConnectionError, TimeoutError, APIConnectionError, APIRateLimitError):
             raise  # Allow retry decorator to handle retryable exceptions
         except Exception as e:
             latency = time.time() - start_time if "start_time" in locals() else -1

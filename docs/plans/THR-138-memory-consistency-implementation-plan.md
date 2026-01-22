@@ -49,17 +49,22 @@ The `PortfolioMemoryEngine` has multiple persistence paths that can leave the sy
 3. **Checkpoint mechanism**: Periodic full state snapshots
 4. **Recovery on startup**: Replay WAL entries since last checkpoint
 
+
 ### Architecture
 
 ```
 storage/
-├── portfolio_state.json      # Checkpoint (full state snapshot)
-├── portfolio.wal             # Write-ahead log (pending operations)
+├── portfolio_state.json      # Checkpoint (full state snapshot, atomic write via .tmp and .bak)
+├── portfolio_state.json.tmp  # Temp file for atomic checkpoint writes
 ├── portfolio_state.json.bak  # Previous checkpoint (for recovery)
+├── portfolio.wal             # Write-ahead log (pending operations)
 └── legacy/                   # Archive old individual files
     ├── outcome_*.json
     └── snapshot_*.json
 ```
+
+**Atomic checkpoint write pattern:**
+When creating `portfolio_state.json`, write the snapshot to `portfolio_state.json.tmp`, fsync the temp file, rename the existing `portfolio_state.json` to `portfolio_state.json.bak`, rename `portfolio_state.json.tmp` to `portfolio_state.json`, then fsync the directory to ensure metadata durability. This ensures that either the old or new checkpoint is always recoverable, and never a partial file.
 
 ## Step-by-Step Implementation Plan
 
@@ -98,6 +103,7 @@ storage/
 **Goal**: Ensure no operations are lost during crashes.
 
 #### Step 2.1: Create WAL Data Structures
+
 ```python
 @dataclass
 class WALEntry:
@@ -105,20 +111,31 @@ class WALEntry:
     operation: str  # "record_outcome", "update_stats", etc.
     timestamp: str
     data: Dict[str, Any]
-    checksum: str  # For integrity verification
+    checksum: str  # For integrity verification (SHA256 recommended)
+    checksum_algo: str = "sha256"  # Algorithm used for checksum
+"""
+WALEntry checksum field uses SHA256 for integrity and security. All writers/readers must use SHA256 for compute_checksum/verify_checksum. Tests must assert the exact algorithm and output format.
+"""
 ```
+
 
 #### Step 2.2: Implement WAL Writer
 - [ ] Create `_append_to_wal(operation, data)` method
 - [ ] Use append-only file writes (no atomic rename needed)
-- [ ] Add fsync after each entry for durability
-- [ ] Include sequence numbers for ordering
+- [ ] Assign a strictly increasing sequence number to each entry, persisted in memory and checkpoint metadata
+- [ ] Make fsync configurable via `wal_fsync` boolean config (default: false); log a clear durability warning if false
+- [ ] Document fsync latency (1–10ms typical on HDDs) and trade-offs
+- [ ] Implement a buffer/flush mechanism for batched WAL writes (Phase 2), still assigning sequence numbers per entry and ensuring ordering before flush; keep option to force immediate fsync for tests/critical paths
+- [ ] In `_append_to_wal`, reject or log any WAL entry with sequence <= checkpoint sequence as a safety check
+
 
 #### Step 2.3: Implement WAL Recovery
 - [ ] Create `_recover_from_wal()` method
+- [ ] On startup, initialize the in-memory sequence counter from the latest checkpoint value plus any replayed WAL entries
 - [ ] Read WAL entries since last checkpoint
 - [ ] Replay operations in sequence order
 - [ ] Handle partial/corrupted entries gracefully
+
 
 #### Step 2.4: Modify `record_trade_outcome()`
 ```python
@@ -132,6 +149,10 @@ def record_trade_outcome(self, ...):
     # 3. Trigger checkpoint if needed (async/batched)
     self._maybe_checkpoint()
 ```
+
+#### Step 2.5: WAL Size Monitoring
+- [ ] Monitor WAL file size (configurable threshold, e.g., 10MB)
+- [ ] If threshold exceeded, trigger checkpoint and WAL truncation/rotation to prevent unbounded growth
 
 **Files to modify**:
 - `finance_feedback_engine/memory/portfolio_memory.py`
@@ -148,29 +169,41 @@ def record_trade_outcome(self, ...):
 
 **Goal**: Periodic full state snapshots for faster recovery.
 
+
 #### Step 3.1: Create Checkpoint Mechanism
 - [ ] Create `_write_checkpoint()` method
-- [ ] Atomic write of full state to `portfolio_state.json`
+- [ ] Before writing, either acquire a read lock (via state lock or new RWLock) or create a shallow/deep copy of the in-memory state and atomically write that copy (using the .bak swap behavior and sequence number recording)
+- [ ] Atomic write of full state to `portfolio_state.json` using the temp file/rename/fsync pattern
 - [ ] Keep previous checkpoint as `.bak` for recovery
-- [ ] Record checkpoint sequence number
+- [ ] Record checkpoint sequence number in checkpoint metadata
 
 #### Step 3.2: Implement Checkpoint Triggering
 - [ ] Checkpoint after N operations (configurable, default: 100)
 - [ ] Checkpoint on clean shutdown
 - [ ] Checkpoint on explicit `save_memory()` call
 
-#### Step 3.3: Implement WAL Truncation
-- [ ] After successful checkpoint, truncate WAL
-- [ ] Keep checkpoint sequence number to reject stale WAL entries
-- [ ] Handle edge case: crash during truncation
+
+#### Step 3.3: Implement WAL Truncation/Rotation
+- [ ] After successful checkpoint, rotate WAL: create a new empty WAL file with incremented sequence (e.g., newWalPath with seq+1)
+- [ ] Atomically rename the current WAL to current.wal.old (or similar) only after checkpoint succeeds
+- [ ] Set checkpointSequenceNumber to reject stale entries
+- [ ] On next successful checkpoint, delete the .old WAL file
+- [ ] In recovery, check and replay both the current WAL and any .old WAL on startup so partial truncations do not lose entries
+
 
 **Configuration options**:
 ```yaml
 portfolio_memory:
-  checkpoint_interval: 100  # Operations between checkpoints
-  wal_enabled: true
-  wal_fsync: true  # fsync after each write (slower but safer)
+    checkpoint_interval: 100  # Operations between checkpoints (default: 100)
+    wal_enabled: false        # WAL is opt-in by default for gradual rollout (set true for immediate durability)
+    wal_fsync: true           # fsync after each write (default: true for safety, but can be set false for performance)
 ```
+
+**Defaults and Migration Guidance:**
+- If config values are absent, use the above defaults.
+- On startup, validate existing configs (key: portfolio_memory), emit warnings if keys are missing.
+- Provide a one-time migration script or automated upgrade step to inject defaults into stored configs.
+- For `wal_enabled`, recommend phased rollout (feature-flag or cohort enablement with monitoring) and backward-compatibility testing.
 
 **Tests to add**:
 - Test checkpoint creation and loading
@@ -188,10 +221,17 @@ portfolio_memory:
 - [ ] Add deprecation warning to individual file loading in `_load_memory()`
 - [ ] Document migration path
 
+
 #### Step 4.2: Add Migration Logic
 - [ ] On first load with new system, migrate from individual files
 - [ ] Archive individual files to `legacy/` directory
 - [ ] Create initial checkpoint from migrated data
+- [ ] **Validate migration:**
+    - Verify record/trade counts match originals
+    - Compute and compare checksums or hashes for migrated blobs
+    - Ensure required fields are present and well-typed
+    - Compare a sample or full state snapshot against original files
+    - If validation fails, abort/rollback migration, report clear error, and do not create checkpoint or delete/archive originals
 
 #### Step 4.3: Remove Legacy Code (Future Release)
 - [ ] Remove `_save_outcome()`, `_save_snapshot()` after migration period
@@ -212,10 +252,11 @@ portfolio_memory:
 - [ ] Rely on WAL + periodic checkpointing instead
 - [ ] Add explicit `flush()` method for critical operations
 
-#### Step 5.2: Implement Batched Writes
+
+#### Step 5.2: Implement Batched Writes (Opt-in)
 - [ ] Buffer WAL entries in memory (configurable batch size)
 - [ ] Flush batch on: batch full, timeout, explicit request
-- [ ] Trade-off: slight durability risk for better performance
+- [ ] Batched writes are **disabled by default**; enabling them violates the no-data-loss guarantee and must be explicitly opted-in with clear documentation of the risk
 
 #### Step 5.3: Add Async Checkpointing (Optional)
 - [ ] Run checkpoint in background thread
@@ -231,10 +272,18 @@ portfolio_memory:
 - Checkpoint creation and loading
 - Recovery logic with various failure scenarios
 
+
 ### Integration Tests
 - Full workflow: record trades → checkpoint → restart → verify state
 - Concurrent access (if multi-threaded)
 - Large state files (performance)
+
+### Performance Regression Tests
+- WAL write throughput (trades/sec) benchmark (serialization/deserialization)
+- Timed tests for checkpoint creation/loading (duration)
+- Timed recovery tests for various failure scenarios (recovery time)
+- Memory/heap usage comparisons for large state files and concurrent access
+- Tests must produce reproducible metrics and baseline artifacts for regression detection
 
 ### Chaos Tests
 - Simulate crash during various operations
@@ -248,6 +297,15 @@ portfolio_memory:
 
 ---
 
+
+## Concurrency Control
+
+PortfolioMemoryEngine may be accessed from multiple threads. To ensure thread safety:
+- Use a read/write lock strategy around state access and checkpointing (readers for normal ops, writer/exclusive lock for checkpoint)
+- Serialize WAL appends (single-writer or mutex around WAL.write/append)
+- Avoid races between WAL append and checkpoint: flush WAL and obtain checkpoint write lock, or use an epoch/counting scheme
+- Update Phase 2/3 design tasks to include these mechanisms and corresponding integration tests (concurrent access, WAL serialization, race-condition scenarios)
+
 ## Rollback Plan
 
 If issues arise during rollout:
@@ -259,23 +317,26 @@ If issues arise during rollout:
 
 ---
 
+
 ## Estimated Effort
 
 | Phase | Complexity | Risk | Effort |
 |-------|------------|------|--------|
-| Phase 1: Unify Loading | Low | Low | 2-3 hours |
-| Phase 2: WAL Implementation | Medium | Medium | 4-6 hours |
-| Phase 3: Checkpointing | Medium | Medium | 3-4 hours |
-| Phase 4: Deprecate Legacy | Low | Low | 2-3 hours |
-| Phase 5: Performance | Low | Low | 2-3 hours |
+| Phase 1: Unify Loading | Low | Low | 3-4.5 hours |
+| Phase 2: WAL Implementation | Medium | Medium | 6-9 hours |
+| Phase 3: Checkpointing | Medium | Medium | 4.5-6 hours |
+| Phase 4: Deprecate Legacy | Low | Low | 3-4.5 hours |
+| Phase 5: Performance | Low | Low | 3-4.5 hours |
 
-**Total**: ~15-20 hours
+**Total**: ~23-30 hours
+
+*Note: A 50% buffer was added to account for WAL recovery complexity, chaos testing, concurrent edge-case debugging, and migration/backward compatibility validation.*
 
 ---
 
 ## Success Criteria
 
-1. No data loss on any crash scenario
+1. No data loss with default configuration (`wal_fsync: true`, batching: false)
 2. Single authoritative loading path
 3. Recovery time < 5 seconds for typical state sizes
 4. All existing tests pass
