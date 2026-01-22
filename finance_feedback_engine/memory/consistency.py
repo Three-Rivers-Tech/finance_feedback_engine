@@ -9,13 +9,12 @@ import hashlib
 import json
 import logging
 import os
-import shutil
 import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +59,24 @@ class MemoryManifest:
     def from_dict(cls, data: Dict[str, Any]) -> "MemoryManifest":
         """Create from dictionary."""
         files = {}
+        required_fields = {"path", "checksum", "size", "timestamp"}
+        malformed_entries = []
         for name, entry_data in data.get("files", {}).items():
-            files[name] = FileManifestEntry(
-                path=entry_data["path"],
-                checksum=entry_data["checksum"],
-                size=entry_data["size"],
-                timestamp=entry_data["timestamp"]
-            )
-
+            if not all(field in entry_data for field in required_fields):
+                missing = [field for field in required_fields if field not in entry_data]
+                malformed_entries.append((name, missing))
+                continue
+            try:
+                files[name] = FileManifestEntry(
+                    path=entry_data["path"],
+                    checksum=entry_data["checksum"],
+                    size=entry_data["size"],
+                    timestamp=entry_data["timestamp"]
+                )
+            except Exception as e:
+                malformed_entries.append((name, str(e)))
+                continue
+        # Optionally: log malformed_entries if needed
         return cls(
             version=data.get("version", "1.0"),
             transaction_id=data.get("transaction_id", ""),
@@ -110,7 +119,7 @@ class MemoryConsistencyManager:
         """
         if self.manifest_path.exists():
             try:
-                with open(self.manifest_path, "r") as f:
+                with open(self.manifest_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 manifest = MemoryManifest.from_dict(data)
                 logger.info(
@@ -246,7 +255,7 @@ class MemoryConsistencyManager:
                     # Clean up temp file on error
                     try:
                         os.unlink(temp_path)
-                    except:
+                    except Exception:
                         pass
                     raise e
 
@@ -257,17 +266,23 @@ class MemoryConsistencyManager:
                 files=new_entries
             )
 
-            # Step 3: Write new manifest atomically
+
+            # Step 3: Write new manifest atomically (to temp)
             manifest_temp = self.manifest_path.with_suffix(".tmp")
             self._atomic_write_json(manifest_temp, new_manifest.to_dict())
 
-            # Step 4: Atomic manifest update (this is the commit point)
-            os.replace(str(manifest_temp), str(self.manifest_path))
+            # Step 4: Move temp files to final locations before manifest swap
+            try:
+                for logical_name, temp_path in temp_files.items():
+                    final_path = self.storage_path / f"{logical_name}.json"
+                    os.replace(temp_path, str(final_path))
+            except Exception as e:
+                logger.error(f"Commit failed during file move: {e}")
+                # Do not touch manifest if any file move fails
+                raise
 
-            # Step 5: Move temp files to final locations
-            for logical_name, temp_path in temp_files.items():
-                final_path = self.storage_path / f"{logical_name}.json"
-                os.replace(temp_path, str(final_path))
+            # Step 5: Atomic manifest update (commit point)
+            os.replace(str(manifest_temp), str(self.manifest_path))
 
             # Step 6: Write commit marker
             commit_file = self.transaction_dir / f"txn_{txn_id}_commit.json"
@@ -290,7 +305,7 @@ class MemoryConsistencyManager:
             for temp_path in temp_files.values():
                 try:
                     os.unlink(temp_path)
-                except:
+                except Exception:
                     pass
 
             # Write rollback marker
@@ -303,7 +318,7 @@ class MemoryConsistencyManager:
                     "error": str(e)
                 }
                 self._atomic_write_json(rollback_file, rollback_data)
-            except:
+            except Exception:
                 pass
 
             return False
@@ -325,9 +340,8 @@ class MemoryConsistencyManager:
 
         for prep_file in prepare_files:
             try:
-                with open(prep_file, "r") as f:
+                with open(prep_file, "r", encoding="utf-8") as f:
                     prep_data = json.load(f)
-
                 txn_id = prep_data["transaction_id"]
                 commit_file = self.transaction_dir / f"txn_{txn_id}_commit.json"
                 rollback_file = self.transaction_dir / f"txn_{txn_id}_rollback.json"
@@ -432,6 +446,6 @@ class MemoryConsistencyManager:
             # Clean up temp file on error
             try:
                 os.unlink(temp_path)
-            except:
+            except Exception:
                 pass
             raise

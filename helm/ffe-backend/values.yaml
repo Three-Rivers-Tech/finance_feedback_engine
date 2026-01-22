@@ -77,9 +77,7 @@ ingress:
         more_set_headers "X-Frame-Options: DENY";
         more_set_headers "X-Content-Type-Options: nosniff";
         more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
-          more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'nonce-{{csp_nonce}}' \
-          https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'nonce-{{csp_nonce}}' \
-          https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net https://www.googletagmanager.com; connect-src \
+        more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net https://www.googletagmanager.com; connect-src 'self' https://api.ffe.three-rivers-tech.com wss://ws.ffe.three-rivers-tech.com; font-src 'self' https://cdn.jsdelivr.net; frame-src 'self'";
           'self' https://api.example.com wss://ws.example.com; font-src 'self' https://cdn.jsdelivr.net; frame-src 'self'";
   hosts:
     - host: ffe.three-rivers-tech.com
