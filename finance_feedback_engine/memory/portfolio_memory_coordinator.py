@@ -119,15 +119,7 @@ class PortfolioMemoryCoordinator:
 
         logger.debug(f"Trade outcome recorded and processed: {outcome.decision_id}")
 
-    def record_pair_selection(self, pair: str, selection_data: Dict[str, Any]) -> None:
-        """
-        Record a pair selection event.
-
-        Args:
-            pair: Trading pair
-            selection_data: Selection metadata
-        """
-        self.trade_recorder.record_pair_selection(pair, selection_data)
+    # Pair selection recording method removed as part of THR-172 cleanup
 
     def get_recent_trades(self, limit: int = 20) -> List[TradeOutcome]:
         """

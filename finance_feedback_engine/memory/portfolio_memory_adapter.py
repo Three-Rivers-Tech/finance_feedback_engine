@@ -93,10 +93,7 @@ class PortfolioMemoryEngineAdapter:
         # Also update legacy engine for methods that depend on it
         self._legacy_engine.record_trade_outcome(outcome)
 
-    def record_pair_selection(self, pair: str, selection_data: Dict[str, Any]) -> None:
-        """Record pair selection (delegates to coordinator)."""
-        self._coordinator.record_pair_selection(pair, selection_data)
-        self._legacy_engine.record_pair_selection(pair, selection_data)
+    # Pair selection recording method removed as part of THR-172 cleanup
 
     def register_thompson_sampling_callback(self, callback: Callable) -> None:
         """Register Thompson sampling callback (delegates to coordinator)."""
@@ -192,15 +189,7 @@ class PortfolioMemoryEngineAdapter:
         """
         return self._legacy_engine.format_context_for_prompt(context=context)
 
-    def get_pair_selection_context(self, lookback_hours: int = 168) -> Dict[str, Any]:
-        """
-        Get pair selection context (legacy method).
-        
-        Delegates to legacy PortfolioMemoryEngine.
-        """
-        return self._legacy_engine.get_pair_selection_context(
-            lookback_hours=lookback_hours
-        )
+    # Pair selection context method removed as part of THR-172 cleanup
 
     def generate_learning_validation_metrics(self) -> Dict[str, Any]:
         """
