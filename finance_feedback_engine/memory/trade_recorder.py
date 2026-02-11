@@ -41,7 +41,6 @@ class TradeRecorder(ITradeRecorder):
         """
         self.max_memory_size = max_memory_size
         self.trade_outcomes: deque[TradeOutcome] = deque(maxlen=max_memory_size)
-        self.pair_selections: List[Dict[str, Any]] = []
 
         logger.debug(f"TradeRecorder initialized with max_memory_size={max_memory_size}")
 
@@ -64,23 +63,7 @@ class TradeRecorder(ITradeRecorder):
             f"P&L: {outcome.realized_pnl}"
         )
 
-    def record_pair_selection(self, pair: str, selection_data: Dict[str, Any]) -> None:
-        """
-        Record a pair selection event.
-
-        Args:
-            pair: Trading pair selected
-            selection_data: Metadata about the selection
-        """
-        selection_record = {
-            "pair": pair,
-            "timestamp": datetime.now().isoformat(),
-            **selection_data,
-        }
-
-        self.pair_selections.append(selection_record)
-
-        logger.debug(f"Recorded pair selection: {pair}")
+    # Pair selection recording method removed as part of THR-172 cleanup
 
     def get_recent_trades(self, limit: int = 20) -> List[TradeOutcome]:
         """
@@ -155,20 +138,7 @@ class TradeRecorder(ITradeRecorder):
 
         return filtered_trades
 
-    def get_pair_selections(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-        """
-        Get recorded pair selections.
-
-        Args:
-            limit: Optional limit on number of selections to return
-
-        Returns:
-            List of pair selection records
-        """
-        if limit is None:
-            return self.pair_selections
-
-        return self.pair_selections[-limit:]
+    # Pair selection getter method removed as part of THR-172 cleanup
 
     def get_trade_count(self) -> int:
         """
@@ -180,9 +150,8 @@ class TradeRecorder(ITradeRecorder):
         return len(self.trade_outcomes)
 
     def clear(self) -> None:
-        """Clear all recorded trades and selections."""
+        """Clear all recorded trades."""
         self.trade_outcomes.clear()
-        self.pair_selections.clear()
         logger.info("TradeRecorder cleared")
 
     def get_summary(self) -> Dict[str, Any]:
@@ -198,7 +167,6 @@ class TradeRecorder(ITradeRecorder):
             "memory_utilization": len(self.trade_outcomes) / self.max_memory_size
             if self.max_memory_size > 0
             else 0,
-            "pair_selections_count": len(self.pair_selections),
             "providers": list(
                 {trade.ai_provider for trade in self.trade_outcomes if trade.ai_provider}
             ),
