@@ -31,17 +31,6 @@ class ITradeRecorder(ABC):
         pass
 
     @abstractmethod
-    def record_pair_selection(self, pair: str, selection_data: Dict[str, Any]) -> None:
-        """
-        Record a pair selection event.
-
-        Args:
-            pair: Trading pair selected
-            selection_data: Metadata about the selection
-        """
-        pass
-
-    @abstractmethod
     def get_recent_trades(self, limit: int = 20) -> List[Any]:
         """
         Get most recent trade outcomes.
