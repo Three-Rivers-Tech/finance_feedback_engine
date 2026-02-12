@@ -189,17 +189,17 @@ class RiskGatekeeper:
             if the trade passes all checks, otherwise ``False``.
         """
         # 0A. Gatekeeper Override Check (Market Hours & Data Freshness from Decision)
-        # This enforces temporal constraints by overriding the decision if needed
+        # This enforces temporal constraints by rejecting the trade (not mutating input)
         needs_override, modified_decision = self.check_market_hours(decision)
         if needs_override:
-            # Update the original decision dict in-place with the modified values
-            decision.update(modified_decision)
+            # SAFETY: Do NOT mutate the input decision dict. Instead, reject the trade
+            # so the caller can decide how to handle it. The original decision data is
+            # preserved for audit/debugging purposes.
             logger.info(
-                "[GATEKEEPER] Decision was overridden to HOLD due to temporal constraints"
+                "[GATEKEEPER] Trade rejected due to temporal constraints "
+                f"(would override {decision.get('action')} → {modified_decision.get('action')})"
             )
-            # After override to HOLD, the trade is technically "allowed" but neutralized
-            # Return True since we've handled it, but log the override
-            return True, "Decision overridden to HOLD (temporal constraints)"
+            return False, "Trade rejected: temporal constraints (market hours/data freshness)"
 
         # 0B. Market Schedule Check (Legacy: from context for backward compatibility)
         # This provides additional validation using context data
