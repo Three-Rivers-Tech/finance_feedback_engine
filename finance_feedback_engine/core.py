@@ -19,6 +19,7 @@ from .exceptions import (
     FFEMemoryError,
     InsufficientProvidersError,
     ModelInstallationError,
+    RiskValidationError,
     TradingError,
 )
 from .memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
@@ -1494,8 +1495,57 @@ class FinanceFeedbackEngine:
                 # Abort execution and return rejection result
                 return decision["execution_result"]
         except Exception as e:
-            # Fail-safe: log but do not block if gatekeeper encounters an unexpected error
-            logger.error(f"RiskGatekeeper validation error: {e}", exc_info=True)
+            # FAIL-CLOSED: If gatekeeper crashes, block the trade (never execute unvalidated)
+            logger.critical(
+                f"RiskGatekeeper validation error — BLOCKING TRADE: {e}",
+                exc_info=True,
+            )
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {
+                "success": False,
+                "error": f"RiskGatekeeper internal error: {e}",
+                "status": "BLOCKED_GATEKEEPER_ERROR",
+            }
+            self.decision_store.update_decision(decision)
+            raise RiskValidationError(
+                f"Trade blocked: RiskGatekeeper encountered an internal error: {e}"
+            ) from e
+
+        # === POSITION SIZE REVALIDATION AT EXECUTION TIME (THR-80) ===
+        # Position size was calculated during RISK_CHECK, but risk limits or balance
+        # may have changed. Recalculate with CURRENT limits before executing.
+        if hasattr(self, "position_sizing_calculator") and self.position_sizing_calculator:
+            try:
+                sizing = self.position_sizing_calculator.calculate_position_sizing_params(
+                    context=decision,
+                    current_price=decision.get("entry_price", 0),
+                    action=decision.get("action", "UNKNOWN"),
+                    has_existing_position=decision.get("has_existing_position", False),
+                    relevant_balance=decision.get("relevant_balance", {}),
+                    balance_source=decision.get("balance_source", "unknown"),
+                )
+                if sizing:
+                    new_size = sizing.get("recommended_position_size")
+                    old_size = decision.get("recommended_position_size")
+                    if new_size and old_size and new_size != old_size:
+                        logger.warning(
+                            f"Position size recalculated at execution time: "
+                            f"{old_size} → {new_size} (risk limits may have changed)"
+                        )
+                    if new_size is not None:
+                        decision["recommended_position_size"] = new_size
+                        decision["position_size_recalculated_at_execution"] = True
+            except Exception as e:
+                # Log but don't block — the original sizing from RISK_CHECK is still valid
+                logger.warning(f"Position size recalculation failed: {e}")
+
+        # === TWO-PHASE COMMIT: Persist intent BEFORE execution ===
+        # PHASE 1: Mark decision as "pending execution" and flush to disk.
+        # If the system crashes after this point, we can detect the orphan on restart.
+        decision["execution_status"] = "pending"
+        decision["execution_started"] = datetime.utcnow().isoformat()
+        self.decision_store.update_decision(decision)
 
         # Use persistent circuit breaker on platform when available
         try:
@@ -1512,23 +1562,26 @@ class FinanceFeedbackEngine:
                     failure_threshold=3, recovery_timeout=60, name=cb_name
                 )
 
-            # Execute trade under circuit breaker protection
+            # PHASE 2: Execute trade under circuit breaker protection
             result = breaker.call_sync(self.trading_platform.execute_trade, decision)
         except TradingError as e:
             # Log and update decision with failure
             logger.error(f"Trade execution failed: {e}")
             decision["executed"] = False
+            decision["execution_status"] = "failed"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
         except (ConnectionError, socket.timeout, TimeoutError) as e:
-            # Log and update decision with failure
+            # Log and update decision with failure — status stays "pending" so
+            # orphan detection can reconcile with the platform on restart.
             logger.error(
                 f"Trade execution failed due to connection/network issue: {e}",
                 exc_info=True,
             )
             decision["executed"] = False
+            decision["execution_status"] = "pending_unknown"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
@@ -1537,13 +1590,15 @@ class FinanceFeedbackEngine:
             # Log and update decision with failure
             logger.error(f"Trade execution failed: {e}", exc_info=True)
             decision["executed"] = False
+            decision["execution_status"] = "failed"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
 
-        # Update decision with successful execution result
+        # PHASE 3: Post-execution persistence — mark as completed
         decision["executed"] = True
+        decision["execution_status"] = "completed"
         decision["execution_time"] = datetime.utcnow().isoformat()
         decision["execution_result"] = result
         self.decision_store.update_decision(decision)
@@ -1603,7 +1658,52 @@ class FinanceFeedbackEngine:
                 self.decision_store.update_decision(decision)
                 return decision["execution_result"]
         except Exception as e:
-            logger.error(f"RiskGatekeeper validation error: {e}", exc_info=True)
+            # FAIL-CLOSED: If gatekeeper crashes, block the trade (never execute unvalidated)
+            logger.critical(
+                f"RiskGatekeeper validation error — BLOCKING TRADE: {e}",
+                exc_info=True,
+            )
+            decision["executed"] = False
+            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_result"] = {
+                "success": False,
+                "error": f"RiskGatekeeper internal error: {e}",
+                "status": "BLOCKED_GATEKEEPER_ERROR",
+            }
+            self.decision_store.update_decision(decision)
+            raise RiskValidationError(
+                f"Trade blocked: RiskGatekeeper encountered an internal error: {e}"
+            ) from e
+
+        # === POSITION SIZE REVALIDATION AT EXECUTION TIME (THR-80) ===
+        if hasattr(self, "position_sizing_calculator") and self.position_sizing_calculator:
+            try:
+                sizing = self.position_sizing_calculator.calculate_position_sizing_params(
+                    context=decision,
+                    current_price=decision.get("entry_price", 0),
+                    action=decision.get("action", "UNKNOWN"),
+                    has_existing_position=decision.get("has_existing_position", False),
+                    relevant_balance=decision.get("relevant_balance", {}),
+                    balance_source=decision.get("balance_source", "unknown"),
+                )
+                if sizing:
+                    new_size = sizing.get("recommended_position_size")
+                    old_size = decision.get("recommended_position_size")
+                    if new_size and old_size and new_size != old_size:
+                        logger.warning(
+                            f"Position size recalculated at execution time: "
+                            f"{old_size} → {new_size} (risk limits may have changed)"
+                        )
+                    if new_size is not None:
+                        decision["recommended_position_size"] = new_size
+                        decision["position_size_recalculated_at_execution"] = True
+            except Exception as e:
+                logger.warning(f"Position size recalculation failed: {e}")
+
+        # === TWO-PHASE COMMIT: Persist intent BEFORE execution ===
+        decision["execution_status"] = "pending"
+        decision["execution_started"] = datetime.utcnow().isoformat()
+        self.decision_store.update_decision(decision)
 
         try:
             breaker = None
@@ -1622,6 +1722,7 @@ class FinanceFeedbackEngine:
         except TradingError as e:
             logger.error(f"Trade execution failed: {e}")
             decision["executed"] = False
+            decision["execution_status"] = "failed"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
@@ -1632,6 +1733,7 @@ class FinanceFeedbackEngine:
                 exc_info=True,
             )
             decision["executed"] = False
+            decision["execution_status"] = "pending_unknown"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
@@ -1639,12 +1741,14 @@ class FinanceFeedbackEngine:
         except Exception as e:
             logger.error(f"Trade execution failed: {e}", exc_info=True)
             decision["executed"] = False
+            decision["execution_status"] = "failed"
             decision["execution_time"] = datetime.utcnow().isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
 
         decision["executed"] = True
+        decision["execution_status"] = "completed"
         decision["execution_time"] = datetime.utcnow().isoformat()
         decision["execution_result"] = result
         self.decision_store.update_decision(decision)
