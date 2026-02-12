@@ -132,9 +132,10 @@ class TradingLoopAgent:
         self._current_decisions = []  # Store multiple decisions for batch processing
         # Lock for protecting current_decisions list from concurrent modification
         self._current_decisions_lock = asyncio.Lock()
+        # Lock for atomic state transitions (THR-81)
+        self._state_transition_lock = asyncio.Lock()
 
-        # Lock for protecting asset_pairs list from concurrent modification
-        self._asset_pairs_lock = asyncio.Lock()
+        # Asset pairs lock removed as part of THR-172 cleanup
         # Track analysis failures and their timestamps for time-based decay
         self.analysis_failures = {}  # {failure_key: count}
         self.analysis_failure_timestamps = {}  # {failure_key: last_failure_datetime}
@@ -317,192 +318,9 @@ class TradingLoopAgent:
         # Initialize gauge with starting state
         self._record_state_metric()
 
-        # Pair selection system (optional)
-        self.pair_selector = None
-        self.pair_scheduler = None
+        # Pair selection system removed as part of THR-172 cleanup
 
-        # Initialize pair selection if configured
-        if hasattr(config, "pair_selection") and config.pair_selection.get(
-            "enabled", False
-        ):
-            try:
-                from finance_feedback_engine.pair_selection import (
-                    PairSelectionConfig,
-                    PairSelector,
-                )
-                from finance_feedback_engine.pair_selection.core.discovery_filters import (
-                    DiscoveryFilterConfig,
-                    WhitelistConfig,
-                )
-                from finance_feedback_engine.pair_selection.core.selection_scheduler import (
-                    PairSelectionScheduler,
-                )
-
-                # Build PairSelectionConfig from dict config
-                ps_config = config.pair_selection
-
-                # Load discovery filter configuration from YAML
-                discovery_filters_cfg = ps_config.get("universe", {}).get(
-                    "discovery_filters", {}
-                )
-                discovery_filter_config = DiscoveryFilterConfig(
-                    enabled=discovery_filters_cfg.get("enabled", True),
-                    volume_threshold_usd=discovery_filters_cfg.get(
-                        "volume_threshold_usd", 50_000_000
-                    ),
-                    min_listing_age_days=discovery_filters_cfg.get(
-                        "min_listing_age_days", 365
-                    ),
-                    max_spread_pct=discovery_filters_cfg.get("max_spread_pct", 0.001),
-                    min_depth_usd=discovery_filters_cfg.get(
-                        "min_depth_usd", 10_000_000
-                    ),
-                    exclude_suspicious_patterns=discovery_filters_cfg.get(
-                        "exclude_suspicious_patterns", True
-                    ),
-                    min_venue_count=discovery_filters_cfg.get("min_venue_count", 2),
-                    auto_add_to_whitelist=discovery_filters_cfg.get(
-                        "auto_add_to_whitelist", False
-                    ),
-                )
-
-                # Load whitelist configuration from YAML
-                whitelist_cfg = ps_config.get("universe", {})
-                whitelist_config = WhitelistConfig(
-                    enabled=whitelist_cfg.get("whitelist_enabled", True),
-                    whitelist_entries=whitelist_cfg.get(
-                        "whitelist_entries",
-                        ["BTCUSD", "ETHUSD", "EURUSD", "GBPUSD", "USDJPY"],
-                    ),
-                )
-
-                pair_selection_config = PairSelectionConfig(
-                    target_pair_count=ps_config.get("target_pair_count", 5),
-                    candidate_oversampling=ps_config.get("llm", {}).get(
-                        "candidate_oversampling", 3
-                    ),
-                    sortino_weight=ps_config.get("statistical", {})
-                    .get("aggregation_weights", {})
-                    .get("sortino", 0.4),
-                    diversification_weight=ps_config.get("statistical", {})
-                    .get("aggregation_weights", {})
-                    .get("diversification", 0.35),
-                    volatility_weight=ps_config.get("statistical", {})
-                    .get("aggregation_weights", {})
-                    .get("volatility", 0.25),
-                    sortino_windows_days=ps_config.get("statistical", {})
-                    .get("sortino", {})
-                    .get("windows_days", [7, 30, 90]),
-                    sortino_window_weights=ps_config.get("statistical", {})
-                    .get("sortino", {})
-                    .get("weights", [0.5, 0.3, 0.2]),
-                    correlation_lookback_days=ps_config.get("statistical", {})
-                    .get("correlation", {})
-                    .get("lookback_days", 30),
-                    garch_p=ps_config.get("statistical", {})
-                    .get("garch", {})
-                    .get("p", 1),
-                    garch_q=ps_config.get("statistical", {})
-                    .get("garch", {})
-                    .get("q", 1),
-                    garch_forecast_horizon_days=ps_config.get("statistical", {})
-                    .get("garch", {})
-                    .get("forecast_horizon_days", 7),
-                    garch_fitting_window_days=ps_config.get("statistical", {})
-                    .get("garch", {})
-                    .get("fitting_window_days", 90),
-                    thompson_enabled=ps_config.get("thompson_sampling", {}).get(
-                        "enabled", True
-                    ),
-                    thompson_success_threshold=ps_config.get(
-                        "thompson_sampling", {}
-                    ).get("success_threshold", 0.55),
-                    thompson_failure_threshold=ps_config.get(
-                        "thompson_sampling", {}
-                    ).get("failure_threshold", 0.45),
-                    thompson_min_trades=ps_config.get("thompson_sampling", {}).get(
-                        "min_trades_for_update", 3
-                    ),
-                    universe_cache_ttl_hours=ps_config.get("universe", {}).get(
-                        "cache_ttl_hours", 24
-                    ),
-                    pair_blacklist=ps_config.get("universe", {}).get("blacklist", []),
-                    auto_discover=ps_config.get("universe", {}).get(
-                        "auto_discover", False
-                    ),
-                    discovery_filter_config=discovery_filter_config,
-                    whitelist_config=whitelist_config,
-                    llm_enabled=ps_config.get("llm", {}).get("enabled", True),
-                    llm_enabled_providers=None,  # Will use all enabled
-                )
-
-                # Initialize pair selector
-                self.pair_selector = PairSelector(
-                    data_provider=engine.data_provider,
-                    config=pair_selection_config,
-                    ai_decision_manager=getattr(engine, "ai_decision_manager", None),
-                )
-
-                # Initialize scheduler
-                def on_selection_callback(result):
-                    """Update agent's asset_pairs when selection completes."""
-                    # Always preserve core pairs (BTCUSD, ETHUSD, EURUSD)
-                    core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "ETHUSD", "EURUSD"])
-
-                    # Merge selected pairs with core pairs (union, preserving order)
-                    # Core pairs come first, then any additional selected pairs
-                    final_pairs = list(core_pairs)  # Start with core pairs
-                    for pair in result.selected_pairs:
-                        if pair not in final_pairs:
-                            final_pairs.append(pair)
-
-                    # Thread-safe update using asyncio.create_task with lock
-                    async def update_pairs():
-                        try:
-                            async with self._asset_pairs_lock:
-                                self.config.asset_pairs = final_pairs
-                                logger.info(
-                                    f"✓ Updated active pairs: {final_pairs} "
-                                    f"(core: {core_pairs}, additional: {[p for p in final_pairs if p not in core_pairs]})"
-                                )
-                        except Exception as e:
-                            logger.error(f"Error updating asset pairs: {e}", exc_info=True)
-
-                    # Schedule the update in the event loop
-                    try:
-                        task = asyncio.create_task(update_pairs())
-                        # Store task reference to prevent it from being garbage collected
-                        # and to ensure exceptions are not silently lost
-                        if not hasattr(self, '_background_tasks'):
-                            self._background_tasks = set()
-                        self._background_tasks.add(task)
-                        task.add_done_callback(self._background_tasks.discard)
-                    except RuntimeError:
-                        # If no event loop is running in this thread, we cannot safely update under the async lock.
-                        # This should not occur in normal agent operation; log and skip the update to avoid races.
-                        logger.error(
-                            "Unable to schedule asset pair update: no running event loop. "
-                            f"Intended active pairs were: {final_pairs}"
-                        )
-
-                self.pair_scheduler = PairSelectionScheduler(
-                    pair_selector=self.pair_selector,
-                    trade_monitor=trade_monitor,
-                    portfolio_memory=portfolio_memory,
-                    interval_hours=ps_config.get("rotation_interval_hours", 1.0),
-                    on_selection_callback=on_selection_callback,
-                )
-
-                logger.info("✓ Pair selection system initialized")
-
-            except ImportError as e:
-                logger.warning(f"Pair selection disabled: Import error - {e}")
-                self.pair_selector = None
-                self.pair_scheduler = None
-            except Exception as e:
-                logger.error(f"Failed to initialize pair selection: {e}", exc_info=True)
-                self.pair_selector = None
-                self.pair_scheduler = None
+        # Pair selection initialization removed as part of THR-172 cleanup
 
     @property
     def start_time(self):
@@ -694,13 +512,7 @@ class TradingLoopAgent:
             # (position recovery is now a proper OODA state)
             await self._transition_to(AgentState.RECOVERING)
 
-            # Start pair selection scheduler if configured
-            if self.pair_scheduler:
-                try:
-                    await self.pair_scheduler.start()
-                    logger.info("✓ Pair selection scheduler started")
-                except Exception as e:
-                    logger.error(f"Failed to start pair scheduler: {e}", exc_info=True)
+            # Pair scheduler start logic removed as part of THR-172 cleanup
 
             # Main loop: process cycles with sleep intervals
             while self.is_running:
@@ -726,24 +538,58 @@ class TradingLoopAgent:
                     logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
                     await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
 
+    # Valid state transitions — prevents illegal jumps (e.g. skipping RISK_CHECK)
+    _VALID_TRANSITIONS: dict[AgentState, set[AgentState]] = {
+        AgentState.IDLE: {AgentState.RECOVERING, AgentState.PERCEPTION},
+        AgentState.RECOVERING: {AgentState.IDLE, AgentState.PERCEPTION},
+        AgentState.PERCEPTION: {AgentState.REASONING, AgentState.IDLE},
+        AgentState.REASONING: {AgentState.RISK_CHECK, AgentState.IDLE},
+        AgentState.RISK_CHECK: {AgentState.EXECUTION, AgentState.IDLE, AgentState.REASONING},
+        AgentState.EXECUTION: {AgentState.LEARNING, AgentState.IDLE},
+        AgentState.LEARNING: {AgentState.IDLE, AgentState.PERCEPTION},
+    }
+
     async def _transition_to(self, new_state: AgentState):
-        """Helper method to handle state transitions with logging."""
-        old_state = self.state
-        self.state = new_state
-        logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+        """Atomically transition to a new state with validation and rollback."""
+        async with self._state_transition_lock:
+            old_state = self.state
 
-        # Update Prometheus gauge to reflect the new state
-        self._record_state_metric()
+            # Validate transition is legal
+            valid_targets = self._VALID_TRANSITIONS.get(old_state, set())
+            if new_state not in valid_targets:
+                logger.error(
+                    f"ILLEGAL state transition blocked: {old_state.name} -> {new_state.name}. "
+                    f"Valid targets: {[s.name for s in valid_targets]}"
+                )
+                raise ValueError(
+                    f"Illegal state transition: {old_state.name} -> {new_state.name}"
+                )
 
-        # Emit event for dashboard
-        self._emit_dashboard_event(
-            {
-                "type": "state_transition",
-                "from": old_state.name,
-                "to": new_state.name,
-                "timestamp": time.time(),
-            }
-        )
+            try:
+                self.state = new_state
+                logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+
+                # Update Prometheus gauge to reflect the new state
+                self._record_state_metric()
+
+                # Emit event for dashboard
+                self._emit_dashboard_event(
+                    {
+                        "type": "state_transition",
+                        "from": old_state.name,
+                        "to": new_state.name,
+                        "timestamp": time.time(),
+                    }
+                )
+            except Exception as e:
+                # Rollback on failure
+                self.state = old_state
+                logger.error(
+                    f"State transition {old_state.name} -> {new_state.name} failed, "
+                    f"rolled back: {e}",
+                    exc_info=True,
+                )
+                raise
 
     def _record_state_metric(self):
         """Push the current OODA state to Prometheus gauge."""
@@ -1464,26 +1310,25 @@ class TradingLoopAgent:
         logger.info("State: REASONING - Running DecisionEngine...")
         logger.info("=" * 80)
 
-        # Guard against empty or missing core pairs (with lock protection)
-        async with self._asset_pairs_lock:
-            core_pairs = getattr(self.config, 'core_pairs', ["BTCUSD", "EURUSD"])
-            if not self.config.asset_pairs:
-                logger.error(
-                    "CRITICAL: No asset pairs configured! Restoring core pairs."
-                )
-                self.config.asset_pairs = core_pairs
+        # Guard against empty or missing core pairs
+        core_pairs = ["BTCUSD", "EURUSD"]
+        if not self.config.asset_pairs:
+            logger.error(
+                "CRITICAL: No asset pairs configured! Restoring core pairs."
+            )
+            self.config.asset_pairs = core_pairs
 
-            # Validate core pairs are present
-            missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
-            if missing_core_pairs:
-                logger.warning(
-                    "Core pairs missing from asset_pairs: %s. Restoring them.",
-                    missing_core_pairs
-                )
-                self.config.asset_pairs.extend(missing_core_pairs)
+        # Validate core pairs are present
+        missing_core_pairs = [p for p in core_pairs if p not in self.config.asset_pairs]
+        if missing_core_pairs:
+            logger.warning(
+                "Core pairs missing from asset_pairs: %s. Restoring them.",
+                missing_core_pairs
+            )
+            self.config.asset_pairs.extend(missing_core_pairs)
 
-            # Create a snapshot copy for iteration (prevents race conditions)
-            asset_pairs_snapshot = list(self.config.asset_pairs)
+        # Create a snapshot copy for iteration (prevents race conditions)
+        asset_pairs_snapshot = list(self.config.asset_pairs)
 
         logger.info("Analyzing %d pairs: %s", len(asset_pairs_snapshot), asset_pairs_snapshot)
 
@@ -2665,37 +2510,7 @@ class TradingLoopAgent:
         self.state = AgentState.IDLE
         self._record_state_metric()
 
-        # Stop pair selection scheduler if running
-        if self.pair_scheduler and self.pair_scheduler.is_running:
-            try:
-                # Check if there's a running event loop
-                try:
-                    loop = asyncio.get_running_loop()
-                    # Schedule the coroutine in the running loop and wait for completion
-                    if loop.is_running():
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.pair_scheduler.stop(), loop
-                        )
-                        # Wait up to 5 seconds for graceful shutdown
-                        try:
-                            future.result(timeout=5.0)
-                            logger.info("✓ Pair selection scheduler stopped successfully")
-                        except TimeoutError:
-                            logger.warning(
-                                "Pair scheduler stop timed out after 5s; may still be running"
-                            )
-                    else:
-                        logger.warning(
-                            "Event loop exists but is not running; cannot stop pair scheduler gracefully"
-                        )
-                except RuntimeError:
-                    # No running event loop - log warning
-                    logger.warning(
-                        "No running event loop available to stop pair scheduler; "
-                        "scheduler may not stop gracefully"
-                    )
-            except Exception as e:
-                logger.error(f"Error stopping pair scheduler: {e}", exc_info=True)
+        # Pair scheduler stop logic removed as part of THR-172 cleanup
 
     def pause(self) -> bool:
         """
