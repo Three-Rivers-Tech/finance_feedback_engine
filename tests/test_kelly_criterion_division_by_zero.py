@@ -112,10 +112,9 @@ class TestDivisionByZeroFixes:
         assert details["position_size_units"] == 0.0
         assert not math.isnan(position_size)
         assert position_size != float('inf')
-            import math
-            assert not math.isnan(kelly_fraction), "kelly_fraction is NaN for negative payoff ratio"
-            assert kelly_fraction != float("inf"), "kelly_fraction is inf for negative payoff ratio"
-            assert kelly_fraction != -float("inf"), "kelly_fraction is -inf for negative payoff ratio"
+        assert not math.isnan(kelly_fraction), "kelly_fraction is NaN for negative payoff ratio"
+        assert kelly_fraction != float("inf"), "kelly_fraction is inf for negative payoff ratio"
+        assert kelly_fraction != -float("inf"), "kelly_fraction is -inf for negative payoff ratio"
 
     def test_both_avg_win_and_loss_zero(self, kelly_calculator):
         """
