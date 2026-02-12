@@ -1512,6 +1512,34 @@ class FinanceFeedbackEngine:
                 f"Trade blocked: RiskGatekeeper encountered an internal error: {e}"
             ) from e
 
+        # === POSITION SIZE REVALIDATION AT EXECUTION TIME (THR-80) ===
+        # Position size was calculated during RISK_CHECK, but risk limits or balance
+        # may have changed. Recalculate with CURRENT limits before executing.
+        if hasattr(self, "position_sizing_calculator") and self.position_sizing_calculator:
+            try:
+                sizing = self.position_sizing_calculator.calculate_position_sizing_params(
+                    context=decision,
+                    current_price=decision.get("entry_price", 0),
+                    action=decision.get("action", "UNKNOWN"),
+                    has_existing_position=decision.get("has_existing_position", False),
+                    relevant_balance=decision.get("relevant_balance", {}),
+                    balance_source=decision.get("balance_source", "unknown"),
+                )
+                if sizing:
+                    new_size = sizing.get("recommended_position_size")
+                    old_size = decision.get("recommended_position_size")
+                    if new_size and old_size and new_size != old_size:
+                        logger.warning(
+                            f"Position size recalculated at execution time: "
+                            f"{old_size} → {new_size} (risk limits may have changed)"
+                        )
+                    if new_size is not None:
+                        decision["recommended_position_size"] = new_size
+                        decision["position_size_recalculated_at_execution"] = True
+            except Exception as e:
+                # Log but don't block — the original sizing from RISK_CHECK is still valid
+                logger.warning(f"Position size recalculation failed: {e}")
+
         # === TWO-PHASE COMMIT: Persist intent BEFORE execution ===
         # PHASE 1: Mark decision as "pending execution" and flush to disk.
         # If the system crashes after this point, we can detect the orphan on restart.
@@ -1646,6 +1674,31 @@ class FinanceFeedbackEngine:
             raise RiskValidationError(
                 f"Trade blocked: RiskGatekeeper encountered an internal error: {e}"
             ) from e
+
+        # === POSITION SIZE REVALIDATION AT EXECUTION TIME (THR-80) ===
+        if hasattr(self, "position_sizing_calculator") and self.position_sizing_calculator:
+            try:
+                sizing = self.position_sizing_calculator.calculate_position_sizing_params(
+                    context=decision,
+                    current_price=decision.get("entry_price", 0),
+                    action=decision.get("action", "UNKNOWN"),
+                    has_existing_position=decision.get("has_existing_position", False),
+                    relevant_balance=decision.get("relevant_balance", {}),
+                    balance_source=decision.get("balance_source", "unknown"),
+                )
+                if sizing:
+                    new_size = sizing.get("recommended_position_size")
+                    old_size = decision.get("recommended_position_size")
+                    if new_size and old_size and new_size != old_size:
+                        logger.warning(
+                            f"Position size recalculated at execution time: "
+                            f"{old_size} → {new_size} (risk limits may have changed)"
+                        )
+                    if new_size is not None:
+                        decision["recommended_position_size"] = new_size
+                        decision["position_size_recalculated_at_execution"] = True
+            except Exception as e:
+                logger.warning(f"Position size recalculation failed: {e}")
 
         # === TWO-PHASE COMMIT: Persist intent BEFORE execution ===
         decision["execution_status"] = "pending"
