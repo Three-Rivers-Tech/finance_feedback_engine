@@ -1,9 +1,26 @@
 """Input validation utilities."""
 
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
+
+# Configurable staleness thresholds (in minutes) via environment variables.
+# Free-tier data providers (e.g., Alpha Vantage) often have 15-60 min delays,
+# so the defaults are relaxed to avoid false CRITICAL alerts.
+CRYPTO_INTRADAY_STALE_MINUTES = float(
+    os.getenv("FFE_CRYPTO_INTRADAY_STALE_MINUTES", "90")
+)
+CRYPTO_INTRADAY_WARN_MINUTES = float(
+    os.getenv("FFE_CRYPTO_INTRADAY_WARN_MINUTES", "30")
+)
+FOREX_INTRADAY_STALE_MINUTES = float(
+    os.getenv("FFE_FOREX_INTRADAY_STALE_MINUTES", "90")
+)
+FOREX_INTRADAY_WARN_MINUTES = float(
+    os.getenv("FFE_FOREX_INTRADAY_WARN_MINUTES", "30")
+)
 
 logger = logging.getLogger(__name__)
 
@@ -286,19 +303,19 @@ def validate_data_freshness(
                 )
                 logger.warning(warning_msg)
         else:
-            # Intraday crypto: 15 min threshold
-            if (age_minutes - 15) > epsilon:
+            # Intraday crypto: configurable threshold (default 90min for free-tier providers)
+            if (age_minutes - CRYPTO_INTRADAY_STALE_MINUTES) > epsilon:
                 is_fresh = False
                 warning_msg = (
                     f"CRITICAL: Crypto {timeframe_kind} data is {age_str} old "
-                    f"(threshold: 15 minutes). Stale market data detected."
+                    f"(threshold: {CRYPTO_INTRADAY_STALE_MINUTES:.0f} minutes). Stale market data detected."
                 )
                 logger.error(warning_msg)
-            elif age_minutes >= 5:
+            elif age_minutes >= CRYPTO_INTRADAY_WARN_MINUTES:
                 is_fresh = True
                 warning_msg = (
                     f"WARNING: Crypto {timeframe_kind} data is {age_str} old "
-                    f"(warning: 5 minutes). Consider refreshing."
+                    f"(warning: {CRYPTO_INTRADAY_WARN_MINUTES:.0f} minutes). Consider refreshing."
                 )
                 logger.warning(warning_msg)
 
@@ -340,19 +357,19 @@ def validate_data_freshness(
                     )
                     logger.warning(warning_msg)
             else:
-                # Market hours: 15 min threshold
-                if (age_minutes - 15) > epsilon:
+                # Market hours: configurable threshold (default 90min for free-tier providers)
+                if (age_minutes - FOREX_INTRADAY_STALE_MINUTES) > epsilon:
                     is_fresh = False
                     warning_msg = (
                         f"CRITICAL: Forex {timeframe_kind} data is {age_str} old "
-                        f"(threshold: 15 minutes). Stale market data detected."
+                        f"(threshold: {FOREX_INTRADAY_STALE_MINUTES:.0f} minutes). Stale market data detected."
                     )
                     logger.error(warning_msg)
-                elif age_minutes >= 5:
+                elif age_minutes >= FOREX_INTRADAY_WARN_MINUTES:
                     is_fresh = True
                     warning_msg = (
                         f"WARNING: Forex {timeframe_kind} data is {age_str} old "
-                        f"(warning: 5 minutes). Consider refreshing."
+                        f"(warning: {FOREX_INTRADAY_WARN_MINUTES:.0f} minutes). Consider refreshing."
                     )
                     logger.warning(warning_msg)
     elif asset_kind == "stocks":
@@ -410,14 +427,14 @@ def validate_data_freshness(
                     logger.warning(warning_msg)
     else:
         # Unknown asset type: default to crypto thresholds
-        if (age_minutes - 15) > epsilon:
+        if (age_minutes - CRYPTO_INTRADAY_STALE_MINUTES) > epsilon:
             is_fresh = False
             warning_msg = (
-                f"CRITICAL: Data is {age_str} old (threshold: 15 minutes). "
+                f"CRITICAL: Data is {age_str} old (threshold: {CRYPTO_INTRADAY_STALE_MINUTES:.0f} minutes). "
                 f"Stale market data detected. Recommend skipping trade."
             )
             logger.error(warning_msg)
-        elif age_minutes >= 5:
+        elif age_minutes >= CRYPTO_INTRADAY_WARN_MINUTES:
             is_fresh = True
             warning_msg = (
                 f"WARNING: Data is {age_str} old "
