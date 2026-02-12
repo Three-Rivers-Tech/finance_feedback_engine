@@ -119,7 +119,8 @@ class EnsembleDecisionManager:
         self.learning_rate = ensemble_config.get("learning_rate", 0.1)
 
         # Debate mode settings
-        self.debate_mode = ensemble_config.get("debate_mode", False)
+        raw_debate = ensemble_config.get("debate_mode", False)
+        self.debate_mode = raw_debate.get("enabled", False) if isinstance(raw_debate, dict) else bool(raw_debate)
 
         # THR-63: Use curated debate seat resolver (prefers local Ollama models with cloud fallback)
         if self.debate_mode:
