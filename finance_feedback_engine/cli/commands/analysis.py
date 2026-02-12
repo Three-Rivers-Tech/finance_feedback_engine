@@ -13,6 +13,11 @@ from rich.console import Console
 from rich.table import Table
 
 from finance_feedback_engine.cli.formatters.pulse_formatter import display_pulse_data
+
+
+def _num(val, default=0):
+    """Coalesce None to a numeric default for safe format string usage."""
+    return default if val is None else val
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.utils.environment import get_environment_name
 from finance_feedback_engine.utils.validation import standardize_asset_pair
@@ -235,14 +240,14 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         if decision.get("position_type") and not decision.get("signal_only"):
             console.print("\n[bold]Position Details:[/bold]")
             console.print(f"  Type: {decision['position_type']}")
-            console.print(f"  Entry Price: ${decision.get('entry_price', 0):.2f}")
+            console.print(f"  Entry Price: ${_num(decision.get('entry_price')):.2f}")
             console.print(
                 f"  Recommended Size: "
-                f"{decision.get('recommended_position_size', 0):.6f} units"
+                f"{_num(decision.get('recommended_position_size')):.6f} units"
             )
-            console.print(f"  Risk: {decision.get('risk_percentage', 1)}% of account")
+            console.print(f"  Risk: {_num(decision.get('risk_percentage'), 1)}% of account")
             console.print(
-                f"  Stop Loss: {decision.get('stop_loss_fraction', 0.02)*100:.1f}% "
+                f"  Stop Loss: {_num(decision.get('stop_loss_fraction'), 0.02)*100:.1f}% "
                 "from entry"
             )
 
@@ -254,17 +259,17 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         if md:
             console.print("\nMarket Data:")
             if "open" in md:
-                console.print(f"  Open: ${md.get('open', 0):.2f}")
+                console.print(f"  Open: ${_num(md.get('open')):.2f}")
             if "close" in md:
-                console.print(f"  Close: ${md.get('close', 0):.2f}")
+                console.print(f"  Close: ${_num(md.get('close')):.2f}")
             if "high" in md:
-                console.print(f"  High: ${md.get('high', 0):.2f}")
+                console.print(f"  High: ${_num(md.get('high')):.2f}")
             if "low" in md:
-                console.print(f"  Low: ${md.get('low', 0):.2f}")
+                console.print(f"  Low: ${_num(md.get('low')):.2f}")
         if "price_change" in decision:
-            console.print(f"  Price Change: {decision.get('price_change', 0):.2f}%")
+            console.print(f"  Price Change: {_num(decision.get('price_change')):.2f}%")
         if "volatility" in decision:
-            console.print(f"  Volatility: {decision.get('volatility', 0):.2f}%")
+            console.print(f"  Volatility: {_num(decision.get('volatility')):.2f}%")
 
         # Display additional technical data if available
         md = decision.get("market_data", {}) or {}
@@ -272,14 +277,14 @@ def analyze(ctx, asset_pair, provider, show_pulse):
             console.print("\nTechnical Analysis:")
             console.print(f"  Trend: {md.get('trend', 'N/A')}")
             console.print(
-                f"  Price Range: ${md.get('price_range', 0):.2f} ("
-                f"{md.get('price_range_pct', 0):.2f}%)"
+                f"  Price Range: ${_num(md.get('price_range')):.2f} ("
+                f"{_num(md.get('price_range_pct')):.2f}%)"
             )
-            console.print(f"  Body %: {md.get('body_pct', 0):.2f}%")
+            console.print(f"  Body %: {_num(md.get('body_pct')):.2f}%")
 
         if "rsi" in md:
             console.print(
-                f"  RSI: {md.get('rsi', 0):.2f} (" f"{md.get('rsi_signal', 'neutral')})"
+                f"  RSI: {_num(md.get('rsi')):.2f} (" f"{md.get('rsi_signal', 'neutral')})"
             )
 
         # Display multi-timeframe pulse if requested using the new formatter
@@ -323,7 +328,7 @@ def analyze(ctx, asset_pair, provider, show_pulse):
                 )
             console.print(f"  Voting Strategy: {meta['voting_strategy']}")
             console.print(f"  Agreement Score: {meta['agreement_score']:.1%}")
-            console.print(f"  Confidence Variance: {meta['confidence_variance']:.1f}")
+            console.print(f"  Confidence Variance: {_num(meta.get('confidence_variance')):.1f}")
 
             # Show individual provider decisions
             console.print("\n[bold]Provider Decisions:[/bold]")
