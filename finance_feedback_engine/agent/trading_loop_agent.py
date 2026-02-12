@@ -132,6 +132,8 @@ class TradingLoopAgent:
         self._current_decisions = []  # Store multiple decisions for batch processing
         # Lock for protecting current_decisions list from concurrent modification
         self._current_decisions_lock = asyncio.Lock()
+        # Lock for atomic state transitions (THR-81)
+        self._state_transition_lock = asyncio.Lock()
 
         # Asset pairs lock removed as part of THR-172 cleanup
         # Track analysis failures and their timestamps for time-based decay
@@ -536,24 +538,58 @@ class TradingLoopAgent:
                     logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
                     await asyncio.sleep(self.config.main_loop_error_backoff_seconds)
 
+    # Valid state transitions — prevents illegal jumps (e.g. skipping RISK_CHECK)
+    _VALID_TRANSITIONS: dict[AgentState, set[AgentState]] = {
+        AgentState.IDLE: {AgentState.RECOVERING, AgentState.PERCEPTION},
+        AgentState.RECOVERING: {AgentState.IDLE, AgentState.PERCEPTION},
+        AgentState.PERCEPTION: {AgentState.REASONING, AgentState.IDLE},
+        AgentState.REASONING: {AgentState.RISK_CHECK, AgentState.IDLE},
+        AgentState.RISK_CHECK: {AgentState.EXECUTION, AgentState.IDLE, AgentState.REASONING},
+        AgentState.EXECUTION: {AgentState.LEARNING, AgentState.IDLE},
+        AgentState.LEARNING: {AgentState.IDLE, AgentState.PERCEPTION},
+    }
+
     async def _transition_to(self, new_state: AgentState):
-        """Helper method to handle state transitions with logging."""
-        old_state = self.state
-        self.state = new_state
-        logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+        """Atomically transition to a new state with validation and rollback."""
+        async with self._state_transition_lock:
+            old_state = self.state
 
-        # Update Prometheus gauge to reflect the new state
-        self._record_state_metric()
+            # Validate transition is legal
+            valid_targets = self._VALID_TRANSITIONS.get(old_state, set())
+            if new_state not in valid_targets:
+                logger.error(
+                    f"ILLEGAL state transition blocked: {old_state.name} -> {new_state.name}. "
+                    f"Valid targets: {[s.name for s in valid_targets]}"
+                )
+                raise ValueError(
+                    f"Illegal state transition: {old_state.name} -> {new_state.name}"
+                )
 
-        # Emit event for dashboard
-        self._emit_dashboard_event(
-            {
-                "type": "state_transition",
-                "from": old_state.name,
-                "to": new_state.name,
-                "timestamp": time.time(),
-            }
-        )
+            try:
+                self.state = new_state
+                logger.info(f"Transitioning {old_state.name} -> {new_state.name}")
+
+                # Update Prometheus gauge to reflect the new state
+                self._record_state_metric()
+
+                # Emit event for dashboard
+                self._emit_dashboard_event(
+                    {
+                        "type": "state_transition",
+                        "from": old_state.name,
+                        "to": new_state.name,
+                        "timestamp": time.time(),
+                    }
+                )
+            except Exception as e:
+                # Rollback on failure
+                self.state = old_state
+                logger.error(
+                    f"State transition {old_state.name} -> {new_state.name} failed, "
+                    f"rolled back: {e}",
+                    exc_info=True,
+                )
+                raise
 
     def _record_state_metric(self):
         """Push the current OODA state to Prometheus gauge."""
