@@ -23,29 +23,29 @@ class TestValidateDataFreshness:
         assert "2" in age_str and "minute" in age_str
 
     @freeze_time("2024-01-15 12:00:00")
-    def test_crypto_warning_threshold_5_minutes(self):
-        """Crypto data > 5 mins but ≤ 15 mins should warn but remain usable."""
-        stale_ts = "2024-01-15T11:53:00Z"  # 7 minutes ago
+    def test_crypto_warning_threshold(self):
+        """Crypto data > 30 mins (default warn) but ≤ 90 mins should warn but remain usable."""
+        stale_ts = "2024-01-15T11:25:00Z"  # 35 minutes ago
 
         is_fresh, age_str, warning = validate_data_freshness(stale_ts, "crypto")
         assert is_fresh is True  # Still usable
         assert "WARNING" in warning
-        assert "7" in age_str
+        assert "35" in age_str
 
     @freeze_time("2024-01-15 12:00:00")
-    def test_crypto_critical_threshold_15_minutes(self):
-        """Crypto data > 15 mins should be critical (not fresh)."""
-        very_stale_ts = "2024-01-15T11:40:00Z"  # 20 minutes ago
+    def test_crypto_critical_threshold(self):
+        """Crypto data > 90 mins (default stale) should be critical (not fresh)."""
+        very_stale_ts = "2024-01-15T10:25:00Z"  # 95 minutes ago
 
         is_fresh, age_str, warning = validate_data_freshness(very_stale_ts, "crypto")
         assert is_fresh is False
         assert "CRITICAL" in warning
-        assert "20" in age_str
+        assert "95" in age_str or "1.5" in age_str or "hour" in age_str
 
     @freeze_time("2024-01-15 12:00:00")
-    def test_forex_warning_threshold_5_minutes(self):
-        """Forex data follows same thresholds as crypto."""
-        stale_ts = "2024-01-15T11:54:00Z"  # 6 minutes ago
+    def test_forex_warning_threshold(self):
+        """Forex data > 30 mins (default warn) should warn but remain usable."""
+        stale_ts = "2024-01-15T11:25:00Z"  # 35 minutes ago
 
         is_fresh, age_str, warning = validate_data_freshness(stale_ts, "forex")
         assert is_fresh is True  # Still usable
@@ -53,9 +53,9 @@ class TestValidateDataFreshness:
         assert "Forex" in warning
 
     @freeze_time("2024-01-15 12:00:00")
-    def test_forex_critical_threshold_15_minutes(self):
-        """Forex data > 15 mins should be critical."""
-        very_stale_ts = "2024-01-15T11:44:00Z"  # 16 minutes ago
+    def test_forex_critical_threshold(self):
+        """Forex data > 90 mins (default stale) should be critical."""
+        very_stale_ts = "2024-01-15T10:25:00Z"  # 95 minutes ago
 
         is_fresh, age_str, warning = validate_data_freshness(very_stale_ts, "forex")
         assert is_fresh is False
@@ -199,11 +199,11 @@ class TestValidateDataFreshness:
     def test_unknown_asset_type_defaults_to_crypto_thresholds(self):
         """Unknown asset types should default to crypto thresholds."""
         now = dt.datetime.now(timezone.utc)
-        ts = (now - dt.timedelta(minutes=8)).isoformat().replace("+00:00", "Z")
+        ts = (now - dt.timedelta(minutes=45)).isoformat().replace("+00:00", "Z")
 
         is_fresh, age_str, warning = validate_data_freshness(ts, "unknown_asset")
-        assert is_fresh is True  # Within 15 mins
-        assert "WARNING" in warning  # But warns (> 5 mins)
+        assert is_fresh is True  # Within 90 mins (default stale threshold)
+        assert "WARNING" in warning  # But warns (> 30 mins)
 
     def test_invalid_timestamp_format_raises_error(self):
         """Invalid timestamp format should raise ValueError."""
@@ -227,7 +227,7 @@ class TestValidateDataFreshness:
     def test_default_asset_type_is_crypto(self):
         """When asset_type is None, should default to crypto thresholds."""
         now = dt.datetime.now(timezone.utc)
-        ts = (now - dt.timedelta(minutes=7)).isoformat().replace("+00:00", "Z")
+        ts = (now - dt.timedelta(minutes=45)).isoformat().replace("+00:00", "Z")
 
         is_fresh, age_str, warning = validate_data_freshness(ts)  # No asset_type
         assert is_fresh is True
@@ -253,13 +253,13 @@ class TestValidateDataFreshness:
         # Exactly at threshold - may or may not warn depending on precision
         assert is_fresh is True  # Still usable
 
-    def test_edge_case_exactly_15_minutes_old_crypto(self):
-        """Data exactly 15 minutes old should warn but remain usable for crypto (critical is > 15)."""
+    def test_edge_case_exactly_at_stale_threshold_crypto(self):
+        """Data exactly at 90 min threshold should warn but remain usable for crypto (critical is > 90)."""
         now = dt.datetime.now(timezone.utc)
-        ts = (now - dt.timedelta(minutes=15)).isoformat().replace("+00:00", "Z")
+        ts = (now - dt.timedelta(minutes=90)).isoformat().replace("+00:00", "Z")
 
         is_fresh, age_str, warning = validate_data_freshness(ts, "crypto")
-        # Exactly at threshold but not over it (> 15): warn, still usable
+        # Exactly at threshold but not over it (> 90): warn, still usable
         assert is_fresh is True
         assert "WARNING" in warning
 
