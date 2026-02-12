@@ -1768,6 +1768,13 @@ class FinanceFeedbackEngine:
         signal-only blocking (deprecated in favor of explicit approvals/autonomous mode).
         """
 
+        # Block signal-only decisions from execution
+        if decision.get("signal_only"):
+            raise ValueError(
+                "Cannot execute trade in signal-only mode. "
+                "Decision is flagged as signal_only."
+            )
+
         # Note: Leverage and concentration checks are now handled by
         # RiskGatekeeper._validate_leverage_and_concentration() which is called
         # during the agent RISK_CHECK state. This consolidates all risk validation
