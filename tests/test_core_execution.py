@@ -44,7 +44,7 @@ def minimal_config(tmp_path):
             "enabled_providers": ["local"],
             "provider_weights": {"local": 1.0},
             "min_providers_required": 1,
-            "debate_mode": {"enabled": False},
+            "debate_mode": False,
         },
         "decision_engine": {
             "signal_only_default": False,
