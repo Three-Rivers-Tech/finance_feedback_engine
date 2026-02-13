@@ -2128,22 +2128,26 @@ def backtest_simple(ctx, symbol, days, granularity, no_cache):
 @click.option("--symbol", default="EUR_USD", help="Trading symbol (default: EUR_USD)")
 @click.option("--days", default=30, type=int, help="Number of days of history (default: 30)")
 @click.option("--granularity", default="M5", help="Candle granularity (default: M5)")
+@click.option("--n-trials", default=100, type=int, help="Number of Optuna trials (default: 100)")
 @click.option("--min-trades", default=5, type=int, help="Minimum trades for valid result (default: 5)")
+@click.option("--use-ffe", is_flag=True, help="Use full FFE decision engine (requires initialization)")
 @click.option("--export", type=str, help="Export results to CSV file")
 @click.pass_context
-def optimize_params(ctx, symbol, days, granularity, min_trades, export):
+def optimize_params(ctx, symbol, days, granularity, n_trials, min_trades, use_ffe, export):
     """
-    Run parameter optimization to find best trading parameters (THR-301).
+    Run Bayesian parameter optimization using Optuna (THR-301).
     
-    Tests combinations of stop loss, take profit, and position sizing
-    to find parameters that achieve >55% win rate.
+    Uses TPE (Tree-structured Parzen Estimator) for efficient search.
+    Far superior to grid search - learns from previous trials.
     """
     from finance_feedback_engine.backtest import HistoricalDataManager, Backtester
     from finance_feedback_engine.backtest.optimizer import ParameterOptimizer
+    from finance_feedback_engine.backtest.strategy_adapter import create_ffe_strategy
     from decimal import Decimal
+    import asyncio
     
     try:
-        console.print(f"\n[bold cyan]═══ PARAMETER OPTIMIZATION (THR-301) ═══[/bold cyan]\n")
+        console.print(f"\n[bold cyan]═══ OPTUNA PARAMETER OPTIMIZATION (THR-301) ═══[/bold cyan]\n")
         
         config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
@@ -2167,9 +2171,13 @@ def optimize_params(ctx, symbol, days, granularity, min_trades, export):
         candles_needed = int((days * 86400) / seconds_per_candle)
         candles_needed = min(candles_needed, 5000)
         
+        strategy_type = "FFE Decision Engine" if use_ffe else "Simple Momentum"
+        
         console.print(f"Symbol: {symbol}")
         console.print(f"Period: {days} days ({candles_needed} {granularity} candles)")
-        console.print(f"Min trades per test: {min_trades}")
+        console.print(f"Strategy: {strategy_type}")
+        console.print(f"Optuna trials: {n_trials}")
+        console.print(f"Min trades per trial: {min_trades}")
         console.print()
         
         # Load historical data
@@ -2196,35 +2204,61 @@ def optimize_params(ctx, symbol, days, granularity, min_trades, export):
         console.print(f"  ✓ Loaded {len(df)} candles")
         console.print()
         
-        # Define simple strategy (will be replaced with FFE strategy)
+        # Define strategy
         console.print("[cyan]Step 2:[/cyan] Defining strategy...")
         
-        def simple_momentum_strategy(data, index):
-            """Simple momentum strategy for optimization."""
-            if index < 20:
+        if use_ffe:
+            # Initialize FFE engine for strategy
+            console.print("[dim]Initializing FFE decision engine...[/dim]")
+            
+            try:
+                # Run async initialization
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(engine.initialize())
+                finally:
+                    loop.close()
+                
+                # Create FFE strategy function
+                strategy = create_ffe_strategy(engine)
+                console.print("  ✓ FFE decision engine initialized")
+                
+            except Exception as e:
+                console.print(f"[red]Failed to initialize FFE: {e}[/red]")
+                console.print("[yellow]Falling back to simple momentum strategy[/yellow]")
+                use_ffe = False  # Fallback to simple strategy
+        
+        if not use_ffe:
+            # Simple momentum strategy (fallback or default)
+            def simple_momentum_strategy(data, index):
+                """Simple momentum strategy for optimization."""
+                if index < 20:
+                    return None
+                
+                # Calculate momentum indicators
+                ma_short = data.iloc[index-10:index+1]['close'].mean()
+                ma_long = data.iloc[index-20:index+1]['close'].mean()
+                current_price = data.iloc[index]['close']
+                
+                # Buy when short MA > long MA and price > short MA
+                if ma_short > ma_long and current_price > ma_short:
+                    return "BUY"
+                
+                # Sell when short MA < long MA and price < short MA
+                if ma_short < ma_long and current_price < ma_short:
+                    return "SELL"
+                
                 return None
             
-            # Calculate momentum indicators
-            ma_short = data.iloc[index-10:index+1]['close'].mean()
-            ma_long = data.iloc[index-20:index+1]['close'].mean()
-            current_price = data.iloc[index]['close']
-            
-            # Buy when short MA > long MA and price > short MA
-            if ma_short > ma_long and current_price > ma_short:
-                return "BUY"
-            
-            # Sell when short MA < long MA and price < short MA
-            if ma_short < ma_long and current_price < ma_short:
-                return "SELL"
-            
-            return None
+            strategy = simple_momentum_strategy
+            console.print("  ✓ Simple momentum strategy loaded")
         
-        console.print("  ✓ Using momentum-based strategy")
         console.print()
         
-        # Run optimization
-        console.print("[cyan]Step 3:[/cyan] Running parameter optimization...")
-        console.print("[dim]Testing combinations of SL, TP, and position size...[/dim]")
+        # Run Optuna optimization
+        console.print("[cyan]Step 3:[/cyan] Running Bayesian optimization...")
+        console.print(f"[dim]Optuna will intelligently search parameter space ({n_trials} trials)[/dim]")
         console.print()
         
         optimizer = ParameterOptimizer(
@@ -2234,11 +2268,14 @@ def optimize_params(ctx, symbol, days, granularity, min_trades, export):
         
         results = optimizer.optimize(
             data=df,
-            strategy=simple_momentum_strategy,
-            stop_loss_range=[0.01, 0.015, 0.02, 0.025, 0.03],  # 1-3%
-            take_profit_range=[0.02, 0.03, 0.04, 0.05],        # 2-5%
-            position_size_range=[0.01, 0.02, 0.03],            # 1-3%
-            min_trades=min_trades
+            strategy=strategy,
+            n_trials=n_trials,
+            stop_loss_range=(0.005, 0.05),    # 0.5% to 5%
+            take_profit_range=(0.01, 0.10),   # 1% to 10%
+            position_size_range=(0.005, 0.05),  # 0.5% to 5%
+            min_trades=min_trades,
+            timeout=None,  # No timeout
+            n_jobs=1  # Sequential execution (parallel would need careful async handling)
         )
         
         if not results:
