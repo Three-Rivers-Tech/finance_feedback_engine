@@ -155,6 +155,8 @@ class TradeOutcomeRecorder:
                     "entry_size": size,
                 }
                 logger.info(f"New position opened: {pos_key} @ {entry_price}")
+                # Save state immediately when new position detected
+                self._save_state()
         
         # Detect closed positions (in state but not in current)
         closed_keys = set(self.open_positions.keys()) - current_keys
