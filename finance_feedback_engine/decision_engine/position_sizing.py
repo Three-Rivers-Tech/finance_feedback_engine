@@ -18,6 +18,17 @@ class PositionSizingCalculator:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        
+        # Debug: log position sizing config on init
+        agent_cfg = config.get("agent", {})
+        pos_sizing_cfg = agent_cfg.get("position_sizing", {})
+        logger.info(
+            f"PositionSizingCalculator init: agent_cfg keys={list(agent_cfg.keys())[:10]}"
+        )
+        logger.info(
+            f"PositionSizingCalculator initialized with risk_percentage={pos_sizing_cfg.get('risk_percentage', 'NOT SET')}"
+        )
+        
         # Import Kelly Criterion calculator if available
         try:
             from .kelly_criterion import KellyCriterionCalculator
@@ -474,10 +485,33 @@ class PositionSizingCalculator:
             stop_loss_percentage: Stop loss distance as decimal fraction (default 0.02 = 2%)
 
         Returns:
-            Suggested position size in units of asset
+            Suggested position size in units of asset (always >= 0)
         """
-        if entry_price == 0 or stop_loss_percentage == 0:
+        # Gemini Issue #1: Validate entry_price > 0 (prevent ZeroDivisionError)
+        if entry_price <= 0:
+            logger.warning(
+                f"Invalid entry_price ({entry_price}) - must be > 0. Returning 0 position size."
+            )
             return 0.0
+        
+        # Gemini Issue #3: Enforce minimum stop-loss distance (0.5%)
+        MIN_STOP_LOSS_PCT = 0.005  # 0.5% minimum
+        if stop_loss_percentage < MIN_STOP_LOSS_PCT:
+            logger.warning(
+                f"Stop loss too tight ({stop_loss_percentage:.3%}) - enforcing minimum {MIN_STOP_LOSS_PCT:.1%}"
+            )
+            stop_loss_percentage = MIN_STOP_LOSS_PCT
+        
+        # Validate inputs
+        if account_balance <= 0:
+            logger.warning(f"Invalid account_balance ({account_balance}) - returning 0 position size")
+            return 0.0
+        
+        if risk_percentage <= 0 or risk_percentage > 0.10:  # Max 10% risk
+            logger.warning(
+                f"Invalid risk_percentage ({risk_percentage:.1%}) - must be 0-10%. Using 1% default."
+            )
+            risk_percentage = 0.01
 
         # Amount willing to risk in dollar terms
         risk_amount = account_balance * risk_percentage
@@ -487,6 +521,18 @@ class PositionSizingCalculator:
 
         # Position size = Risk Amount / Stop Loss Distance
         position_size = risk_amount / stop_loss_distance
+        
+        # Gemini Issue #2: Ensure position_size is always positive
+        position_size = abs(position_size)
+        
+        # Final sanity check
+        if position_size < 0 or position_size != position_size:  # Check for NaN
+            logger.error(
+                f"Position size calculation error: size={position_size}, "
+                f"balance={account_balance}, risk={risk_percentage}, "
+                f"entry={entry_price}, sl%={stop_loss_percentage}"
+            )
+            return 0.0
 
         return position_size
 
