@@ -951,10 +951,12 @@ class OandaPlatform(BaseTradingPlatform):
             stop_loss_pct = decision.get("stop_loss_percentage", 0.02)
 
             # Determine order direction
+            # Oanda requires integer units for forex (1 unit = 1 EUR, ~$1.19)
+            # Round to nearest integer, minimum 1 unit
             if action == "BUY":
-                order_units = abs(units)
+                order_units = max(1, round(abs(units)))
             elif action == "SELL":
-                order_units = -abs(units)
+                order_units = -max(1, round(abs(units)))
             else:
                 return {
                     "success": False,
@@ -1009,7 +1011,7 @@ class OandaPlatform(BaseTradingPlatform):
                 "order": {
                     "type": "MARKET",
                     "instrument": instrument,
-                    "units": str(int(order_units)),
+                    "units": str(int(order_units)),  # Integer units required by Oanda
                     "timeInForce": "FOK",  # Fill or Kill
                     "positionFill": "DEFAULT",
                     "clientRequestID": client_request_id,  # Idempotency key
