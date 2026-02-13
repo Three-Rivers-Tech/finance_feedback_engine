@@ -116,6 +116,76 @@ services:
       - ${PROFILE:-}  # blank for always-on, 'dev' or 'test' if needed
 
   # =============================================================================
+  # Trade Tracker - Position Close Detection (THR-221)
+  # =============================================================================
+  trade-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${DOCKER_TARGET:-runtime}
+      network: host
+    container_name: ffe-trade-tracker
+    image: finance-feedback-engine:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-ffe_user}:${POSTGRES_PASSWORD:-changeme}@localhost:5432/${POSTGRES_DB:-ffe}
+    # Run trade tracker monitor script
+    command: /app/scripts/run_trade_tracker.sh
+    volumes:
+      - ffe-data:/app/data
+      - ffe-logs:/app/logs
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/open_positions_state.json"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # Volatility Monitor - High-Frequency P&L Alerts (THR-210)
+  # =============================================================================
+  volatility-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ${DOCKER_TARGET:-runtime}
+      network: host
+    container_name: ffe-volatility-monitor
+    image: finance-feedback-engine:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-ffe_user}:${POSTGRES_PASSWORD:-changeme}@localhost:5432/${POSTGRES_DB:-ffe}
+    # Run volatility monitor script
+    command: /app/scripts/run_volatility_monitor.sh
+    volumes:
+      - ffe-data:/app/data
+      - ffe-logs:/app/logs
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/data/volatility_alerts.json"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
   # Frontend Service - React SPA + Nginx (Configurable for Dev/Prod)
   # =============================================================================
   frontend:
