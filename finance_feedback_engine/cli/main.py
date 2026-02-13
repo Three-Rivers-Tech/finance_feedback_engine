@@ -1771,6 +1771,62 @@ def positions(ctx, save):
         raise click.Abort()
 
 
+@cli.command(name="track-trades")
+@click.pass_context
+def track_trades(ctx):
+    """Update trade state and record outcomes for closed positions (THR-221)."""
+    from finance_feedback_engine.monitoring.trade_outcome_recorder import TradeOutcomeRecorder
+    
+    try:
+        config = ctx.obj["config"]
+        engine = FinanceFeedbackEngine(config)
+
+        platform = getattr(engine, "trading_platform", None)
+        if platform is None:
+            console.print("[yellow]No trading platform configured.[/yellow]")
+            return
+
+        # Fetch current positions
+        try:
+            positions_data = platform.get_active_positions()
+        except Exception as e:
+            raise click.ClickException(f"Error fetching positions: {e}")
+
+        positions_list = (positions_data or {}).get("positions", [])
+        
+        # Initialize recorder
+        recorder = TradeOutcomeRecorder()
+        
+        # Update positions and detect closes
+        outcomes = recorder.update_positions(positions_list)
+        
+        if outcomes:
+            console.print(f"\n[bold green]✅ Recorded {len(outcomes)} closed trade(s)[/bold green]\n")
+            for outcome in outcomes:
+                pnl = Decimal(outcome["realized_pnl"])
+                pnl_color = "green" if pnl > 0 else ("red" if pnl < 0 else "dim")
+                pnl_sign = "+" if pnl > 0 else ""
+                
+                console.print(f"[bold]{outcome['product']}[/bold] {outcome['side']}")
+                console.print(f"  Entry: ${outcome['entry_price']} @ {outcome['entry_time'][:19]}")
+                console.print(f"  Exit: ${outcome['exit_price']} @ {outcome['exit_time'][:19]}")
+                console.print(f"  Realized P&L: [{pnl_color}]{pnl_sign}${float(pnl):.2f}[/{pnl_color}]")
+                console.print(f"  ROI: [{pnl_color}]{pnl_sign}{outcome['roi_percent']}%[/{pnl_color}]")
+                console.print()
+        else:
+            open_count = len(positions_list)
+            if open_count > 0:
+                console.print(f"[dim]No closed trades. {open_count} position(s) still open.[/dim]")
+            else:
+                console.print("[dim]No open or closed trades detected.[/dim]")
+
+    except click.ClickException:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        raise click.Abort()
+
+
 @cli.command()
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
