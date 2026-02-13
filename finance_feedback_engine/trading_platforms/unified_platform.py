@@ -224,6 +224,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         all_holdings = []
         num_assets = 0
         cash_balances = {}
+        futures_value_usd = 0
+        spot_value_usd = 0
 
         platform_breakdowns = {}
 
@@ -235,6 +237,10 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 total_value_usd += breakdown.get("total_value_usd", 0)
                 # Capture unrealized P&L if the platform exposes it
                 total_unrealized += breakdown.get("unrealized_pnl", 0.0)
+                
+                # Aggregate futures and spot values for position sizing
+                futures_value_usd += breakdown.get("futures_value_usd", 0)
+                spot_value_usd += breakdown.get("spot_value_usd", 0)
 
                 # Capture cash/balance if provided by the platform
                 bal = breakdown.get("balance") or breakdown.get("total_balance_usd")
@@ -274,6 +280,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
 
         return {
             "total_value_usd": total_value_usd,
+            "futures_value_usd": futures_value_usd,
+            "spot_value_usd": spot_value_usd,
             "cash_balance_usd": cash_balance_usd,
             "per_platform_cash": cash_balances,
             "num_assets": num_assets,
@@ -281,6 +289,90 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             "platform_breakdowns": platform_breakdowns,
             "unrealized_pnl": total_unrealized,
         }
+
+    async def aget_portfolio_breakdown(self) -> Dict[str, Any]:
+        """
+        Async version of get_portfolio_breakdown.
+        
+        Get a combined portfolio breakdown from all platforms.
+        Merges portfolio data from Coinbase (futures) and Oanda (forex).
+        """
+        total_value_usd = 0
+        total_unrealized = 0.0
+        all_holdings = []
+        num_assets = 0
+        cash_balances = {}
+        futures_value_usd = 0
+        spot_value_usd = 0
+
+        platform_breakdowns = {}
+
+        for name, platform in self.platforms.items():
+            try:
+                # Use async version if available, otherwise fall back to sync
+                if hasattr(platform, 'aget_portfolio_breakdown'):
+                    breakdown = await platform.aget_portfolio_breakdown()
+                else:
+                    breakdown = platform.get_portfolio_breakdown()
+                    
+                platform_breakdowns[name] = breakdown
+
+                total_value_usd += breakdown.get("total_value_usd", 0)
+                # Capture unrealized P&L if the platform exposes it
+                total_unrealized += breakdown.get("unrealized_pnl", 0.0)
+                
+                # Aggregate futures and spot values for position sizing
+                futures_value_usd += breakdown.get("futures_value_usd", 0)
+                spot_value_usd += breakdown.get("spot_value_usd", 0)
+
+                # Capture cash/balance if provided by the platform
+                bal = breakdown.get("balance") or breakdown.get("total_balance_usd")
+                if bal is not None:
+                    try:
+                        cash_balances[name] = float(bal)
+                    except Exception:
+                        cash_balances[name] = 0.0
+
+                # Add platform prefix to holdings
+                holdings = breakdown.get("holdings", [])
+                for holding in holdings:
+                    holding["platform"] = name
+                all_holdings.extend(holdings)
+
+                num_assets += breakdown.get("num_assets", 0)
+
+            except (ValueError, TypeError, KeyError) as e:
+                logger.error("Failed to get portfolio breakdown from %s: %s", name, e)
+
+        # Recalculate allocation percentages across the entire portfolio.
+        # Use total notional exposure (sum of all holdings' values) rather
+        # than account balance, so allocations make sense for leveraged positions.
+        total_notional_exposure = sum(
+            holding.get("value_usd", 0) for holding in all_holdings
+        )
+
+        if total_notional_exposure > 0:
+            for holding in all_holdings:
+                allocation = (
+                    holding.get("value_usd", 0) / total_notional_exposure
+                ) * 100
+                holding["allocation_pct"] = allocation
+
+        # Sum cash balances across platforms
+        cash_balance_usd = sum(cash_balances.values()) if cash_balances else 0.0
+
+        return {
+            "total_value_usd": total_value_usd,
+            "futures_value_usd": futures_value_usd,
+            "spot_value_usd": spot_value_usd,
+            "cash_balance_usd": cash_balance_usd,
+            "per_platform_cash": cash_balances,
+            "num_assets": num_assets,
+            "holdings": all_holdings,
+            "platform_breakdowns": platform_breakdowns,
+            "unrealized_pnl": total_unrealized,
+        }
+
     def test_connection(self) -> Dict[str, bool]:
         """
         Test connectivity across all configured platforms.
