@@ -2124,6 +2124,189 @@ def backtest_simple(ctx, symbol, days, granularity, no_cache):
         raise click.Abort()
 
 
+@cli.command(name="optimize-params")
+@click.option("--symbol", default="EUR_USD", help="Trading symbol (default: EUR_USD)")
+@click.option("--days", default=30, type=int, help="Number of days of history (default: 30)")
+@click.option("--granularity", default="M5", help="Candle granularity (default: M5)")
+@click.option("--min-trades", default=5, type=int, help="Minimum trades for valid result (default: 5)")
+@click.option("--export", type=str, help="Export results to CSV file")
+@click.pass_context
+def optimize_params(ctx, symbol, days, granularity, min_trades, export):
+    """
+    Run parameter optimization to find best trading parameters (THR-301).
+    
+    Tests combinations of stop loss, take profit, and position sizing
+    to find parameters that achieve >55% win rate.
+    """
+    from finance_feedback_engine.backtest import HistoricalDataManager, Backtester
+    from finance_feedback_engine.backtest.optimizer import ParameterOptimizer
+    from decimal import Decimal
+    
+    try:
+        console.print(f"\n[bold cyan]═══ PARAMETER OPTIMIZATION (THR-301) ═══[/bold cyan]\n")
+        
+        config = ctx.obj["config"]
+        engine = FinanceFeedbackEngine(config)
+        platform = getattr(engine, "trading_platform", None)
+        
+        if platform is None:
+            console.print("[yellow]No trading platform configured.[/yellow]")
+            return
+        
+        # Calculate candles needed
+        granularity_map = {
+            "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
+            "H1": 3600, "H4": 14400, "D": 86400
+        }
+        
+        if granularity not in granularity_map:
+            console.print(f"[red]Invalid granularity: {granularity}[/red]")
+            return
+        
+        seconds_per_candle = granularity_map[granularity]
+        candles_needed = int((days * 86400) / seconds_per_candle)
+        candles_needed = min(candles_needed, 5000)
+        
+        console.print(f"Symbol: {symbol}")
+        console.print(f"Period: {days} days ({candles_needed} {granularity} candles)")
+        console.print(f"Min trades per test: {min_trades}")
+        console.print()
+        
+        # Load historical data
+        console.print("[cyan]Step 1:[/cyan] Loading historical data...")
+        
+        data_manager = HistoricalDataManager()
+        
+        try:
+            df = data_manager.fetch_history(
+                symbol=symbol,
+                granularity=granularity,
+                count=candles_needed,
+                platform=platform,
+                use_cache=True
+            )
+        except Exception as e:
+            console.print(f"[red]Failed to fetch data: {e}[/red]")
+            return
+        
+        if df.empty:
+            console.print("[yellow]No data available.[/yellow]")
+            return
+        
+        console.print(f"  ✓ Loaded {len(df)} candles")
+        console.print()
+        
+        # Define simple strategy (will be replaced with FFE strategy)
+        console.print("[cyan]Step 2:[/cyan] Defining strategy...")
+        
+        def simple_momentum_strategy(data, index):
+            """Simple momentum strategy for optimization."""
+            if index < 20:
+                return None
+            
+            # Calculate momentum indicators
+            ma_short = data.iloc[index-10:index+1]['close'].mean()
+            ma_long = data.iloc[index-20:index+1]['close'].mean()
+            current_price = data.iloc[index]['close']
+            
+            # Buy when short MA > long MA and price > short MA
+            if ma_short > ma_long and current_price > ma_short:
+                return "BUY"
+            
+            # Sell when short MA < long MA and price < short MA
+            if ma_short < ma_long and current_price < ma_short:
+                return "SELL"
+            
+            return None
+        
+        console.print("  ✓ Using momentum-based strategy")
+        console.print()
+        
+        # Run optimization
+        console.print("[cyan]Step 3:[/cyan] Running parameter optimization...")
+        console.print("[dim]Testing combinations of SL, TP, and position size...[/dim]")
+        console.print()
+        
+        optimizer = ParameterOptimizer(
+            initial_balance=Decimal("10000"),
+            fee_pct=Decimal("0.001")
+        )
+        
+        results = optimizer.optimize(
+            data=df,
+            strategy=simple_momentum_strategy,
+            stop_loss_range=[0.01, 0.015, 0.02, 0.025, 0.03],  # 1-3%
+            take_profit_range=[0.02, 0.03, 0.04, 0.05],        # 2-5%
+            position_size_range=[0.01, 0.02, 0.03],            # 1-3%
+            min_trades=min_trades
+        )
+        
+        if not results:
+            console.print("[yellow]No valid results (not enough trades in any combination).[/yellow]")
+            console.print(f"[dim]Try reducing --min-trades (current: {min_trades})[/dim]")
+            return
+        
+        console.print(f"  ✓ Tested {len(results)} valid parameter combinations")
+        console.print()
+        
+        # Display top results
+        console.print("[bold cyan]═══ TOP 10 PARAMETER SETS ═══[/bold cyan]\n")
+        
+        top_10 = optimizer.get_top_results(10)
+        
+        for i, result in enumerate(top_10, 1):
+            # Color-code based on win rate
+            if result.win_rate >= 55:
+                wr_color = "green"
+                marker = "🎯"
+            elif result.win_rate >= 50:
+                wr_color = "yellow"
+                marker = "⚠️ "
+            else:
+                wr_color = "red"
+                marker = "  "
+            
+            console.print(f"{marker} [bold]#{i}[/bold] SL={result.stop_loss_pct:.1%} TP={result.take_profit_pct:.1%} Size={result.position_size_pct:.1%}")
+            console.print(f"    Win Rate: [{wr_color}]{result.win_rate:.2f}%[/{wr_color}] | PF: {result.profit_factor:.2f} | Return: {result.return_pct:+.2f}%")
+            console.print(f"    Trades: {result.total_trades} | Score: {result.score:.3f}")
+            console.print()
+        
+        # Show results that meet criteria
+        good_results = optimizer.get_results_above_threshold(
+            min_win_rate=55.0,
+            min_profit_factor=1.5
+        )
+        
+        if good_results:
+            console.print(f"[bold green]✅ Found {len(good_results)} parameter set(s) meeting criteria:[/bold green]")
+            console.print(f"[dim]Win Rate ≥55% AND Profit Factor ≥1.5[/dim]\n")
+            
+            for result in good_results[:5]:
+                console.print(f"  • SL={result.stop_loss_pct:.1%}, TP={result.take_profit_pct:.1%}, Size={result.position_size_pct:.1%}")
+                console.print(f"    WR={result.win_rate:.1f}%, PF={result.profit_factor:.2f}, Return={result.return_pct:+.2f}%")
+        else:
+            console.print("[yellow]⚠️  No parameter sets achieved Win Rate ≥55% AND Profit Factor ≥1.5[/yellow]")
+            console.print("[dim]Consider:[/dim]")
+            console.print("[dim]  - Testing with more historical data (increase --days)[/dim]")
+            console.print("[dim]  - Adjusting parameter ranges[/dim]")
+            console.print("[dim]  - Improving strategy logic[/dim]")
+        
+        console.print()
+        
+        # Export if requested
+        if export:
+            optimizer.export_results(export)
+            console.print(f"[dim]📄 Results exported to {export}[/dim]")
+        
+    except click.ClickException:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Optimization Error:[/bold red] {str(e)}")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise click.Abort()
+
+
 @cli.command()
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
