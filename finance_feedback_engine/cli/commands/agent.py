@@ -582,6 +582,7 @@ def run_agent(
     else:
         console.print("[cyan]Debate mode disabled; skipping Ollama check[/cyan]")
 
+    engine = None
     try:
         engine = FinanceFeedbackEngine(config)
 
@@ -720,6 +721,7 @@ def run_agent(
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
