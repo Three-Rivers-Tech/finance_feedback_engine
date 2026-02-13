@@ -737,6 +737,29 @@ agent:
     var_confidence: 0.90               # 90% confidence (lower precision acceptable in dev)
     # Note: max_drawdown_percent is controlled by TradingAgentConfig, not here
 
+  # Position Sizing Configuration (THR-209)
+  # Controls how much capital to allocate per trade
+  position_sizing:
+    # Risk percentage: fraction of account balance to risk per trade
+    # Conservative: 0.01 (1%), Moderate: 0.02 (2%), Aggressive: 0.05 (5%)
+    risk_percentage: 0.02  # 2% - moderate risk level
+    
+    # Position size caps (safety limits)
+    max_position_usd_dev: 50.0      # $50 max per trade in development
+    max_position_usd_prod: 500.0    # $500 max per trade in production
+    
+    # Platform-specific minimums (enforced automatically)
+    # Oanda: 1 unit minimum (~$1.19 for EUR_USD)
+    # Coinbase: $10 minimum notional
+    
+    # Dynamic sizing: adjust position size based on account balance
+    # If true, positions scale with account growth/decline
+    dynamic_sizing: true
+    
+    # Capital utilization target
+    # Target percentage of account to deploy per trade
+    target_utilization_pct: 0.02  # 2% of account per trade
+
   # Asset pairs for trading
   asset_pairs:
     - BTCUSD
