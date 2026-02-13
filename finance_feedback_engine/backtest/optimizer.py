@@ -35,8 +35,10 @@ class OptimizationResult:
     trial_number: int = 0
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return asdict(self)
+        """Convert to dictionary including computed score."""
+        d = asdict(self)
+        d['score'] = self.score  # Add computed property
+        return d
     
     @property
     def score(self) -> float:
