@@ -10,10 +10,11 @@ from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 @pytest.mark.external_service
 def test_rejects_trade_with_stale_crypto_data():
-    """Gatekeeper should reject trades when crypto data is > 15 min old."""
+    """Gatekeeper should reject trades when crypto data is > 90 min old (default threshold)."""
     gatekeeper = RiskGatekeeper()
     now = dt.datetime.now(timezone.utc)
-    stale_ts = (now - dt.timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+    # Use 95 minutes to exceed the default 90-minute threshold
+    stale_ts = (now - dt.timedelta(minutes=95)).isoformat().replace("+00:00", "Z")
 
     decision = {
         "action": "BUY",
@@ -168,10 +169,11 @@ def test_rejects_invalid_timestamp_format():
 
 
 def test_data_freshness_checked_before_other_validations():
-    """Data freshness check should fail before drawdown check."""
+    """Data freshness check should fail before drawdown check (uses 90-min threshold)."""
     gatekeeper = RiskGatekeeper()
     now = dt.datetime.now(timezone.utc)
-    stale_ts = (now - dt.timedelta(minutes=20)).isoformat().replace("+00:00", "Z")
+    # Use 95 minutes to exceed the default 90-minute threshold
+    stale_ts = (now - dt.timedelta(minutes=95)).isoformat().replace("+00:00", "Z")
 
     decision = {
         "action": "BUY",
