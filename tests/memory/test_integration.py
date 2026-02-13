@@ -483,15 +483,28 @@ class TestVetoTrackingIntegration:
         assert veto_metrics["accuracy"] == pytest.approx(0.5, abs=0.01)
 
     def test_threshold_optimization(self, tmp_path):
-        """Should recommend optimal veto threshold based on history."""
+        """Should recommend optimal veto threshold based on history (requires MIN_SAMPLES=10)."""
         coordinator = PortfolioMemoryCoordinator(storage_path=tmp_path)
 
         # Record outcomes at different thresholds
-        # Threshold 0.6: Poor performance
-        for i in range(3):
+        # Threshold 0.6: Poor performance (40% accuracy: 4 correct, 6 incorrect)
+        for i in range(4):
             coordinator.record_trade_outcome(
                 TradeOutcome(
-                    decision_id=f"t06-{i}",
+                    decision_id=f"t06-correct-{i}",
+                    asset_pair="BTC-USD",
+                    action="BUY",
+                    entry_timestamp=datetime.now().isoformat(),
+                    realized_pnl=-50.0,  # Would have lost
+                    was_profitable=False,
+                    veto_applied=True,  # Correctly vetoed (good)
+                    veto_threshold=0.6,
+                )
+            )
+        for i in range(6):
+            coordinator.record_trade_outcome(
+                TradeOutcome(
+                    decision_id=f"t06-incorrect-{i}",
                     asset_pair="BTC-USD",
                     action="BUY",
                     entry_timestamp=datetime.now().isoformat(),
@@ -502,11 +515,11 @@ class TestVetoTrackingIntegration:
                 )
             )
 
-        # Threshold 0.8: Good performance
-        for i in range(5):
+        # Threshold 0.8: Good performance (90% accuracy: 9 correct, 1 incorrect)
+        for i in range(9):
             coordinator.record_trade_outcome(
                 TradeOutcome(
-                    decision_id=f"t08-{i}",
+                    decision_id=f"t08-correct-{i}",
                     asset_pair="ETH-USD",
                     action="BUY",
                     entry_timestamp=datetime.now().isoformat(),
@@ -516,11 +529,24 @@ class TestVetoTrackingIntegration:
                     veto_threshold=0.8,
                 )
             )
+        for i in range(1):
+            coordinator.record_trade_outcome(
+                TradeOutcome(
+                    decision_id=f"t08-incorrect-{i}",
+                    asset_pair="ETH-USD",
+                    action="BUY",
+                    entry_timestamp=datetime.now().isoformat(),
+                    realized_pnl=100.0,  # Would have won
+                    was_profitable=True,
+                    veto_applied=True,  # But was vetoed (bad)
+                    veto_threshold=0.8,
+                )
+            )
 
         # Get threshold recommendation
         recommended = coordinator.get_veto_threshold_recommendation()
 
-        # Should recommend 0.8 (higher accuracy)
+        # Should recommend 0.8 (higher accuracy: 90% vs 40%)
         assert recommended == 0.8
 
 
