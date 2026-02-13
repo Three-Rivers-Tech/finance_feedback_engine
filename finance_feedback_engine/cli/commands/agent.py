@@ -718,6 +718,13 @@ def run_agent(
         if ctx.obj.get("verbose"):
             console.print(traceback.format_exc())
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.group()

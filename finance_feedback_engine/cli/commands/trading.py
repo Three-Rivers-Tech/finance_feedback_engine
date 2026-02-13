@@ -44,6 +44,13 @@ def balance(ctx):
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command()
@@ -168,6 +175,13 @@ def execute(ctx, decision_id):
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command(name="check-ollama")
