@@ -155,6 +155,13 @@ def learning_report(ctx, asset_pair):
 
             console.print(traceback.format_exc())
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command(name="prune-memory")
@@ -230,6 +237,13 @@ def prune_memory(ctx, keep_recent, confirm):
 
             console.print(traceback.format_exc())
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 # Export commands for registration in main.py
