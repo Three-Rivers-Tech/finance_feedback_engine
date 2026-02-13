@@ -192,6 +192,14 @@ def load_env_config() -> Dict[str, Any]:
         "max_correlated_assets": _env_int("AGENT_MAX_CORRELATED_ASSETS", 2),
         "max_var_pct": _env_float("AGENT_MAX_VAR_PCT", 0.05),
         "var_confidence": _env_float("AGENT_VAR_CONFIDENCE", 0.95),
+        # Position sizing configuration (THR-209)
+        "position_sizing": {
+            "risk_percentage": _env_float("AGENT_POSITION_SIZING_RISK_PERCENTAGE", 0.01),
+            "max_position_usd_dev": _env_float("AGENT_POSITION_SIZING_MAX_POSITION_USD_DEV", 50.0),
+            "max_position_usd_prod": _env_float("AGENT_POSITION_SIZING_MAX_POSITION_USD_PROD", 500.0),
+            "dynamic_sizing": _env_bool("AGENT_POSITION_SIZING_DYNAMIC_SIZING", True),
+            "target_utilization_pct": _env_float("AGENT_POSITION_SIZING_TARGET_UTILIZATION_PCT", 0.02),
+        },
     }
 
     config["circuit_breaker"] = {
@@ -281,8 +289,49 @@ def load_env_config() -> Dict[str, Any]:
         "pool_timeout": _env_int("DB_POOL_TIMEOUT", 30),
         "echo": _env_bool("DB_ECHO", False),
     }
+    
+    # Validate position sizing config for safety (Gemini Issue #4)
+    _validate_position_sizing_config(config["agent"]["position_sizing"])
 
     return config
+
+
+def _validate_position_sizing_config(pos_config: Dict[str, Any]) -> None:
+    """Validate position sizing configuration for safety (Gemini review issue #4)."""
+    risk_pct = pos_config.get("risk_percentage", 0)
+    max_dev = pos_config.get("max_position_usd_dev", 0)
+    max_prod = pos_config.get("max_position_usd_prod", 0)
+    
+    # Critical validations
+    if risk_pct <= 0 or risk_pct > 0.10:
+        raise ValueError(
+            f"Invalid AGENT_POSITION_SIZING_RISK_PERCENTAGE={risk_pct:.3f}. "
+            f"Must be between 0.001 (0.1%) and 0.10 (10%)."
+        )
+    
+    if max_dev <= 0 or max_dev > 10000:
+        raise ValueError(
+            f"Invalid AGENT_POSITION_SIZING_MAX_POSITION_USD_DEV={max_dev}. "
+            f"Must be between 1 and 10000."
+        )
+    
+    if max_prod <= 0 or max_prod > 100000:
+        raise ValueError(
+            f"Invalid AGENT_POSITION_SIZING_MAX_POSITION_USD_PROD={max_prod}. "
+            f"Must be between 1 and 100000."
+        )
+    
+    # Sanity check: dev cap should be <= prod cap
+    if max_dev > max_prod:
+        logger.warning(
+            f"Position sizing: dev cap (${max_dev}) > prod cap (${max_prod}). "
+            f"This is unusual - dev should be more conservative."
+        )
+    
+    logger.info(
+        f"Position sizing config validated: risk={risk_pct:.1%}, "
+        f"caps=[dev=${max_dev:.0f}, prod=${max_prod:.0f}]"
+    )
 
 
 def load_config(_: Optional[str] = None) -> Dict[str, Any]:
