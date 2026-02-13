@@ -4,6 +4,7 @@ This module contains commands for generating learning reports and pruning
 portfolio memory.
 """
 
+import asyncio
 import logging
 
 import click
@@ -17,36 +18,20 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-@click.command(name="learning-report")
-@click.option("--asset-pair", default=None, help="Filter by asset pair (optional)")
-@click.pass_context
-def learning_report(ctx, asset_pair):
-    """
-    Generate comprehensive learning validation report.
-
-    Shows RL/meta-learning metrics:
-    - Sample efficiency (DQN/Rainbow)
-    - Cumulative regret (Multi-armed Bandits)
-    - Concept drift detection
-    - Thompson Sampling diagnostics
-    - Learning curve analysis
-
-    Example:
-        python main.py learning-report --asset-pair BTCUSD
-    """
+async def learning_report_async(ctx, asset_pair):
+    """Async implementation of learning_report command."""
     console.print("\n[bold cyan]📈 Learning Validation Report[/bold cyan]")
     if asset_pair:
         console.print(f"[dim]Filtering by: {asset_pair}[/dim]")
 
-    try:
-        config = ctx.obj.get("config")
-        if config is None:
-            console.print(
-                "[bold red]Error: Configuration not found in context[/bold red]"
-            )
-            raise click.Abort()
-        engine = FinanceFeedbackEngine(config)
-
+    config = ctx.obj.get("config")
+    if config is None:
+        console.print(
+            "[bold red]Error: Configuration not found in context[/bold red]"
+        )
+        raise click.Abort()
+    
+    async with FinanceFeedbackEngine(config) as engine:
         # Consistent memory engine usage and initialization check
         if not hasattr(engine, "memory_engine") or engine.memory_engine is None:
             console.print("[yellow]Portfolio memory not initialized.[/yellow]")
@@ -148,6 +133,26 @@ def learning_report(ctx, asset_pair):
         for metric, paper in metrics.get("research_methods", {}).items():
             console.print(f"  [dim]- {metric}: {paper}[/dim]")
 
+
+@click.command(name="learning-report")
+@click.option("--asset-pair", default=None, help="Filter by asset pair (optional)")
+@click.pass_context
+def learning_report(ctx, asset_pair):
+    """
+    Generate comprehensive learning validation report.
+
+    Shows RL/meta-learning metrics:
+    - Sample efficiency (DQN/Rainbow)
+    - Cumulative regret (Multi-armed Bandits)
+    - Concept drift detection
+    - Thompson Sampling diagnostics
+    - Learning curve analysis
+
+    Example:
+        python main.py learning-report --asset-pair BTCUSD
+    """
+    try:
+        asyncio.run(learning_report_async(ctx, asset_pair))
     except Exception as e:
         console.print(f"[bold red]An unexpected error occurred:[/bold red] {str(e)}")
         if ctx.obj.get("verbose"):
@@ -157,32 +162,18 @@ def learning_report(ctx, asset_pair):
         raise click.Abort()
 
 
-@click.command(name="prune-memory")
-@click.option(
-    "--keep-recent", default=1000, help="Keep N most recent trades (default: 1000)"
-)
-@click.option("--confirm/--no-confirm", default=True, help="Confirm before pruning")
-@click.pass_context
-def prune_memory(ctx, keep_recent, confirm):
-    """
-    Prune old trade outcomes from portfolio memory.
-
-    Keeps only the N most recent trades to manage memory size.
-
-    Example:
-        python main.py prune-memory --keep-recent 500
-    """
+async def prune_memory_async(ctx, keep_recent, confirm):
+    """Async implementation of prune_memory command."""
     console.print("\n[bold cyan]🗑️  Portfolio Memory Pruning[/bold cyan]")
 
-    try:
-        config = ctx.obj.get("config")
-        if config is None:
-            console.print(
-                "[bold red]Error: Configuration not found in context[/bold red]"
-            )
-            raise click.Abort()
-        engine = FinanceFeedbackEngine(config)
-
+    config = ctx.obj.get("config")
+    if config is None:
+        console.print(
+            "[bold red]Error: Configuration not found in context[/bold red]"
+        )
+        raise click.Abort()
+    
+    async with FinanceFeedbackEngine(config) as engine:
         # Use the standard memory_engine attribute for portfolio memory operations
         if not hasattr(engine, "memory_engine") or engine.memory_engine is None:
             console.print("[yellow]Portfolio memory not initialized.[/yellow]")
@@ -223,6 +214,24 @@ def prune_memory(ctx, keep_recent, confirm):
             memory.save()
             console.print("[green]✓ Saved pruned memory to disk[/green]")
 
+
+@click.command(name="prune-memory")
+@click.option(
+    "--keep-recent", default=1000, help="Keep N most recent trades (default: 1000)"
+)
+@click.option("--confirm/--no-confirm", default=True, help="Confirm before pruning")
+@click.pass_context
+def prune_memory(ctx, keep_recent, confirm):
+    """
+    Prune old trade outcomes from portfolio memory.
+
+    Keeps only the N most recent trades to manage memory size.
+
+    Example:
+        python main.py prune-memory --keep-recent 500
+    """
+    try:
+        asyncio.run(prune_memory_async(ctx, keep_recent, confirm))
     except Exception as e:
         console.print(f"[bold red]Error pruning memory:[/bold red] {str(e)}")
         if ctx.obj.get("verbose"):

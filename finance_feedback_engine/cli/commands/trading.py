@@ -3,6 +3,8 @@
 This module contains commands for executing trades and viewing account balances.
 """
 
+import asyncio
+
 import click
 from rich.console import Console
 from rich.table import Table
@@ -12,14 +14,11 @@ from finance_feedback_engine.core import FinanceFeedbackEngine
 console = Console()
 
 
-@click.command()
-@click.pass_context
-def balance(ctx):
-    """Show current account balances."""
-    try:
-        config = ctx.obj["config"]
-        engine = FinanceFeedbackEngine(config)
-
+async def balance_async(ctx):
+    """Async implementation of balance command."""
+    config = ctx.obj["config"]
+    
+    async with FinanceFeedbackEngine(config) as engine:
         balances = engine.get_balance()
 
         # Display balances in a table
@@ -32,20 +31,23 @@ def balance(ctx):
 
         console.print(table)
 
+
+@click.command()
+@click.pass_context
+def balance(ctx):
+    """Show current account balances."""
+    try:
+        asyncio.run(balance_async(ctx))
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
 
 
-@click.command()
-@click.argument("decision_id", required=False)
-@click.pass_context
-def execute(ctx, decision_id):
-    """Execute a trading decision."""
-    try:
-        config = ctx.obj["config"]
-        engine = FinanceFeedbackEngine(config)
-
+async def execute_async(ctx, decision_id):
+    """Async implementation of execute command."""
+    config = ctx.obj["config"]
+    
+    async with FinanceFeedbackEngine(config) as engine:
         # If no decision_id provided, show recent decisions and let user select
         if not decision_id:
             console.print("[bold blue]Recent Trading Decisions:[/bold blue]\n")
@@ -148,6 +150,14 @@ def execute(ctx, decision_id):
         console.print(f"Platform: {result.get('platform')}")
         console.print(f"Message: {result.get('message')}")
 
+
+@click.command()
+@click.argument("decision_id", required=False)
+@click.pass_context
+def execute(ctx, decision_id):
+    """Execute a trading decision."""
+    try:
+        asyncio.run(execute_async(ctx, decision_id))
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()

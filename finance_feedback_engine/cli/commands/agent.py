@@ -549,39 +549,39 @@ def run_agent(
         # User cancelled or configuration invalid
         return
 
-    try:
-        engine = FinanceFeedbackEngine(config)
-        agent = _initialize_agent(
-            config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs
-        )
+    async def run_agent_async():
+        """Async implementation with proper resource cleanup."""
+        async with FinanceFeedbackEngine(config) as engine:
+            agent = _initialize_agent(
+                config, engine, take_profit, stop_loss, autonomous, parsed_asset_pairs
+            )
 
-        if not agent:
-            return
+            if not agent:
+                return
 
-        console.print("[green]✓ Autonomous agent initialized.[/green]")
-        console.print("[yellow]Press Ctrl+C to stop the agent.[/yellow]")
+            console.print("[green]✓ Autonomous agent initialized.[/green]")
+            console.print("[yellow]Press Ctrl+C to stop the agent.[/yellow]")
 
-        monitoring_cfg = config.get("monitoring", {})
-        enable_live_view = monitoring_cfg.get("enable_live_view", True)
+            monitoring_cfg = config.get("monitoring", {})
+            enable_live_view = monitoring_cfg.get("enable_live_view", True)
 
-        # Use asyncio.run() for proper event loop management
-        async def run_agent_tasks():
+            # Build task list
             tasks = [agent.run()]
             if enable_live_view:
                 tasks.append(_run_live_dashboard(engine, agent))
 
             # Run tasks concurrently
-            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            except KeyboardInterrupt:
+                console.print(
+                    "\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]"
+                )
+                agent.stop()
+                console.print("[bold green]✓ Agent stopped.[/bold green]")
 
-        try:
-            asyncio.run(run_agent_tasks())
-        except KeyboardInterrupt:
-            console.print(
-                "\n[yellow]Shutdown signal received. Stopping agent gracefully...[/yellow]"
-            )
-            agent.stop()
-            console.print("[bold green]✓ Agent stopped.[/bold green]")
-
+    try:
+        asyncio.run(run_agent_async())
     except Exception as e:
         console.print(f"[bold red]Error starting agent:[/bold red] {str(e)}")
         if ctx.obj.get("verbose"):

@@ -3,6 +3,7 @@
 This module contains commands for analyzing assets and viewing decision history.
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -19,76 +20,58 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 console = Console()
 
 
-@click.command()
-@click.argument("asset_pair")
-@click.option(
-    "--provider",
-    "-p",
-    type=click.Choice(
-        ["local", "cli", "codex", "qwen", "gemini", "ensemble"], case_sensitive=False
-    ),
-    help="AI provider (local/cli/codex/qwen/gemini/ensemble)",
-)
-@click.option(
-    "--show-pulse",
-    is_flag=True,
-    help="Display multi-timeframe technical analysis pulse data",
-)
-@click.pass_context
-def analyze(ctx, asset_pair, provider, show_pulse):
-    """Analyze an asset pair and generate trading decision."""
+async def analyze_async(ctx, asset_pair, provider, show_pulse):
+    """Async implementation of analyze command."""
+    # Standardize asset pair input (uppercase, remove separators)
+    asset_pair = standardize_asset_pair(asset_pair)
+
+    config = ctx.obj["config"]
+
+    # Override provider if specified
+    if provider:
+        if "decision_engine" not in config:
+            config["decision_engine"] = {}
+        config["decision_engine"]["ai_provider"] = provider.lower()
+
+        if provider.lower() == "ensemble":
+            console.print(
+                "[yellow]Using ensemble mode (multiple providers)[/yellow]"
+            )
+        else:
+            console.print(f"[yellow]Using AI provider: {provider}[/yellow]")
+
     try:
-        # Standardize asset pair input (uppercase, remove separators)
-        asset_pair = standardize_asset_pair(asset_pair)
+        engine_instance = FinanceFeedbackEngine(config)
+    except ValueError as e:
+        # Preserve the special Alpha Vantage API key message
+        msg = str(e)
+        if (
+            "Alpha Vantage API key" in msg
+            or "api key is required" in msg.lower()
+            or "alpha_vantage" in msg.lower()
+        ):
+            console.print(
+                "[bold red]Alpha Vantage API key is required to fetch market data.[/bold red]"
+            )
+            console.print("Set the key via one of the following:")
+            console.print(
+                "  - Run `python main.py config-editor` and enter the Alpha Vantage key when prompted"
+            )
+            console.print(
+                "  - Export the environment variable `ALPHA_VANTAGE_API_KEY` before running the CLI"
+            )
+            console.print(
+                "  - Add `alpha_vantage_api_key: YOUR_KEY` to `config/config.local.yaml`"
+            )
+            return
+        # Delegate interactive fallback to helper
+        engine_instance = _handle_engine_init_error(ctx, config, e)
+    except Exception as e:
+        # Delegate interactive fallback to helper for non-ValueError exceptions
+        engine_instance = _handle_engine_init_error(ctx, config, e)
 
-        config = ctx.obj["config"]
-
-        # Override provider if specified
-        if provider:
-            if "decision_engine" not in config:
-                config["decision_engine"] = {}
-            config["decision_engine"]["ai_provider"] = provider.lower()
-
-            if provider.lower() == "ensemble":
-                console.print(
-                    "[yellow]Using ensemble mode (multiple providers)[/yellow]"
-                )
-            else:
-                console.print(f"[yellow]Using AI provider: {provider}[/yellow]")
-
-        try:
-            engine = FinanceFeedbackEngine(config)
-        except ValueError as e:
-            # Preserve the special Alpha Vantage API key message
-            msg = str(e)
-            if (
-                "Alpha Vantage API key" in msg
-                or "api key is required" in msg.lower()
-                or "alpha_vantage" in msg.lower()
-            ):
-                console.print(
-                    "[bold red]Alpha Vantage API key is required to fetch market data.[/bold red]"
-                )
-                console.print("Set the key via one of the following:")
-                console.print(
-                    "  - Run `python main.py config-editor` and enter the Alpha Vantage key when prompted"
-                )
-                console.print(
-                    "  - Export the environment variable `ALPHA_VANTAGE_API_KEY` before running the CLI"
-                )
-                console.print(
-                    "  - Add `alpha_vantage_api_key: YOUR_KEY` to `config/config.local.yaml`"
-                )
-                return
-            # Delegate interactive fallback to helper
-            engine = _handle_engine_init_error(ctx, config, e)
-        except Exception as e:
-            # Delegate interactive fallback to helper for non-ValueError exceptions
-            engine = _handle_engine_init_error(ctx, config, e)
-
+    async with engine_instance as engine:
         console.print(f"[bold blue]Analyzing {asset_pair}...[/bold blue]")
-
-        import asyncio
 
         # Support both legacy generate_decision mocks and new analyze_asset
         decision = {}
@@ -97,7 +80,7 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         else:
             result = engine.analyze_asset(asset_pair)
             if asyncio.iscoroutine(result):
-                decision = asyncio.run(result)
+                decision = await result
             else:
                 decision = result
 
@@ -310,17 +293,17 @@ def analyze(ctx, asset_pair, provider, show_pulse):
 
             # Show individual provider decisions
             console.print("\n[bold]Provider Decisions:[/bold]")
-            for provider, pdecision in (
+            for provider_name, pdecision in (
                 meta.get("provider_decisions", {}) or {}
             ).items():
-                original_w = meta.get("original_weights", {}).get(provider, 0)
-                adjusted_w = meta.get("adjusted_weights", {}).get(provider, 0)
-                vote_power = meta.get("voting_power", {}).get(provider, None)
+                original_w = meta.get("original_weights", {}).get(provider_name, 0)
+                adjusted_w = meta.get("adjusted_weights", {}).get(provider_name, 0)
+                vote_power = meta.get("voting_power", {}).get(provider_name, None)
                 weight_str = f"orig {original_w:.2f}, adj {adjusted_w:.2f}"
                 if vote_power is not None:
                     weight_str += f", vote {vote_power:.2f}"
                 console.print(
-                    f"  [{provider.upper()}] {pdecision['action']} "
+                    f"  [{provider_name.upper()}] {pdecision['action']} "
                     f"({pdecision['confidence']}%) - {weight_str}"
                 )
 
@@ -332,21 +315,37 @@ def analyze(ctx, asset_pair, provider, show_pulse):
             if meta.get("local_priority_applied"):
                 console.print("  Local Priority Applied: Yes")
 
+
+@click.command()
+@click.argument("asset_pair")
+@click.option(
+    "--provider",
+    "-p",
+    type=click.Choice(
+        ["local", "cli", "codex", "qwen", "gemini", "ensemble"], case_sensitive=False
+    ),
+    help="AI provider (local/cli/codex/qwen/gemini/ensemble)",
+)
+@click.option(
+    "--show-pulse",
+    is_flag=True,
+    help="Display multi-timeframe technical analysis pulse data",
+)
+@click.pass_context
+def analyze(ctx, asset_pair, provider, show_pulse):
+    """Analyze an asset pair and generate trading decision."""
+    try:
+        asyncio.run(analyze_async(ctx, asset_pair, provider, show_pulse))
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
 
 
-@click.command()
-@click.option("--asset", "-a", help="Filter by asset pair")
-@click.option("--limit", "-l", default=10, help="Number of decisions to show")
-@click.pass_context
-def history(ctx, asset, limit):
-    """Show decision history."""
-    try:
-        config = ctx.obj["config"]
-        engine = FinanceFeedbackEngine(config)
-
+async def history_async(ctx, asset, limit):
+    """Async implementation of history command."""
+    config = ctx.obj["config"]
+    
+    async with FinanceFeedbackEngine(config) as engine:
         decisions = engine.get_decision_history(asset_pair=asset, limit=limit)
         # Some tests may mock a non-iterable; guard here
         if not isinstance(decisions, (list, tuple)) or not decisions:
@@ -363,6 +362,7 @@ def history(ctx, asset, limit):
 
         if not decisions:
             console.print("[yellow]No decisions found[/yellow]")
+            return
 
         # Display decisions in a table
         table = Table(title=f"Decision History ({len(decisions)} decisions)")
@@ -391,6 +391,15 @@ def history(ctx, asset, limit):
 
         console.print(table)
 
+
+@click.command()
+@click.option("--asset", "-a", help="Filter by asset pair")
+@click.option("--limit", "-l", default=10, help="Number of decisions to show")
+@click.pass_context
+def history(ctx, asset, limit):
+    """Show decision history."""
+    try:
+        asyncio.run(history_async(ctx, asset, limit))
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()

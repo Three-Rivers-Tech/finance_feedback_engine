@@ -405,3 +405,56 @@ class UnifiedDataProvider:
             result["metadata"]["cache_hit_rate"] = cache_hits / len(timeframes)
 
         return result
+
+    async def close(self) -> None:
+        """
+        Close all provider sessions properly.
+
+        Closes aiohttp sessions for all initialized providers to prevent
+        resource leaks.
+        """
+        close_errors = []
+
+        # Close Alpha Vantage provider
+        if self.alpha_vantage and hasattr(self.alpha_vantage, "close"):
+            try:
+                await self.alpha_vantage.close()
+                logger.debug("Alpha Vantage provider closed successfully")
+            except Exception as e:
+                logger.error(f"Error closing Alpha Vantage provider: {e}", exc_info=True)
+                close_errors.append(("AlphaVantage", e))
+
+        # Close Coinbase provider if it has async cleanup
+        if self.coinbase and hasattr(self.coinbase, "close"):
+            try:
+                close_result = self.coinbase.close()
+                if hasattr(close_result, "__await__"):
+                    await close_result
+                logger.debug("Coinbase provider closed successfully")
+            except Exception as e:
+                logger.error(f"Error closing Coinbase provider: {e}", exc_info=True)
+                close_errors.append(("Coinbase", e))
+
+        # Close Oanda provider if it has async cleanup
+        if self.oanda and hasattr(self.oanda, "close"):
+            try:
+                close_result = self.oanda.close()
+                if hasattr(close_result, "__await__"):
+                    await close_result
+                logger.debug("Oanda provider closed successfully")
+            except Exception as e:
+                logger.error(f"Error closing Oanda provider: {e}", exc_info=True)
+                close_errors.append(("Oanda", e))
+
+        if close_errors:
+            error_summary = ", ".join([f"{name}: {str(err)}" for name, err in close_errors])
+            logger.warning(f"Some providers failed to close cleanly: {error_summary}")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup all provider resources."""
+        await self.close()
+        return False
