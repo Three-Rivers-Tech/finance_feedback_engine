@@ -35,6 +35,10 @@ class FFEStrategyAdapter:
         self.decision_engine = engine.decision_engine
         self.config = engine.config
         
+        # FIX #1: Create persistent event loop (reuse across all decisions)
+        # Prevents creating 2000+ event loops in a 7-day backtest
+        self.loop = asyncio.new_event_loop()
+        
         logger.info("FFE Strategy Adapter initialized with full decision engine")
     
     def get_signal(self, data: pd.DataFrame, index: int) -> Optional[str]:
@@ -82,9 +86,14 @@ class FFEStrategyAdapter:
             
             return None
             
-        except Exception as e:
-            logger.error(f"Error getting signal at index {index}: {e}", exc_info=True)
+        # FIX #2: Handle specific exceptions, let unexpected ones propagate
+        except (ValueError, TypeError, KeyError) as e:
+            logger.error(f"Expected error getting signal at index {index}: {e}", exc_info=True)
             return None
+        except asyncio.TimeoutError as e:
+            logger.warning(f"Decision timeout at index {index}: {e}")
+            return None
+        # Let other exceptions propagate - they indicate bugs that need attention
     
     def _build_market_context(self, data: pd.DataFrame, index: int) -> Dict[str, Any]:
         """
@@ -181,7 +190,7 @@ class FFEStrategyAdapter:
         """
         Get decision from engine synchronously (for backtesting).
         
-        Uses asyncio.run() to execute async decision engine in sync context.
+        Uses persistent event loop to execute async decision engine in sync context.
         
         Args:
             context: Market context
@@ -189,29 +198,69 @@ class FFEStrategyAdapter:
         Returns:
             Decision dictionary or None
         """
+        # FIX #1: Reuse persistent event loop instead of creating new one per candle
+        # This prevents event loop proliferation (2000+ loops in 7-day backtest)
+        asyncio.set_event_loop(self.loop)
+        
         try:
-            # Run async decision engine in sync context
-            # Create new event loop for each call (backtesting requirement)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
-            try:
-                # Call decision engine's make_decision method
-                decision = loop.run_until_complete(
-                    self.decision_engine.make_decision(
-                        context=context,
-                        symbol=context.get("symbol", "BACKTEST")
-                    )
+            # Call decision engine's make_decision method
+            decision = self.loop.run_until_complete(
+                self.decision_engine.make_decision(
+                    context=context,
+                    symbol=context.get("symbol", "BACKTEST")
                 )
-                
-                return decision
-                
-            finally:
-                loop.close()
+            )
             
-        except Exception as e:
-            logger.error(f"Error in decision engine call: {e}", exc_info=True)
+            return decision
+            
+        # FIX #2: Handle specific exceptions, let unexpected ones propagate
+        except (ValueError, TypeError, KeyError) as e:
+            logger.error(f"Expected error in decision engine call: {e}", exc_info=True)
             return None
+        except asyncio.TimeoutError as e:
+            logger.warning(f"Decision engine timeout: {e}")
+            return None
+        # Let other exceptions (e.g., AttributeError, RuntimeError) propagate to surface bugs
+    
+    def reset_state(self):
+        """
+        FIX #3: Reset FFE internal state before each backtest run.
+        
+        Prevents data poisoning between backtests by clearing:
+        - Vector memory (semantic search / embeddings)
+        - Portfolio memory (historical positions/decisions)
+        
+        Called before each backtest to ensure isolation.
+        """
+        # Clear vector memory if present
+        if hasattr(self.decision_engine, 'vector_memory'):
+            try:
+                self.decision_engine.vector_memory.clear()
+                logger.info("Cleared decision engine vector memory")
+            except Exception as e:
+                logger.warning(f"Failed to clear vector memory: {e}")
+        
+        # Reset portfolio memory if present
+        if hasattr(self.engine, 'portfolio_memory'):
+            try:
+                self.engine.portfolio_memory.reset()
+                logger.info("Reset portfolio memory")
+            except Exception as e:
+                logger.warning(f"Failed to reset portfolio memory: {e}")
+        
+        logger.info("FFE state reset for backtest isolation")
+    
+    def close(self):
+        """
+        FIX #1: Cleanup method to close persistent event loop.
+        
+        Should be called when adapter is no longer needed to prevent
+        resource leaks. Particularly important in long-running processes
+        or when running multiple backtests sequentially.
+        """
+        if hasattr(self, 'loop') and self.loop and not self.loop.is_closed():
+            self.loop.close()
+            logger.info("Closed persistent event loop")
 
 
 def create_ffe_strategy(engine):
