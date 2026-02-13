@@ -357,6 +357,14 @@ def analyze(ctx, asset_pair, provider, show_pulse):
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception as cleanup_error:
+            # Log but don't fail the command if cleanup fails
+            pass  # Silent cleanup to avoid cluttering output
 
 
 @click.command()
@@ -416,6 +424,13 @@ def history(ctx, asset, limit):
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 # Export commands for registration in main.py

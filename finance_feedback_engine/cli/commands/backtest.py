@@ -233,6 +233,13 @@ def backtest(
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         logger.error(f"Backtest error: {str(e)}", exc_info=True)
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command(name="portfolio-backtest")
@@ -331,6 +338,13 @@ def portfolio_backtest(
         console.print(f"[bold red]Error:[/bold red] {str(e)}")
         logger.error(f"Portfolio backtest error: {str(e)}", exc_info=True)
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command(name="walk-forward")
@@ -483,6 +497,13 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
 
             console.print(traceback.format_exc())
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 @click.command(name="monte-carlo")
@@ -594,6 +615,13 @@ def monte_carlo(
 
             console.print(traceback.format_exc())
         raise click.Abort()
+    finally:
+        # Always close the engine to prevent session leaks
+        try:
+            import asyncio
+            asyncio.run(engine.close())
+        except Exception:
+            pass  # Silent cleanup
 
 
 # Export commands for registration in main.py

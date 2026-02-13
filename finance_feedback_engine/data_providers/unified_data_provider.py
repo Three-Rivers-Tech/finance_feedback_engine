@@ -477,3 +477,35 @@ class UnifiedDataProvider:
             return None
 
     # Pair discovery methods removed as part of THR-172 cleanup
+
+    async def close(self):
+        """Close all provider sessions."""
+        # Close Alpha Vantage provider if it exists
+        if self.alpha_vantage and hasattr(self.alpha_vantage, "close"):
+            await self.alpha_vantage.close()
+            logger.debug("Alpha Vantage provider session closed")
+
+        # Close Coinbase provider if it exists
+        if self.coinbase and hasattr(self.coinbase, "close"):
+            close_result = self.coinbase.close()
+            # Check if result is awaitable
+            if hasattr(close_result, "__await__"):
+                await close_result
+            logger.debug("Coinbase provider session closed")
+
+        # Close Oanda provider if it exists
+        if self.oanda and hasattr(self.oanda, "close"):
+            close_result = self.oanda.close()
+            # Check if result is awaitable
+            if hasattr(close_result, "__await__"):
+                await close_result
+            logger.debug("Oanda provider session closed")
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - cleanup resources."""
+        await self.close()
+        return False

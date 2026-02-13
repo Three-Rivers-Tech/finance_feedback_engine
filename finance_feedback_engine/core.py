@@ -2018,6 +2018,7 @@ class FinanceFeedbackEngine:
         import inspect
 
         try:
+            # Close main data provider
             if hasattr(self.data_provider, "close"):
                 close_result = self.data_provider.close()
                 # Check if result is awaitable (coroutine or awaitable object)
@@ -2025,7 +2026,27 @@ class FinanceFeedbackEngine:
                     close_result
                 ):
                     await close_result
-                logger.info("Data provider resources closed successfully")
+                logger.debug("Data provider resources closed successfully")
+
+            # Close unified data provider
+            if hasattr(self, "unified_provider") and hasattr(self.unified_provider, "close"):
+                close_result = self.unified_provider.close()
+                if inspect.iscoroutine(close_result) or inspect.isawaitable(
+                    close_result
+                ):
+                    await close_result
+                logger.debug("Unified data provider resources closed successfully")
+
+            # Close historical data provider
+            if hasattr(self, "historical_data_provider") and hasattr(self.historical_data_provider, "close"):
+                close_result = self.historical_data_provider.close()
+                if inspect.iscoroutine(close_result) or inspect.isawaitable(
+                    close_result
+                ):
+                    await close_result
+                logger.debug("Historical data provider resources closed successfully")
+
+            logger.info("All engine resources closed successfully")
         except Exception as e:
             logger.error(f"Error during engine cleanup: {e}", exc_info=True)
 
