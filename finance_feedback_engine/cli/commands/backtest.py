@@ -237,11 +237,11 @@ def backtest(
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command(name="portfolio-backtest")
@@ -344,11 +344,11 @@ def portfolio_backtest(
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command(name="walk-forward")
@@ -505,11 +505,11 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command(name="monte-carlo")
@@ -625,11 +625,11 @@ def monte_carlo(
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 # Export commands for registration in main.py

@@ -722,11 +722,11 @@ def run_agent(
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.group()
