@@ -323,7 +323,9 @@ class ParameterOptimizer:
                 # Get stored result
                 result_dict = trial.user_attrs.get("result")
                 if result_dict:
-                    result = OptimizationResult(**result_dict)
+                    # Remove 'score' if present (it's a computed property, not a field)
+                    result_dict_clean = {k: v for k, v in result_dict.items() if k != 'score'}
+                    result = OptimizationResult(**result_dict_clean)
                     results.append(result)
         
         return results
