@@ -1546,8 +1546,9 @@ def status(ctx):
 
 
 @cli.command()
+@click.option("--save", is_flag=True, help="Save P&L snapshot to data/pnl_snapshots/")
 @click.pass_context
-def positions(ctx):
+def positions(ctx, save):
     """Display active trading positions with real-time P&L (THR-215)."""
     try:
         config = ctx.obj["config"]
@@ -1661,6 +1662,56 @@ def positions(ctx):
             if sl_str:
                 console.print(sl_str, end="")
             console.print()  # Blank line between positions
+        
+        # Save snapshot if requested (THR-215)
+        if save:
+            from datetime import datetime
+            import json
+            from pathlib import Path
+            
+            snapshot_dir = Path("data/pnl_snapshots")
+            snapshot_dir.mkdir(parents=True, exist_ok=True)
+            
+            today = datetime.now().strftime("%Y-%m-%d")
+            snapshot_file = snapshot_dir / f"{today}.jsonl"
+            
+            snapshot = {
+                "timestamp": datetime.now().isoformat(),
+                "platform": platform_name,
+                "total_pnl": total_pnl,
+                "position_count": len(positions_list),
+                "positions": []
+            }
+            
+            for pos in positions_list:
+                product = pos.get("product_id") or pos.get("instrument") or pos.get("symbol") or "UNKNOWN"
+                side = (pos.get("side") or pos.get("position_type") or pos.get("direction") or "UNKNOWN").upper()
+                size = float(pos.get("contracts") or pos.get("units") or pos.get("size") or pos.get("quantity") or 0)
+                entry_price = float(pos.get("entry_price") or pos.get("average_price") or pos.get("price") or 0)
+                current_price = float(pos.get("current_price") or pos.get("mark_price") or entry_price or 0)
+                
+                # Calculate P&L
+                unrealized_pnl = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+                if unrealized_pnl is None and entry_price > 0 and current_price > 0:
+                    price_diff = current_price - entry_price
+                    direction = 1 if side in ["BUY", "LONG"] else -1
+                    unrealized_pnl = price_diff * size * direction
+                unrealized_pnl = float(unrealized_pnl or 0)
+                
+                snapshot["positions"].append({
+                    "product": product,
+                    "side": side,
+                    "size": size,
+                    "entry_price": entry_price,
+                    "current_price": current_price,
+                    "unrealized_pnl": unrealized_pnl
+                })
+            
+            # Append to JSONL file
+            with open(snapshot_file, "a") as f:
+                f.write(json.dumps(snapshot) + "\n")
+            
+            console.print(f"[dim]💾 Snapshot saved to {snapshot_file}[/dim]\n")
         
         # Print totals
         total_color = "green" if total_pnl > 0 else ("red" if total_pnl < 0 else "dim")
