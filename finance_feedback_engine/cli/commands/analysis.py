@@ -43,6 +43,7 @@ console = Console()
 @click.pass_context
 def analyze(ctx, asset_pair, provider, show_pulse):
     """Analyze an asset pair and generate trading decision."""
+    engine = None
     try:
         # Standardize asset pair input (uppercase, remove separators)
         asset_pair = standardize_asset_pair(asset_pair)
@@ -359,12 +360,12 @@ def analyze(ctx, asset_pair, provider, show_pulse):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception as cleanup_error:
-            # Log but don't fail the command if cleanup fails
-            pass  # Silent cleanup to avoid cluttering output
+        if engine is not None:
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command()
@@ -373,6 +374,7 @@ def analyze(ctx, asset_pair, provider, show_pulse):
 @click.pass_context
 def history(ctx, asset, limit):
     """Show decision history."""
+    engine = None
     try:
         config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
@@ -426,11 +428,12 @@ def history(ctx, asset, limit):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+        if engine is not None:
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 # Export commands for registration in main.py

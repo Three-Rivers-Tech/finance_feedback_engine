@@ -83,6 +83,7 @@ def backtest(
     output_file,
 ):
     """Run AI-driven backtest using the decision engine."""
+    engine = None
     try:
         # Validate date range
         try:
@@ -235,6 +236,7 @@ def backtest(
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
@@ -278,6 +280,7 @@ def portfolio_backtest(
     )
     from finance_feedback_engine.cli.backtest_formatter import format_full_results
 
+    engine = None
     try:
         # Validate inputs
         if len(asset_pairs) < 2:
@@ -340,6 +343,7 @@ def portfolio_backtest(
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
@@ -366,6 +370,7 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
     """
     console.print(f"\n[bold cyan]📊 Walk-Forward Analysis: {asset_pair}[/bold cyan]")
 
+    engine = None
     try:
         config = ctx.obj["config"]
 
@@ -499,6 +504,7 @@ def walk_forward(ctx, asset_pair, start_date, end_date, train_ratio, provider):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
@@ -529,6 +535,7 @@ def monte_carlo(
     """
     console.print(f"\n[bold cyan]🎲 Monte Carlo Simulation: {asset_pair}[/bold cyan]")
 
+    engine = None
     try:
         config = ctx.obj["config"]
 
@@ -617,6 +624,7 @@ def monte_carlo(
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
