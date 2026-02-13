@@ -247,7 +247,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 if bal is not None:
                     try:
                         cash_balances[name] = float(bal)
-                    except Exception:
+                    except (ValueError, TypeError):  # More specific exception
                         cash_balances[name] = 0.0
 
                 # Add platform prefix to holdings
@@ -258,7 +258,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
 
                 num_assets += breakdown.get("num_assets", 0)
 
-            except (ValueError, TypeError, KeyError) as e:
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
+                # Added AttributeError for None returns
                 logger.error("Failed to get portfolio breakdown from %s: %s", name, e)
 
         # Recalculate allocation percentages across the entire portfolio.
@@ -294,9 +295,36 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         """
         Async version of get_portfolio_breakdown.
         
-        Get a combined portfolio breakdown from all platforms.
+        Get a combined portfolio breakdown from all platforms by running calls concurrently.
         Merges portfolio data from Coinbase (futures) and Oanda (forex).
         """
+        import asyncio
+        from typing import List, Coroutine
+        
+        async def _get_platform_breakdown(name: str, platform) -> Dict[str, Any]:
+            """Wrapper to handle async/sync calls and exceptions for a single platform."""
+            try:
+                if hasattr(platform, 'aget_portfolio_breakdown'):
+                    return await platform.aget_portfolio_breakdown()
+                else:
+                    # Run blocking sync call in a separate thread to avoid blocking event loop
+                    loop = asyncio.get_running_loop()
+                    return await loop.run_in_executor(None, platform.get_portfolio_breakdown)
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
+                # Added AttributeError and return empty dict on failure
+                logger.error("Failed to get portfolio breakdown from %s: %s", name, e)
+                return {}
+
+        # Create a list of concurrent tasks
+        tasks: List[Coroutine] = [
+            _get_platform_breakdown(name, platform)
+            for name, platform in self.platforms.items()
+        ]
+
+        # Run all tasks in parallel
+        results = await asyncio.gather(*tasks)
+
+        # --- Aggregation Logic ---
         total_value_usd = 0
         total_unrealized = 0.0
         all_holdings = []
@@ -304,45 +332,34 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         cash_balances = {}
         futures_value_usd = 0
         spot_value_usd = 0
-
         platform_breakdowns = {}
+        platform_names = list(self.platforms.keys())
 
-        for name, platform in self.platforms.items():
-            try:
-                # Use async version if available, otherwise fall back to sync
-                if hasattr(platform, 'aget_portfolio_breakdown'):
-                    breakdown = await platform.aget_portfolio_breakdown()
-                else:
-                    breakdown = platform.get_portfolio_breakdown()
-                    
-                platform_breakdowns[name] = breakdown
+        for i, breakdown in enumerate(results):
+            name = platform_names[i]
+            if not breakdown:  # Skip failed or empty results
+                continue
 
-                total_value_usd += breakdown.get("total_value_usd", 0)
-                # Capture unrealized P&L if the platform exposes it
-                total_unrealized += breakdown.get("unrealized_pnl", 0.0)
-                
-                # Aggregate futures and spot values for position sizing
-                futures_value_usd += breakdown.get("futures_value_usd", 0)
-                spot_value_usd += breakdown.get("spot_value_usd", 0)
+            platform_breakdowns[name] = breakdown
 
-                # Capture cash/balance if provided by the platform
-                bal = breakdown.get("balance") or breakdown.get("total_balance_usd")
-                if bal is not None:
-                    try:
-                        cash_balances[name] = float(bal)
-                    except Exception:
-                        cash_balances[name] = 0.0
+            total_value_usd += breakdown.get("total_value_usd", 0)
+            total_unrealized += breakdown.get("unrealized_pnl", 0.0)
+            futures_value_usd += breakdown.get("futures_value_usd", 0)
+            spot_value_usd += breakdown.get("spot_value_usd", 0)
 
-                # Add platform prefix to holdings
-                holdings = breakdown.get("holdings", [])
-                for holding in holdings:
-                    holding["platform"] = name
-                all_holdings.extend(holdings)
+            bal = breakdown.get("balance") or breakdown.get("total_balance_usd")
+            if bal is not None:
+                try:
+                    cash_balances[name] = float(bal)
+                except (ValueError, TypeError):  # More specific exception
+                    cash_balances[name] = 0.0
 
-                num_assets += breakdown.get("num_assets", 0)
+            holdings = breakdown.get("holdings", [])
+            for holding in holdings:
+                holding["platform"] = name
+            all_holdings.extend(holdings)
 
-            except (ValueError, TypeError, KeyError) as e:
-                logger.error("Failed to get portfolio breakdown from %s: %s", name, e)
+            num_assets += breakdown.get("num_assets", 0)
 
         # Recalculate allocation percentages across the entire portfolio.
         # Use total notional exposure (sum of all holdings' values) rather
