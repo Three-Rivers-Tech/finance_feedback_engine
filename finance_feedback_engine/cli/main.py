@@ -1724,10 +1724,11 @@ def positions(ctx, save):
             today = now_utc.strftime("%Y-%m-%d")
             snapshot_file = snapshot_dir / f"{today}.jsonl"
             
+            # Gemini Issue #6: Store Decimals as strings to preserve precision
             snapshot = {
                 "timestamp": now_utc.isoformat(),  # THR-219: Timezone aware
                 "platform": platform_name,
-                "total_pnl": float(total_pnl),  # Convert Decimal to float for JSON
+                "total_pnl": str(total_pnl),  # Store as string to preserve Decimal precision
                 "position_count": len(valid_positions),
                 "positions": []
             }
@@ -1737,10 +1738,10 @@ def positions(ctx, save):
                 snapshot["positions"].append({
                     "product": pos_data["product"],
                     "side": pos_data["side"],
-                    "size": float(pos_data["size"]),
-                    "entry_price": float(pos_data["entry_price"]),
-                    "current_price": float(pos_data["current_price"]),
-                    "unrealized_pnl": float(pos_data["unrealized_pnl"])
+                    "size": str(pos_data["size"]),  # Preserve precision
+                    "entry_price": str(pos_data["entry_price"]),
+                    "current_price": str(pos_data["current_price"]),
+                    "unrealized_pnl": str(pos_data["unrealized_pnl"])
                 })
             
             # THR-217: Atomic append with file locking
