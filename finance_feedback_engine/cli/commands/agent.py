@@ -136,6 +136,18 @@ def _initialize_agent(
         trading_platform=engine.trading_platform,
     )
 
+    # Validate signal-only mode support if running in non-autonomous mode
+    if not agent_config.autonomous.enabled:
+        if not agent.supports_signal_only_mode():
+            logger.error(
+                "Agent does not support signal-only mode. Required methods are missing."
+            )
+            raise click.ClickException(
+                "This agent implementation does not support signal-only (approval) mode. "
+                "Enable autonomous execution or use a different agent implementation."
+            )
+        console.print("[green]✓ Agent supports signal-only mode.[/green]")
+
     return agent
 
 

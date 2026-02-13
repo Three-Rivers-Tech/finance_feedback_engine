@@ -117,8 +117,8 @@ async def test_recovery_no_positions(agent, mock_engine):
     # Execute
     await agent.handle_recovering_state()
 
-    # Assert: agent transitions to LEARNING, emit recovery_complete with found=0
-    assert agent.state == AgentState.LEARNING
+    # Assert: agent transitions to PERCEPTION, emit recovery_complete with found=0
+    assert agent.state == AgentState.PERCEPTION
     assert agent._recovered_positions == []
     assert agent._startup_complete.is_set()
 
@@ -156,7 +156,7 @@ async def test_recovery_single_position(agent, mock_engine):
     await agent.handle_recovering_state()
 
     # Assert: position normalized, decision persisted, transitions to LEARNING
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 1
     assert agent._recovered_positions[0]["asset_pair"] == "BTCUSD"
     assert agent._recovered_positions[0]["size"] == 0.5
@@ -206,7 +206,7 @@ async def test_recovery_excess_positions_closed(agent, mock_engine, mock_platfor
     await agent.handle_recovering_state()
 
     # Assert: 3 positions retrieved, 2 kept, 1 closed
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 2
     assert mock_platform.aclose_position.called
     assert agent._startup_complete.is_set()
@@ -258,7 +258,7 @@ async def test_recovery_close_failure_all_or_nothing(agent, mock_engine, mock_pl
     await agent.handle_recovering_state()
 
     # Assert: recovery failed, transitions to LEARNING with clean slate
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 0  # No positions kept
     assert agent._startup_complete.is_set()
 
@@ -288,7 +288,7 @@ async def test_recovery_malformed_position_data(agent, mock_engine):
     await agent.handle_recovering_state()
 
     # Assert: recovery fails gracefully, transitions to LEARNING with clean slate
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 0
 
 
@@ -328,7 +328,7 @@ async def test_recovery_api_timeout_retry(agent, mock_engine):
 
     # Assert: retried once, eventually succeeded
     assert call_count == 2
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 1
 
 
@@ -344,7 +344,7 @@ async def test_recovery_api_failure_all_retries_exhausted(agent, mock_engine):
     await agent.handle_recovering_state()
 
     # Assert: recovery failed after retry exhausted, transitions to LEARNING with clean slate
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 0
     assert agent._startup_complete.is_set()
 
@@ -372,7 +372,7 @@ async def test_recovery_position_normalization(agent, mock_engine):
     await agent.handle_recovering_state()
 
     # Assert: decision normalized and persisted
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
     assert len(agent._recovered_positions) == 1
     assert agent._recovered_positions[0]["side"] == "SHORT"
     assert agent._recovered_positions[0]["asset_pair"] == "BTCUSD"
@@ -487,7 +487,7 @@ async def test_recovery_state_transitions(agent, mock_engine):
     await agent.handle_recovering_state()
 
     # After recovery, should transition to LEARNING
-    assert agent.state == AgentState.LEARNING
+    assert agent.state == AgentState.PERCEPTION
 
 
 @pytest.mark.asyncio

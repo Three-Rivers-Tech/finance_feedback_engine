@@ -63,16 +63,30 @@ def trading_agent(
 async def test_agent_state_transitions(trading_agent):
     # Mocking sleep to speed up the test
     with patch("asyncio.sleep", new=AsyncMock()):
-        # IDLE -> LEARNING
+        # IDLE: Does NOT auto-transition (external controller handles it)
         assert trading_agent.state == AgentState.IDLE
         await trading_agent.handle_idle_state()
-        assert trading_agent.state == AgentState.LEARNING
+        assert trading_agent.state == AgentState.IDLE  # Should remain in IDLE
+
+        # Manually transition to LEARNING (as run() method would do)
+        trading_agent.state = AgentState.LEARNING
 
         # LEARNING -> PERCEPTION
         await trading_agent.handle_learning_state()
         assert trading_agent.state == AgentState.PERCEPTION
 
         # PERCEPTION -> REASONING
+        # Mock monitoring context for data freshness validation
+        from datetime import datetime, timezone
+        mock_context = {
+            "latest_market_data_timestamp": datetime.now(timezone.utc).isoformat(),
+            "asset_type": "crypto",
+            "timeframe": "intraday",
+            "market_status": None,
+            "unrealized_pnl_percent": 0.0,
+        }
+        trading_agent.trade_monitor.monitoring_context_provider.get_monitoring_context.return_value = mock_context
+        
         await trading_agent.handle_perception_state()
         assert trading_agent.state == AgentState.REASONING
 

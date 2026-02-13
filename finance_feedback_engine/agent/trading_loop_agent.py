@@ -871,7 +871,7 @@ class TradingLoopAgent:
                         "timestamp": time.time(),
                     })
                     self._startup_complete.set()
-                    await self._transition_to(AgentState.LEARNING)
+                    await self._transition_to(AgentState.PERCEPTION)
                     return
 
                 # Sort by unrealized P&L (descending) and keep top 2
@@ -890,7 +890,7 @@ class TradingLoopAgent:
                             logger.info("Closing excess position: %s (P&L: $%.2f)", asset_pair, pos["unrealized_pnl"])
 
                             # Close via platform
-                            close_result = await self.trading_platform.close_position(pos["product_id"])
+                            close_result = await self.trading_platform.aclose_position(pos["product_id"])
 
                             closed_positions.append({
                                 "asset_pair": asset_pair,
@@ -916,7 +916,7 @@ class TradingLoopAgent:
                                 "timestamp": time.time(),
                             })
                             self._startup_complete.set()
-                            await self._transition_to(AgentState.LEARNING)
+                            await self._transition_to(AgentState.PERCEPTION)
                             return
 
                 # Normalize and validate kept positions
@@ -1036,7 +1036,7 @@ class TradingLoopAgent:
                 })
 
                 self._startup_complete.set()
-                await self._transition_to(AgentState.LEARNING)
+                await self._transition_to(AgentState.PERCEPTION)
                 return
 
             except Exception as e:
@@ -1054,7 +1054,7 @@ class TradingLoopAgent:
                         "timestamp": time.time(),
                     })
                     self._startup_complete.set()
-                    await self._transition_to(AgentState.LEARNING)
+                    await self._transition_to(AgentState.PERCEPTION)
                     return
 
     async def handle_recovering_state(self) -> None:

@@ -31,10 +31,9 @@ class TestTradeRecorderInitialization:
         assert recorder.max_memory_size == 500
 
     def test_init_empty_collections(self):
-        """Should start with empty trade and selection collections."""
+        """Should start with empty trade collections."""
         recorder = TradeRecorder()
         assert len(recorder.trade_outcomes) == 0
-        assert len(recorder.pair_selections) == 0
 
 
 class TestRecordTradeOutcome:
@@ -97,34 +96,6 @@ class TestRecordTradeOutcome:
 
         with pytest.raises(TypeError, match="Expected TradeOutcome"):
             recorder.record_trade_outcome({"invalid": "dict"})
-
-
-class TestRecordPairSelection:
-    """Test pair selection recording."""
-
-    def test_record_pair_selection(self):
-        """Should record pair selection with metadata."""
-        recorder = TradeRecorder()
-
-        recorder.record_pair_selection(
-            pair="BTC-USD", selection_data={"method": "thompson", "score": 0.85}
-        )
-
-        assert len(recorder.pair_selections) == 1
-        selection = recorder.pair_selections[0]
-        assert selection["pair"] == "BTC-USD"
-        assert selection["method"] == "thompson"
-        assert "timestamp" in selection
-
-    def test_record_multiple_pair_selections(self):
-        """Should record multiple pair selections."""
-        recorder = TradeRecorder()
-
-        pairs = ["BTC-USD", "ETH-USD", "XRP-USD"]
-        for pair in pairs:
-            recorder.record_pair_selection(pair, {"score": 0.5})
-
-        assert len(recorder.pair_selections) == 3
 
 
 class TestGetRecentTrades:
@@ -342,13 +313,10 @@ class TestUtilityMethods:
             )
             recorder.record_trade_outcome(outcome)
 
-        recorder.record_pair_selection("BTC-USD", {})
-
         # Clear
         recorder.clear()
 
         assert len(recorder.trade_outcomes) == 0
-        assert len(recorder.pair_selections) == 0
 
     def test_get_summary(self):
         """Should return summary statistics."""
@@ -372,26 +340,3 @@ class TestUtilityMethods:
         assert set(summary["providers"]) == {"local", "qwen"}
 
 
-class TestGetPairSelections:
-    """Test pair selection retrieval."""
-
-    def test_get_pair_selections_no_limit(self):
-        """Should return all selections when no limit."""
-        recorder = TradeRecorder()
-
-        for i in range(5):
-            recorder.record_pair_selection(f"PAIR-{i}", {})
-
-        selections = recorder.get_pair_selections()
-        assert len(selections) == 5
-
-    def test_get_pair_selections_with_limit(self):
-        """Should return last N selections."""
-        recorder = TradeRecorder()
-
-        for i in range(10):
-            recorder.record_pair_selection(f"PAIR-{i}", {})
-
-        selections = recorder.get_pair_selections(limit=3)
-        assert len(selections) == 3
-        assert selections[-1]["pair"] == "PAIR-9"

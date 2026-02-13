@@ -134,49 +134,31 @@ class TestTradeRecording:
         assert veto_metrics["total_decisions"] == 1
         assert veto_metrics["true_negatives"] == 1  # No veto, profitable
 
-    def test_record_pair_selection(self, tmp_path):
-        """Should delegate pair selection recording."""
-        mock_recorder = Mock()
-        coordinator = PortfolioMemoryCoordinator(
-            trade_recorder=mock_recorder, storage_path=tmp_path
-        )
-
-        coordinator.record_pair_selection("BTC-USD", {"score": 0.85})
-
-        mock_recorder.record_pair_selection.assert_called_once_with(
-            "BTC-USD", {"score": 0.85}
-        )
-
 
 class TestTradeRetrieval:
     """Test trade retrieval methods."""
 
     def test_get_recent_trades(self, tmp_path):
         """Should get recent trades from recorder."""
+        from datetime import datetime, timedelta
+        
         coordinator = PortfolioMemoryCoordinator(storage_path=tmp_path)
 
+        base_time = datetime.now()
         # Add some trades
-from datetime import datetime, timedelta
+        for i in range(5):
+            outcome = TradeOutcome(
+                decision_id=f"test-{i}",
+                asset_pair="BTC-USD",
+                action="BUY",
+                entry_timestamp=(base_time + timedelta(seconds=i)).isoformat(),
+            )
+            coordinator.record_trade_outcome(outcome)
 
-def test_get_recent_trades(self, tmp_path):
-    """Should get recent trades from recorder."""
-    coordinator = PortfolioMemoryCoordinator(storage_path=tmp_path)
+        recent = coordinator.get_recent_trades(limit=3)
 
-    base_time = datetime.now()
-    # Add some trades
-    for i in range(5):
-        outcome = TradeOutcome(
-            decision_id=f"test-{i}",
-            asset_pair="BTC-USD",
-            action="BUY",
-            entry_timestamp=(base_time + timedelta(seconds=i)).isoformat(),
-        )
-        coordinator.record_trade_outcome(outcome)
-
-    recent = coordinator.get_recent_trades(limit=3)
-
-    assert len(recent) == 3
-    assert recent[0].decision_id == "test-4"  # Most recent first
+        assert len(recent) == 3
+        assert recent[0].decision_id == "test-4"  # Most recent first
 
     def test_get_all_trades(self, tmp_path):
         """Should get all trades from recorder."""

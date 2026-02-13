@@ -375,17 +375,17 @@ class TestGetThresholdRecommendation:
         assert threshold == 0.6
 
     def test_recommend_best_threshold(self):
-        """Should recommend threshold with highest accuracy."""
+        """Should recommend threshold with highest accuracy (requires MIN_SAMPLES=10)."""
         tracker = VetoTracker()
 
-        # Threshold 0.5: 50% accuracy (1 correct, 1 incorrect)
-        tracker.threshold_outcomes[0.5] = {"correct": 1, "incorrect": 1}
+        # Threshold 0.5: 50% accuracy (5 correct, 5 incorrect) - 10 samples
+        tracker.threshold_outcomes[0.5] = {"correct": 5, "incorrect": 5}
 
-        # Threshold 0.7: 75% accuracy (3 correct, 1 incorrect)
-        tracker.threshold_outcomes[0.7] = {"correct": 3, "incorrect": 1}
+        # Threshold 0.7: 75% accuracy (9 correct, 3 incorrect) - 12 samples
+        tracker.threshold_outcomes[0.7] = {"correct": 9, "incorrect": 3}
 
-        # Threshold 0.9: 33% accuracy (1 correct, 2 incorrect)
-        tracker.threshold_outcomes[0.9] = {"correct": 1, "incorrect": 2}
+        # Threshold 0.9: 33% accuracy (4 correct, 8 incorrect) - 12 samples
+        tracker.threshold_outcomes[0.9] = {"correct": 4, "incorrect": 8}
 
         threshold = tracker.get_veto_threshold_recommendation()
 
