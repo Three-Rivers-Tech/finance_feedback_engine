@@ -38,6 +38,7 @@ def learning_report(ctx, asset_pair):
     if asset_pair:
         console.print(f"[dim]Filtering by: {asset_pair}[/dim]")
 
+    engine = None
     try:
         config = ctx.obj.get("config")
         if config is None:
@@ -157,6 +158,7 @@ def learning_report(ctx, asset_pair):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())
@@ -181,6 +183,7 @@ def prune_memory(ctx, keep_recent, confirm):
     """
     console.print("\n[bold cyan]🗑️  Portfolio Memory Pruning[/bold cyan]")
 
+    engine = None
     try:
         config = ctx.obj.get("config")
         if config is None:
@@ -239,6 +242,7 @@ def prune_memory(ctx, keep_recent, confirm):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
+        if engine is not None:
         try:
             import asyncio
             asyncio.run(engine.close())

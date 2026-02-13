@@ -17,6 +17,7 @@ console = Console()
 @click.pass_context
 def balance(ctx):
     """Show current account balances."""
+    engine = None
     try:
         config = ctx.obj["config"]
 
@@ -46,11 +47,12 @@ def balance(ctx):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+        if engine is not None:
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command()
@@ -58,6 +60,7 @@ def balance(ctx):
 @click.pass_context
 def execute(ctx, decision_id):
     """Execute a trading decision."""
+    engine = None
     try:
         config = ctx.obj["config"]
 
@@ -177,11 +180,12 @@ def execute(ctx, decision_id):
         raise click.Abort()
     finally:
         # Always close the engine to prevent session leaks
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+        if engine is not None:
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command(name="check-ollama")
