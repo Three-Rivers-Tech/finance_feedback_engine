@@ -62,12 +62,25 @@ class PositionSizingCalculator:
             and len(relevant_balance) > 0
             and sum(relevant_balance.values()) > 0
         )
+        
+        # Debug logging for position sizing
+        logger.debug(
+            f"Position sizing inputs: relevant_balance={relevant_balance}, "
+            f"has_valid={has_valid_balance}, action={action}, "
+            f"has_existing_position={has_existing_position}, source={balance_source}"
+        )
 
         # Determine if we should calculate position sizing (no signal-only mode)
         should_calculate = has_valid_balance and (
             action in ["BUY", "SELL"]
             or (action == "HOLD" and has_existing_position)
         )
+        
+        if not should_calculate:
+            logger.info(
+                f"Position sizing skipped: has_valid_balance={has_valid_balance}, "
+                f"action={action}, has_existing={has_existing_position}"
+            )
 
         # Get risk parameters from agent config
         agent_config = self.config.get("agent", {})
