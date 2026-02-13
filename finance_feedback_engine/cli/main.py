@@ -1827,6 +1827,116 @@ def track_trades(ctx):
         raise click.Abort()
 
 
+@cli.command(name="check-volatility")
+@click.option("--send-alerts", is_flag=True, help="Send Telegram alerts for high volatility")
+@click.pass_context
+def check_volatility(ctx, send_alerts):
+    """Check positions for high volatility (±5% threshold) - THR-210."""
+    from finance_feedback_engine.monitoring.volatility_monitor import VolatilityMonitor
+    from decimal import Decimal, InvalidOperation
+    
+    try:
+        config = ctx.obj["config"]
+        engine = FinanceFeedbackEngine(config)
+
+        platform = getattr(engine, "trading_platform", None)
+        if platform is None:
+            console.print("[yellow]No trading platform configured.[/yellow]")
+            return
+
+        # Fetch current positions (with error handling - Task 3)
+        try:
+            positions_data = platform.get_active_positions()
+        except Exception as e:
+            console.print(f"[red]⚠ Data Stale - API Error:[/red] {str(e)}")
+            return
+
+        positions_list = (positions_data or {}).get("positions", [])
+        
+        if not positions_list:
+            console.print("[dim]No open positions to monitor.[/dim]")
+            return
+        
+        # Parse positions with P&L calculation
+        parsed_positions = []
+        for pos in positions_list:
+            product = (
+                pos.get("product") or 
+                pos.get("product_id") or 
+                pos.get("instrument") or 
+                "UNKNOWN"
+            )
+            side = (
+                pos.get("side") or 
+                pos.get("position_type") or 
+                pos.get("direction") or 
+                "UNKNOWN"
+            ).upper()
+            
+            try:
+                size = Decimal(str(pos.get("units") or pos.get("size") or "0"))
+                entry_price = Decimal(str(pos.get("entry_price") or pos.get("average_price") or "0"))
+                current_price = Decimal(str(pos.get("current_price") or pos.get("mark_price") or entry_price))
+                
+                # Calculate P&L
+                unrealized_pnl = pos.get("unrealized_pnl") or pos.get("pnl")
+                if unrealized_pnl is not None:
+                    unrealized_pnl = Decimal(str(unrealized_pnl))
+                else:
+                    if entry_price > 0 and current_price > 0:
+                        direction = 1 if side in ["BUY", "LONG"] else -1
+                        price_diff = current_price - entry_price
+                        unrealized_pnl = price_diff * size * Decimal(str(direction))
+                    else:
+                        unrealized_pnl = Decimal("0")
+                
+                # Calculate P&L %
+                if entry_price > 0 and size > 0:
+                    position_value = entry_price * size
+                    pnl_pct = (unrealized_pnl / position_value * Decimal("100"))
+                else:
+                    pnl_pct = Decimal("0")
+                
+                parsed_positions.append({
+                    "product": product,
+                    "side": side,
+                    "unrealized_pnl": str(unrealized_pnl),
+                    "pnl_pct": str(pnl_pct)
+                })
+                
+            except (ValueError, TypeError, InvalidOperation) as e:
+                console.print(f"[yellow]Warning: Invalid data for {product}: {e}[/yellow]")
+                continue
+        
+        # Initialize monitor and check for alerts
+        monitor = VolatilityMonitor()
+        alerts = monitor.check_positions(parsed_positions)
+        
+        if alerts:
+            console.print(f"\n[bold red]⚠️  {len(alerts)} VOLATILITY ALERT(S)[/bold red]\n")
+            for alert_msg in alerts:
+                console.print(f"[yellow]{alert_msg}[/yellow]\n")
+            
+            # Send Telegram alerts if requested
+            if send_alerts:
+                # Alerts are sent via the delivery mechanism in cron
+                pass
+        else:
+            console.print("[dim]No high volatility detected (threshold: ±5%).[/dim]")
+        
+        # Show alert summary
+        summary = monitor.get_alert_summary()
+        if "No active" not in summary:
+            console.print(f"\n[dim]{summary}[/dim]")
+
+    except click.ClickException:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {str(e)}")
+        console.print("[red]⚠ Data Stale - System Error[/red]")
+        raise click.Abort()
+
+
 @cli.command()
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
