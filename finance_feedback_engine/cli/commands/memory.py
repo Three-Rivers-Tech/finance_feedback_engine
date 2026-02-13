@@ -159,11 +159,11 @@ def learning_report(ctx, asset_pair):
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 @click.command(name="prune-memory")
@@ -243,11 +243,11 @@ def prune_memory(ctx, keep_recent, confirm):
     finally:
         # Always close the engine to prevent session leaks
         if engine is not None:
-        try:
-            import asyncio
-            asyncio.run(engine.close())
-        except Exception:
-            pass  # Silent cleanup
+            try:
+                import asyncio
+                asyncio.run(engine.close())
+            except Exception:
+                pass  # Silent cleanup
 
 
 # Export commands for registration in main.py
