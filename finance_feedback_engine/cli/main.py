@@ -1549,7 +1549,16 @@ def status(ctx):
 @click.option("--save", is_flag=True, help="Save P&L snapshot to data/pnl_snapshots/")
 @click.pass_context
 def positions(ctx, save):
-    """Display active trading positions with real-time P&L (THR-215)."""
+    """Display active trading positions with real-time P&L (THR-215, THR-216-220)."""
+    from decimal import Decimal, InvalidOperation
+    from datetime import datetime, timezone
+    import json
+    import fcntl
+    from pathlib import Path
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
     try:
         config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
@@ -1572,7 +1581,8 @@ def positions(ctx, save):
 
         console.print(f"\n[bold cyan]═══ OPEN POSITIONS ({platform_name}) ═══[/bold cyan]\n")
         
-        total_pnl = 0.0
+        total_pnl = Decimal("0")  # THR-216: Use Decimal for financial calculations
+        valid_positions = []  # Store successfully parsed positions
         
         for pos in positions_list:
             # Extract position details with fallbacks
@@ -1589,38 +1599,65 @@ def positions(ctx, save):
                 or "UNKNOWN"
             ).upper()
             
-            size = float(
-                pos.get("contracts")
-                or pos.get("units")
-                or pos.get("size")
-                or pos.get("quantity")
-                or 0
-            )
+            # THR-218: Safe type conversions with error handling
+            try:
+                size_raw = pos.get("contracts") or pos.get("units") or pos.get("size") or pos.get("quantity") or "0"
+                size = Decimal(str(size_raw))
+            except (ValueError, TypeError, InvalidOperation) as e:
+                logger.warning(f"Invalid size for {product}: {size_raw} ({e}). Skipping position.")
+                continue
             
-            entry_price = float(
-                pos.get("entry_price") or pos.get("average_price") or pos.get("price") or 0
-            )
+            try:
+                entry_raw = pos.get("entry_price") or pos.get("average_price") or pos.get("price") or "0"
+                entry_price = Decimal(str(entry_raw))
+            except (ValueError, TypeError, InvalidOperation) as e:
+                logger.warning(f"Invalid entry_price for {product}: {entry_raw} ({e}). Skipping position.")
+                continue
             
-            current_price = float(
-                pos.get("current_price") or pos.get("mark_price") or entry_price or 0
-            )
+            try:
+                current_raw = pos.get("current_price") or pos.get("mark_price") or entry_raw or "0"
+                current_price = Decimal(str(current_raw))
+            except (ValueError, TypeError, InvalidOperation) as e:
+                logger.warning(f"Invalid current_price for {product}: {current_raw} ({e}). Skipping position.")
+                continue
             
-            # Calculate P&L if not provided
-            unrealized_pnl = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+            # THR-220: Explicit SHORT/LONG detection with validation
+            side_upper = side.upper()
+            if side_upper in ["BUY", "LONG"]:
+                direction = 1
+            elif side_upper in ["SELL", "SHORT"]:
+                direction = -1
+            else:
+                logger.warning(f"Unknown position side '{side}' for {product}. Skipping position.")
+                continue
+            
+            # Calculate P&L if not provided (THR-216: Decimal arithmetic)
+            unrealized_pnl_raw = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+            
+            if unrealized_pnl_raw is not None:
+                try:
+                    unrealized_pnl = Decimal(str(unrealized_pnl_raw))
+                except (ValueError, TypeError, InvalidOperation):
+                    unrealized_pnl = None
+            else:
+                unrealized_pnl = None
             
             if unrealized_pnl is None and entry_price > 0 and current_price > 0:
                 # Calculate: (current - entry) × units × direction
                 price_diff = current_price - entry_price
-                direction = 1 if side in ["BUY", "LONG"] else -1
-                unrealized_pnl = price_diff * size * direction
+                unrealized_pnl = price_diff * size * Decimal(str(direction))
             
-            unrealized_pnl = float(unrealized_pnl or 0)
+            if unrealized_pnl is None:
+                unrealized_pnl = Decimal("0")
+            
             total_pnl += unrealized_pnl
             
-            # Calculate percentage P&L
-            pnl_pct = 0.0
-            if entry_price > 0:
-                pnl_pct = (unrealized_pnl / (entry_price * size)) * 100 if size > 0 else 0
+            # Calculate percentage P&L (THR-216: Decimal arithmetic)
+            pnl_pct = Decimal("0")
+            if entry_price > 0 and size > 0:
+                position_value = entry_price * size
+                if position_value > 0:
+                    pnl_pct = (unrealized_pnl / position_value) * Decimal("100")
             
             # Color-code P&L
             if unrealized_pnl > 0:
@@ -1633,90 +1670,97 @@ def positions(ctx, save):
                 pnl_color = "dim"
                 pnl_sign = ""
             
-            # Get timestamp if available
+            # Get timestamp if available (THR-219: Timezone aware)
             entry_time = pos.get("open_time") or pos.get("created_at") or pos.get("timestamp")
             time_str = ""
             if entry_time:
-                from datetime import datetime
                 try:
                     if isinstance(entry_time, str):
                         dt = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
                     else:
-                        dt = datetime.fromtimestamp(entry_time)
+                        dt = datetime.fromtimestamp(entry_time, tz=timezone.utc)
                     time_str = f" @ {dt.strftime('%H:%M')}"
-                except:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Could not parse entry_time for {product}: {e}")
             
-            # Get stop loss if available
-            stop_loss = pos.get("stop_loss") or pos.get("stopLoss") or pos.get("sl")
+            # Get stop loss if available (THR-216: Decimal arithmetic)
+            stop_loss_raw = pos.get("stop_loss") or pos.get("stopLoss") or pos.get("sl")
             sl_str = ""
-            if stop_loss:
-                sl_pct = ((float(stop_loss) - entry_price) / entry_price * 100) if entry_price > 0 else 0
-                sl_str = f"  Stop Loss: ${float(stop_loss):.4f} ({sl_pct:+.2f}%)\n"
+            if stop_loss_raw:
+                try:
+                    stop_loss = Decimal(str(stop_loss_raw))
+                    if entry_price > 0:
+                        sl_pct = ((stop_loss - entry_price) / entry_price * Decimal("100"))
+                        sl_str = f"  Stop Loss: ${float(stop_loss):.4f} ({float(sl_pct):+.2f}%)\n"
+                except (ValueError, TypeError, InvalidOperation) as e:
+                    logger.debug(f"Could not parse stop_loss for {product}: {e}")
             
-            # Print position details
-            console.print(f"[bold]{product}[/bold] {side} ({size} units)")
-            console.print(f"  Entry: ${entry_price:.4f}{time_str}")
-            console.print(f"  Current: ${current_price:.4f}")
-            console.print(f"  P&L: [{pnl_color}]{pnl_sign}${unrealized_pnl:.2f} ({pnl_sign}{pnl_pct:.2f}%)[/{pnl_color}]")
+            # Store valid position for snapshot
+            valid_positions.append({
+                "product": product,
+                "side": side,
+                "size": size,
+                "entry_price": entry_price,
+                "current_price": current_price,
+                "unrealized_pnl": unrealized_pnl
+            })
+            
+            # Print position details (convert Decimal to float for display)
+            console.print(f"[bold]{product}[/bold] {side} ({float(size)} units)")
+            console.print(f"  Entry: ${float(entry_price):.4f}{time_str}")
+            console.print(f"  Current: ${float(current_price):.4f}")
+            console.print(f"  P&L: [{pnl_color}]{pnl_sign}${float(unrealized_pnl):.2f} ({pnl_sign}{float(pnl_pct):.2f}%)[/{pnl_color}]")
             if sl_str:
                 console.print(sl_str, end="")
             console.print()  # Blank line between positions
         
-        # Save snapshot if requested (THR-215)
-        if save:
-            from datetime import datetime
-            import json
-            from pathlib import Path
-            
+        # Save snapshot if requested (THR-215, THR-217, THR-219)
+        if save and valid_positions:
             snapshot_dir = Path("data/pnl_snapshots")
             snapshot_dir.mkdir(parents=True, exist_ok=True)
             
-            today = datetime.now().strftime("%Y-%m-%d")
+            # THR-219: Use UTC timezone for all timestamps
+            now_utc = datetime.now(timezone.utc)
+            today = now_utc.strftime("%Y-%m-%d")
             snapshot_file = snapshot_dir / f"{today}.jsonl"
             
             snapshot = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": now_utc.isoformat(),  # THR-219: Timezone aware
                 "platform": platform_name,
-                "total_pnl": total_pnl,
-                "position_count": len(positions_list),
+                "total_pnl": float(total_pnl),  # Convert Decimal to float for JSON
+                "position_count": len(valid_positions),
                 "positions": []
             }
             
-            for pos in positions_list:
-                product = pos.get("product_id") or pos.get("instrument") or pos.get("symbol") or "UNKNOWN"
-                side = (pos.get("side") or pos.get("position_type") or pos.get("direction") or "UNKNOWN").upper()
-                size = float(pos.get("contracts") or pos.get("units") or pos.get("size") or pos.get("quantity") or 0)
-                entry_price = float(pos.get("entry_price") or pos.get("average_price") or pos.get("price") or 0)
-                current_price = float(pos.get("current_price") or pos.get("mark_price") or entry_price or 0)
-                
-                # Calculate P&L
-                unrealized_pnl = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
-                if unrealized_pnl is None and entry_price > 0 and current_price > 0:
-                    price_diff = current_price - entry_price
-                    direction = 1 if side in ["BUY", "LONG"] else -1
-                    unrealized_pnl = price_diff * size * direction
-                unrealized_pnl = float(unrealized_pnl or 0)
-                
+            # Use pre-validated positions from display loop
+            for pos_data in valid_positions:
                 snapshot["positions"].append({
-                    "product": product,
-                    "side": side,
-                    "size": size,
-                    "entry_price": entry_price,
-                    "current_price": current_price,
-                    "unrealized_pnl": unrealized_pnl
+                    "product": pos_data["product"],
+                    "side": pos_data["side"],
+                    "size": float(pos_data["size"]),
+                    "entry_price": float(pos_data["entry_price"]),
+                    "current_price": float(pos_data["current_price"]),
+                    "unrealized_pnl": float(pos_data["unrealized_pnl"])
                 })
             
-            # Append to JSONL file
-            with open(snapshot_file, "a") as f:
-                f.write(json.dumps(snapshot) + "\n")
-            
-            console.print(f"[dim]💾 Snapshot saved to {snapshot_file}[/dim]\n")
+            # THR-217: Atomic append with file locking
+            try:
+                with open(snapshot_file, "a") as f:
+                    fcntl.flock(f, fcntl.LOCK_EX)  # Acquire exclusive lock
+                    try:
+                        f.write(json.dumps(snapshot) + "\n")
+                    finally:
+                        fcntl.flock(f, fcntl.LOCK_UN)  # Always release lock
+                console.print(f"[dim]💾 Snapshot saved to {snapshot_file}[/dim]\n")
+            except IOError as e:
+                logger.error(f"Failed to write snapshot: {e}")
+                console.print(f"[yellow]⚠ Warning: Could not save snapshot ({e})[/yellow]\n")
         
-        # Print totals
+        # Print totals (THR-216: Convert Decimal to float for display)
+        total_pnl_float = float(total_pnl)
         total_color = "green" if total_pnl > 0 else ("red" if total_pnl < 0 else "dim")
         total_sign = "+" if total_pnl > 0 else ""
-        console.print(f"[bold]Total Unrealized P&L:[/bold] [{total_color}]{total_sign}${total_pnl:.2f}[/{total_color}]")
+        console.print(f"[bold]Total Unrealized P&L:[/bold] [{total_color}]{total_sign}${total_pnl_float:.2f}[/{total_color}]")
         console.print()
 
     except click.ClickException:
