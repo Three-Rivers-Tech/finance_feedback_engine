@@ -2220,12 +2220,54 @@ def optimize_params(ctx, symbol, days, granularity, n_trials, min_trades, use_ff
                 finally:
                     loop.close()
                 
+                # FIX #4: Validate FFE initialization before proceeding
+                # Check that critical components are initialized
+                if not hasattr(engine, 'decision_engine') or engine.decision_engine is None:
+                    raise RuntimeError("Decision engine not initialized")
+                
+                if not hasattr(engine, 'trading_platform') or engine.trading_platform is None:
+                    raise RuntimeError("Trading platform not initialized")
+                
+                # Test decision engine with dummy data to ensure it's functional
+                console.print("[dim]Validating decision engine with test data...[/dim]")
+                test_context = {
+                    "market_data": {
+                        "symbol": "TEST",
+                        "current_price": 1.1000,
+                        "high": 1.1010,
+                        "low": 1.0990,
+                        "open": 1.0995,
+                        "volume": 1000,
+                        "timestamp": "2024-01-01T00:00:00Z",
+                        "price_change_pct": 0.05,
+                        "volatility": 0.001,
+                        "ma_20": 1.1000,
+                        "rsi": 50.0
+                    },
+                    "symbol": "TEST",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "backtest_mode": True
+                }
+                
+                # Re-create event loop for test
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    test_decision = loop.run_until_complete(
+                        engine.decision_engine.make_decision(test_context, "TEST")
+                    )
+                finally:
+                    loop.close()
+                
+                if test_decision is None:
+                    raise RuntimeError("Decision engine test returned None - initialization incomplete")
+                
                 # Create FFE strategy function
                 strategy = create_ffe_strategy(engine)
-                console.print("  ✓ FFE decision engine initialized")
+                console.print("  ✓ FFE decision engine initialized and validated")
                 
             except Exception as e:
-                console.print(f"[red]Failed to initialize FFE: {e}[/red]")
+                console.print(f"[red]FFE initialization failed: {e}[/red]")
                 console.print("[yellow]Falling back to simple momentum strategy[/yellow]")
                 use_ffe = False  # Fallback to simple strategy
         
