@@ -84,6 +84,9 @@ class PositionSizingCalculator:
 
         # Get risk parameters from agent config
         agent_config = self.config.get("agent", {})
+        
+        # Get position sizing config (THR-209)
+        position_sizing_config = agent_config.get("position_sizing", {})
 
         # Helper function to safely get value from dict or object
         def safe_get(config, key, default):
@@ -93,7 +96,14 @@ class PositionSizingCalculator:
             else:
                 return getattr(config, key, default)
 
-        risk_percentage = safe_get(agent_config, "risk_percentage", 0.01)
+        # Read risk percentage from position_sizing config, fallback to old location, then default
+        risk_percentage = position_sizing_config.get("risk_percentage", 
+                                                     safe_get(agent_config, "risk_percentage", 0.01))
+        
+        logger.debug(
+            f"Position sizing config loaded: risk_pct={risk_percentage}, "
+            f"config_dict={position_sizing_config}"
+        )
         default_stop_loss = safe_get(agent_config, "sizing_stop_loss_percentage", 0.02)
         use_dynamic_stop_loss = safe_get(agent_config, "use_dynamic_stop_loss", True)
 
@@ -169,6 +179,35 @@ class PositionSizingCalculator:
                     entry_price=current_price,
                     stop_loss_percentage=sizing_stop_loss_percentage,
                 )
+            
+            # Apply position size caps (THR-209)
+            if recommended_position_size and current_price > 0:
+                # Determine environment
+                from ..utils.environment import get_environment_name
+                env = get_environment_name()
+                
+                # Get max position cap based on environment
+                if env == "production":
+                    max_position_usd = position_sizing_config.get("max_position_usd_prod", 500.0)
+                else:
+                    max_position_usd = position_sizing_config.get("max_position_usd_dev", 50.0)
+                
+                # Calculate current position value in USD
+                position_value_usd = recommended_position_size * current_price
+                
+                # Cap if exceeded
+                if position_value_usd > max_position_usd:
+                    original_size = recommended_position_size
+                    recommended_position_size = max_position_usd / current_price
+                    logger.warning(
+                        "Position size capped: %.4f units ($%.2f) → %.4f units ($%.2f) [%s env, max $%.2f]",
+                        original_size,
+                        position_value_usd,
+                        recommended_position_size,
+                        max_position_usd,
+                        env,
+                        max_position_usd
+                    )
 
             # Calculate stop loss price
             position_type = self._determine_position_type(action)
