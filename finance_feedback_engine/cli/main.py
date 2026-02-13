@@ -1937,6 +1937,193 @@ def check_volatility(ctx, send_alerts):
         raise click.Abort()
 
 
+@cli.command(name="backtest-simple")
+@click.option("--symbol", default="EUR_USD", help="Trading symbol (default: EUR_USD)")
+@click.option("--days", default=30, type=int, help="Number of days of history (default: 30)")
+@click.option("--granularity", default="M5", help="Candle granularity: M1, M5, M15, H1, D (default: M5)")
+@click.option("--no-cache", is_flag=True, help="Force fresh data download (ignore cache)")
+@click.pass_context
+def backtest_simple(ctx, symbol, days, granularity, no_cache):
+    """
+    Run simple backtest with easy parameters (THR-300 Task C).
+    
+    Simplified backtesting interface: just specify symbol and days.
+    Downloads historical candles and simulates strategy execution.
+    """
+    from finance_feedback_engine.backtest import HistoricalDataManager, Backtester
+    from decimal import Decimal
+    
+    try:
+        console.print(f"\n[bold cyan]═══ BACKTESTING ENGINE (THR-300) ═══[/bold cyan]\n")
+        
+        config = ctx.obj["config"]
+        engine = FinanceFeedbackEngine(config)
+        platform = getattr(engine, "trading_platform", None)
+        
+        if platform is None:
+            console.print("[yellow]No trading platform configured.[/yellow]")
+            return
+        
+        # Calculate number of candles needed
+        granularity_map = {
+            "M1": 60, "M5": 300, "M15": 900, "M30": 1800,
+            "H1": 3600, "H4": 14400, "D": 86400
+        }
+        
+        if granularity not in granularity_map:
+            console.print(f"[red]Invalid granularity: {granularity}[/red]")
+            console.print(f"[dim]Use: {', '.join(granularity_map.keys())}[/dim]")
+            return
+        
+        seconds_per_candle = granularity_map[granularity]
+        candles_needed = int((days * 86400) / seconds_per_candle)
+        candles_needed = min(candles_needed, 5000)  # Oanda limit
+        
+        console.print(f"Symbol: {symbol}")
+        console.print(f"Period: {days} days ({candles_needed} {granularity} candles)")
+        console.print(f"Cache: {'Disabled (fresh download)' if no_cache else 'Enabled'}")
+        console.print()
+        
+        # Step 1: Load historical data
+        console.print("[cyan]Step 1:[/cyan] Loading historical data...")
+        
+        data_manager = HistoricalDataManager()
+        
+        try:
+            df = data_manager.fetch_history(
+                symbol=symbol,
+                granularity=granularity,
+                count=candles_needed,
+                platform=platform,
+                use_cache=not no_cache
+            )
+        except Exception as e:
+            console.print(f"[red]Failed to fetch data: {e}[/red]")
+            return
+        
+        if df.empty:
+            console.print("[yellow]No data available for backtesting.[/yellow]")
+            return
+        
+        console.print(f"  ✓ Loaded {len(df)} candles")
+        console.print(f"  ✓ Range: {df['time'].min()} to {df['time'].max()}")
+        console.print()
+        
+        # Step 2: Define strategy (simple example - will be replaced with actual strategy)
+        console.print("[cyan]Step 2:[/cyan] Running strategy simulation...")
+        
+        def simple_strategy(data, index):
+            """
+            Example strategy: Buy when price crosses above 20-period MA.
+            
+            This is a placeholder - will be replaced with actual FFE strategy logic.
+            """
+            if index < 20:
+                return None  # Not enough data for MA
+            
+            # Calculate simple moving average
+            ma_period = 20
+            recent_closes = data.iloc[index-ma_period+1:index+1]['close']
+            ma = recent_closes.mean()
+            
+            current_close = data.iloc[index]['close']
+            prev_close = data.iloc[index-1]['close']
+            
+            # Buy when price crosses above MA
+            if prev_close <= ma and current_close > ma:
+                return "BUY"
+            
+            # Sell when price crosses below MA
+            if prev_close >= ma and current_close < ma:
+                return "SELL"
+            
+            return None
+        
+        # Step 3: Run backtest
+        backtester = Backtester(
+            initial_balance=Decimal("10000"),
+            position_size_pct=Decimal("0.02"),  # 2% per trade
+            stop_loss_pct=Decimal("0.02"),      # 2% SL
+            take_profit_pct=Decimal("0.04"),    # 4% TP
+            fee_pct=Decimal("0.001")            # 0.1% fee
+        )
+        
+        trades = backtester.run(df, simple_strategy)
+        
+        console.print(f"  ✓ Executed {len(trades)} trades")
+        console.print()
+        
+        # Step 4: Display results
+        summary = backtester.get_summary()
+        
+        console.print("[bold cyan]═══ BACKTEST RESULTS ═══[/bold cyan]\n")
+        
+        # Overall performance
+        console.print("[bold]Overall Performance:[/bold]")
+        console.print(f"  Total Trades: {summary['total_trades']}")
+        console.print(f"  Winners: {summary['winners']} | Losers: {summary['losers']}")
+        
+        # Win rate (color-coded)
+        win_rate = summary['win_rate']
+        if win_rate >= 55:
+            wr_color = "green"
+        elif win_rate >= 45:
+            wr_color = "yellow"
+        else:
+            wr_color = "red"
+        console.print(f"  Win Rate: [{wr_color}]{win_rate:.2f}%[/{wr_color}]")
+        
+        # Profit factor (color-coded)
+        pf = summary['profit_factor']
+        if pf >= 2.0:
+            pf_color = "green"
+        elif pf >= 1.5:
+            pf_color = "yellow"
+        else:
+            pf_color = "red"
+        console.print(f"  Profit Factor: [{pf_color}]{pf:.2f}[/{pf_color}]")
+        console.print()
+        
+        # P&L metrics
+        console.print("[bold]P&L Metrics:[/bold]")
+        total_pnl = summary['total_pnl']
+        pnl_color = "green" if total_pnl > 0 else "red"
+        pnl_sign = "+" if total_pnl > 0 else ""
+        console.print(f"  Total P&L: [{pnl_color}]{pnl_sign}${total_pnl:.2f}[/{pnl_color}]")
+        console.print(f"  Gross Profit: [green]+${summary['gross_profit']:.2f}[/green]")
+        console.print(f"  Gross Loss: [red]-${summary['gross_loss']:.2f}[/red]")
+        console.print(f"  Avg Win: +${summary['avg_win']:.2f}")
+        console.print(f"  Avg Loss: -${summary['avg_loss']:.2f}")
+        console.print(f"  Max Win: +${summary['max_win']:.2f}")
+        console.print(f"  Max Loss: -${summary['max_loss']:.2f}")
+        console.print()
+        
+        # Account performance
+        console.print("[bold]Account Performance:[/bold]")
+        console.print(f"  Initial Balance: ${summary['initial_balance']:.2f}")
+        final_balance = summary['final_balance']
+        balance_color = "green" if final_balance > summary['initial_balance'] else "red"
+        console.print(f"  Final Balance: [{balance_color}]${final_balance:.2f}[/{balance_color}]")
+        
+        return_pct = summary['return_pct']
+        return_color = "green" if return_pct > 0 else "red"
+        return_sign = "+" if return_pct > 0 else ""
+        console.print(f"  Return: [{return_color}]{return_sign}{return_pct:.2f}%[/{return_color}]")
+        console.print()
+        
+        # Strategy notes
+        console.print("[dim]Note: Using simple 20-MA crossover strategy (placeholder)[/dim]")
+        console.print("[dim]Next: Integrate actual FFE strategy logic for optimization[/dim]")
+        
+    except click.ClickException:
+        raise
+    except Exception as e:
+        console.print(f"[bold red]Backtest Error:[/bold red] {str(e)}")
+        import traceback
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
+        raise click.Abort()
+
+
 @cli.command()
 @click.option("--confirm", is_flag=True, help="Skip confirmation prompt")
 @click.pass_context
