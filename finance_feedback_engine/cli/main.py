@@ -1548,7 +1548,7 @@ def status(ctx):
 @cli.command()
 @click.pass_context
 def positions(ctx):
-    """Display active trading positions from the configured platform."""
+    """Display active trading positions with real-time P&L (THR-215)."""
     try:
         config = ctx.obj["config"]
         engine = FinanceFeedbackEngine(config)
@@ -1566,13 +1566,15 @@ def positions(ctx):
 
         positions_list = (positions_data or {}).get("positions", [])
         if not positions_list:
-            console.print("No active positions found.")
+            console.print("[dim]No active positions found.[/dim]")
             return
 
-        console.print(
-            f"[bold cyan]Active Trading Positions ({platform_name})[/bold cyan]"
-        )
+        console.print(f"\n[bold cyan]═══ OPEN POSITIONS ({platform_name}) ═══[/bold cyan]\n")
+        
+        total_pnl = 0.0
+        
         for pos in positions_list:
+            # Extract position details with fallbacks
             product = (
                 pos.get("product_id")
                 or pos.get("instrument")
@@ -1584,26 +1586,87 @@ def positions(ctx):
                 or pos.get("position_type")
                 or pos.get("direction")
                 or "UNKNOWN"
-            )
-            size = (
+            ).upper()
+            
+            size = float(
                 pos.get("contracts")
                 or pos.get("units")
                 or pos.get("size")
                 or pos.get("quantity")
+                or 0
             )
-            entry = (
-                pos.get("entry_price") or pos.get("average_price") or pos.get("price")
+            
+            entry_price = float(
+                pos.get("entry_price") or pos.get("average_price") or pos.get("price") or 0
             )
-            current = (
-                pos.get("current_price") or pos.get("mark_price") or pos.get("price")
+            
+            current_price = float(
+                pos.get("current_price") or pos.get("mark_price") or entry_price or 0
             )
-            unrealized = (
-                pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
-            )
-
-            console.print(
-                f"- {product}: {side} size={size} entry={entry} current={current} PnL={unrealized}"
-            )
+            
+            # Calculate P&L if not provided
+            unrealized_pnl = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+            
+            if unrealized_pnl is None and entry_price > 0 and current_price > 0:
+                # Calculate: (current - entry) × units × direction
+                price_diff = current_price - entry_price
+                direction = 1 if side in ["BUY", "LONG"] else -1
+                unrealized_pnl = price_diff * size * direction
+            
+            unrealized_pnl = float(unrealized_pnl or 0)
+            total_pnl += unrealized_pnl
+            
+            # Calculate percentage P&L
+            pnl_pct = 0.0
+            if entry_price > 0:
+                pnl_pct = (unrealized_pnl / (entry_price * size)) * 100 if size > 0 else 0
+            
+            # Color-code P&L
+            if unrealized_pnl > 0:
+                pnl_color = "green"
+                pnl_sign = "+"
+            elif unrealized_pnl < 0:
+                pnl_color = "red"
+                pnl_sign = ""
+            else:
+                pnl_color = "dim"
+                pnl_sign = ""
+            
+            # Get timestamp if available
+            entry_time = pos.get("open_time") or pos.get("created_at") or pos.get("timestamp")
+            time_str = ""
+            if entry_time:
+                from datetime import datetime
+                try:
+                    if isinstance(entry_time, str):
+                        dt = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
+                    else:
+                        dt = datetime.fromtimestamp(entry_time)
+                    time_str = f" @ {dt.strftime('%H:%M')}"
+                except:
+                    pass
+            
+            # Get stop loss if available
+            stop_loss = pos.get("stop_loss") or pos.get("stopLoss") or pos.get("sl")
+            sl_str = ""
+            if stop_loss:
+                sl_pct = ((float(stop_loss) - entry_price) / entry_price * 100) if entry_price > 0 else 0
+                sl_str = f"  Stop Loss: ${float(stop_loss):.4f} ({sl_pct:+.2f}%)\n"
+            
+            # Print position details
+            console.print(f"[bold]{product}[/bold] {side} ({size} units)")
+            console.print(f"  Entry: ${entry_price:.4f}{time_str}")
+            console.print(f"  Current: ${current_price:.4f}")
+            console.print(f"  P&L: [{pnl_color}]{pnl_sign}${unrealized_pnl:.2f} ({pnl_sign}{pnl_pct:.2f}%)[/{pnl_color}]")
+            if sl_str:
+                console.print(sl_str, end="")
+            console.print()  # Blank line between positions
+        
+        # Print totals
+        total_color = "green" if total_pnl > 0 else ("red" if total_pnl < 0 else "dim")
+        total_sign = "+" if total_pnl > 0 else ""
+        console.print(f"[bold]Total Unrealized P&L:[/bold] [{total_color}]{total_sign}${total_pnl:.2f}[/{total_color}]")
+        console.print()
 
     except click.ClickException:
         raise
