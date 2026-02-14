@@ -1607,17 +1607,12 @@ def positions(ctx, save):
                 logger.warning(f"Invalid size for {product}: {size_raw} ({e}). Skipping position.")
                 continue
             
-            # Handle entry_price (may be None for settled balances without history)
-            entry_raw = pos.get("entry_price") or pos.get("average_price") or pos.get("price")
-            if entry_raw is None:
-                # Entry price unknown - cannot calculate P&L
-                entry_price = None
-            else:
-                try:
-                    entry_price = Decimal(str(entry_raw))
-                except (ValueError, TypeError, InvalidOperation) as e:
-                    logger.warning(f"Invalid entry_price for {product}: {entry_raw} ({e}). Skipping position.")
-                    continue
+            try:
+                entry_raw = pos.get("entry_price") or pos.get("average_price") or pos.get("price") or "0"
+                entry_price = Decimal(str(entry_raw))
+            except (ValueError, TypeError, InvalidOperation) as e:
+                logger.warning(f"Invalid entry_price for {product}: {entry_raw} ({e}). Skipping position.")
+                continue
             
             try:
                 current_raw = pos.get("current_price") or pos.get("mark_price") or entry_raw or "0"
@@ -1637,14 +1632,9 @@ def positions(ctx, save):
                 continue
             
             # Calculate P&L if not provided (THR-216: Decimal arithmetic)
-            # Skip P&L calculation if entry_price is None (unknown)
             unrealized_pnl_raw = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
             
-            if entry_price is None:
-                # Cannot calculate P&L without entry price
-                unrealized_pnl = None
-                pnl_pct = None
-            elif unrealized_pnl_raw is not None:
+            if unrealized_pnl_raw is not None:
                 try:
                     unrealized_pnl = Decimal(str(unrealized_pnl_raw))
                 except (ValueError, TypeError, InvalidOperation):
@@ -1652,28 +1642,25 @@ def positions(ctx, save):
             else:
                 unrealized_pnl = None
             
-            # Calculate P&L if entry price is known but P&L not provided
-            if entry_price is not None and unrealized_pnl is None and current_price > 0:
+            if unrealized_pnl is None and entry_price > 0 and current_price > 0:
                 # Calculate: (current - entry) × units × direction
                 price_diff = current_price - entry_price
                 unrealized_pnl = price_diff * size * Decimal(str(direction))
             
-            # Add to total if P&L is known
-            if unrealized_pnl is not None:
-                total_pnl += unrealized_pnl
+            if unrealized_pnl is None:
+                unrealized_pnl = Decimal("0")
+            
+            total_pnl += unrealized_pnl
             
             # Calculate percentage P&L (THR-216: Decimal arithmetic)
-            pnl_pct = None
-            if entry_price is not None and entry_price > 0 and size > 0 and unrealized_pnl is not None:
+            pnl_pct = Decimal("0")
+            if entry_price > 0 and size > 0:
                 position_value = entry_price * size
                 if position_value > 0:
                     pnl_pct = (unrealized_pnl / position_value) * Decimal("100")
             
-            # Color-code P&L (handle None for unknown entry prices)
-            if unrealized_pnl is None:
-                pnl_color = "dim"
-                pnl_sign = ""
-            elif unrealized_pnl > 0:
+            # Color-code P&L
+            if unrealized_pnl > 0:
                 pnl_color = "green"
                 pnl_sign = "+"
             elif unrealized_pnl < 0:
@@ -1699,7 +1686,7 @@ def positions(ctx, save):
             # Get stop loss if available (THR-216: Decimal arithmetic)
             stop_loss_raw = pos.get("stop_loss") or pos.get("stopLoss") or pos.get("sl")
             sl_str = ""
-            if stop_loss_raw and entry_price is not None:
+            if stop_loss_raw:
                 try:
                     stop_loss = Decimal(str(stop_loss_raw))
                     if entry_price > 0:
@@ -1718,22 +1705,11 @@ def positions(ctx, save):
                 "unrealized_pnl": unrealized_pnl
             })
             
-            # Print position details (convert Decimal to float for display, handle None)
+            # Print position details (convert Decimal to float for display)
             console.print(f"[bold]{product}[/bold] {side} ({float(size)} units)")
-            
-            # Entry price (may be None for settled balances without history)
-            if entry_price is None:
-                console.print(f"  Entry: [dim]Unknown[/dim]{time_str}")
-            else:
-                console.print(f"  Entry: ${float(entry_price):.4f}{time_str}")
-            
+            console.print(f"  Entry: ${float(entry_price):.4f}{time_str}")
             console.print(f"  Current: ${float(current_price):.4f}")
-            
-            # P&L (may be None if entry price unknown)
-            if unrealized_pnl is None or pnl_pct is None:
-                console.print(f"  P&L: [dim]Unknown (no entry price)[/dim]")
-            else:
-                console.print(f"  P&L: [{pnl_color}]{pnl_sign}${float(unrealized_pnl):.2f} ({pnl_sign}{float(pnl_pct):.2f}%)[/{pnl_color}]")
+            console.print(f"  P&L: [{pnl_color}]{pnl_sign}${float(unrealized_pnl):.2f} ({pnl_sign}{float(pnl_pct):.2f}%)[/{pnl_color}]")
             if sl_str:
                 console.print(sl_str, end="")
             console.print()  # Blank line between positions
