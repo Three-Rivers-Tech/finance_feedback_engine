@@ -455,7 +455,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 accounts = getattr(accounts_response, "accounts", None) or []
 
                 for account in accounts:
-                    currency = (getattr(account, "currency", "") or "").upper()
+                    currency = getattr(account, "currency", "").upper()
                     if currency not in ("USD", "USDC"):
                         continue
 
@@ -704,7 +704,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     accounts_response = client.get_accounts()
                     accounts = getattr(accounts_response, "accounts", None) or []
                     for account in accounts:
-                        currency = (getattr(account, "currency", "") or "").upper()
+                        currency = getattr(account, "currency", "").upper()
                         if currency not in ("USD", "USDC"):
                             continue
                         available_balance = getattr(account, "available_balance", None)
@@ -1174,6 +1174,42 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 "timestamp": decision.get("timestamp"),
             }
 
+    def _batch_fetch_prices(self, product_ids: List[str]) -> Dict[str, float]:
+        """
+        Fetch current prices for multiple products in a single API call.
+        
+        Args:
+            product_ids: List of product IDs (e.g., ["BTC-USD", "ETH-USD"])
+            
+        Returns:
+            Dictionary mapping product_id to current price
+        """
+        if not product_ids:
+            return {}
+        
+        prices = {}
+        try:
+            client = self._get_client()
+            # Use get_products with product_ids filter for batch fetch
+            products_response = client.get_products(product_ids=product_ids)
+            products = getattr(products_response, "products", [])
+            
+            for product in products:
+                product_id = getattr(product, "product_id", "")
+                price_str = getattr(product, "price", "0")
+                if product_id and price_str:
+                    try:
+                        prices[product_id] = float(price_str)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Invalid price format for {product_id}: {price_str}")
+                        
+        except Exception:
+            logger.exception(f"Batch price fetch failed for {len(product_ids)} products")
+            # Fall back to empty dict - caller will handle missing prices
+            
+        logger.debug(f"Batch fetched {len(prices)} prices in 1 API call (requested: {len(product_ids)})")
+        return prices
+
     def _get_spot_positions(self) -> List[Dict[str, Any]]:
         """
         Get spot positions from account balances AND partially filled orders.
@@ -1190,12 +1226,13 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         try:
             client = self._get_client()
             
-            # METHOD 1: Get positions from account balances
+            # STEP 1: Collect all non-zero account balances
             accounts_response = client.get_accounts()
             accounts = getattr(accounts_response, "accounts", None) or []
             
+            balance_data = []  # List of (currency, amount) tuples
             for account in accounts:
-                currency = (getattr(account, "currency", "") or "").upper()
+                currency = getattr(account, "currency", "").upper()
                 
                 # Skip stablecoins and fiat (not positions, just balances)
                 if currency in ("USD", "USDC", "USDT", "DAI", ""):
@@ -1210,33 +1247,35 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 if amount < 0.00000001:
                     continue
                 
-                # Get current price for P&L calculation
+                balance_data.append((currency, amount))
+            
+            # STEP 2: Batch fetch prices for all currencies
+            balance_product_ids = [f"{currency}-USD" for currency, _ in balance_data]
+            balance_prices = self._batch_fetch_prices(balance_product_ids)
+            
+            # STEP 3: Build position dicts with batched prices
+            for currency, amount in balance_data:
                 product_id = f"{currency}-USD"
-                try:
-                    product = client.get_product(product_id=product_id)
-                    price_str = getattr(product, "price", "0")
-                    current_price = float(price_str or 0)
-                except Exception as price_err:
-                    logger.warning(f"Could not fetch price for {product_id}: {price_err}")
-                    current_price = 0.0
+                current_price = balance_prices.get(product_id, 0.0)
                 
                 # Create position dict
+                # Note: For settled balances, entry price is unknown (no historical data)
                 position = {
                     "id": f"spot-{currency}",
                     "instrument": product_id,
                     "product_id": product_id,
                     "units": amount,
-                    "entry_price": current_price,  # Approximation (no historical data)
+                    "entry_price": None,  # Unknown - no transaction history available
                     "current_price": current_price,
-                    "pnl": 0.0,  # Unknown without entry price
-                    "unrealized_pnl": 0.0,
+                    "pnl": None,  # Cannot calculate without entry price
+                    "unrealized_pnl": None,
                     "side": "LONG",
                     "position_type": "spot",
                     "opened_at": None,
                 }
                 
                 spot_positions.append(position)
-                logger.info(f"Spot position from balance: {currency} = {amount} units @ ${current_price}")
+                logger.info(f"Spot position from balance: {currency} = {amount} units @ ${current_price} (entry price unknown)")
             
             # METHOD 2: Get positions from partially filled BUY orders
             # (In sandbox, filled portions may not show in balances until order closes)
@@ -1245,12 +1284,14 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 orders_response = client.list_orders(limit=50)
                 all_orders = getattr(orders_response, "orders", [])
                 
-                # Filter to OPEN orders manually
+                # Filter to OPEN BUY orders with partial fills
                 open_orders = [o for o in all_orders if getattr(o, "status", "") == "OPEN"]
                 logger.debug(f"Checking {len(open_orders)} open orders for partial fills (from {len(all_orders)} total)")
                 
+                # STEP 1: Collect all partially filled BUY orders
+                partial_fill_data = []  # List of (order_id, product_id, entry_price, filled_size, created_time)
                 for order in open_orders:
-                    # Only check BUY orders (SELL orders are exiting positions, not creating them)
+                    # Only check BUY orders
                     side = getattr(order, "side", "")
                     if side != "BUY":
                         continue
@@ -1262,20 +1303,23 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     if filled_size < 0.00000001:
                         continue  # No fills yet
                     
-                    # Get order details
+                    # Collect order details
                     product_id = getattr(order, "product_id", "")
                     avg_price_str = getattr(order, "average_filled_price", "0")
                     entry_price = float(avg_price_str or 0)
                     order_id = getattr(order, "order_id", "")
                     created_time = getattr(order, "created_time", None)
                     
-                    # Get current price
-                    try:
-                        product = client.get_product(product_id=product_id)
-                        price_str = getattr(product, "price", "0")
-                        current_price = float(price_str or 0)
-                    except Exception:
-                        current_price = entry_price  # Fallback to entry price
+                    partial_fill_data.append((order_id, product_id, entry_price, filled_size, created_time))
+                
+                # STEP 2: Batch fetch current prices for all partial fills
+                partial_product_ids = [product_id for _, product_id, _, _, _ in partial_fill_data]
+                partial_prices = self._batch_fetch_prices(partial_product_ids)
+                
+                # STEP 3: Build position dicts with batched prices
+                for order_id, product_id, entry_price, filled_size, created_time in partial_fill_data:
+                    # Get current price from batch or fall back to entry price
+                    current_price = partial_prices.get(product_id, entry_price)
                     
                     # Calculate P&L
                     pnl_usd = (current_price - entry_price) * filled_size
@@ -1302,11 +1346,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         f"@ ${entry_price} (current: ${current_price}, P&L: ${pnl_usd:.2f})"
                     )
                     
-            except Exception as partial_err:
-                logger.warning(f"Could not fetch partially filled orders: {partial_err}")
+            except Exception:
+                logger.exception("Could not fetch partially filled orders")
                 
-        except Exception as e:
-            logger.warning(f"Error fetching spot positions: {e}")
+        except Exception:
+            logger.exception("Error fetching spot positions")
             # Return empty list on error (don't fail the entire positions call)
         
         return spot_positions
@@ -1326,8 +1370,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         try:
             portfolio = self.get_portfolio_breakdown()
             futures_positions = portfolio.get("futures_positions", [])
-        except Exception as e:
-            logger.warning(f"Could not fetch futures positions (likely sandbox/spot-only): {e}")
+        except Exception:
+            logger.exception("Could not fetch futures positions (likely sandbox/spot-only)")
         
         # Get spot positions from account holdings and partially filled orders
         spot_positions = self._get_spot_positions()
