@@ -24,6 +24,7 @@ from .exceptions import (
 )
 from .memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from .monitoring.error_tracking import ErrorTracker
+from .monitoring.trade_outcome_recorder import TradeOutcomeRecorder
 from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
 from .security.validator import validate_at_startup
@@ -369,6 +370,17 @@ class FinanceFeedbackEngine:
                 logger.info("No persisted memory found, starting fresh (using new adapter)")
 
             logger.info("Portfolio Memory Engine enabled")
+
+        # Initialize trade outcome recorder (THR-235)
+        self.trade_outcome_recorder: Optional[TradeOutcomeRecorder] = None
+        outcome_recording_enabled = config.get("trade_outcome_recording", {}).get("enabled", True)
+        if outcome_recording_enabled and not is_backtest:
+            try:
+                self.trade_outcome_recorder = TradeOutcomeRecorder(data_dir="data")
+                logger.info("Trade Outcome Recorder initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Trade Outcome Recorder: {e}")
+                self.trade_outcome_recorder = None
 
         # Initialize monitoring context provider (lazy init)
         self.monitoring_provider = None
@@ -1606,10 +1618,31 @@ class FinanceFeedbackEngine:
         decision["execution_status"] = "completed"
         decision["execution_time"] = datetime.utcnow().isoformat()
         decision["execution_result"] = result
+        
+        # Populate decision file fields (THR-235)
+        decision["status"] = "executed"
+        decision["platform_name"] = result.get("platform", self.config.get("trading_platform"))
+        decision["position_size"] = result.get("size") or decision.get("recommended_position_size")
+        
         self.decision_store.update_decision(decision)
 
         # Invalidate portfolio cache after trade execution (Phase 2 optimization)
         self.invalidate_portfolio_cache()
+
+        # Record trade outcome (THR-235)
+        if self.trade_outcome_recorder:
+            try:
+                # Fetch current positions from platform
+                positions_response = self.trading_platform.get_active_positions()
+                current_positions = positions_response.get("positions", [])
+                outcomes = self.trade_outcome_recorder.update_positions(current_positions)
+                if outcomes:
+                    logger.info(f"Recorded {len(outcomes)} trade outcomes")
+                    # Update decision file with outcome data
+                    decision["trade_outcomes"] = outcomes
+                    self.decision_store.update_decision(decision)
+            except Exception as e:
+                logger.warning(f"Failed to record trade outcome: {e}")
 
         return result
 
@@ -1756,9 +1789,30 @@ class FinanceFeedbackEngine:
         decision["execution_status"] = "completed"
         decision["execution_time"] = datetime.utcnow().isoformat()
         decision["execution_result"] = result
+        
+        # Populate decision file fields (THR-235)
+        decision["status"] = "executed"
+        decision["platform_name"] = result.get("platform", self.config.get("trading_platform"))
+        decision["position_size"] = result.get("size") or decision.get("recommended_position_size")
+        
         self.decision_store.update_decision(decision)
 
         self.invalidate_portfolio_cache()
+
+        # Record trade outcome (THR-235)
+        if self.trade_outcome_recorder:
+            try:
+                # Fetch current positions from platform
+                positions_response = await self.trading_platform.aget_active_positions()
+                current_positions = positions_response.get("positions", [])
+                outcomes = self.trade_outcome_recorder.update_positions(current_positions)
+                if outcomes:
+                    logger.info(f"Recorded {len(outcomes)} trade outcomes")
+                    # Update decision file with outcome data
+                    decision["trade_outcomes"] = outcomes
+                    self.decision_store.update_decision(decision)
+            except Exception as e:
+                logger.warning(f"Failed to record trade outcome: {e}")
 
         return result
 
