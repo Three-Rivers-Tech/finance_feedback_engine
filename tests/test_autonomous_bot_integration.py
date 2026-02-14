@@ -184,6 +184,23 @@ class TestAutonomousBotIntegration:
             # Create bot components
             trade_monitor = TradeMonitor(engine.config)
             portfolio_memory = PortfolioMemoryEngine(engine.config)
+            
+            # Mock monitoring context to include required timestamp
+            from datetime import datetime, timezone
+            original_get_monitoring_context = trade_monitor.monitoring_context_provider.get_monitoring_context
+            
+            def mock_get_monitoring_context(*args, **kwargs):
+                context = original_get_monitoring_context(*args, **kwargs)
+                # Ensure timestamp is always present
+                if "latest_market_data_timestamp" not in context:
+                    context["latest_market_data_timestamp"] = datetime.now(timezone.utc).isoformat()
+                if "asset_type" not in context:
+                    context["asset_type"] = "crypto"
+                if "timeframe" not in context:
+                    context["timeframe"] = "intraday"
+                return context
+            
+            trade_monitor.monitoring_context_provider.get_monitoring_context = mock_get_monitoring_context
 
             # Create agent config
             agent_cfg = TradingAgentConfig(

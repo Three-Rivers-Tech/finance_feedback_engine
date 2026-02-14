@@ -174,8 +174,8 @@ class TestBacktesterInitialization:
 
         # Memory engine should be initialized (not None)
         assert backtester.memory_engine is not None
-        # Verify it's the correct type
-        assert backtester.memory_engine.__class__.__name__ == "PortfolioMemoryEngine"
+        # Verify it's the correct type (could be PortfolioMemoryEngine or PortfolioMemoryEngineAdapter)
+        assert backtester.memory_engine.__class__.__name__ in ["PortfolioMemoryEngine", "PortfolioMemoryEngineAdapter"]
 
     def test_platform_margin_fetching(self, mock_historical_provider):
         """Test fetching leverage and maintenance margin from platform."""

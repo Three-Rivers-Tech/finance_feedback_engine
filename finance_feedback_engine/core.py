@@ -612,13 +612,18 @@ class FinanceFeedbackEngine:
         # Phase 2 Pre-flight: Trading platform connectivity (lightweight)
         try:
             if hasattr(self, "trading_platform") and self.trading_platform:
+                # Check for execute_trade (UnifiedTradingPlatform) or execute (legacy)
+                has_execute = (
+                    hasattr(self.trading_platform, "execute_trade")
+                    or hasattr(self.trading_platform, "execute")
+                )
                 has_methods = (
                     hasattr(self.trading_platform, "get_balance")
-                    and hasattr(self.trading_platform, "execute")
+                    and has_execute
                 )
                 if not has_methods:
                     errors.append(
-                        "Trading platform missing required methods (get_balance/execute). "
+                        "Trading platform missing required methods (get_balance/execute_trade). "
                         "Verify platform initialization and credentials."
                     )
         except Exception as e:
