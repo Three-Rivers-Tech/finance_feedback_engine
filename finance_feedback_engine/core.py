@@ -373,14 +373,29 @@ class FinanceFeedbackEngine:
 
         # Initialize trade outcome recorder (THR-235)
         self.trade_outcome_recorder: Optional[TradeOutcomeRecorder] = None
+        self.order_status_worker = None
         outcome_recording_enabled = config.get("trade_outcome_recording", {}).get("enabled", True)
         if outcome_recording_enabled and not is_backtest:
             try:
                 self.trade_outcome_recorder = TradeOutcomeRecorder(data_dir="data")
                 logger.info("Trade Outcome Recorder initialized")
+                
+                # Initialize order status worker (THR-236)
+                from .monitoring.order_status_worker import OrderStatusWorker
+                
+                self.order_status_worker = OrderStatusWorker(
+                    trading_platform=self.trading_platform,
+                    outcome_recorder=self.trade_outcome_recorder,
+                    data_dir="data",
+                    poll_interval=30,
+                )
+                # Start the background worker
+                self.order_status_worker.start()
+                logger.info("Order Status Worker initialized and started")
             except Exception as e:
                 logger.warning(f"Failed to initialize Trade Outcome Recorder: {e}")
                 self.trade_outcome_recorder = None
+                self.order_status_worker = None
 
         # Initialize monitoring context provider (lazy init)
         self.monitoring_provider = None
@@ -1624,12 +1639,34 @@ class FinanceFeedbackEngine:
         decision["platform_name"] = result.get("platform", self.config.get("trading_platform"))
         decision["position_size"] = result.get("size") or decision.get("recommended_position_size")
         
+        # Store order_id in decision file (THR-236)
+        order_id = result.get("order_id")
+        if order_id:
+            decision["order_id"] = order_id
+        
         self.decision_store.update_decision(decision)
 
         # Invalidate portfolio cache after trade execution (Phase 2 optimization)
         self.invalidate_portfolio_cache()
 
-        # Record trade outcome (THR-235)
+        # Add order to pending outcomes tracking (THR-236)
+        if self.order_status_worker and order_id and result.get("success"):
+            try:
+                self.order_status_worker.add_pending_order(
+                    order_id=order_id,
+                    decision_id=decision.get("id"),
+                    asset_pair=decision.get("asset_pair"),
+                    platform=result.get("platform", self.config.get("trading_platform")),
+                    action=decision.get("action"),
+                    size=float(decision.get("position_size", 0)),
+                    entry_price=float(decision.get("entry_price", 0)) if decision.get("entry_price") else None,
+                )
+                logger.info(f"Added order {order_id} to pending outcomes tracking")
+            except Exception as e:
+                logger.warning(f"Failed to add order to pending tracking: {e}")
+
+        # Still do immediate position polling as fallback (THR-235)
+        # Background worker will handle the outcome recording asynchronously
         if self.trade_outcome_recorder:
             try:
                 # Fetch current positions from platform
@@ -1637,12 +1674,12 @@ class FinanceFeedbackEngine:
                 current_positions = positions_response.get("positions", [])
                 outcomes = self.trade_outcome_recorder.update_positions(current_positions)
                 if outcomes:
-                    logger.info(f"Recorded {len(outcomes)} trade outcomes")
+                    logger.info(f"Recorded {len(outcomes)} trade outcomes (immediate polling)")
                     # Update decision file with outcome data
                     decision["trade_outcomes"] = outcomes
                     self.decision_store.update_decision(decision)
             except Exception as e:
-                logger.warning(f"Failed to record trade outcome: {e}")
+                logger.warning(f"Failed to record trade outcome via position polling: {e}")
 
         return result
 
@@ -1795,11 +1832,33 @@ class FinanceFeedbackEngine:
         decision["platform_name"] = result.get("platform", self.config.get("trading_platform"))
         decision["position_size"] = result.get("size") or decision.get("recommended_position_size")
         
+        # Store order_id in decision file (THR-236)
+        order_id = result.get("order_id")
+        if order_id:
+            decision["order_id"] = order_id
+        
         self.decision_store.update_decision(decision)
 
         self.invalidate_portfolio_cache()
 
-        # Record trade outcome (THR-235)
+        # Add order to pending outcomes tracking (THR-236)
+        if self.order_status_worker and order_id and result.get("success"):
+            try:
+                self.order_status_worker.add_pending_order(
+                    order_id=order_id,
+                    decision_id=decision.get("id"),
+                    asset_pair=decision.get("asset_pair"),
+                    platform=result.get("platform", self.config.get("trading_platform")),
+                    action=decision.get("action"),
+                    size=float(decision.get("position_size", 0)),
+                    entry_price=float(decision.get("entry_price", 0)) if decision.get("entry_price") else None,
+                )
+                logger.info(f"Added order {order_id} to pending outcomes tracking")
+            except Exception as e:
+                logger.warning(f"Failed to add order to pending tracking: {e}")
+
+        # Still do immediate position polling as fallback (THR-235)
+        # Background worker will handle the outcome recording asynchronously
         if self.trade_outcome_recorder:
             try:
                 # Fetch current positions from platform
@@ -1807,12 +1866,12 @@ class FinanceFeedbackEngine:
                 current_positions = positions_response.get("positions", [])
                 outcomes = self.trade_outcome_recorder.update_positions(current_positions)
                 if outcomes:
-                    logger.info(f"Recorded {len(outcomes)} trade outcomes")
+                    logger.info(f"Recorded {len(outcomes)} trade outcomes (immediate polling)")
                     # Update decision file with outcome data
                     decision["trade_outcomes"] = outcomes
                     self.decision_store.update_decision(decision)
             except Exception as e:
-                logger.warning(f"Failed to record trade outcome: {e}")
+                logger.warning(f"Failed to record trade outcome via position polling: {e}")
 
         return result
 
@@ -2077,6 +2136,14 @@ class FinanceFeedbackEngine:
         import inspect
 
         try:
+            # Stop order status worker (THR-236)
+            if hasattr(self, "order_status_worker") and self.order_status_worker:
+                try:
+                    self.order_status_worker.stop(timeout=10)
+                    logger.debug("Order status worker stopped successfully")
+                except Exception as e:
+                    logger.warning(f"Error stopping order status worker: {e}")
+            
             # Close main data provider
             if hasattr(self.data_provider, "close"):
                 close_result = self.data_provider.close()
