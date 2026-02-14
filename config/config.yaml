@@ -765,6 +765,52 @@ agent:
   asset_pairs:
     - BTCUSD
     - EURUSD
+    - GBPUSD
+    - ETHUSD
+
+  # Asset-specific parameter overrides (from Phase 3 stress test optimization)
+  # These override default position sizing/SL/TP for specific assets
+  asset_parameters:
+    GBP_USD:
+      stop_loss_pct: 2.6      # Validated: 66.67% WR, 2.27 PF
+      take_profit_pct: 4.8
+      position_size_pct: 2.3
+      timeframe: M5
+    GBPUSD:
+      stop_loss_pct: 2.6      # Alias for GBP_USD
+      take_profit_pct: 4.8
+      position_size_pct: 2.3
+      timeframe: M5
+    BTC_USD:
+      stop_loss_pct: 5.0      # Validated: 84.44% WR, 2.27 PF
+      take_profit_pct: 1.2
+      position_size_pct: 2.8
+      timeframe: M5
+    BTCUSD:
+      stop_loss_pct: 5.0      # Alias for BTC_USD
+      take_profit_pct: 1.2
+      position_size_pct: 2.8
+      timeframe: M5
+    ETH_USD:
+      stop_loss_pct: 2.5      # Fixed params (was 80% WR but 0.94 PF)
+      take_profit_pct: 4.0    # Widened TP, tightened SL
+      position_size_pct: 2.0
+      timeframe: M5
+    ETHUSD:
+      stop_loss_pct: 2.5      # Alias for ETH_USD
+      take_profit_pct: 4.0
+      position_size_pct: 2.0
+      timeframe: M5
+    EUR_USD:
+      stop_loss_pct: 0.6      # Validated M15: 60% WR, 1.61 PF
+      take_profit_pct: 1.0
+      position_size_pct: 1.7
+      timeframe: M15          # Note: M15 performs better than M5
+    EURUSD:
+      stop_loss_pct: 0.6      # Alias for EUR_USD
+      take_profit_pct: 1.0
+      position_size_pct: 1.7
+      timeframe: M15
 
 # Pair selection functionality removed as part of THR-172 cleanup
 
