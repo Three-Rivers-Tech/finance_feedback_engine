@@ -61,13 +61,20 @@ class TestKillSwitchProtection:
     @pytest.mark.asyncio
     async def test_stop_loss_trigger(self, trading_agent, mock_dependencies):
         """Test that stop-loss threshold triggers kill-switch."""
+        from datetime import datetime, timezone
+        from finance_feedback_engine.agent.trading_loop_agent import AgentState
+        
         # Arrange: Mock portfolio with -3% loss (breaching the -2% threshold)
         mock_dependencies[
             "trade_monitor"
         ].monitoring_context_provider.get_monitoring_context.return_value = {
-            "unrealized_pnl_percent": -3.0
+            "unrealized_pnl_percent": -3.0,
+            "latest_market_data_timestamp": datetime.now(timezone.utc).isoformat(),
+            "asset_type": "crypto",
+            "timeframe": "intraday",
         }
         trading_agent.is_running = True
+        trading_agent.state = AgentState.PERCEPTION  # Set to valid state for handle_perception_state
         original_stop_method = trading_agent.stop
         trading_agent.stop = MagicMock()
 
@@ -81,13 +88,20 @@ class TestKillSwitchProtection:
     @pytest.mark.asyncio
     async def test_no_kill_switch_within_limits(self, trading_agent, mock_dependencies):
         """Test that kill-switch doesn't trigger within normal limits."""
+        from datetime import datetime, timezone
+        from finance_feedback_engine.agent.trading_loop_agent import AgentState
+        
         # Arrange: Mock portfolio with -1% loss (within the -2% threshold)
         mock_dependencies[
             "trade_monitor"
         ].monitoring_context_provider.get_monitoring_context.return_value = {
-            "unrealized_pnl_percent": -1.0
+            "unrealized_pnl_percent": -1.0,
+            "latest_market_data_timestamp": datetime.now(timezone.utc).isoformat(),
+            "asset_type": "crypto",
+            "timeframe": "intraday",
         }
         trading_agent.is_running = True
+        trading_agent.state = AgentState.PERCEPTION  # Set to valid state for handle_perception_state
         original_stop_method = trading_agent.stop
         trading_agent.stop = MagicMock()
 
@@ -138,9 +152,12 @@ class TestDailyTradeLimit:
         Test that handle_reasoning_state does not collect decisions
         when the daily trade limit is reached.
         """
+        from finance_feedback_engine.agent.trading_loop_agent import AgentState
+        
         # Arrange
         trading_agent.config.max_daily_trades = 2
         trading_agent.daily_trade_count = 2
+        trading_agent.state = AgentState.REASONING  # Set to valid state for handle_reasoning_state
 
         # Mock the engine to return an actionable decision
         mock_decision = {"action": "BUY", "confidence": 95, "asset_pair": "BTCUSD"}
