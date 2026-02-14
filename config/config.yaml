@@ -141,13 +141,15 @@ providers:
 #
 platforms:
   # ============================================
-  # Paper Trading (Sandbox) - Default for Dev
+  # Paper Trading (Sandbox) - DISABLED for Phase 3
   # ============================================
-  # Enable paper trading for development, testing, and paper trade runs
-  # No credentials required - uses mock platform with seeded balance
-  - name: "paper"
-    credentials:
-      initial_cash_usd: 10000.0
+  # Paper platform disabled to ensure clean routing:
+  # - Crypto (BTC/ETH) → Coinbase sandbox
+  # - Forex (GBP/EUR) → Oanda practice
+  # Uncomment below to re-enable paper trading
+  # - name: "paper"
+  #   credentials:
+  #     initial_cash_usd: 10000.0
 
   - name: "coinbase_advanced"
     credentials:

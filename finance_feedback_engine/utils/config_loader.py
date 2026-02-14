@@ -104,13 +104,17 @@ def load_env_config() -> Dict[str, Any]:
         "use_sandbox": _env_bool("COINBASE_USE_SANDBOX", False),
     }
 
+    # Phase 3: Only Coinbase + Oanda platforms (paper platform disabled)
+    # Crypto (BTC/ETH) → Coinbase sandbox
+    # Forex (GBP/EUR) → Oanda practice
     config["platforms"] = [
-        {
-            "name": "paper",
-            "credentials": {
-                "initial_cash_usd": _env_float("PAPER_INITIAL_CASH_USD", 10000.0),
-            },
-        },
+        # Paper platform commented out for Phase 3 deployment
+        # {
+        #     "name": "paper",
+        #     "credentials": {
+        #         "initial_cash_usd": _env_float("PAPER_INITIAL_CASH_USD", 10000.0),
+        #     },
+        # },
         {
             "name": "coinbase_advanced",
             "credentials": {
