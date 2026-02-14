@@ -74,8 +74,9 @@ database:
 trading_platform: "unified"
 
 # Default paper-trading sandbox for unified platform
+# DISABLED: Using real Coinbase sandbox + Oanda practice for testing
 paper_trading_defaults:
-  enabled: true
+  enabled: false
   initial_cash_usd: 10000.0
 
 # Platform-specific credentials
