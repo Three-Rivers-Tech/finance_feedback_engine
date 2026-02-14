@@ -1,6 +1,6 @@
 """Security tests for bot control authentication."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,9 +20,37 @@ def prod_env(monkeypatch):
 def mock_engine():
     """Create a mock FinanceFeedbackEngine."""
     engine = Mock()
+    
+    # Mock data provider with async methods
     engine.data_provider = Mock()
+    engine.data_provider.get_latest_price = AsyncMock(return_value=50000.0)
+    
+    # Mock platform with async methods
     engine.platform = Mock()
+    engine.platform.get_portfolio_breakdown_async = AsyncMock(
+        return_value={"balances": {"USD": 10000.0}, "total_value": 10000.0}
+    )
+    
+    # Mock decision store
     engine.decision_store = Mock()
+    
+    # Mock engine async methods
+    engine.close = AsyncMock()
+    engine.get_portfolio_breakdown_async = AsyncMock(
+        return_value={"balances": {"USD": 10000.0}, "total_value": 10000.0}
+    )
+    engine.execute_decision_async = AsyncMock(
+        return_value={"status": "success", "trade_id": "test_123"}
+    )
+    
+    # Mock config
+    engine.config = {
+        "agent": {
+            "asset_pairs": ["BTCUSD"],
+            "max_daily_trades": 5,
+        }
+    }
+    
     return engine
 
 
@@ -32,22 +60,25 @@ def mock_auth_manager():
     auth_manager = Mock()
     # By default, validation fails (invalid key)
     auth_manager.validate_api_key.return_value = (False, None, {})
+    # Mock get_key_stats for startup logging
+    auth_manager.get_key_stats.return_value = {"total": 0, "successful": 0, "failed": 0}
     return auth_manager
 
 
 @pytest.fixture
 def client_with_auth(mock_engine, mock_auth_manager):
     """Create test client with mocked engine and auth."""
+    # Patch both engine and auth manager creation in the lifespan
     with patch(
         "finance_feedback_engine.api.app.FinanceFeedbackEngine",
         return_value=mock_engine,
+    ), patch(
+        "finance_feedback_engine.api.app.AuthManager",
+        return_value=mock_auth_manager,
     ):
-        # Set up app state
-        app_state["engine"] = mock_engine
-        app_state["auth_manager"] = mock_auth_manager
-
-        client = TestClient(app)
-        yield client
+        # Use TestClient as context manager to ensure proper cleanup
+        with TestClient(app) as client:
+            yield client
 
         # Cleanup
         app_state.clear()
