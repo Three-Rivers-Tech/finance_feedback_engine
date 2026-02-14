@@ -124,8 +124,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                 # Initialize client with API credentials
                 # For CDP API keys (organizations/.../apiKeys/...), pass directly
+                # Respect use_sandbox flag for sandbox vs production environment
+                base_url = "api-sandbox.coinbase.com" if self.use_sandbox else "api.coinbase.com"
                 self._client = RESTClient(
-                    api_key=self.api_key, api_secret=self.api_secret
+                    api_key=self.api_key, 
+                    api_secret=self.api_secret,
+                    base_url=base_url
                 )
 
                 # Inject correlation ID headers defensively
@@ -1170,18 +1174,170 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 "timestamp": decision.get("timestamp"),
             }
 
+    def _get_spot_positions(self) -> List[Dict[str, Any]]:
+        """
+        Get spot positions from account balances AND partially filled orders.
+        
+        In Coinbase sandbox/spot trading, positions can exist in two forms:
+        1. Settled balances in accounts
+        2. Partially filled BUY orders (filled_size > 0 but order still OPEN)
+        
+        Returns:
+            List of spot positions as dictionaries
+        """
+        spot_positions = []
+        
+        try:
+            client = self._get_client()
+            
+            # METHOD 1: Get positions from account balances
+            accounts_response = client.get_accounts()
+            accounts = getattr(accounts_response, "accounts", None) or []
+            
+            for account in accounts:
+                currency = (getattr(account, "currency", "") or "").upper()
+                
+                # Skip stablecoins and fiat (not positions, just balances)
+                if currency in ("USD", "USDC", "USDT", "DAI", ""):
+                    continue
+                
+                # Get available balance
+                available_balance = getattr(account, "available_balance", None)
+                balance_value = getattr(available_balance, "value", None)
+                amount = float(balance_value or 0)
+                
+                # Skip zero/dust balances
+                if amount < 0.00000001:
+                    continue
+                
+                # Get current price for P&L calculation
+                product_id = f"{currency}-USD"
+                try:
+                    product = client.get_product(product_id=product_id)
+                    price_str = getattr(product, "price", "0")
+                    current_price = float(price_str or 0)
+                except Exception as price_err:
+                    logger.warning(f"Could not fetch price for {product_id}: {price_err}")
+                    current_price = 0.0
+                
+                # Create position dict
+                position = {
+                    "id": f"spot-{currency}",
+                    "instrument": product_id,
+                    "product_id": product_id,
+                    "units": amount,
+                    "entry_price": current_price,  # Approximation (no historical data)
+                    "current_price": current_price,
+                    "pnl": 0.0,  # Unknown without entry price
+                    "unrealized_pnl": 0.0,
+                    "side": "LONG",
+                    "position_type": "spot",
+                    "opened_at": None,
+                }
+                
+                spot_positions.append(position)
+                logger.info(f"Spot position from balance: {currency} = {amount} units @ ${current_price}")
+            
+            # METHOD 2: Get positions from partially filled BUY orders
+            # (In sandbox, filled portions may not show in balances until order closes)
+            try:
+                # Note: order_status parameter is not supported in sandbox, get all recent orders
+                orders_response = client.list_orders(limit=50)
+                all_orders = getattr(orders_response, "orders", [])
+                
+                # Filter to OPEN orders manually
+                open_orders = [o for o in all_orders if getattr(o, "status", "") == "OPEN"]
+                logger.debug(f"Checking {len(open_orders)} open orders for partial fills (from {len(all_orders)} total)")
+                
+                for order in open_orders:
+                    # Only check BUY orders (SELL orders are exiting positions, not creating them)
+                    side = getattr(order, "side", "")
+                    if side != "BUY":
+                        continue
+                    
+                    # Check if any fills exist
+                    filled_size_str = getattr(order, "filled_size", "0")
+                    filled_size = float(filled_size_str or 0)
+                    
+                    if filled_size < 0.00000001:
+                        continue  # No fills yet
+                    
+                    # Get order details
+                    product_id = getattr(order, "product_id", "")
+                    avg_price_str = getattr(order, "average_filled_price", "0")
+                    entry_price = float(avg_price_str or 0)
+                    order_id = getattr(order, "order_id", "")
+                    created_time = getattr(order, "created_time", None)
+                    
+                    # Get current price
+                    try:
+                        product = client.get_product(product_id=product_id)
+                        price_str = getattr(product, "price", "0")
+                        current_price = float(price_str or 0)
+                    except Exception:
+                        current_price = entry_price  # Fallback to entry price
+                    
+                    # Calculate P&L
+                    pnl_usd = (current_price - entry_price) * filled_size
+                    pnl_pct = ((current_price / entry_price) - 1) * 100 if entry_price > 0 else 0.0
+                    
+                    # Create position dict
+                    position = {
+                        "id": f"partial-{order_id[:8]}",
+                        "instrument": product_id,
+                        "product_id": product_id,
+                        "units": filled_size,
+                        "entry_price": entry_price,
+                        "current_price": current_price,
+                        "pnl": pnl_usd,
+                        "unrealized_pnl": pnl_usd,
+                        "side": "LONG",
+                        "position_type": "spot-partial",
+                        "opened_at": created_time,
+                    }
+                    
+                    spot_positions.append(position)
+                    logger.info(
+                        f"Spot position from partial fill: {product_id} = {filled_size} units "
+                        f"@ ${entry_price} (current: ${current_price}, P&L: ${pnl_usd:.2f})"
+                    )
+                    
+            except Exception as partial_err:
+                logger.warning(f"Could not fetch partially filled orders: {partial_err}")
+                
+        except Exception as e:
+            logger.warning(f"Error fetching spot positions: {e}")
+            # Return empty list on error (don't fail the entire positions call)
+        
+        return spot_positions
+
     def get_active_positions(self) -> Dict[str, Any]:
         """
         Get all currently active positions from Coinbase.
 
         Returns:
-            A dictionary with ``"positions"`` containing Coinbase futures
-            positions as dictionaries.
+            A dictionary with ``"positions"`` containing both futures and spot
+            positions. Spot positions are derived from non-zero account balances.
         """
         logger.info("Fetching active positions from Coinbase")
-        portfolio = self.get_portfolio_breakdown()
-        positions: List[Dict[str, Any]] = portfolio.get("futures_positions", [])
-        return {"positions": positions}
+        
+        # Get futures positions (may fail in sandbox or spot-only accounts)
+        futures_positions: List[Dict[str, Any]] = []
+        try:
+            portfolio = self.get_portfolio_breakdown()
+            futures_positions = portfolio.get("futures_positions", [])
+        except Exception as e:
+            logger.warning(f"Could not fetch futures positions (likely sandbox/spot-only): {e}")
+        
+        # Get spot positions from account holdings and partially filled orders
+        spot_positions = self._get_spot_positions()
+        
+        # Combine futures and spot positions
+        all_positions = futures_positions + spot_positions
+        
+        logger.info(f"Total positions: {len(all_positions)} (futures: {len(futures_positions)}, spot: {len(spot_positions)})")
+        
+        return {"positions": all_positions}
 
     def get_account_info(self) -> Dict[str, Any]:
         """
