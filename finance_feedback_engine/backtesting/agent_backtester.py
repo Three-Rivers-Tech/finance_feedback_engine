@@ -284,6 +284,17 @@ class AgentModeBacktester(Backtester):
                     except Exception:
                         pass
 
+            def validate_agent_readiness(self):
+                """
+                Validate that the backtest engine is ready for agent operation.
+                
+                Returns:
+                    tuple: (is_ready: bool, errors: list[str])
+                """
+                # For backtesting, we always return ready since validation
+                # is done during backtest setup
+                return (True, [])
+
         backtest_engine = BacktestEngine(
             self,
             decision_engine,
