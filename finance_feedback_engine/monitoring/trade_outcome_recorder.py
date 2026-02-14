@@ -268,3 +268,94 @@ class TradeOutcomeRecorder:
             
         except Exception as e:
             logger.error(f"Failed to save outcome: {e}")
+    
+    def record_order_outcome(
+        self,
+        order_id: str,
+        decision_id: str,
+        asset_pair: str,
+        side: str,
+        entry_time: str,
+        entry_price: Decimal,
+        size: Decimal,
+        fees: Decimal,
+        exit_time: Optional[str] = None,
+        exit_price: Optional[Decimal] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Record outcome for a specific order (THR-236).
+        
+        This method is called by OrderStatusWorker when an order completes.
+        Unlike update_positions(), this doesn't rely on position polling.
+        
+        Args:
+            order_id: Platform order ID
+            decision_id: Decision ID from decision file
+            asset_pair: Trading pair (e.g., "BTCUSD")
+            side: Trade side ("BUY", "SELL", "LONG", "SHORT")
+            entry_time: ISO timestamp of order entry
+            entry_price: Execution price
+            size: Position size
+            fees: Transaction fees
+            exit_time: Exit timestamp (defaults to now if order just closed)
+            exit_price: Exit price (defaults to entry_price if not known)
+        
+        Returns:
+            Outcome dict or None if recording failed
+        """
+        try:
+            # Default exit time to now
+            if not exit_time:
+                exit_time = datetime.now(timezone.utc).isoformat()
+            
+            # Default exit price to entry price (for now - will improve later)
+            if not exit_price:
+                exit_price = entry_price
+            
+            # Calculate P&L
+            if side.upper() in ["BUY", "LONG"]:
+                direction = 1
+            elif side.upper() in ["SELL", "SHORT"]:
+                direction = -1
+            else:
+                logger.warning(f"Unknown side '{side}', skipping outcome")
+                return None
+            
+            price_diff = exit_price - entry_price
+            realized_pnl = price_diff * size * Decimal(str(direction)) - fees
+            
+            # Calculate holding duration
+            entry_time_dt = datetime.fromisoformat(entry_time.replace("Z", "+00:00"))
+            exit_time_dt = datetime.fromisoformat(exit_time.replace("Z", "+00:00"))
+            holding_duration = (exit_time_dt - entry_time_dt).total_seconds()
+            
+            # Calculate ROI percentage
+            position_value = entry_price * size
+            roi_percent = (realized_pnl / position_value * Decimal("100")) if position_value > 0 else Decimal("0")
+            
+            outcome = {
+                "order_id": order_id,
+                "decision_id": decision_id,
+                "product": asset_pair,
+                "side": side,
+                "entry_time": entry_time,
+                "entry_price": str(entry_price),
+                "entry_size": str(size),
+                "exit_time": exit_time,
+                "exit_price": str(exit_price),
+                "exit_size": str(size),
+                "realized_pnl": str(realized_pnl),
+                "fees": str(fees),
+                "holding_duration_seconds": int(holding_duration),
+                "roi_percent": str(roi_percent),
+                "recorded_via": "order_id_tracking",  # Metadata to distinguish from position polling
+            }
+            
+            # Save outcome to JSONL
+            self._save_outcome(outcome)
+            
+            return outcome
+            
+        except Exception as e:
+            logger.error(f"Failed to record order outcome for {order_id}: {e}", exc_info=True)
+            return None
