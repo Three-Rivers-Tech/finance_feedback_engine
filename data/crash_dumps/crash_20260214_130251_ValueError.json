@@ -1,0 +1,268 @@
+{
+  "timestamp": "2026-02-14T13:02:51.701222",
+  "error_type": "ValueError",
+  "error_message": "data_timestamp must be a non-empty ISO 8601 string",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/agent/trading_loop_agent.py\", line 2439, in process_cycle\n    await handler()\n  File \"/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/agent/trading_loop_agent.py\", line 1089, in handle_perception_state\n    is_fresh, age_str, warning_msg = validate_data_freshness(\n                                     ~~~~~~~~~~~~~~~~~~~~~~~^\n        data_timestamp=data_timestamp,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<2 lines>...\n        market_status=market_status,\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/utils/validation.py\", line 236, in validate_data_freshness\n    raise ValueError(\"data_timestamp must be a non-empty ISO 8601 string\")\nValueError: data_timestamp must be a non-empty ISO 8601 string\n",
+  "context": {
+    "state": "PERCEPTION",
+    "cycle_id": "990efb90",
+    "retry_budget": 3,
+    "asset_pairs": [
+      "BTCUSD"
+    ]
+  },
+  "stack_frames": [
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/bin/pytest",
+      "lineno": 6,
+      "name": "<module>",
+      "line": "sys.exit(console_main())"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py",
+      "lineno": 223,
+      "name": "console_main",
+      "line": "code = main()"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/config/__init__.py",
+      "lineno": 199,
+      "name": "main",
+      "line": "ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_hooks.py",
+      "lineno": 512,
+      "name": "__call__",
+      "line": "return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_manager.py",
+      "lineno": 120,
+      "name": "_hookexec",
+      "line": "return self._inner_hookexec(hook_name, methods, kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_callers.py",
+      "lineno": 121,
+      "name": "_multicall",
+      "line": "res = hook_impl.function(*args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/main.py",
+      "lineno": 365,
+      "name": "pytest_cmdline_main",
+      "line": "return wrap_session(config, _main)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/main.py",
+      "lineno": 318,
+      "name": "wrap_session",
+      "line": "session.exitstatus = doit(config, session) or 0"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/main.py",
+      "lineno": 372,
+      "name": "_main",
+      "line": "config.hook.pytest_runtestloop(session=session)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_hooks.py",
+      "lineno": 512,
+      "name": "__call__",
+      "line": "return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_manager.py",
+      "lineno": 120,
+      "name": "_hookexec",
+      "line": "return self._inner_hookexec(hook_name, methods, kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_callers.py",
+      "lineno": 121,
+      "name": "_multicall",
+      "line": "res = hook_impl.function(*args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/main.py",
+      "lineno": 396,
+      "name": "pytest_runtestloop",
+      "line": "item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_hooks.py",
+      "lineno": 512,
+      "name": "__call__",
+      "line": "return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_manager.py",
+      "lineno": 120,
+      "name": "_hookexec",
+      "line": "return self._inner_hookexec(hook_name, methods, kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_callers.py",
+      "lineno": 121,
+      "name": "_multicall",
+      "line": "res = hook_impl.function(*args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 118,
+      "name": "pytest_runtest_protocol",
+      "line": "runtestprotocol(item, nextitem=nextitem)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 137,
+      "name": "runtestprotocol",
+      "line": "reports.append(call_and_report(item, \"call\", log))"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 244,
+      "name": "call_and_report",
+      "line": "call = CallInfo.from_call("
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 353,
+      "name": "from_call",
+      "line": "result: TResult | None = func()"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 245,
+      "name": "<lambda>",
+      "line": "lambda: runtest_hook(item=item, **kwds),"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_hooks.py",
+      "lineno": 512,
+      "name": "__call__",
+      "line": "return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_manager.py",
+      "lineno": 120,
+      "name": "_hookexec",
+      "line": "return self._inner_hookexec(hook_name, methods, kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_callers.py",
+      "lineno": 121,
+      "name": "_multicall",
+      "line": "res = hook_impl.function(*args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/runner.py",
+      "lineno": 179,
+      "name": "pytest_runtest_call",
+      "line": "item.runtest()"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py",
+      "lineno": 469,
+      "name": "runtest",
+      "line": "super().runtest()"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/python.py",
+      "lineno": 1720,
+      "name": "runtest",
+      "line": "self.ihook.pytest_pyfunc_call(pyfuncitem=self)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_hooks.py",
+      "lineno": 512,
+      "name": "__call__",
+      "line": "return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_manager.py",
+      "lineno": 120,
+      "name": "_hookexec",
+      "line": "return self._inner_hookexec(hook_name, methods, kwargs, firstresult)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pluggy/_callers.py",
+      "lineno": 121,
+      "name": "_multicall",
+      "line": "res = hook_impl.function(*args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/_pytest/python.py",
+      "lineno": 166,
+      "name": "pytest_pyfunc_call",
+      "line": "result = testfunction(**testargs)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py",
+      "lineno": 716,
+      "name": "inner",
+      "line": "runner.run(coro, context=context)"
+    },
+    {
+      "filename": "/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py",
+      "lineno": 118,
+      "name": "run",
+      "line": "return self._loop.run_until_complete(task)"
+    },
+    {
+      "filename": "/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py",
+      "lineno": 712,
+      "name": "run_until_complete",
+      "line": "self.run_forever()"
+    },
+    {
+      "filename": "/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py",
+      "lineno": 683,
+      "name": "run_forever",
+      "line": "self._run_once()"
+    },
+    {
+      "filename": "/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py",
+      "lineno": 2050,
+      "name": "_run_once",
+      "line": "handle._run()"
+    },
+    {
+      "filename": "/opt/homebrew/Cellar/python@3.13/3.13.12_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/events.py",
+      "lineno": 89,
+      "name": "_run",
+      "line": "self._context.run(self._callback, *self._args)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/agent/trading_loop_agent.py",
+      "lineno": 521,
+      "name": "run",
+      "line": "cycle_successful = await self.process_cycle()"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/agent/trading_loop_agent.py",
+      "lineno": 2441,
+      "name": "process_cycle",
+      "line": "dump_path = self._handle_state_exception("
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/agent/trading_loop_agent.py",
+      "lineno": 737,
+      "name": "_handle_state_exception",
+      "line": "dump_path = tracker.capture_crash_dump("
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/monitoring/error_tracking.py",
+      "lineno": 136,
+      "name": "capture_crash_dump",
+      "line": "dump_payload[\"stack_frames\"] = self._extract_locals_from_traceback(max_length=200)"
+    },
+    {
+      "filename": "/Users/cmp6510/finance_feedback_engine/finance_feedback_engine/monitoring/error_tracking.py",
+      "lineno": 183,
+      "name": "_extract_locals_from_traceback",
+      "line": "tb = traceback.extract_stack()"
+    }
+  ]
+}
