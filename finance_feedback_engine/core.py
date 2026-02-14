@@ -1665,21 +1665,21 @@ class FinanceFeedbackEngine:
             except Exception as e:
                 logger.warning(f"Failed to add order to pending tracking: {e}")
 
-        # Still do immediate position polling as fallback (THR-235)
-        # Background worker will handle the outcome recording asynchronously
+        # THR-237: Async position polling (fire-and-forget, reduces latency)
+        # Background worker (THR-236) handles outcome recording via order ID tracking
         if self.trade_outcome_recorder:
             try:
                 # Fetch current positions from platform
                 positions_response = self.trading_platform.get_active_positions()
                 current_positions = positions_response.get("positions", [])
-                outcomes = self.trade_outcome_recorder.update_positions(current_positions)
-                if outcomes:
-                    logger.info(f"Recorded {len(outcomes)} trade outcomes (immediate polling)")
-                    # Update decision file with outcome data
-                    decision["trade_outcomes"] = outcomes
-                    self.decision_store.update_decision(decision)
+                
+                # Fire-and-forget: queue outcome recording in background
+                # This returns immediately (<10ms) instead of blocking (100-500ms)
+                self.trade_outcome_recorder.update_positions_async(current_positions)
+                logger.debug("Queued async position update (non-blocking)")
+                
             except Exception as e:
-                logger.warning(f"Failed to record trade outcome via position polling: {e}")
+                logger.warning(f"Failed to queue async position update: {e}")
 
         return result
 
@@ -1857,21 +1857,21 @@ class FinanceFeedbackEngine:
             except Exception as e:
                 logger.warning(f"Failed to add order to pending tracking: {e}")
 
-        # Still do immediate position polling as fallback (THR-235)
-        # Background worker will handle the outcome recording asynchronously
+        # THR-237: Async position polling (fire-and-forget, reduces latency)
+        # Background worker (THR-236) handles outcome recording via order ID tracking
         if self.trade_outcome_recorder:
             try:
                 # Fetch current positions from platform
                 positions_response = await self.trading_platform.aget_active_positions()
                 current_positions = positions_response.get("positions", [])
-                outcomes = self.trade_outcome_recorder.update_positions(current_positions)
-                if outcomes:
-                    logger.info(f"Recorded {len(outcomes)} trade outcomes (immediate polling)")
-                    # Update decision file with outcome data
-                    decision["trade_outcomes"] = outcomes
-                    self.decision_store.update_decision(decision)
+                
+                # Fire-and-forget: queue outcome recording in background
+                # This returns immediately (<10ms) instead of blocking (100-500ms)
+                self.trade_outcome_recorder.update_positions_async(current_positions)
+                logger.debug("Queued async position update (non-blocking)")
+                
             except Exception as e:
-                logger.warning(f"Failed to record trade outcome via position polling: {e}")
+                logger.warning(f"Failed to queue async position update: {e}")
 
         return result
 
