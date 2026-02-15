@@ -818,7 +818,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     if raw_leverage is not None:
                         try:
                             parsed_leverage = float(raw_leverage)
-                        except Exception:
+                        except (ValueError, TypeError) as e:
+                            logger.debug(
+                                "Invalid leverage value for position: %s - %s, using default",
+                                raw_leverage,
+                                e,
+                            )
                             parsed_leverage = None
 
                     leverage_value = (
@@ -938,7 +943,14 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 # or the `default_leverage` so this conversion should succeed.
                 try:
                     leverage = float(pos.get("leverage", default_leverage))
-                except Exception:
+                except (ValueError, TypeError) as e:
+                    logger.debug(
+                        "Invalid leverage value in position %s: %s - %s, using default %s",
+                        pos.get("product_id"),
+                        pos.get("leverage"),
+                        e,
+                        default_leverage,
+                    )
                     leverage = default_leverage
 
                 contracts = float(pos.get("contracts", 0.0))
@@ -975,7 +987,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         holding["allocation_pct"] = (
                             holding_value / total_notional
                         ) * 100
-                    except Exception:
+                    except (ValueError, TypeError, ZeroDivisionError) as e:
+                        logger.debug(
+                            "Failed to calculate allocation for holding %s: %s",
+                            holding.get("asset"),
+                            e,
+                        )
                         holding["allocation_pct"] = 0.0
 
             logger.info(
