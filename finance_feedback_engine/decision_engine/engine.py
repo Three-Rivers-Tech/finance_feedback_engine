@@ -641,13 +641,63 @@ Signal Integration Framework:
 - High inflation/rates may favor crypto over fiat currencies
 - Economic weakness may indicate risk-off behavior
 
+"""
+
+        # Add position state awareness section (SHORT position support)
+        position_state = self._extract_position_state(context, asset_pair)
+
+        if position_state["has_position"]:
+            state_emoji = "📈" if position_state["side"] == "LONG" else "📉"
+            pnl_sign = "+" if position_state["unrealized_pnl"] >= 0 else ""
+
+            position_state_section = f"""
+=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===
+Status: {state_emoji} {position_state["state"]} position in {asset_pair}
+Side: {position_state["side"]}
+Contracts: {position_state["contracts"]:.4f}
+Entry Price: ${position_state["entry_price"]:.2f}
+Unrealized P&L: {pnl_sign}${position_state["unrealized_pnl"]:.2f}
+
+⚠️ CRITICAL CONSTRAINT: You currently have a {position_state["state"]} position.
+Allowed signals ONLY: {", ".join(position_state["allowed_signals"])}
+
+If you recommend a PROHIBITED signal, your decision will be AUTOMATICALLY REJECTED.
+
+SIGNAL INTERPRETATION WITH POSITION:
+- If you recommend BUY: This will CLOSE your LONG position (if LONG) or violate constraints (if SHORT)
+- If you recommend SELL: This will CLOSE your SHORT position (if SHORT) or violate constraints (if LONG)
+- If you recommend HOLD: Maintains current position
+
+"""
+        else:
+            position_state_section = f"""
+=== YOUR CURRENT POSITION STATE ===
+Status: 📊 FLAT (no active position in {asset_pair})
+Allowed signals: BUY (open LONG), SELL (open SHORT), HOLD
+
+You can freely open either a LONG or SHORT position based on your analysis.
+
+SIGNAL INTERPRETATION WHEN FLAT:
+- BUY signal → Opens LONG position (profit when price rises)
+- SELL signal → Opens SHORT position (profit when price falls)
+- HOLD signal → Remain flat, no position
+
+"""
+
+        prompt += position_state_section
+
+        prompt += f"""
 ANALYSIS OUTPUT REQUIRED:
 =========================
 Demonstrate a technical analysis for {asset_pair} showing:
-1. Signal Type: BUY (long signal), SELL (short signal), or HOLD (neutral)
+1. Signal Type: Based on position state above, recommend ONE of your allowed signals
+   - Respect the position state constraints listed above
+   - BUY/SELL/HOLD must be from your allowed signal list
 2. Signal Strength: 0-100% (how strong the technical indicators align)
 3. Technical Reasoning: Brief explanation of what the indicators show (reference long/short mechanics)
 4. Example Position Size: Demonstrate position sizing calculation for risk management education
+
+⚠️ REMEMBER: Check "YOUR CURRENT POSITION STATE" section above before recommending a signal!
 
 Format response as a structured technical analysis demonstration.
 """
@@ -1355,6 +1405,130 @@ Format response as a structured technical analysis demonstration.
             asset_pair, portfolio, monitoring_context
         )
 
+    def _extract_position_state(
+        self, context: Dict[str, Any], asset_pair: str
+    ) -> Dict[str, Any]:
+        """
+        Extract current position state for the given asset (for SHORT position awareness).
+
+        This method provides detailed position state information to enable proper
+        signal interpretation:
+        - BUY when LONG = invalid (can't add to long)
+        - SELL when LONG = valid (closes long)
+        - BUY when SHORT = valid (closes short)
+        - SELL when SHORT = invalid (can't add to short)
+
+        Args:
+            context: Decision context with monitoring_context
+            asset_pair: Asset pair being analyzed (e.g., "BTC-USD")
+
+        Returns:
+            {
+                "has_position": bool,
+                "side": "LONG" | "SHORT" | None,
+                "contracts": float,
+                "entry_price": float,
+                "unrealized_pnl": float,
+                "allowed_signals": ["BUY", "SELL", "HOLD"],
+                "state": "FLAT" | "LONG" | "SHORT" | "UNKNOWN"
+            }
+        """
+        monitoring = context.get("monitoring_context", {})
+        active_positions = monitoring.get("active_positions", {})
+        futures = active_positions.get("futures", [])
+
+        # Find position for this asset
+        current_position = None
+        for pos in futures:
+            if pos.get("product_id") == asset_pair:
+                current_position = pos
+                break
+
+        if not current_position:
+            # FLAT - can open either LONG or SHORT
+            return {
+                "has_position": False,
+                "side": None,
+                "contracts": 0,
+                "entry_price": 0,
+                "unrealized_pnl": 0,
+                "allowed_signals": ["BUY", "SELL", "HOLD"],
+                "state": "FLAT",
+            }
+
+        side = current_position.get("side", "UNKNOWN").upper()
+
+        if side == "LONG":
+            # Have LONG - can only SELL (close) or HOLD
+            allowed_signals = ["SELL", "HOLD"]
+            state = "LONG"
+        elif side == "SHORT":
+            # Have SHORT - can only BUY (close) or HOLD
+            allowed_signals = ["BUY", "HOLD"]
+            state = "SHORT"
+        else:
+            # Unknown side - default to allow all
+            logger.warning(f"Unknown position side: {side} for {asset_pair}")
+            allowed_signals = ["BUY", "SELL", "HOLD"]
+            state = "UNKNOWN"
+
+        return {
+            "has_position": True,
+            "side": side,
+            "contracts": current_position.get("contracts", 0),
+            "entry_price": current_position.get("entry_price", 0),
+            "unrealized_pnl": current_position.get("unrealized_pnl", 0),
+            "allowed_signals": allowed_signals,
+            "state": state,
+        }
+
+    def _validate_signal_against_position(
+        self, action: str, position_state: Dict[str, Any], asset_pair: str
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate that the signal is allowed given current position state.
+
+        Prevents invalid signals like:
+        - BUY when already LONG (can't add to long, must close first)
+        - SELL when already SHORT (can't add to short, must close first)
+
+        Args:
+            action: The signal action (BUY, SELL, HOLD)
+            position_state: Current position state from _extract_position_state
+            asset_pair: Asset pair for logging
+
+        Returns:
+            (is_valid, error_message)
+        """
+        allowed = position_state.get("allowed_signals", ["BUY", "SELL", "HOLD"])
+
+        if action not in allowed:
+            state = position_state.get("state", "UNKNOWN")
+            error = (
+                f"Signal {action} not allowed when {state}. "
+                f"Current position: {position_state.get('side', 'NONE')} {asset_pair}. "
+                f"Allowed signals: {', '.join(allowed)}"
+            )
+            return False, error
+
+        # Additional validation: Don't allow BUY when already LONG
+        if action == "BUY" and position_state.get("side") == "LONG":
+            error = (
+                f"Cannot BUY when already LONG {asset_pair}. "
+                f"Use HOLD to keep position or SELL to close."
+            )
+            return False, error
+
+        # Additional validation: Don't allow SELL when already SHORT
+        if action == "SELL" and position_state.get("side") == "SHORT":
+            error = (
+                f"Cannot SELL when already SHORT {asset_pair}. "
+                f"Use HOLD to keep position or BUY to close."
+            )
+            return False, error
+
+        return True, None
+
     def _calculate_position_sizing_params(
         self,
         context: Dict[str, Any],
@@ -1662,6 +1836,29 @@ Format response as a structured technical analysis demonstration.
                     f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
                 )
                 ai_response["action"] = "HOLD"
+
+            # Validate signal against position state (SHORT position support)
+            position_state = self._extract_position_state(context, asset_pair)
+            is_valid, error_msg = self._validate_signal_against_position(
+                ai_response.get("action"), position_state, asset_pair
+            )
+
+            if not is_valid:
+                logger.warning(
+                    f"AI generated invalid signal for {asset_pair}: {error_msg}. "
+                    f"Forcing HOLD to prevent position state violation."
+                )
+                original_action = ai_response.get("action")
+                original_reasoning = ai_response.get("reasoning", "N/A")
+                ai_response["action"] = "HOLD"
+                ai_response["reasoning"] = (
+                    f"[FORCED HOLD - Position State Violation] "
+                    f"{error_msg} | "
+                    f"Original signal: {original_action}. "
+                    f"Original reasoning: {original_reasoning}"
+                )
+                ai_response["confidence"] = 0.0  # Zero confidence for forced HOLD
+                ai_response["position_state_violation"] = True
 
             # Create structured decision object
             decision = self._create_decision(asset_pair, context, ai_response)
