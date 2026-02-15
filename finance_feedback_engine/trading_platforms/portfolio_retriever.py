@@ -80,8 +80,14 @@ class AbstractPortfolioRetriever(ABC):
                     "stage": "get_portfolio_breakdown",
                     "account_info_available": "account_info" in locals()
                 })
-            except Exception:
-                pass  # Don't fail on error tracking failure
+            except (ImportError, AttributeError, RuntimeError) as err:
+                # Don't fail on error tracking failure
+                logger.debug(
+                    "Error tracking capture failed for %s: %s",
+                    self.platform_name,
+                    err,
+                )
+                pass
 
             raise PortfolioRetrievingError(
                 f"Failed to retrieve {self.platform_name} portfolio: {str(e)}"

@@ -612,13 +612,15 @@ class OandaPlatform(BaseTradingPlatform):
                                 if cb is not None or ca is not None:
                                     try:
                                         mid = float(cb or ca)
-                                    except Exception:
+                                    except (ValueError, TypeError) as e:
                                         logger.warning(
                                             "Invalid closeout prices for %s: "
-                                            "cb=%s ca=%s",
+                                            "cb=%s ca=%s - %s",
                                             instr,
                                             cb,
                                             ca,
+                                            e,
+                                            exc_info=True,
                                         )
                                         mid = None
                                 else:
@@ -740,7 +742,13 @@ class OandaPlatform(BaseTradingPlatform):
             for instr, units, usd_value in position_usd_values:
                 try:
                     v = float(usd_value)
-                except Exception:
+                except (ValueError, TypeError) as e:
+                    logger.debug(
+                        "Invalid position value for %s: %s - %s, defaulting to 0.0",
+                        instr,
+                        usd_value,
+                        e,
+                    )
                     v = 0.0
                 total_exposure_usd += v
                 holdings.append(

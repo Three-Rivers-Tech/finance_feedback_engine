@@ -1021,7 +1021,12 @@ class Backtester:
                     self._maker_probability = float(
                         bt_backtesting.get("maker_probability", 0.0)
                     )
-                except Exception:
+                except (ValueError, TypeError) as e:
+                    logger.debug(
+                        "Invalid maker_probability value: %s - %s, defaulting to 0.0",
+                        bt_backtesting.get("maker_probability"),
+                        e,
+                    )
                     self._maker_probability = 0.0
 
             async def analyze_asset(self, asset_pair):
@@ -1112,7 +1117,12 @@ class Backtester:
                                     < max(0.0, min(1.0, self._maker_probability))
                                     else "market"
                                 )
-                            except Exception:
+                            except (AttributeError, TypeError, ValueError) as e:
+                                logger.debug(
+                                    "Failed to determine order type for decision %s: %s, defaulting to market",
+                                    decision.get("id"),
+                                    e,
+                                )
                                 decision["order_type"] = "market"
 
                     # Store decision for later execution
@@ -1256,7 +1266,13 @@ class Backtester:
                 (end_dt - start_dt).total_seconds() / seconds_per_year,
                 num_periods / periods_per_year if periods_per_year > 0 else 0,
             )
-        except Exception:
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(
+                "Failed to parse dates for duration calculation (%s to %s): %s, using period-based calculation",
+                start_date,
+                end_date,
+                e,
+            )
             duration_years = (
                 num_periods / periods_per_year if periods_per_year > 0 else 0
             )

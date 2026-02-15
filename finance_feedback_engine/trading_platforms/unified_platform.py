@@ -165,7 +165,12 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     service=target_platform.__class__.__name__.lower(),
                     state=state_map.get(cb.state.value, 0),
                 )
-            except Exception:
+            except (AttributeError, KeyError, ImportError) as e:
+                # Don't let metrics/monitoring failures affect trading execution
+                logger.debug(
+                    "Failed to update circuit breaker metrics: %s",
+                    e,
+                )
                 pass
             return result
         else:
