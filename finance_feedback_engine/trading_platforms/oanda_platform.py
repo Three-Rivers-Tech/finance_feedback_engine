@@ -708,7 +708,11 @@ class OandaPlatform(BaseTradingPlatform):
                             conv_rate_inv = price_map[inverse]
                             try:
                                 usd_value = notional_in_quote * (1.0 / conv_rate_inv)
-                            except Exception:
+                            except (ZeroDivisionError, TypeError) as e:
+                                logger.warning(
+                                    f"Failed to calculate USD value (division error): {e}",
+                                    extra={"notional_in_quote": notional_in_quote, "conv_rate_inv": conv_rate_inv}
+                                )
                                 usd_value = None
 
                 # Fallback: if we couldn't convert via pricing, fall back to

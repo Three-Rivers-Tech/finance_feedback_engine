@@ -138,7 +138,11 @@ class FinanceFeedbackEngine:
         paper_enabled = bool(paper_defaults.get("enabled"))
         try:
             paper_initial_cash = float(paper_defaults.get("initial_cash_usd", 10000.0))
-        except Exception:
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                f"Invalid paper_initial_cash value, using default 10000.0: {e}",
+                extra={"config_value": paper_defaults.get("initial_cash_usd")}
+            )
             paper_initial_cash = 10000.0
 
         # Initialize Delta Lake integration (if enabled)
@@ -1290,9 +1294,12 @@ class FinanceFeedbackEngine:
             record_decision_latency(
                 provider="ensemble", asset_pair=asset_pair, duration_seconds=_duration
             )
-        except Exception:
+        except Exception as e:
             # Metrics should never break the flow
-            pass
+            logger.warning(
+                f"Failed to record decision latency for {asset_pair}: {e}",
+                extra={"asset_pair": asset_pair, "duration": _duration}
+            )
 
         # Persist decision
         self.decision_store.save_decision(decision)

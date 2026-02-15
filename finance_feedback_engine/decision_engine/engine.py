@@ -1902,8 +1902,11 @@ Format response as a structured technical analysis demonstration.
             if span_cm:
                 try:
                     span_cm.__exit__(type(e), e, None)
-                except Exception:
-                    pass
+                except Exception as cleanup_error:
+                    logger.debug(
+                        f"Error during span context cleanup: {cleanup_error}",
+                        extra={"original_exception": str(e)}
+                    )
 
             # Re-raise the exception so caller can handle it
             raise

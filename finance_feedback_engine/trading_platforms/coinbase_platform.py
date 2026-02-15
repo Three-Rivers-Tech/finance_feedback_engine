@@ -791,7 +791,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             if isinstance(o, dict):
                                 return o.get(key, default)
                             return getattr(o, key, default)
-                        except Exception:
+                        except (AttributeError, KeyError, TypeError) as e:
+                            logger.debug(
+                                f"safe_get failed for key '{key}': {e}",
+                                extra={"key": key, "object_type": type(o).__name__}
+                            )
                             return default
 
                     # Try a set of possible leverage field names that the API
