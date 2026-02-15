@@ -1,0 +1,67 @@
+THR-235: Trade Outcome Recording Pipeline - Verification Checklist
+==================================================================
+
+Date: 2026-02-14
+Status: ✅ COMPLETE
+
+PIPELINE COMPONENTS:
+--------------------
+[✅] TradeOutcomeRecorder imported in core.py
+[✅] Recorder initialized in FinanceFeedbackEngine.__init__()
+[✅] update_positions() called after execute_decision() (sync)
+[✅] update_positions() called after execute_decision_async() (async)
+[✅] Decision file fields populated (status, platform_name, position_size)
+[✅] Corrupt portfolio memory deleted
+
+FILE OUTPUTS:
+-------------
+[✅] State file: data/open_positions_state.json (exists)
+[✅] Outcomes dir: data/trade_outcomes/ (exists)
+[✅] JSONL files: data/trade_outcomes/2026-02-14.jsonl (4 entries)
+[✅] Decision files: updated with trade_outcomes field
+
+DATABASE:
+---------
+[✅] Schema exists: trade_outcomes table
+[⚠️] ORM model: NOT IMPLEMENTED (deferred to THR-236)
+[⚠️] Database writes: NOT IMPLEMENTED (deferred to THR-236)
+[✅] Query result: 0 rows (expected, no writer)
+
+TESTING:
+--------
+[✅] Unit tests: test_thr235_pipeline.py PASSING
+[✅] Position open: VERIFIED
+[✅] Position update: VERIFIED
+[✅] Position close: VERIFIED
+[✅] Multiple positions: VERIFIED
+[✅] JSONL output: VERIFIED (valid format)
+
+INTEGRATION:
+------------
+[✅] Test trade: BTC-USD order b45e8b73-b5ed-4ffb-b61f-af2ee79743b9
+[✅] Decision file: 2026-02-14_079c15f0-54f7-475f-92fe-0ca4d9abecff.json
+[✅] Execution status: completed
+[✅] Platform: coinbase_advanced
+
+DOCUMENTATION:
+--------------
+[✅] Completion report: THR-235_COMPLETION_REPORT.md
+[✅] Gemini review: gemini_review_thr235.md
+[✅] Final summary: THR-235_FINAL_SUMMARY.md
+[✅] Test script: test_thr235_pipeline.py
+
+GIT COMMITS:
+------------
+[✅] 8177f20: Fix THR-235: Hook TradeOutcomeRecorder into execution flow
+[✅] c070305: Add THR-235 completion report and test script
+[✅] c3c161f: Add Gemini code review request for THR-235
+[✅] 0762f98: Add final summary for THR-235 completion
+
+FOLLOW-UP TASKS:
+----------------
+[ ] THR-236: Add SQLAlchemy ORM model for trade_outcomes
+[ ] THR-237: Add database writer to TradeOutcomeRecorder
+[ ] THR-238: Improve exit price accuracy (query platform API)
+[ ] THR-239: Add fee data to outcome records
+
+OVERALL STATUS: ✅ PRODUCTION READY (with JSONL files)

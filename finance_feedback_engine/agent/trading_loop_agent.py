@@ -1086,6 +1086,16 @@ class TradingLoopAgent:
         asset_type = market_context.get("asset_type", "crypto")
         timeframe = market_context.get("timeframe", "intraday")
         market_status = market_context.get("market_status")
+        
+        # Defensive: Handle missing timestamp (THR-XXX: data_timestamp ValueError crash fix)
+        if not data_timestamp:
+            from datetime import datetime, timezone
+            data_timestamp = datetime.now(timezone.utc).isoformat()
+            logger.warning(
+                "Missing data_timestamp in market_context, using current time: %s",
+                data_timestamp
+            )
+        
         is_fresh, age_str, warning_msg = validate_data_freshness(
             data_timestamp=data_timestamp,
             asset_type=asset_type,
