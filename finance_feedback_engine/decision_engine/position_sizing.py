@@ -220,13 +220,73 @@ class PositionSizingCalculator:
                         max_position_usd
                     )
 
-            # Calculate stop loss price
-            position_type = self._determine_position_type(action)
-            stop_loss_price = 0
-            if position_type == "LONG" and current_price > 0:
-                stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
-            elif position_type == "SHORT" and current_price > 0:
-                stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
+            # Calculate stop loss price with validation (SHORT position support)
+            # Validate stop-loss percentage bounds
+            MIN_STOP_LOSS_PCT = 0.005  # 0.5% minimum
+            MAX_STOP_LOSS_PCT = 0.50  # 50% maximum (sanity check)
+
+            if sizing_stop_loss_percentage < MIN_STOP_LOSS_PCT:
+                logger.warning(
+                    f"Stop-loss percentage {sizing_stop_loss_percentage:.3%} below minimum {MIN_STOP_LOSS_PCT:.3%}. "
+                    f"Adjusting to minimum."
+                )
+                sizing_stop_loss_percentage = MIN_STOP_LOSS_PCT
+
+            if sizing_stop_loss_percentage > MAX_STOP_LOSS_PCT:
+                logger.warning(
+                    f"Stop-loss percentage {sizing_stop_loss_percentage:.3%} above maximum {MAX_STOP_LOSS_PCT:.3%}. "
+                    f"Capping to maximum."
+                )
+                sizing_stop_loss_percentage = MAX_STOP_LOSS_PCT
+
+            # Validate current price
+            if current_price <= 0:
+                logger.error(
+                    f"Invalid current_price: {current_price}. Cannot calculate stop-loss. "
+                    f"Defaulting to 0."
+                )
+                stop_loss_price = 0
+            else:
+                position_type = self._determine_position_type(action)
+
+                if position_type == "LONG":
+                    stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
+                    # Validate: LONG stop-loss must be below entry
+                    if stop_loss_price >= current_price:
+                        logger.error(
+                            f"LONG stop-loss {stop_loss_price:.2f} >= entry {current_price:.2f}. "
+                            f"This should never happen. Setting to entry * 0.98"
+                        )
+                        stop_loss_price = current_price * 0.98
+                elif position_type == "SHORT":
+                    stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
+                    # Validate: SHORT stop-loss must be above entry
+                    if stop_loss_price <= current_price:
+                        logger.error(
+                            f"SHORT stop-loss {stop_loss_price:.2f} <= entry {current_price:.2f}. "
+                            f"This should never happen. Setting to entry * 1.02"
+                        )
+                        stop_loss_price = current_price * 1.02
+                else:
+                    logger.warning(
+                        f"Unknown position type: {position_type}. Cannot calculate stop-loss."
+                    )
+                    stop_loss_price = 0
+
+                # Final validation: Ensure minimum distance between entry and stop-loss
+                if stop_loss_price > 0:
+                    min_distance = current_price * MIN_STOP_LOSS_PCT
+                    actual_distance = abs(stop_loss_price - current_price)
+
+                    if actual_distance < min_distance:
+                        logger.warning(
+                            f"Stop-loss distance {actual_distance:.2f} too close to entry {current_price:.2f}. "
+                            f"Minimum distance: {min_distance:.2f}. Adjusting."
+                        )
+                        if position_type == "LONG":
+                            stop_loss_price = current_price * (1 - MIN_STOP_LOSS_PCT)
+                        elif position_type == "SHORT":
+                            stop_loss_price = current_price * (1 + MIN_STOP_LOSS_PCT)
 
             result.update(
                 {
