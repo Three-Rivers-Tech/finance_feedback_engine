@@ -2208,20 +2208,12 @@ def optimize_params(ctx, symbol, days, granularity, n_trials, min_trades, use_ff
         console.print("[cyan]Step 2:[/cyan] Defining strategy...")
         
         if use_ffe:
-            # Initialize FFE engine for strategy
-            console.print("[dim]Initializing FFE decision engine...[/dim]")
+            # FFE engine is already initialized in __init__
+            console.print("[dim]Validating FFE decision engine...[/dim]")
             
             try:
-                # Run async initialization
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(engine.initialize())
-                finally:
-                    loop.close()
-                
-                # FIX #4: Validate FFE initialization before proceeding
-                # Check that critical components are initialized
+                # FIX THR-227: Remove engine.initialize() call - FFE initializes in __init__
+                # Validate that critical components are initialized
                 if not hasattr(engine, 'decision_engine') or engine.decision_engine is None:
                     raise RuntimeError("Decision engine not initialized")
                 

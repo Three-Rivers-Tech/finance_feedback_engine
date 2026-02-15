@@ -74,7 +74,7 @@ class TestOptunaOptimizer:
 
         # Mock trial
         trial = Mock()
-        trial.suggest_float.side_effect = [0.015, 0.025]  # risk, stop_loss
+        trial.suggest_float.side_effect = [0.015, 0.025, 0.04]  # risk, stop_loss, take_profit
         trial.suggest_categorical.return_value = "weighted"
 
         with patch.object(
@@ -199,7 +199,7 @@ class TestMultiObjectiveOptimization:
         )
 
         trial = Mock()
-        trial.suggest_float.side_effect = [0.015, 0.025]
+        trial.suggest_float.side_effect = [0.015, 0.025, 0.04]  # risk, stop_loss, take_profit
         trial.suggest_categorical.return_value = "weighted"
 
         with patch.object(
@@ -250,7 +250,7 @@ class TestParameterSearchSpace:
         )
 
         trial = Mock()
-        trial.suggest_float.side_effect = [0.015, 0.025, 0.4, 0.3, 0.3]
+        trial.suggest_float.side_effect = [0.015, 0.025, 0.04, 0.4, 0.3, 0.3]  # risk, stop_loss, take_profit, weights...
         trial.suggest_categorical.return_value = "weighted"
 
         with patch.object(
@@ -258,8 +258,8 @@ class TestParameterSearchSpace:
         ):
             optimizer.objective(trial)
 
-        # Should suggest weights for each provider
-        assert trial.suggest_float.call_count >= 5
+        # Should suggest weights for each provider (3 params + 3 weights = 6)
+        assert trial.suggest_float.call_count >= 6
 
 
 class TestOptimizationResults:
