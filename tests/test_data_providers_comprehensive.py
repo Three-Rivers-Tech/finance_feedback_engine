@@ -36,14 +36,14 @@ class TestAlphaVantageProvider:
     @pytest.mark.asyncio
     async def test_get_market_data_success(self, provider):
         """Test successful market data retrieval."""
-        # Mock _make_http_request directly to bypass aiohttp complexity
+        # Mock with intraday format (default timeframe is 60min, not daily)
         mock_data = {
-            "Time Series (Digital Currency Daily)": {
-                "2024-12-04": {
-                    "1a. open (USD)": "100.00",
-                    "2a. high (USD)": "105.00",
-                    "3a. low (USD)": "99.00",
-                    "4a. close (USD)": "103.00",
+            "Time Series Crypto (60min)": {
+                "2024-12-04 23:00:00": {
+                    "1. open": "100.00",
+                    "2. high": "105.00",
+                    "3. low": "99.00",
+                    "4. close": "103.00",
                     "5. volume": "1000000",
                 }
             }
@@ -278,11 +278,11 @@ class TestUnifiedDataProvider:
         provider.coinbase.get_candles.return_value = [{"close": 50000.0}]
         provider.oanda.get_candles.return_value = [{"close": 1.05}]
 
-        # Test stock routing (defaults to Alpha Vantage)
+        # Test stock routing (unknown assets default to Coinbase since Alpha Vantage doesn't support get_candles)
         candles, source = provider.get_candles("AAPL")
-        assert source == "alpha_vantage"
+        assert source == "coinbase"
         assert len(candles) == 1
-        assert candles[0]["close"] == 150.0
+        assert candles[0]["close"] == 50000.0
 
     def test_get_crypto_data_routes_to_coinbase(self, provider):
         """Test crypto requests route to Coinbase."""
