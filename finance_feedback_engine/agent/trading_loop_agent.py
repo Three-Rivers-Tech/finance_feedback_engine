@@ -6,6 +6,7 @@ import logging
 import queue
 import time
 import uuid
+from datetime import date
 from enum import Enum, auto
 from typing import Any, Dict, Optional
 
@@ -1188,7 +1189,7 @@ class TradingLoopAgent:
                 return
 
         # --- Daily Counter Reset ---
-        today = datetime.date.today()
+        today = date.today()
         if today > self.last_trade_date:
             logger.info(
                 "New day detected. Resetting daily trade count from %d to 0.", self.daily_trade_count
