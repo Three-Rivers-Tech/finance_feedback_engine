@@ -56,6 +56,7 @@ class OptunaOptimizer:
         self.search_space = search_space or {
             "risk_per_trade": (0.005, 0.03),
             "stop_loss_percentage": (0.01, 0.05),
+            "take_profit_percentage": (0.02, 0.08),  # THR-226 fix: Add TP optimization
         }
 
         logger.info(
@@ -86,9 +87,21 @@ class OptunaOptimizer:
             self.search_space["stop_loss_percentage"][0],
             self.search_space["stop_loss_percentage"][1],
         )
+        
+        # THR-226 fix: Add take_profit optimization
+        take_profit_pct = trial.suggest_float(
+            "take_profit_percentage",
+            self.search_space.get("take_profit_percentage", (0.02, 0.08))[0],
+            self.search_space.get("take_profit_percentage", (0.02, 0.08))[1],
+        )
 
         trial_config["decision_engine"]["risk_per_trade"] = risk_per_trade
         trial_config["decision_engine"]["stop_loss_percentage"] = stop_loss_pct
+        
+        # Store TP in advanced_backtesting config (where backtester reads it)
+        if "advanced_backtesting" not in trial_config:
+            trial_config["advanced_backtesting"] = {}
+        trial_config["advanced_backtesting"]["take_profit_percentage"] = take_profit_pct
 
         # Voting strategy
         if "ensemble" in trial_config:
@@ -333,6 +346,13 @@ class OptunaOptimizer:
         if "stop_loss_percentage" in best_params:
             best_config["decision_engine"]["stop_loss_percentage"] = best_params[
                 "stop_loss_percentage"
+            ]
+        # THR-226 fix: Save take_profit_percentage to config
+        if "take_profit_percentage" in best_params:
+            if "advanced_backtesting" not in best_config:
+                best_config["advanced_backtesting"] = {}
+            best_config["advanced_backtesting"]["take_profit_percentage"] = best_params[
+                "take_profit_percentage"
             ]
         if "voting_strategy" in best_params:
             best_config["ensemble"]["voting_strategy"] = best_params["voting_strategy"]
