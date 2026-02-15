@@ -20,6 +20,14 @@ class TestOODALoopBugFixes:
         """
         # Setup minimal mock config
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
@@ -58,6 +66,14 @@ class TestOODALoopBugFixes:
         Test Bug #2 fix: asset_pairs mutations should be thread-safe.
         """
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD", "ETHUSD"]
         config.core_pairs = ["BTCUSD", "ETHUSD"]
         config.autonomous = Mock(enabled=True)
@@ -108,6 +124,14 @@ class TestOODALoopBugFixes:
         Test Bug #3 fix: _cleanup_rejected_cache should be called in multiple states.
         """
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
@@ -141,6 +165,14 @@ class TestOODALoopBugFixes:
         Test Bug #4 fix: stop() should wait for scheduler to complete.
         """
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
@@ -180,6 +212,14 @@ class TestOODALoopBugFixes:
         """
         # Test new format (autonomous.enabled)
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
@@ -228,6 +268,14 @@ class TestOODALoopBugFixes:
         Test Bug #8 fix: _current_decision variable should not exist.
         """
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
@@ -257,6 +305,14 @@ class TestOODALoopBugFixes:
         Test Bug #9 fix: Successful analysis should remove entry from dict.
         """
         config = Mock(spec=TradingAgentConfig)
+        config.correlation_threshold = 0.7
+        config.max_correlated_assets = 2
+        config.max_var_pct = 0.05
+        config.var_confidence = 0.95
+        config.max_drawdown_percent = 10.0
+        config.main_loop_error_backoff_seconds = 5
+        config.analysis_frequency_seconds = 60
+        config.reasoning_failure_decay_seconds = 300
         config.asset_pairs = ["BTCUSD"]
         config.core_pairs = ["BTCUSD"]
         config.autonomous = Mock(enabled=True)
