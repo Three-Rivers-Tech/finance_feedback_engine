@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -231,8 +232,10 @@ class Backtester:
         """Ensure resources are cleaned up on garbage collection."""
         try:
             self.close()
-        except Exception:
-            pass  # Suppress errors during cleanup
+        except Exception as e:
+            # Suppress errors during cleanup but log for debugging
+            # Use print instead of logger to avoid issues during interpreter shutdown
+            print(f"Warning: Backtester cleanup error in __del__: {e}", file=sys.stderr)
 
     # ============================================
     # Enhanced Slippage & Commission Modeling (Phase 1.1)

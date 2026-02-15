@@ -124,8 +124,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
                 # Initialize client with API credentials
                 # For CDP API keys (organizations/.../apiKeys/...), pass directly
+                # Respect use_sandbox flag for environment selection (futures-only project)
+                base_url = "api-sandbox.coinbase.com" if self.use_sandbox else "api.coinbase.com"
                 self._client = RESTClient(
-                    api_key=self.api_key, api_secret=self.api_secret
+                    api_key=self.api_key, 
+                    api_secret=self.api_secret,
+                    base_url=base_url
                 )
 
                 # Inject correlation ID headers defensively
@@ -451,7 +455,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 accounts = getattr(accounts_response, "accounts", None) or []
 
                 for account in accounts:
-                    currency = (getattr(account, "currency", "") or "").upper()
+                    currency = getattr(account, "currency", "").upper()
                     if currency not in ("USD", "USDC"):
                         continue
 
@@ -700,7 +704,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     accounts_response = client.get_accounts()
                     accounts = getattr(accounts_response, "accounts", None) or []
                     for account in accounts:
-                        currency = (getattr(account, "currency", "") or "").upper()
+                        currency = getattr(account, "currency", "").upper()
                         if currency not in ("USD", "USDC"):
                             continue
                         available_balance = getattr(account, "available_balance", None)
@@ -787,7 +791,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                             if isinstance(o, dict):
                                 return o.get(key, default)
                             return getattr(o, key, default)
-                        except Exception:
+                        except (AttributeError, KeyError, TypeError) as e:
+                            logger.debug(
+                                f"safe_get failed for key '{key}': {e}",
+                                extra={"key": key, "object_type": type(o).__name__}
+                            )
                             return default
 
                     # Try a set of possible leverage field names that the API

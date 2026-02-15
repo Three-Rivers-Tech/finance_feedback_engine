@@ -1,0 +1,373 @@
+diff --git a/finance_feedback_engine/cli/main.py b/finance_feedback_engine/cli/main.py
+index 6348d0f..5c3c7ce 100644
+--- a/finance_feedback_engine/cli/main.py
++++ b/finance_feedback_engine/cli/main.py
+@@ -1607,12 +1607,17 @@ def positions(ctx, save):
+                 logger.warning(f"Invalid size for {product}: {size_raw} ({e}). Skipping position.")
+                 continue
+             
+-            try:
+-                entry_raw = pos.get("entry_price") or pos.get("average_price") or pos.get("price") or "0"
+-                entry_price = Decimal(str(entry_raw))
+-            except (ValueError, TypeError, InvalidOperation) as e:
+-                logger.warning(f"Invalid entry_price for {product}: {entry_raw} ({e}). Skipping position.")
+-                continue
++            # Handle entry_price (may be None for settled balances without history)
++            entry_raw = pos.get("entry_price") or pos.get("average_price") or pos.get("price")
++            if entry_raw is None:
++                # Entry price unknown - cannot calculate P&L
++                entry_price = None
++            else:
++                try:
++                    entry_price = Decimal(str(entry_raw))
++                except (ValueError, TypeError, InvalidOperation) as e:
++                    logger.warning(f"Invalid entry_price for {product}: {entry_raw} ({e}). Skipping position.")
++                    continue
+             
+             try:
+                 current_raw = pos.get("current_price") or pos.get("mark_price") or entry_raw or "0"
+@@ -1632,9 +1637,14 @@ def positions(ctx, save):
+                 continue
+             
+             # Calculate P&L if not provided (THR-216: Decimal arithmetic)
++            # Skip P&L calculation if entry_price is None (unknown)
+             unrealized_pnl_raw = pos.get("unrealized_pnl") or pos.get("unrealized_pl") or pos.get("pnl")
+             
+-            if unrealized_pnl_raw is not None:
++            if entry_price is None:
++                # Cannot calculate P&L without entry price
++                unrealized_pnl = None
++                pnl_pct = None
++            elif unrealized_pnl_raw is not None:
+                 try:
+                     unrealized_pnl = Decimal(str(unrealized_pnl_raw))
+                 except (ValueError, TypeError, InvalidOperation):
+@@ -1642,25 +1652,28 @@ def positions(ctx, save):
+             else:
+                 unrealized_pnl = None
+             
+-            if unrealized_pnl is None and entry_price > 0 and current_price > 0:
++            # Calculate P&L if entry price is known but P&L not provided
++            if entry_price is not None and unrealized_pnl is None and current_price > 0:
+                 # Calculate: (current - entry) × units × direction
+                 price_diff = current_price - entry_price
+                 unrealized_pnl = price_diff * size * Decimal(str(direction))
+             
+-            if unrealized_pnl is None:
+-                unrealized_pnl = Decimal("0")
+-            
+-            total_pnl += unrealized_pnl
++            # Add to total if P&L is known
++            if unrealized_pnl is not None:
++                total_pnl += unrealized_pnl
+             
+             # Calculate percentage P&L (THR-216: Decimal arithmetic)
+-            pnl_pct = Decimal("0")
+-            if entry_price > 0 and size > 0:
++            pnl_pct = None
++            if entry_price is not None and entry_price > 0 and size > 0 and unrealized_pnl is not None:
+                 position_value = entry_price * size
+                 if position_value > 0:
+                     pnl_pct = (unrealized_pnl / position_value) * Decimal("100")
+             
+-            # Color-code P&L
+-            if unrealized_pnl > 0:
++            # Color-code P&L (handle None for unknown entry prices)
++            if unrealized_pnl is None:
++                pnl_color = "dim"
++                pnl_sign = ""
++            elif unrealized_pnl > 0:
+                 pnl_color = "green"
+                 pnl_sign = "+"
+             elif unrealized_pnl < 0:
+@@ -1686,7 +1699,7 @@ def positions(ctx, save):
+             # Get stop loss if available (THR-216: Decimal arithmetic)
+             stop_loss_raw = pos.get("stop_loss") or pos.get("stopLoss") or pos.get("sl")
+             sl_str = ""
+-            if stop_loss_raw:
++            if stop_loss_raw and entry_price is not None:
+                 try:
+                     stop_loss = Decimal(str(stop_loss_raw))
+                     if entry_price > 0:
+@@ -1705,11 +1718,22 @@ def positions(ctx, save):
+                 "unrealized_pnl": unrealized_pnl
+             })
+             
+-            # Print position details (convert Decimal to float for display)
++            # Print position details (convert Decimal to float for display, handle None)
+             console.print(f"[bold]{product}[/bold] {side} ({float(size)} units)")
+-            console.print(f"  Entry: ${float(entry_price):.4f}{time_str}")
++            
++            # Entry price (may be None for settled balances without history)
++            if entry_price is None:
++                console.print(f"  Entry: [dim]Unknown[/dim]{time_str}")
++            else:
++                console.print(f"  Entry: ${float(entry_price):.4f}{time_str}")
++            
+             console.print(f"  Current: ${float(current_price):.4f}")
+-            console.print(f"  P&L: [{pnl_color}]{pnl_sign}${float(unrealized_pnl):.2f} ({pnl_sign}{float(pnl_pct):.2f}%)[/{pnl_color}]")
++            
++            # P&L (may be None if entry price unknown)
++            if unrealized_pnl is None or pnl_pct is None:
++                console.print(f"  P&L: [dim]Unknown (no entry price)[/dim]")
++            else:
++                console.print(f"  P&L: [{pnl_color}]{pnl_sign}${float(unrealized_pnl):.2f} ({pnl_sign}{float(pnl_pct):.2f}%)[/{pnl_color}]")
+             if sl_str:
+                 console.print(sl_str, end="")
+             console.print()  # Blank line between positions
+diff --git a/finance_feedback_engine/trading_platforms/coinbase_platform.py b/finance_feedback_engine/trading_platforms/coinbase_platform.py
+index 89f9b9e..b59b97b 100644
+--- a/finance_feedback_engine/trading_platforms/coinbase_platform.py
++++ b/finance_feedback_engine/trading_platforms/coinbase_platform.py
+@@ -124,8 +124,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
+ 
+                 # Initialize client with API credentials
+                 # For CDP API keys (organizations/.../apiKeys/...), pass directly
++                # Respect use_sandbox flag for sandbox vs production environment
++                base_url = "api-sandbox.coinbase.com" if self.use_sandbox else "api.coinbase.com"
+                 self._client = RESTClient(
+-                    api_key=self.api_key, api_secret=self.api_secret
++                    api_key=self.api_key, 
++                    api_secret=self.api_secret,
++                    base_url=base_url
+                 )
+ 
+                 # Inject correlation ID headers defensively
+@@ -451,7 +455,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
+                 accounts = getattr(accounts_response, "accounts", None) or []
+ 
+                 for account in accounts:
+-                    currency = (getattr(account, "currency", "") or "").upper()
++                    currency = getattr(account, "currency", "").upper()
+                     if currency not in ("USD", "USDC"):
+                         continue
+ 
+@@ -700,7 +704,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
+                     accounts_response = client.get_accounts()
+                     accounts = getattr(accounts_response, "accounts", None) or []
+                     for account in accounts:
+-                        currency = (getattr(account, "currency", "") or "").upper()
++                        currency = getattr(account, "currency", "").upper()
+                         if currency not in ("USD", "USDC"):
+                             continue
+                         available_balance = getattr(account, "available_balance", None)
+@@ -1170,18 +1174,214 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
+                 "timestamp": decision.get("timestamp"),
+             }
+ 
++    def _batch_fetch_prices(self, product_ids: List[str]) -> Dict[str, float]:
++        """
++        Fetch current prices for multiple products in a single API call.
++        
++        Args:
++            product_ids: List of product IDs (e.g., ["BTC-USD", "ETH-USD"])
++            
++        Returns:
++            Dictionary mapping product_id to current price
++        """
++        if not product_ids:
++            return {}
++        
++        prices = {}
++        try:
++            client = self._get_client()
++            # Use get_products with product_ids filter for batch fetch
++            products_response = client.get_products(product_ids=product_ids)
++            products = getattr(products_response, "products", [])
++            
++            for product in products:
++                product_id = getattr(product, "product_id", "")
++                price_str = getattr(product, "price", "0")
++                if product_id and price_str:
++                    try:
++                        prices[product_id] = float(price_str)
++                    except (ValueError, TypeError):
++                        logger.warning(f"Invalid price format for {product_id}: {price_str}")
++                        
++        except Exception:
++            logger.exception(f"Batch price fetch failed for {len(product_ids)} products")
++            # Fall back to empty dict - caller will handle missing prices
++            
++        logger.debug(f"Batch fetched {len(prices)} prices in 1 API call (requested: {len(product_ids)})")
++        return prices
++
++    def _get_spot_positions(self) -> List[Dict[str, Any]]:
++        """
++        Get spot positions from account balances AND partially filled orders.
++        
++        In Coinbase sandbox/spot trading, positions can exist in two forms:
++        1. Settled balances in accounts
++        2. Partially filled BUY orders (filled_size > 0 but order still OPEN)
++        
++        Returns:
++            List of spot positions as dictionaries
++        """
++        spot_positions = []
++        
++        try:
++            client = self._get_client()
++            
++            # STEP 1: Collect all non-zero account balances
++            accounts_response = client.get_accounts()
++            accounts = getattr(accounts_response, "accounts", None) or []
++            
++            balance_data = []  # List of (currency, amount) tuples
++            for account in accounts:
++                currency = getattr(account, "currency", "").upper()
++                
++                # Skip stablecoins and fiat (not positions, just balances)
++                if currency in ("USD", "USDC", "USDT", "DAI", ""):
++                    continue
++                
++                # Get available balance
++                available_balance = getattr(account, "available_balance", None)
++                balance_value = getattr(available_balance, "value", None)
++                amount = float(balance_value or 0)
++                
++                # Skip zero/dust balances
++                if amount < 0.00000001:
++                    continue
++                
++                balance_data.append((currency, amount))
++            
++            # STEP 2: Batch fetch prices for all currencies
++            balance_product_ids = [f"{currency}-USD" for currency, _ in balance_data]
++            balance_prices = self._batch_fetch_prices(balance_product_ids)
++            
++            # STEP 3: Build position dicts with batched prices
++            for currency, amount in balance_data:
++                product_id = f"{currency}-USD"
++                current_price = balance_prices.get(product_id, 0.0)
++                
++                # Create position dict
++                # Note: For settled balances, entry price is unknown (no historical data)
++                position = {
++                    "id": f"spot-{currency}",
++                    "instrument": product_id,
++                    "product_id": product_id,
++                    "units": amount,
++                    "entry_price": None,  # Unknown - no transaction history available
++                    "current_price": current_price,
++                    "pnl": None,  # Cannot calculate without entry price
++                    "unrealized_pnl": None,
++                    "side": "LONG",
++                    "position_type": "spot",
++                    "opened_at": None,
++                }
++                
++                spot_positions.append(position)
++                logger.info(f"Spot position from balance: {currency} = {amount} units @ ${current_price} (entry price unknown)")
++            
++            # METHOD 2: Get positions from partially filled BUY orders
++            # (In sandbox, filled portions may not show in balances until order closes)
++            try:
++                # Note: order_status parameter is not supported in sandbox, get all recent orders
++                orders_response = client.list_orders(limit=50)
++                all_orders = getattr(orders_response, "orders", [])
++                
++                # Filter to OPEN BUY orders with partial fills
++                open_orders = [o for o in all_orders if getattr(o, "status", "") == "OPEN"]
++                logger.debug(f"Checking {len(open_orders)} open orders for partial fills (from {len(all_orders)} total)")
++                
++                # STEP 1: Collect all partially filled BUY orders
++                partial_fill_data = []  # List of (order_id, product_id, entry_price, filled_size, created_time)
++                for order in open_orders:
++                    # Only check BUY orders
++                    side = getattr(order, "side", "")
++                    if side != "BUY":
++                        continue
++                    
++                    # Check if any fills exist
++                    filled_size_str = getattr(order, "filled_size", "0")
++                    filled_size = float(filled_size_str or 0)
++                    
++                    if filled_size < 0.00000001:
++                        continue  # No fills yet
++                    
++                    # Collect order details
++                    product_id = getattr(order, "product_id", "")
++                    avg_price_str = getattr(order, "average_filled_price", "0")
++                    entry_price = float(avg_price_str or 0)
++                    order_id = getattr(order, "order_id", "")
++                    created_time = getattr(order, "created_time", None)
++                    
++                    partial_fill_data.append((order_id, product_id, entry_price, filled_size, created_time))
++                
++                # STEP 2: Batch fetch current prices for all partial fills
++                partial_product_ids = [product_id for _, product_id, _, _, _ in partial_fill_data]
++                partial_prices = self._batch_fetch_prices(partial_product_ids)
++                
++                # STEP 3: Build position dicts with batched prices
++                for order_id, product_id, entry_price, filled_size, created_time in partial_fill_data:
++                    # Get current price from batch or fall back to entry price
++                    current_price = partial_prices.get(product_id, entry_price)
++                    
++                    # Calculate P&L
++                    pnl_usd = (current_price - entry_price) * filled_size
++                    pnl_pct = ((current_price / entry_price) - 1) * 100 if entry_price > 0 else 0.0
++                    
++                    # Create position dict
++                    position = {
++                        "id": f"partial-{order_id[:8]}",
++                        "instrument": product_id,
++                        "product_id": product_id,
++                        "units": filled_size,
++                        "entry_price": entry_price,
++                        "current_price": current_price,
++                        "pnl": pnl_usd,
++                        "unrealized_pnl": pnl_usd,
++                        "side": "LONG",
++                        "position_type": "spot-partial",
++                        "opened_at": created_time,
++                    }
++                    
++                    spot_positions.append(position)
++                    logger.info(
++                        f"Spot position from partial fill: {product_id} = {filled_size} units "
++                        f"@ ${entry_price} (current: ${current_price}, P&L: ${pnl_usd:.2f})"
++                    )
++                    
++            except Exception:
++                logger.exception("Could not fetch partially filled orders")
++                
++        except Exception:
++            logger.exception("Error fetching spot positions")
++            # Return empty list on error (don't fail the entire positions call)
++        
++        return spot_positions
++
+     def get_active_positions(self) -> Dict[str, Any]:
+         """
+         Get all currently active positions from Coinbase.
+ 
+         Returns:
+-            A dictionary with ``"positions"`` containing Coinbase futures
+-            positions as dictionaries.
++            A dictionary with ``"positions"`` containing both futures and spot
++            positions. Spot positions are derived from non-zero account balances.
+         """
+         logger.info("Fetching active positions from Coinbase")
+-        portfolio = self.get_portfolio_breakdown()
+-        positions: List[Dict[str, Any]] = portfolio.get("futures_positions", [])
+-        return {"positions": positions}
++        
++        # Get futures positions (may fail in sandbox or spot-only accounts)
++        futures_positions: List[Dict[str, Any]] = []
++        try:
++            portfolio = self.get_portfolio_breakdown()
++            futures_positions = portfolio.get("futures_positions", [])
++        except Exception:
++            logger.exception("Could not fetch futures positions (likely sandbox/spot-only)")
++        
++        # Get spot positions from account holdings and partially filled orders
++        spot_positions = self._get_spot_positions()
++        
++        # Combine futures and spot positions
++        all_positions = futures_positions + spot_positions
++        
++        logger.info(f"Total positions: {len(all_positions)} (futures: {len(futures_positions)}, spot: {len(spot_positions)})")
++        
++        return {"positions": all_positions}
+ 
+     def get_account_info(self) -> Dict[str, Any]:
+         """

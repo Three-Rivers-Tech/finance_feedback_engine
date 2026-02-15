@@ -239,44 +239,115 @@ class MockTradingPlatform(BaseTradingPlatform):
         fee_rate = 0.00025 if is_maker else 0.0006
         fee_amount = suggested_amount * fee_rate
 
+        # Initialize realized P&L
+        realized_pnl = 0.0
+
         # Update balances and positions
         try:
             if action == "BUY":
-                # Check sufficient balance
-                futures_balance = self._balance.get("FUTURES_USD", 0)
-                required_amount = suggested_amount + fee_amount
-
-                if futures_balance < required_amount:
-                    logger.warning(
-                        "Insufficient balance: %.2f < %.2f required",
-                        futures_balance,
-                        required_amount,
-                    )
-                    return {
-                        "success": False,
-                        "platform": "mock",
-                        "decision_id": decision_id,
-                        "error": f"Insufficient balance: {futures_balance:.2f} < {required_amount:.2f}",
-                        "timestamp": decision.get(
-                            "timestamp", datetime.utcnow().isoformat()
-                        ),
-                    }
-
-                # Deduct from balance
-                self._balance["FUTURES_USD"] -= required_amount
-
-                # Update or create position
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]
-                    # Average entry price for multiple buys
-                    total_contracts = pos["contracts"] + contracts
-                    weighted_entry = (
-                        (pos["contracts"] * pos["entry_price"])
-                        + (contracts * execution_price)
-                    ) / total_contracts
-                    pos["contracts"] = total_contracts
-                    pos["entry_price"] = weighted_entry
+                    
+                    # Check if closing SHORT position or adding to LONG
+                    if pos.get("side") == "SHORT":
+                        # Closing SHORT position
+                        short_contracts = abs(pos["contracts"])  # Convert negative to positive
+                        
+                        if short_contracts >= contracts:
+                            # Calculate realized P&L for SHORT (inverted)
+                            # Profit when entry_price > exit_price
+                            pnl = (
+                                (pos["entry_price"] - execution_price)
+                                * contracts
+                                * self._contract_multiplier
+                            )
+                            realized_pnl = pnl
+                            
+                            # Return margin plus P&L, minus fee and cost to buy back
+                            margin_returned = pos.get("margin_held", 0)
+                            self._balance["FUTURES_USD"] += margin_returned + realized_pnl - fee_amount
+                            
+                            # Update position
+                            pos["contracts"] += contracts  # Adding positive to negative
+                            if abs(pos["contracts"]) < 0.01:  # Close position if nearly zero
+                                del self._positions[asset_pair_normalized]
+                            
+                            logger.info(
+                                "Closed/reduced SHORT position, realized P&L: $%.2f", realized_pnl
+                            )
+                        else:
+                            # Not enough contracts to close
+                            logger.warning(
+                                "Insufficient SHORT position: %.4f contracts < %.4f required",
+                                short_contracts,
+                                contracts,
+                            )
+                            return {
+                                "success": False,
+                                "platform": "mock",
+                                "decision_id": decision_id,
+                                "error": f"Insufficient SHORT position: {short_contracts:.4f} < {contracts:.4f}",
+                                "timestamp": decision.get(
+                                    "timestamp", datetime.utcnow().isoformat()
+                                ),
+                            }
+                    else:  # pos["side"] == "LONG"
+                        # Adding to LONG position
+                        futures_balance = self._balance.get("FUTURES_USD", 0)
+                        required_amount = suggested_amount + fee_amount
+
+                        if futures_balance < required_amount:
+                            logger.warning(
+                                "Insufficient balance: %.2f < %.2f required",
+                                futures_balance,
+                                required_amount,
+                            )
+                            return {
+                                "success": False,
+                                "platform": "mock",
+                                "decision_id": decision_id,
+                                "error": f"Insufficient balance: {futures_balance:.2f} < {required_amount:.2f}",
+                                "timestamp": decision.get(
+                                    "timestamp", datetime.utcnow().isoformat()
+                                ),
+                            }
+
+                        # Deduct from balance
+                        self._balance["FUTURES_USD"] -= required_amount
+
+                        # Average entry price for multiple buys
+                        total_contracts = pos["contracts"] + contracts
+                        weighted_entry = (
+                            (pos["contracts"] * pos["entry_price"])
+                            + (contracts * execution_price)
+                        ) / total_contracts
+                        pos["contracts"] = total_contracts
+                        pos["entry_price"] = weighted_entry
                 else:
+                    # No position exists - open a LONG position
+                    futures_balance = self._balance.get("FUTURES_USD", 0)
+                    required_amount = suggested_amount + fee_amount
+
+                    if futures_balance < required_amount:
+                        logger.warning(
+                            "Insufficient balance: %.2f < %.2f required",
+                            futures_balance,
+                            required_amount,
+                        )
+                        return {
+                            "success": False,
+                            "platform": "mock",
+                            "decision_id": decision_id,
+                            "error": f"Insufficient balance: {futures_balance:.2f} < {required_amount:.2f}",
+                            "timestamp": decision.get(
+                                "timestamp", datetime.utcnow().isoformat()
+                            ),
+                        }
+
+                    # Deduct from balance
+                    self._balance["FUTURES_USD"] -= required_amount
+
+                    # Create LONG position
                     self._positions[asset_pair_normalized] = {
                         "contracts": contracts,
                         "entry_price": execution_price,
@@ -285,68 +356,123 @@ class MockTradingPlatform(BaseTradingPlatform):
                         "daily_pnl": 0.0,
                     }
 
-            realized_pnl = 0.0
             if action == "SELL":
                 if asset_pair_normalized in self._positions:
                     pos = self._positions[asset_pair_normalized]
+                    
+                    # Check if this is a LONG position (close) or SHORT position (increase short)
+                    if pos.get("side") == "LONG":
+                        # Close or reduce LONG position
+                        if pos["contracts"] >= contracts:
+                            # Calculate realized P&L for LONG
+                            pnl = (
+                                (execution_price - pos["entry_price"])
+                                * contracts
+                                * self._contract_multiplier
+                            )
+                            realized_pnl = pnl
+                            # Update balance with proceeds and realized P&L
+                            self._balance["FUTURES_USD"] += (
+                                suggested_amount - fee_amount
+                            )
 
-                    # Close or reduce long position
-                    if pos["contracts"] >= contracts:
-                        # Calculate realized P&L
-                        pnl = (
-                            (execution_price - pos["entry_price"])
-                            * contracts
-                            * self._contract_multiplier
-                        )
-                        realized_pnl = pnl
-                        # Update balance with proceeds and realized P&L
-                        self._balance["FUTURES_USD"] += (
-                            suggested_amount - fee_amount
-                        )
+                            # Update position
+                            pos["contracts"] -= contracts
+                            if pos["contracts"] < 0.01:  # Close position if nearly zero
+                                del self._positions[asset_pair_normalized]
 
-                        # Update position
-                        pos["contracts"] -= contracts
-                        if pos["contracts"] < 0.01:  # Close position if nearly zero
-                            del self._positions[asset_pair_normalized]
-
-                        logger.info(
-                            "Closed/reduced position, realized P&L: $%.2f", realized_pnl
-                        )
-                    else:
-                        # Not enough contracts to sell
-                        logger.warning(
-                            "Insufficient position: %.4f contracts < %.4f required",
-                            pos["contracts"],
-                            contracts,
-                        )
+                            logger.info(
+                                "Closed/reduced LONG position, realized P&L: $%.2f", realized_pnl
+                            )
+                        else:
+                            # Not enough contracts to sell
+                            logger.warning(
+                                "Insufficient LONG position: %.4f contracts < %.4f required",
+                                pos["contracts"],
+                                contracts,
+                            )
+                            return {
+                                "success": False,
+                                "platform": "mock",
+                                "decision_id": decision_id,
+                                "error": f'Insufficient position: {pos["contracts"]:.4f} < {contracts:.4f}',
+                                "timestamp": decision.get(
+                                    "timestamp", datetime.utcnow().isoformat()
+                                ),
+                            }
+                    else:  # pos["side"] == "SHORT"
+                        # Adding to SHORT position - not typically supported, reject for now
+                        logger.warning("Cannot add to existing SHORT position with SELL")
                         return {
                             "success": False,
                             "platform": "mock",
                             "decision_id": decision_id,
-                            "error": f'Insufficient position: {pos["contracts"]:.4f} < {contracts:.4f}',
+                            "error": "Cannot add to existing SHORT position. Close SHORT first with BUY.",
                             "timestamp": decision.get(
                                 "timestamp", datetime.utcnow().isoformat()
                             ),
                         }
                 else:
-                    # No position to sell
-                    logger.warning("No position to sell for %s", asset_pair_normalized)
-                    return {
-                        "success": False,
-                        "platform": "mock",
-                        "decision_id": decision_id,
-                        "error": f"No position to sell for {asset_pair_normalized}",
-                        "timestamp": decision.get(
-                            "timestamp", datetime.utcnow().isoformat()
-                        ),
+                    # No position exists - open a SHORT position
+                    logger.info(f"Opening SHORT position for {asset_pair_normalized}")
+                    
+                    # Check sufficient balance for margin
+                    futures_balance = self._balance.get("FUTURES_USD", 0)
+                    # For SHORT, we need margin (assumed 10x leverage, so 10% of notional)
+                    required_margin = (suggested_amount / 10.0) + fee_amount
+                    
+                    if futures_balance < required_margin:
+                        logger.warning(
+                            "Insufficient balance for SHORT: %.2f < %.2f required margin",
+                            futures_balance,
+                            required_margin,
+                        )
+                        return {
+                            "success": False,
+                            "platform": "mock",
+                            "decision_id": decision_id,
+                            "error": f"Insufficient balance for SHORT: {futures_balance:.2f} < {required_margin:.2f}",
+                            "timestamp": decision.get(
+                                "timestamp", datetime.utcnow().isoformat()
+                            ),
+                        }
+                    
+                    # Deduct margin and fee from balance
+                    self._balance["FUTURES_USD"] -= required_margin
+                    
+                    # Create SHORT position (negative contracts to indicate short)
+                    self._positions[asset_pair_normalized] = {
+                        "contracts": -contracts,  # Negative for SHORT
+                        "entry_price": execution_price,
+                        "side": "SHORT",
+                        "unrealized_pnl": 0.0,
+                        "daily_pnl": 0.0,
+                        "margin_held": required_margin - fee_amount,  # Track margin
                     }
+                    
+                    logger.info(
+                        "Opened SHORT position: %.4f contracts @ $%.2f (margin: $%.2f)",
+                        contracts,
+                        execution_price,
+                        required_margin - fee_amount,
+                    )
             # Record trade in history
+            # Determine position side from current position or action
+            position_side = "UNKNOWN"
+            if asset_pair_normalized in self._positions:
+                position_side = self._positions[asset_pair_normalized].get("side", "UNKNOWN")
+            elif action == "BUY":
+                position_side = "LONG"  # BUY without position opens LONG
+            elif action == "SELL":
+                position_side = "SHORT"  # SELL without position opens SHORT
+            
             trade_record = {
                 "order_id": f"mock-{uuid.uuid4().hex[:8]}",
                 "decision_id": decision_id,
                 "timestamp": decision.get("timestamp", datetime.utcnow().isoformat()),
                 "asset_pair": asset_pair_normalized,
                 "action": action,
+                "side": position_side,  # Track position side
                 "contracts": contracts,
                 "execution_price": execution_price,
                 "notional_value": suggested_amount,
@@ -354,7 +480,9 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "fee_rate": fee_rate,
                 "slippage_pct": slippage_pct,
                 "realized_pnl": realized_pnl,
+                "pnl_value": realized_pnl,  # Alias for consistency with backtest metrics
                 "order_type": order_type,
+                "success": True,  # Mark as successful for filtering
             }
             self._trade_history.append(trade_record)
 
@@ -432,12 +560,28 @@ class MockTradingPlatform(BaseTradingPlatform):
                 current_price = pos["entry_price"] * 1.01
 
             contracts = pos["contracts"]
-            notional = contracts * current_price * self._contract_multiplier
-            unrealized_pnl = (
-                (current_price - pos["entry_price"])
-                * contracts
-                * self._contract_multiplier
-            )
+            side = pos.get("side", "LONG")
+            
+            # Calculate notional value (always positive)
+            notional = abs(contracts) * current_price * self._contract_multiplier
+            
+            # Calculate unrealized P&L (inverted for SHORT positions)
+            if side == "SHORT":
+                # For SHORT: profit when price drops, loss when price rises
+                # contracts is negative, so this formula works:
+                # (entry_price - current_price) * abs(contracts)
+                unrealized_pnl = (
+                    (pos["entry_price"] - current_price)
+                    * abs(contracts)
+                    * self._contract_multiplier
+                )
+            else:  # LONG
+                # For LONG: profit when price rises, loss when price drops
+                unrealized_pnl = (
+                    (current_price - pos["entry_price"])
+                    * abs(contracts)
+                    * self._contract_multiplier
+                )
 
             total_unrealized_pnl += unrealized_pnl
             total_notional += notional
@@ -445,8 +589,8 @@ class MockTradingPlatform(BaseTradingPlatform):
             futures_positions.append(
                 {
                     "product_id": asset_pair,
-                    "side": pos.get("side", "LONG"),
-                    "contracts": contracts,
+                    "side": side,
+                    "contracts": abs(contracts),  # Report as positive for display
                     "entry_price": pos["entry_price"],
                     "current_price": current_price,
                     "unrealized_pnl": unrealized_pnl,
