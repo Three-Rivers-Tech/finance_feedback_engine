@@ -322,7 +322,7 @@ class RiskGatekeeper:
                             "asset_pair": asset_pair,
                             "asset_type": asset_type,
                             "data_age": age_str,
-                            "message": freshness_msg,
+                            "freshness_message": freshness_msg,
                             "decision_action": decision.get("action", "UNKNOWN")
                         }
                     )
@@ -335,7 +335,7 @@ class RiskGatekeeper:
                         extra={
                             "asset_pair": asset_pair,
                             "asset_type": asset_type,
-                            "message": freshness_msg
+                            "freshness_message": freshness_msg
                         }
                     )
             except ValueError as e:
