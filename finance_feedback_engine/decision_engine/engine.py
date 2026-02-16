@@ -261,8 +261,25 @@ class DecisionEngine:
                 dp_stats = self.data_provider.get_circuit_breaker_stats()
                 if dp_stats:
                     stats["data_provider"] = dp_stats
+        except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive logging
+            logger.debug(
+                "Failed to collect data provider circuit breaker stats - attribute/type error",
+                extra={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "has_method": hasattr(self.data_provider, "get_circuit_breaker_stats")
+                }
+            )
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("Failed to collect data provider circuit breaker stats: %s", exc)
+            logger.warning(
+                "Failed to collect data provider circuit breaker stats - unexpected error",
+                extra={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__
+                },
+                exc_info=True
+            )
+            # TODO: Monitor circuit breaker stat collection failures (THR-XXX)
 
         try:
             if hasattr(self.ai_manager, "get_circuit_breaker_stats"):
@@ -272,8 +289,25 @@ class DecisionEngine:
                         stats.update(ai_stats)
                     else:
                         stats["ai_manager"] = ai_stats
+        except (AttributeError, TypeError) as exc:  # pragma: no cover - defensive logging
+            logger.debug(
+                "Failed to collect AI manager circuit breaker stats - attribute/type error",
+                extra={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "has_method": hasattr(self.ai_manager, "get_circuit_breaker_stats")
+                }
+            )
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("Failed to collect AI manager circuit breaker stats: %s", exc)
+            logger.warning(
+                "Failed to collect AI manager circuit breaker stats - unexpected error",
+                extra={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__
+                },
+                exc_info=True
+            )
+            # TODO: Monitor circuit breaker stat collection failures (THR-XXX)
 
         return stats
 
