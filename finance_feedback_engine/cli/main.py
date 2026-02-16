@@ -52,6 +52,13 @@ from finance_feedback_engine.utils.retention_manager import create_default_manag
 from finance_feedback_engine.cli.commands.optimize import optimize as optimize_command
 from finance_feedback_engine.cli.commands.trading import balance as balance_command
 from finance_feedback_engine.cli.commands.trading import execute as execute_command
+from finance_feedback_engine.cli.commands.analytics import (
+    daily_pnl as daily_pnl_command,
+    weekly_pnl as weekly_pnl_command,
+    monthly_pnl as monthly_pnl_command,
+    asset_breakdown as asset_breakdown_command,
+    export_csv as export_csv_command,
+)
 from finance_feedback_engine.cli.interactive import start_interactive_session
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.dashboard import (
@@ -2629,6 +2636,13 @@ cli.add_command(prune_memory_command, name="prune-memory")
 cli.add_command(run_agent_command, name="run-agent")
 cli.add_command(monitor_command, name="monitor")
 cli.add_command(frontend_command, name="frontend")
+
+# Analytics commands
+cli.add_command(daily_pnl_command, name="daily-pnl")
+cli.add_command(weekly_pnl_command, name="weekly-pnl")
+cli.add_command(monthly_pnl_command, name="monthly-pnl")
+cli.add_command(asset_breakdown_command, name="asset-breakdown")
+cli.add_command(export_csv_command, name="export-csv")
 
 
 if __name__ == "__main__":
