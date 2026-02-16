@@ -1140,8 +1140,28 @@ class FinanceFeedbackEngine:
                     f"Price check: Alpha Vantage ${av_price:.2f} ({data_age_minutes:.1f}min old) | "
                     f"Platform price unavailable"
                 )
+        except (KeyError, TypeError) as e:
+            logger.warning(
+                "Price comparison skipped due to data format issue",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "has_platform_data": bool(platform_price_data),
+                    "has_av_price": bool(av_price)
+                }
+            )
         except Exception as e:
-            logger.debug(f"Price comparison failed for {asset_pair}: {e}")
+            logger.warning(
+                "Price comparison failed unexpectedly",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                },
+                exc_info=True
+            )
+            # TODO: Alert if price comparison consistently fails (THR-XXX)
 
         # Get portfolio breakdown with caching (Phase 2 optimization)
         # This replaces the separate get_balance() call (which was redundant)
@@ -1176,20 +1196,50 @@ class FinanceFeedbackEngine:
                 )
 
             except (AttributeError, TypeError) as e:
-                logger.warning(
-                    "Could not fetch portfolio breakdown due to data format error: %s",
-                    e,
+                logger.error(
+                    "Portfolio breakdown fetch failed - data format error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "platform_type": type(self.trading_platform).__name__
+                    }
                 )
-            except (ConnectionError, TimeoutError, ValueError) as e:
-                logger.warning(
-                    "Could not fetch portfolio breakdown due to connection issue: %s",
-                    e,
-                    exc_info=True,
+                # TODO: Track portfolio fetch data errors for platform health (THR-XXX)
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Portfolio breakdown fetch timed out",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "timeout_seconds": 15.0,
+                        "platform_type": type(self.trading_platform).__name__
+                    }
                 )
+                # TODO: Alert on portfolio fetch timeouts - impacts position sizing (THR-XXX)
+            except (ConnectionError, ValueError) as e:
+                logger.error(
+                    "Portfolio breakdown fetch failed - connection/validation error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "platform_type": type(self.trading_platform).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Alert on repeated connection failures (THR-XXX)
             except Exception as e:
-                logger.warning(
-                    "Could not fetch portfolio breakdown: %s", e, exc_info=True
+                logger.error(
+                    "Portfolio breakdown fetch failed unexpectedly",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "platform_type": type(self.trading_platform).__name__
+                    },
+                    exc_info=True
                 )
+                # TODO: Alert on unknown portfolio fetch errors (THR-XXX)
 
         # Get memory context if enabled
         memory_context = None
@@ -1213,9 +1263,28 @@ class FinanceFeedbackEngine:
                         cost_stats.get("avg_total_cost_pct", 0),
                         cost_stats.get("sample_size", 0),
                     )
-            except Exception as e:
-                logger.warning(f"Could not calculate transaction costs: {e}")
+            except (ValueError, TypeError, KeyError) as e:
+                logger.warning(
+                    "Transaction cost calculation failed - data issue",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
                 memory_context["transaction_costs"] = {"has_data": False}
+            except Exception as e:
+                logger.error(
+                    "Transaction cost calculation failed unexpectedly",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                memory_context["transaction_costs"] = {"has_data": False}
+                # TODO: Monitor transaction cost calculation failures (THR-XXX)
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         from .monitoring.prometheus import (
