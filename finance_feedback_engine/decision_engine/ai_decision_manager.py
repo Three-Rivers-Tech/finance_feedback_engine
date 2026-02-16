@@ -177,10 +177,32 @@ class AIDecisionManager:
                     f"Debate: {bull_provider} (bull) -> {bull_case.get('action')} ({bull_case.get('confidence')}%)"
                 )
                 increment_provider_request(bull_provider, "success")
-        except Exception as e:
-            logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
+        except asyncio.TimeoutError:
+            logger.error(
+                "Debate: bull provider timed out",
+                extra={
+                    "provider": bull_provider,
+                    "role": "bull",
+                    "timeout_seconds": self.ensemble_timeout,
+                }
+            )
             failed_debate_providers.append(bull_provider)
             increment_provider_request(bull_provider, "failure")
+            # TODO: Track debate provider timeouts for alerting (THR-XXX)
+        except Exception as e:
+            logger.error(
+                "Debate: bull provider failed with exception",
+                extra={
+                    "provider": bull_provider,
+                    "role": "bull",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True
+            )
+            failed_debate_providers.append(bull_provider)
+            increment_provider_request(bull_provider, "failure")
+            # TODO: Alert on repeated debate provider failures (THR-XXX)
 
         # Query bear provider (bearish case)
         try:
@@ -199,10 +221,32 @@ class AIDecisionManager:
                     f"Debate: {bear_provider} (bear) -> {bear_case.get('action')} ({bear_case.get('confidence')}%)"
                 )
                 increment_provider_request(bear_provider, "success")
-        except Exception as e:
-            logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
+        except asyncio.TimeoutError:
+            logger.error(
+                "Debate: bear provider timed out",
+                extra={
+                    "provider": bear_provider,
+                    "role": "bear",
+                    "timeout_seconds": self.ensemble_timeout,
+                }
+            )
             failed_debate_providers.append(bear_provider)
             increment_provider_request(bear_provider, "failure")
+            # TODO: Track debate provider timeouts for alerting (THR-XXX)
+        except Exception as e:
+            logger.error(
+                "Debate: bear provider failed with exception",
+                extra={
+                    "provider": bear_provider,
+                    "role": "bear",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True
+            )
+            failed_debate_providers.append(bear_provider)
+            increment_provider_request(bear_provider, "failure")
+            # TODO: Alert on repeated debate provider failures (THR-XXX)
 
         # Query judge provider (final decision)
         try:
@@ -221,10 +265,32 @@ class AIDecisionManager:
                     f"Debate: {judge_provider} (judge) -> {judge_decision.get('action')} ({judge_decision.get('confidence')}%)"
                 )
                 increment_provider_request(judge_provider, "success")
-        except Exception as e:
-            logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
+        except asyncio.TimeoutError:
+            logger.error(
+                "Debate: judge provider timed out",
+                extra={
+                    "provider": judge_provider,
+                    "role": "judge",
+                    "timeout_seconds": self.ensemble_timeout,
+                }
+            )
             failed_debate_providers.append(judge_provider)
             increment_provider_request(judge_provider, "failure")
+            # TODO: Track debate provider timeouts for alerting (THR-XXX)
+        except Exception as e:
+            logger.error(
+                "Debate: judge provider failed with exception",
+                extra={
+                    "provider": judge_provider,
+                    "role": "judge",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                exc_info=True
+            )
+            failed_debate_providers.append(judge_provider)
+            increment_provider_request(judge_provider, "failure")
+            # TODO: Alert on repeated debate provider failures (THR-XXX)
 
         # Error: if any debate provider failed, raise error
         if bull_case is None or bear_case is None or judge_decision is None:
