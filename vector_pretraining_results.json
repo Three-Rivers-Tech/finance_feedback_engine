@@ -1,0 +1,87 @@
+{
+  "start_time": "2026-02-16T16:31:37.161625",
+  "phases": [
+    {
+      "phase": "phase1_bull_market",
+      "periods": [
+        {
+          "name": "bull_early_2021",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        },
+        {
+          "name": "bull_late_2020",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        }
+      ],
+      "total_lessons": 14,
+      "successful_backtests": 2,
+      "failed_backtests": 0
+    },
+    {
+      "phase": "phase2_bear_market",
+      "periods": [
+        {
+          "name": "bear_2022_crash",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        },
+        {
+          "name": "bear_2021_correction",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        }
+      ],
+      "total_lessons": 14,
+      "successful_backtests": 2,
+      "failed_backtests": 0
+    },
+    {
+      "phase": "phase3_mixed_market",
+      "periods": [
+        {
+          "name": "mixed_2023_recovery",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        },
+        {
+          "name": "mixed_2020_covid",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        }
+      ],
+      "total_lessons": 14,
+      "successful_backtests": 2,
+      "failed_backtests": 0
+    },
+    {
+      "phase": "phase4_complexity",
+      "periods": [
+        {
+          "name": "complexity_15m_2021",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        },
+        {
+          "name": "complexity_h1_volatile",
+          "success": true,
+          "lessons_extracted": 7,
+          "lessons_stored": 7
+        }
+      ],
+      "total_lessons": 14,
+      "successful_backtests": 2,
+      "failed_backtests": 0
+    }
+  ],
+  "end_time": "2026-02-16T16:31:40.382266",
+  "total_lessons": 56
+}
