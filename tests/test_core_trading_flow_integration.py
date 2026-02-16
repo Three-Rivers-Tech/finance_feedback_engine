@@ -19,19 +19,14 @@ def mock_config():
     """Provide a valid test configuration."""
     return {
         "alpha_vantage_api_key": "test_key",
-        "trading_platform": "paper",
-        "platforms": [
-            {
-                "name": "paper",
-                "credentials": {
-                    "initial_balance": {
-                        "FUTURES_USD": 6000.0,
-                        "SPOT_USD": 3000.0,
-                        "SPOT_USDC": 1000.0,
-                    }
-                },
+        "trading_platform": "mock",
+        "platform_credentials": {
+            "initial_balance": {
+                "FUTURES_USD": 6000.0,
+                "SPOT_USD": 3000.0,
+                "SPOT_USDC": 1000.0,
             }
-        ],
+        },
         "paper_trading_defaults": {
             "enabled": True,
             "initial_cash_usd": 10000.0,
@@ -100,10 +95,14 @@ def mock_data_provider():
 @pytest.fixture
 async def engine_with_mocks(mock_config, mock_decision_engine, mock_data_provider):
     """Create engine with mocked dependencies to bypass sklearn imports."""
+    # Mock UnifiedDataProvider
+    mock_unified = Mock()
+    mock_unified.get_current_price = Mock(return_value=None)
+    
     with patch("finance_feedback_engine.core.DecisionEngine", return_value=mock_decision_engine), \
          patch("finance_feedback_engine.core.AlphaVantageProvider", return_value=mock_data_provider), \
          patch("finance_feedback_engine.core.HistoricalDataProvider"), \
-         patch("finance_feedback_engine.core.UnifiedDataProvider"), \
+         patch("finance_feedback_engine.data_providers.unified_data_provider.UnifiedDataProvider", return_value=mock_unified), \
          patch("finance_feedback_engine.core.validate_at_startup"), \
          patch("finance_feedback_engine.core.validate_credentials"), \
          patch("finance_feedback_engine.core.validate_and_warn"), \
@@ -114,6 +113,7 @@ async def engine_with_mocks(mock_config, mock_decision_engine, mock_data_provide
         engine = FinanceFeedbackEngine(mock_config)
         engine.decision_engine = mock_decision_engine
         engine.data_provider = mock_data_provider
+        engine.unified_provider = mock_unified
         
         yield engine
         
