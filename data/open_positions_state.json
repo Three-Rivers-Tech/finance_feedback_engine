@@ -1,1 +1,10 @@
-{}
+{
+  "EUR_USD_LONG": {
+    "trade_id": "ffb30a9d-85ab-4fb3-9045-1aaaaf0030a0",
+    "product": "EUR_USD",
+    "side": "LONG",
+    "entry_time": "2026-02-16T18:16:57.010398+00:00",
+    "entry_price": "1.19111",
+    "entry_size": "2101.0"
+  }
+}
