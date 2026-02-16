@@ -174,8 +174,40 @@ class MonitoringContextProvider:
 
                 context["has_monitoring_data"] = True
 
+        except ConnectionError as e:
+            logger.error(
+                "Failed to fetch active positions - connection error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": "connection",
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                },
+                exc_info=True
+            )
+            # TODO: Alert on repeated position fetch failures (THR-XXX)
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(
+                "Failed to fetch active positions - data validation error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                }
+            )
         except Exception as e:
-            logger.warning(f"Could not fetch active positions: {e}")
+            logger.error(
+                "Failed to fetch active positions - unexpected error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                },
+                exc_info=True
+            )
+            # TODO: Monitor unexpected context provider errors (THR-XXX)
 
         # Get active trade monitoring data
         if self.trade_monitor:
@@ -188,8 +220,27 @@ class MonitoringContextProvider:
                     self.trade_monitor.MAX_CONCURRENT_TRADES
                     - len(self.trade_monitor.active_trackers)
                 )
+            except (AttributeError, TypeError) as e:
+                logger.warning(
+                    "Failed to fetch active trades - attribute error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "has_trade_monitor": bool(self.trade_monitor)
+                    }
+                )
             except Exception as e:
-                logger.warning(f"Could not fetch active trades: {e}")
+                logger.error(
+                    "Failed to fetch active trades - unexpected error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Monitor trade monitor access errors (THR-XXX)
 
         # Get recent performance metrics
         if self.metrics_collector:
@@ -197,8 +248,29 @@ class MonitoringContextProvider:
                 context["recent_performance"] = self._get_recent_performance(
                     asset_pair, lookback_hours
                 )
+            except (ValueError, TypeError, KeyError) as e:
+                logger.warning(
+                    "Failed to fetch recent performance - data validation error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "lookback_hours": lookback_hours,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "has_metrics_collector": bool(self.metrics_collector)
+                    }
+                )
             except Exception as e:
-                logger.warning(f"Could not fetch recent performance: {e}")
+                logger.error(
+                    "Failed to fetch recent performance - unexpected error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "lookback_hours": lookback_hours,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Monitor metrics collector errors (THR-XXX)
 
         # Get multi-timeframe pulse from TradeMonitor (if configured)
         if self.trade_monitor and asset_pair:
