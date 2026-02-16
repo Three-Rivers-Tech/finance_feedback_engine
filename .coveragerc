@@ -1,109 +1,58 @@
-# Coverage.py Configuration for Finance Feedback Engine
-# Used by pytest-cov for code coverage measurement
-
 [run]
-# Specify which package to measure
 source = finance_feedback_engine
-
-# Files and directories to omit from coverage
-omit =
-    # Test files
+omit = 
     */tests/*
-    */test_*.py
-    *_test.py
-
-    # Python cache
-    */__pycache__/*
-    *.pyc
-
-    # Virtual environments
     */venv/*
     */.venv/*
-    */env/*
-
-    # Build artifacts
-    */dist/*
-    */build/*
-    *.egg-info/*
-
-    # Migration files (if any)
+    */__pycache__/*
+    */site-packages/*
     */migrations/*
-    */alembic/*
-
-    # Configuration and setup
-    setup.py
-    conftest.py
-
-# Enable branch coverage (measures if/else branches)
-branch = True
-
-# Parallel mode for faster test execution (optional)
-parallel = False
+    */scripts/*
+    */.pytest_cache/*
+    */htmlcov/*
+    */build/*
+    */dist/*
+    */.git/*
+    */.tox/*
 
 [report]
-# Precision for coverage percentages
-precision = 2
-
-# Skip files with 100% coverage in reports
-skip_covered = False
-
-# Skip empty files
-skip_empty = True
-
-# Show lines that weren't executed
-show_missing = True
-
-# Exclude lines from coverage (comments matching these patterns)
+# Regexes for lines to exclude from consideration
 exclude_lines =
-    # Standard pragma
+    # Have to re-enable the standard pragma
     pragma: no cover
 
-    # Don't complain about missing debug-only code
+    # Don't complain about missing debug-only code:
     def __repr__
     def __str__
 
-    # Don't complain if tests don't hit defensive assertion code
+    # Don't complain if tests don't hit defensive assertion code:
     raise AssertionError
     raise NotImplementedError
 
-    # Don't complain if non-runnable code isn't run
-    if 0:
-    if False:
+    # Don't complain if non-runnable code isn't run:
     if __name__ == .__main__.:
-
-    # Don't complain about abstract methods
-    @(abc\.)?abstractmethod
-
-    # Don't complain about type checking blocks
     if TYPE_CHECKING:
     if typing.TYPE_CHECKING:
 
-    # Don't complain about deprecated functions
-    @deprecated
+    # Don't complain about abstract methods:
+    @abstractmethod
+    @abc.abstractmethod
 
-    # Don't complain about pass statements
-    pass
+    # Don't complain about deprecated code:
+    warnings.warn
+    DeprecationWarning
 
-# Sort report by coverage percentage (useful for finding gaps)
-sort = Cover
+precision = 2
+show_missing = True
+skip_covered = False
 
 [html]
-# Directory for HTML coverage report
 directory = htmlcov
-
-# Title for HTML report
-title = Finance Feedback Engine - Coverage Report
+title = Finance Feedback Engine - Test Coverage Report
 
 [xml]
-# Output file for XML coverage report (for CI/CD)
 output = coverage.xml
 
 [json]
-# Output file for JSON coverage report (for tooling)
 output = coverage.json
-pretty_print = True
-
-# Coverage thresholds (optional - can fail builds if coverage too low)
-# Uncomment to enforce minimum coverage
-# [coverage:fail_under]
-# fail_under = 70
+pretty_print = true
