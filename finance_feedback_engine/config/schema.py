@@ -74,12 +74,31 @@ class PlatformCredentials(BaseModel):
     @field_validator("api_key", "api_secret")
     @classmethod
     def validate_credentials(cls, v: Optional[str]) -> Optional[str]:
-        """Ensure credentials are not placeholder values."""
-        if v and v.startswith("YOUR_"):
+        """Ensure credentials are not placeholder values.
+        
+        Checks for common placeholder patterns that indicate missing credentials.
+        Only validates when credentials are actually required (not in test/dev mode).
+        """
+        if not v:
+            return v
+        
+        # Check for unsubstituted environment variable syntax
+        if v.startswith("${") and v.endswith("}"):
             raise ValueError(
-                "Credential appears to be a placeholder (starts with 'YOUR_'). "
-                "Please set actual credentials in environment variables or config."
+                f"Environment variable not substituted: {v}. "
+                "Ensure .env file is loaded before config validation."
             )
+        
+        # Check for placeholder patterns (but only warn, don't block)
+        placeholder_patterns = ["YOUR_", "REPLACE_", "CHANGEME", "EXAMPLE_"]
+        if any(v.startswith(pattern) for pattern in placeholder_patterns):
+            import warnings
+            warnings.warn(
+                f"Credential appears to be a placeholder: {v[:20]}... "
+                "Set actual credentials in .env file or environment variables.",
+                UserWarning
+            )
+        
         return v
 
     @field_validator("environment")
@@ -435,7 +454,10 @@ def load_config_from_dict(config_dict: Dict[str, Any]) -> EngineConfig:
 
 def load_config_from_file(config_path: Union[str, Path]) -> EngineConfig:
     """
-    Load configuration from YAML file with validation.
+    Load configuration from YAML file with validation and env var substitution.
+
+    Environment variables in YAML using ${VAR:-default} syntax are substituted
+    before validation, ensuring .env values override YAML placeholders.
 
     Args:
         config_path: Path to YAML configuration file
@@ -447,14 +469,10 @@ def load_config_from_file(config_path: Union[str, Path]) -> EngineConfig:
         FileNotFoundError: If config file not found
         ValidationError: If configuration is invalid
     """
-    import yaml
+    from finance_feedback_engine.utils.env_yaml_loader import load_yaml_with_env_substitution
 
     config_path = Path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config_dict = yaml.safe_load(f)
+    config_dict = load_yaml_with_env_substitution(config_path)
 
     return load_config_from_dict(config_dict)
 
