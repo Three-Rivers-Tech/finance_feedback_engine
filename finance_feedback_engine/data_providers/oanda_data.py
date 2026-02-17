@@ -241,6 +241,89 @@ class OandaDataProvider:
 
         return candles
 
+    def get_current_price_direct(self, asset_pair: str) -> Optional[Dict[str, Any]]:
+        """
+        Get current bid/ask/mid price directly from Oanda pricing endpoint.
+
+        Uses GET /v3/accounts/{accountID}/pricing?instruments={instrument}
+        which is more reliable than the candles endpoint (works during weekends,
+        no granularity issues, real-time streaming prices).
+
+        Args:
+            asset_pair: Asset pair (e.g., 'EUR_USD', 'EURUSD', 'GBP_USD')
+
+        Returns:
+            Dict with keys: asset_pair, price (mid), provider, timestamp
+            Returns None if fetch fails.
+        """
+        import requests
+        from datetime import datetime, timezone
+
+        instrument = self._normalize_asset_pair(asset_pair)
+
+        if not self.account_id:
+            logger.warning("Oanda account_id required for pricing endpoint")
+            return None
+
+        url = f"{self.base_url}/v3/accounts/{self.account_id}/pricing"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        params = {"instruments": instrument}
+
+        try:
+            self.rate_limiter.wait_for_token()
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        except Exception as e:
+            logger.warning(f"Oanda pricing endpoint failed for {instrument}: {e}")
+            return None
+
+        prices = data.get("prices", [])
+        if not prices:
+            logger.warning(f"No prices returned from Oanda for {instrument}")
+            return None
+
+        price_entry = prices[0]
+
+        # Check tradeable status
+        status = price_entry.get("status", "tradeable")
+        if status not in ("tradeable", "non-tradeable"):
+            logger.warning(f"Unexpected Oanda price status '{status}' for {instrument}")
+
+        # Compute mid price from asks/bids
+        asks = price_entry.get("asks", [])
+        bids = price_entry.get("bids", [])
+
+        if asks and bids:
+            ask = float(asks[0]["price"])
+            bid = float(bids[0]["price"])
+            mid = (ask + bid) / 2.0
+        elif asks:
+            mid = float(asks[0]["price"])
+        elif bids:
+            mid = float(bids[0]["price"])
+        else:
+            logger.warning(f"No bid/ask in Oanda price data for {instrument}")
+            return None
+
+        timestamp = price_entry.get("time", datetime.now(timezone.utc).isoformat())
+
+        logger.info(
+            f"Oanda direct price for {instrument}: {mid:.6f} "
+            f"(bid={bids[0]['price'] if bids else 'N/A'}, "
+            f"ask={asks[0]['price'] if asks else 'N/A'})"
+        )
+
+        return {
+            "asset_pair": asset_pair,
+            "price": mid,
+            "provider": "oanda_pricing",
+            "timestamp": timestamp,
+        }
+
     def get_latest_price(self, asset_pair: str) -> float:
         """
         Get latest price for asset pair.
@@ -251,6 +334,11 @@ class OandaDataProvider:
         Returns:
             Latest price
         """
+        # Try direct pricing endpoint first (more reliable)
+        price_data = self.get_current_price_direct(asset_pair)
+        if price_data and price_data.get("price"):
+            return float(price_data["price"])
+        # Fall back to candles
         candles = self.get_candles(asset_pair, granularity="1m", limit=1)
         if candles:
             return candles[-1]["close"]
