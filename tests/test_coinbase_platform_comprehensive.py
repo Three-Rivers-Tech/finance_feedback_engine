@@ -773,10 +773,12 @@ class TestExecuteTrade:
         mock_client.market_order_buy.assert_called_once()
 
     def test_execute_trade_buy_rounds_quote_size_to_product_increment(self, platform, mock_client):
-        """BUY quote_size should be rounded down to Coinbase quote_increment."""
+        """Non-futures BUY orders should keep quote_size rounding behavior."""
         product = MagicMock()
         product.quote_increment = "0.01"
         product.quote_min_size = "10"
+        product.product_type = "SPOT"
+        product.future_product_details = None
         mock_client.get_product.return_value = product
 
         order_result = MagicMock()
@@ -792,7 +794,7 @@ class TestExecuteTrade:
         decision = {
             "id": "dec-buy-precision",
             "action": "BUY",
-            "asset_pair": "BTC-USD",
+            "asset_pair": "SOL-USD",
             "suggested_amount": 80.779,
             "timestamp": "2024-01-01T00:00:00Z",
         }
@@ -802,6 +804,75 @@ class TestExecuteTrade:
         assert result["success"] is True
         call_args = mock_client.market_order_buy.call_args.kwargs
         assert call_args["quote_size"] == "80.77"
+
+    def test_execute_trade_buy_uses_base_size_for_btc_futures_mode(self, platform, mock_client):
+        """BTC/ETH futures rail must use base_size (contract-style), not quote_size."""
+        product = MagicMock()
+        product.price = "50000"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": True,
+            "order_id": "order-fut-buy",
+            "status": "OPEN",
+        }
+        mock_client.market_order_buy.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-fut-buy",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 500.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        call_kwargs = mock_client.market_order_buy.call_args.kwargs
+        assert call_kwargs["base_size"] == "1"
+        assert "quote_size" not in call_kwargs
+
+    def test_execute_trade_futures_micro_start_respects_increment_and_min_size(self, platform, mock_client):
+        """Micro start should use minimum valid contract size when min/increment > 1."""
+        product = MagicMock()
+        product.price = "2500"
+        product.base_increment = "0.5"
+        product.base_min_size = "1.5"
+        product.contract_size = "0.01"
+        product.future_product_details = {"contract_code": "ETH-PERP"}
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": True,
+            "order_id": "order-fut-micro",
+            "status": "OPEN",
+        }
+        mock_client.market_order_buy.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-fut-micro",
+            "action": "BUY",
+            "asset_pair": "ETH-USD",
+            "suggested_amount": 500.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        call_kwargs = mock_client.market_order_buy.call_args.kwargs
+        assert call_kwargs["base_size"] == "1.5"
 
     def test_execute_trade_sell_rounds_base_size_to_product_increment(self, platform, mock_client):
         """SELL base_size should use base_increment and never round up."""
@@ -957,11 +1028,10 @@ class TestExecuteTrade:
 
         result = platform.execute_trade(decision)
 
-        # Verify base_size calculation: 2000 / 40000 = 0.05 BTC
+        # BTC/ETH futures path now enforces micro-start contract sizing.
         call_args = mock_client.market_order_sell.call_args
         base_size = call_args[1]["base_size"]
-        expected_base_size = 2000.0 / 40000.0
-        assert float(base_size) == pytest.approx(expected_base_size, rel=1e-6)
+        assert float(base_size) == pytest.approx(1.0, rel=1e-6)
 
     def test_execute_trade_sell_invalid_price_raises_error(self, platform, mock_client):
         """Test that SELL with invalid price raises error."""
@@ -983,7 +1053,45 @@ class TestExecuteTrade:
         result = platform.execute_trade(decision)
 
         assert result["success"] is False
-        assert "Invalid price" in result["error"]
+        assert "product price" in result["error"]
+
+    def test_execute_trade_futures_rejection_path_not_quote_size(self, platform, mock_client):
+        """Regression: futures order payload should avoid quote_size-only preview failures."""
+        product = MagicMock()
+        product.price = "50000"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": False,
+            "error_response": {
+                "error": "PREVIEW_INSUFFICIENT_FUND",
+                "error_details": "preview rejected"
+            },
+            "error_details": "preview rejected",
+        }
+        mock_client.market_order_buy.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-fut-reject",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 500.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is False
+        call_kwargs = mock_client.market_order_buy.call_args.kwargs
+        assert "base_size" in call_kwargs
+        assert "quote_size" not in call_kwargs
 
     def test_execute_trade_api_error_handling(self, platform, mock_client):
         """Test handling of API errors during execution."""
