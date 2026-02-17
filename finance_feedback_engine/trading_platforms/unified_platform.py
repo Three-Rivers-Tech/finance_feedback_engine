@@ -99,8 +99,41 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 balances = platform.get_balance()
                 for asset, balance in balances.items():
                     combined_balances[f"{name}_{asset}"] = balance
+            except ConnectionError as e:
+                logger.error(
+                    "Connection error getting balance from platform",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform.__class__.__name__,
+                        "error": str(e),
+                        "error_type": "connection"
+                    },
+                    exc_info=True
+                )
+                # TODO: Alert on repeated platform connection failures (THR-XXX)
+            except (ValueError, TypeError, KeyError) as e:
+                logger.error(
+                    "Data validation error getting balance from platform",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform.__class__.__name__,
+                        "error": str(e),
+                        "error_type": "validation"
+                    }
+                )
+                # TODO: Track data validation errors for platform health monitoring (THR-XXX)
             except Exception as e:
-                logger.error("Failed to get balance from %s: %s", name, e)
+                logger.error(
+                    "Unexpected error getting balance from platform",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform.__class__.__name__,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Alert on unknown platform errors (THR-XXX)
 
         return combined_balances
 
@@ -207,10 +240,44 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     # Add platform name to each position for context in CLI display
                     pos["platform"] = name
                     all_positions.append(pos)
-            except Exception as e:
-                logger.warning(
-                    "Could not fetch active positions from %s platform: %s", name, e
+            except ConnectionError as e:
+                logger.error(
+                    "Connection error fetching active positions from platform",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform_instance.__class__.__name__,
+                        "error": str(e),
+                        "error_type": "connection"
+                    },
+                    exc_info=True
                 )
+                # Continue with other platforms - fail-safe mode
+                # TODO: Alert when position fetching fails (THR-XXX)
+            except (ValueError, TypeError, KeyError) as e:
+                logger.error(
+                    "Data validation error fetching active positions",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform_instance.__class__.__name__,
+                        "error": str(e),
+                        "error_type": "validation"
+                    }
+                )
+                # Continue with other platforms
+                # TODO: Track validation errors for platform health (THR-XXX)
+            except Exception as e:
+                logger.error(
+                    "Unexpected error fetching active positions from platform",
+                    extra={
+                        "platform": name,
+                        "platform_class": platform_instance.__class__.__name__,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # Continue with other platforms - fail-safe mode
+                # TODO: Alert on unknown platform errors (THR-XXX)
         return {"positions": all_positions}
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:

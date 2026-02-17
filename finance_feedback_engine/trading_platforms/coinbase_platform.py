@@ -1160,7 +1160,6 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "error_details": error_details,
                     "latency_seconds": latency,
                     "response": order_result_dict,
-                    "response": order_result,
                     "timestamp": decision.get("timestamp"),
                 }
 

@@ -85,15 +85,44 @@ def platform_retry(
             except retry_on as e:
                 # Log transient error for monitoring
                 logger.warning(
-                    f"Retryable error in {func.__name__}: {type(e).__name__}: {e}"
+                    "Retryable error in platform operation",
+                    extra={
+                        "function": func.__name__,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "is_transient": True,
+                        "max_attempts": max_attempts
+                    }
                 )
+                # TODO: Track retry metrics for alerting (THR-XXX)
+                raise
+            except (ValueError, TypeError, KeyError) as e:
+                # Data validation errors - not retryable
+                logger.error(
+                    "Data validation error in platform operation - not retryable",
+                    extra={
+                        "function": func.__name__,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "is_transient": False
+                    },
+                    exc_info=True
+                )
+                # TODO: Alert on data validation errors (THR-XXX)
                 raise
             except Exception as e:
-                # Non-retryable error - log and re-raise
+                # Unknown non-retryable error - log and re-raise
                 logger.error(
-                    f"Non-retryable error in {func.__name__}: {type(e).__name__}: {e}",
-                    exc_info=True,
+                    "Unexpected non-retryable error in platform operation",
+                    extra={
+                        "function": func.__name__,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "is_transient": False
+                    },
+                    exc_info=True
                 )
+                # TODO: Alert on unknown platform errors (THR-XXX)
                 raise
 
         return wrapper

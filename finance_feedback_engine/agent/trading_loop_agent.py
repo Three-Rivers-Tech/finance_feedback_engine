@@ -6,6 +6,7 @@ import logging
 import queue
 import time
 import uuid
+from datetime import date
 from enum import Enum, auto
 from typing import Any, Dict, Optional
 
@@ -540,7 +541,7 @@ class TradingLoopAgent:
 
     # Valid state transitions — prevents illegal jumps (e.g. skipping RISK_CHECK)
     _VALID_TRANSITIONS: dict[AgentState, set[AgentState]] = {
-        AgentState.IDLE: {AgentState.RECOVERING, AgentState.PERCEPTION},
+        AgentState.IDLE: {AgentState.RECOVERING, AgentState.PERCEPTION, AgentState.LEARNING},
         AgentState.RECOVERING: {AgentState.IDLE, AgentState.PERCEPTION},
         AgentState.PERCEPTION: {AgentState.REASONING, AgentState.IDLE},
         AgentState.REASONING: {AgentState.RISK_CHECK, AgentState.IDLE},
@@ -1016,7 +1017,7 @@ class TradingLoopAgent:
                         "timestamp": time.time(),
                     })
                     self._startup_complete.set()
-                    await self._transition_to(AgentState.LEARNING)
+                    await self._transition_to(AgentState.PERCEPTION)
                     return
 
                 # Recovery successful!
@@ -1188,7 +1189,7 @@ class TradingLoopAgent:
                 return
 
         # --- Daily Counter Reset ---
-        today = datetime.date.today()
+        today = date.today()
         if today > self.last_trade_date:
             logger.info(
                 "New day detected. Resetting daily trade count from %d to 0.", self.daily_trade_count
@@ -2420,12 +2421,12 @@ class TradingLoopAgent:
             return False
 
         try:
-            # Start from current state (RECOVERING on first cycle, LEARNING thereafter)
-            # If state is IDLE (from previous cycle), transition to LEARNING to start new cycle
+            # Start from current state (RECOVERING on first cycle, PERCEPTION thereafter)
+            # If state is IDLE (from previous cycle), transition to PERCEPTION to start new cycle
             if self.state == AgentState.IDLE:
                 self._reset_cycle_budget()
                 self._ensure_cycle_budget()
-                await self._transition_to(AgentState.LEARNING)
+                await self._transition_to(AgentState.PERCEPTION)
             else:
                 # Ensure budget exists for mid-cycle recoveries (e.g., after errors)
                 self._ensure_cycle_budget()

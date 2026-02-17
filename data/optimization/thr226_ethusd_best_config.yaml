@@ -1,0 +1,158 @@
+alpha_vantage_api_key: REDACTED_ALPHAVANTAGE_KEY
+trading_platform: unified
+platform_credentials:
+  api_key: REDACTED_COINBASE_KEY_ID
+  api_secret: '-----BEGIN EC PRIVATE KEY REDACTED-----
+
+    REDACTED_KEY_MATERIAL
+
+    REDACTED_KEY_MATERIAL
+
+    REDACTED_KEY_MATERIAL
+
+    -----END EC PRIVATE KEY REDACTED-----'
+  use_sandbox: false
+platforms:
+- name: coinbase_advanced
+  credentials:
+    api_key: REDACTED_COINBASE_KEY_ID
+    api_secret: '-----BEGIN EC PRIVATE KEY REDACTED-----
+
+      REDACTED_KEY_MATERIAL
+
+      REDACTED_KEY_MATERIAL
+
+      REDACTED_KEY_MATERIAL
+
+      -----END EC PRIVATE KEY REDACTED-----'
+    use_sandbox: false
+- name: oanda
+  credentials:
+    api_key: REDACTED_OANDA_TOKEN
+    account_id: 001-001-8530782-001
+    environment: live
+providers:
+  alpha_vantage:
+    api_key: REDACTED_ALPHAVANTAGE_KEY
+  coinbase:
+    credentials:
+      api_key: REDACTED_COINBASE_KEY_ID
+      api_secret: '-----BEGIN EC PRIVATE KEY REDACTED-----
+
+        REDACTED_KEY_MATERIAL
+
+        REDACTED_KEY_MATERIAL
+
+        REDACTED_KEY_MATERIAL
+
+        -----END EC PRIVATE KEY REDACTED-----'
+      use_sandbox: false
+  oanda:
+    credentials:
+      api_key: REDACTED_OANDA_TOKEN
+      account_id: 001-001-8530782-001
+      environment: live
+decision_engine:
+  ai_provider: local
+  model_name: llama3.2:3b-instruct-q4_0
+  decision_threshold: 0.7
+  risk_per_trade: 0.0249816047538945
+  stop_loss_percentage: 0.02901428612819832
+ensemble:
+  voting_strategy: weighted
+  provider_weights:
+    llama: 0.16666667
+    deepseek: 0.16666667
+    mistral: 0.16666667
+    qwen25: 0.16666667
+    gemma2: 0.16666667
+    qwen: 0.16666666
+  debate_mode: true
+  debate_providers:
+    bull: local
+    bear: local
+    judge: local
+  agreement_threshold: 0.6
+  adaptive_learning: true
+agent:
+  autonomous_execution: false
+  approval_policy: on_new_asset
+  max_daily_trades: 5
+  strategic_goal: balanced
+  risk_appetite: medium
+  autonomous:
+    enabled: false
+    profit_target: 0.05
+    stop_loss: 0.02
+  correlation_threshold: 0.7
+  max_correlated_assets: 2
+  max_var_pct: 0.05
+  var_confidence: 0.95
+  position_sizing:
+    risk_percentage: 0.02
+    max_position_usd_dev: 50.0
+    max_position_usd_prod: 500.0
+    dynamic_sizing: true
+    target_utilization_pct: 0.02
+circuit_breaker:
+  enabled: true
+  failure_threshold: 3
+  timeout_seconds: 300
+  half_open_max_attempts: 1
+logging:
+  level: INFO
+  structured:
+    enabled: true
+    format: json
+    correlation_ids: true
+    pii_redaction: true
+  file:
+    enabled: true
+    base_path: logs
+    rotation_max_bytes: 10485760
+    rotation_backup_count: 30
+  retention:
+    hot_days: 7
+    warm_days: 30
+    cold_days: 365
+monitoring:
+  enabled: false
+  include_sentiment: true
+  include_macro: false
+  pulse_interval_seconds: 300
+persistence:
+  storage_path: data/decisions
+  max_decisions: 1000
+  cleanup_days: 30
+portfolio_memory:
+  enabled: true
+  max_memory_size: 1000
+  learning_rate: 0.1
+  context_window: 20
+telegram:
+  enabled: false
+  bot_token: YOUR_TELEGRAM_BOT_TOKEN
+  chat_id: YOUR_TELEGRAM_CHAT_ID
+  ngrok_auth_token: YOUR_NGROK_AUTH_TOKEN
+  allowed_user_ids: YOUR_USER_ID
+backtesting:
+  enabled: false
+  use_real_data: false
+  initial_balance: 10000.0
+  fee_percentage: 0.1
+safety:
+  max_leverage: 1.0
+  max_position_pct: 1.0
+api_auth:
+  rate_limit_max: 100
+  rate_limit_window: 60
+  enable_fallback_to_config: false
+database:
+  url: postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe
+  pool_size: 20
+  max_overflow: 10
+  pool_recycle: 3600
+  pool_timeout: 30
+  echo: false
+advanced_backtesting:
+  take_profit_percentage: 0.041959818254342154

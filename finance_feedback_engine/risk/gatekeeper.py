@@ -227,18 +227,55 @@ class RiskGatekeeper:
                 market_status = MarketSchedule.get_market_status_at_timestamp(
                     asset_pair, asset_type, unix_timestamp
                 )
-            except (ValueError, AttributeError) as e:
+            except ValueError as e:
                 # In backtest mode, timestamp parsing failures are critical errors
                 # that should halt execution to prevent data corruption
                 if self.is_backtest:
+                    logger.error(
+                        "Timestamp parsing failed in backtest mode",
+                        extra={
+                            "asset_pair": asset_pair,
+                            "timestamp": timestamp,
+                            "timestamp_type": type(timestamp).__name__,
+                            "error": str(e)
+                        }
+                    )
                     raise ValueError(
                         f"Failed to parse timestamp in backtest mode for {asset_pair}: "
                         f"timestamp={timestamp}, error={e}. Backtest requires valid timestamps."
                     ) from e
                 # In live mode, fall back to current market status
                 logger.warning(
-                    f"Could not parse timestamp {timestamp}: {e}. Using live market status."
+                    f"Could not parse timestamp {timestamp}: {e}. Using live market status.",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "timestamp": timestamp,
+                        "timestamp_type": type(timestamp).__name__,
+                        "fallback_mode": "live_market_status"
+                    }
                 )
+                # TODO: Add alerting when timestamp parsing fails repeatedly (THR-XXX)
+                market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
+            except AttributeError as e:
+                # Attribute error indicates a code bug (accessing wrong field)
+                # This should always be logged as an error
+                logger.error(
+                    "Attribute error during timestamp parsing - potential code bug",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "timestamp": timestamp,
+                        "timestamp_type": type(timestamp).__name__,
+                        "error": str(e)
+                    },
+                    exc_info=True
+                )
+                if self.is_backtest:
+                    raise ValueError(
+                        f"Code error parsing timestamp in backtest mode for {asset_pair}: "
+                        f"timestamp={timestamp}, error={e}. This is a bug."
+                    ) from e
+                # In live mode, fail-safe to current market status but alert
+                # TODO: Send alert to ops team when this occurs (THR-XXX)
                 market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
         else:
             market_status = MarketSchedule.get_market_status(asset_pair, asset_type)
@@ -279,13 +316,41 @@ class RiskGatekeeper:
                 )
 
                 if not is_fresh:
-                    logger.error(f"Rejecting trade: {freshness_msg}")
+                    logger.error(
+                        "Rejecting trade: stale market data",
+                        extra={
+                            "asset_pair": asset_pair,
+                            "asset_type": asset_type,
+                            "data_age": age_str,
+                            "freshness_message": freshness_msg,
+                            "decision_action": decision.get("action", "UNKNOWN")
+                        }
+                    )
+                    # TODO: Track data staleness metrics for alerting (THR-XXX)
                     return False, f"Stale market data ({age_str}): {freshness_msg}"
 
                 if freshness_msg:  # Warning but still usable
-                    logger.warning(f"Data freshness warning: {freshness_msg}")
+                    logger.warning(
+                        "Data freshness warning",
+                        extra={
+                            "asset_pair": asset_pair,
+                            "asset_type": asset_type,
+                            "freshness_message": freshness_msg
+                        }
+                    )
             except ValueError as e:
-                logger.error(f"Invalid market data timestamp: {e}")
+                logger.error(
+                    "Invalid market data timestamp - rejecting trade",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "asset_type": asset_type,
+                        "timestamp": market_data_timestamp,
+                        "timestamp_type": type(market_data_timestamp).__name__,
+                        "error": str(e)
+                    },
+                    exc_info=True
+                )
+                # TODO: Alert on timestamp validation failures (THR-XXX)
                 return False, f"Invalid timestamp: {str(e)}"
 
         # 2. Max Drawdown Check (robust to dollars vs percent input)

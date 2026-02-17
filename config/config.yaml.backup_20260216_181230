@@ -1,0 +1,1062 @@
+# Finance Feedback Engine 0.9.9 Configuration
+# Last mile to 1.0 - Consolidated single-source configuration
+
+# ============================================================================
+# CONFIGURATION LOADING PRIORITY (highest to lowest):
+# 1. Environment variables (from .env or shell)
+# 2. config/config.local.yaml (if exists, deprecated - use .env instead)
+# 3. config/config.yaml (defaults - this file)
+#
+# RECOMMENDED: Use .env file instead of config.local.yaml
+# - Copy .env.example to .env
+# - Fill in your API keys and settings in .env
+# - .env is automatically git-ignored
+#
+# NOTE (v0.9.9): All configuration is now consolidated here.
+# Separate config files (agent.yaml, telegram.yaml) have been merged
+# into this single source of truth. See 'agent:' and 'telegram:' sections below.
+# ============================================================================
+
+# Alpha Vantage API Configuration
+# Get your free or premium API key at: https://www.alphavantage.co/support/#api-key
+# Load from environment variable: ALPHA_VANTAGE_API_KEY
+alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY:-YOUR_ALPHA_VANTAGE_API_KEY}"
+
+# ============================================================================
+# DATA PROVIDERS CONFIGURATION
+# ============================================================================
+# Configure cache TTL and behavior for different data providers
+data_providers:
+  # Unified data provider (Coinbase/Oanda for real-time prices)
+  unified:
+    cache_ttl: 120  # 2-minute cache for real-time price monitoring
+
+  # Alpha Vantage provider (sentiment, macro, comprehensive analysis)
+  alpha_vantage:
+    cache_ttl: 300  # 5-minute cache for comprehensive data (rate limit friendly)
+
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+# PostgreSQL connection settings for production deployments
+# SQLite is NOT recommended for multi-worker scenarios
+#
+# Connection pooling tuning:
+# - pool_size: Number of persistent connections (default 20)
+# - max_overflow: Additional connections under load (default 10)
+# - pool_recycle: Recycle connections after N seconds (default 3600 = 1 hour)
+# - pool_timeout: Wait time for available connection (default 30 seconds)
+# - echo: Enable SQL query logging (default false, set true for debugging)
+#
+# Override via environment variables:
+# - DATABASE_URL (format: postgresql+psycopg2://user:password@host:port/database)
+# - DB_POOL_SIZE, DB_POOL_OVERFLOW, DB_POOL_RECYCLE, DB_POOL_TIMEOUT, DB_ECHO
+#
+database:
+  url: "${DATABASE_URL:-postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}"
+  pool_size: ${DB_POOL_SIZE:-20}
+  max_overflow: ${DB_POOL_OVERFLOW:-10}
+  pool_recycle: ${DB_POOL_RECYCLE:-3600}
+  pool_timeout: ${DB_POOL_TIMEOUT:-30}
+  echo: ${DB_ECHO:-false}
+  isolation_level: "READ_COMMITTED"
+
+# Trading Platform Configuration
+# Options: 'coinbase', 'coinbase_advanced', 'oanda', 'unified'
+# - coinbase/coinbase_advanced: Crypto trading with futures portfolio tracking
+# - oanda: Forex trading with position & margin tracking
+# - unified: Multi-platform mode (configure 'platforms' list below) - RECOMMENDED
+#
+# Single Platform Mode: Set one platform name (legacy)
+# trading_platform: "coinbase_advanced"
+#
+# Multi-Platform Mode: Use 'unified' and configure platforms list below
+trading_platform: "unified"
+
+# Default paper-trading sandbox for unified platform
+# DISABLED: Using real Coinbase sandbox + Oanda practice for testing
+paper_trading_defaults:
+  enabled: false
+  initial_cash_usd: 10000.0
+
+# Platform-specific credentials
+# Uncomment and configure based on your chosen platform
+platform_credentials:
+  # ============================================
+  # Option 1: Coinbase Advanced (Crypto Futures)
+  # ============================================
+  # Get your API keys from: https://www.coinbase.com/settings/api
+  # Load from environment variables: COINBASE_API_KEY, COINBASE_API_SECRET
+  api_key: "${COINBASE_API_KEY:-YOUR_COINBASE_API_KEY}"
+  api_secret: "${COINBASE_API_SECRET:-YOUR_COINBASE_API_SECRET}"
+  use_sandbox: false  # true for testing, false for production
+  # passphrase: "${COINBASE_PASSPHRASE}"  # optional, for legacy API only
+
+  # ============================================
+  # Option 2: Oanda (Forex Trading)
+  # ============================================
+  # Get credentials from: https://www.oanda.com/
+  # 1. Create account (practice or live)
+  # 2. Generate Personal Access Token
+  # 3. Find account ID in dashboard (format: 001-XXX-XXXXXXX-XXX)
+  # Load from environment variables: OANDA_API_TOKEN, OANDA_ACCOUNT_ID
+  # Uncomment below if using Oanda:
+  #
+  # api_key: "${OANDA_API_TOKEN:YOUR_OANDA_API_TOKEN}"
+  # account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
+  # environment: "practice"  # 'practice' for demo, 'live' for real money
+
+  # ============================================
+  # Option 3: Unified Platform (Multi-Asset)
+  # ============================================
+  # Configure platform routing for different asset types
+  # Set trading_platform: "unified" above
+
+# ============================================
+# Data Providers (UnifiedDataProvider Credentials)
+# ============================================
+# Structured credentials used by internal monitoring and data fetchers.
+# If present, these take precedence for unified data access.
+providers:
+  alpha_vantage:
+    api_key: "${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}"
+  coinbase:
+    credentials:
+      api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
+      api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
+      use_sandbox: false
+  oanda:
+    credentials:
+      api_key: "${OANDA_API_KEY:YOUR_OANDA_API_KEY}"
+      account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
+      environment: "${OANDA_ENVIRONMENT:practice}"
+
+# ============================================
+# Multi-Platform Configuration (Advanced)
+# ============================================
+# To use multiple platforms simultaneously:
+# 1. Set trading_platform: "unified" above
+# 2. Uncomment and configure platforms list below
+# 3. Dashboard aggregates portfolio across all platforms
+#
+platforms:
+  # ============================================
+  # Paper Trading (Sandbox) - DISABLED for Phase 3
+  # ============================================
+  # Paper platform disabled to ensure clean routing:
+  # - Crypto (BTC/ETH) → Coinbase sandbox
+  # - Forex (GBP/EUR) → Oanda practice
+  # Uncomment below to re-enable paper trading
+  # - name: "paper"
+  #   credentials:
+  #     initial_cash_usd: 10000.0
+
+  - name: "coinbase_advanced"
+    credentials:
+      api_key: "${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}"
+      api_secret: "${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}"
+      use_sandbox: false
+
+  - name: "oanda"
+    credentials:
+      api_key: "${OANDA_API_KEY:YOUR_OANDA_API_KEY}"
+      account_id: "${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}"
+      environment: "${OANDA_ENVIRONMENT:practice}"
+#
+# NOTE: When using unified platform mode:
+# - Execute trades on specific platform: specify platform_name in decision
+# - View aggregated portfolio: python main.py portfolio (uses dashboard aggregator)
+# - Balances shown separately per platform in 'balance' command
+
+# ============================================
+# Feature Flags (Incremental Rollout)
+# ============================================
+# CRITICAL: All new features start as FALSE (disabled by default)
+# Enable features one at a time after thorough testing
+# See TDD_WORKFLOW.md for rollout protocol
+#
+# STATUS LEGEND:
+# [READY]    - Implemented, tested, awaiting user approval
+# [DEFERRED] - Planned, not implemented, post-MVP
+# [RESEARCH] - Experimental, no implementation timeline
+#
+features:
+  # ==========================================
+  # Phase 1: Quick Wins (Q1 2026 - Weeks 1-4)
+  # ==========================================
+
+  # [DEFERRED] Enhanced slippage modeling for realistic backtesting
+  # WHAT: Tiered slippage based on liquidity, market hours, order size
+  # WHY: Current 1bp fixed slippage unrealistic for large orders
+  # WHEN: Post-MVP after 100+ backtest runs validate baseline
+  # PREREQ: Historical order book data, volume profiles
+  # OWNER: Backtesting team
+  enhanced_slippage_model: false
+
+  # [DEFERRED] Thompson Sampling for ensemble weight optimization
+  # WHAT: Auto-tune provider weights using multi-armed bandit (MAB)
+  # WHY: Manual weight tuning is time-consuming and suboptimal
+  # WHEN: Post-MVP after 500+ decisions with portfolio_memory enabled
+  # PREREQ: portfolio_memory.enabled=true, adaptive_learning=true
+  # OWNER: Decision engine team
+  # NOTE: Basic adaptive learning already enabled (learning_rate: 0.1)
+  thompson_sampling_weights: false
+
+  # [DEFERRED] Optuna hyperparameter search integration
+  # WHAT: Bayesian optimization for backtester parameters (stop-loss, take-profit, thresholds)
+  # WHY: Grid search is inefficient for high-dimensional parameter spaces
+  # WHEN: Q2 2026 after baseline backtest metrics established
+  # PREREQ: 30+ days historical data, compute resources for parallel trials
+  # OWNER: Optimization team
+  optuna_hyperparameter_search: false
+
+  # ==========================================
+  # Phase 2: Medium-Term (Q2 2026 - Weeks 5-12)
+  # ==========================================
+
+  # [DEFERRED] Multi-LLM sentiment veto system
+  # WHAT: Secondary sentiment validation layer (bull/bear consensus)
+  # WHY: Prevent execution on news-driven volatility without fundamental signal
+  # WHEN: Q2 2026 after sentiment_veto module implementation
+  # PREREQ: sentiment analysis API integration (Alpha Vantage NEWS_SENTIMENT)
+  # OWNER: Decision engine team
+  # RISK: Adds latency (200-500ms per veto check)
+  sentiment_veto: false
+
+  # [DEFERRED] Paper trading mode
+  # WHAT: Live data with simulated execution (no real capital risk)
+  # WHY: Test strategies in production environment before live capital
+  # WHEN: Q1 2026 (high priority for user onboarding)
+  # PREREQ: Mock platform enhancements, decision replay capability
+  # OWNER: Trading platforms team
+  # NOTE: Use 'mock' platform for basic paper trading now
+  paper_trading_mode: false
+
+  # [DEFERRED] Visual backtest reports (Plotly/Matplotlib)
+  # WHAT: Interactive charts (equity curve, drawdown, trade distribution)
+  # WHY: CLI-only output insufficient for strategy analysis
+  # WHEN: Q2 2026 after backtester stabilization
+  # PREREQ: Plotly/Matplotlib dependencies, HTML export support
+  # OWNER: Backtesting team
+  visual_reports: false
+
+  # ==========================================
+  # Phase 3: Advanced ML (Q3 2026 - Research)
+  # ==========================================
+
+  # [RESEARCH] Reinforcement Learning (RL) decision agent
+  # WHAT: PPO-based agent replacing LLM decision engine
+  # WHY: Potentially faster, more consistent than LLM prompting
+  # WHEN: Research phase, no production timeline
+  # PREREQ: Stable backtesting framework, 90+ days training data
+  # OWNER: Research team
+  # RISK: High - RL instability, overfitting, black-box decisions
+  # NOTE: Consider LLM fine-tuning as alternative (more explainable)
+  rl_agent: false
+
+  # [RESEARCH] Multi-agent system (specialized agents)
+  # WHAT: Separate agents for technical/fundamental/sentiment/risk/execution
+  # WHY: Domain-specific reasoning may outperform single LLM
+  # WHEN: Research phase, depends on rl_agent success
+  # PREREQ: Agent orchestration layer, consensus mechanism
+  # OWNER: Research team
+  # RISK: Coordination complexity, higher API costs
+  multi_agent_system: false
+
+  # ==========================================
+  # Phase 4: Infrastructure (Q4 2026+)
+  # ==========================================
+
+  # [DEFERRED] Parallel backtesting with multiprocessing
+  # WHAT: Distribute hyperparameter search across CPU cores
+  # WHY: Single-threaded backtesting slow for parameter sweeps
+  # WHEN: Q3 2026 after optuna integration
+  # PREREQ: Thread-safe data providers, shared decision cache
+  # OWNER: Infrastructure team
+  parallel_backtesting: false
+
+  # [DEFERRED] Limit and stop orders (advanced order types)
+  # WHAT: Support limit orders, stop-loss orders, trailing stops
+  # WHY: Market orders suffer from slippage on large positions
+  # WHEN: Q4 2026 (requires exchange API support verification)
+  # PREREQ: Platform-specific implementations (Coinbase, Oanda)
+  # OWNER: Trading platforms team
+  # NOTE: Current implementation uses market orders only
+  limit_stop_orders: false
+
+# Backtesting Configuration (Enhanced Slippage Feature)
+backtesting:
+  slippage_model: "basic"  # Options: "basic" (legacy 1bp fixed) or "realistic" (tiered with liquidity)
+  fee_model: "simple"      # Options: "simple" (0.1% flat) or "tiered" (maker/taker differentiation)
+
+# Decision Engine Configuration
+decision_engine:
+  # AI Provider Options:
+  # - 'local': Free Llama-3.2-3B via Ollama (auto-installed)
+  # - 'cli': GitHub Copilot CLI
+  # - 'codex': Codex CLI
+  # - 'qwen': Free Qwen CLI (requires Node.js v20+)
+  # - 'gemini': Free Google Gemini CLI (requires Node.js v20+)
+  # - 'ensemble': Aggregate multiple providers for best signals
+  ai_provider: "local"
+
+  # Model name/path (provider-specific)
+  model_name: "llama3.2:3b-instruct-fp16"
+
+  # Default position sizing and retry configuration
+  default_position_size: 0.03  # Default position size (3% of balance) when LLM doesn't specify - conservative fallback
+  max_retries: 3  # Maximum retry attempts for LLM queries
+  ensemble_timeout: 120  # Timeout in seconds for ensemble decision aggregation (must exceed llm_debate timeout)
+
+  # Local models list for ensemble (optional, defaults to auto-discovery)
+  # local_models: ["llama3.2:3b-instruct-fp16", "mistral:7b-instruct"]
+
+  # Local priority mode: boost local providers in ensemble
+  # Options: false (disabled), true (2x boost), "soft" (1.5x boost), or number (custom multiplier)
+  # local_priority: "soft"
+
+  # Decision confidence threshold (0.0 - 1.0)
+  # Only execute trades above this confidence level
+  decision_threshold: 0.7
+
+  # Veto configuration (used when features.sentiment_veto is enabled)
+  veto_threshold: 0.6
+
+  # Custom prompt template (optional)
+  # prompt_template: "path/to/custom_prompt.txt"
+
+# Ensemble Configuration (only used if ai_provider: "ensemble")
+ensemble:
+  # Which providers to include in ensemble
+  # Only enable providers you have configured
+  # Two-phase mode uses: enabled_providers (free/local quorum), escalates to premium_providers when needed
+  enabled_providers:
+    - llama3.2:3b-instruct-fp16
+    - deepseek-r1:8b
+    - mistral:latest
+    - gemma2:9b
+    - gemma3:4b
+
+  # Initial weights for each provider (must sum to 1.0)
+  provider_weights:
+    llama3.2:3b-instruct-fp16: 0.20
+    deepseek-r1:8b: 0.20
+    mistral:latest: 0.20
+    gemma2:9b: 0.20
+    gemma3:4b: 0.20
+    # NOTE: Premium providers (cli, gemini, gpt-oss:120b-cloud) are NOT weighted here;
+    # they are used conditionally in asset_routing for Phase 2 escalation
+
+  # Voting strategy: 'weighted', 'majority', or 'stacking'
+  voting_strategy: "weighted"
+
+  # Vote score thresholds for categorical vote classification
+  vote_thresholds:
+    strong_buy: 1.5    # Score >= 1.5 → STRONG_BUY
+    buy: 0.5           # Score >= 0.5 → BUY
+    neutral: -0.5      # Score >= -0.5 → NEUTRAL
+    # Score < -0.5 → AVOID
+
+
+  # Debate mode: Enable structured debate between providers
+  # When enabled, uses bull/bear/judge workflow instead of ensemble voting
+  # DEFAULT: true - uses local providers by default for safety
+  # Can be customized to use premium providers (gemini, qwen) when API keys available
+  debate_mode: true
+
+  # Debate providers: Specify which providers play which roles
+  # BYOM (Bring Your Own Model): You can assign specific Ollama model tags to each seat
+  # Examples:
+  #   - Use "local" to let the system choose the default model
+  #   - Use explicit Ollama tags like "mistral:7b-instruct" for precise control
+  #   - Mix cloud providers (gemini, qwen) with local models
+  # IMPORTANT: Ollama must be running and specified models must be installed
+  #   Run: ollama pull <model-tag> to download missing models
+  debate_providers:
+    bull: "mistral:7b-instruct"     # Bullish provider
+    bear: "llama3.2:3b-instruct-fp16"    # Bearish provider
+    judge: "deepseek-r1:8b"    # Judge provider
+
+  # Example BYOM configurations:
+  # debate_providers:
+  #   bull: "mistral:7b-instruct"     # Fast, aggressive local model
+  #   bear: "llama2:13b"              # Larger, more conservative local model
+  #   judge: "deepseek-r1:8b"         # Balanced reasoning model
+  #
+  # debate_providers:
+  #   bull: "gemini"                  # Cloud provider for bull case
+  #   bear: "qwen2.5:7b-instruct"     # Local model for bear case
+  #   judge: "local"                  # Default local model for judgment
+
+  # Minimum agreement threshold (0.0-1.0)
+  # Higher = requires more consensus between providers
+  agreement_threshold: 0.6
+
+  # Adaptive learning: adjust weights based on accuracy
+  # TESTED: Dynamic weight adjustment, ensemble fallback system
+  adaptive_learning: true  # ON BY DEFAULT - thoroughly tested
+  learning_rate: 0.1
+
+# ============================================
+# Two-Phase Ensemble (Smart Premium API Management)
+# ============================================
+# Phase 1: Query enabled_providers (free/local quorum)
+#   - Requires minimum 3 successful responses (quorum)
+#   - Calculates weighted consensus
+# Phase 2: Escalate to premium_providers if:
+#   - Phase 1 confidence < threshold OR
+#   - Phase 1 agreement < threshold OR
+#   - High-stakes position detected
+# Asset-based routing: Crypto→cli, Forex→gemini, Stock→gemini, Fallback→gpt-oss:120b-cloud
+  two_phase:
+    # Enable two-phase mode (default: false for backward compatibility)
+    enabled: true
+
+    # Phase 1 quorum: minimum successful free providers required
+    phase1_min_quorum: 3
+
+    # Phase 1 confidence threshold (0.0-1.0)
+    # Escalate to Phase 2 if confidence below this
+    phase1_confidence_threshold: 0.75
+
+    # Phase 1 agreement threshold (0.0-1.0)
+    # Escalate if weighted vote share for winning action < this
+    phase1_agreement_threshold: 0.6
+
+    # Require premium providers for high-stakes trades
+    require_premium_for_high_stakes: true
+
+    # High-stakes position threshold (USD)
+    high_stakes_position_threshold: 1000
+
+    # Asset-based routing using premium_providers
+    asset_routing:
+      crypto: "cli"      # Copilot for crypto analysis
+      forex: "gemini"    # Gemini for forex analysis
+      stock: "gemini"    # Gemini for stock analysis
+      fallback: "gpt-oss:120b-cloud"  # OSS 120B cloud model as fallback
+
+      # Call Codex as tiebreaker when primary agrees with Phase 1
+      codex_as_tiebreaker: true
+
+      # Maximum premium API calls per day (budget enforcement)
+      max_premium_calls_per_day: 50
+
+# ============================================
+# Live Trading Monitoring
+# ============================================
+# Provides real-time position awareness to AI decision engine
+# TESTED: Monitoring integration tests, context provider validation
+monitoring:
+  # Enable monitoring context integration (AI position awareness)
+  enable_context_integration: true  # ON BY DEFAULT - thoroughly tested
+  # Auto-start internal TradeMonitor (no manual CLI exposure)
+  enabled: false  # Set true to start TradeMonitor automatically
+  # Allow legacy manual CLI monitor commands (start/status/metrics)
+  manual_cli: false  # Keep false for safety; true re-enables commands
+  # Pulse interval for multi-timeframe cached analysis
+  pulse_interval_seconds: 300
+
+  # Include sentiment data in market analysis
+  include_sentiment: true  # Alpha Vantage NEWS_SENTIMENT API
+
+  # Include macro indicators in market analysis
+  include_macro: false  # Real GDP, inflation, Fed Funds, unemployment
+
+  # ==========================================
+  # Live Dashboard View [DEFERRED]
+  # ==========================================
+  # STATUS: [DEFERRED] Post-MVP enhancement (Q1 2026)
+  #
+  # WHAT: Real-time Rich TUI dashboard for autonomous agent monitoring
+  #       - Active trades, positions, P&L
+  #       - Market pulse (6-timeframe technical indicators)
+  #       - Recent AI decisions with reasoning
+  #       - Performance attribution per provider
+  #
+  # WHY: CLI-only interface insufficient for monitoring autonomous agent
+  #      Live view provides immediate feedback on agent state
+  #
+  # WHEN: Q1 2026 (1-2 weeks implementation)
+  #
+  # PREREQ:
+  #       - Autonomous agent stable (agent.autonomous.enabled=true)
+  #       - TradeMonitor tested and working (monitoring.enabled=true)
+  #       - Rich TUI library integration complete
+  #
+  # OWNER: Monitoring team
+  #
+  # RISK: LOW - purely observational, no execution impact
+  #
+  # ALTERNATIVE: Use `python main.py dashboard` for static snapshots
+  #
+  enable_live_view: false
+
+  # Live dashboard configuration
+  live_view:
+    # Refresh rates (seconds) for different data types
+    refresh_rates:
+      fast: 2       # Active trades, agent state
+      medium: 5     # Portfolio metrics, risk checks, recent decisions
+      slow: 10      # Market pulse table
+      lazy: 30      # Performance statistics
+
+    # Panel visibility toggles
+    panels:
+      agent_status: true
+      portfolio: true
+      active_trades: true
+      market_pulse: true
+      recent_decisions: true
+      performance: true
+
+    # Decision log settings
+    decision_log:
+      max_entries: 10
+      show_reasoning: true
+      max_reasoning_length: 200  # in characters
+
+    # Performance panel settings
+    performance:
+      lookback_hours: 24
+
+# Error Tracking Configuration
+# Centralized error tracking with Sentry integration and logging fallback
+# PHASE 2.1: Production readiness - monitor errors in production
+error_tracking:
+  # Enable error tracking (set to true in production)
+  enabled: false
+
+  # Backend: 'sentry' (cloud), 'logging' (local), or 'file' (local)
+  backend: "logging"
+
+  # Sentry DSN for remote error tracking (production only)
+  # Set via SENTRY_DSN environment variable
+  sentry_dsn: "${SENTRY_DSN:}"
+
+  # Performance trace sample rate (0.0 = none, 1.0 = all requests)
+  # Lower in production to reduce overhead (recommended: 0.1)
+  traces_sample_rate: 0.1
+
+  # Environment name (for Sentry tagging)
+  # Auto-detected from FFE_ENVIRONMENT, defaults to development
+  environment: "${FFE_ENVIRONMENT:development}"
+
+# Persistence Configuration
+persistence:
+  # Path to store trading decisions
+  storage_path: "data/decisions"
+
+  # Maximum decisions to keep in memory
+  max_decisions: 1000
+
+  # Auto-cleanup old decisions (days)
+  cleanup_days: 30
+
+# ============================================
+# Portfolio Memory Engine
+# ============================================
+# Tracks trade outcomes and provides learning-based recommendations
+# Inspired by reinforcement learning (experience replay, Thompson sampling)
+# TESTED: Phase 1 integration tests, portfolio memory implementation
+portfolio_memory:
+  # Enable portfolio memory tracking
+  enabled: true  # ON BY DEFAULT - thoroughly tested
+
+  # Maximum experiences to retain in memory buffer
+  max_memory_size: 1000
+
+  # Learning rate for provider weight updates (0.0-1.0)
+  # Higher = faster adaptation, Lower = more stable
+  learning_rate: 0.1
+
+  # Number of recent trades to include in AI context
+  context_window: 20
+
+# ============================================
+# Telegram Notifications (Optional)
+# ============================================
+# Send alerts for Phase 1 quorum failures and trade executions
+# TODO: Implement Telegram Bot API integration
+telegram:
+  # Enable Telegram notifications (for signal-only mode: set autonomous.enabled=false and this to true)
+  enabled: false
+
+  # Telegram Bot API token (from @BotFather)
+  # Get one at: https://t.me/BotFather
+  bot_token: "${TELEGRAM_BOT_TOKEN:YOUR_TELEGRAM_BOT_TOKEN}"
+
+  # Telegram chat ID (your user ID or group ID)
+  chat_id: "${TELEGRAM_CHAT_ID:YOUR_TELEGRAM_CHAT_ID}"
+
+# ============================================
+# Backtesting (Experimental)
+# ============================================
+# Run historical strategy simulations
+backtesting:
+  # Enable backtesting (manual toggle)
+  enabled: false
+
+  # Use real historical data from AlphaVantage (requires API key)
+  # If false, uses synthetic candles
+  use_real_data: false
+
+  # Starting paper balance for simulations
+  initial_balance: 10000.0
+
+  # Per-trade fee as percentage of notional (0.1 = 0.1%)
+  fee_percentage: 0.1
+
+  # Default strategy configuration
+  strategy:
+    name: "sma_crossover"  # Options: sma_crossover, ensemble_weight_rl
+    short_window: 5        # Fast moving average period
+    long_window: 20        # Slow moving average period
+
+  # Reinforcement learning config (for RL strategies)
+  rl:
+    learning_rate: 0.01
+    discount_factor: 0.95
+    exploration_rate: 0.1
+
+# ============================================
+# Safety & Execution Controls
+# ============================================
+# Prevent unsafe automated executions and provide circuit breaker protection
+safety:
+  # Safety thresholds used during pre-execution monitoring checks
+  max_leverage: 5.0           # block execution above this leverage estimate
+  max_position_pct: 25.0      # block execution if largest position > this percent
+
+# Circuit breaker tuning (process-local)
+circuit_breaker:
+  failure_threshold: 3        # number of consecutive failures to open the breaker
+  recovery_timeout_seconds: 300
+  half_open_retry: 1
+
+# ============================================
+# Signal-Only Mode
+# ============================================
+# Force signal-only mode globally (no position sizing or execution)
+signal_only_default: false  # Enable real trading execution
+
+# ============================================
+# Logging Configuration (Optional)
+# ============================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+  # Optional: Log file path (if omitted, logs to console only)
+  # file: "logs/finance_engine.log"
+
+  # ============================================
+  # Extended Structured Logging Configuration
+  # ============================================
+  # Provides JSON-formatted logs with correlation IDs, PII redaction, and retention
+  structured:
+    enabled: true
+    format: json  # Options: "json" or "text"
+    correlation_ids: true
+    pii_redaction: true
+
+  # File output configuration
+  file:
+    enabled: true
+    base_path: "logs"
+    rotation:
+      max_bytes: 10485760  # 10MB
+      backup_count: 30
+
+    # Separate files by log level
+    handlers:
+      - name: "all"
+        level: "DEBUG"
+        filename: "ffe_all.log"
+      - name: "error"
+        level: "ERROR"
+        filename: "ffe_errors.log"
+      - name: "audit"
+        level: "INFO"
+        filename: "ffe_audit.log"
+
+  # Retention policies (days)
+  retention:
+    hot_tier: 7    # Keep in active log directory
+    warm_tier: 30  # Compress and move to archive
+    cold_tier: 365 # Final retention before deletion
+
+  # PII redaction patterns (regex)
+  # Customize these patterns to match your sensitive data formats
+  # Note: Patterns are applied by the PIIRedactionFilter in logging_config.py
+  pii_patterns: []
+  # Example custom patterns (uncomment and modify as needed):
+  # - pattern: 'custom_pattern_here'
+  #   replacement: '***REDACTED***'
+
+# ============================================
+# Trading Agent (Risk Gatekeeper)
+# ============================================
+agent:
+  # Execution controls
+  # IMPORTANT: Set autonomous.enabled=true for full trading OR telegram.enabled=true for signal-only mode
+  autonomous_execution: true  # Legacy flag - use autonomous.enabled instead
+  approval_policy: on_new_asset
+  max_daily_trades: 5
+  strategic_goal: balanced
+  risk_appetite: medium
+  autonomous:
+    enabled: true        # Set to false and enable telegram for signal-only mode
+    profit_target: 0.05   # 5%
+    stop_loss: 0.02       # 2%
+
+  # Resilience and observability
+  # Queue size auto-tunes by environment when set to 0 (dev=50, staging=200, prod=1000)
+  max_retries_per_cycle: 3
+  dashboard_event_queue_size: 50
+
+  # Webhook configuration for trading signals
+  webhook:
+    enabled: false          # Set to true to enable webhook notifications
+    url: ""                 # e.g., https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+    retry_attempts: 3       # Number of retry attempts on failure
+    timeout_seconds: 10     # Request timeout in seconds
+
+  # RiskGatekeeper configuration (decimal fractions)
+  # IMPORTANT: These defaults are for LIVE trading. For development/paper trading,
+  # see 'agent.development_risk_limits' section below which relaxes constraints.
+  correlation_threshold: 0.7   # 70% - correlated assets are rejected
+  max_correlated_assets: 2     # Blocks 2+ similar assets in same category
+  max_var_pct: 0.05            # 5% - max portfolio risk per day
+  var_confidence: 0.95         # 95% - VaR confidence level
+
+  # Development/Paper Trading Risk Limits
+  # Auto-applied when ENVIRONMENT=development (see FinanceFeedbackEngine.initialize_risk_gatekeeper)
+  # Relaxes constraints to allow portfolio building and experimentation in sandbox
+  development_risk_limits:
+    correlation_threshold: 0.7         # Same as production (correlation still matters)
+    max_correlated_assets: 5           # Allow 5 similar assets (5x more permissive than live)
+    max_var_pct: 0.10                  # 10% daily VaR (2x more permissive)
+    var_confidence: 0.90               # 90% confidence (lower precision acceptable in dev)
+    # Note: max_drawdown_percent is controlled by TradingAgentConfig, not here
+
+  # Position Sizing Configuration (THR-209)
+  # Controls how much capital to allocate per trade
+  position_sizing:
+    # Risk percentage: fraction of account balance to risk per trade
+    # Conservative: 0.01 (1%), Moderate: 0.02 (2%), Aggressive: 0.05 (5%)
+    risk_percentage: 0.02  # 2% - moderate risk level
+    
+    # Position size caps (safety limits)
+    max_position_usd_dev: 50.0      # $50 max per trade in development
+    max_position_usd_prod: 500.0    # $500 max per trade in production
+    
+    # Platform-specific minimums (enforced automatically)
+    # Oanda: 1 unit minimum (~$1.19 for EUR_USD)
+    # Coinbase: $10 minimum notional
+    
+    # Dynamic sizing: adjust position size based on account balance
+    # If true, positions scale with account growth/decline
+    dynamic_sizing: true
+    
+    # Capital utilization target
+    # Target percentage of account to deploy per trade
+    target_utilization_pct: 0.02  # 2% of account per trade
+
+  # Asset pairs for trading
+  asset_pairs:
+    - BTCUSD
+    - EURUSD
+    - GBPUSD
+    - ETHUSD
+
+  # Asset-specific parameter overrides (from Phase 3 stress test optimization)
+  # These override default position sizing/SL/TP for specific assets
+  asset_parameters:
+    GBP_USD:
+      stop_loss_pct: 2.6      # Validated: 66.67% WR, 2.27 PF
+      take_profit_pct: 4.8
+      position_size_pct: 2.3
+      timeframe: M5
+    GBPUSD:
+      stop_loss_pct: 2.6      # Alias for GBP_USD
+      take_profit_pct: 4.8
+      position_size_pct: 2.3
+      timeframe: M5
+    BTC_USD:
+      stop_loss_pct: 5.0      # Validated: 84.44% WR, 2.27 PF
+      take_profit_pct: 1.2
+      position_size_pct: 2.8
+      timeframe: M5
+    BTCUSD:
+      stop_loss_pct: 5.0      # Alias for BTC_USD
+      take_profit_pct: 1.2
+      position_size_pct: 2.8
+      timeframe: M5
+    ETH_USD:
+      stop_loss_pct: 2.5      # Fixed params (was 80% WR but 0.94 PF)
+      take_profit_pct: 4.0    # Widened TP, tightened SL
+      position_size_pct: 2.0
+      timeframe: M5
+    ETHUSD:
+      stop_loss_pct: 2.5      # Alias for ETH_USD
+      take_profit_pct: 4.0
+      position_size_pct: 2.0
+      timeframe: M5
+    EUR_USD:
+      stop_loss_pct: 0.6      # Validated M15: 60% WR, 1.61 PF
+      take_profit_pct: 1.0
+      position_size_pct: 1.7
+      timeframe: M15          # Note: M15 performs better than M5
+    EURUSD:
+      stop_loss_pct: 0.6      # Alias for EUR_USD
+      take_profit_pct: 1.0
+      position_size_pct: 1.7
+      timeframe: M15
+
+# Pair selection functionality removed as part of THR-172 cleanup
+
+# ============================================
+# USAGE NOTES
+# ============================================
+#
+# Quick Start:
+# 1. Set your alpha_vantage_api_key above
+# 2. Choose your trading_platform (coinbase_advanced or oanda)
+# 3. Add platform credentials for your chosen platform
+# 4. Choose ai_provider (local is easiest - no setup required)
+#
+# CLI Commands:
+# - python main.py status              # Check account & platform
+# - python main.py balance             # Quick balance check
+# - python main.py portfolio           # Detailed holdings (if supported)
+# - python main.py analyze BTCUSD      # Get AI trading signal
+# - python main.py history --limit 20  # View past decisions
+# - python main.py execute <id>        # Execute a decision
+#
+# Platform-Specific Notes:
+#
+# Coinbase Advanced (Crypto Futures):
+# - Supports: BTC, ETH futures trading
+# - Portfolio tracking: positions, P&L, margin
+# - Asset format: BTCUSD, ETHUSD
+# - Install: pip install coinbase-advanced-py
+#
+# Oanda (Forex):
+# - Supports: All major/cross/exotic forex pairs
+# - Portfolio tracking: positions, P&L, margin, currency exposure
+# - Asset format: EURUSD, GBP_USD (use underscore)
+# - Install: pip install oandapyV20
+# - Environments: 'practice' (demo) or 'live' (real money)
+#
+# AI Providers:
+# - local: Free, no API costs, runs on CPU (4-8GB RAM)
+# - cli/codex: Requires GitHub Copilot subscription
+# - qwen: Free, requires Node.js v20+ and OAuth
+# - gemini: Free, requires Node.js v20+ and OAuth or API key
+# - ensemble: Combines multiple providers for better accuracy
+#
+# For more details, see:
+# - README.md
+# - USAGE.md
+# - docs/OANDA_INTEGRATION.md (forex)
+# - docs/PORTFOLIO_TRACKING.md (crypto)
+# - docs/ENSEMBLE_SYSTEM.md (multi-provider AI)
+
+# ============================================
+# BENCHMARKING CONFIGURATION
+# ============================================
+# Configuration for performance benchmarking and optimization
+benchmark:
+  # Asset pairs to use for benchmarking
+  asset_pairs:
+    - BTCUSD
+    - ETHUSD
+
+  # Date range for backtesting
+  start_date: "2024-01-01"
+  end_date: "2024-12-01"
+
+  # Benchmark frequency (run full benchmark every N refactorings)
+  benchmark_frequency: 5
+
+  # Save benchmark reports
+  save_reports: true
+  reports_directory: "data/benchmarks"
+
+# ============================================
+# AUTOMATED REFACTORING CONFIGURATION
+# ============================================
+# Settings for automated refactoring pipeline
+refactoring:
+  # Maximum concurrent refactorings
+  max_concurrent: 1
+
+  # Performance degradation threshold
+  # If improvement score drops below this, rollback the change
+  degradation_threshold: -0.05
+
+  # Run full benchmark every N refactorings
+  # Set higher to speed up pipeline, lower for more precision
+  benchmark_frequency: 5
+
+  # Use git for version control during refactoring
+  use_git: true
+
+  # Automatically rollback on test failures
+  auto_rollback: true
+
+  # Output directory for reports
+  output_directory: "data/refactoring"
+
+# ============================================
+# OPTUNA OPTIMIZATION CONFIGURATION
+# ============================================
+# Configuration for Bayesian hyperparameter optimization
+optimization:
+  # Default number of trials
+  n_trials: 50
+
+  # Default optimization metric
+  # Options: sharpe_ratio, total_return, profit_factor, win_rate
+  optimize_for: "sharpe_ratio"
+
+  # Timeout in seconds (null = no timeout)
+  timeout: null
+
+  # Save optimization results
+  save_results: true
+  results_directory: "data/optimization"
+
+  # Parameter search spaces (min, max)
+  search_spaces:
+    stop_loss_pct:
+      min: 0.01
+      max: 0.05
+    position_size_pct:
+      min: 0.005
+      max: 0.02
+    confidence_threshold:
+      min: 0.65
+      max: 0.85
+    rsi_period:
+      min: 10
+      max: 20
+    atr_multiplier:
+      min: 1.5
+      max: 3.0
+# ============================================================
+# SECURE API AUTHENTICATION CONFIGURATION
+# ============================================================
+# Validates API keys against a secure database with rate limiting
+#
+# Production Deployment Checklist:
+# - [ ] Set api_keys explicitly in config/config.local.yaml (never in base config)
+# - [ ] Use environment variable FINANCE_FEEDBACK_API_KEY for runtime override
+# - [ ] Enable rate limiting and set appropriate thresholds
+# - [ ] Review audit logs regularly: data/auth.db
+# - [ ] Remove placeholder keys before deploying
+#
+api_auth:
+  # Rate limiting configuration
+  # Maximum requests per API key within the time window
+  rate_limit_max: 100
+
+  # Time window in seconds for rate limiting
+  rate_limit_window: 60
+
+  # If true, fall back to config_keys when database lookup fails
+  # Useful for gradual migration to DB-based auth
+  enable_fallback_to_config: true
+
+# API Timeout Configuration
+# Define timeout values for different API calls to prevent hanging requests
+api_timeouts:
+  # Data providers
+  market_data: 10
+  sentiment: 15
+  macro: 10
+
+  # Trading platforms (NEW)
+  platform_balance: 5      # Get balance operations
+  platform_portfolio: 10   # Portfolio breakdown (more data)
+  platform_execute: 30     # Trade execution (critical path)
+  platform_connection: 3   # Initial connection establishment
+
+  # AI providers (NEW)
+  llm_query: 120          # LLM decision generation (120s for CPU-based Ollama)
+  llm_debate: 180         # Debate mode (multiple LLM calls)
+  llm_connection: 5       # Provider connection timeout
+
+  # External services (NEW)
+  telegram_webhook: 5     # Telegram bot API
+  redis_operations: 2     # Redis cache operations
+
+# ============================================================
+# API KEYS (PLACEHOLDER - SET IN config.local.yaml)
+# ============================================================
+# NEVER commit real API keys to this file!
+#
+# Instead, add to config/config.local.yaml (git-ignored):
+#   api_keys:
+#     my-service: "your-secret-key-here"
+#
+# Or use environment variable:
+#   export FINANCE_FEEDBACK_API_KEY="your-secret-key-here"
+#
+api_keys:
+  # Placeholder - override in config.local.yaml or environment
+  # Example: "service-key": "sk_live_xxxxxxxxxxxxxxxx"
+  {}
+
+# ============================================================================
+# OBSERVABILITY (TRACING, LOGGING, METRICS)
+# ============================================================================
+# NOTE: Tracing is disabled by default for local development.
+# To enable in local dev:
+#   1. Set enabled: true below, OR
+#   2. Set environment variable: TRACING_ENABLED=true
+#
+# For Jaeger backend (staging/production):
+#   - Run Jaeger locally: docker run -d -p 6831:6831/udp -p 16686:16686 jaegertracing/all-in-one
+#   - Then set backend: jaeger and enabled: true
+#   - Access UI: http://localhost:16686
+#
+# For Console backend (local testing):
+#   - No additional infrastructure needed
+#   - Traces printed to stdout
+#   - Set backend: console and enabled: true
+#
+observability:
+  # Tracing Configuration
+  # Can be overridden via TRACING_ENABLED environment variable
+  tracing:
+    enabled: false                           # Set to true or use TRACING_ENABLED=true env var to enable
+    backend: console                         # Options: console (local), jaeger (requires infrastructure), tempo
+    sample_rate: 0.1                         # Fraction of traces to sample (10% deterministic)
+    jaeger:
+      agent_host: localhost
+      agent_port: 6831                       # Jaeger agent UDP port (Thrift compact)
+                                             # Requires: docker run -d -p 6831:6831/udp jaegertracing/all-in-one
+    otlp:
+      endpoint: "http://localhost:4317"      # OTLP gRPC endpoint for Tempo (alternative)
+
+  # Logging Configuration
+  logging:
+    level: INFO                              # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: json                             # Options: json, text
+    file_enabled: true                       # Enable file logging
+    file_base_path: logs                     # Directory for log files
+
+  # Metrics Configuration
+  metrics:
+    enabled: true                            # Enable Prometheus metrics
+    prometheus_port: 8000                    # Port for Prometheus exporter
+
+# ============================================================================
+# SERVICE METADATA
+# ============================================================================
+service:
+  name: finance_feedback_engine
+  version: "2.0.0"
+  environment: development

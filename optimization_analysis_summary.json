@@ -1,0 +1,242 @@
+{
+  "btcusd": {
+    "trials": 100,
+    "best_trial": 58,
+    "best_sharpe": 6.468682861010784,
+    "best_params": {
+      "stop_loss": 0.0418722903729898,
+      "take_profit": 0.0358921111551528,
+      "position_size": 0.0402289620713378,
+      "risk_reward_ratio": 0.8571805085280316
+    },
+    "best_metrics": {
+      "win_rate": 70.58823529411765,
+      "profit_factor": 2.2699456245755933,
+      "total_pnl": 92.04319436994004,
+      "return_pct": 0.9204319436994004,
+      "max_drawdown": -0.2297031411315396,
+      "total_trades": 17
+    },
+    "parameter_ranges_top_10pct": {
+      "stop_loss": {
+        "min": 0.0211333297324178,
+        "max": 0.0499330840269494,
+        "mean": 0.04115301528213594
+      },
+      "take_profit": {
+        "min": 0.026242809910175,
+        "max": 0.0923065496951857,
+        "mean": 0.046779859821206
+      },
+      "position_size": {
+        "min": 0.0054685747490295,
+        "max": 0.043091834490242,
+        "mean": 0.02945822575292706
+      }
+    },
+    "convergence_analysis": {
+      "first_10_avg": 0.8344043870899398,
+      "last_10_avg": -1.7372044389921601,
+      "improvement": -2.5716088260821,
+      "best_found_at_trial": 58,
+      "convergence_pct": 57.99999999999999
+    },
+    "parameter_sensitivity": {
+      "sharpe_vs_sl_corr": 0.43704247589621914,
+      "sharpe_vs_tp_corr": 0.564563438871936,
+      "sharpe_vs_pos_corr": 0.12402931851691441
+    }
+  },
+  "ethusd": {
+    "trials": 100,
+    "best_trial": 48,
+    "best_sharpe": 0.900532548047968,
+    "best_params": {
+      "stop_loss": 0.0345899919144354,
+      "take_profit": 0.0620852718427515,
+      "position_size": 0.0058831933100754,
+      "risk_reward_ratio": 1.7948911926990512
+    },
+    "best_metrics": {
+      "win_rate": 42.857142857142854,
+      "profit_factor": 1.1253342775887656,
+      "total_pnl": 3.2374178230497517,
+      "return_pct": 0.0323741782304975,
+      "max_drawdown": -0.0722185462789141,
+      "total_trades": 21
+    },
+    "parameter_ranges_top_10pct": {
+      "stop_loss": {
+        "min": 0.0102016585610735,
+        "max": 0.0497338242671313,
+        "mean": 0.03485461606605092
+      },
+      "take_profit": {
+        "min": 0.0122332068704538,
+        "max": 0.0892718030435362,
+        "mean": 0.04059357542173229
+      },
+      "position_size": {
+        "min": 0.0058831933100754,
+        "max": 0.0492137120264777,
+        "mean": 0.030596766022223488
+      }
+    },
+    "convergence_analysis": {
+      "first_10_avg": -0.8364722271757563,
+      "last_10_avg": -1.0615857690891495,
+      "improvement": -0.22511354191339317,
+      "best_found_at_trial": 48,
+      "convergence_pct": 48.0
+    },
+    "parameter_sensitivity": {
+      "sharpe_vs_sl_corr": 0.12284956077806687,
+      "sharpe_vs_tp_corr": 0.49485329117897353,
+      "sharpe_vs_pos_corr": -0.09955579098368104
+    }
+  },
+  "eurusd_90d": {
+    "trials": 46,
+    "best_trial": 60,
+    "best_sharpe": 2.341506203442727,
+    "best_params": {
+      "stop_loss": 0.0058862968828576,
+      "take_profit": 0.0100849349119166,
+      "position_size": 0.0180117736339095,
+      "risk_reward_ratio": 1.713290225181558
+    },
+    "best_metrics": {
+      "win_rate": 50.0,
+      "profit_factor": 1.3614052261497631,
+      "total_pnl": 1.1592084932742457,
+      "return_pct": 0.0115920849327424,
+      "max_drawdown": -0.0142152216910835,
+      "total_trades": 6
+    },
+    "parameter_ranges_top_10pct": {
+      "stop_loss": {
+        "min": 0.0057879812110912,
+        "max": 0.0061081512180217,
+        "mean": 0.005935503012758125
+      },
+      "take_profit": {
+        "min": 0.010031120983613,
+        "max": 0.0103841913043749,
+        "mean": 0.010159670353573074
+      },
+      "position_size": {
+        "min": 0.0141735350819566,
+        "max": 0.0182411029003933,
+        "mean": 0.016897819892437597
+      }
+    },
+    "convergence_analysis": {
+      "first_10_avg": 1.614448069063879,
+      "last_10_avg": -4.866543101464524,
+      "improvement": -6.480991170528403,
+      "best_found_at_trial": 60,
+      "convergence_pct": 130.43478260869566
+    },
+    "parameter_sensitivity": {
+      "sharpe_vs_sl_corr": -0.3810569840748909,
+      "sharpe_vs_tp_corr": -0.5446448401140384,
+      "sharpe_vs_pos_corr": -0.10173015477887494
+    }
+  },
+  "eurusd_m15": {
+    "trials": 44,
+    "best_trial": 99,
+    "best_sharpe": 3.7067270030666686,
+    "best_params": {
+      "stop_loss": 0.0056453064708241,
+      "take_profit": 0.014690628274422,
+      "position_size": 0.0098485409871495,
+      "risk_reward_ratio": 2.6022729413089714
+    },
+    "best_metrics": {
+      "win_rate": 57.14285714285714,
+      "profit_factor": 1.672655282127072,
+      "total_pnl": 1.520005539551725,
+      "return_pct": 0.0152000553955172,
+      "max_drawdown": -0.0075350712169394,
+      "total_trades": 7
+    },
+    "parameter_ranges_top_10pct": {
+      "stop_loss": {
+        "min": 0.0056453064708241,
+        "max": 0.0070232658871297,
+        "mean": 0.006078418461588325
+      },
+      "take_profit": {
+        "min": 0.0143496456610911,
+        "max": 0.014690628274422,
+        "mean": 0.014556729221715676
+      },
+      "position_size": {
+        "min": 0.0093251430112504,
+        "max": 0.0159805804033627,
+        "mean": 0.011256059915332675
+      }
+    },
+    "convergence_analysis": {
+      "first_10_avg": 2.95458661670535,
+      "last_10_avg": -7.394903790469182,
+      "improvement": -10.349490407174532,
+      "best_found_at_trial": 99,
+      "convergence_pct": 225.0
+    },
+    "parameter_sensitivity": {
+      "sharpe_vs_sl_corr": 0.26037879606617637,
+      "sharpe_vs_tp_corr": -0.34505299827551766,
+      "sharpe_vs_pos_corr": 0.18942467403165986
+    }
+  },
+  "gbpusd": {
+    "trials": 56,
+    "best_trial": 78,
+    "best_sharpe": 6.1681670150350385,
+    "best_params": {
+      "stop_loss": 0.0050278929289192,
+      "take_profit": 0.0120238262189158,
+      "position_size": 0.0412313501030715,
+      "risk_reward_ratio": 2.391424477191572
+    },
+    "best_metrics": {
+      "win_rate": 66.66666666666666,
+      "profit_factor": 2.266204551687262,
+      "total_pnl": 7.344665245443261,
+      "return_pct": 0.0734466524544326,
+      "max_drawdown": -0.0289976820652804,
+      "total_trades": 6
+    },
+    "parameter_ranges_top_10pct": {
+      "stop_loss": {
+        "min": 0.0050278929289192,
+        "max": 0.0056572622103639,
+        "mean": 0.0053901136353086
+      },
+      "take_profit": {
+        "min": 0.0120238262189158,
+        "max": 0.0143584537388892,
+        "mean": 0.012587768799573401
+      },
+      "position_size": {
+        "min": 0.0386993843089047,
+        "max": 0.0459428744083028,
+        "mean": 0.04242326685962542
+      }
+    },
+    "convergence_analysis": {
+      "first_10_avg": 5.686325345468299,
+      "last_10_avg": -4.652741236214668,
+      "improvement": -10.339066581682967,
+      "best_found_at_trial": 78,
+      "convergence_pct": 139.28571428571428
+    },
+    "parameter_sensitivity": {
+      "sharpe_vs_sl_corr": 0.008819115917424694,
+      "sharpe_vs_tp_corr": -0.3413447301644624,
+      "sharpe_vs_pos_corr": 0.21537320514264408
+    }
+  }
+}
