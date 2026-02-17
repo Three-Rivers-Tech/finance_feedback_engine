@@ -61,6 +61,7 @@ class TestExitPriceFix:
             # Exit price should be the market price, NOT entry price
             assert outcome["exit_price"] == "1.19125"
             assert outcome["exit_price"] != outcome["entry_price"]
+            assert outcome["exit_price_source"] == "provider:oanda"
             
             # P&L should be non-zero (1000 units * 0.00014 price diff)
             realized_pnl = Decimal(outcome["realized_pnl"])
@@ -124,6 +125,7 @@ class TestExitPriceFix:
             assert len(outcomes) == 1
             outcome = outcomes[0]
             assert outcome["exit_price"] == "3515.00"
+            assert outcome["exit_price_source"] == "state:last_price"
             assert Decimal(outcome["realized_pnl"]) > Decimal("0")
     
     def test_exit_price_without_provider_skips_without_last_price(self):
@@ -262,6 +264,72 @@ class TestExitPriceFix:
             # ETH-USD
             assert Decimal(outcomes_by_product["ETH-USD"]["exit_price"]) == Decimal("3515.00")
             assert Decimal(outcomes_by_product["ETH-USD"]["realized_pnl"]) > Decimal("0")
+
+    def test_regression_market_move_persisted_close_has_distinct_exit_and_nonzero_pnl(self):
+        """Regression: persisted close should reflect market move and non-zero realized P&L."""
+        mock_provider = MagicMock()
+        mock_provider.get_current_price.return_value = {
+            "price": 1.18525,
+            "provider": "oanda",
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            recorder = TradeOutcomeRecorder(data_dir=temp_dir, unified_provider=mock_provider)
+            recorder.open_positions = {
+                "EUR_USD_LONG": {
+                    "trade_id": "regression-eurusd-1",
+                    "product": "EUR_USD",
+                    "side": "LONG",
+                    "entry_time": "2026-02-17T17:00:00+00:00",
+                    "entry_price": Decimal("1.18296"),
+                    "entry_size": Decimal("1000"),
+                }
+            }
+
+            outcomes = recorder.update_positions([])
+            assert len(outcomes) == 1
+
+            outcome = outcomes[0]
+            assert Decimal(outcome["exit_price"]) != Decimal(outcome["entry_price"])
+            assert Decimal(outcome["realized_pnl"]) != Decimal("0")
+            assert outcome["exit_price_source"] == "provider:oanda"
+
+            jsonl_files = list((Path(temp_dir) / "trade_outcomes").glob("*.jsonl"))
+            assert len(jsonl_files) == 1
+            saved_outcome = json.loads(jsonl_files[0].read_text().splitlines()[0])
+            assert Decimal(saved_outcome["exit_price"]) == Decimal("1.18525")
+            assert Decimal(saved_outcome["entry_price"]) == Decimal("1.18296")
+            assert Decimal(saved_outcome["realized_pnl"]) == Decimal("2.29000")
+
+    def test_alert_logged_on_consecutive_flat_closures(self, caplog):
+        """Alert when entry==exit persists for multiple consecutive outcomes."""
+        recorder = TradeOutcomeRecorder(data_dir=tempfile.mkdtemp(), unified_provider=None)
+
+        base = {
+            "exit_time": datetime.now(timezone.utc).isoformat(),
+            "entry_size": "1",
+            "exit_size": "1",
+            "side": "BUY",
+            "fees": "0",
+            "holding_duration_seconds": 1,
+            "roi_percent": "0",
+            "exit_price_source": "state:last_price",
+        }
+
+        with caplog.at_level("ERROR"):
+            for i in range(3):
+                outcome = {
+                    **base,
+                    "trade_id": f"flat-{i}",
+                    "product": "EUR_USD",
+                    "entry_time": "2026-02-17T17:00:00+00:00",
+                    "entry_price": "1.1000",
+                    "exit_price": "1.1000",
+                    "realized_pnl": "0",
+                }
+                recorder._save_outcome(outcome)
+
+        assert any("consecutive flat closures" in record.message for record in caplog.records)
 
 
 if __name__ == "__main__":
