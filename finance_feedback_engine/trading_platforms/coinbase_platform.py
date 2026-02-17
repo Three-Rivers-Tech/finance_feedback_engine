@@ -418,66 +418,141 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         try:
             client = self._get_client()
-            balances = {}
+            balances: Dict[str, float] = {}
 
-            # Get futures balance summary
+            futures_buying_power = 0.0
+
+            # Get futures balance summary (fallback/validation)
             try:
                 futures_summary = client.get_futures_balance_summary()
                 balance_summary = getattr(futures_summary, "balance_summary", None)
 
                 if balance_summary:
-                    # Use futures_buying_power as it represents actual available collateral
-                    # (includes spot USD/USDC that can be used for futures trading)
-                    # total_usd_balance only shows active futures positions
-
-                    futures_buying_power = _get_attr_value(balance_summary, "futures_buying_power")
-                    if futures_buying_power:
-                        futures_usd = _to_float_value(futures_buying_power)
-                        if futures_usd > 0:
-                            balances["FUTURES_USD"] = futures_usd
-                            logger.info("Futures buying power: $%.2f USD", futures_usd)
+                    futures_buying_power_value = _get_attr_value(
+                        balance_summary, "futures_buying_power"
+                    )
+                    if futures_buying_power_value:
+                        futures_buying_power = _to_float_value(futures_buying_power_value)
+                        logger.info(
+                            "Futures buying power (total collateral): $%.2f USD",
+                            futures_buying_power,
+                        )
 
             except Exception as e:
-                logger.warning("Could not fetch futures balance: %s", e)
-                # Check if this is an authentication error
+                logger.warning("Could not fetch futures balance summary: %s", e)
                 error_str = str(e).lower()
-                if any(keyword in error_str for keyword in ['auth', 'permission', 'credential', 'api key', 'unauthorized', '401']):
+                if any(
+                    keyword in error_str
+                    for keyword in [
+                        "auth",
+                        "permission",
+                        "credential",
+                        "api key",
+                        "unauthorized",
+                        "401",
+                    ]
+                ):
                     logger.error(
                         "Authentication error fetching Coinbase futures balance. "
                         "Check API credentials (api_key, api_secret, private_key_path) in config."
                     )
                     from ..exceptions import TradingError
+
                     raise TradingError(f"Coinbase authentication failed: {e}")
 
-            # Get spot balances via accounts endpoint (preferred in unit tests)
+            # Get USD/USDC balances from accounts endpoint and classify futures-vs-spot
+            futures_usd = 0.0
+            futures_usdc = 0.0
+            spot_usd = 0.0
+            spot_usdc = 0.0
+
             try:
                 accounts_response = client.get_accounts()
                 accounts = getattr(accounts_response, "accounts", None) or []
 
                 for account in accounts:
-                    currency = getattr(account, "currency", "").upper()
+                    currency = str(_get_attr_value(account, "currency", "")).upper()
                     if currency not in ("USD", "USDC"):
                         continue
 
-                    available_balance = getattr(account, "available_balance", None)
-                    balance_value = getattr(available_balance, "value", None)
-                    spot_amount = float(balance_value or 0)
-                    if spot_amount > 0:
-                        balances[f"SPOT_{currency}"] = spot_amount
-                        logger.info("Spot %s: $%.2f", currency, spot_amount)
+                    available_balance = _get_attr_value(account, "available_balance", None)
+                    amount = _to_float_value(available_balance)
+                    if amount <= 0:
+                        continue
+
+                    account_type = str(
+                        _get_attr_value(account, "type", "")
+                        or _get_attr_value(account, "account_type", "")
+                        or _get_attr_value(account, "retail_portfolio_type", "")
+                    ).upper()
+
+                    is_futures_account = any(
+                        marker in account_type
+                        for marker in ("FUTURE", "PERP", "DERIVATIVE")
+                    )
+
+                    if is_futures_account:
+                        if currency == "USD":
+                            futures_usd += amount
+                        else:
+                            futures_usdc += amount
+                    else:
+                        if currency == "USD":
+                            spot_usd += amount
+                        else:
+                            spot_usdc += amount
+
+                # If no explicit futures split is available from account types,
+                # fall back to buying power for total collateral.
+                accounts_futures_total = futures_usd + futures_usdc
+                if accounts_futures_total <= 0 and futures_buying_power > 0:
+                    futures_usd = futures_buying_power
+
+                if futures_usd > 0:
+                    balances["FUTURES_USD"] = futures_usd
+                if futures_usdc > 0:
+                    balances["FUTURES_USDC"] = futures_usdc
+                if spot_usd > 0:
+                    balances["SPOT_USD"] = spot_usd
+                if spot_usdc > 0:
+                    balances["SPOT_USDC"] = spot_usdc
+
+                if futures_usd > 0 or futures_usdc > 0:
+                    logger.info(
+                        "Futures collateral split - USD: $%.2f, USDC: $%.2f, total: $%.2f",
+                        futures_usd,
+                        futures_usdc,
+                        futures_usd + futures_usdc,
+                    )
+                if spot_usd > 0 or spot_usdc > 0:
+                    logger.info("Spot balances - USD: $%.2f, USDC: $%.2f", spot_usd, spot_usdc)
+
             except Exception as e:
-                logger.warning("Could not fetch spot balances: %s", e)
-                # Check if this is an authentication error
+                logger.warning("Could not fetch spot/futures account balances: %s", e)
                 error_str = str(e).lower()
-                if any(keyword in error_str for keyword in ['auth', 'permission', 'credential', 'api key', 'unauthorized', '401']):
+                if any(
+                    keyword in error_str
+                    for keyword in [
+                        "auth",
+                        "permission",
+                        "credential",
+                        "api key",
+                        "unauthorized",
+                        "401",
+                    ]
+                ):
                     logger.error(
-                        "Authentication error fetching Coinbase spot balance. "
+                        "Authentication error fetching Coinbase account balances. "
                         "Check API credentials (api_key, api_secret, private_key_path) in config."
                     )
                     from ..exceptions import TradingError
+
                     raise TradingError(f"Coinbase authentication failed: {e}")
 
-            # Validate we got at least some balance
+                # Fallback to futures buying power if accounts call failed
+                if futures_buying_power > 0:
+                    balances["FUTURES_USD"] = futures_buying_power
+
             if not balances:
                 logger.warning(
                     "No Coinbase balances returned. This may indicate:\n"
@@ -1233,3 +1308,45 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 "status": "error",
                 "error": str(e),
             }
+
+    async def get_account_balance(self) -> Dict[str, float]:
+        """Async compatibility wrapper for legacy callers."""
+        return self.get_balance()
+
+    async def get_accounts(self) -> List[Dict[str, Any]]:
+        """Return Coinbase account records in a JSON-safe format."""
+        client = self._get_client()
+        accounts_response = client.get_accounts()
+        accounts = getattr(accounts_response, "accounts", None) or []
+
+        normalized: List[Dict[str, Any]] = []
+        for account in accounts:
+            currency = str(_get_attr_value(account, "currency", ""))
+            account_type = str(
+                _get_attr_value(account, "type", "")
+                or _get_attr_value(account, "account_type", "")
+            )
+            available_balance = _to_float_value(
+                _get_attr_value(account, "available_balance", 0)
+            )
+            hold_balance = _to_float_value(_get_attr_value(account, "hold", 0))
+
+            normalized.append(
+                {
+                    "uuid": _get_attr_value(account, "uuid", None),
+                    "currency": currency,
+                    "type": account_type,
+                    "available_balance": available_balance,
+                    "hold": hold_balance,
+                }
+            )
+
+        return normalized
+
+
+class CoinbasePlatform(CoinbaseAdvancedPlatform):
+    """Backward-compatible wrapper used by ad-hoc scripts/tests."""
+
+    def __init__(self, config: Dict[str, Any]):
+        credentials = config.get("platform_credentials", {}) if isinstance(config, dict) else {}
+        super().__init__(credentials, config if isinstance(config, dict) else None)

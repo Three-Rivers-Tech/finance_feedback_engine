@@ -99,9 +99,19 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         if hasattr(engine, "platform"):
             balance_info = engine.platform.get_balance()
             if balance_info:
-                health_data["portfolio_balance"] = balance_info.get(
-                    "total", balance_info.get("balance")
-                )
+                if isinstance(balance_info, dict):
+                    futures_usd = float(balance_info.get("FUTURES_USD", 0) or 0)
+                    futures_usdc = float(balance_info.get("FUTURES_USDC", 0) or 0)
+                    total_collateral = futures_usd + futures_usdc
+
+                    health_data["portfolio_balance"] = {
+                        "total": total_collateral if total_collateral > 0 else None,
+                        "coinbase_FUTURES_USD": futures_usd if futures_usd > 0 else None,
+                        "coinbase_FUTURES_USDC": futures_usdc if futures_usdc > 0 else None,
+                        "raw": balance_info,
+                    }
+                else:
+                    health_data["portfolio_balance"] = balance_info
             else:
                 logger.warning("Platform returned empty balance info")
                 health_data["portfolio_balance"] = None

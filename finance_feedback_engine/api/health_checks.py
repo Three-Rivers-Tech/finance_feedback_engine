@@ -323,7 +323,17 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
                 elif "balance" in balance_info:
                     portfolio_balance = balance_info["balance"]
                 else:
-                    portfolio_balance = _safe_json(balance_info)
+                    futures_usd = float(balance_info.get("FUTURES_USD", 0) or 0)
+                    futures_usdc = float(balance_info.get("FUTURES_USDC", 0) or 0)
+                    if futures_usd > 0 or futures_usdc > 0:
+                        portfolio_balance = {
+                            "total": futures_usd + futures_usdc,
+                            "coinbase_FUTURES_USD": futures_usd if futures_usd > 0 else None,
+                            "coinbase_FUTURES_USDC": futures_usdc if futures_usdc > 0 else None,
+                            "raw": _safe_json(balance_info),
+                        }
+                    else:
+                        portfolio_balance = _safe_json(balance_info)
             elif isinstance(balance_info, (int, float)):
                 portfolio_balance = balance_info
             else:
