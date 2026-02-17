@@ -3,7 +3,7 @@
 **Sprint:** Feb 17 – Mar 2, 2026  
 **Goal:** Deploy production-ready trading parameters with validated optimization infrastructure  
 **Board:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/issues  
-**Last Updated:** 2026-02-17 (THR-264 Optuna results logged)
+**Last Updated:** 2026-02-17 (THR-265 bidirectional momentum complete)
 
 ---
 
@@ -21,7 +21,7 @@ The optimization pipeline (THR-248) is the centerpiece: build curriculum learnin
 | # | GitHub Issue | Title | Status | Notes |
 |---|---|---|---|---|
 | 1 | #69 | [THR-264] Simple Momentum Strategy (BUY-only) | ✅ **DONE** | Optimized — fast=7, slow=100, Sharpe=4.31 (local fallback dataset) |
-| 2 | #70 | [THR-265] Bidirectional Trading Optimization (BUY + SHORT) | 🟡 Ready | THR-264 complete — unblocked |
+| 2 | #70 | [THR-265] Bidirectional Trading Optimization (BUY + SHORT) | ✅ **DONE** | LONG/SHORT/HOLD signal + BUY/SELL/HOLD engine shipped (fast=29, slow=45 defaults) |
 | 3 | #71 | [THR-266] Mixed Market Curriculum (Choppy/Sideways) | 🔒 Blocked | Blocked by THR-265 |
 | 4 | #68 | [THR-260] Build OptunaOptimizer Infrastructure | ✅ **DONE** | Already complete (pre-sprint) |
 | 5 | #66 | [THR-248] EPIC: Optimization Pipeline & Curriculum Learning | 🔄 In Progress | Phase 1 started tonight |
@@ -63,6 +63,32 @@ The optimization pipeline (THR-248) is the centerpiece: build curriculum learnin
 #### Phase 1 Status: **COMPLETE** — THR-265 (Bidirectional) is now unblocked.
 
 ---
+
+## 🌅 Feb 17, 2026 — THR-265 Bidirectional Momentum Complete ✅
+
+### THR-265 — Bidirectional Momentum (BUY + SHORT) ✅
+
+**Branch:** `sprint2/thR-265-bidirectional-momentum`
+
+**What was built:**
+- `MomentumSignal` upgraded from BUY-only to tri-state: `LONG` / `SHORT` / `HOLD`
+- Golden cross (fast EMA crosses above slow EMA) => `LONG`
+- Death cross (fast EMA crosses below slow EMA) => `SHORT`
+- `MomentumDecisionEngine` now maps:
+  - `LONG` => `BUY`
+  - `SHORT` => `SELL` (includes `position_type="SHORT"`, `position_size_multiplier=-1`)
+  - `HOLD` => `HOLD`
+- Default EMA params updated to Optuna best: `fast_period=29`, `slow_period=45`
+- Added decision-engine shim file:
+  - `finance_feedback_engine/decision_engine/momentum_decision_engine.py`
+
+**Validation:**
+- `tests/optimization/test_momentum_signal.py` => **15 passed**
+- Focused regression:
+  - `tests/optimization`
+  - `tests/backtesting`
+  - `tests/decision_engine`
+  - Result: **253 passed**
 
 ## 🌙 Feb 16–17, 2026 — Sprint Kickoff Completions
 
@@ -146,8 +172,8 @@ THR-248 Curriculum Learning Pipeline
 ├── Level 1 (THR-264) ✅ — BUY-only momentum on bull market
 │   └── MomentumSignal(fast=20, slow=50)
 │   └── MomentumDecisionEngine → Backtester → Optuna
-├── Level 2 (THR-265) 🔒 — BUY + SHORT bidirectional
-├── Level 3 (THR-266) 🔒 — Mixed/choppy market
+├── Level 2 (THR-265) ✅ — BUY + SHORT bidirectional
+├── Level 3 (THR-266) 🟡 — Mixed/choppy market (unblocked)
 ├── Level 4 (THR-267) 📋 — Full market cycle
 └── Level 5 (THR-268) 📋 — Production deployment
 ```
