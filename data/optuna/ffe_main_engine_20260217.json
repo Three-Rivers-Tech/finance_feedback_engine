@@ -1,0 +1,19 @@
+{
+  "run_date": "2026-02-17",
+  "asset_pair": "BTCUSD",
+  "date_range": "2023-01-01 to 2023-12-31",
+  "n_trials": 100,
+  "baseline_sharpe": 1.9290841480923429,
+  "best_sharpe": 6.468682861010784,
+  "improvement_vs_baseline": 4.5395987129184405,
+  "best_params": {
+    "risk_per_trade": 0.0402289620713378,
+    "stop_loss_percentage": 0.0418722903729898,
+    "take_profit_percentage": 0.0358921111551528,
+    "agent.asset_parameters.BTCUSD.stop_loss_pct": 4.1872,
+    "agent.asset_parameters.BTCUSD.take_profit_pct": 3.5892,
+    "agent.asset_parameters.BTCUSD.position_size_pct": 4.0229
+  },
+  "source": "optuna_results_btcusd.csv",
+  "notes": "Direct engine optimization attempt on 2026-02-17 blocked by backtester/decision-engine runtime errors (semantic memory tuple bug and BacktestEngine get_portfolio_breakdown missing). Used existing completed Optuna study results from repo (100 trials)."
+}
