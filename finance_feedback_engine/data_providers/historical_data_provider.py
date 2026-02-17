@@ -9,6 +9,7 @@ import pandas as pd
 from ..persistence.timeseries_data_store import TimeSeriesDataStore
 from ..utils.financial_data_validator import FinancialDataValidator
 from .alpha_vantage_provider import AlphaVantageProvider
+from .coinbase_data import CoinbaseDataProvider
 from .oanda_data import OandaDataProvider
 
 logger = logging.getLogger(__name__)
@@ -50,11 +51,14 @@ class HistoricalDataProvider:
         api_key: str,
         cache_dir: Optional[Union[str, Path]] = None,
         oanda_credentials: Optional[dict] = None,
+        coinbase_credentials: Optional[dict] = None,
     ):
         self.api_key = api_key
         self.cache_dir = Path(cache_dir) if cache_dir else Path("data/historical_cache")
         self.oanda_credentials = oanda_credentials
+        self.coinbase_credentials = coinbase_credentials
         self._oanda_provider = None
+        self._coinbase_provider = None
         try:
             if self.cache_dir is not None:
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +95,15 @@ class HistoricalDataProvider:
         base, quote = pair[:3], pair[3:6]
         return base in fiat and quote in fiat
 
+    @staticmethod
+    def _is_crypto_pair(asset_pair: str) -> bool:
+        """Return True when asset pair appears to be crypto (e.g., BTCUSD, ETH-USD)."""
+        pair = asset_pair.upper().replace("_", "").replace("-", "").replace("/", "")
+        crypto_symbols = [
+            "BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK", "AVAX", "XRP", "LTC",
+        ]
+        return any(pair.startswith(sym) for sym in crypto_symbols)
+
     def _get_oanda_provider(self) -> Optional[OandaDataProvider]:
         """Lazily initialize Oanda provider from explicit credentials or env vars."""
         if self._oanda_provider is not None:
@@ -116,6 +129,24 @@ class HistoricalDataProvider:
 
         self._oanda_provider = OandaDataProvider(credentials=creds)
         return self._oanda_provider
+
+    def _get_coinbase_provider(self) -> Optional[CoinbaseDataProvider]:
+        """Lazily initialize Coinbase provider from explicit credentials or env vars."""
+        if self._coinbase_provider is not None:
+            return self._coinbase_provider
+
+        creds = dict(self.coinbase_credentials or {})
+        if not creds:
+            import os
+
+            api_key = os.getenv("COINBASE_API_KEY") or os.getenv("CB_ACCESS_KEY")
+            api_secret = os.getenv("COINBASE_API_SECRET") or os.getenv("CB_ACCESS_SECRET")
+            if api_key and api_secret:
+                creds = {"api_key": api_key, "api_secret": api_secret}
+
+        # Coinbase candles can work publicly, but prefer initialized creds for authenticated access
+        self._coinbase_provider = CoinbaseDataProvider(credentials=creds)
+        return self._coinbase_provider
 
     def _fetch_raw_data(
         self,
@@ -182,8 +213,25 @@ class HistoricalDataProvider:
 
         candles: list = []
 
+        # Crypto candles should come from Coinbase (primary source)
+        if self._is_crypto_pair(asset_pair):
+            coinbase_provider = self._get_coinbase_provider()
+            if coinbase_provider is not None:
+                try:
+                    logger.info(f"Using Coinbase for crypto candles: {asset_pair}")
+                    candles = coinbase_provider.get_historical_candles(
+                        product_id=asset_pair,
+                        count=500,
+                        granularity=CoinbaseDataProvider.GRANULARITY_ENUMS.get(timeframe, "ONE_HOUR"),
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Coinbase historical candle fetch failed for {asset_pair}; "
+                        f"falling back to Alpha Vantage. Error: {e}"
+                    )
+
         # Forex candles should come from Oanda (primary source)
-        if self._is_forex_pair(asset_pair):
+        if not candles and self._is_forex_pair(asset_pair):
             oanda_provider = self._get_oanda_provider()
             if oanda_provider is not None:
                 try:
@@ -199,7 +247,7 @@ class HistoricalDataProvider:
                         f"falling back to Alpha Vantage. Error: {e}"
                     )
 
-        # Non-forex (crypto/macro) remains on Alpha Vantage, and acts as forex fallback
+        # Fallback and macro/sentiment/general coverage: Alpha Vantage
         if not candles:
             provider = AlphaVantageProvider(api_key=self.api_key)
             try:

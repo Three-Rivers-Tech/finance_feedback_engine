@@ -1,8 +1,13 @@
 """Coinbase data provider for historical candle data across multiple timeframes."""
 
+import base64
+import hashlib
+import hmac
 import logging
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from ..utils.rate_limiter import RateLimiter
@@ -42,6 +47,21 @@ class CoinbaseDataProvider:
         "ONE_HOUR": 3600,
         "FOUR_HOUR": 14400,
         "ONE_DAY": 86400,
+    }
+
+    GRANULARITY_ENUMS = {
+        "1m": "ONE_MINUTE",
+        "5m": "FIVE_MINUTE",
+        "15m": "FIFTEEN_MINUTE",
+        "1h": "ONE_HOUR",
+        "4h": "FOUR_HOUR",
+        "1d": "ONE_DAY",
+        "ONE_MINUTE": "ONE_MINUTE",
+        "FIVE_MINUTE": "FIVE_MINUTE",
+        "FIFTEEN_MINUTE": "FIFTEEN_MINUTE",
+        "ONE_HOUR": "ONE_HOUR",
+        "FOUR_HOUR": "FOUR_HOUR",
+        "ONE_DAY": "ONE_DAY",
     }
 
     def __init__(
@@ -217,6 +237,121 @@ class CoinbaseDataProvider:
         # Sort by timestamp (oldest first)
         candles.sort(key=lambda x: x["timestamp"])
 
+        return candles
+
+    def _build_auth_headers(self, method: str, request_path: str, query_string: str = "") -> Dict[str, str]:
+        """Build Coinbase Advanced Trade HMAC auth headers when credentials are present."""
+        api_key = self.credentials.get("api_key") or self.credentials.get("CB_ACCESS_KEY")
+        api_secret = self.credentials.get("api_secret") or self.credentials.get("CB_ACCESS_SECRET")
+        if not api_key or not api_secret:
+            return {}
+
+        timestamp = str(int(time.time()))
+        message = f"{timestamp}{method.upper()}{request_path}{query_string}"
+        try:
+            secret_bytes = base64.b64decode(api_secret)
+        except Exception:
+            secret_bytes = api_secret.encode("utf-8")
+
+        signature = base64.b64encode(
+            hmac.new(secret_bytes, message.encode("utf-8"), hashlib.sha256).digest()
+        ).decode("utf-8")
+
+        return {
+            "CB-ACCESS-KEY": api_key,
+            "CB-ACCESS-SIGN": signature,
+            "CB-ACCESS-TIMESTAMP": timestamp,
+        }
+
+    def get_historical_candles(
+        self, product_id: str, count: int = 500, granularity: str = "ONE_HOUR"
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch historical candles in Coinbase Advanced Trade format.
+
+        Args:
+            product_id: Coinbase product (e.g., BTC-USD, ETH-USD)
+            count: Number of candles to fetch
+            granularity: Coinbase granularity enum (e.g., ONE_HOUR)
+
+        Returns:
+            List of OHLCV dicts: date, open, high, low, close, volume
+        """
+        import requests
+
+        normalized_product = self._normalize_asset_pair(product_id)
+        granularity_enum = self.GRANULARITY_ENUMS.get(granularity, granularity)
+        granularity_seconds = self.GRANULARITIES.get(granularity_enum)
+        if not granularity_seconds:
+            raise ValueError(f"Unsupported granularity: {granularity}")
+
+        end_ts = int(time.time())
+        start_ts = end_ts - (granularity_seconds * max(1, count))
+
+        payload: Dict[str, Any] = {}
+
+        # Prefer official Coinbase SDK with credentials when available.
+        api_key = self.credentials.get("api_key") or self.credentials.get("CB_ACCESS_KEY")
+        api_secret = self.credentials.get("api_secret") or self.credentials.get("CB_ACCESS_SECRET")
+        if api_key and api_secret:
+            try:
+                from coinbase.rest import RESTClient
+
+                use_sandbox = bool(self.credentials.get("use_sandbox", False))
+                base_url = "api-sandbox.coinbase.com" if use_sandbox else "api.coinbase.com"
+                client = RESTClient(api_key=api_key, api_secret=api_secret, base_url=base_url)
+                sdk_response = client.get_candles(
+                    product_id=normalized_product,
+                    start=str(start_ts),
+                    end=str(end_ts),
+                    granularity=granularity_enum,
+                )
+                payload = sdk_response if isinstance(sdk_response, dict) else sdk_response.to_dict()
+            except Exception as sdk_error:
+                logger.warning(
+                    "Coinbase SDK candle fetch failed for %s (%s). Falling back to direct API request.",
+                    normalized_product,
+                    sdk_error,
+                )
+
+        if not payload:
+            request_path = f"/api/v3/brokerage/products/{normalized_product}/candles"
+            params = {
+                "start": start_ts,
+                "end": end_ts,
+                "granularity": granularity_enum,
+            }
+            query_string = f"?{urlencode(params)}"
+
+            headers = self._build_auth_headers("GET", request_path, query_string)
+
+            self.rate_limiter.wait_for_token()
+            response = self.circuit_breaker.call_sync(
+                requests.get,
+                f"{self.BASE_URL}{request_path}",
+                params=params,
+                headers=headers or None,
+                timeout=10,
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        candles = []
+        for candle in payload.get("candles", []):
+            ts = int(candle.get("start", 0))
+            date = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            candles.append(
+                {
+                    "date": date,
+                    "open": float(candle.get("open", 0)),
+                    "high": float(candle.get("high", 0)),
+                    "low": float(candle.get("low", 0)),
+                    "close": float(candle.get("close", 0)),
+                    "volume": float(candle.get("volume", 0)),
+                }
+            )
+
+        candles.sort(key=lambda x: x["date"])
         return candles
 
     def get_latest_price(self, asset_pair: str) -> float:
