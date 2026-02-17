@@ -334,6 +334,99 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         normalized = rounded_size.normalize()
         return format(normalized, "f")
 
+    @staticmethod
+    def _extract_base_quote(asset_pair: str) -> tuple[str, str]:
+        """Extract base/quote from normalized product id."""
+        normalized = str(asset_pair or "").strip().upper().replace("/", "-")
+        parts = [p for p in normalized.split("-") if p]
+        if len(parts) >= 2:
+            return parts[0], parts[1]
+        return "", ""
+
+    def _is_futures_product(self, decision: Dict[str, Any], product: Any) -> bool:
+        """Decide whether order sizing must use futures-style base/contract sizing."""
+        asset_pair = str(decision.get("asset_pair", ""))
+        base, quote = self._extract_base_quote(asset_pair)
+
+        # Explicit routing hints from decision payload (if present)
+        venue_hint = str(
+            decision.get("market_type")
+            or decision.get("instrument_type")
+            or decision.get("execution_venue")
+            or ""
+        ).upper()
+        if any(tag in venue_hint for tag in ("FUTURE", "PERP")):
+            return True
+
+        # Coinbase product metadata hints
+        product_type = str(self._get_product_field(product, "product_type", "")).upper()
+        if any(tag in product_type for tag in ("FUTURE", "PERP")):
+            return True
+        if self._get_product_field(product, "future_product_details", None) is not None:
+            return True
+
+        # Strategy-level default: BTC/ETH USD rails are futures in this project.
+        return base in {"BTC", "ETH"} and quote in {"USD", "USDC"}
+
+    def _build_futures_base_size(
+        self,
+        decision: Dict[str, Any],
+        product: Any,
+        requested_size_usd_decimal: Decimal,
+    ) -> str:
+        """Compute conservative futures-compatible base size (micro/contract style)."""
+
+        # Contract-size metadata (default to 1 contract == 1 base unit when missing)
+        contract_multiplier = self._coerce_decimal_or_default(
+            self._get_product_field(product, "contract_size", "1"),
+            "1",
+            "contract_size",
+        )
+        price_decimal = self._to_decimal(
+            self._get_product_field(product, "price", 0),
+            "product price",
+        )
+
+        base_increment = self._coerce_decimal_or_default(
+            self._get_product_field(product, "base_increment", "1"),
+            "1",
+            "base_increment",
+        )
+        base_min_size = self._coerce_optional_decimal(
+            self._get_product_field(product, "base_min_size", None),
+            "base_min_size",
+        )
+
+        # Micro-start policy for BTC/ETH futures: begin at 1 contract-equivalent.
+        target_base_size = Decimal("1")
+        if base_min_size is not None and target_base_size < base_min_size:
+            target_base_size = base_min_size
+
+        rounded_base = self._round_down_to_increment(target_base_size, base_increment)
+        if rounded_base <= 0:
+            rounded_base = base_increment
+
+        if base_min_size is not None and rounded_base < base_min_size:
+            rounded_base = base_min_size
+
+        # Conservative notional cap from decision budget to avoid oversizing.
+        per_contract_notional = price_decimal * contract_multiplier
+        if per_contract_notional > 0 and requested_size_usd_decimal > 0:
+            notional_contracts = self._round_down_to_increment(
+                requested_size_usd_decimal / per_contract_notional,
+                base_increment,
+            )
+            if notional_contracts > 0:
+                rounded_base = min(rounded_base, notional_contracts)
+
+        if rounded_base <= 0:
+            raise ValueError(
+                "Futures micro-size computed to 0 after applying increments/min constraints"
+            )
+
+        normalized = rounded_base.normalize()
+        return format(normalized, "f")
+
     def _inject_trace_headers_per_request(self) -> None:
         """
         Inject trace headers (correlation ID, traceparent) before each request.
@@ -1237,6 +1330,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             )
             product_response = client.get_product(product_id=product_id)
 
+            use_futures_size_mode = self._is_futures_product(decision, product_response)
+
             quote_increment = self._coerce_decimal_or_default(
                 self._get_product_field(product_response, "quote_increment", "0.01"),
                 "0.01",
@@ -1247,7 +1342,32 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 "quote_min_size",
             )
 
-            if action == "BUY":
+            if use_futures_size_mode:
+                base_size = self._build_futures_base_size(
+                    decision=decision,
+                    product=product_response,
+                    requested_size_usd_decimal=requested_size_usd_decimal,
+                )
+                logger.info(
+                    "Using futures contract sizing for %s: base_size=%s (requested_usd=%s)",
+                    product_id,
+                    base_size,
+                    requested_size_usd_decimal,
+                )
+
+                if action == "BUY":
+                    order_result = client.market_order_buy(
+                        client_order_id=client_order_id,
+                        product_id=product_id,
+                        base_size=base_size,
+                    )
+                else:
+                    order_result = client.market_order_sell(
+                        client_order_id=client_order_id,
+                        product_id=product_id,
+                        base_size=base_size,
+                    )
+            elif action == "BUY":
                 quote_size = self._format_size_with_increment(
                     raw_size=requested_size_usd_decimal,
                     increment=quote_increment,
