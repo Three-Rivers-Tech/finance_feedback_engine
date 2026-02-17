@@ -240,18 +240,57 @@ class CoinbaseDataProvider:
         return candles
 
     def _build_auth_headers(self, method: str, request_path: str, query_string: str = "") -> Dict[str, str]:
-        """Build Coinbase Advanced Trade HMAC auth headers when credentials are present."""
+        """Build Coinbase auth headers (JWT for CDP Cloud keys, HMAC for legacy keys)."""
         api_key = self.credentials.get("api_key") or self.credentials.get("CB_ACCESS_KEY")
         api_secret = self.credentials.get("api_secret") or self.credentials.get("CB_ACCESS_SECRET")
         if not api_key or not api_secret:
             return {}
 
+        # Coinbase Cloud (CDP) keys use JWT auth (key format: organizations/.../apiKeys/...).
+        if str(api_key).startswith("organizations/"):
+            try:
+                import jwt
+                from cryptography.hazmat.primitives import serialization
+                import secrets
+            except ImportError as exc:
+                raise RuntimeError(
+                    "PyJWT and cryptography are required for Coinbase Cloud key authentication"
+                ) from exc
+
+            now = int(time.time())
+            payload = {
+                "sub": api_key,
+                "iss": "cdp",
+                "nbf": now,
+                "exp": now + 120,
+                "uri": f"{method.upper()} api.coinbase.com{request_path}",
+            }
+
+            secret = str(api_secret).strip()
+            if "\\n" in secret:
+                secret = secret.replace("\\n", "\n")
+
+            private_key = serialization.load_pem_private_key(
+                secret.encode("utf-8"), password=None
+            )
+            token = jwt.encode(
+                payload,
+                private_key,
+                algorithm="ES256",
+                headers={"kid": api_key, "nonce": secrets.token_hex()},
+            )
+            return {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }
+
+        # Legacy Coinbase keys use HMAC headers.
         timestamp = str(int(time.time()))
         message = f"{timestamp}{method.upper()}{request_path}{query_string}"
         try:
             secret_bytes = base64.b64decode(api_secret)
         except Exception:
-            secret_bytes = api_secret.encode("utf-8")
+            secret_bytes = str(api_secret).encode("utf-8")
 
         signature = base64.b64encode(
             hmac.new(secret_bytes, message.encode("utf-8"), hashlib.sha256).digest()
