@@ -125,14 +125,11 @@ class TestExitPriceRecordingFix:
 
     @pytest.mark.integration
     @pytest.mark.critical
-    def test_fallback_to_entry_price_on_provider_failure(
+    def test_provider_failure_without_last_price_skips_close_artifact(
         self, trade_outcome_recorder, mock_unified_provider
     ):
         """
-        Test fallback to entry price when provider fails.
-        
-        The fix includes graceful error handling - if the price provider
-        fails, it should fall back to entry price (with warning logged).
+        Guardrail: when provider fails and no last_price exists, do not persist fabricated close.
         """
         # Setup - open position
         entry_time = datetime.now(timezone.utc) - timedelta(minutes=5)
@@ -156,23 +153,15 @@ class TestExitPriceRecordingFix:
         # Execute - close position (should not crash)
         outcomes = trade_outcome_recorder.update_positions([])
 
-        # Verify fallback to entry price
-        assert len(outcomes) == 1
-        outcome = outcomes[0]
-        
-        # Should fall back to entry price
-        assert Decimal(outcome["exit_price"]) == Decimal(outcome["entry_price"])
-        assert Decimal(outcome["exit_price"]) == Decimal("41000.00")
-        
-        # P&L should be zero (breakeven fallback)
-        assert Decimal(outcome["realized_pnl"]) == Decimal("0.00")
+        # Guardrail should skip outcome instead of writing fabricated entry==exit close
+        assert outcomes == []
 
     @pytest.mark.integration
     @pytest.mark.critical
-    def test_fallback_when_provider_returns_none(
+    def test_fallback_to_last_observed_price_when_provider_returns_none(
         self, trade_outcome_recorder, mock_unified_provider
     ):
-        """Test fallback when provider returns None or empty dict."""
+        """Fallback should use last observed market price and record provenance."""
         # Setup - open position
         entry_time = datetime.now(timezone.utc) - timedelta(minutes=5)
         open_positions = [
@@ -181,7 +170,7 @@ class TestExitPriceRecordingFix:
                 "side": "BUY",
                 "size": "1.0",
                 "entry_price": "2400.00",
-                "current_price": "2400.00",
+                "current_price": "2410.00",
                 "entry_time": entry_time.isoformat(),
             }
         ]
@@ -193,9 +182,11 @@ class TestExitPriceRecordingFix:
         # Execute - close position
         outcomes = trade_outcome_recorder.update_positions([])
 
-        # Verify fallback to entry price
+        # Verify fallback to last observed price + provenance
         assert len(outcomes) == 1
-        assert Decimal(outcomes[0]["exit_price"]) == Decimal("2400.00")
+        assert Decimal(outcomes[0]["exit_price"]) == Decimal("2410.00")
+        assert outcomes[0]["exit_price_source"] == "state:last_price"
+        assert Decimal(outcomes[0]["realized_pnl"]) == Decimal("10.00")
 
     @pytest.mark.integration
     @pytest.mark.critical
@@ -344,8 +335,8 @@ class TestExitPriceEdgeCases:
         assert realized_pnl == Decimal("5.00")
 
     @pytest.mark.integration
-    def test_recorder_without_unified_provider(self, temp_data_dir):
-        """Test recorder without unified_provider (backward compatibility)."""
+    def test_recorder_without_unified_provider_skips_when_only_entry_price_available(self, temp_data_dir):
+        """Without provider and without market move, recorder should skip fabricated flat close."""
         from finance_feedback_engine.monitoring.trade_outcome_recorder import (
             TradeOutcomeRecorder,
         )
@@ -374,10 +365,8 @@ class TestExitPriceEdgeCases:
         # Execute - close position
         outcomes = recorder.update_positions([])
 
-        # Verify fallback to entry price (backward compatible)
-        assert len(outcomes) == 1
-        assert Decimal(outcomes[0]["exit_price"]) == Decimal("41000.00")
-        assert Decimal(outcomes[0]["realized_pnl"]) == Decimal("0.00")
+        # Guardrail: no fabricated entry==exit persistence
+        assert outcomes == []
 
     @pytest.mark.integration
     def test_exit_price_with_price_slippage(

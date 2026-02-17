@@ -54,6 +54,10 @@ class TradeOutcomeRecorder:
         
         # Unified data provider for real-time exit prices (FFE Exit Price Fix)
         self.unified_provider = unified_provider
+
+        # Anomaly monitoring: alert on repeated flat closes (entry == exit)
+        self._consecutive_flat_closures = 0
+        self._flat_closure_alert_threshold = 3
     
     def _load_state(self) -> Dict[str, Dict[str, Any]]:
         """Load open positions state from disk."""
@@ -261,18 +265,21 @@ class TradeOutcomeRecorder:
         for pos_key in closed_keys:
             pos_data = self.open_positions[pos_key]
             
-            # Fetch actual exit price from UnifiedDataProvider (FFE Exit Price Fix)
+            # Fetch actual exit price from a provenance chain.
             # Do NOT fall back to entry_price; that creates false zero-P&L outcomes.
             exit_price: Optional[Decimal] = None
+            exit_price_source = "missing"
 
             if self.unified_provider:
                 try:
                     price_data = self.unified_provider.get_current_price(pos_data["product"])
                     if price_data and "price" in price_data and price_data["price"] is not None:
                         exit_price = Decimal(str(price_data["price"]))
+                        provider_name = price_data.get("provider", "unknown")
+                        exit_price_source = f"provider:{provider_name}"
                         logger.info(
                             f"Exit price for {pos_data['product']} from "
-                            f"{price_data.get('provider', 'unknown')}: {exit_price}"
+                            f"{provider_name}: {exit_price}"
                         )
                 except Exception as e:
                     logger.warning(
@@ -287,6 +294,7 @@ class TradeOutcomeRecorder:
                         parsed_last = Decimal(str(last_price))
                         if parsed_last > 0:
                             exit_price = parsed_last
+                            exit_price_source = "state:last_price"
                             logger.info(
                                 f"Using last observed price for {pos_data['product']} exit: {exit_price}"
                             )
@@ -300,11 +308,22 @@ class TradeOutcomeRecorder:
                 del self.open_positions[pos_key]
                 continue
 
+            entry_price = pos_data.get("entry_price")
+            if exit_price_source == "state:last_price" and entry_price is not None and exit_price == entry_price:
+                logger.warning(
+                    "Skipping closed position outcome for %s: fallback exit_price equals entry_price (%s)",
+                    pos_key,
+                    exit_price,
+                )
+                del self.open_positions[pos_key]
+                continue
+
             outcome = self._create_outcome(
                 trade_data=pos_data,
                 exit_time=now_utc,
                 exit_price=exit_price,
-                exit_size=pos_data["entry_size"]
+                exit_size=pos_data["entry_size"],
+                exit_price_source=exit_price_source,
             )
             
             if outcome:
@@ -325,7 +344,8 @@ class TradeOutcomeRecorder:
         trade_data: Dict[str, Any],
         exit_time: datetime,
         exit_price: Decimal,
-        exit_size: Decimal
+        exit_size: Decimal,
+        exit_price_source: str = "unknown",
     ) -> Optional[Dict[str, Any]]:
         """Create trade outcome record."""
         try:
@@ -366,6 +386,7 @@ class TradeOutcomeRecorder:
                 "entry_size": str(entry_size),
                 "exit_time": exit_time.isoformat(),
                 "exit_price": str(exit_price),
+                "exit_price_source": exit_price_source,
                 "exit_size": str(exit_size),
                 "realized_pnl": str(realized_pnl),
                 "fees": str(fees),
@@ -381,10 +402,78 @@ class TradeOutcomeRecorder:
         except Exception as e:
             logger.error(f"Failed to create outcome: {e}")
             return None
+
+    def _recompute_realized_pnl(self, outcome: Dict[str, Any]) -> Decimal:
+        """Recompute realized P&L from side/qty/prices/fees."""
+        side = str(outcome.get("side", "")).upper()
+        if side in ["BUY", "LONG"]:
+            direction = Decimal("1")
+        elif side in ["SELL", "SHORT"]:
+            direction = Decimal("-1")
+        else:
+            raise ValueError(f"Unknown side '{side}'")
+
+        entry_price = Decimal(str(outcome["entry_price"]))
+        exit_price = Decimal(str(outcome["exit_price"]))
+        size = Decimal(str(outcome.get("exit_size", outcome.get("entry_size", "0"))))
+        fees = Decimal(str(outcome.get("fees", "0")))
+
+        return (exit_price - entry_price) * size * direction - fees
+
+    def _validate_and_normalize_outcome(self, outcome: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate output fields and enforce canonical realized_pnl at write-time."""
+        computed = self._recompute_realized_pnl(outcome)
+        reported = Decimal(str(outcome.get("realized_pnl", "0")))
+        delta = abs(reported - computed)
+
+        # Always persist canonical value derived from trade primitives.
+        if delta > Decimal("0.00000001"):
+            logger.warning(
+                "Correcting realized_pnl before persistence for %s: reported=%s computed=%s",
+                outcome.get("trade_id") or outcome.get("order_id") or outcome.get("product", "unknown"),
+                reported,
+                computed,
+            )
+            outcome["realized_pnl"] = str(computed)
+
+        # Suspicious pattern: non-trivial move but zero P&L.
+        entry = Decimal(str(outcome["entry_price"]))
+        exit_p = Decimal(str(outcome["exit_price"]))
+        if abs(exit_p - entry) > Decimal("0.00000001") and Decimal(str(outcome["realized_pnl"])) == Decimal("0"):
+            logger.error(
+                "PnL anomaly persisted for %s: entry=%s exit=%s size=%s fees=%s",
+                outcome.get("product", "unknown"),
+                entry,
+                exit_p,
+                outcome.get("exit_size", outcome.get("entry_size", "0")),
+                outcome.get("fees", "0"),
+            )
+
+        return outcome
+
+    def _emit_flat_close_alert_if_needed(self, outcome: Dict[str, Any]) -> None:
+        """Emit alert log if entry==exit closes happen consecutively."""
+        entry = Decimal(str(outcome["entry_price"]))
+        exit_p = Decimal(str(outcome["exit_price"]))
+
+        if entry == exit_p:
+            self._consecutive_flat_closures += 1
+            if self._consecutive_flat_closures >= self._flat_closure_alert_threshold:
+                logger.error(
+                    "ALERT: detected %s consecutive flat closures (entry_price==exit_price). latest product=%s source=%s",
+                    self._consecutive_flat_closures,
+                    outcome.get("product", "unknown"),
+                    outcome.get("exit_price_source", "unknown"),
+                )
+        else:
+            self._consecutive_flat_closures = 0
     
     def _save_outcome(self, outcome: Dict[str, Any]) -> None:
         """Save outcome to JSONL file with file locking."""
         try:
+            outcome = self._validate_and_normalize_outcome(outcome)
+            self._emit_flat_close_alert_if_needed(outcome)
+
             # Use date-based file naming
             exit_dt = datetime.fromisoformat(outcome["exit_time"].replace("Z", "+00:00"))
             filename = f"{exit_dt.strftime('%Y-%m-%d')}.jsonl"
@@ -445,16 +534,19 @@ class TradeOutcomeRecorder:
             
             # Exit price must reflect close-time market/fill price. Do NOT silently
             # copy entry_price (that forces zero P&L and masks bugs).
+            exit_price_source = "order:explicit"
             if exit_price is None:
                 if self.unified_provider:
                     try:
                         live_price = self.unified_provider.get_current_price(asset_pair)
                         if live_price and live_price.get("price") is not None:
                             exit_price = Decimal(str(live_price["price"]))
+                            provider_name = live_price.get("provider", "unknown")
+                            exit_price_source = f"provider:{provider_name}"
                             logger.info(
                                 "record_order_outcome: fetched live exit price for %s from %s: %s",
                                 asset_pair,
-                                live_price.get("provider", "unknown"),
+                                provider_name,
                                 exit_price,
                             )
                     except Exception as e:
@@ -501,6 +593,7 @@ class TradeOutcomeRecorder:
                 "entry_size": str(size),
                 "exit_time": exit_time,
                 "exit_price": str(exit_price),
+                "exit_price_source": exit_price_source,
                 "exit_size": str(size),
                 "realized_pnl": str(realized_pnl),
                 "fees": str(fees),
