@@ -478,6 +478,9 @@ class ConfigValidator:
         self, config: Dict, config_path: str, result: ValidationResult
     ):
         """Check environment-specific validation rules"""
+        if not config:
+            return
+        
         # Check debug mode
         if not self.rules["allow_debug"]:
             # Check in decision_engine
@@ -516,6 +519,9 @@ class ConfigValidator:
         self, config: Dict, config_path: str, result: ValidationResult
     ):
         """Check configuration best practices"""
+        if not config:
+            return
+        
         # Check if API keys are using environment variables
         if "alpha_vantage_api_key" in config:
             api_key = config["alpha_vantage_api_key"]
@@ -559,6 +565,9 @@ class ConfigValidator:
         self, config: Dict, config_path: str, result: ValidationResult
     ):
         """Check logging configuration for production environments"""
+        if not config:
+            return
+        
         # Check if logging is configured for production
         if self.environment == "production":
             logging_config = config.get("logging", {})

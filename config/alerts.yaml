@@ -1,0 +1,104 @@
+# FFE Trading Alert Configuration
+# Production-grade alert thresholds for live trading monitoring
+
+# Alert delivery channels
+channels:
+  telegram:
+    enabled: true
+    # Telegram config loaded from environment variables:
+    # TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+  
+  email:
+    enabled: false  # TODO: Configure SMTP settings
+    recipients: []
+
+# P&L Alerts
+pnl_alerts:
+  # Maximum drawdown threshold (percentage)
+  max_drawdown_percent: 5.0
+  enabled: true
+  severity: critical
+  message: "ALERT: Drawdown exceeded {threshold}% (current: {current}%)"
+
+  # Daily loss limit (absolute value in USD)
+  daily_loss_limit: 500.0
+  enabled: true
+  severity: high
+  message: "ALERT: Daily loss limit reached ${limit} (current: ${current})"
+
+# Performance Alerts
+performance_alerts:
+  # Minimum win rate threshold (percentage)
+  min_win_rate_percent: 45.0
+  enabled: true
+  severity: medium
+  message: "WARNING: Win rate below {threshold}% (current: {current}%)"
+  # Only trigger after minimum number of trades
+  min_trades_threshold: 10
+
+  # Profit factor threshold
+  min_profit_factor: 1.2
+  enabled: true
+  severity: medium
+  message: "WARNING: Profit factor below {threshold} (current: {current})"
+  min_trades_threshold: 10
+
+# Position Management Alerts
+position_alerts:
+  # Position size violation (percentage of account balance)
+  max_position_size_percent: 10.0
+  enabled: true
+  severity: high
+  message: "ALERT: Position size exceeds {threshold}% of account (position: {current}%)"
+
+  # Maximum number of concurrent positions
+  max_positions: 5
+  enabled: true
+  severity: medium
+  message: "WARNING: Position count limit reached (max: {max_positions})"
+
+  # Position age threshold (hours)
+  max_position_age_hours: 24
+  enabled: true
+  severity: low
+  message: "INFO: Position {product} open for {hours}h without action"
+
+  # Total exposure limit (percentage of account)
+  max_total_exposure_percent: 30.0
+  enabled: true
+  severity: high
+  message: "ALERT: Total exposure exceeds {threshold}% of account (current: {current}%)"
+
+# System Health Alerts
+system_alerts:
+  # Trading platform connectivity
+  platform_disconnect:
+    enabled: true
+    severity: critical
+    message: "CRITICAL: Trading platform disconnected"
+
+  # Data feed health
+  stale_data_minutes: 5
+  enabled: true
+  severity: high
+  message: "ALERT: Market data stale (last update: {minutes}m ago)"
+
+  # Execution errors
+  execution_error_threshold: 3  # consecutive errors
+  enabled: true
+  severity: high
+  message: "ALERT: {count} consecutive execution errors"
+
+# Alert rate limiting (prevent spam)
+rate_limiting:
+  # Minimum time between duplicate alerts (seconds)
+  duplicate_window_seconds: 300  # 5 minutes
+  
+  # Maximum alerts per hour
+  max_alerts_per_hour: 20
+
+# Alert severity levels
+# critical: Immediate action required, trading should be paused
+# high: Important issue, needs attention soon
+# medium: Warning condition, monitor closely
+# low: Informational, no immediate action needed
