@@ -416,7 +416,8 @@ class TradeOutcomeRecorder:
             size: Position size
             fees: Transaction fees
             exit_time: Exit timestamp (defaults to now if order just closed)
-            exit_price: Exit price (defaults to entry_price if not known)
+            exit_price: Exit price at close time. If omitted, recorder tries live
+                market price via unified_provider; if unavailable, skips recording.
         
         Returns:
             Outcome dict or None if recording failed
@@ -426,9 +427,32 @@ class TradeOutcomeRecorder:
             if not exit_time:
                 exit_time = datetime.now(timezone.utc).isoformat()
             
-            # Default exit price to entry price (for now - will improve later)
-            if not exit_price:
-                exit_price = entry_price
+            # Exit price must reflect close-time market/fill price. Do NOT silently
+            # copy entry_price (that forces zero P&L and masks bugs).
+            if exit_price is None:
+                if self.unified_provider:
+                    try:
+                        live_price = self.unified_provider.get_current_price(asset_pair)
+                        if live_price and live_price.get("price") is not None:
+                            exit_price = Decimal(str(live_price["price"]))
+                            logger.info(
+                                "record_order_outcome: fetched live exit price for %s from %s: %s",
+                                asset_pair,
+                                live_price.get("provider", "unknown"),
+                                exit_price,
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            "record_order_outcome: failed to fetch live exit price for %s: %s",
+                            asset_pair,
+                            e,
+                        )
+
+            if exit_price is None:
+                logger.warning(
+                    "record_order_outcome called without exit_price and no live price available; skipping to avoid false zero-P&L outcome"
+                )
+                return None
             
             # Calculate P&L
             if side.upper() in ["BUY", "LONG"]:
