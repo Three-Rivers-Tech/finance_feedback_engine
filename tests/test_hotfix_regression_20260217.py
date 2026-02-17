@@ -187,6 +187,25 @@ class TestBalanceFallbackPath:
         result = any(float(v or 0) > 0 for v in balance.values())
         assert result is False, "None values should be treated as 0, triggering fallback"
 
+    def test_forex_balance_missing_oanda_keys_triggers_refresh(self):
+        """Forex sizing should refresh balances when only Coinbase-derived keys exist."""
+        from finance_feedback_engine.core import FinanceFeedbackEngine
+
+        engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+
+        # Positive balance exists, but only in Coinbase-style key
+        balance = {"FUTURES_USD": 807.79, "SPOT_USD": 0.0}
+        assert engine._should_refresh_balance_for_asset(balance, "EURUSD") is True
+
+    def test_forex_balance_with_oanda_key_does_not_trigger_refresh(self):
+        """Forex sizing should not refresh when Oanda-prefixed balance is present."""
+        from finance_feedback_engine.core import FinanceFeedbackEngine
+
+        engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+
+        balance = {"oanda_USD": 167.64, "FUTURES_USD": 807.79}
+        assert engine._should_refresh_balance_for_asset(balance, "EURUSD") is False
+
 
 # ---------------------------------------------------------------------------
 # 2. max_position_usd_dev default — commit 49430881 (+ bugfix in config_loader)
