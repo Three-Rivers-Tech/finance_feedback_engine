@@ -30,13 +30,14 @@ class TradeOutcomeRecorder:
     - Async: Fire-and-forget with background tasks (recommended)
     """
     
-    def __init__(self, data_dir: str = "data", use_async: bool = True):
+    def __init__(self, data_dir: str = "data", use_async: bool = True, unified_provider=None):
         """
         Initialize Trade Outcome Recorder.
         
         Args:
             data_dir: Directory for state and outcome files
             use_async: Enable async/fire-and-forget mode (THR-237)
+            unified_provider: UnifiedDataProvider instance for fetching real-time exit prices
         """
         self.data_dir = Path(data_dir)
         self.state_file = self.data_dir / "open_positions_state.json"
@@ -50,6 +51,9 @@ class TradeOutcomeRecorder:
         self.use_async = use_async
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="outcome-recorder")
         self._background_tasks: set = set()  # Track async tasks to prevent early GC
+        
+        # Unified data provider for real-time exit prices (FFE Exit Price Fix)
+        self.unified_provider = unified_provider
     
     def _load_state(self) -> Dict[str, Dict[str, Any]]:
         """Load open positions state from disk."""
@@ -252,12 +256,38 @@ class TradeOutcomeRecorder:
         for pos_key in closed_keys:
             pos_data = self.open_positions[pos_key]
             
-            # We don't have the exact exit price, so we'll need to get it from the last snapshot
-            # For now, mark as closed with entry price (will be improved in next iteration)
+            # Fetch actual exit price from UnifiedDataProvider (FFE Exit Price Fix)
+            exit_price = pos_data["entry_price"]  # Fallback to entry price
+            
+            if self.unified_provider:
+                try:
+                    price_data = self.unified_provider.get_current_price(pos_data["product"])
+                    if price_data and "price" in price_data:
+                        exit_price = Decimal(str(price_data["price"]))
+                        logger.info(
+                            f"Exit price for {pos_data['product']} from "
+                            f"{price_data.get('provider', 'unknown')}: {exit_price}"
+                        )
+                    else:
+                        logger.warning(
+                            f"No price data returned for {pos_data['product']}, "
+                            f"using entry price as fallback"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to fetch exit price for {pos_data['product']}, "
+                        f"using entry price as fallback: {e}"
+                    )
+            else:
+                logger.debug(
+                    f"No unified_provider available, using entry price as exit price "
+                    f"for {pos_data['product']}"
+                )
+            
             outcome = self._create_outcome(
                 trade_data=pos_data,
                 exit_time=now_utc,
-                exit_price=pos_data["entry_price"],  # Placeholder - will improve
+                exit_price=exit_price,  # Real market price or fallback
                 exit_size=pos_data["entry_size"]
             )
             
