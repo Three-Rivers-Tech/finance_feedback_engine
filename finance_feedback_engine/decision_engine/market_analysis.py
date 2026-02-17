@@ -334,6 +334,13 @@ class MarketAnalysisContext:
             if i >= 3:  # Only include top 3 most similar memories
                 break
 
+            # VectorMemory returns tuples: (id, similarity_score, metadata)
+            # while some callers may provide dicts directly.
+            if isinstance(memory, tuple):
+                memory = memory[2] if len(memory) >= 3 and isinstance(memory[2], dict) else {}
+            elif not isinstance(memory, dict):
+                memory = {}
+
             # Extract key fields from memory with truncation
             asset = memory.get("asset_pair", "N/A")
             action = memory.get("action", "N/A")

@@ -246,6 +246,15 @@ class Backtester:
     # - backtesting.fee_model: "simple" or "tiered"
     # ============================================
 
+    def get_portfolio_breakdown(self) -> Dict[str, Any]:
+        """Return current portfolio breakdown from platform when available."""
+        if self.platform and hasattr(self.platform, "get_portfolio_breakdown"):
+            try:
+                return self.platform.get_portfolio_breakdown()
+            except Exception:
+                logger.debug("Failed to fetch portfolio breakdown from platform", exc_info=True)
+        return {"holdings": [], "total_value_usd": float(getattr(self, "current_balance", self.initial_balance))}
+
     def _is_enhanced_slippage_enabled(self) -> bool:
         """
         Check if enhanced slippage model is enabled via feature flag.
@@ -1146,6 +1155,12 @@ class Backtester:
                         self.memory_engine.record_outcome(outcome)
                     except Exception as e:
                         logger.debug(f"Error recording outcome to memory: {e}")
+
+            def get_portfolio_breakdown(self):
+                """Expose portfolio breakdown using mock platform interface."""
+                if hasattr(self.mock_platform, "get_portfolio_breakdown"):
+                    return self.mock_platform.get_portfolio_breakdown()
+                return {"holdings": [], "total_value_usd": 0.0}
 
             def validate_agent_readiness(self):
                 """
