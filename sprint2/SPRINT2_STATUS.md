@@ -22,7 +22,7 @@ The optimization pipeline (THR-248) is the centerpiece: build curriculum learnin
 |---|---|---|---|---|
 | 1 | #69 | [THR-264] Simple Momentum Strategy (BUY-only) | ✅ **DONE** | Optimized — fast=7, slow=100, Sharpe=4.31 (local fallback dataset) |
 | 2 | #70 | [THR-265] Bidirectional Trading Optimization (BUY + SHORT) | ✅ **DONE** | LONG/SHORT/HOLD signal + BUY/SELL/HOLD engine shipped (fast=29, slow=45 defaults) |
-| 3 | #71 | [THR-266] Mixed Market Curriculum (Choppy/Sideways) | 🔒 Blocked | Blocked by THR-265 |
+| 3 | #71 | [THR-266] Portfolio Backtesting with Long + Short | ✅ **DONE** | PortfolioBacktester supports simultaneous LONG/SHORT + 2:1 short leverage guardrails; Backtester supports allow_shorts routing |
 | 4 | #68 | [THR-260] Build OptunaOptimizer Infrastructure | ✅ **DONE** | Already complete (pre-sprint) |
 | 5 | #66 | [THR-248] EPIC: Optimization Pipeline & Curriculum Learning | 🔄 In Progress | Phase 1 started tonight |
 
