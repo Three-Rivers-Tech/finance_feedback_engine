@@ -212,9 +212,18 @@ class CoinbaseDataProvider:
         # Coinbase public candles endpoint
         url = f"{self.BASE_URL}/api/v3/brokerage/products/{product_id}/candles"
 
-        params = {"start": start, "end": end, "granularity": granularity}
+        # Coinbase v3 API requires named granularity, not numeric seconds
+        GRANULARITY_NAMES = {
+            60: "ONE_MINUTE", 300: "FIVE_MINUTE", 900: "FIFTEEN_MINUTE",
+            1800: "THIRTY_MINUTE", 3600: "ONE_HOUR", 21600: "SIX_HOUR", 86400: "ONE_DAY",
+        }
+        granularity_name = GRANULARITY_NAMES.get(int(granularity), str(granularity))
+        params = {"start": start, "end": end, "granularity": granularity_name}
 
-        response = requests.get(url, params=params, timeout=10)
+        # Build auth headers (JWT for Cloud keys, HMAC for legacy keys)
+        request_path = f"/api/v3/brokerage/products/{product_id}/candles"
+        auth_headers = self._build_auth_headers("GET", request_path)
+        response = requests.get(url, params=params, headers=auth_headers or None, timeout=10)
         response.raise_for_status()
 
         data = response.json()
