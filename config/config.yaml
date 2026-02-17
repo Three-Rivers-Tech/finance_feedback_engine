@@ -784,13 +784,13 @@ agent:
       position_size_pct: 2.3
       timeframe: M5
     BTC_USD:
-      stop_loss_pct: 5.0      # Validated: 84.44% WR, 2.27 PF
-      take_profit_pct: 1.2
+      stop_loss_pct: 1.5      # Fixed: corrected inverted R:R (was 5.0 SL / 1.2 TP → now 1:2 R:R)
+      take_profit_pct: 3.0
       position_size_pct: 2.8
       timeframe: M5
     BTCUSD:
-      stop_loss_pct: 5.0      # Alias for BTC_USD
-      take_profit_pct: 1.2
+      stop_loss_pct: 1.5      # Alias for BTC_USD (fixed inverted R:R)
+      take_profit_pct: 3.0
       position_size_pct: 2.8
       timeframe: M5
     ETH_USD:
