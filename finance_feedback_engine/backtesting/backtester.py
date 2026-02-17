@@ -891,6 +891,7 @@ class Backtester:
         end_date: Union[str, datetime],
         decision_engine: DecisionEngine,
         data_override: Optional["pd.DataFrame"] = None,
+        allow_shorts: bool = True,
     ) -> Dict[str, Any]:
         """
         Runs a backtest for a given asset, date range, and strategy using TradingLoopAgent.
@@ -1009,6 +1010,7 @@ class Backtester:
                 mock_platform,
                 asset_pair,
                 memory_engine,
+                allow_shorts,
             ):
                 self.backtester = backtester
                 self.decision_engine = decision_engine
@@ -1016,6 +1018,7 @@ class Backtester:
                 self.mock_platform = mock_platform
                 self.asset_pair = asset_pair
                 self.memory_engine = memory_engine
+                self.allow_shorts = allow_shorts
                 self._decisions = {}  # Store decisions by ID
                 # Order type policy for backtests
                 bt_cfg = backtester.config or {}
@@ -1094,6 +1097,13 @@ class Backtester:
 
                 # Update decision with calculated position size if decision is valid
                 if decision:
+                    # Normalize LONG/SHORT semantic actions into BUY/SELL for mock platform
+                    action = str(decision.get("action", "")).upper()
+                    if action == "LONG":
+                        decision["action"] = "BUY"
+                    elif action == "SHORT":
+                        decision["action"] = "SELL" if self.allow_shorts else "HOLD"
+
                     # Modify the decision with position sizing if it contains position info
                     if "position_size" not in decision:
                         decision["position_size"] = position_size
@@ -1180,6 +1190,7 @@ class Backtester:
             mock_platform,
             asset_pair_std,
             self.memory_engine,
+            allow_shorts,
         )  # Instantiate TradingLoopAgent
         agent = TradingLoopAgent(
             config=agent_config,
