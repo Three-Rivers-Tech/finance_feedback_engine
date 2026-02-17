@@ -71,19 +71,17 @@ class TestExitPriceFix:
             # ROI should be non-zero
             assert Decimal(outcome["roi_percent"]) != Decimal("0")
     
-    def test_exit_price_fallback_on_provider_error(self):
-        """Verify fallback to entry price when provider fails."""
-        # Create mock unified provider that raises an exception
+    def test_exit_price_skips_outcome_on_provider_error_without_last_price(self):
+        """Verify we skip outcome instead of forcing entry==exit when provider fails."""
         mock_provider = MagicMock()
         mock_provider.get_current_price.side_effect = Exception("Provider unavailable")
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             recorder = TradeOutcomeRecorder(
                 data_dir=temp_dir,
                 unified_provider=mock_provider
             )
-            
-            # Simulate an open position
+
             recorder.open_positions = {
                 "BTC-USD_LONG": {
                     "trade_id": "test-trade-456",
@@ -94,32 +92,21 @@ class TestExitPriceFix:
                     "entry_size": Decimal("0.001"),
                 }
             }
-            
-            # Update with empty positions
+
             outcomes = recorder.update_positions([])
-            
-            # Verify fallback behavior
-            assert len(outcomes) == 1
-            outcome = outcomes[0]
-            
-            # Should fall back to entry price
-            assert outcome["exit_price"] == outcome["entry_price"]
-            assert outcome["exit_price"] == "69500.00"
-            
-            # P&L should be zero (fallback behavior)
-            assert Decimal(outcome["realized_pnl"]) == Decimal("0")
+            assert outcomes == []
     
-    def test_exit_price_fallback_on_no_price_data(self):
-        """Verify fallback when provider returns None or empty."""
+    def test_exit_price_uses_last_observed_price_when_provider_has_no_data(self):
+        """Verify fallback uses last observed price (not entry price) when provider returns None."""
         mock_provider = MagicMock()
         mock_provider.get_current_price.return_value = None
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             recorder = TradeOutcomeRecorder(
                 data_dir=temp_dir,
                 unified_provider=mock_provider
             )
-            
+
             recorder.open_positions = {
                 "ETH-USD_LONG": {
                     "trade_id": "test-trade-789",
@@ -128,27 +115,25 @@ class TestExitPriceFix:
                     "entry_time": "2026-02-16T20:00:00+00:00",
                     "entry_price": Decimal("3500.00"),
                     "entry_size": Decimal("0.1"),
+                    "last_price": Decimal("3515.00"),
                 }
             }
-            
+
             outcomes = recorder.update_positions([])
-            
+
             assert len(outcomes) == 1
             outcome = outcomes[0]
-            
-            # Should fall back to entry price
-            assert outcome["exit_price"] == "3500.00"
-            assert Decimal(outcome["realized_pnl"]) == Decimal("0")
+            assert outcome["exit_price"] == "3515.00"
+            assert Decimal(outcome["realized_pnl"]) > Decimal("0")
     
-    def test_exit_price_without_provider(self):
-        """Verify backward compatibility when no provider is passed."""
+    def test_exit_price_without_provider_skips_without_last_price(self):
+        """Verify no-provider path does not fabricate zero-P&L outcomes."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create recorder WITHOUT unified_provider
             recorder = TradeOutcomeRecorder(
                 data_dir=temp_dir,
                 unified_provider=None
             )
-            
+
             recorder.open_positions = {
                 "EUR_USD_LONG": {
                     "trade_id": "test-trade-999",
@@ -159,15 +144,9 @@ class TestExitPriceFix:
                     "entry_size": Decimal("1000"),
                 }
             }
-            
+
             outcomes = recorder.update_positions([])
-            
-            assert len(outcomes) == 1
-            outcome = outcomes[0]
-            
-            # Should use entry price (backward compatible behavior)
-            assert outcome["exit_price"] == "1.19111"
-            assert Decimal(outcome["realized_pnl"]) == Decimal("0")
+            assert outcomes == []
     
     def test_exit_price_recorded_to_file(self):
         """Verify outcome with real exit price is persisted to JSONL."""

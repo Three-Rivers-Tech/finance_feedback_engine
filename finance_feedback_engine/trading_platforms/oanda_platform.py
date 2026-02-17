@@ -668,6 +668,14 @@ class OandaPlatform(BaseTradingPlatform):
             except Exception as e:
                 logger.warning("Could not fetch live pricing for instruments: %s", e)
 
+            # Populate live current_price on positions (used by /bot/positions and
+            # downstream monitoring). Keep 0.0 if pricing is unavailable.
+            for p in positions:
+                instr = p.get("instrument")
+                live_price = price_map.get(instr)
+                if live_price is not None:
+                    p["current_price"] = float(live_price)
+
             # Compute per-position notional (in quote currency) and convert
             # to account base currency (usually USD) using price_map.
             default_leverage = 50.0

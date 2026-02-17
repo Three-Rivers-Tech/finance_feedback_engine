@@ -245,10 +245,15 @@ class TradeOutcomeRecorder:
                     "entry_time": entry_time,
                     "entry_price": entry_price,
                     "entry_size": size,
+                    "last_price": current_price,
                 }
                 logger.info(f"New position opened: {pos_key} @ {entry_price}")
                 # Save state immediately when new position detected
                 self._save_state()
+            else:
+                # Keep most recent observed mark/current price for close-time fallback
+                if current_price > 0:
+                    self.open_positions[pos_key]["last_price"] = current_price
         
         # Detect closed positions (in state but not in current)
         closed_keys = set(self.open_positions.keys()) - current_keys
@@ -257,37 +262,48 @@ class TradeOutcomeRecorder:
             pos_data = self.open_positions[pos_key]
             
             # Fetch actual exit price from UnifiedDataProvider (FFE Exit Price Fix)
-            exit_price = pos_data["entry_price"]  # Fallback to entry price
-            
+            # Do NOT fall back to entry_price; that creates false zero-P&L outcomes.
+            exit_price: Optional[Decimal] = None
+
             if self.unified_provider:
                 try:
                     price_data = self.unified_provider.get_current_price(pos_data["product"])
-                    if price_data and "price" in price_data:
+                    if price_data and "price" in price_data and price_data["price"] is not None:
                         exit_price = Decimal(str(price_data["price"]))
                         logger.info(
                             f"Exit price for {pos_data['product']} from "
                             f"{price_data.get('provider', 'unknown')}: {exit_price}"
                         )
-                    else:
-                        logger.warning(
-                            f"No price data returned for {pos_data['product']}, "
-                            f"using entry price as fallback"
-                        )
                 except Exception as e:
                     logger.warning(
-                        f"Failed to fetch exit price for {pos_data['product']}, "
-                        f"using entry price as fallback: {e}"
+                        f"Failed to fetch exit price for {pos_data['product']}: {e}"
                     )
-            else:
-                logger.debug(
-                    f"No unified_provider available, using entry price as exit price "
-                    f"for {pos_data['product']}"
+
+            # Fallback to the last observed mark/current price if we have one
+            if exit_price is None:
+                last_price = pos_data.get("last_price")
+                try:
+                    if last_price is not None:
+                        parsed_last = Decimal(str(last_price))
+                        if parsed_last > 0:
+                            exit_price = parsed_last
+                            logger.info(
+                                f"Using last observed price for {pos_data['product']} exit: {exit_price}"
+                            )
+                except (InvalidOperation, ValueError, TypeError):
+                    pass
+
+            if exit_price is None:
+                logger.warning(
+                    f"Skipping closed position outcome for {pos_key}: no reliable exit price available"
                 )
-            
+                del self.open_positions[pos_key]
+                continue
+
             outcome = self._create_outcome(
                 trade_data=pos_data,
                 exit_time=now_utc,
-                exit_price=exit_price,  # Real market price or fallback
+                exit_price=exit_price,
                 exit_size=pos_data["entry_size"]
             )
             
