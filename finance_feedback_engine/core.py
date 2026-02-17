@@ -119,8 +119,46 @@ class FinanceFeedbackEngine:
         # against potentially stale Alpha Vantage data (THR-22 fix)
         from .data_providers.unified_data_provider import UnifiedDataProvider
 
-        coinbase_credentials = config.get("coinbase") or config.get("platform_credentials", {}).get("coinbase")
-        oanda_credentials = config.get("oanda") or config.get("platform_credentials", {}).get("oanda")
+        # Resolve provider credentials from multiple config layouts.
+        # This codebase supports both legacy flat config and newer nested layouts
+        # (providers/platforms sections). If we miss Oanda credentials here,
+        # UnifiedDataProvider cannot initialize Oanda and forex price lookups
+        # silently fall back to stale non-exchange data.
+        providers_cfg = config.get("providers", {}) if isinstance(config.get("providers"), dict) else {}
+        platform_creds_cfg = (
+            config.get("platform_credentials", {})
+            if isinstance(config.get("platform_credentials"), dict)
+            else {}
+        )
+
+        coinbase_credentials = (
+            config.get("coinbase")
+            or providers_cfg.get("coinbase", {}).get("credentials")
+            or platform_creds_cfg.get("coinbase")
+        )
+
+        oanda_credentials = (
+            config.get("oanda")
+            or providers_cfg.get("oanda", {}).get("credentials")
+            or platform_creds_cfg.get("oanda")
+        )
+
+        # Fallback: extract credentials from platforms list (name/credentials entries)
+        if not oanda_credentials or not isinstance(oanda_credentials, dict):
+            for platform_cfg in config.get("platforms", []) or []:
+                if isinstance(platform_cfg, dict) and str(platform_cfg.get("name", "")).lower() == "oanda":
+                    creds = platform_cfg.get("credentials")
+                    if isinstance(creds, dict):
+                        oanda_credentials = creds
+                        break
+
+        if not coinbase_credentials or not isinstance(coinbase_credentials, dict):
+            for platform_cfg in config.get("platforms", []) or []:
+                if isinstance(platform_cfg, dict) and str(platform_cfg.get("name", "")).lower() in {"coinbase", "coinbase_advanced"}:
+                    creds = platform_cfg.get("credentials")
+                    if isinstance(creds, dict):
+                        coinbase_credentials = creds
+                        break
 
         self.unified_provider = UnifiedDataProvider(
             alpha_vantage_api_key=api_key,
@@ -1104,6 +1142,19 @@ class FinanceFeedbackEngine:
         market_data = await self.data_provider.get_comprehensive_market_data(
             asset_pair, include_sentiment=include_sentiment, include_macro=include_macro
         )
+
+        # Live-forex freshness fix: override potentially stale historical close with
+        # real-time Oanda pricing when available.
+        try:
+            if self.unified_provider and self.unified_provider._is_forex(asset_pair):
+                live_price = self.unified_provider.get_current_price(asset_pair)
+                if live_price and live_price.get("price") is not None:
+                    market_data["close"] = float(live_price["price"])
+                    market_data["timestamp"] = live_price.get("timestamp")
+                    market_data["data_age_seconds"] = 0
+                    market_data["live_price_provider"] = live_price.get("provider", "oanda_pricing")
+        except Exception as _e:
+            logger.debug("Unable to overlay live forex price for %s: %s", asset_pair, _e)
 
         # Compare Alpha Vantage price with real-time platform data (THR-22 fix)
         # This validates data quality and detects price divergence
