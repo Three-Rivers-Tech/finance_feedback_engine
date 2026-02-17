@@ -74,31 +74,35 @@ class PlatformCredentials(BaseModel):
     @field_validator("api_key", "api_secret")
     @classmethod
     def validate_credentials(cls, v: Optional[str]) -> Optional[str]:
-        """Ensure credentials are not placeholder values.
-        
-        Checks for common placeholder patterns that indicate missing credentials.
-        Only validates when credentials are actually required (not in test/dev mode).
-        """
+        """Ensure credentials are not placeholder values."""
         if not v:
             return v
-        
+
         # Check for unsubstituted environment variable syntax
         if v.startswith("${") and v.endswith("}"):
             raise ValueError(
                 f"Environment variable not substituted: {v}. "
                 "Ensure .env file is loaded before config validation."
             )
-        
-        # Check for placeholder patterns (but only warn, don't block)
-        placeholder_patterns = ["YOUR_", "REPLACE_", "CHANGEME", "EXAMPLE_"]
-        if any(v.startswith(pattern) for pattern in placeholder_patterns):
-            import warnings
-            warnings.warn(
-                f"Credential appears to be a placeholder: {v[:20]}... "
-                "Set actual credentials in .env file or environment variables.",
-                UserWarning
+
+        # Reject common placeholder patterns
+        normalized = v.strip().upper()
+        placeholder_tokens = (
+            "YOUR_",
+            "REPLACE_",
+            "CHANGEME",
+            "EXAMPLE_",
+            "PLACEHOLDER",
+            "DUMMY",
+            "TEST_KEY",
+            "API_KEY_HERE",
+        )
+        if any(token in normalized for token in placeholder_tokens):
+            raise ValueError(
+                "Credential appears to be a placeholder. "
+                "Set actual credentials in .env file or environment variables."
             )
-        
+
         return v
 
     @field_validator("environment")

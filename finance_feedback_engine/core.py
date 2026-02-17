@@ -364,6 +364,12 @@ class FinanceFeedbackEngine:
         # Initialize decision engine
         self.decision_engine = DecisionEngine(config, self.data_provider)
 
+        # Backward-compatible alias used by trading loop and execution revalidation paths.
+        # DecisionEngine stores this as `position_sizing_calc`.
+        self.position_sizing_calculator = getattr(
+            self.decision_engine, "position_sizing_calc", None
+        )
+
         # Initialize persistence
         persistence_config = config.get("persistence", {})
         self.decision_store = DecisionStore(persistence_config)
