@@ -381,8 +381,11 @@ class FinanceFeedbackEngine:
         outcome_recording_enabled = config.get("trade_outcome_recording", {}).get("enabled", True)
         if outcome_recording_enabled and not is_backtest:
             try:
-                self.trade_outcome_recorder = TradeOutcomeRecorder(data_dir="data")
-                logger.info("Trade Outcome Recorder initialized")
+                self.trade_outcome_recorder = TradeOutcomeRecorder(
+                    data_dir="data",
+                    unified_provider=self.unified_provider
+                )
+                logger.info("Trade Outcome Recorder initialized with unified data provider")
                 
                 # Initialize order status worker (THR-236)
                 from .monitoring.order_status_worker import OrderStatusWorker
