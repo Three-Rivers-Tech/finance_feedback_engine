@@ -205,7 +205,7 @@ def load_env_config() -> Dict[str, Any]:
         # Position sizing configuration (THR-209)
         "position_sizing": {
             "risk_percentage": _env_float("AGENT_POSITION_SIZING_RISK_PERCENTAGE", 0.01),
-            "max_position_usd_dev": _env_float("AGENT_POSITION_SIZING_MAX_POSITION_USD_DEV", 50.0),
+            "max_position_usd_dev": _env_float("AGENT_POSITION_SIZING_MAX_POSITION_USD_DEV", 500.0),
             "max_position_usd_prod": _env_float("AGENT_POSITION_SIZING_MAX_POSITION_USD_PROD", 500.0),
             "dynamic_sizing": _env_bool("AGENT_POSITION_SIZING_DYNAMIC_SIZING", True),
             "target_utilization_pct": _env_float("AGENT_POSITION_SIZING_TARGET_UTILIZATION_PCT", 0.02),

@@ -1129,6 +1129,47 @@ class FinanceFeedbackEngine:
             "Use await FinanceFeedbackEngine.analyze_asset_async(...) instead."
         )
 
+    def _should_refresh_balance_for_asset(
+        self,
+        balance: Dict[str, float],
+        asset_pair: str,
+    ) -> bool:
+        """Return True when direct balance refresh is needed for sizing.
+
+        Triggers when:
+        1) No positive balance values exist at all, OR
+        2) Asset-specific platform keys are missing/zero (e.g. forex without
+           positive oanda_* balance keys).
+        """
+        # Base condition: no positive cash at all
+        has_any_positive = any(float(v or 0) > 0 for v in balance.values())
+        if not has_any_positive:
+            return True
+
+        try:
+            from .utils.asset_classifier import classify_asset_pair
+
+            asset_class = classify_asset_pair(asset_pair)
+        except Exception:
+            asset_class = "unknown"
+
+        if asset_class == "forex":
+            # Forex execution routes to Oanda, so require positive Oanda balance
+            return not any(
+                k.startswith("oanda_") and float(v or 0) > 0
+                for k, v in balance.items()
+            )
+
+        if asset_class == "crypto":
+            # Crypto execution routes to Coinbase
+            return not any(
+                (k.startswith("coinbase_") or k in {"FUTURES_USD", "SPOT_USD", "SPOT_USDC"})
+                and float(v or 0) > 0
+                for k, v in balance.items()
+            )
+
+        return False
+
     async def analyze_asset_async(
         self,
         asset_pair: str,
@@ -1301,9 +1342,11 @@ class FinanceFeedbackEngine:
                 )
                 # TODO: Alert on unknown portfolio fetch errors (THR-XXX)
 
-        # Fallback: if portfolio-derived balance is empty/zero, use direct platform balance.
-        # This protects execution sizing when portfolio breakdown omits futures cash fields.
-        if not any(float(v or 0) > 0 for v in balance.values()):
+        # Fallback: if portfolio-derived balance is empty/zero OR missing
+        # asset-specific platform keys, use direct platform balance.
+        # This protects execution sizing when portfolio breakdown omits
+        # platform-prefixed balances (e.g., oanda_USD for forex).
+        if self._should_refresh_balance_for_asset(balance, asset_pair):
             try:
                 balance = await asyncio.wait_for(
                     self.trading_platform.aget_balance(), timeout=10.0
