@@ -284,6 +284,12 @@ class AgentModeBacktester(Backtester):
                     except Exception:
                         pass
 
+            def get_portfolio_breakdown(self):
+                """Expose portfolio breakdown using mock platform interface."""
+                if hasattr(self.mock_platform, "get_portfolio_breakdown"):
+                    return self.mock_platform.get_portfolio_breakdown()
+                return {"holdings": [], "total_value_usd": 0.0}
+
             def validate_agent_readiness(self):
                 """
                 Validate that the backtest engine is ready for agent operation.
