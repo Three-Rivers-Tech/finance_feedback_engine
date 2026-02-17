@@ -1,35 +1,24 @@
 {
-  "model_version": "1.0.1",
-  "trained_date": "2025-11-28T00:00:00Z",
-  "training_data_provenance": "Trained on historical trading decisions from 2020-2025, sampled from diverse market conditions including bull, bear, and sideways markets. Data sourced from internal decision logs with 70% training, 20% validation, 10% test split.",
+  "model_version": "1.1.0",
+  "trained_date": "2026-02-17T15:12:16.960395+00:00",
+  "training_data_provenance": "Retrained using historical ensemble decision logs plus balanced synthetic samples generated from RSI/MACD/20MA technical patterns to ensure BUY/HOLD/SELL coverage.",
   "validation_metrics": {
-    "accuracy": 0.84,
-    "precision": 0.79,
-    "recall": 0.91,
-    "f1_score": 0.84,
-    "auc_roc": 0.92,
-    "calibration_stats": {
-      "brier_score": 0.18,
-      "expected_calibration_error": 0.03
-    },
-    "confusion_matrix": [
-      [395, 105],
-      [45, 455]
-    ],
-    "validation_timestamp": "2025-11-28T12:00:00Z"
+    "accuracy": 1.0,
+    "validation_timestamp": "2026-02-17T15:12:16.960395+00:00"
   },
   "validation_coverage": {
-    "training_samples": 10000,
-    "validation_samples": 2500,
-    "test_samples": 1250,
-    "time_period": "2020-01-01 to 2025-10-31"
+    "training_samples": 423,
+    "validation_samples": 0,
+    "test_samples": 106,
+    "time_period": "historical decisions + synthetic augmentation"
   },
   "decision_thresholds": {
-    "buy_threshold": 0.5,
+    "buy_threshold": null,
     "hold_threshold": null,
-    "explanation": "Only buy_threshold is used; predictions >= 0.5 trigger BUY signals, < 0.5 trigger HOLD. No separate sell threshold as the model focuses on entry timing rather than exit signals."
+    "sell_threshold": null,
+    "explanation": "Multiclass softmax logistic regression; class with max probability is selected."
   },
-  "business_logic_notes": "Model predicts BUY for probabilities >= 0.5, HOLD for < 0.5 based on ensemble decision features. Designed for risk management with position sizing integration. See meta_learner_model.md for detailed rationale.",
+  "business_logic_notes": "Native 3-class meta-learner supporting BUY/HOLD/SELL including SHORT-aligned SELL outputs.",
   "deployment_gated_by_metrics": true,
   "verification": {
     "re_validation_performed": true,
@@ -64,60 +53,77 @@
   },
   "feature_definitions": [
     {
-      "name": "ensemble_confidence",
-      "description": "Average confidence score from ensemble decision providers",
+      "name": "buy_ratio",
+      "description": "Fraction of provider BUY votes",
+      "units": "0-1"
+    },
+    {
+      "name": "sell_ratio",
+      "description": "Fraction of provider SELL votes",
+      "units": "0-1"
+    },
+    {
+      "name": "hold_ratio",
+      "description": "Fraction of provider HOLD votes",
+      "units": "0-1"
+    },
+    {
+      "name": "avg_confidence",
+      "description": "Mean provider confidence",
       "units": "percentage (0-100)"
     },
     {
-      "name": "volatility_index",
-      "description": "Market volatility measure based on price fluctuations",
-      "units": "index (0-1)"
-    },
-    {
-      "name": "trend_strength",
-      "description": "Strength of current market trend direction",
-      "units": "score (-1 to 1)"
-    },
-    {
-      "name": "risk_score",
-      "description": "Calculated risk assessment for the position",
-      "units": "score (0-100)"
-    },
-    {
-      "name": "market_sentiment",
-      "description": "Aggregated market sentiment from multiple indicators",
-      "units": "sentiment index (-1 to 1)"
+      "name": "confidence_std",
+      "description": "Stddev of provider confidence",
+      "units": "percentage"
     }
   ],
   "documentation_file": "meta_learner_model.md",
   "classes": [
     "BUY",
-    "HOLD"
+    "HOLD",
+    "SELL"
   ],
   "coef": [
     [
-      -0.6485084656959074,
-      -0.655467695834225,
-      0.9370996292425142,
-      -0.9045960818091535,
-      0.6923520097625149
+      1.930746837925598,
+      -1.2489524823661113,
+      -1.1361766811324656,
+      0.4304767691946824,
+      0.3818524737117607
+    ],
+    [
+      -1.040114950186569,
+      -1.01772375876731,
+      1.9793507503191452,
+      -1.2019731328954204,
+      -0.6298281030639329
+    ],
+    [
+      -0.8906318877390295,
+      2.266676241133418,
+      -0.8431740691866761,
+      0.7714963637007418,
+      0.2479756293521704
     ]
   ],
   "intercept": [
-    0.7715656394144417
+    0.9763028385748702,
+    -0.08787584889231093,
+    -0.8884269896825537
   ],
   "scaler_mean": [
-    0.4601851851851852,
-    0.046296296296296294,
-    0.49351851851851847,
-    57.61296296296296,
-    12.100277933995518
+    0.4303421535580696,
+    0.21586955785259523,
+    0.3537882885893353,
+    73.61436694558786,
+    5.769669515745228
   ],
   "scaler_scale": [
-    0.22697275689631533,
-    0.1047565601757848,
-    0.2303472210591156,
-    5.053838400550138,
-    3.990447989214883
+    0.3812629742442883,
+    0.2773886445329937,
+    0.34297222627576784,
+    15.30711706102944,
+    4.819300647854624
   ]
 }

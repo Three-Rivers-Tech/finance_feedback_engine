@@ -772,8 +772,8 @@ class TestMetaLearner:
             len(manager.meta_learner.classes_) >= 2
         )  # At least BUY, HOLD (may include SELL)
 
-    def test_stacking_binary_model_allows_sell_override(self):
-        """Binary BUY/HOLD models should still emit SELL under strong bearish consensus."""
+    def test_stacking_binary_model_uses_model_output_without_override(self):
+        """Binary BUY/HOLD models should use direct model output (no SELL override workaround)."""
 
         class DummyScaler:
             mean_ = np.array([0.0] * 5)
@@ -817,8 +817,8 @@ class TestMetaLearner:
             adjusted_weights={},
         )
 
-        assert result["action"] == "SELL"
-        assert result.get("stacking_override") == "binary_meta_learner_sell_bias_correction"
+        assert result["action"] == "HOLD"
+        assert "stacking_override" not in result
 
 
 # ===== Dynamic Weights Property Tests =====

@@ -488,20 +488,9 @@ class VotingStrategies:
         probabilities = meta_learner.predict_proba(scaled_features)[0]
 
         model_classes = list(meta_learner.classes_)
-        sell_override = self._binary_model_sell_override(
-            actions=actions,
-            confidences=confidences,
-            meta_features=meta_features,
-            model_classes=model_classes,
-        )
-
-        if sell_override is not None:
-            final_action = sell_override["action"]
-            final_confidence = sell_override["confidence"]
-        else:
-            # Get confidence for the winning action
-            class_index = model_classes.index(final_action)
-            final_confidence = int(probabilities[class_index] * 100)
+        # Get confidence for the winning action
+        class_index = model_classes.index(final_action)
+        final_confidence = int(probabilities[class_index] * 100)
 
         final_reasoning = self._aggregate_reasoning(
             providers, actions, reasonings, final_action
@@ -509,7 +498,7 @@ class VotingStrategies:
 
         final_amount = meta_features["avg_amount"]
 
-        result = {
+        return {
             "action": final_action,
             "confidence": final_confidence,
             "reasoning": final_reasoning,
@@ -517,68 +506,7 @@ class VotingStrategies:
             "meta_features": meta_features,
             "stacking_probabilities": dict(zip(meta_learner.classes_, probabilities)),
         }
-        if sell_override is not None:
-            result["stacking_override"] = sell_override["override_applied"]
 
-        return result
-
-    def _binary_model_sell_override(
-        self,
-        actions: List[str],
-        confidences: List[int],
-        meta_features: Dict[str, Any],
-        model_classes: List[str],
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Correct historical BUY/HOLD-only meta-learner bias.
-
-        Legacy binary meta-learner models were trained without SELL as an output class.
-        When base providers show a clear bearish consensus, allow a SELL decision even if
-        the loaded meta-learner cannot emit SELL directly.
-        """
-        if "SELL" in model_classes:
-            return None
-
-        sell_supporters = [
-            conf for action, conf in zip(actions, confidences) if action == "SELL"
-        ]
-        if not sell_supporters:
-            return None
-
-        sell_ratio = float(meta_features.get("sell_ratio", 0.0))
-        buy_ratio = float(meta_features.get("buy_ratio", 0.0))
-        hold_ratio = float(meta_features.get("hold_ratio", 0.0))
-
-        avg_sell_conf = float(np.mean(sell_supporters))
-
-        # Bearish consensus gate:
-        # - SELL is strict plurality/majority among base models
-        # - At least half of providers vote SELL
-        # - SELL supporters are reasonably confident
-        bearish_consensus = (
-            sell_ratio >= 0.5
-            and sell_ratio > buy_ratio
-            and sell_ratio >= hold_ratio
-            and avg_sell_conf >= 55.0
-        )
-
-        if not bearish_consensus:
-            return None
-
-        adjusted_confidence = int(np.clip(avg_sell_conf * (0.8 + 0.4 * sell_ratio), 0, 100))
-
-        logger.info(
-            "Applying binary meta-learner SELL override (classes=%s, sell_ratio=%.2f, avg_sell_conf=%.1f)",
-            model_classes,
-            sell_ratio,
-            avg_sell_conf,
-        )
-
-        return {
-            "action": "SELL",
-            "confidence": adjusted_confidence,
-            "override_applied": "binary_meta_learner_sell_bias_correction",
-        }
 
     def _enhanced_stacking_voting(
         self,
@@ -664,20 +592,9 @@ class VotingStrategies:
         probabilities = self.meta_learner.predict_proba(scaled_features)[0]
 
         model_classes = list(self.meta_learner.classes_)
-        sell_override = self._binary_model_sell_override(
-            actions=actions,
-            confidences=confidences,
-            meta_features=meta_features,
-            model_classes=model_classes,
-        )
-
-        if sell_override is not None:
-            final_action = sell_override["action"]
-            final_confidence = sell_override["confidence"]
-        else:
-            # Get confidence for the winning action
-            class_index = model_classes.index(final_action)
-            final_confidence = int(probabilities[class_index] * 100)
+        # Get confidence for the winning action
+        class_index = model_classes.index(final_action)
+        final_confidence = int(probabilities[class_index] * 100)
 
         final_reasoning = self._aggregate_reasoning(
             providers, actions, reasonings, final_action
@@ -685,7 +602,7 @@ class VotingStrategies:
 
         final_amount = meta_features["avg_amount"]
 
-        result = {
+        return {
             "action": final_action,
             "confidence": final_confidence,
             "reasoning": final_reasoning,
@@ -697,10 +614,6 @@ class VotingStrategies:
             "enhanced_meta_features": expected_features
             == 9,  # Only True if using 9 features
         }
-        if sell_override is not None:
-            result["stacking_override"] = sell_override["override_applied"]
-
-        return result
 
     def _generate_enhanced_meta_features(
         self, actions: List[str], confidences: List[int], amounts: List[float]
