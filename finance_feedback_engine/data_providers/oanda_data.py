@@ -173,6 +173,40 @@ class OandaDataProvider:
             logger.error(f"Failed to fetch Oanda candles: {e}")
             raise
 
+    def get_historical_candles(
+        self, instrument: str, count: int = 500, granularity: str = "H1"
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch historical candles in Oanda API granularity format.
+
+        Args:
+            instrument: Forex pair (e.g., 'EUR_USD', 'GBP_USD')
+            count: Number of candles (default 500)
+            granularity: Oanda granularity code ('M1', 'H1', 'D', ...)
+
+        Returns:
+            List of OHLCV dicts: date, open, high, low, close, volume
+        """
+        normalized = self._normalize_asset_pair(instrument)
+        candles = self._fetch_candles_from_api(normalized, granularity, count)
+
+        historical: List[Dict[str, Any]] = []
+        for c in candles:
+            ts = c.get("timestamp")
+            dt_iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+            historical.append(
+                {
+                    "date": dt_iso,
+                    "open": c.get("open"),
+                    "high": c.get("high"),
+                    "low": c.get("low"),
+                    "close": c.get("close"),
+                    "volume": c.get("volume", 0),
+                }
+            )
+
+        return historical
+
     def _fetch_candles_from_api(
         self, instrument: str, granularity: str, count: int
     ) -> List[Dict[str, Any]]:
@@ -200,6 +234,7 @@ class OandaDataProvider:
         params = {
             "granularity": granularity,
             "count": min(count, 5000),  # Oanda max is 5000
+            "price": "M",  # Midpoint candles for strategy consistency
         }
 
         response = requests.get(url, headers=headers, params=params, timeout=10)

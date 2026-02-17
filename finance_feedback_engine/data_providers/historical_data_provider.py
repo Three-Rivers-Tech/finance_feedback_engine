@@ -9,6 +9,7 @@ import pandas as pd
 from ..persistence.timeseries_data_store import TimeSeriesDataStore
 from ..utils.financial_data_validator import FinancialDataValidator
 from .alpha_vantage_provider import AlphaVantageProvider
+from .oanda_data import OandaDataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +45,16 @@ class HistoricalDataProvider:
     - **Error Handling:** More granular error handling for API-specific error codes.
     """
 
-    def __init__(self, api_key: str, cache_dir: Optional[Union[str, Path]] = None):
+    def __init__(
+        self,
+        api_key: str,
+        cache_dir: Optional[Union[str, Path]] = None,
+        oanda_credentials: Optional[dict] = None,
+    ):
         self.api_key = api_key
         self.cache_dir = Path(cache_dir) if cache_dir else Path("data/historical_cache")
+        self.oanda_credentials = oanda_credentials
+        self._oanda_provider = None
         try:
             if self.cache_dir is not None:
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +74,48 @@ class HistoricalDataProvider:
         logger.info(
             "✅ HistoricalDataProvider initialized with validator and data store"
         )
+
+    @staticmethod
+    def _is_forex_pair(asset_pair: str) -> bool:
+        """Return True when asset pair appears to be fiat/forex (e.g., EURUSD, EUR_USD)."""
+        pair = asset_pair.upper().replace("_", "").replace("-", "").replace("/", "")
+        if len(pair) < 6:
+            return False
+        crypto_symbols = ["BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK"]
+        if any(sym in pair for sym in crypto_symbols):
+            return False
+
+        fiat = {
+            "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "CNY", "HKD", "SEK", "NOK"
+        }
+        base, quote = pair[:3], pair[3:6]
+        return base in fiat and quote in fiat
+
+    def _get_oanda_provider(self) -> Optional[OandaDataProvider]:
+        """Lazily initialize Oanda provider from explicit credentials or env vars."""
+        if self._oanda_provider is not None:
+            return self._oanda_provider
+
+        creds = dict(self.oanda_credentials or {})
+        if not creds:
+            import os
+
+            api_key = os.getenv("OANDA_API_KEY")
+            account_id = os.getenv("OANDA_ACCOUNT_ID")
+            environment = os.getenv("OANDA_ENVIRONMENT", "practice")
+            if api_key:
+                creds = {
+                    "api_key": api_key,
+                    "account_id": account_id,
+                    "environment": environment,
+                }
+
+        token = creds.get("access_token") or creds.get("api_key")
+        if not token or str(token).startswith("YOUR_"):
+            return None
+
+        self._oanda_provider = OandaDataProvider(credentials=creds)
+        return self._oanda_provider
 
     def _fetch_raw_data(
         self,
@@ -124,8 +174,6 @@ class HistoricalDataProvider:
         except Exception as e:
             logger.debug(f"Historical cache load skipped: {e}")
 
-        # Fetch via Alpha Vantage provider (async method; call in sync context)
-        provider = AlphaVantageProvider(api_key=self.api_key)
         start_str = start_date.strftime("%Y-%m-%d")
         end_str = end_date.strftime("%Y-%m-%d")
         logger.info(
@@ -133,29 +181,50 @@ class HistoricalDataProvider:
         )
 
         candles: list = []
-        try:
-            import asyncio
-            import concurrent.futures
 
-            coro = provider.get_historical_data(
-                asset_pair, start=start_str, end=end_str, timeframe=timeframe
-            )
-            
+        # Forex candles should come from Oanda (primary source)
+        if self._is_forex_pair(asset_pair):
+            oanda_provider = self._get_oanda_provider()
+            if oanda_provider is not None:
+                try:
+                    logger.info(f"Using Oanda for forex candles: {asset_pair}")
+                    candles = oanda_provider.get_historical_candles(
+                        instrument=asset_pair,
+                        count=500,
+                        granularity=OandaDataProvider.GRANULARITIES.get(timeframe, "H1"),
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Oanda historical candle fetch failed for {asset_pair}; "
+                        f"falling back to Alpha Vantage. Error: {e}"
+                    )
+
+        # Non-forex (crypto/macro) remains on Alpha Vantage, and acts as forex fallback
+        if not candles:
+            provider = AlphaVantageProvider(api_key=self.api_key)
             try:
-                # Check if we're in an event loop
-                loop = asyncio.get_running_loop()
-                # We're in an event loop - run in a separate thread to avoid blocking
-                logger.debug(f"Fetching {asset_pair} ({timeframe}) data via thread pool")
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(asyncio.run, coro)
-                    candles = future.result()
-            except RuntimeError:
-                # No event loop running - create one
-                logger.debug(f"Fetching {asset_pair} ({timeframe}) data in new event loop")
-                candles = asyncio.run(coro)
-        except Exception as e:
-            logger.error(f"Error fetching historical data: {e}", exc_info=True)
-            candles = []
+                import asyncio
+                import concurrent.futures
+
+                coro = provider.get_historical_data(
+                    asset_pair, start=start_str, end=end_str, timeframe=timeframe
+                )
+
+                try:
+                    # Check if we're in an event loop
+                    asyncio.get_running_loop()
+                    # We're in an event loop - run in a separate thread to avoid blocking
+                    logger.debug(f"Fetching {asset_pair} ({timeframe}) data via thread pool")
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, coro)
+                        candles = future.result()
+                except RuntimeError:
+                    # No event loop running - create one
+                    logger.debug(f"Fetching {asset_pair} ({timeframe}) data in new event loop")
+                    candles = asyncio.run(coro)
+            except Exception as e:
+                logger.error(f"Error fetching historical data: {e}", exc_info=True)
+                candles = []
 
         if not candles:
             logger.warning(
