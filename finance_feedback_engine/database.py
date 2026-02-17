@@ -69,7 +69,7 @@ class DatabaseConfig:
         return cls(
             url=os.getenv(
                 "DATABASE_URL",
-                "postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe",
+                "",
             ),
             pool_size=int(os.getenv("DB_POOL_SIZE", "20")),
             max_overflow=int(os.getenv("DB_POOL_OVERFLOW", "10")),

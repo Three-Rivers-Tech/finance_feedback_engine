@@ -2,7 +2,7 @@
 from sqlalchemy import create_engine, text
 import os
 
-url = os.getenv('DATABASE_URL', 'postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe')
+url = os.getenv('DATABASE_URL', '')
 try:
     engine = create_engine(url)
     with engine.connect() as conn:

@@ -291,7 +291,7 @@ def load_env_config() -> Dict[str, Any]:
     config["database"] = {
         "url": _env_str(
             "DATABASE_URL",
-            "postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe",
+            "",
         ),
         "pool_size": _env_int("DB_POOL_SIZE", 20),
         "max_overflow": _env_int("DB_POOL_OVERFLOW", 10),

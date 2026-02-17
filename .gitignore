@@ -32,10 +32,14 @@ finance_feedback_engine.egg-info/
 # Environment variables
 # Environment files (keep .env.*.example files)
 .env
-.env.local
-.env.production
-.env.staging
-.env.dev
+.env.*
+.env.backup.*
+!.env.example
+!.env.*.example
+
+# Sensitive config/material
+config/secrets.yaml
+memory/security/
 
 # Logs
 *.log
@@ -64,6 +68,8 @@ data/test_memory/
 data/trade_metrics/
 data/api_costs/
 data/historical_cache/
+# Optimization outputs may include credentials from local env
+/data/optimization/*best_config*.yaml
 # Data pipeline artifacts
 data/watermarks/
 data/dlq/
