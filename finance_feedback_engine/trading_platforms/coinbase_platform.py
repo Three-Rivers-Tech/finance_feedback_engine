@@ -3,6 +3,7 @@
 import logging
 import time
 import uuid
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from typing import Any, Dict, List, Optional
 
 from requests.exceptions import RequestException
@@ -251,6 +252,87 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             # but let validation errors (empty input) propagate
             logger.error("Unexpected error formatting product_id: %s", e)
             return asset_pair
+
+    @staticmethod
+    def _to_decimal(value: Any, field_name: str) -> Decimal:
+        """Convert a numeric value to Decimal with validation."""
+        try:
+            decimal_value = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid {field_name}: {value}") from exc
+
+        if decimal_value <= 0:
+            raise ValueError(f"{field_name} must be > 0, got {value}")
+        return decimal_value
+
+    @staticmethod
+    def _get_product_field(product: Any, field_name: str, default: Any = None) -> Any:
+        """Safely read product field from dict-like or object responses."""
+        if isinstance(product, dict):
+            return product.get(field_name, default)
+        return getattr(product, field_name, default)
+
+    @classmethod
+    def _round_down_to_increment(cls, value: Decimal, increment: Decimal) -> Decimal:
+        """Round value down to the nearest exchange increment."""
+        steps = (value / increment).to_integral_value(rounding=ROUND_DOWN)
+        return steps * increment
+
+    @classmethod
+    def _coerce_decimal_or_default(
+        cls, value: Any, default: Any, field_name: str
+    ) -> Decimal:
+        """Parse Decimal from value, falling back to default on malformed input."""
+        try:
+            return cls._to_decimal(value, field_name)
+        except ValueError:
+            logger.warning(
+                "Invalid %s from product metadata (%s). Falling back to %s",
+                field_name,
+                value,
+                default,
+            )
+            return cls._to_decimal(default, f"{field_name} fallback")
+
+    @classmethod
+    def _coerce_optional_decimal(cls, value: Any, field_name: str) -> Optional[Decimal]:
+        """Parse optional Decimal; return None when missing or malformed."""
+        if value is None:
+            return None
+        try:
+            return cls._to_decimal(value, field_name)
+        except ValueError:
+            logger.warning("Ignoring invalid optional %s from product metadata: %s", field_name, value)
+            return None
+
+    @classmethod
+    def _format_size_with_increment(
+        cls,
+        raw_size: Any,
+        increment: Any,
+        field_name: str,
+        min_size: Any = None,
+    ) -> str:
+        """Format order size to Coinbase increment precision without oversizing."""
+        size_decimal = cls._to_decimal(raw_size, field_name)
+        increment_decimal = cls._to_decimal(increment, f"{field_name} increment")
+
+        rounded_size = cls._round_down_to_increment(size_decimal, increment_decimal)
+        if rounded_size <= 0:
+            raise ValueError(
+                f"{field_name} rounds to 0 with increment {increment_decimal}. raw={size_decimal}"
+            )
+
+        if min_size is not None:
+            min_size_decimal = cls._to_decimal(min_size, f"{field_name} min_size")
+            if rounded_size < min_size_decimal:
+                raise ValueError(
+                    f"{field_name} {rounded_size} below Coinbase minimum {min_size_decimal} "
+                    f"after precision rounding"
+                )
+
+        normalized = rounded_size.normalize()
+        return format(normalized, "f")
 
     def _inject_trace_headers_per_request(self) -> None:
         """
@@ -1103,7 +1185,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         action = decision.get("action")
         asset_pair = decision.get("asset_pair")
         product_id = self._format_product_id(asset_pair)
-        size_in_usd = str(decision.get("suggested_amount", 0))
+        requested_size_usd = decision.get("suggested_amount", 0)
         client_order_id = f"ffe-{decision.get('id', uuid.uuid4().hex)}"
 
         # Check for existing order with the same client_order_id to avoid duplicates
@@ -1137,7 +1219,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         except Exception as e:
             logger.debug("No existing order found or error checking: %s", e)
 
-        if action not in ["BUY", "SELL"] or float(size_in_usd) <= 0:
+        if action not in ["BUY", "SELL"] or float(requested_size_usd) <= 0:
             logger.warning("Invalid trade decision: %s", decision)
             return {
                 "success": False,
@@ -1150,34 +1232,73 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         try:
             start_time = time.time()
 
+            requested_size_usd_decimal = self._to_decimal(
+                requested_size_usd, "suggested_amount"
+            )
+            product_response = client.get_product(product_id=product_id)
+
+            quote_increment = self._coerce_decimal_or_default(
+                self._get_product_field(product_response, "quote_increment", "0.01"),
+                "0.01",
+                "quote_increment",
+            )
+            quote_min_size = self._coerce_optional_decimal(
+                self._get_product_field(product_response, "quote_min_size", None),
+                "quote_min_size",
+            )
+
             if action == "BUY":
+                quote_size = self._format_size_with_increment(
+                    raw_size=requested_size_usd_decimal,
+                    increment=quote_increment,
+                    field_name="quote_size",
+                    min_size=quote_min_size,
+                )
+
+                logger.info(
+                    "Calculated quote_size for BUY: %s (requested_usd=%s, increment=%s)",
+                    quote_size,
+                    requested_size_usd_decimal,
+                    quote_increment,
+                )
+
                 order_result = client.market_order_buy(
                     client_order_id=client_order_id,
                     product_id=product_id,
-                    quote_size=size_in_usd,
+                    quote_size=quote_size,
                 )
             else:  # SELL
-                # Fetch current price to calculate base size
                 try:
-                    product_response = client.get_product(product_id=product_id)
-                    current_price = float(getattr(product_response, "price", 0))
+                    current_price = float(self._get_product_field(product_response, "price", 0))
                     if current_price <= 0:
                         raise ValueError(
                             f"Invalid price for {product_id}: {current_price}"
                         )
-                    # Validate size_in_usd before division
-                    if float(size_in_usd) <= 0:
-                        raise ValueError(
-                            f"Invalid USD size for SELL order: {size_in_usd}"
-                        )
-                    base_size_value = float(size_in_usd) / current_price
-                    # Format with appropriate precision (8 decimals is standard for crypto)
-                    base_size = f"{base_size_value:.8f}"
+
+                    base_size_value = requested_size_usd_decimal / Decimal(str(current_price))
+                    base_increment = self._coerce_decimal_or_default(
+                        self._get_product_field(
+                            product_response, "base_increment", "0.00000001"
+                        ),
+                        "0.00000001",
+                        "base_increment",
+                    )
+                    base_min_size = self._coerce_optional_decimal(
+                        self._get_product_field(product_response, "base_min_size", None),
+                        "base_min_size",
+                    )
+                    base_size = self._format_size_with_increment(
+                        raw_size=base_size_value,
+                        increment=base_increment,
+                        field_name="base_size",
+                        min_size=base_min_size,
+                    )
                     logger.info(
-                        "Calculated base_size for SELL: %s (price: %.2f, usd_size: %s)",
+                        "Calculated base_size for SELL: %s (price: %.2f, usd_size: %s, increment=%s)",
                         base_size,
                         current_price,
-                        size_in_usd,
+                        requested_size_usd_decimal,
+                        base_increment,
                     )
                 except ValueError as e:
                     logger.error("Validation error calculating base_size for SELL: %s", e)

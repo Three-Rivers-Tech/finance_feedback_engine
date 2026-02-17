@@ -772,6 +772,69 @@ class TestExecuteTrade:
         assert result["platform"] == "coinbase_advanced"
         mock_client.market_order_buy.assert_called_once()
 
+    def test_execute_trade_buy_rounds_quote_size_to_product_increment(self, platform, mock_client):
+        """BUY quote_size should be rounded down to Coinbase quote_increment."""
+        product = MagicMock()
+        product.quote_increment = "0.01"
+        product.quote_min_size = "10"
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": True,
+            "order_id": "order-buy-precision",
+            "status": "OPEN",
+        }
+        mock_client.market_order_buy.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-buy-precision",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 80.779,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        call_args = mock_client.market_order_buy.call_args.kwargs
+        assert call_args["quote_size"] == "80.77"
+
+    def test_execute_trade_sell_rounds_base_size_to_product_increment(self, platform, mock_client):
+        """SELL base_size should use base_increment and never round up."""
+        product = MagicMock()
+        product.price = "50000"
+        product.base_increment = "0.0001"
+        product.base_min_size = "0.0001"
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": True,
+            "order_id": "order-sell-precision",
+            "status": "OPEN",
+        }
+        mock_client.market_order_sell.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-sell-precision",
+            "action": "SELL",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 123.45,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        call_args = mock_client.market_order_sell.call_args.kwargs
+        assert call_args["base_size"] == "0.0024"
+
     def test_execute_trade_sell_success(self, platform, mock_client):
         """Test successful SELL trade execution."""
         # Mock product price lookup for base_size calculation
