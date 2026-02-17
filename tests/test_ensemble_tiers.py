@@ -10,6 +10,7 @@ Target Coverage: Increase ensemble_manager.py from 7% to >50%
 from pathlib import Path
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 import yaml
 
@@ -770,6 +771,54 @@ class TestMetaLearner:
         assert (
             len(manager.meta_learner.classes_) >= 2
         )  # At least BUY, HOLD (may include SELL)
+
+    def test_stacking_binary_model_allows_sell_override(self):
+        """Binary BUY/HOLD models should still emit SELL under strong bearish consensus."""
+
+        class DummyScaler:
+            mean_ = np.array([0.0] * 5)
+
+            def transform(self, x):
+                return x
+
+        class DummyBinaryModel:
+            classes_ = np.array(["BUY", "HOLD"])
+
+            def predict(self, x):
+                return np.array(["HOLD"])
+
+            def predict_proba(self, x):
+                return np.array([[0.15, 0.85]])
+
+        config = {
+            "ensemble": {
+                "enabled_providers": ["local", "cli", "codex"],
+                "voting_strategy": "stacking",
+            }
+        }
+        manager = EnsembleDecisionManager(config)
+
+        manager.voting_strategies.meta_learner = DummyBinaryModel()
+        manager.voting_strategies.meta_feature_scaler = DummyScaler()
+
+        providers = ["local", "cli", "codex", "qwen"]
+        actions = ["SELL", "SELL", "HOLD", "SELL"]
+        confidences = [78, 80, 40, 76]
+        reasonings = ["bearish" for _ in providers]
+        amounts = [0.10, 0.12, 0.08, 0.11]
+
+        result = manager.voting_strategies.apply_voting_strategy(
+            providers,
+            actions,
+            confidences,
+            reasonings,
+            amounts,
+            base_weights={},
+            adjusted_weights={},
+        )
+
+        assert result["action"] == "SELL"
+        assert result.get("stacking_override") == "binary_meta_learner_sell_bias_correction"
 
 
 # ===== Dynamic Weights Property Tests =====
