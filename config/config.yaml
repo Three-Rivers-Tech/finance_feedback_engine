@@ -228,7 +228,7 @@ agent:
     var_confidence: 0.9
   position_sizing:
     risk_percentage: 0.02
-    max_position_usd_dev: 50.0
+    max_position_usd_dev: 500.0
     max_position_usd_prod: 500.0
     dynamic_sizing: true
     target_utilization_pct: 0.02
