@@ -757,8 +757,35 @@ class PortfolioBacktester:
         date: datetime,
         decision: Dict[str, Any],
     ) -> None:
-        """Open a SHORT position (SELL to open)."""
+        """Open a SHORT position (SELL to open) with 2:1 leverage guardrails."""
         execution_price = price * (1 - self.slippage_rate)
+
+        # Enforce 2:1 gross short leverage limit
+        current_prices = {asset: pos.entry_price for asset, pos in self.portfolio_state.positions.items()}
+        current_prices[asset_pair] = execution_price
+        portfolio_equity = self.portfolio_state.total_value(current_prices)
+        max_short_exposure = max(portfolio_equity * 2.0, 0.0)
+
+        current_short_exposure = sum(
+            abs(pos.units) * current_prices.get(asset, pos.entry_price)
+            for asset, pos in self.portfolio_state.positions.items()
+            if pos.side == "SHORT"
+        )
+
+        requested_short_exposure = position_size
+        if current_short_exposure + requested_short_exposure > max_short_exposure:
+            remaining_capacity = max(max_short_exposure - current_short_exposure, 0.0)
+            if remaining_capacity <= 0:
+                logger.debug(
+                    f"Cannot open SHORT {asset_pair}: short leverage limit reached "
+                    f"(current=${current_short_exposure:.2f}, max=${max_short_exposure:.2f})"
+                )
+                return
+            logger.debug(
+                f"Capping SHORT {asset_pair} from ${requested_short_exposure:.2f} to ${remaining_capacity:.2f} "
+                f"to satisfy 2:1 leverage limit"
+            )
+            position_size = remaining_capacity
 
         units = position_size / execution_price
 
