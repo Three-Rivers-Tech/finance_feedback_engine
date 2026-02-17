@@ -1301,6 +1301,23 @@ class FinanceFeedbackEngine:
                 )
                 # TODO: Alert on unknown portfolio fetch errors (THR-XXX)
 
+        # Fallback: if portfolio-derived balance is empty/zero, use direct platform balance.
+        # This protects execution sizing when portfolio breakdown omits futures cash fields.
+        if not any(float(v or 0) > 0 for v in balance.values()):
+            try:
+                balance = await asyncio.wait_for(
+                    self.trading_platform.aget_balance(), timeout=10.0
+                )
+                logger.info(
+                    "Using direct platform balance fallback for sizing: %s",
+                    balance,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Direct balance fallback failed; sizing may use minimum order: %s",
+                    e,
+                )
+
         # Get memory context if enabled
         memory_context = None
         if use_memory_context and self.memory_engine:
