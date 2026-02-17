@@ -1,0 +1,123 @@
+{
+  "timestamp_utc": "2026-02-17T12:52:05.579629+00:00",
+  "asset_pair": "BTC-USD",
+  "timeframe": "1h",
+  "n_trials": 60,
+  "data": {
+    "source_file": "data/historical_cache/BTCUSD_1h_2021-01-01_2021-01-07.parquet",
+    "source_note": "2023-2024 data unavailable; using best available BTCUSD cache",
+    "rows": 168,
+    "start_date": "2021-01-01",
+    "end_date": "2021-01-07"
+  },
+  "best": {
+    "params": {
+      "fast_period": 7,
+      "slow_period": 100
+    },
+    "sharpe_ratio": 4.312019052566247,
+    "total_return_pct": 0.1042937336234172
+  },
+  "top_trials": [
+    {
+      "number": 22,
+      "value": 4.312019052566247,
+      "params": {
+        "fast_period": 7,
+        "slow_period": 100
+      },
+      "total_return_pct": 0.1042937336234172,
+      "total_trades": 2
+    },
+    {
+      "number": 38,
+      "value": 0.8615658944068664,
+      "params": {
+        "fast_period": 6,
+        "slow_period": 52
+      },
+      "total_return_pct": 0.32428558863397483,
+      "total_trades": 2
+    },
+    {
+      "number": 57,
+      "value": 0.8615658944068664,
+      "params": {
+        "fast_period": 8,
+        "slow_period": 46
+      },
+      "total_return_pct": 0.32428558863397483,
+      "total_trades": 2
+    },
+    {
+      "number": 27,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 7,
+        "slow_period": 57
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 35,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 7,
+        "slow_period": 53
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 42,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 8,
+        "slow_period": 53
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 43,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 8,
+        "slow_period": 53
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 51,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 8,
+        "slow_period": 53
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 54,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 6,
+        "slow_period": 58
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    },
+    {
+      "number": 58,
+      "value": 0.8442890075601344,
+      "params": {
+        "fast_period": 10,
+        "slow_period": 46
+      },
+      "total_return_pct": 0.30424638170110485,
+      "total_trades": 2
+    }
+  ]
+}
