@@ -179,6 +179,10 @@ def load_env_config() -> Dict[str, Any]:
         "adaptive_learning": _env_bool("ENSEMBLE_ADAPTIVE_LEARNING", True),
     }
 
+    # Parse AGENT_ASSET_PAIRS from comma-separated env var (e.g. "BTCUSD,EURUSD,GBPUSD")
+    _raw_pairs = os.environ.get("AGENT_ASSET_PAIRS", "")
+    _asset_pairs = [p.strip() for p in _raw_pairs.split(",") if p.strip()] if _raw_pairs else ["BTCUSD", "EURUSD", "GBPUSD", "ETHUSD"]
+
     # Agent / risk controls
     config["agent"] = {
         "autonomous_execution": _env_bool("AGENT_AUTONOMOUS_EXECUTION", False),
@@ -186,9 +190,11 @@ def load_env_config() -> Dict[str, Any]:
         "max_daily_trades": _env_int("AGENT_MAX_DAILY_TRADES", 5),
         "strategic_goal": _env_str("AGENT_STRATEGIC_GOAL", "balanced"),
         "risk_appetite": _env_str("AGENT_RISK_APPETITE", "medium"),
+        # Asset pairs for trading (configurable via AGENT_ASSET_PAIRS env var)
+        "asset_pairs": _asset_pairs,
         # Nested autonomous config (required by TradingAgentConfig)
         "autonomous": {
-            "enabled": _env_bool("AGENT_AUTONOMOUS_ENABLED", False),
+            "enabled": _env_bool("AGENT_AUTONOMOUS_ENABLED", True),
             "profit_target": _env_float("AGENT_AUTONOMOUS_PROFIT_TARGET", 0.05),
             "stop_loss": _env_float("AGENT_AUTONOMOUS_STOP_LOSS", 0.02),
         },
