@@ -425,19 +425,48 @@ class UnifiedDataProvider:
         """
         Get current real-time price from platform APIs (Coinbase/Oanda).
 
-        Fetches the latest 1-minute candle and extracts the close price.
-        This provides real-time data (1-2 minutes old) for monitoring and
-        comparison against potentially stale Alpha Vantage data.
+        For forex pairs (e.g., 'EUR_USD', 'EURUSD'):
+            Uses Oanda's dedicated pricing endpoint (bid/ask/mid) which is
+            more reliable than the candles endpoint — works 24/7, handles
+            underscore-format symbols, and is faster.
+
+        For crypto pairs (e.g., 'BTCUSD'):
+            Fetches the latest 1-minute candle close from Coinbase.
 
         Args:
-            asset_pair: Asset pair (e.g., 'BTCUSD', 'EURUSD')
+            asset_pair: Asset pair (e.g., 'BTCUSD', 'EUR_USD', 'EURUSD')
 
         Returns:
             Dict with keys: asset_pair, price, timestamp, provider
-            Returns None if fetch fails or no data available
+            Returns None if fetch fails or no data available.
         """
+        # --- Forex fast path: Oanda direct pricing endpoint ---
+        # This bypasses the candles route which has known issues with:
+        #   - Underscore-format symbols ("EUR_USD" vs "EURUSD")
+        #   - Alpha Vantage not supporting FX via the generic candles path
+        #   - Market-hours gaps in 1m candle availability
+        if self._is_forex(asset_pair) and self.oanda and hasattr(self.oanda, "get_current_price_direct"):
+            try:
+                price_data = self.oanda.get_current_price_direct(asset_pair)
+                if price_data and price_data.get("price") is not None:
+                    logger.debug(
+                        f"Forex price for {asset_pair} via Oanda pricing endpoint: "
+                        f"{price_data['price']}"
+                    )
+                    return price_data
+                else:
+                    logger.warning(
+                        f"Oanda pricing endpoint returned no data for {asset_pair}, "
+                        f"falling back to candles"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Oanda direct pricing failed for {asset_pair} "
+                    f"({type(e).__name__}: {e}), falling back to candles"
+                )
+
+        # --- General path: 1-minute candle close ---
         try:
-            # Fetch latest 1-minute candle
             candles, provider = self.get_candles(asset_pair, granularity="1m")
 
             if not candles or len(candles) == 0:
@@ -447,7 +476,7 @@ class UnifiedDataProvider:
             # Extract latest candle (most recent)
             latest_candle = candles[-1]
             close_price = latest_candle.get("close")
-            timestamp = latest_candle.get("date")
+            timestamp = latest_candle.get("date") or latest_candle.get("timestamp")
 
             if close_price is None:
                 logger.warning(f"Latest candle for {asset_pair} missing close price")
