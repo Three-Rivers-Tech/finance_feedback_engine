@@ -20,7 +20,16 @@ from finance_feedback_engine.monitoring.prometheus import (
 )
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trade_execution_safety import (
+    clear_stale_reservations,
+    finalize_trade_reservation,
+    reserve_trade_exposure,
+)
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.decision_engine.execution_quality import (
+    ExecutionQualityControls,
+    evaluate_signal_quality,
+)
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
@@ -1567,18 +1576,8 @@ class TradingLoopAgent:
                 )
                 approved_decisions.append(decision)
                 try:
-                    notional_value = decision.get("notional_value", 0) or (
-                        decision.get("recommended_position_size", 0)
-                        * decision.get("entry_price", 0)
-                    )
                     exposure_manager = get_exposure_manager()
-                    exposure_manager.reserve_exposure(
-                        decision_id=decision_id,
-                        asset_pair=asset_pair,
-                        action=decision.get("action", "UNKNOWN"),
-                        position_size=decision.get("recommended_position_size", 0),
-                        notional_value=notional_value,
-                    )
+                    reserve_trade_exposure(exposure_manager=exposure_manager, decision=decision)
                 except Exception as e:
                     logger.warning("Failed to reserve exposure for %s: %s", decision_id, e)
                     tracker = getattr(self.engine, "error_tracker", None)
@@ -1776,9 +1775,13 @@ class TradingLoopAgent:
                         # THR-134: Commit reservation - actual position now exists
                         try:
                             exposure_manager = get_exposure_manager()
-                            exposure_manager.commit_reservation(decision_id)
+                            finalize_trade_reservation(
+                                exposure_manager=exposure_manager,
+                                decision_id=decision_id,
+                                execution_succeeded=True,
+                            )
                         except Exception as e:
-                            logger.warning(f"Failed to commit reservation for {decision_id}: {e}")
+                            logger.warning(f"Failed to finalize reservation for {decision_id}: {e}")
                     else:
                         error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
                         logger.error(
@@ -1787,9 +1790,13 @@ class TradingLoopAgent:
                         # THR-134: Rollback reservation - trade didn't execute
                         try:
                             exposure_manager = get_exposure_manager()
-                            exposure_manager.rollback_reservation(decision_id)
+                            finalize_trade_reservation(
+                                exposure_manager=exposure_manager,
+                                decision_id=decision_id,
+                                execution_succeeded=False,
+                            )
                         except Exception as e:
-                            logger.warning(f"Failed to rollback reservation for {decision_id}: {e}")
+                            logger.warning(f"Failed to finalize reservation for {decision_id}: {e}")
                 except asyncio.CancelledError:
                     logger.warning(
                         f"Trade execution cancelled for decision {decision_id} (agent shutdown?)"
@@ -1797,7 +1804,11 @@ class TradingLoopAgent:
                     # THR-134: Rollback reservation on cancellation
                     try:
                         exposure_manager = get_exposure_manager()
-                        exposure_manager.rollback_reservation(decision_id)
+                        finalize_trade_reservation(
+                            exposure_manager=exposure_manager,
+                            decision_id=decision_id,
+                            execution_succeeded=False,
+                        )
                     except Exception:
                         pass
                     raise  # Re-raise to allow proper cleanup
@@ -1811,7 +1822,11 @@ class TradingLoopAgent:
                     # THR-134: Rollback reservation on exception
                     try:
                         exposure_manager = get_exposure_manager()
-                        exposure_manager.rollback_reservation(decision_id)
+                        finalize_trade_reservation(
+                            exposure_manager=exposure_manager,
+                            decision_id=decision_id,
+                            execution_succeeded=False,
+                        )
                     except Exception:
                         pass
         else:
@@ -1825,9 +1840,7 @@ class TradingLoopAgent:
         # This handles edge cases where reservations weren't properly committed/rolled back
         try:
             exposure_manager = get_exposure_manager()
-            cleared = exposure_manager.clear_stale_reservations()
-            if cleared > 0:
-                logger.warning(f"Cleared {cleared} stale exposure reservations after batch")
+            clear_stale_reservations(exposure_manager)
         except Exception as e:
             logger.warning(f"Failed to clear stale reservations: {e}")
 
@@ -2437,6 +2450,47 @@ class TradingLoopAgent:
         if confidence_normalized < self.config.min_confidence_threshold:
             logger.info(
                 f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
+            )
+            return False
+
+        # Quality gate: reject poor asymmetry and weak high-volatility setups.
+        controls = ExecutionQualityControls(
+            enabled=bool(getattr(self.config, "quality_gate_enabled", True)),
+            min_risk_reward_ratio=float(getattr(self.config, "min_risk_reward_ratio", 1.25)),
+            high_volatility_threshold=float(getattr(self.config, "high_volatility_threshold", 0.04)),
+            high_volatility_min_confidence=float(
+                getattr(self.config, "high_volatility_min_confidence", 80.0)
+            ),
+            full_size_confidence=float(getattr(self.config, "position_size_full_confidence", 90.0)),
+            min_size_multiplier=float(getattr(self.config, "position_size_min_multiplier", 0.50)),
+            high_volatility_size_scale=float(
+                getattr(self.config, "position_size_high_volatility_scale", 0.75)
+            ),
+            extreme_volatility_threshold=float(
+                getattr(self.config, "position_size_extreme_volatility_threshold", 0.07)
+            ),
+            extreme_volatility_size_scale=float(
+                getattr(self.config, "position_size_extreme_volatility_scale", 0.50)
+            ),
+        )
+
+        quality_ok, quality_reasons, quality_metrics = evaluate_signal_quality(
+            confidence_pct=float(confidence),
+            min_conf_threshold_pct=self.config.min_confidence_threshold * 100.0,
+            volatility=float(decision.get("volatility", 0.0) or 0.0),
+            stop_loss_fraction=decision.get("stop_loss_fraction"),
+            take_profit_fraction=(
+                decision.get("take_profit_percentage")
+                or decision.get("portfolio_take_profit_percentage")
+            ),
+            controls=controls,
+        )
+        if not quality_ok:
+            logger.info(
+                "Skipping trade due to quality gate (%s) for %s | metrics=%s",
+                ",".join(quality_reasons),
+                decision.get("asset_pair"),
+                quality_metrics,
             )
             return False
 
