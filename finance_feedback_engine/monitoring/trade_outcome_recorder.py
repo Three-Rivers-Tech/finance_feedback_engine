@@ -11,11 +11,14 @@ import json
 import fcntl
 import logging
 import asyncio
+import os
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any
 import uuid
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -30,7 +33,14 @@ class TradeOutcomeRecorder:
     - Async: Fire-and-forget with background tasks (recommended)
     """
     
-    def __init__(self, data_dir: str = "data", use_async: bool = True, unified_provider=None):
+    def __init__(
+        self,
+        data_dir: str = "data",
+        use_async: bool = True,
+        unified_provider=None,
+        trade_close_alert_webhook_url: Optional[str] = None,
+        trade_close_alert_token: Optional[str] = None,
+    ):
         """
         Initialize Trade Outcome Recorder.
         
@@ -38,6 +48,8 @@ class TradeOutcomeRecorder:
             data_dir: Directory for state and outcome files
             use_async: Enable async/fire-and-forget mode (THR-237)
             unified_provider: UnifiedDataProvider instance for fetching real-time exit prices
+            trade_close_alert_webhook_url: n8n webhook URL for trade-close accounting alerts
+            trade_close_alert_token: Optional shared token sent as X-FFE-Alert-Token header
         """
         self.data_dir = Path(data_dir)
         self.state_file = self.data_dir / "open_positions_state.json"
@@ -58,6 +70,23 @@ class TradeOutcomeRecorder:
         # Anomaly monitoring: alert on repeated flat closes (entry == exit)
         self._consecutive_flat_closures = 0
         self._flat_closure_alert_threshold = 3
+
+        # Optional n8n trade-close alert integration (CFO accounting ingestion)
+        self.trade_close_alert_webhook_url = (
+            (trade_close_alert_webhook_url or os.getenv("N8N_TRADE_CLOSE_WEBHOOK_URL", "")).strip()
+        )
+        self.trade_close_alert_token = (
+            (trade_close_alert_token or os.getenv("N8N_TRADE_CLOSE_WEBHOOK_TOKEN", "")).strip()
+        )
+        self.trade_close_alert_timeout_seconds = float(
+            os.getenv("N8N_TRADE_CLOSE_WEBHOOK_TIMEOUT_SECONDS", "5")
+        )
+
+        if self.trade_close_alert_webhook_url:
+            logger.info(
+                "Trade-close n8n alert enabled for CFO accounting webhook: %s",
+                self.trade_close_alert_webhook_url,
+            )
     
     def _load_state(self) -> Dict[str, Dict[str, Any]]:
         """Load open positions state from disk."""
@@ -468,6 +497,98 @@ class TradeOutcomeRecorder:
         else:
             self._consecutive_flat_closures = 0
     
+    def _build_trade_close_alert_payload(self, outcome: Dict[str, Any]) -> Dict[str, Any]:
+        """Build standardized n8n alert payload for closed-trade accounting."""
+        def _safe_float(value: Any) -> Optional[float]:
+            try:
+                if value is None:
+                    return None
+                return float(value)
+            except (ValueError, TypeError):
+                return None
+
+        return {
+            "event_type": "ffe.trade.closed",
+            "event_version": "1.0",
+            "event_id": str(uuid.uuid4()),
+            "occurred_at": outcome.get("exit_time") or datetime.now(timezone.utc).isoformat(),
+            "source": "finance_feedback_engine.trade_outcome_recorder",
+            "environment": os.getenv("FFE_ENVIRONMENT", "development"),
+            "cfo_accounting": {
+                "trade_id": outcome.get("trade_id") or outcome.get("order_id"),
+                "decision_id": outcome.get("decision_id"),
+                "asset_pair": outcome.get("product"),
+                "side": outcome.get("side"),
+                "entry_time": outcome.get("entry_time"),
+                "exit_time": outcome.get("exit_time"),
+                "entry_price": outcome.get("entry_price"),
+                "exit_price": outcome.get("exit_price"),
+                "quantity": outcome.get("exit_size") or outcome.get("entry_size"),
+                "realized_pnl": outcome.get("realized_pnl"),
+                "realized_pnl_float": _safe_float(outcome.get("realized_pnl")),
+                "roi_percent": outcome.get("roi_percent"),
+                "fees": outcome.get("fees"),
+                "holding_duration_seconds": outcome.get("holding_duration_seconds"),
+                "exit_price_source": outcome.get("exit_price_source"),
+                "recorded_via": outcome.get("recorded_via", "position_polling"),
+            },
+            "raw_outcome": outcome,
+        }
+
+    def _post_trade_close_alert(self, payload: Dict[str, Any]) -> None:
+        """POST trade-close alert payload to n8n webhook."""
+        if not self.trade_close_alert_webhook_url:
+            return
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "ffe-trade-outcome-recorder/1.0",
+        }
+        if self.trade_close_alert_token:
+            headers["X-FFE-Alert-Token"] = self.trade_close_alert_token
+
+        request = urllib.request.Request(
+            self.trade_close_alert_webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=self.trade_close_alert_timeout_seconds) as response:
+                status_code = response.getcode()
+                if 200 <= status_code < 300:
+                    logger.info(
+                        "Trade-close alert delivered to n8n for trade_id=%s status=%s",
+                        payload.get("cfo_accounting", {}).get("trade_id"),
+                        status_code,
+                    )
+                else:
+                    logger.warning(
+                        "Trade-close alert webhook returned non-2xx status=%s for trade_id=%s",
+                        status_code,
+                        payload.get("cfo_accounting", {}).get("trade_id"),
+                    )
+        except urllib.error.HTTPError as e:
+            logger.warning(
+                "Trade-close alert webhook HTTP error status=%s reason=%s",
+                e.code,
+                e.reason,
+            )
+        except Exception as e:
+            logger.warning("Trade-close alert webhook delivery failed: %s", e)
+
+    def _emit_trade_close_alert_async(self, outcome: Dict[str, Any]) -> None:
+        """Fire-and-forget trade-close alert to n8n for CFO accounting ingestion."""
+        if not self.trade_close_alert_webhook_url:
+            return
+
+        payload = self._build_trade_close_alert_payload(outcome)
+        try:
+            self._executor.submit(self._post_trade_close_alert, payload)
+        except Exception as e:
+            logger.warning("Failed to enqueue trade-close alert delivery: %s", e)
+
     def _save_outcome(self, outcome: Dict[str, Any]) -> None:
         """Save outcome to JSONL file with file locking."""
         try:
@@ -478,7 +599,7 @@ class TradeOutcomeRecorder:
             exit_dt = datetime.fromisoformat(outcome["exit_time"].replace("Z", "+00:00"))
             filename = f"{exit_dt.strftime('%Y-%m-%d')}.jsonl"
             outcome_file = self.outcomes_dir / filename
-            
+
             # Atomic append with file locking
             with open(outcome_file, "a") as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
@@ -486,9 +607,12 @@ class TradeOutcomeRecorder:
                     f.write(json.dumps(outcome) + "\n")
                 finally:
                     fcntl.flock(f, fcntl.LOCK_UN)
-            
+
             logger.info(f"Trade outcome saved to {outcome_file}")
-            
+
+            # Trigger n8n alert for CFO accounting ingestion (non-blocking)
+            self._emit_trade_close_alert_async(outcome)
+
         except Exception as e:
             logger.error(f"Failed to save outcome: {e}")
     
