@@ -1102,6 +1102,7 @@ class FinanceFeedbackEngine:
         include_sentiment: bool = True,
         include_macro: bool = False,
         use_memory_context: bool = True,
+        provider: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Analyze an asset and generate a trading decision (sync API).
 
@@ -1121,6 +1122,7 @@ class FinanceFeedbackEngine:
                     include_sentiment=include_sentiment,
                     include_macro=include_macro,
                     use_memory_context=use_memory_context,
+                    provider=provider,
                 )
             )
 
@@ -1176,6 +1178,7 @@ class FinanceFeedbackEngine:
         include_sentiment: bool = True,
         include_macro: bool = False,
         use_memory_context: bool = True,
+        provider: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Analyze an asset and generate trading decision (async API)."""
         from .utils.validation import standardize_asset_pair
@@ -1420,6 +1423,7 @@ class FinanceFeedbackEngine:
                 balance=balance,
                 portfolio=portfolio,
                 memory_context=memory_context,
+                provider_override=provider,
             )
         except InsufficientProvidersError as e:
             # Phase 1 quorum failure - log and return NO_DECISION

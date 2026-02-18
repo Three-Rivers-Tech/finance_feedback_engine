@@ -861,6 +861,7 @@ Format response as a structured technical analysis demonstration.
         prompt: str,
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None,
+        provider_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -869,20 +870,26 @@ Format response as a structured technical analysis demonstration.
             prompt: AI prompt
             asset_pair: Optional asset pair for two-phase routing
             market_data: Optional market data for two-phase routing
+            provider_override: Optional provider override for this call
 
         Returns:
             AI response
         """
         # Track AI provider query latency
         query_start_time = time.time()
+        provider_name = provider_override or self.ai_manager.ai_provider or "unknown"
         try:
             # Delegating to the AI manager
-            ai_response = await self.ai_manager.query_ai(prompt, asset_pair, market_data)
+            ai_response = await self.ai_manager.query_ai(
+                prompt,
+                asset_pair,
+                market_data,
+                provider_override=provider_override,
+            )
 
             # Record successful query latency
             query_elapsed = time.time() - query_start_time
             if self._histograms.get("ffe_provider_query_latency_seconds"):
-                provider_name = self.ai_manager.ai_provider or "unknown"
                 self._histograms["ffe_provider_query_latency_seconds"].record(
                     query_elapsed,
                     attributes={
@@ -901,7 +908,7 @@ Format response as a structured technical analysis demonstration.
                 error_counter.add(
                     1,
                     attributes={
-                        "provider": self.ai_manager.ai_provider or "unknown",
+                        "provider": provider_name,
                         "error_type": type(e).__name__,
                         "asset_pair": asset_pair or "unknown",
                     }
@@ -912,7 +919,6 @@ Format response as a structured technical analysis demonstration.
             # Record failed query latency
             query_elapsed = time.time() - query_start_time
             if self._histograms.get("ffe_provider_query_latency_seconds"):
-                provider_name = self.ai_manager.ai_provider or "unknown"
                 self._histograms["ffe_provider_query_latency_seconds"].record(
                     query_elapsed,
                     attributes={
@@ -1738,6 +1744,7 @@ Format response as a structured technical analysis demonstration.
         portfolio: Optional[Dict[str, Any]] = None,
         memory_context: Optional[Dict[str, Any]] = None,
         monitoring_context: Optional[Dict[str, Any]] = None,
+        provider_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Generate a trading decision based on market data and balances.
@@ -1749,6 +1756,7 @@ Format response as a structured technical analysis demonstration.
             portfolio: Optional portfolio breakdown with holdings/allocations
             memory_context: Optional historical performance context
             monitoring_context: Optional monitoring context with active positions and pulse
+            provider_override: Optional AI provider override for this decision
 
         Returns:
             Trading decision with recommendation
@@ -1855,7 +1863,10 @@ Format response as a structured technical analysis demonstration.
 
             # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
             ai_response = await self._query_ai(
-                prompt, asset_pair=asset_pair, market_data=market_data
+                prompt,
+                asset_pair=asset_pair,
+                market_data=market_data,
+                provider_override=provider_override,
             )
 
             # Apply optional veto logic before final decision creation
@@ -1896,6 +1907,9 @@ Format response as a structured technical analysis demonstration.
 
             # Create structured decision object
             decision = self._create_decision(asset_pair, context, ai_response)
+
+            if provider_override:
+                decision["ai_provider"] = provider_override
 
             # Record successful decision generation latency
             decision_elapsed = time.time() - decision_start_time

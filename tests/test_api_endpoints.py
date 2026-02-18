@@ -174,6 +174,37 @@ class TestDecisionsEndpoints:
         # Accept various status codes (endpoint may not be fully implemented)
         assert response.status_code in [200, 404, 405]
 
+    def test_create_decision_uses_provider(self, client, mock_engine):
+        """Test decision creation passes provider through to engine."""
+        mock_engine.analyze_asset.return_value = {
+            "decision_id": "test-decision-123",
+            "asset_pair": "BTCUSD",
+            "action": "BUY",
+            "confidence": 72,
+            "reasoning": "Test reasoning",
+        }
+
+        payload = {
+            "asset_pair": "BTCUSD",
+            "provider": "ensemble",
+            "include_sentiment": False,
+            "include_macro": False,
+        }
+
+        response = client.post("/api/v1/decisions", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["decision_id"] == "test-decision-123"
+        assert data["asset_pair"] == "BTCUSD"
+        assert data["action"] == "BUY"
+
+        mock_engine.analyze_asset.assert_called_once_with(
+            asset_pair="BTCUSD",
+            provider="ensemble",
+            include_sentiment=False,
+            include_macro=False,
+        )
+
 
 class TestStatusEndpoint:
     """Test /api/v1/status endpoint."""

@@ -62,6 +62,7 @@ class AIDecisionManager:
         prompt: str,
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None,
+        provider_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -70,36 +71,40 @@ class AIDecisionManager:
             prompt: AI prompt
             asset_pair: Optional asset pair for two-phase routing
             market_data: Optional market data for two-phase routing
+            provider_override: Optional provider override for this call
 
         Returns:
             AI response
         """
-        logger.info(f"Querying AI provider: {self.ai_provider}")
+        provider = provider_override or self.ai_provider
+        logger.info(f"Querying AI provider: {provider}")
 
         # Mock mode: fast random decisions for backtesting
-        if self.ai_provider == "mock":
+        if provider == "mock":
             return await self._mock_ai_inference(prompt)
 
         # Ensemble mode: query multiple providers and aggregate
-        if self.ai_provider == "ensemble":
+        if provider == "ensemble":
+            if self.ensemble_manager is None:
+                self._get_ensemble_manager()
             return await self._ensemble_ai_inference(
                 prompt, asset_pair=asset_pair, market_data=market_data
             )
 
         # Route to appropriate single provider
-        if self.ai_provider == "local":
+        if provider == "local":
             return await self._local_ai_inference(prompt)
-        elif self.ai_provider == "cli":
+        elif provider == "cli":
             return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == "codex":
+        elif provider == "codex":
             return await self._codex_ai_inference(prompt)
-        elif self.ai_provider == "qwen":
+        elif provider == "qwen":
             # Qwen CLI provider
             return await self._cli_ai_inference(prompt)
-        elif self.ai_provider == "gemini":
+        elif provider == "gemini":
             return await self._gemini_ai_inference(prompt)
         else:
-            raise ValueError(f"Unknown AI provider: {self.ai_provider}")
+            raise ValueError(f"Unknown AI provider: {provider}")
 
     async def _mock_ai_inference(self, prompt: str) -> Dict[str, Any]:
         """
