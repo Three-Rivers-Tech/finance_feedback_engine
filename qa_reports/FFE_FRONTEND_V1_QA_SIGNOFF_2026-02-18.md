@@ -1,25 +1,42 @@
-# FFE Frontend V1 QA Signoff — 2026-02-18
+# FFE Frontend v1 QA Signoff — 2026-02-18
 
-## Scope
-Frontend overhaul for clean v1 UX on branch `feat/ffe-frontend-v1-20260218`.
+## Branch
+`feat/ffe-frontend-v1-20260218`
 
 ## Phase Summary
-1. **Stability/Auth**: Added robust API key handling (`localStorage` + env fallback), placeholder-key filtering, clear unauthenticated notice, and in-app Settings key management.
-2. **Product Cleanup**: Focused v1 navigation/routes to Dashboard, Agent Control, Positions/Trades, Health/SelfCheck, Settings. Legacy routes redirect.
-3. **Quality Gate**: Resolved lint/type/build issues; verified tests and runtime preview.
 
-## Verification Commands
-| Command | Result |
-|---|---|
-| `npm run lint` | ✅ PASS |
-| `npm run type-check` | ✅ PASS |
-| `npm run test -- --run` | ✅ PASS (10 files, 203 tests) |
-| `npm run build` | ✅ PASS |
-| `curl -fsS http://127.0.0.1:8000/health` | ✅ PASS (`status":"healthy`) |
-| `npm run preview -- --host 0.0.0.0 --port 4173` | ✅ PASS (started) |
-| `curl -I -s http://127.0.0.1:4173 | head -n 1` | ✅ PASS (`HTTP/1.1 200 OK`) |
+### Phase 1 — Stability (Auth/Dev-preview flow)
+- Introduced `src/utils/auth.ts`: `getEffectiveApiKey()`, `isPlaceholderApiKey()`, `setStoredApiKey()`, `clearStoredApiKey()`, `hasUsableApiKey()`. Placeholder keys (e.g. `your-api-key-here`) are silently rejected.
+- `api/client.ts` and `config/loader.ts` updated to use `getEffectiveApiKey()` — no more 401 spam from placeholder keys.
+- `services/websocket.ts` updated to use `getEffectiveApiKey()` for WS token.
+- `UnauthenticatedNotice` component added to `AppLayout`: persistent banner links to Settings when no key is present.
+- `Settings` page added (`/settings`): paste + save API key, clear key, test API access inline.
+- `Header` now shows AUTH badge (READY / MISSING).
 
-## Notes
-- Backend compatibility preserved (existing API routes and payload expectations retained).
-- No secrets committed.
-- Preview running in background session: `lucky-prairie`.
+### Phase 2 — Product Cleanup
+- Sidebar nav reduced to 5 focused routes: Dashboard, Agent Control, Positions/Trades, Health/Self-Check, Settings.
+- Legacy pages (Analytics, Optimization, Models) archived via `<Navigate>` redirects in `App.tsx` — no broken routes.
+- `PositionsTrades` page added as dedicated positions + decisions view.
+- `ConnectionContext` split cleanly: `connectionContextState.ts` (context + types), `ConnectionContext.tsx` (provider), `useConnectionStatus.ts` (hook) — resolves fast-refresh warnings.
+
+### Phase 3 — Quality Gate
+- Lint errors: **41 errors → 0 errors** (0 warnings in production files)
+- Type-check: **PASS** (0 errors)
+- Tests: **PASS** (10 files, 203 tests)
+- Build: **PASS**
+- Backend integration: **PASS** (6/6)
+
+## QA Commands (all exit 0)
+```bash
+cd frontend
+npm run lint            # 0 errors, 0 warnings
+npm run type-check      # exit 0
+npm run test -- --run   # 10 files, 203 tests PASS
+npm run build           # exit 0
+
+cd ..
+.venv/bin/pytest -q tests/integration/test_trading_api_endpoints.py --no-cov  # 6/6 PASS
+```
+
+## QA Gate Decision
+✅ **PASS** — Approved for merge, branch deletion, and live reboot.
