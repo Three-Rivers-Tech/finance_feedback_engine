@@ -198,6 +198,7 @@ class MockLiveProvider:
         asset_pair: str,
         include_sentiment: bool = True,
         include_macro: bool = False,
+        force_refresh: bool = False,
     ) -> Dict[str, Any]:
         """
         Get comprehensive market data matching AlphaVantageProvider format.

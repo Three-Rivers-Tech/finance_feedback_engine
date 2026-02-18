@@ -1190,21 +1190,63 @@ class FinanceFeedbackEngine:
 
         # Fetch comprehensive market data
         market_data = await self.data_provider.get_comprehensive_market_data(
-            asset_pair, include_sentiment=include_sentiment, include_macro=include_macro
+            asset_pair,
+            include_sentiment=include_sentiment,
+            include_macro=include_macro,
         )
 
-        # Live-forex freshness fix: override potentially stale historical close with
-        # real-time Oanda pricing when available.
+        # If provider reported stale data, force one cache-bypassing refresh before
+        # decisioning. This prevents cache age from repeatedly triggering HOLD.
+        if market_data.get("stale_data"):
+            logger.warning(
+                "Stale market data detected for %s; forcing fresh provider fetch.",
+                asset_pair,
+            )
+            try:
+                market_data = await self.data_provider.get_comprehensive_market_data(
+                    asset_pair,
+                    include_sentiment=include_sentiment,
+                    include_macro=include_macro,
+                    force_refresh=True,
+                )
+            except Exception as refresh_err:
+                logger.warning(
+                    "Forced refresh failed for %s; using previous data: %s",
+                    asset_pair,
+                    refresh_err,
+                )
+
+        # Live price overlay: refresh the tradeable spot from exchange pricing for
+        # both forex and crypto. This updates both `timestamp` and `date` so all
+        # downstream freshness checks see the latest provider time.
         try:
-            if self.unified_provider and self.unified_provider._is_forex(asset_pair):
+            if self.unified_provider and (
+                self.unified_provider._is_forex(asset_pair)
+                or self.unified_provider._is_crypto(asset_pair)
+            ):
                 live_price = self.unified_provider.get_current_price(asset_pair)
                 if live_price and live_price.get("price") is not None:
+                    live_ts = live_price.get("timestamp")
+
+                    # Normalize numeric timestamps to ISO for consistency
+                    if isinstance(live_ts, (int, float)):
+                        live_ts = datetime.utcfromtimestamp(live_ts).isoformat() + "Z"
+                    elif not live_ts:
+                        live_ts = datetime.utcnow().isoformat() + "Z"
+
                     market_data["close"] = float(live_price["price"])
-                    market_data["timestamp"] = live_price.get("timestamp")
+                    market_data["timestamp"] = live_ts
+                    market_data["date"] = live_ts
                     market_data["data_age_seconds"] = 0
-                    market_data["live_price_provider"] = live_price.get("provider", "oanda_pricing")
+                    market_data["data_age_hours"] = 0
+                    market_data["stale_data"] = False
+                    market_data["live_price_provider"] = live_price.get(
+                        "provider", "exchange_live_price"
+                    )
         except Exception as _e:
-            logger.debug("Unable to overlay live forex price for %s: %s", asset_pair, _e)
+            logger.debug(
+                "Unable to overlay live exchange price for %s: %s", asset_pair, _e
+            )
 
         # Compare Alpha Vantage price with real-time platform data (THR-22 fix)
         # This validates data quality and detects price divergence

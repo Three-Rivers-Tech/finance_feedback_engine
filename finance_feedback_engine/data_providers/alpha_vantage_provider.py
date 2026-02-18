@@ -1246,6 +1246,7 @@ class AlphaVantageProvider:
         asset_pair: str,
         include_sentiment: bool = True,
         include_macro: bool = False,
+        force_refresh: bool = False,
     ) -> Dict[str, Any]:
         """
         Fetch comprehensive market data including price, sentiment, and macro.
@@ -1254,12 +1255,13 @@ class AlphaVantageProvider:
             asset_pair: Asset pair to analyze
             include_sentiment: Whether to include news sentiment
             include_macro: Whether to include macro indicators
+            force_refresh: Whether to bypass provider cache and fetch fresh data
 
         Returns:
             Comprehensive market data dictionary
         """
         # Get base market data
-        market_data = await self.get_market_data(asset_pair)
+        market_data = await self.get_market_data(asset_pair, force_refresh=force_refresh)
 
         # Add sentiment if requested
         if include_sentiment:
@@ -1521,9 +1523,12 @@ class AlphaVantageProvider:
                 return self._create_mock_data(asset_pair, "crypto")
             raise ValueError(msg)
 
+        # Freshness-first mapping for live crypto routing:
+        # use 1-minute exchange candles for intraday paths to avoid stale
+        # top-of-hour closes being treated as old during active trading.
         granularity_map = {
-            "60min": "1h",
-            "1h": "1h",
+            "60min": "1m",
+            "1h": "1m",
             "daily": "1d",
             "1d": "1d",
         }

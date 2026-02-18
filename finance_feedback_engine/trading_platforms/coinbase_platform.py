@@ -336,11 +336,29 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
     @staticmethod
     def _extract_base_quote(asset_pair: str) -> tuple[str, str]:
-        """Extract base/quote from normalized product id."""
+        """Extract base/quote from common pair formats (BTCUSD, BTC-USD, BTC/USD)."""
         normalized = str(asset_pair or "").strip().upper().replace("/", "-")
         parts = [p for p in normalized.split("-") if p]
         if len(parts) >= 2:
             return parts[0], parts[1]
+
+        pair = normalized.replace("-", "")
+        known_quotes = (
+            "USDT",
+            "USDC",
+            "USD",
+            "EUR",
+            "GBP",
+            "JPY",
+            "AUD",
+            "CAD",
+            "BTC",
+            "ETH",
+        )
+        for quote in known_quotes:
+            if pair.endswith(quote) and len(pair) > len(quote):
+                return pair[: -len(quote)], quote
+
         return "", ""
 
     def _is_futures_product(self, decision: Dict[str, Any], product: Any) -> bool:
@@ -367,6 +385,69 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         # Strategy-level default: BTC/ETH USD rails are futures in this project.
         return base in {"BTC", "ETH"} and quote in {"USD", "USDC"}
+
+    def _resolve_futures_product(
+        self,
+        client: Any,
+        asset_pair: str,
+    ) -> tuple[str, Any]:
+        """Resolve tradable perpetual futures product metadata for an asset pair."""
+        base, quote = self._extract_base_quote(asset_pair)
+        if not base:
+            raise ValueError(f"Unable to parse asset pair for futures routing: {asset_pair}")
+
+        preferred_quotes = [quote] if quote else ["USD"]
+        if "USD" not in preferred_quotes:
+            preferred_quotes.append("USD")
+        if "USDC" not in preferred_quotes:
+            preferred_quotes.append("USDC")
+
+        candidates: list[str] = []
+        for q in preferred_quotes:
+            candidates.extend(
+                [
+                    f"{base}-{q}-PERP-INTX",
+                    f"{base}-{q}-PERP",
+                    f"{base}-PERP-INTX",
+                    f"{base}-PERP",
+                ]
+            )
+
+        # preserve order while removing duplicates
+        seen: set[str] = set()
+        unique_candidates: list[str] = []
+        for candidate in candidates:
+            if candidate not in seen:
+                seen.add(candidate)
+                unique_candidates.append(candidate)
+
+        last_error: Optional[Exception] = None
+        for candidate in unique_candidates:
+            try:
+                product = client.get_product(product_id=candidate)
+                product_type = str(
+                    self._get_product_field(product, "product_type", "")
+                ).upper()
+                has_future_details = (
+                    self._get_product_field(product, "future_product_details", None)
+                    is not None
+                )
+                trading_disabled = bool(
+                    self._get_product_field(product, "trading_disabled", False)
+                    or self._get_product_field(product, "is_disabled", False)
+                    or self._get_product_field(product, "cancel_only", False)
+                )
+
+                if (has_future_details or any(tag in product_type for tag in ("FUTURE", "PERP"))) and not trading_disabled:
+                    return candidate, product
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        raise ValueError(
+            f"No active perpetual futures product found for {asset_pair}. "
+            f"Tried: {unique_candidates}. Last error: {last_error}"
+        )
 
     def _build_futures_base_size(
         self,
@@ -426,6 +507,55 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
         normalized = rounded_base.normalize()
         return format(normalized, "f")
+
+    @staticmethod
+    def _is_insufficient_fund_response(order_result: Dict[str, Any]) -> bool:
+        """Detect insufficient-funds errors across Coinbase response shapes."""
+        if not order_result:
+            return False
+
+        error_response = order_result.get("error_response") or {}
+        blob = " ".join(
+            str(v)
+            for v in [
+                order_result.get("error", ""),
+                order_result.get("message", ""),
+                order_result.get("error_details", ""),
+                error_response.get("error", ""),
+                error_response.get("message", ""),
+                error_response.get("preview_failure_reason", ""),
+            ]
+            if v
+        ).upper()
+
+        return "INSUFFICIENT_FUND" in blob or "PREVIEW_INSUFFICIENT_FUND" in blob
+
+    def _extract_buying_power_snapshot(self) -> Dict[str, Decimal]:
+        """Fetch USD buying power snapshot for quote sizing pre-checks."""
+        try:
+            balances = self.get_balance() or {}
+        except Exception as exc:
+            logger.warning("Could not fetch balance snapshot for quote sizing: %s", exc)
+            balances = {}
+
+        futures_total = Decimal("0")
+        spot_total = Decimal("0")
+
+        for key in ("FUTURES_USD", "FUTURES_USDC"):
+            val = balances.get(key, 0)
+            if val:
+                futures_total += self._to_decimal(val, key)
+
+        for key in ("SPOT_USD", "SPOT_USDC"):
+            val = balances.get(key, 0)
+            if val:
+                spot_total += self._to_decimal(val, key)
+
+        return {
+            "futures_total": futures_total,
+            "spot_total": spot_total,
+            "raw": balances,
+        }
 
     def _inject_trace_headers_per_request(self) -> None:
         """
@@ -1332,6 +1462,38 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
 
             use_futures_size_mode = self._is_futures_product(decision, product_response)
 
+            # Futures-first routing: BTC/ETH rails must execute on perpetual futures
+            # product ids, not spot pairs.
+            if use_futures_size_mode:
+                try:
+                    futures_product_id, futures_product = self._resolve_futures_product(
+                        client=client,
+                        asset_pair=asset_pair,
+                    )
+                    if futures_product_id != product_id:
+                        logger.info(
+                            "Rerouting %s from %s to futures product %s",
+                            asset_pair,
+                            product_id,
+                            futures_product_id,
+                        )
+                    product_id = futures_product_id
+                    product_response = futures_product
+                except Exception as futures_resolve_err:
+                    logger.error(
+                        "Futures routing failed for %s: %s",
+                        asset_pair,
+                        futures_resolve_err,
+                    )
+                    return {
+                        "success": False,
+                        "platform": "coinbase_advanced",
+                        "decision_id": decision.get("id"),
+                        "error": "Futures product resolution failed",
+                        "error_details": str(futures_resolve_err),
+                        "timestamp": decision.get("timestamp"),
+                    }
+
             quote_increment = self._coerce_decimal_or_default(
                 self._get_product_field(product_response, "quote_increment", "0.01"),
                 "0.01",
@@ -1341,6 +1503,11 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 self._get_product_field(product_response, "quote_min_size", None),
                 "quote_min_size",
             )
+
+            buying_power_snapshot = (
+                self._extract_buying_power_snapshot() if action == "BUY" else {}
+            )
+            quote_size = None
 
             if use_futures_size_mode:
                 base_size = self._build_futures_base_size(
@@ -1368,17 +1535,74 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         base_size=base_size,
                     )
             elif action == "BUY":
+                futures_total = buying_power_snapshot.get("futures_total", Decimal("0"))
+                spot_total = buying_power_snapshot.get("spot_total", Decimal("0"))
+
+                # Quote-size orders spend spot quote balance. If spot USD/USDC is empty,
+                # do not submit a guaranteed-reject order.
+                if spot_total <= 0:
+                    logger.error(
+                        "BUY pre-check failed for %s: spot quote balance is 0 "
+                        "(futures collateral=%s). Skipping order to avoid INSUFFICIENT_FUND.",
+                        product_id,
+                        futures_total,
+                    )
+                    return {
+                        "success": False,
+                        "platform": "coinbase_advanced",
+                        "decision_id": decision.get("id"),
+                        "error": "Insufficient source balance",
+                        "error_details": (
+                            "Spot USD/USDC available is 0 for quote_size BUY order. "
+                            "Futures collateral exists but this order route uses spot quote balance."
+                        ),
+                        "response": {
+                            "precheck": "insufficient_spot_quote_balance",
+                            "spot_total": float(spot_total),
+                            "futures_total": float(futures_total),
+                            "suggested_amount": float(requested_size_usd_decimal),
+                        },
+                        "timestamp": decision.get("timestamp"),
+                    }
+
+                # Safety buffer to absorb fees/slippage/preview deltas and avoid edge rejects.
+                safety_buffer = Decimal("0.97")
+                max_safe_quote = spot_total * safety_buffer
+                quote_budget = min(requested_size_usd_decimal, max_safe_quote)
+
+                if quote_budget <= 0:
+                    return {
+                        "success": False,
+                        "platform": "coinbase_advanced",
+                        "decision_id": decision.get("id"),
+                        "error": "Insufficient buying power",
+                        "error_details": (
+                            f"Available spot quote after buffer is {max_safe_quote}; "
+                            f"requested {requested_size_usd_decimal}."
+                        ),
+                        "response": {
+                            "precheck": "buying_power_below_buffer",
+                            "spot_total": float(spot_total),
+                            "requested_size_usd": float(requested_size_usd_decimal),
+                            "max_safe_quote": float(max_safe_quote),
+                        },
+                        "timestamp": decision.get("timestamp"),
+                    }
+
                 quote_size = self._format_size_with_increment(
-                    raw_size=requested_size_usd_decimal,
+                    raw_size=quote_budget,
                     increment=quote_increment,
                     field_name="quote_size",
                     min_size=quote_min_size,
                 )
 
                 logger.info(
-                    "Calculated quote_size for BUY: %s (requested_usd=%s, increment=%s)",
+                    "Calculated quote_size for BUY: %s "
+                    "(requested_usd=%s, spot_total=%s, safe_cap=%s, increment=%s)",
                     quote_size,
                     requested_size_usd_decimal,
+                    spot_total,
+                    max_safe_quote,
                     quote_increment,
                 )
 
@@ -1466,6 +1690,69 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     "timestamp": decision.get("timestamp"),
                 }
             else:
+                # Single adaptive retry for quote_size BUY orders that fail due to
+                # insufficient funds: refresh balances and downsize to a safer cap.
+                if (
+                    action == "BUY"
+                    and not use_futures_size_mode
+                    and quote_size is not None
+                    and self._is_insufficient_fund_response(order_result_dict)
+                ):
+                    logger.warning(
+                        "BUY order for %s failed with INSUFFICIENT_FUND. "
+                        "Refreshing buying power and retrying with reduced quote_size.",
+                        product_id,
+                    )
+                    refreshed_snapshot = self._extract_buying_power_snapshot()
+                    refreshed_spot_total = refreshed_snapshot.get("spot_total", Decimal("0"))
+
+                    try:
+                        previous_quote = self._to_decimal(quote_size, "quote_size")
+                        retry_cap = refreshed_spot_total * Decimal("0.92")
+                        retry_budget = min(previous_quote, retry_cap)
+
+                        # Ensure retry is strictly smaller than the previous attempt.
+                        if retry_budget >= previous_quote:
+                            retry_budget = previous_quote - quote_increment
+
+                        if retry_budget > 0:
+                            retry_quote_size = self._format_size_with_increment(
+                                raw_size=retry_budget,
+                                increment=quote_increment,
+                                field_name="quote_size",
+                                min_size=quote_min_size,
+                            )
+
+                            logger.info(
+                                "Retrying BUY %s with reduced quote_size=%s "
+                                "(prev=%s, spot_total=%s)",
+                                product_id,
+                                retry_quote_size,
+                                quote_size,
+                                refreshed_spot_total,
+                            )
+
+                            retry_result = client.market_order_buy(
+                                client_order_id=f"{client_order_id}-retry",
+                                product_id=product_id,
+                                quote_size=retry_quote_size,
+                            )
+                            order_result_dict = retry_result.to_dict()
+                            success = order_result_dict.get("success", False)
+                            if success:
+                                return {
+                                    "success": True,
+                                    "platform": "coinbase_advanced",
+                                    "decision_id": decision.get("id"),
+                                    "order_id": order_result_dict.get("order_id"),
+                                    "order_status": order_result_dict.get("status"),
+                                    "latency_seconds": time.time() - start_time,
+                                    "response": order_result_dict,
+                                    "timestamp": decision.get("timestamp"),
+                                }
+                    except Exception as retry_exc:
+                        logger.warning("Adaptive buy-size retry failed: %s", retry_exc)
+
                 error_details = order_result_dict.get("error_details", "No error details")
                 logger.error("Trade execution failed: %s", error_details)
                 return {

@@ -1751,11 +1751,25 @@ class TradingLoopAgent:
                     )
                     if execution_result.get("success"):
                         logger.info(
-                            "Trade executed successfully for %s %s. Associating decision with monitor.",
+                            "Trade execution succeeded for %s %s. Associating decision with monitor.",
                             action,
-                            asset_pair
+                            asset_pair,
                         )
-                        self.daily_trade_count += 1
+
+                        if self._counts_toward_daily_trade_limit(decision, execution_result):
+                            self.daily_trade_count += 1
+                            logger.info(
+                                "Daily trade count incremented to %d for %s",
+                                self.daily_trade_count,
+                                asset_pair,
+                            )
+                        else:
+                            logger.info(
+                                "Execution for %s did not count toward daily limit "
+                                "(insufficient funds/logistics/rejection/no order id).",
+                                asset_pair,
+                            )
+
                         self.trade_monitor.associate_decision_to_trade(
                             decision_id, asset_pair
                         )
@@ -2333,6 +2347,80 @@ class TradingLoopAgent:
                 exc_info=True,
             )
             return False
+
+    def _counts_toward_daily_trade_limit(
+        self, decision: Dict[str, Any], execution_result: Dict[str, Any]
+    ) -> bool:
+        """
+        Determine whether an attempted execution should consume one daily trade slot.
+
+        Rules:
+        - Must be a successful BUY/SELL execution
+        - Must have an order identifier
+        - Must NOT be rejected/cancelled/failed due to logistics (insufficient funds,
+          connectivity, stale data, platform rejection)
+        """
+        if not execution_result or not execution_result.get("success"):
+            return False
+
+        action = str(decision.get("action", "")).upper()
+        if action not in {"BUY", "SELL"}:
+            return False
+
+        response = execution_result.get("response") or {}
+        order_id = execution_result.get("order_id") or response.get("order_id")
+        if not order_id:
+            # No concrete order => do not burn daily quota
+            return False
+
+        order_status = str(
+            execution_result.get("order_status")
+            or response.get("status")
+            or ""
+        ).upper()
+        non_count_statuses = {
+            "FAILED",
+            "FAILURE",
+            "REJECTED",
+            "CANCELED",
+            "CANCELLED",
+            "EXPIRED",
+            "PENDING_REJECT",
+        }
+        if order_status in non_count_statuses:
+            return False
+
+        error_blob = " ".join(
+            str(v)
+            for v in [
+                execution_result.get("error", ""),
+                execution_result.get("error_details", ""),
+                (response.get("error_response", {}) or {}).get("error", ""),
+                (response.get("error_response", {}) or {}).get("message", ""),
+                (response.get("error_response", {}) or {}).get(
+                    "preview_failure_reason", ""
+                ),
+            ]
+            if v
+        ).lower()
+
+        logistical_failure_markers = [
+            "insufficient_fund",
+            "insufficient fund",
+            "preview_insufficient_fund",
+            "connection",
+            "timeout",
+            "name resolution",
+            "stale",
+            "rejected",
+            "order creation failed",
+            "no valid coinbase balance",
+            "rate limit",
+        ]
+        if any(marker in error_blob for marker in logistical_failure_markers):
+            return False
+
+        return True
 
     async def _should_execute(self, decision) -> bool:
         """
