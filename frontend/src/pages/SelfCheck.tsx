@@ -1,11 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import apiClient, { handleApiError } from '../api/client';
 import { API_BASE_URL, APP_VERSION } from '../utils/constants';
+import { hasUsableApiKey } from '../utils/auth';
 
 type CheckResult = {
   ok: boolean;
   message: string;
   details?: unknown;
+};
+
+
+type BotStatusDetails = {
+  state?: string;
+  current_asset_pair?: string;
+  total_trades?: number;
+  portfolio_value?: number;
+  daily_pnl?: number;
 };
 
 export const SelfCheck: React.FC = () => {
@@ -19,7 +29,7 @@ export const SelfCheck: React.FC = () => {
   const [assetPair, setAssetPair] = useState<string>('BTCUSD');
   const [toast, setToast] = useState<string | null>(null);
 
-  const apiKeyPresent = useMemo(() => !!(localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY), []);
+  const apiKeyPresent = useMemo(() => hasUsableApiKey(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,11 +190,18 @@ export const SelfCheck: React.FC = () => {
           </div>
           {/* Quick metrics */}
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <InfoRow label="State" value={String((botStatus?.details as any)?.state ?? 'unknown')} />
-            <InfoRow label="Asset Pair" value={String((botStatus?.details as any)?.current_asset_pair ?? 'n/a')} />
-            <InfoRow label="Total Trades" value={String((botStatus?.details as any)?.total_trades ?? '0')} />
-            <InfoRow label="Portfolio Value" value={String((botStatus?.details as any)?.portfolio_value ?? 'n/a')} />
-            <InfoRow label="Daily PnL" value={String((botStatus?.details as any)?.daily_pnl ?? 'n/a')} />
+            {(() => {
+              const details = (botStatus?.details ?? {}) as BotStatusDetails;
+              return (
+                <>
+                  <InfoRow label="State" value={String(details.state ?? 'unknown')} />
+                  <InfoRow label="Asset Pair" value={String(details.current_asset_pair ?? 'n/a')} />
+                  <InfoRow label="Total Trades" value={String(details.total_trades ?? '0')} />
+                  <InfoRow label="Portfolio Value" value={String(details.portfolio_value ?? 'n/a')} />
+                  <InfoRow label="Daily PnL" value={String(details.daily_pnl ?? 'n/a')} />
+                </>
+              );
+            })()}
           </div>
           <div className="mt-3 flex items-center gap-3">
             <button

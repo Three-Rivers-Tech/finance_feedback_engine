@@ -15,7 +15,7 @@ interface Props {
 
 export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConnected }) => {
   const { data: positionsData, refetch: refetchPositions } = usePositions();
-  const positions: Position[] = positionsData ?? [];
+  const positions: Position[] = useMemo(() => positionsData ?? [], [positionsData]);
   const { data: decisionsData } = useDecisions(5);
   const decisions: Decision[] = decisionsData ?? [];
   const [closeError, setCloseError] = useState<string | null>(null);
@@ -124,23 +124,31 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
             {recentDecisions && recentDecisions.length === 0 && (
               <p className="text-xs font-mono text-text-muted">No recent decisions</p>
             )}
-            {recentDecisions && recentDecisions.map((evt, idx) => (
-              <div
-                key={`${evt.event}-${idx}`}
-                className="flex items-center justify-between rounded border border-border px-3 py-2"
-              >
-                <div>
-                  <p className="font-mono text-sm">{evt.data?.asset || evt.data?.asset_pair}</p>
-                  <p className="text-xs text-text-secondary font-mono">{evt.data?.reason || evt.data?.reasoning}</p>
+            {recentDecisions && recentDecisions.map((evt, idx) => {
+              const data = evt.data as Record<string, unknown>;
+              const asset = typeof data.asset === 'string' ? data.asset : typeof data.asset_pair === 'string' ? data.asset_pair : 'UNKNOWN';
+              const reason = typeof data.reason === 'string' ? data.reason : typeof data.reasoning === 'string' ? data.reasoning : 'No reasoning';
+              const action = typeof data.action === 'string' ? data.action : 'N/A';
+              const confidenceValue = data.confidence;
+
+              return (
+                <div
+                  key={`${evt.event}-${idx}`}
+                  className="flex items-center justify-between rounded border border-border px-3 py-2"
+                >
+                  <div>
+                    <p className="font-mono text-sm">{asset}</p>
+                    <p className="text-xs text-text-secondary font-mono">{reason}</p>
+                  </div>
+                  <Badge variant={evt.event === 'decision_approved' ? 'success' : 'danger'}>
+                    {action}
+                    {confidenceValue !== undefined && confidenceValue !== null
+                      ? ` ${normalizeConfidence(Number(confidenceValue))?.toFixed(0) ?? ''}%`
+                      : ''}
+                  </Badge>
                 </div>
-                <Badge variant={evt.event === 'decision_approved' ? 'success' : 'danger'}>
-                  {evt.data?.action}
-                  {evt.data?.confidence !== undefined && evt.data?.confidence !== null
-                    ? ` ${normalizeConfidence(Number(evt.data.confidence))?.toFixed(0) ?? ''}%`
-                    : ''}
-                </Badge>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -188,17 +196,25 @@ export const AgentMetricsDashboard: React.FC<Props> = ({ status, events, isConne
           {signalAlerts && signalAlerts.length === 0 && (
             <p className="text-xs font-mono text-text-muted">No signal delivery issues</p>
           )}
-          {signalAlerts && signalAlerts.map((evt, idx) => (
-            <div
-              key={`alert-${idx}`}
-              className="rounded border border-accent-red px-3 py-2 bg-accent-red bg-opacity-10"
-            >
-              <p className="font-mono text-sm text-accent-red">Failures: {evt.data?.failed_count}</p>
-              {evt.data?.reasons && (
-                <p className="text-xs text-accent-red font-mono">{evt.data.reasons.join('; ')}</p>
-              )}
-            </div>
-          ))}
+          {signalAlerts && signalAlerts.map((evt, idx) => {
+            const data = evt.data as Record<string, unknown>;
+            const failedCount = typeof data.failed_count === 'number' ? data.failed_count : 0;
+            const reasons = Array.isArray(data.reasons)
+              ? data.reasons.map((reason) => String(reason))
+              : [];
+
+            return (
+              <div
+                key={`alert-${idx}`}
+                className="rounded border border-accent-red px-3 py-2 bg-accent-red bg-opacity-10"
+              >
+                <p className="font-mono text-sm text-accent-red">Failures: {failedCount}</p>
+                {reasons.length > 0 && (
+                  <p className="text-xs text-accent-red font-mono">{reasons.join('; ')}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="space-y-2">

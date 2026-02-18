@@ -8,7 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigValidator } from '../src/config/validator';
-import type { Environment } from '../src/config/schema';
+import type { AppConfig, Environment, ValidationResult } from '../src/config/schema';
 
 interface ValidationOptions {
   environment: Environment;
@@ -76,7 +76,7 @@ class ConfigValidationCLI {
   /**
    * Load configuration from env file
    */
-  private loadConfig(): any {
+  private loadConfig(): AppConfig | null {
     const envFile = this.getEnvFile();
 
     if (!fs.existsSync(envFile)) {
@@ -159,11 +159,11 @@ class ConfigValidationCLI {
   /**
    * Report validation results
    */
-  private reportResults(result: any): void {
+  private reportResults(result: ValidationResult): void {
     // Report errors
     if (result.errors && result.errors.length > 0) {
       console.error('❌ Validation Errors:\n');
-      result.errors.forEach((error: any) => {
+      result.errors.forEach((error) => {
         const severity = this.getSeverityIcon(error.severity);
         console.error(`  ${severity} ${error.path}`);
         console.error(`     ${error.message}`);
@@ -174,7 +174,7 @@ class ConfigValidationCLI {
     // Report warnings
     if (result.warnings && result.warnings.length > 0) {
       console.warn('⚠️  Validation Warnings:\n');
-      result.warnings.forEach((warning: any) => {
+      result.warnings.forEach((warning) => {
         const severity = this.getSeverityIcon(warning.severity);
         console.warn(`  ${severity} ${warning.path}`);
         console.warn(`     ${warning.message}`);

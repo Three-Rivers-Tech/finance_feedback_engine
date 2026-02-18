@@ -93,7 +93,7 @@ describe('Status Endpoint Integration', () => {
 
       const status = response.data as AgentStatus & {
         balances?: Record<string, number>;
-        portfolio?: Record<string, any>;
+        portfolio?: Record<string, unknown>;
       };
 
       // In development, enriched fields may be present

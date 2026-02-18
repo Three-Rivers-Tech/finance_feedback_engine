@@ -4,14 +4,17 @@
  */
 
 import { API_BASE_URL } from '../utils/constants';
+import { getEffectiveApiKey } from '../utils/auth';
 
-export type WebSocketMessage<T = any> = {
+export type WebSocketMessage<T = unknown> = {
   event: string;
   data: T;
   timestamp?: number;
 };
 
-export type WebSocketCallback<T = any> = (message: WebSocketMessage<T>) => void;
+export type WebSocketCallback<T = unknown> = (message: WebSocketMessage<T>) => void;
+
+type ListenerMap = Map<string, Set<WebSocketCallback<unknown>>>;
 
 interface WebSocketConfig {
   url: string;
@@ -28,14 +31,14 @@ export class WebSocketService {
   private maxRetries: number;
   private initialDelay: number;
   private maxDelay: number;
-  private retryCount: number = 0;
+  private retryCount = 0;
   private retryTimer: number | null = null;
-  private listeners: Map<string, Set<WebSocketCallback>> = new Map();
-  private isIntentionallyClosed: boolean = false;
+  private listeners: ListenerMap = new Map();
+  private isIntentionallyClosed = false;
   private connectionPromise: Promise<void> | null = null;
   private resolveConnection: (() => void) | null = null;
   private heartbeatTimer: number | null = null;
-  private lastMessageTime: number = Date.now();
+  private lastMessageTime = Date.now();
 
   constructor(config: WebSocketConfig) {
     this.url = config.url;
@@ -45,9 +48,6 @@ export class WebSocketService {
     this.maxDelay = config.maxDelay ?? 30000;
   }
 
-  /**
-   * Connect to WebSocket with automatic reconnection
-   */
   public connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN || this.connectionPromise) {
       return this.connectionPromise || Promise.resolve();
@@ -66,14 +66,12 @@ export class WebSocketService {
     try {
       let wsUrl = this.url;
 
-      // Normalize and upgrade to ws/wss
       const trimmed = wsUrl.replace(/\/+$/, '');
       const isAbsolute = /^https?:\/\//i.test(trimmed);
       const baseWithProtocol = isAbsolute ? trimmed : `${window.location.origin}${trimmed || ''}`;
       const wsBase = baseWithProtocol.replace(/^http/i, 'ws');
       wsUrl = wsBase;
 
-      // Append API key as query parameter
       if (this.apiKey) {
         const separator = wsUrl.includes('?') ? '&' : '?';
         wsUrl = `${wsUrl}${separator}token=${encodeURIComponent(this.apiKey)}`;
@@ -92,7 +90,6 @@ export class WebSocketService {
   }
 
   private _handleOpen(): void {
-    console.log('[WebSocket] Connected');
     this.retryCount = 0;
     this.lastMessageTime = Date.now();
     this._startHeartbeat();
@@ -109,12 +106,8 @@ export class WebSocketService {
   private _handleMessage(event: MessageEvent<string>): void {
     try {
       this.lastMessageTime = Date.now();
-      const message: WebSocketMessage = JSON.parse(event.data);
-
-      // Emit to specific event listeners
+      const message = JSON.parse(event.data) as WebSocketMessage<unknown>;
       this._emit(message.event, message);
-
-      // Always emit raw message
       this._emit('message', message);
     } catch (err) {
       console.warn('Failed to parse WebSocket message:', err);
@@ -122,13 +115,6 @@ export class WebSocketService {
   }
 
   private _handleError(): void {
-    console.error('[WebSocket] Error encountered');
-    console.error('[WebSocket] Connection state:', {
-      readyState: this.socket?.readyState,
-      url: this.socket?.url,
-      retryCount: this.retryCount,
-      maxRetries: this.maxRetries,
-    });
     this._emit('error', {
       message: 'WebSocket error',
       timestamp: Date.now(),
@@ -137,28 +123,21 @@ export class WebSocketService {
   }
 
   private _handleClose(event?: CloseEvent): void {
-    console.log('[WebSocket] Disconnected', {
-      code: event?.code,
-      reason: event?.reason
-    });
     this._stopHeartbeat();
 
-    // Check if this is an authentication failure (code 4001)
     if (event?.code === 4001) {
-      console.error('[WebSocket] Authentication failed:', event.reason);
       this._emit('auth_failed', {
         message: event.reason || 'Unauthorized',
         code: event.code,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
-      // Don't attempt to reconnect on auth failure
       this.isIntentionallyClosed = true;
     }
 
     this._emit('disconnected', {
       timestamp: Date.now(),
       code: event?.code,
-      reason: event?.reason
+      reason: event?.reason,
     });
 
     if (!this.isIntentionallyClosed) {
@@ -168,18 +147,13 @@ export class WebSocketService {
 
   private _scheduleReconnect(): void {
     if (this.retryCount >= this.maxRetries) {
-      console.error(`[WebSocket] Max retries (${this.maxRetries}) reached`);
       this._emit('connection_failed', { message: 'Max retries reached' });
       return;
     }
 
-    const delay = Math.min(
-      this.initialDelay * Math.pow(2, this.retryCount),
-      this.maxDelay
-    );
-    this.retryCount++;
+    const delay = Math.min(this.initialDelay * 2 ** this.retryCount, this.maxDelay);
+    this.retryCount += 1;
 
-    console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.retryCount}/${this.maxRetries})`);
     this.retryTimer = window.setTimeout(() => {
       this._internalConnect();
     }, delay);
@@ -189,7 +163,6 @@ export class WebSocketService {
     this._stopHeartbeat();
     this.heartbeatTimer = window.setInterval(() => {
       const timeSinceLastMessage = Date.now() - this.lastMessageTime;
-      // Ping if no message for 30 seconds
       if (timeSinceLastMessage > 30000 && this.socket?.readyState === WebSocket.OPEN) {
         this.send('ping', {});
       }
@@ -203,69 +176,40 @@ export class WebSocketService {
     }
   }
 
-  /**
-   * Send a message over WebSocket
-   * Note: Server expects { action, payload } format for commands
-   */
-  public send(event: string, data: any): void {
+  public send(event: string, data: unknown): void {
     if (this.socket?.readyState === WebSocket.OPEN) {
-      // Server expects { action, payload } for commands like 'start', 'stop', etc.
-      // but sends { event, data } for broadcasts
-      const message = event === 'ping'
-        ? { event, data }  // Keep heartbeat as { event, data }
-        : { action: event, payload: data };  // Commands use { action, payload }
+      const message = event === 'ping' ? { event, data } : { action: event, payload: data };
       this.socket.send(JSON.stringify(message));
-    } else {
-      console.warn('[WebSocket] Cannot send - socket not open');
     }
   }
 
-  /**
-   * Subscribe to specific event type
-   */
-  public on<T = any>(event: string, callback: WebSocketCallback<T>): () => void {
+  public on<T = unknown>(event: string, callback: WebSocketCallback<T>): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(callback);
-
-    // Return unsubscribe function
+    this.listeners.get(event)?.add(callback as WebSocketCallback<unknown>);
     return () => this.off(event, callback);
   }
 
-  /**
-   * Unsubscribe from event
-   */
-  public off(event: string, callback: WebSocketCallback): void {
-    this.listeners.get(event)?.delete(callback);
+  public off<T = unknown>(event: string, callback: WebSocketCallback<T>): void {
+    this.listeners.get(event)?.delete(callback as WebSocketCallback<unknown>);
   }
 
-  /**
-   * Emit event to all listeners
-   */
-  private _emit(event: string, data: any): void {
+  private _emit(event: string, data: unknown): void {
     const callbacks = this.listeners.get(event);
-    if (callbacks) {
-      callbacks.forEach((callback) => {
-        try {
-          callback({ event, data });
-        } catch (err) {
-          console.error(`Error in WebSocket listener for ${event}:`, err);
-        }
-      });
-    }
+    callbacks?.forEach((callback) => {
+      try {
+        callback({ event, data });
+      } catch (err) {
+        console.error(`Error in WebSocket listener for ${event}:`, err);
+      }
+    });
   }
 
-  /**
-   * Get current connection state
-   */
   public isConnected(): boolean {
     return this.socket?.readyState === WebSocket.OPEN;
   }
 
-  /**
-   * Disconnect and close all listeners
-   */
   public disconnect(): void {
     this.isIntentionallyClosed = true;
     this._stopHeartbeat();
@@ -275,24 +219,18 @@ export class WebSocketService {
       this.retryTimer = null;
     }
 
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
-    }
-
+    this.socket?.close();
+    this.socket = null;
     this.listeners.clear();
     this.connectionPromise = null;
   }
 }
 
-/**
- * Create singleton WebSocket instance
- */
 let globalWebSocketService: WebSocketService | null = null;
 
 export function getWebSocketService(): WebSocketService {
   if (!globalWebSocketService) {
-    const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
+    const apiKey = getEffectiveApiKey() ?? undefined;
     const baseUrl = (import.meta.env.VITE_API_BASE_URL || API_BASE_URL || '/api').replace(/\/+$/, '');
     const wsUrl = `${baseUrl}/api/v1/bot/ws`;
 
@@ -307,9 +245,6 @@ export function getWebSocketService(): WebSocketService {
   return globalWebSocketService;
 }
 
-/**
- * Reset global WebSocket service (useful for testing)
- */
 export function resetWebSocketService(): void {
   globalWebSocketService?.disconnect();
   globalWebSocketService = null;

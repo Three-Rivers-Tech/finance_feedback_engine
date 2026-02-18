@@ -7,7 +7,9 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getWebSocketService, type WebSocketMessage } from '../../services/websocket';
 import apiClient from '../client';
-import type { PortfolioStatus, Decision, Position } from '../types';
+import type { PortfolioStatus, Decision, Position, HealthStatus } from '../types';
+
+type DecisionEventPayload = Partial<Decision> & { id?: string; decision_id?: string };
 
 /**
  * Real-time portfolio status hook
@@ -71,7 +73,7 @@ export function usePositionsRealTime(enabled = true) {
 
     // Listen for position open/close/update events
     unsubscribers.push(
-      service.on('position_opened', (msg: WebSocketMessage) => {
+      service.on<Position>('position_opened', (msg) => {
         queryClient.setQueryData(['positions'], (prev: Position[] | undefined) => {
           return prev ? [...prev, msg.data] : [msg.data];
         });
@@ -79,7 +81,7 @@ export function usePositionsRealTime(enabled = true) {
     );
 
     unsubscribers.push(
-      service.on('position_updated', (msg: WebSocketMessage) => {
+      service.on<Position>('position_updated', (msg) => {
         queryClient.setQueryData(['positions'], (prev: Position[] | undefined) => {
           if (!prev) return [msg.data];
           return prev.map((p) => (p.id === msg.data.id ? msg.data : p));
@@ -88,7 +90,7 @@ export function usePositionsRealTime(enabled = true) {
     );
 
     unsubscribers.push(
-      service.on('position_closed', (msg: WebSocketMessage) => {
+      service.on<Position>('position_closed', (msg) => {
         queryClient.setQueryData(['positions'], (prev: Position[] | undefined) => {
           return prev ? prev.filter((p) => p.id !== msg.data.id) : [];
         });
@@ -128,15 +130,15 @@ export function useDecisionsRealTime(enabled = true, limit = 20) {
     if (!enabled) return;
 
     const service = getWebSocketService();
-    const unsubscribe = service.on('decision_made', (msg: WebSocketMessage) => {
+    const unsubscribe = service.on<DecisionEventPayload>('decision_made', (msg) => {
       queryClient.setQueryData(['decisions', limit], (prev: Decision[] | undefined) => {
         const newDecision: Decision = {
-          decision_id: msg.data.id || msg.data.decision_id || `decision-${Date.now()}`,
-          asset_pair: msg.data.asset_pair,
-          action: msg.data.action,
-          confidence: msg.data.confidence,
-          reasoning: msg.data.reasoning,
-          timestamp: msg.data.timestamp || new Date().toISOString(),
+          decision_id: msg.data.id ?? msg.data.decision_id ?? 'decision-realtime',
+          asset_pair: msg.data.asset_pair ?? 'UNKNOWN',
+          action: (msg.data.action as Decision['action']) ?? 'HOLD',
+          confidence: typeof msg.data.confidence === 'number' ? msg.data.confidence : 0,
+          reasoning: msg.data.reasoning ?? 'Realtime decision event',
+          timestamp: msg.data.timestamp ?? new Date().toISOString(),
         };
 
         const updated = [newDecision, ...(prev || [])];
@@ -157,7 +159,7 @@ export function useDecisionsRealTime(enabled = true, limit = 20) {
 export function useHealthStatusRealTime(enabled = true) {
   const queryClient = useQueryClient();
 
-  const query = useQuery<any>({
+  const query = useQuery<HealthStatus>({
     queryKey: ['health'],
     queryFn: async () => {
       const response = await apiClient.get('/health');
@@ -213,19 +215,19 @@ export function usePositionUpdates(
     const unsubscribers: (() => void)[] = [];
 
     unsubscribers.push(
-      service.on('position_opened', (msg: WebSocketMessage) => {
+      service.on<Position>('position_opened', (msg) => {
         callback('opened', msg.data);
       })
     );
 
     unsubscribers.push(
-      service.on('position_updated', (msg: WebSocketMessage) => {
+      service.on<Position>('position_updated', (msg) => {
         callback('updated', msg.data);
       })
     );
 
     unsubscribers.push(
-      service.on('position_closed', (msg: WebSocketMessage) => {
+      service.on<Position>('position_closed', (msg) => {
         callback('closed', msg.data);
       })
     );
@@ -247,7 +249,7 @@ export function useDecisionUpdates(
     if (!enabled) return;
 
     const service = getWebSocketService();
-    return service.on('decision_made', (msg: WebSocketMessage) => {
+    return service.on<Decision>('decision_made', (msg) => {
       callback(msg.data);
     });
   }, [callback, enabled]);

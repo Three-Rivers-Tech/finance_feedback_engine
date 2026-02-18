@@ -29,7 +29,7 @@ export const PositionsTable: React.FC = () => {
           </p>
           <p className="text-text-secondary text-sm font-mono">
             {isAuthError
-              ? 'API key required. Set VITE_API_KEY in frontend/.env file.'
+              ? 'API key required. Configure a valid key in Settings or VITE_API_KEY.'
               : error.message}
           </p>
         </div>

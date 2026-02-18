@@ -4,10 +4,9 @@ import { NavLink } from 'react-router-dom';
 const navItems = [
   { path: '/', label: 'Dashboard', icon: '▣' },
   { path: '/agent', label: 'Agent Control', icon: '⚙' },
-  { path: '/analytics', label: 'Analytics', icon: '📊' },
-  { path: '/optimization', label: 'Optimization', icon: '🔬' },
-  { path: '/models', label: 'Models', icon: '⬇' },
-  { path: '/self-check', label: 'Self-Check', icon: '✓' },
+  { path: '/positions', label: 'Positions/Trades', icon: '📈' },
+  { path: '/self-check', label: 'Health/SelfCheck', icon: '✓' },
+  { path: '/settings', label: 'Settings', icon: '🔐' },
 ];
 
 export const Sidebar: React.FC = () => {

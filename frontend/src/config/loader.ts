@@ -1,5 +1,6 @@
 import { ConfigValidator } from './validator';
 import { type AppConfig, type Environment } from './schema';
+import { getEffectiveApiKey } from '../utils/auth';
 
 // App version - defined here to avoid circular dependency with constants.ts
 const APP_VERSION = '1.0.0';
@@ -150,19 +151,7 @@ export class ConfigLoader {
    * Load API key from localStorage or environment
    */
   private loadApiKey(): string | undefined {
-    // Try localStorage first (user-provided key takes precedence)
-    const storedKey = localStorage.getItem('api_key');
-    if (storedKey) {
-      return storedKey;
-    }
-
-    // Fall back to environment variable
-    const envKey = import.meta.env.VITE_API_KEY;
-    if (envKey) {
-      return envKey;
-    }
-
-    return undefined;
+    return getEffectiveApiKey() ?? undefined;
   }
 
   /**

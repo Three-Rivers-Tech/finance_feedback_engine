@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { useConnectionStatus } from '../contexts/ConnectionContext';
+import { useConnectionStatus } from '../contexts/useConnectionStatus';
 import { Spinner } from './common/Spinner';
 import clsx from 'clsx';
 

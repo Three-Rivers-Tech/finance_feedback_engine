@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
+import { UnauthenticatedNotice } from '../common/UnauthenticatedNotice';
 
 export const AppLayout: React.FC = () => {
   return (
@@ -11,6 +12,7 @@ export const AppLayout: React.FC = () => {
         <Sidebar />
         <main className="flex-1 overflow-auto scrollbar-thin bg-bg-primary">
           <div className="p-6">
+            <UnauthenticatedNotice />
             <Outlet />
           </div>
         </main>

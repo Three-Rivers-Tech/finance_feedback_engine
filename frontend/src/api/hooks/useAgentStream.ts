@@ -4,7 +4,7 @@ import type { AgentStatus } from '../types';
 
 export type AgentStreamEvent = {
   event: string;
-  data: any;
+  data: Record<string, unknown>;
 };
 
 interface AgentStreamState {
@@ -33,19 +33,15 @@ export function useAgentStream(): AgentStreamState {
     let isCancelled = false;
     const service = wsServiceRef.current;
 
-    // Clean up previous subscriptions
     unsubscribersRef.current.forEach((unsub) => unsub());
     unsubscribersRef.current = [];
 
-    // Connect and set up event listeners
-    service.connect().catch((err) => {
+    service.connect().catch((err: Error) => {
       if (!isCancelled) {
-        console.error('Failed to connect:', err);
         setError(err.message || 'Failed to connect');
       }
     });
 
-    // Subscribe to connection events
     unsubscribersRef.current.push(
       service.on('connected', () => {
         if (!isCancelled) {
@@ -66,7 +62,7 @@ export function useAgentStream(): AgentStreamState {
     );
 
     unsubscribersRef.current.push(
-      service.on('error', (msg: WebSocketMessage) => {
+      service.on<{ message?: string }>('error', (msg) => {
         if (!isCancelled) {
           setError(msg.data?.message || 'WebSocket error');
         }
@@ -74,24 +70,23 @@ export function useAgentStream(): AgentStreamState {
     );
 
     unsubscribersRef.current.push(
-      service.on('connection_failed', (msg: WebSocketMessage) => {
+      service.on<{ message?: string }>('connection_failed', (msg) => {
         if (!isCancelled) {
           setError(msg.data?.message || 'Failed to connect after max retries');
         }
       })
     );
 
-    // Subscribe to agent-specific events
     unsubscribersRef.current.push(
-      service.on('status', (msg: WebSocketMessage) => {
+      service.on('status', (msg: WebSocketMessage<AgentStatus>) => {
         if (!isCancelled) {
-          setStatus(msg.data as AgentStatus);
+          setStatus(msg.data);
         }
       })
     );
 
     unsubscribersRef.current.push(
-      service.on('start_ack', (msg: WebSocketMessage) => {
+      service.on<Record<string, unknown>>('start_ack', (msg) => {
         if (!isCancelled) {
           setLastStartAck({ event: 'start_ack', data: msg.data });
           setStartInFlight(false);
@@ -99,64 +94,19 @@ export function useAgentStream(): AgentStreamState {
       })
     );
 
-    unsubscribersRef.current.push(
-      service.on('state_transition', (msg: WebSocketMessage) => {
-        if (!isCancelled) {
-          setEvents((prev) => {
-            const next = [...prev, { event: 'state_transition', data: msg.data }];
-            return next.slice(-50);
-          });
-        }
-      })
-    );
+    const appendEvent = (eventName: string, msg: WebSocketMessage<Record<string, unknown>>) => {
+      if (isCancelled) return;
+      setEvents((prev) => [...prev, { event: eventName, data: msg.data }].slice(-50));
+    };
 
-    unsubscribersRef.current.push(
-      service.on('decision_made', (msg: WebSocketMessage) => {
-        if (!isCancelled) {
-          setEvents((prev) => {
-            const next = [...prev, { event: 'decision_made', data: msg.data }];
-            return next.slice(-50);
-          });
-        }
-      })
-    );
-
-    unsubscribersRef.current.push(
-      service.on('trade_executed', (msg: WebSocketMessage) => {
-        if (!isCancelled) {
-          setEvents((prev) => {
-            const next = [...prev, { event: 'trade_executed', data: msg.data }];
-            return next.slice(-50);
-          });
-        }
-      })
-    );
-
-    unsubscribersRef.current.push(
-      service.on('position_closed', (msg: WebSocketMessage) => {
-        if (!isCancelled) {
-          setEvents((prev) => {
-            const next = [...prev, { event: 'position_closed', data: msg.data }];
-            return next.slice(-50);
-          });
-        }
-      })
-    );
-
-    unsubscribersRef.current.push(
-      service.on('error', (msg: WebSocketMessage) => {
-        if (!isCancelled) {
-          setEvents((prev) => {
-            const next = [...prev, { event: 'error', data: msg.data }];
-            return next.slice(-50);
-          });
-        }
-      })
-    );
+    unsubscribersRef.current.push(service.on<Record<string, unknown>>('state_transition', (msg) => appendEvent('state_transition', msg)));
+    unsubscribersRef.current.push(service.on<Record<string, unknown>>('decision_made', (msg) => appendEvent('decision_made', msg)));
+    unsubscribersRef.current.push(service.on<Record<string, unknown>>('trade_executed', (msg) => appendEvent('trade_executed', msg)));
+    unsubscribersRef.current.push(service.on<Record<string, unknown>>('position_closed', (msg) => appendEvent('position_closed', msg)));
+    unsubscribersRef.current.push(service.on<Record<string, unknown>>('error', (msg) => appendEvent('error', msg)));
 
     return () => {
       isCancelled = true;
-      // Unsubscribe from all events but keep service alive
       unsubscribersRef.current.forEach((unsub) => unsub());
       unsubscribersRef.current = [];
     };

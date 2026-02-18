@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { API_BASE_URL } from '../utils/constants';
+import { clearStoredApiKey, getEffectiveApiKey } from '../utils/auth';
 
 // Normalize base URL to avoid double /api when endpoints already include the /api prefix
 const normalizedBaseUrl = (() => {
@@ -34,8 +35,7 @@ apiClient.interceptors.request.use((config) => {
     config.url = config.url.replace(/^\/api\/api\//, '/api/');
   }
 
-  // Try localStorage first, then environment variable
-  const apiKey = localStorage.getItem('api_key') || import.meta.env.VITE_API_KEY;
+  const apiKey = getEffectiveApiKey();
   if (apiKey && config.headers) {
     config.headers.Authorization = `Bearer ${apiKey}`;
   }
@@ -47,11 +47,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      // Don't reload - this causes infinite loop!
-      // Instead, mark as unauthenticated and continue
-      localStorage.removeItem('api_key');
-      console.warn('API authentication failed - API key required or invalid');
-      // Let the error propagate so components can handle gracefully
+      clearStoredApiKey();
+      console.warn('API authentication failed - configure a valid API key in Settings.');
     }
     return Promise.reject(error);
   }

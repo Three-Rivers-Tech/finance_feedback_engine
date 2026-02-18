@@ -131,7 +131,7 @@ export interface ExperimentResult {
   asset_pair: string;
   best_sharpe_ratio: number | null;
   best_drawdown_pct: number | null;
-  best_params: Record<string, any>;
+  best_params: Record<string, unknown>;
   n_trials: number;
 }
 

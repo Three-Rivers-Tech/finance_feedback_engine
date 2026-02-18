@@ -7,10 +7,9 @@ export function usePolling<T>(
 ) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
   const fetcherRef = useRef(fetcher);
 
-  // Update fetcher ref when it changes
   useEffect(() => {
     fetcherRef.current = fetcher;
   }, [fetcher]);
@@ -20,24 +19,27 @@ export function usePolling<T>(
       const result = await fetcherRef.current();
       setData(result);
       setError(null);
-      setIsLoading(false);
     } catch (err) {
       setError(err as Error);
-      setIsLoading(false);
+    } finally {
+      setHasFetched(true);
     }
   }, []);
 
   useEffect(() => {
     if (!enabled) {
-      setIsLoading(false);
       return;
     }
 
-    refetch();
-    const intervalId = setInterval(refetch, interval);
+    void refetch();
+    const intervalId = setInterval(() => {
+      void refetch();
+    }, interval);
 
     return () => clearInterval(intervalId);
   }, [interval, enabled, refetch]);
+
+  const isLoading = enabled && !hasFetched;
 
   return { data, error, isLoading, refetch };
 }

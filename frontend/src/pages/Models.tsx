@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { type PullProgress } from '../api/ollama';
 import { useOllamaModels, useOllamaStatus, usePullOllamaModel, useUpdateDebateProviders } from '../api/mutations/useOllamaModels';
 
@@ -17,25 +17,20 @@ export const Models: React.FC = () => {
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   // Extract model names from query data
-  const models = modelsData.map((m: any) => m.name);
+  const models = modelsData.map((m) => m.name);
   const canSaveDebate = Object.values(debateProviders).every((v) => v.trim().length > 0);
 
   const updateSeat = (seat: 'bull' | 'bear' | 'judge', value: string) => {
     setDebateProviders((prev) => ({ ...prev, [seat]: value }));
   };
 
-  // Sync debate providers from status when it changes
-  useEffect(() => {
-    if (ollamaStatus?.debateConfig) {
-      setDebateProviders({
-        bull: ollamaStatus.debateConfig.bull || '',
-        bear: ollamaStatus.debateConfig.bear || '',
-        judge: ollamaStatus.debateConfig.judge || '',
-      });
-    }
-  }, [ollamaStatus?.debateConfig]);
+  const statusDebateProviders = useMemo(() => ({
+    bull: ollamaStatus?.debateConfig?.bull || '',
+    bear: ollamaStatus?.debateConfig?.bear || '',
+    judge: ollamaStatus?.debateConfig?.judge || '',
+  }), [ollamaStatus?.debateConfig]);
 
-  const onPull = async (e?: React.FormEvent) => {
+const onPull = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const name = modelName.trim();
     if (!name) return;
@@ -57,8 +52,8 @@ export const Models: React.FC = () => {
           setLogs(prev => [...prev, 'Done - model installed successfully']);
           setModelName(''); // Clear input on success
         },
-        onError: (error: any) => {
-          const errorMsg = error?.message || String(error);
+        onError: (error: unknown) => {
+          const errorMsg = error instanceof Error ? error.message : String(error);
           setLogs(prev => [...prev, `Failed: ${errorMsg}`]);
           setPullError(errorMsg);
         },
@@ -84,8 +79,8 @@ export const Models: React.FC = () => {
         onSuccess: () => {
           setLogs(prev => [...prev, 'Done - model installed successfully']);
         },
-        onError: (error: any) => {
-          const errorMsg = error?.message || String(error);
+        onError: (error: unknown) => {
+          const errorMsg = error instanceof Error ? error.message : String(error);
           setLogs(prev => [...prev, `Failed: ${errorMsg}`]);
           setPullError(errorMsg);
         },
@@ -105,8 +100,8 @@ export const Models: React.FC = () => {
         onSuccess: () => {
           setSaveNotice('Saved to config.local.yaml. In production, restart the backend to ensure the new models are active.');
         },
-        onError: (error: any) => {
-          const msg = error?.message || 'Failed to save debate providers';
+        onError: (error: unknown) => {
+          const msg = error instanceof Error ? error.message : 'Failed to save debate providers';
           setSaveNotice(msg);
         },
       }
@@ -210,6 +205,15 @@ export const Models: React.FC = () => {
                 <option key={m} value={m} />
               ))}
             </datalist>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDebateProviders(statusDebateProviders)}
+                className="px-4 py-2 border-3 rounded font-mono text-xs border-border-primary text-text-primary hover:border-accent-cyan"
+              >
+                Reset to Current Config
+              </button>
+            </div>
             <div className="mt-3 flex items-center gap-3">
               <button
                 type="button"
