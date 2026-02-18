@@ -1,5 +1,6 @@
 """Alpha Vantage data provider module."""
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -10,8 +11,10 @@ from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..observability.context import get_trace_headers
 from ..observability.metrics import create_histograms, get_meter
+from ..utils.asset_classifier import classify_asset_pair
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from ..utils.rate_limiter import RateLimiter
+from .coinbase_data import CoinbaseDataProvider
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,30 @@ class AlphaVantageProvider:
 
         # Ensure rate limiter is always active - create default if not provided
         self.rate_limiter = rate_limiter or self._create_default_rate_limiter()
+
+        # Initialize Coinbase provider for crypto fallback (public data, no auth required)
+        self.coinbase_provider = None
+        try:
+            coinbase_credentials = None
+            providers_cfg = self.config.get("providers") if isinstance(self.config, dict) else None
+            if isinstance(providers_cfg, dict):
+                coinbase_credentials = providers_cfg.get("coinbase", {}).get("credentials")
+            if not coinbase_credentials:
+                platform_credentials = self.config.get("platform_credentials") if isinstance(self.config, dict) else None
+                if isinstance(platform_credentials, dict) and any(
+                    key in platform_credentials for key in ("api_key", "api_secret", "CB_ACCESS_KEY")
+                ):
+                    coinbase_credentials = platform_credentials
+            if not coinbase_credentials:
+                legacy_coinbase = self.config.get("coinbase") if isinstance(self.config, dict) else None
+                if isinstance(legacy_coinbase, dict):
+                    coinbase_credentials = legacy_coinbase
+
+            self.coinbase_provider = CoinbaseDataProvider(credentials=coinbase_credentials)
+            logger.info("Coinbase data provider initialized for crypto market data")
+        except Exception as e:
+            logger.warning("Failed to initialize Coinbase provider: %s", e)
+
         self._owned_session = False
         import threading
 
@@ -358,7 +385,8 @@ class AlphaVantageProvider:
 
         try:
             # Determine asset type and fetch appropriate data
-            if "BTC" in asset_pair or "ETH" in asset_pair:
+            asset_type = classify_asset_pair(asset_pair)
+            if asset_type == "crypto":
                 market_data = await self._get_crypto_data(
                     asset_pair, force_refresh=force_refresh
                 )
@@ -1462,6 +1490,166 @@ class AlphaVantageProvider:
 
         return results
 
+    async def _get_crypto_data_coinbase(
+        self, asset_pair: str, force_refresh: bool = False, timeframe: str = "60min"
+    ) -> Dict[str, Any]:
+        """
+        Fetch cryptocurrency data from Coinbase (live mode).
+
+        Args:
+            asset_pair: Crypto pair (e.g., 'BTCUSD')
+            force_refresh: If True, bypass cache and force fresh API call
+            timeframe: Data interval ('60min' for hourly, 'daily' for daily)
+
+        Returns:
+            Dictionary containing crypto market data
+
+        Raises:
+            ValueError: If Coinbase data is unavailable in live mode
+        """
+        cache_key = f"crypto_coinbase_{asset_pair}_{timeframe}"
+        if not force_refresh:
+            cached = self._get_from_cache(cache_key, ttl_seconds=300)
+            if cached:
+                logger.debug(f"Returning cached Coinbase crypto data for {asset_pair}")
+                return cached
+
+        if not self.coinbase_provider:
+            msg = f"Coinbase provider not initialized for {asset_pair}"
+            logger.error(msg)
+            if self.is_backtest:
+                return self._create_mock_data(asset_pair, "crypto")
+            raise ValueError(msg)
+
+        granularity_map = {
+            "60min": "1h",
+            "1h": "1h",
+            "daily": "1d",
+            "1d": "1d",
+        }
+        granularity = granularity_map.get(timeframe, "1h")
+
+        try:
+            candles = await asyncio.to_thread(
+                self.coinbase_provider.get_candles,
+                asset_pair,
+                granularity,
+                300,
+            )
+
+            if not candles:
+                msg = f"Coinbase returned no candles for {asset_pair}"
+                logger.error(msg)
+                if self.is_backtest:
+                    return self._create_mock_data(asset_pair, "crypto")
+                raise ValueError(msg)
+
+            latest_candle = candles[-1]
+            data_date = datetime.utcfromtimestamp(latest_candle["timestamp"])
+            data_timestamp = data_date.isoformat() + "Z"
+            latest_date = data_date.strftime("%Y-%m-%d %H:%M:%S")
+
+            # CRITICAL FIX: Market-aware data freshness validation
+            try:
+                from ..utils.market_schedule import MarketSchedule
+                from ..utils.validation import validate_data_freshness
+
+                market_status = MarketSchedule.get_market_status(
+                    asset_pair=asset_pair, asset_type="crypto", now_utc=None
+                )
+
+                validation_timeframe = "daily" if granularity == "1d" else "intraday"
+
+                is_fresh, age_str, freshness_msg = validate_data_freshness(
+                    data_timestamp,
+                    asset_type="crypto",
+                    timeframe=validation_timeframe,
+                    market_status=market_status,
+                )
+
+                if not is_fresh:
+                    logger.error(
+                        "Stale crypto data for %s: %s. "
+                        "Coinbase returned data from %s (%s old). "
+                        "Returning data with stale_data flag.",
+                        asset_pair,
+                        freshness_msg,
+                        latest_date,
+                        age_str,
+                    )
+                    stale_data_warning = {
+                        "stale_data": True,
+                        "data_age_seconds": (
+                            datetime.utcnow() - data_date
+                        ).total_seconds(),
+                        "data_age_hours": (
+                            datetime.utcnow() - data_date
+                        ).total_seconds()
+                        / 3600,
+                        "data_date": latest_date,
+                        "freshness_message": freshness_msg,
+                    }
+                else:
+                    logger.info(
+                        "Data freshness validated for %s: %s old (within threshold)",
+                        asset_pair,
+                        age_str,
+                    )
+                    stale_data_warning = {
+                        "stale_data": False,
+                        "data_age_seconds": (
+                            datetime.utcnow() - data_date
+                        ).total_seconds(),
+                        "data_age_hours": (
+                            datetime.utcnow() - data_date
+                        ).total_seconds()
+                        / 3600,
+                        "data_date": latest_date,
+                    }
+            except ValueError as e:
+                logger.warning(
+                    "Data freshness validation error for %s: %s", asset_pair, e
+                )
+                stale_data_warning = {
+                    "stale_data": True,
+                    "validation_error": str(e),
+                    "data_date": latest_date,
+                }
+            except Exception as e:
+                logger.warning(
+                    "Could not validate data freshness for %s: %s", asset_pair, e
+                )
+                stale_data_warning = {"stale_data": False, "data_date": latest_date}
+
+            result = {
+                "asset_pair": asset_pair,
+                "timestamp": datetime.utcnow().isoformat(),
+                "date": latest_date,
+                "open": float(latest_candle.get("open", 0)),
+                "high": float(latest_candle.get("high", 0)),
+                "low": float(latest_candle.get("low", 0)),
+                "close": float(latest_candle.get("close", 0)),
+                "volume": float(latest_candle.get("volume", 0)),
+                "market_cap": 0.0,
+                "type": "crypto",
+                "provider": "coinbase",
+            }
+            result.update(stale_data_warning)
+
+            self._set_cache(cache_key, result)
+
+            return result
+
+        except ValueError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.error("Error fetching Coinbase crypto data for %s: %s", asset_pair, e)
+            if self.is_backtest:
+                return self._create_mock_data(asset_pair, "crypto")
+            raise ValueError(
+                f"Coinbase data unavailable for {asset_pair}: {type(e).__name__}: {e}"
+            )
+
     async def _get_crypto_data(
         self, asset_pair: str, force_refresh: bool = False, timeframe: str = "60min"
     ) -> Dict[str, Any]:
@@ -1479,6 +1667,12 @@ class AlphaVantageProvider:
         Raises:
             ValueError: If data is stale and cannot be refreshed
         """
+        # Live trading: route crypto to Coinbase to avoid mock data in production
+        if not self.is_backtest:
+            return await self._get_crypto_data_coinbase(
+                asset_pair, force_refresh=force_refresh, timeframe=timeframe
+            )
+
         # Check cache first (5 min TTL)
         cache_key = f"crypto_{asset_pair}_{timeframe}"
         if not force_refresh:

@@ -13,7 +13,7 @@ across the system.
 
 import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -134,32 +134,26 @@ class TestStaleDataRejection:
         """Test that crypto data older than 15 minutes is flagged as stale in live mode."""
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
-        # Create stale data (2 days old to trigger daily data staleness)
-        stale_date = (datetime.utcnow() - timedelta(days=2)).date().isoformat()
-        stale_response = {
-            "Time Series (Digital Currency Daily)": {
-                stale_date: {
-                    "1a. open (USD)": "50000",
-                    "2a. high (USD)": "51000",
-                    "3a. low (USD)": "49000",
-                    "4a. close (USD)": "50500",
-                    "5. volume": "1000000",
-                    "6. market cap (USD)": "1000000000",
-                }
+        # Create stale Coinbase candle (older than intraday threshold)
+        stale_timestamp = int((datetime.utcnow() - timedelta(hours=4)).timestamp())
+        provider.coinbase_provider = Mock()
+        provider.coinbase_provider.get_candles.return_value = [
+            {
+                "timestamp": stale_timestamp,
+                "open": 50000.0,
+                "high": 51000.0,
+                "low": 49000.0,
+                "close": 50500.0,
+                "volume": 1000000.0,
             }
-        }
+        ]
 
-        with patch.object(
-            provider, "_async_request", new_callable=AsyncMock
-        ) as mock_request:
-            mock_request.return_value = stale_response
+        # Should NOT raise ValueError for stale data, but return data with stale flag
+        result = await provider._get_crypto_data("BTCUSD", force_refresh=False)
 
-            # Should NOT raise ValueError for stale data, but return data with stale flag
-            result = await provider._get_crypto_data("BTCUSD", force_refresh=False)
-
-            # Verify that stale data is flagged
-            assert result is not None
-            assert result.get("stale_data") is True  # Data should be flagged as stale
+        # Verify that stale data is flagged
+        assert result is not None
+        assert result.get("stale_data") is True  # Data should be flagged as stale
 
         await provider.close()
 
@@ -168,31 +162,26 @@ class TestStaleDataRejection:
         """Test that force_refresh=True bypasses cache but still validates freshness."""
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
-        # Create stale data
-        stale_date = (datetime.utcnow() - timedelta(days=5)).date().isoformat()
-        stale_response = {
-            "Time Series (Digital Currency Daily)": {
-                stale_date: {
-                    "1a. open (USD)": "50000",
-                    "2a. high (USD)": "51000",
-                    "3a. low (USD)": "49000",
-                    "4a. close (USD)": "50500",
-                    "5. volume": "1000000",
-                }
+        # Create stale Coinbase candle
+        stale_timestamp = int((datetime.utcnow() - timedelta(hours=4)).timestamp())
+        provider.coinbase_provider = Mock()
+        provider.coinbase_provider.get_candles.return_value = [
+            {
+                "timestamp": stale_timestamp,
+                "open": 50000.0,
+                "high": 51000.0,
+                "low": 49000.0,
+                "close": 50500.0,
+                "volume": 1000000.0,
             }
-        }
+        ]
 
-        with patch.object(
-            provider, "_async_request", new_callable=AsyncMock
-        ) as mock_request:
-            mock_request.return_value = stale_response
+        # Even with force_refresh, stale data should NOT raise an exception, but be flagged
+        result = await provider._get_crypto_data("BTCUSD", force_refresh=True)
 
-            # Even with force_refresh, stale data should NOT raise an exception, but be flagged
-            result = await provider._get_crypto_data("BTCUSD", force_refresh=True)
-
-            # Verify that stale data is flagged
-            assert result is not None
-            assert result.get("stale_data") is True  # Data should be flagged as stale
+        # Verify that stale data is flagged
+        assert result is not None
+        assert result.get("stale_data") is True  # Data should be flagged as stale
 
         await provider.close()
 
@@ -201,32 +190,27 @@ class TestStaleDataRejection:
         """Test that fresh data passes validation."""
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
-        # Create fresh data (today)
-        fresh_date = datetime.utcnow().date().isoformat()
-        fresh_response = {
-            "Time Series (Digital Currency Daily)": {
-                fresh_date: {
-                    "1a. open (USD)": "50000",
-                    "2a. high (USD)": "51000",
-                    "3a. low (USD)": "49000",
-                    "4a. close (USD)": "50500",
-                    "5. volume": "1000000",
-                    "6. market cap (USD)": "1000000000",
-                }
+        # Create fresh Coinbase candle (recent)
+        fresh_timestamp = int((datetime.utcnow() - timedelta(minutes=5)).timestamp())
+        expected_date = datetime.utcfromtimestamp(fresh_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        provider.coinbase_provider = Mock()
+        provider.coinbase_provider.get_candles.return_value = [
+            {
+                "timestamp": fresh_timestamp,
+                "open": 50000.0,
+                "high": 51000.0,
+                "low": 49000.0,
+                "close": 50500.0,
+                "volume": 1000000.0,
             }
-        }
+        ]
 
-        with patch.object(
-            provider, "_async_request", new_callable=AsyncMock
-        ) as mock_request:
-            mock_request.return_value = fresh_response
+        # Fresh data should be accepted
+        data = await provider._get_crypto_data("BTCUSD", force_refresh=False)
 
-            # Fresh data should be accepted
-            data = await provider._get_crypto_data("BTCUSD", force_refresh=False)
-
-            assert data is not None
-            assert data["close"] == 50500
-            assert data["date"] == fresh_date
+        assert data is not None
+        assert data["close"] == 50500.0
+        assert data["date"] == expected_date
 
         await provider.close()
 
@@ -321,17 +305,17 @@ class TestMockDataBlocking:
         """Test that API failures trigger the mock data safety check."""
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
-        # Mock API failure
-        with patch.object(
-            provider, "_async_request", new_callable=AsyncMock
-        ) as mock_request:
-            mock_request.side_effect = Exception("API connection failed")
+        # Mock Coinbase failure
+        provider.coinbase_provider = Mock()
+        provider.coinbase_provider.get_candles.side_effect = Exception(
+            "Coinbase connection failed"
+        )
 
-            # Should raise ValueError about mock data in live mode, not the API error
-            with pytest.raises(ValueError) as exc_info:
-                await provider._get_crypto_data("BTCUSD")
+        # Should raise ValueError about Coinbase failure in live mode
+        with pytest.raises(ValueError) as exc_info:
+            await provider._get_crypto_data("BTCUSD")
 
-            assert "CRITICAL SAFETY VIOLATION" in str(exc_info.value)
+        assert "Coinbase data unavailable" in str(exc_info.value)
 
         await provider.close()
 
