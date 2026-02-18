@@ -27,6 +27,7 @@ from .monitoring.error_tracking import ErrorTracker
 from .monitoring.trade_outcome_recorder import TradeOutcomeRecorder
 from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
+from .config.provider_credentials import resolve_provider_credentials
 from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
 from .utils.credential_validator import validate_credentials
@@ -124,41 +125,9 @@ class FinanceFeedbackEngine:
         # (providers/platforms sections). If we miss Oanda credentials here,
         # UnifiedDataProvider cannot initialize Oanda and forex price lookups
         # silently fall back to stale non-exchange data.
-        providers_cfg = config.get("providers", {}) if isinstance(config.get("providers"), dict) else {}
-        platform_creds_cfg = (
-            config.get("platform_credentials", {})
-            if isinstance(config.get("platform_credentials"), dict)
-            else {}
-        )
-
-        coinbase_credentials = (
-            config.get("coinbase")
-            or providers_cfg.get("coinbase", {}).get("credentials")
-            or platform_creds_cfg.get("coinbase")
-        )
-
-        oanda_credentials = (
-            config.get("oanda")
-            or providers_cfg.get("oanda", {}).get("credentials")
-            or platform_creds_cfg.get("oanda")
-        )
-
-        # Fallback: extract credentials from platforms list (name/credentials entries)
-        if not oanda_credentials or not isinstance(oanda_credentials, dict):
-            for platform_cfg in config.get("platforms", []) or []:
-                if isinstance(platform_cfg, dict) and str(platform_cfg.get("name", "")).lower() == "oanda":
-                    creds = platform_cfg.get("credentials")
-                    if isinstance(creds, dict):
-                        oanda_credentials = creds
-                        break
-
-        if not coinbase_credentials or not isinstance(coinbase_credentials, dict):
-            for platform_cfg in config.get("platforms", []) or []:
-                if isinstance(platform_cfg, dict) and str(platform_cfg.get("name", "")).lower() in {"coinbase", "coinbase_advanced"}:
-                    creds = platform_cfg.get("credentials")
-                    if isinstance(creds, dict):
-                        coinbase_credentials = creds
-                        break
+        provider_credentials = resolve_provider_credentials(config)
+        coinbase_credentials = provider_credentials.coinbase
+        oanda_credentials = provider_credentials.oanda
 
         self.unified_provider = UnifiedDataProvider(
             alpha_vantage_api_key=api_key,
