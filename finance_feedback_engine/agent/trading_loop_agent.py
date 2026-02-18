@@ -26,6 +26,10 @@ from finance_feedback_engine.agent.trade_execution_safety import (
     reserve_trade_exposure,
 )
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.decision_engine.execution_quality import (
+    ExecutionQualityControls,
+    evaluate_signal_quality,
+)
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
@@ -2446,6 +2450,47 @@ class TradingLoopAgent:
         if confidence_normalized < self.config.min_confidence_threshold:
             logger.info(
                 f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
+            )
+            return False
+
+        # Quality gate: reject poor asymmetry and weak high-volatility setups.
+        controls = ExecutionQualityControls(
+            enabled=bool(getattr(self.config, "quality_gate_enabled", True)),
+            min_risk_reward_ratio=float(getattr(self.config, "min_risk_reward_ratio", 1.25)),
+            high_volatility_threshold=float(getattr(self.config, "high_volatility_threshold", 0.04)),
+            high_volatility_min_confidence=float(
+                getattr(self.config, "high_volatility_min_confidence", 80.0)
+            ),
+            full_size_confidence=float(getattr(self.config, "position_size_full_confidence", 90.0)),
+            min_size_multiplier=float(getattr(self.config, "position_size_min_multiplier", 0.50)),
+            high_volatility_size_scale=float(
+                getattr(self.config, "position_size_high_volatility_scale", 0.75)
+            ),
+            extreme_volatility_threshold=float(
+                getattr(self.config, "position_size_extreme_volatility_threshold", 0.07)
+            ),
+            extreme_volatility_size_scale=float(
+                getattr(self.config, "position_size_extreme_volatility_scale", 0.50)
+            ),
+        )
+
+        quality_ok, quality_reasons, quality_metrics = evaluate_signal_quality(
+            confidence_pct=float(confidence),
+            min_conf_threshold_pct=self.config.min_confidence_threshold * 100.0,
+            volatility=float(decision.get("volatility", 0.0) or 0.0),
+            stop_loss_fraction=decision.get("stop_loss_fraction"),
+            take_profit_fraction=(
+                decision.get("take_profit_percentage")
+                or decision.get("portfolio_take_profit_percentage")
+            ),
+            controls=controls,
+        )
+        if not quality_ok:
+            logger.info(
+                "Skipping trade due to quality gate (%s) for %s | metrics=%s",
+                ",".join(quality_reasons),
+                decision.get("asset_pair"),
+                quality_metrics,
             )
             return False
 

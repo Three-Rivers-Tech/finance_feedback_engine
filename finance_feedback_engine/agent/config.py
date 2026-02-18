@@ -322,6 +322,17 @@ class TradingAgentConfig(BaseModel):
     min_confidence_threshold: float = (
         70.0  # Minimum confidence to execute a trade (0-100 scale, auto-normalized to 0-1)
     )
+
+    # --- Execution Quality Controls (conservative profitability improvements) ---
+    quality_gate_enabled: bool = True
+    min_risk_reward_ratio: float = 1.25
+    high_volatility_threshold: float = 0.04
+    high_volatility_min_confidence: float = 80.0
+    position_size_full_confidence: float = 90.0
+    position_size_min_multiplier: float = 0.50
+    position_size_high_volatility_scale: float = 0.75
+    position_size_extreme_volatility_threshold: float = 0.07
+    position_size_extreme_volatility_scale: float = 0.50
     # Asset pairs to monitor for opportunities (superset of asset_pairs for active trading)
     watchlist: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
 

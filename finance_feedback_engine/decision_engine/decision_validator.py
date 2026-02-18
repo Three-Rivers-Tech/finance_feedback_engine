@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from .execution_quality import ExecutionQualityControls, calculate_size_multiplier
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +136,40 @@ class DecisionValidator:
                 # For forex or other, use unit amount
                 suggested_amount = recommended_position_size
 
+        # Apply adaptive size scaling (confidence + volatility) to reduce tail-risk.
+        agent_cfg = self.config.get("agent", {}) if isinstance(self.config, dict) else {}
+        min_conf_threshold = agent_cfg.get("min_confidence_threshold", 0.70)
+        if isinstance(min_conf_threshold, (int, float)) and min_conf_threshold <= 1:
+            min_conf_threshold_pct = float(min_conf_threshold) * 100.0
+        else:
+            min_conf_threshold_pct = float(min_conf_threshold or 70.0)
+
+        controls = ExecutionQualityControls(
+            enabled=bool(agent_cfg.get("quality_gate_enabled", True)),
+            full_size_confidence=float(agent_cfg.get("position_size_full_confidence", 90.0)),
+            min_size_multiplier=float(agent_cfg.get("position_size_min_multiplier", 0.50)),
+            high_volatility_threshold=float(agent_cfg.get("high_volatility_threshold", 0.04)),
+            high_volatility_size_scale=float(agent_cfg.get("position_size_high_volatility_scale", 0.75)),
+            extreme_volatility_threshold=float(agent_cfg.get("position_size_extreme_volatility_threshold", 0.07)),
+            extreme_volatility_size_scale=float(agent_cfg.get("position_size_extreme_volatility_scale", 0.50)),
+            min_risk_reward_ratio=float(agent_cfg.get("min_risk_reward_ratio", 1.25)),
+            high_volatility_min_confidence=float(agent_cfg.get("high_volatility_min_confidence", 80.0)),
+        )
+
+        confidence_pct = float(ai_response.get("confidence", 0) or 0)
+        volatility = float(context.get("volatility", 0.0) or 0.0)
+        size_multiplier = calculate_size_multiplier(
+            confidence_pct=confidence_pct,
+            min_conf_threshold_pct=min_conf_threshold_pct,
+            volatility=volatility,
+            controls=controls,
+        )
+
+        if action in ["BUY", "SELL"] and recommended_position_size:
+            recommended_position_size = float(recommended_position_size) * size_multiplier
+            if suggested_amount:
+                suggested_amount = float(suggested_amount) * size_multiplier
+
         # Assemble decision object
         decision = {
             "id": decision_id,
@@ -151,6 +187,8 @@ class DecisionValidator:
             "take_profit_percentage": None,  # Individual trade TP is not explicitly set by the DecisionEngine
             "risk_percentage": risk_percentage,
             "signal_only": signal_only,
+            "position_size_multiplier": size_multiplier,
+            "quality_controls_enabled": controls.enabled,
             "portfolio_stop_loss_percentage": self.portfolio_stop_loss_percentage,
             "portfolio_take_profit_percentage": self.portfolio_take_profit_percentage,
             "market_data": context["market_data"],
