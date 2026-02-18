@@ -3,12 +3,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import axios from 'axios';
+import type { AxiosInstance } from 'axios';
 import type { AgentStatus } from '../types';
 
 const API_BASE_URL = process.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 describe('Status Endpoint Integration', () => {
-  let apiClient: typeof axios;
+  let apiClient: AxiosInstance;
 
   beforeAll(() => {
     apiClient = axios.create({

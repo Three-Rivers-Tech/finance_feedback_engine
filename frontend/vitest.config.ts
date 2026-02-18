@@ -15,6 +15,13 @@ export default defineConfig({
       VITE_POLLING_INTERVAL_MEDIUM: '5000',
       VITE_API_KEY: 'myvalidkey12345',
     },
+    exclude: [
+      'node_modules/**',
+      '**/node_modules/**',
+      'e2e/**',
+      '**/*.e2e.*',
+      '**/playwright/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

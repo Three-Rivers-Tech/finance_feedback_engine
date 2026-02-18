@@ -221,9 +221,12 @@ class TestTradingApiEndpoints:
         bot_control._agent_instance.stop = Mock()
         bot_control._agent_instance.start_time = datetime.utcnow() - timedelta(seconds=5)
 
-        bot_control._agent_task = AsyncMock()
-        bot_control._agent_task.done.return_value = False
-        bot_control._agent_task.cancel = Mock()
+        # _agent_task.done() is checked synchronously by handler; keep it a plain Mock
+        # so .done() returns bool (not coroutine) and stop path behaves realistically.
+        fake_task = Mock()
+        fake_task.done.return_value = False
+        fake_task.cancel = Mock()
+        bot_control._agent_task = fake_task
 
         with patch(
             "finance_feedback_engine.api.bot_control.asyncio.wait_for",
