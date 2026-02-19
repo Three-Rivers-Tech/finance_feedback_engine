@@ -386,6 +386,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         # Strategy-level default: BTC/ETH USD rails are futures in this project.
         return base in {"BTC", "ETH"} and quote in {"USD", "USDC"}
 
+    def _must_use_futures_path(self, decision: Dict[str, Any]) -> bool:
+        """Return True when this decision must never hit spot quote-size routing."""
+        asset_pair = str(decision.get("asset_pair", ""))
+        base, quote = self._extract_base_quote(asset_pair)
+
+        if base in {"BTC", "ETH"} and quote in {"USD", "USDC"}:
+            return True
+
+        venue_hint = str(
+            decision.get("market_type")
+            or decision.get("instrument_type")
+            or decision.get("execution_venue")
+            or ""
+        ).upper()
+        return any(tag in venue_hint for tag in ("FUTURE", "PERP"))
+
     def _resolve_futures_product(
         self,
         client: Any,
@@ -1461,6 +1477,24 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             product_response = client.get_product(product_id=product_id)
 
             use_futures_size_mode = self._is_futures_product(decision, product_response)
+            must_use_futures_path = self._must_use_futures_path(decision)
+
+            if must_use_futures_path and not use_futures_size_mode:
+                logger.error(
+                    "[COINBASE_FUTURES_ORDER] FAIL_CLOSED: refusing spot payload route for %s",
+                    asset_pair,
+                )
+                return {
+                    "success": False,
+                    "platform": "coinbase_advanced",
+                    "decision_id": decision.get("id"),
+                    "error": "Futures fail-closed guard triggered",
+                    "error_details": (
+                        "Order requires Coinbase futures/perpetual path but resolved "
+                        "payload mode was non-futures."
+                    ),
+                    "timestamp": decision.get("timestamp"),
+                }
 
             # Futures-first routing: BTC/ETH rails must execute on perpetual futures
             # product ids, not spot pairs.
@@ -1523,12 +1557,22 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 )
 
                 if action == "BUY":
+                    logger.info(
+                        "[COINBASE_FUTURES_ORDER] endpoint=market_order_buy payload_mode=base_size product_id=%s base_size=%s",
+                        product_id,
+                        base_size,
+                    )
                     order_result = client.market_order_buy(
                         client_order_id=client_order_id,
                         product_id=product_id,
                         base_size=base_size,
                     )
                 else:
+                    logger.info(
+                        "[COINBASE_FUTURES_ORDER] endpoint=market_order_sell payload_mode=base_size product_id=%s base_size=%s",
+                        product_id,
+                        base_size,
+                    )
                     order_result = client.market_order_sell(
                         client_order_id=client_order_id,
                         product_id=product_id,

@@ -840,6 +840,65 @@ class TestExecuteTrade:
         assert call_kwargs["base_size"] == "1"
         assert "quote_size" not in call_kwargs
 
+    def test_execute_trade_fail_closed_when_btc_eth_futures_would_downgrade_to_spot(self, platform, mock_client, monkeypatch):
+        """BTC/ETH rails should fail-closed instead of submitting spot quote_size payloads."""
+        product = MagicMock()
+        product.product_type = "SPOT"
+        product.future_product_details = None
+        mock_client.get_product.return_value = product
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        monkeypatch.setattr(platform, "_is_futures_product", lambda decision, product: False)
+
+        decision = {
+            "id": "dec-fail-closed",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 500.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is False
+        assert result["error"] == "Futures fail-closed guard triggered"
+        mock_client.market_order_buy.assert_not_called()
+
+    def test_execute_trade_logs_futures_payload_marker(self, platform, mock_client, caplog):
+        """Futures order path should emit explicit marker for endpoint/payload mode."""
+        product = MagicMock()
+        product.price = "50000"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+        mock_client.get_product.return_value = product
+
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {
+            "success": True,
+            "order_id": "order-fut-log",
+            "status": "OPEN",
+        }
+        mock_client.market_order_buy.return_value = order_result
+        mock_client.list_orders.return_value = []
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-fut-log",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 500.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        with caplog.at_level("INFO"):
+            result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        assert any("[COINBASE_FUTURES_ORDER] endpoint=market_order_buy payload_mode=base_size" in m for m in caplog.messages)
+
     def test_execute_trade_futures_micro_start_respects_increment_and_min_size(self, platform, mock_client):
         """Micro start should use minimum valid contract size when min/increment > 1."""
         product = MagicMock()
