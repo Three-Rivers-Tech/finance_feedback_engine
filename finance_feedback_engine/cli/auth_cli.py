@@ -242,7 +242,7 @@ def show_audit_log(limit: int, hours: int, failures_only: bool):
 
             from datetime import datetime, timedelta
 
-            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            cutoff_time = datetime.now(UTC) - timedelta(hours=hours)
 
             where_clause = "WHERE timestamp > ?"
             params = [cutoff_time.isoformat()]

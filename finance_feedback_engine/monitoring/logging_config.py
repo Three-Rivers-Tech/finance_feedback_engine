@@ -40,7 +40,7 @@ import os
 import re
 import threading
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -238,7 +238,7 @@ class StructuredJSONFormatter(logging.Formatter):
         """
         # Build the base log data structure
         log_data = {
-            "timestamp": datetime.utcfromtimestamp(record.created).isoformat() + "Z",
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat() + "Z",
             "correlation_id": getattr(record, "correlation_id", None),
             "level": record.levelname,
             "logger": record.name,

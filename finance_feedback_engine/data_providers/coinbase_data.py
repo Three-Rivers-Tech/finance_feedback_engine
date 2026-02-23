@@ -5,7 +5,7 @@ import hashlib
 import hmac
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
@@ -387,7 +387,7 @@ class CoinbaseDataProvider:
         candles = []
         for candle in payload.get("candles", []):
             ts = int(candle.get("start", 0))
-            date = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            date = datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d %H:%M:%S")
             candles.append(
                 {
                     "date": date,

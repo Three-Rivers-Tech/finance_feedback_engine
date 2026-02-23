@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from .execution_quality import ExecutionQualityControls, calculate_size_multiplier
@@ -174,7 +174,7 @@ class DecisionValidator:
         decision = {
             "id": decision_id,
             "asset_pair": asset_pair,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "action": action,
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),

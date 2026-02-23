@@ -16,7 +16,7 @@ import json
 import os
 import pytest
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -249,7 +249,7 @@ class TestCrashScenarios:
         prep_file = tmp_path / "transactions" / f"txn_{txn_id}_prepare.json"
         prep_data = {
             "transaction_id": txn_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "files": ["data"],
             "status": "preparing"
         }
@@ -288,13 +288,13 @@ class TestCrashScenarios:
         checksum = manager._calculate_checksum(data_file)
         manifest = MemoryManifest(
             transaction_id=txn_id,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             files={
                 "data": FileManifestEntry(
                     path="data.json",
                     checksum=checksum,
                     size=os.path.getsize(data_file),
-                    timestamp=datetime.utcnow().isoformat()
+                    timestamp=datetime.now(UTC).isoformat()
                 )
             }
         )
@@ -326,7 +326,7 @@ class TestCrashScenarios:
             prep_file = tmp_path / "transactions" / f"txn_{txn_id}_prepare.json"
             prep_data = {
                 "transaction_id": txn_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "files": [f"data_{i}"],
                 "status": "preparing"
             }
@@ -358,14 +358,14 @@ class TestCrashScenarios:
 
         prep_data = {
             "transaction_id": txn_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "files": ["data"],
             "status": "preparing"
         }
 
         commit_data = {
             "transaction_id": txn_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "status": "committed"
         }
 
@@ -750,7 +750,7 @@ class TestEdgeCases:
         (txn_dir / f"txn_{txn_id_1}_prepare.json").write_text(
             json.dumps({
                 "transaction_id": txn_id_1,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "files": ["data"],
                 "status": "preparing"
             })
@@ -764,7 +764,7 @@ class TestEdgeCases:
         (txn_dir / f"txn_{txn_id_2}_prepare.json").write_text(
             json.dumps({
                 "transaction_id": txn_id_2,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "files": ["data"],
                 "status": "preparing"
             })
@@ -778,7 +778,7 @@ class TestEdgeCases:
         (txn_dir / f"txn_{txn_id_3}_prepare.json").write_text(
             json.dumps({
                 "transaction_id": txn_id_3,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "files": ["data"],
                 "status": "preparing"
             })

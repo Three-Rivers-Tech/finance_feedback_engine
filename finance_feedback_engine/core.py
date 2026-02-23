@@ -5,7 +5,7 @@ import logging
 import os
 import socket
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -1199,9 +1199,9 @@ class FinanceFeedbackEngine:
 
                     # Normalize numeric timestamps to ISO for consistency
                     if isinstance(live_ts, (int, float)):
-                        live_ts = datetime.utcfromtimestamp(live_ts).isoformat() + "Z"
+                        live_ts = datetime.fromtimestamp(live_ts, UTC).isoformat() + "Z"
                     elif not live_ts:
-                        live_ts = datetime.utcnow().isoformat() + "Z"
+                        live_ts = datetime.now(UTC).isoformat() + "Z"
 
                     market_data["close"] = float(live_price["price"])
                     market_data["timestamp"] = live_ts
@@ -1728,7 +1728,7 @@ class FinanceFeedbackEngine:
             if not allowed:
                 logger.warning(f"Trade rejected by RiskGatekeeper: {reason}")
                 decision["executed"] = False
-                decision["execution_time"] = datetime.utcnow().isoformat()
+                decision["execution_time"] = datetime.now(UTC).isoformat()
                 decision["execution_result"] = {
                     "success": False,
                     "error": reason,
@@ -1744,7 +1744,7 @@ class FinanceFeedbackEngine:
                 exc_info=True,
             )
             decision["executed"] = False
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {
                 "success": False,
                 "error": f"RiskGatekeeper internal error: {e}",
@@ -1787,7 +1787,7 @@ class FinanceFeedbackEngine:
         # PHASE 1: Mark decision as "pending execution" and flush to disk.
         # If the system crashes after this point, we can detect the orphan on restart.
         decision["execution_status"] = "pending"
-        decision["execution_started"] = datetime.utcnow().isoformat()
+        decision["execution_started"] = datetime.now(UTC).isoformat()
         self.decision_store.update_decision(decision)
 
         # Use persistent circuit breaker on platform when available
@@ -1812,7 +1812,7 @@ class FinanceFeedbackEngine:
             logger.error(f"Trade execution failed: {e}")
             decision["executed"] = False
             decision["execution_status"] = "failed"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
@@ -1825,7 +1825,7 @@ class FinanceFeedbackEngine:
             )
             decision["executed"] = False
             decision["execution_status"] = "pending_unknown"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
@@ -1834,7 +1834,7 @@ class FinanceFeedbackEngine:
             logger.error(f"Trade execution failed: {e}", exc_info=True)
             decision["executed"] = False
             decision["execution_status"] = "failed"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
@@ -1842,7 +1842,7 @@ class FinanceFeedbackEngine:
         # PHASE 3: Post-execution persistence — mark as completed
         decision["executed"] = True
         decision["execution_status"] = "completed"
-        decision["execution_time"] = datetime.utcnow().isoformat()
+        decision["execution_time"] = datetime.now(UTC).isoformat()
         decision["execution_result"] = result
         
         # Populate decision file fields (THR-235)
@@ -1935,7 +1935,7 @@ class FinanceFeedbackEngine:
             if not allowed:
                 logger.warning(f"Trade rejected by RiskGatekeeper: {reason}")
                 decision["executed"] = False
-                decision["execution_time"] = datetime.utcnow().isoformat()
+                decision["execution_time"] = datetime.now(UTC).isoformat()
                 decision["execution_result"] = {
                     "success": False,
                     "error": reason,
@@ -1950,7 +1950,7 @@ class FinanceFeedbackEngine:
                 exc_info=True,
             )
             decision["executed"] = False
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {
                 "success": False,
                 "error": f"RiskGatekeeper internal error: {e}",
@@ -1988,7 +1988,7 @@ class FinanceFeedbackEngine:
 
         # === TWO-PHASE COMMIT: Persist intent BEFORE execution ===
         decision["execution_status"] = "pending"
-        decision["execution_started"] = datetime.utcnow().isoformat()
+        decision["execution_started"] = datetime.now(UTC).isoformat()
         self.decision_store.update_decision(decision)
 
         try:
@@ -2009,7 +2009,7 @@ class FinanceFeedbackEngine:
             logger.error(f"Trade execution failed: {e}")
             decision["executed"] = False
             decision["execution_status"] = "failed"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
@@ -2020,7 +2020,7 @@ class FinanceFeedbackEngine:
             )
             decision["executed"] = False
             decision["execution_status"] = "pending_unknown"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
@@ -2028,14 +2028,14 @@ class FinanceFeedbackEngine:
             logger.error(f"Trade execution failed: {e}", exc_info=True)
             decision["executed"] = False
             decision["execution_status"] = "failed"
-            decision["execution_time"] = datetime.utcnow().isoformat()
+            decision["execution_time"] = datetime.now(UTC).isoformat()
             decision["execution_result"] = {"success": False, "error": str(e)}
             self.decision_store.update_decision(decision)
             raise
 
         decision["executed"] = True
         decision["execution_status"] = "completed"
-        decision["execution_time"] = datetime.utcnow().isoformat()
+        decision["execution_time"] = datetime.now(UTC).isoformat()
         decision["execution_result"] = result
         
         # Populate decision file fields (THR-235)

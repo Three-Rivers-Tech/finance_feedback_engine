@@ -1,6 +1,6 @@
 """Tests for Coinbase routing in AlphaVantageProvider crypto path."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -16,7 +16,7 @@ async def test_crypto_data_routes_to_coinbase_in_live_mode():
     provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
     try:
-        now_ts = int((datetime.utcnow() - timedelta(minutes=5)).timestamp())
+        now_ts = int((datetime.now(UTC) - timedelta(minutes=5)).timestamp())
         provider.coinbase_provider = Mock()
         provider.coinbase_provider.get_candles.return_value = [
             {

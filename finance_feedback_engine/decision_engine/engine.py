@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional, Tuple
 
 import pytz
@@ -402,7 +402,7 @@ Close Position: {market_data.get('close_position_in_range', 0.5):.1%} in daily r
         # Add temporal context (market schedule and data freshness)
         market_status = context.get("market_status", {})
         data_freshness = context.get("data_freshness", {})
-        utc_now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        utc_now = datetime.now(UTC).replace(tzinfo=pytz.UTC)
         ny_tz = pytz.timezone("America/New_York")
         ny_time = utc_now.astimezone(ny_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
         utc_time = utc_now.strftime("%Y-%m-%d %H:%M:%S UTC")

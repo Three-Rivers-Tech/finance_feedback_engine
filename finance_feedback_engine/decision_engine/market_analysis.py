@@ -1,7 +1,7 @@
 """Market analysis context for trading decisions."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, Optional
 
 import pandas as pd
@@ -65,7 +65,7 @@ class MarketAnalysisContext:
 
         try:
             # Get last 30 days of historical data
-            end_date = datetime.utcnow().date()
+            end_date = datetime.now(UTC).date()
             start_date = end_date - timedelta(days=30)
 
             # Fetch historical data (handle both sync and async providers)
@@ -389,7 +389,7 @@ class MarketAnalysisContext:
             "portfolio": portfolio,
             "memory_context": memory_context,
             "monitoring_context": monitoring_context,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "price_change": self._calculate_price_change(market_data),
             "volatility": self._calculate_volatility(market_data),
         }

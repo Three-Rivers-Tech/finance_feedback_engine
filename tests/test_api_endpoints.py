@@ -176,13 +176,13 @@ class TestDecisionsEndpoints:
 
     def test_create_decision_uses_provider(self, client, mock_engine):
         """Test decision creation passes provider through to engine."""
-        mock_engine.analyze_asset.return_value = {
+        mock_engine.analyze_asset_async = AsyncMock(return_value={
             "decision_id": "test-decision-123",
             "asset_pair": "BTCUSD",
             "action": "BUY",
             "confidence": 72,
             "reasoning": "Test reasoning",
-        }
+        })
 
         payload = {
             "asset_pair": "BTCUSD",
@@ -198,11 +198,42 @@ class TestDecisionsEndpoints:
         assert data["asset_pair"] == "BTCUSD"
         assert data["action"] == "BUY"
 
-        mock_engine.analyze_asset.assert_called_once_with(
+        mock_engine.analyze_asset_async.assert_called_once_with(
             asset_pair="BTCUSD",
             provider="ensemble",
             include_sentiment=False,
             include_macro=False,
+        )
+
+    def test_create_decision_falls_back_to_sync_in_thread_when_async_missing(self, client, mock_engine):
+        """Safety fallback: if async engine method is unavailable, use sync method without API contract change."""
+        mock_engine.analyze_asset_async = None
+        mock_engine.analyze_asset = Mock(return_value={
+            "decision_id": "test-decision-sync-123",
+            "asset_pair": "BTCUSD",
+            "action": "HOLD",
+            "confidence": 51,
+            "reasoning": "sync fallback path",
+        })
+
+        payload = {
+            "asset_pair": "BTCUSD",
+            "provider": "ensemble",
+            "include_sentiment": True,
+            "include_macro": True,
+        }
+
+        response = client.post("/api/v1/decisions", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["decision_id"] == "test-decision-sync-123"
+        assert data["action"] == "HOLD"
+
+        mock_engine.analyze_asset.assert_called_once_with(
+            asset_pair="BTCUSD",
+            provider="ensemble",
+            include_sentiment=True,
+            include_macro=True,
         )
 
 

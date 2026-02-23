@@ -6,7 +6,7 @@ from .circuit_breaker import (
     CircuitState,
     circuit_breaker,
 )
-from .retry import RetryConfig, exponential_backoff_retry
+from .retry import RetryConfig, async_retry, exponential_backoff_retry
 from .validation import (
     standardize_asset_pair,
     validate_asset_pair_composition,
@@ -15,6 +15,7 @@ from .validation import (
 )
 
 __all__ = [
+    "async_retry",
     "exponential_backoff_retry",
     "RetryConfig",
     "CircuitBreaker",

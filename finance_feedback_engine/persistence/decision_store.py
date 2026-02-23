@@ -1,7 +1,7 @@
 """Persistence layer for storing trading decisions."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -51,7 +51,7 @@ class DecisionStore:
             return
 
         # Create filename from decision ID and timestamp
-        timestamp = decision.get("timestamp", datetime.utcnow().isoformat())
+        timestamp = decision.get("timestamp", datetime.now(UTC).isoformat())
         date_str = timestamp.split("T")[0]
         filename = f"{date_str}_{decision_id}.json"
 
@@ -214,7 +214,7 @@ class DecisionStore:
         """
         from datetime import timedelta
 
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days)
         deleted_count = 0
 
         for filepath in self.storage_path.glob("*.json"):

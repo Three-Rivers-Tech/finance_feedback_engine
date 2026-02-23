@@ -7,7 +7,7 @@ in isolation by mocking ensemble_manager calls.
 Target Coverage: Increase engine.py from 6% to >50%
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -76,7 +76,7 @@ def sample_market_data():
         "low": 49000.0,
         "close": 50500.0,
         "volume": 1000,
-        "date": datetime.utcnow().isoformat(),
+        "date": datetime.now(UTC).isoformat(),
         "type": "crypto",
         "asset_type": "crypto",
     }

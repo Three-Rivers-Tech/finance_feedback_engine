@@ -7,6 +7,7 @@ import queue
 import time
 import uuid
 from datetime import date
+from dataclasses import asdict, dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, Optional
 
@@ -68,6 +69,67 @@ STATE_METRIC_VALUES: dict[AgentState, int] = {
     AgentState.RISK_CHECK: 5,
     AgentState.EXECUTION: 6,
 }
+
+
+@dataclass
+class LoopMetrics:
+    """Lightweight OODA timing metrics for cycle-level observability."""
+
+    cycles_completed: int = 0
+    cumulative_phase_durations: dict[str, float] = field(
+        default_factory=lambda: {
+            "PERCEPTION": 0.0,
+            "REASONING": 0.0,
+            "RISK_CHECK": 0.0,
+            "EXECUTION": 0.0,
+            "LEARNING": 0.0,
+        }
+    )
+    last_cycle_phase_durations: dict[str, float] = field(default_factory=dict)
+    last_cycle_total_duration: float = 0.0
+
+    def record_phase(self, phase_name: str, duration_seconds: float) -> None:
+        self.cumulative_phase_durations[phase_name] = (
+            self.cumulative_phase_durations.get(phase_name, 0.0) + duration_seconds
+        )
+
+    def finalize_cycle(self, cycle_phase_durations: dict[str, float]) -> None:
+        self.cycles_completed += 1
+        self.last_cycle_phase_durations = dict(cycle_phase_durations)
+        self.last_cycle_total_duration = sum(cycle_phase_durations.values())
+
+
+class _TokenBucketRateLimiter:
+    """Async token-bucket limiter for pacing provider calls without fixed sleeps."""
+
+    def __init__(self, rate_per_second: float, burst: int = 1):
+        self.rate_per_second = max(0.0, float(rate_per_second))
+        self.capacity = max(1.0, float(burst))
+        self.tokens = self.capacity
+        self.updated_at = time.monotonic()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        """Wait until at least one token is available, then consume it."""
+        if self.rate_per_second <= 0:
+            return
+
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                elapsed = now - self.updated_at
+                self.updated_at = now
+                self.tokens = min(
+                    self.capacity, self.tokens + elapsed * self.rate_per_second
+                )
+
+                if self.tokens >= 1.0:
+                    self.tokens -= 1.0
+                    return
+
+                wait_time = (1.0 - self.tokens) / self.rate_per_second
+
+            await asyncio.sleep(wait_time)
 
 
 class TradingLoopAgent:
@@ -197,6 +259,7 @@ class TradingLoopAgent:
         self._start_time = None  # Will be set in run()
         self._current_cycle_id: str | None = None
         self._cycle_retry_budget: dict[str, int] = {}
+        self._loop_metrics = LoopMetrics()
 
         # Property for dashboard to track if stop was requested
         self.stop_requested = False
@@ -949,7 +1012,7 @@ class TradingLoopAgent:
                         decision = {
                             "id": decision_id,
                             "asset_pair": asset_pair,
-                            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+                            "timestamp": datetime.datetime.now(datetime.UTC).isoformat() + "Z",
                             "action": "BUY" if pos["side"] == "LONG" else "SELL",
                             "confidence": 75,  # Default confidence for recovered positions
                             "recommended_position_size": pos["size"],
@@ -983,7 +1046,7 @@ class TradingLoopAgent:
                             decision_id=decision_id,
                             asset_pair=asset_pair,
                             action="BUY" if pos["side"] == "LONG" else "SELL",
-                            entry_timestamp=datetime.datetime.utcnow().isoformat() + "Z",
+                            entry_timestamp=datetime.datetime.now(datetime.UTC).isoformat() + "Z",
                             entry_price=entry_price,
                             position_size=pos["size"],
                             ai_provider="recovery",
@@ -1324,7 +1387,7 @@ class TradingLoopAgent:
 
     async def handle_reasoning_state(self) -> None:
         """
-        REASONING: Running the DecisionEngine with retry logic for robustness.
+        REASONING: Running per-asset analysis with bounded concurrency and rate limiting.
         """
         logger.info("=" * 80)
         logger.info("State: REASONING - Running DecisionEngine...")
@@ -1343,23 +1406,21 @@ class TradingLoopAgent:
         if missing_core_pairs:
             logger.warning(
                 "Core pairs missing from asset_pairs: %s. Restoring them.",
-                missing_core_pairs
+                missing_core_pairs,
             )
             self.config.asset_pairs.extend(missing_core_pairs)
 
         # Create a snapshot copy for iteration (prevents race conditions)
         asset_pairs_snapshot = list(self.config.asset_pairs)
-
         logger.info("Analyzing %d pairs: %s", len(asset_pairs_snapshot), asset_pairs_snapshot)
 
-        MAX_RETRIES = 5  # Increased from 3 to handle intermittent API failures
+        max_retries = 5  # Keep existing resilience behavior
 
         # If we've already hit the daily trade cap, only inspect the first pair
         limit_reached = (
             self.config.max_daily_trades > 0
             and self.daily_trade_count >= self.config.max_daily_trades
         )
-        processed_pairs = 0
 
         # --- Cleanup expired entries from rejection cache ---
         self._cleanup_rejected_cache()
@@ -1379,111 +1440,144 @@ class TradingLoopAgent:
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
-        for asset_pair in asset_pairs_snapshot:  # Iterate over snapshot, not live list
-            if limit_reached and processed_pairs >= 1:
+        pairs_to_analyze: list[tuple[int, str]] = []
+        for idx, asset_pair in enumerate(asset_pairs_snapshot):
+            if limit_reached and len(pairs_to_analyze) >= 1:
                 logger.info(
                     "Daily trade limit reached; skipping analysis for remaining pairs."
                 )
                 break
-            logger.info(">>> Starting analysis for %s", asset_pair)
+
             failure_key = f"analysis:{asset_pair}"
 
             # --- Check if asset was recently rejected ---
-            asset_rejected = False
-            for timestamp, cached_asset_pair in self._rejected_decisions_cache.values():
-                if asset_pair == cached_asset_pair:
-                    logger.info(
-                        "Skipping analysis for %s: recently rejected. Cooldown active.", asset_pair
-                    )
-                    asset_rejected = True
-                    break
+            asset_rejected = any(
+                asset_pair == cached_asset_pair
+                for _, cached_asset_pair in self._rejected_decisions_cache.values()
+            )
             if asset_rejected:
+                logger.info(
+                    "Skipping analysis for %s: recently rejected. Cooldown active.",
+                    asset_pair,
+                )
                 continue
 
-            if self.analysis_failures.get(failure_key, 0) >= MAX_RETRIES:
+            if self.analysis_failures.get(failure_key, 0) >= max_retries:
                 logger.warning(
                     "Skipping analysis for %s due to repeated failures (will reset after decay or daily reset).",
-                    asset_pair
+                    asset_pair,
                 )
                 continue
 
-            # Use asyncio.wait_for to prevent long-running operations from blocking the loop
-            try:
-                logger.info(f"    → Calling DecisionEngine for {asset_pair} (90s timeout)...")
+            pairs_to_analyze.append((idx, asset_pair))
 
-                analyze_fn = getattr(self.engine, "analyze_asset", None)
-                analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
+        max_concurrent = max(1, int(getattr(self.config, "reasoning_max_concurrent_assets", 3)))
+        semaphore = asyncio.Semaphore(max_concurrent)
 
-                if callable(analyze_async_fn):
-                    analysis_result = await analyze_async_fn(asset_pair)
-                elif callable(analyze_fn):
-                    analysis_result = analyze_fn(asset_pair)
-                else:
-                    raise AttributeError(
-                        "Engine must implement analyze_asset() or analyze_asset_async()"
-                    )
+        requests_per_minute = float(
+            getattr(self.config, "reasoning_rate_limit_requests_per_minute", 4.0)
+        )
+        burst = int(getattr(self.config, "reasoning_rate_limit_burst", 1))
+        limiter = None
+        if requests_per_minute > 0:
+            limiter = _TokenBucketRateLimiter(
+                rate_per_second=requests_per_minute / 60.0,
+                burst=burst,
+            )
 
-                # Wrap with a timeout to prevent blocking
-                import inspect
+        async def _analyze_one(index: int, asset_pair: str) -> tuple[int, Optional[dict]]:
+            failure_key = f"analysis:{asset_pair}"
+            logger.info(">>> Starting analysis for %s", asset_pair)
 
-                if inspect.isawaitable(analysis_result):
-                    analysis_awaitable = analysis_result
-                else:
-                    analysis_awaitable = asyncio.sleep(0, result=analysis_result)
+            async with semaphore:
+                if limiter is not None:
+                    await limiter.acquire()
 
-                decision = await asyncio.wait_for(
-                    analysis_awaitable,
-                    timeout=90,  # Timeout after 90 seconds
-                )
+                try:
+                    logger.info("    → Calling DecisionEngine for %s (90s timeout)...", asset_pair)
 
-                # Reset failure count on success - remove from dict to prevent unbounded growth
-                if failure_key in self.analysis_failures:
-                    del self.analysis_failures[failure_key]
-                if failure_key in self.analysis_failure_timestamps:
-                    del self.analysis_failure_timestamps[failure_key]
+                    analyze_fn = getattr(self.engine, "analyze_asset", None)
+                    analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
 
-                if decision and decision.get("action") in ["BUY", "SELL"]:
-                    if await self._should_execute(decision):
-                        async with self._current_decisions_lock:
-                            self._current_decisions.append(decision)
-                        logger.info(
-                            "Actionable decision collected for %s: %s", asset_pair, decision['action']
-                        )
+                    if callable(analyze_async_fn):
+                        analysis_result = await analyze_async_fn(asset_pair)
+                    elif callable(analyze_fn):
+                        analysis_result = analyze_fn(asset_pair)
                     else:
-                        logger.info(
-                            "Decision to %s %s not executed due to policy or low confidence.",
-                            decision['action'], asset_pair
+                        raise AttributeError(
+                            "Engine must implement analyze_asset() or analyze_asset_async()"
                         )
+
+                    import inspect
+
+                    if inspect.isawaitable(analysis_result):
+                        analysis_awaitable = analysis_result
+                    else:
+                        analysis_awaitable = asyncio.sleep(0, result=analysis_result)
+
+                    decision = await asyncio.wait_for(analysis_awaitable, timeout=90)
+
+                    # Reset failure count on success
+                    self.analysis_failures.pop(failure_key, None)
+                    self.analysis_failure_timestamps.pop(failure_key, None)
+                    return index, decision
+
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Analysis for %s timed out, skipping this cycle.", asset_pair
+                    )
+                    now = datetime.datetime.now()
+                    self.analysis_failure_timestamps[failure_key] = now
+                    self.analysis_failures[failure_key] = (
+                        self.analysis_failures.get(failure_key, 0) + 1
+                    )
+                    return index, None
+                except Exception as e:
+                    logger.warning("Analysis for %s failed: %s", asset_pair, e)
+                    now = datetime.datetime.now()
+                    self.analysis_failure_timestamps[failure_key] = now
+                    self.analysis_failures[failure_key] = (
+                        self.analysis_failures.get(failure_key, 0) + 1
+                    )
+                    logger.error(
+                        "Persistent failure analyzing %s. It will be skipped for a while.",
+                        asset_pair,
+                        exc_info=True,
+                    )
+                    return index, None
+
+        analysis_results = await asyncio.gather(
+            *[_analyze_one(index, pair) for index, pair in pairs_to_analyze]
+        ) if pairs_to_analyze else []
+
+        # Preserve deterministic ordering by original asset index
+        ordered_results = sorted(analysis_results, key=lambda item: item[0])
+        ordered_actionable_decisions: list[dict] = []
+
+        for _, decision in ordered_results:
+            if decision and decision.get("action") in ["BUY", "SELL"]:
+                if await self._should_execute(decision):
+                    ordered_actionable_decisions.append(decision)
+                    logger.info(
+                        "Actionable decision collected for %s: %s",
+                        decision.get("asset_pair"),
+                        decision["action"],
+                    )
                 else:
-                    logger.info("Decision for %s: HOLD. No action taken.", asset_pair)
-
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "Analysis for %s timed out, skipping this cycle.", asset_pair
-                )
-                self.analysis_failure_timestamps[failure_key] = current_time
-                self.analysis_failures[failure_key] = (
-                    self.analysis_failures.get(failure_key, 0) + 1
-                )
-            except Exception as e:
-                logger.warning("Analysis for %s failed: %s", asset_pair, e)
-                self.analysis_failure_timestamps[failure_key] = current_time
-                self.analysis_failures[failure_key] = (
-                    self.analysis_failures.get(failure_key, 0) + 1
-                )
-                logger.error(
-                    "Persistent failure analyzing %s. It will be skipped for a while.",
-                    asset_pair,
-                    exc_info=True,
+                    logger.info(
+                        "Decision to %s %s not executed due to policy or low confidence.",
+                        decision.get("action"),
+                        decision.get("asset_pair"),
+                    )
+            elif decision:
+                logger.info(
+                    "Decision for %s: HOLD. No action taken.",
+                    decision.get("asset_pair"),
                 )
 
-            processed_pairs += 1
-
-            # Add delay between pairs to avoid Alpha Vantage rate limits
-            # Only delay if there are more pairs to analyze
-            if asset_pair != asset_pairs_snapshot[-1]:
-                logger.info("    → Waiting 15s before analyzing next pair (rate limit protection)...")
-                await asyncio.sleep(15)
+        if ordered_actionable_decisions:
+            async with self._current_decisions_lock:
+                self._current_decisions.extend(ordered_actionable_decisions)
 
         # After analyzing all assets, transition based on collected decisions
         async with self._current_decisions_lock:
@@ -1492,7 +1586,8 @@ class TradingLoopAgent:
 
         if has_decisions:
             logger.info(
-                "Collected %s actionable decisions. Proceeding to RISK_CHECK.", decisions_count
+                "Collected %s actionable decisions. Proceeding to RISK_CHECK.",
+                decisions_count,
             )
             await self._transition_to(AgentState.RISK_CHECK)
         else:
@@ -2274,6 +2369,10 @@ class TradingLoopAgent:
             ),
         }
 
+    def get_loop_metrics(self) -> Dict[str, Any]:
+        """Return cycle timing metrics for API consumption."""
+        return asdict(self._loop_metrics)
+
     async def _deliver_webhook(
         self, webhook_url: str, payload: dict, max_retries: int = 3
     ) -> bool:
@@ -2578,6 +2677,14 @@ class TradingLoopAgent:
             iterations = 0
 
             with tracer.start_as_current_span("agent.ooda.cycle") as cycle_span:
+                cycle_phase_durations: dict[str, float] = {
+                    "PERCEPTION": 0.0,
+                    "REASONING": 0.0,
+                    "RISK_CHECK": 0.0,
+                    "EXECUTION": 0.0,
+                    "LEARNING": 0.0,
+                }
+
                 while (
                     self.state != AgentState.IDLE
                     and iterations < max_iterations
@@ -2585,9 +2692,11 @@ class TradingLoopAgent:
                 ):
                     handler = self.state_handlers.get(self.state)
                     if handler:
+                        phase_name = self.state.name
                         cycle_span.add_event(
-                            "state_handler_start", {"state": self.state.name}
+                            "state_handler_start", {"state": phase_name}
                         )
+                        phase_start = time.perf_counter()
                         try:
                             await handler()
                         except Exception as handler_err:
@@ -2617,6 +2726,12 @@ class TradingLoopAgent:
                                 )
                             self._reset_cycle_budget()
                             return False
+                        finally:
+                            if phase_name in cycle_phase_durations:
+                                phase_duration = time.perf_counter() - phase_start
+                                cycle_phase_durations[phase_name] += phase_duration
+                                self._loop_metrics.record_phase(phase_name, phase_duration)
+
                         cycle_span.add_event(
                             "state_handler_end", {"state": self.state.name}
                         )
@@ -2624,6 +2739,18 @@ class TradingLoopAgent:
                         logger.error(f"No handler found for state {self.state}")
                         return False
                     iterations += 1
+
+                self._loop_metrics.finalize_cycle(cycle_phase_durations)
+                logger.info(
+                    "Cycle phase durations (s): PERCEPTION=%.4f REASONING=%.4f "
+                    "RISK_CHECK=%.4f EXECUTION=%.4f LEARNING=%.4f TOTAL=%.4f",
+                    cycle_phase_durations["PERCEPTION"],
+                    cycle_phase_durations["REASONING"],
+                    cycle_phase_durations["RISK_CHECK"],
+                    cycle_phase_durations["EXECUTION"],
+                    cycle_phase_durations["LEARNING"],
+                    self._loop_metrics.last_cycle_total_duration,
+                )
 
                 cycle_span.set_attribute("iterations", iterations)
                 if iterations >= max_iterations:

@@ -152,7 +152,7 @@ def test_learning_loop_calls_ensemble_update(tmp_path, monkeypatch):
         "action": "BUY",
         "confidence": 80,
         "amount": 0.1,
-        "timestamp": "2025-01-01T00:00:01Z",  # Use fixed time instead of datetime.utcnow().isoformat()
+        "timestamp": "2025-01-01T00:00:01Z",  # Use fixed time instead of datetime.now(UTC).isoformat()
         "entry_price": 100.0,
         "recommended_position_size": 1.0,
         "ai_provider": "ensemble",

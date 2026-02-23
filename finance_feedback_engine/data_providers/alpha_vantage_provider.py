@@ -3,17 +3,17 @@
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
-from aiohttp_retry import ExponentialRetry, RetryClient
 
 from ..observability.context import get_trace_headers
 from ..observability.metrics import create_histograms, get_meter
 from ..utils.asset_classifier import classify_asset_pair
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
 from ..utils.rate_limiter import RateLimiter
+from ..utils.retry import async_retry
 from .coinbase_data import CoinbaseDataProvider
 
 logger = logging.getLogger(__name__)
@@ -219,6 +219,13 @@ class AlphaVantageProvider:
                 pass
         return False
 
+    @async_retry(
+        exceptions=(aiohttp.ClientError, asyncio.TimeoutError, TimeoutError, ConnectionError),
+        max_retries=3,
+        base_delay=0.5,
+        max_delay=8.0,
+        jitter=True,
+    )
     async def _async_request(
         self, params: Dict[str, Any], timeout: int
     ) -> Dict[str, Any]:
@@ -276,11 +283,6 @@ class AlphaVantageProvider:
             self.session = None
             await self._ensure_session()
 
-        retry = ExponentialRetry(attempts=3)
-        # Initialize RetryClient bound to an existing session
-        # CRITICAL FIX: Do NOT close RetryClient as it closes the underlying session
-        client = RetryClient(client_session=self.session, retry_options=retry)
-
         # Add correlation ID headers for distributed tracing
         headers = get_trace_headers()
 
@@ -288,7 +290,7 @@ class AlphaVantageProvider:
         start_time = time.time()
 
         try:
-            async with client.get(
+            async with self.session.get(
                 self.BASE_URL, params=params, timeout=timeout, headers=headers
             ) as resp:
                 resp.raise_for_status()
@@ -307,9 +309,6 @@ class AlphaVantageProvider:
 
                 return result
         finally:
-            # DO NOT close the client - it would close our shared session
-            # await client.close()  # REMOVED - this was closing the shared session
-            pass
             # Always release the rate limiter if acquired
             if rate_limiter_acquired and rate_limiter_release:
                 try:
@@ -338,18 +337,9 @@ class AlphaVantageProvider:
             self.session = None
             await self._ensure_session()
 
-        retry = ExponentialRetry(attempts=3)
-        client = RetryClient(client_session=self.session, retry_options=retry)
-        try:
-            async with client.get(
-                self.BASE_URL, params=params, timeout=timeout
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
-        finally:
-            # DO NOT close the client - it would close our shared session
-            # await client.close()  # REMOVED - this was closing the shared session
-            pass
+        async with self.session.get(self.BASE_URL, params=params, timeout=timeout) as resp:
+            resp.raise_for_status()
+            return await resp.json()
 
     async def _ensure_session(self):
         """
@@ -658,7 +648,7 @@ class AlphaVantageProvider:
 
             # Validate data staleness for intraday timeframes
             if staleness_threshold and latest_timestamp:
-                now = datetime.utcnow()
+                now = datetime.now(UTC)
                 staleness_minutes = (now - latest_timestamp).total_seconds() / 60
 
                 # Record staleness metric
@@ -863,10 +853,19 @@ class AlphaVantageProvider:
             market_data["is_bullish"] = is_bullish
             market_data["close_position_in_range"] = close_position_in_range
 
-            # Fetch technical indicators if available
-            technical_data = await self._get_technical_indicators(asset_pair)
-            if technical_data:
-                market_data.update(technical_data)
+            # Fetch technical indicators if available.
+            # In live mode, crypto market data is sourced from Coinbase and should
+            # not trigger Alpha Vantage indicator requests during enrichment.
+            should_fetch_technical = not (
+                not self.is_backtest
+                and classify_asset_pair(asset_pair) == "crypto"
+                and market_data.get("provider") == "coinbase"
+            )
+
+            if should_fetch_technical:
+                technical_data = await self._get_technical_indicators(asset_pair)
+                if technical_data:
+                    market_data.update(technical_data)
 
         except Exception as e:  # noqa: BLE001
             logger.warning("Error enriching market data: %s", e)
@@ -1006,7 +1005,7 @@ class AlphaVantageProvider:
             # Get recent historical data for regime analysis
             from datetime import timedelta
 
-            end_date = datetime.utcnow().date()
+            end_date = datetime.now(UTC).date()
             start_date = end_date - timedelta(days=30)
 
             candles = await self.get_historical_data(
@@ -1329,7 +1328,7 @@ class AlphaVantageProvider:
             "timeframes": {},
             "has_any_fresh_data": False,
             "all_stale": True,
-            "fetch_timestamp": datetime.utcnow().isoformat() + "Z",
+            "fetch_timestamp": datetime.now(UTC).isoformat() + "Z",
         }
 
         # Fetch each timeframe independently
@@ -1348,7 +1347,7 @@ class AlphaVantageProvider:
                     # Get last 2 candles to have latest data
                     from datetime import timedelta
 
-                    end_date = datetime.utcnow().date()
+                    end_date = datetime.now(UTC).date()
                     start_date = end_date - timedelta(days=2)
 
                     candles = await self.get_historical_data(
@@ -1363,7 +1362,7 @@ class AlphaVantageProvider:
                         latest = candles[-1]
                         data = {
                             "asset_pair": asset_pair,
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                             "date": latest.get("date"),
                             "open": latest.get("open"),
                             "high": latest.get("high"),
@@ -1492,6 +1491,24 @@ class AlphaVantageProvider:
 
         return results
 
+    @async_retry(
+        exceptions=(ConnectionError, TimeoutError, asyncio.TimeoutError),
+        max_retries=3,
+        base_delay=0.5,
+        max_delay=8.0,
+        jitter=True,
+    )
+    async def _get_coinbase_candles_with_retry(
+        self, asset_pair: str, granularity: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """Retrieve Coinbase candles with retry for transient transport failures."""
+        return await asyncio.to_thread(
+            self.coinbase_provider.get_candles,
+            asset_pair,
+            granularity,
+            limit,
+        )
+
     async def _get_crypto_data_coinbase(
         self, asset_pair: str, force_refresh: bool = False, timeframe: str = "60min"
     ) -> Dict[str, Any]:
@@ -1535,11 +1552,8 @@ class AlphaVantageProvider:
         granularity = granularity_map.get(timeframe, "1h")
 
         try:
-            candles = await asyncio.to_thread(
-                self.coinbase_provider.get_candles,
-                asset_pair,
-                granularity,
-                300,
+            candles = await self._get_coinbase_candles_with_retry(
+                asset_pair, granularity, 300
             )
 
             if not candles:
@@ -1550,7 +1564,7 @@ class AlphaVantageProvider:
                 raise ValueError(msg)
 
             latest_candle = candles[-1]
-            data_date = datetime.utcfromtimestamp(latest_candle["timestamp"])
+            data_date = datetime.fromtimestamp(latest_candle["timestamp"], UTC)
             data_timestamp = data_date.isoformat() + "Z"
             latest_date = data_date.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -1585,10 +1599,10 @@ class AlphaVantageProvider:
                     stale_data_warning = {
                         "stale_data": True,
                         "data_age_seconds": (
-                            datetime.utcnow() - data_date
+                            datetime.now(UTC) - data_date
                         ).total_seconds(),
                         "data_age_hours": (
-                            datetime.utcnow() - data_date
+                            datetime.now(UTC) - data_date
                         ).total_seconds()
                         / 3600,
                         "data_date": latest_date,
@@ -1603,10 +1617,10 @@ class AlphaVantageProvider:
                     stale_data_warning = {
                         "stale_data": False,
                         "data_age_seconds": (
-                            datetime.utcnow() - data_date
+                            datetime.now(UTC) - data_date
                         ).total_seconds(),
                         "data_age_hours": (
-                            datetime.utcnow() - data_date
+                            datetime.now(UTC) - data_date
                         ).total_seconds()
                         / 3600,
                         "data_date": latest_date,
@@ -1628,7 +1642,7 @@ class AlphaVantageProvider:
 
             result = {
                 "asset_pair": asset_pair,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "date": latest_date,
                 "open": float(latest_candle.get("open", 0)),
                 "high": float(latest_candle.get("high", 0)),
@@ -1799,10 +1813,10 @@ class AlphaVantageProvider:
                         stale_data_warning = {
                             "stale_data": True,
                             "data_age_seconds": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds(),
                             "data_age_hours": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds()
                             / 3600,
                             "data_date": latest_date,
@@ -1817,10 +1831,10 @@ class AlphaVantageProvider:
                         stale_data_warning = {
                             "stale_data": False,
                             "data_age_seconds": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds(),
                             "data_age_hours": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds()
                             / 3600,
                             "data_date": latest_date,
@@ -1844,7 +1858,7 @@ class AlphaVantageProvider:
 
                 result = {
                     "asset_pair": asset_pair,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "date": latest_date,
                     "open": open_price,
                     "high": high_price,
@@ -1964,10 +1978,10 @@ class AlphaVantageProvider:
                         stale_data_warning = {
                             "stale_data": True,
                             "data_age_seconds": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds(),
                             "data_age_hours": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds()
                             / 3600,
                             "data_date": latest_date,
@@ -1985,10 +1999,10 @@ class AlphaVantageProvider:
                         stale_data_warning = {
                             "stale_data": False,
                             "data_age_seconds": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds(),
                             "data_age_hours": (
-                                datetime.utcnow() - data_date
+                                datetime.now(UTC) - data_date
                             ).total_seconds()
                             / 3600,
                             "data_date": latest_date,
@@ -2013,7 +2027,7 @@ class AlphaVantageProvider:
 
                 result = {
                     "asset_pair": asset_pair,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "date": latest_date,
                     "open": float(latest_data.get("1. open", 0)),
                     "high": float(latest_data.get("2. high", 0)),
@@ -2081,8 +2095,8 @@ class AlphaVantageProvider:
 
         return {
             "asset_pair": asset_pair,
-            "timestamp": datetime.utcnow().isoformat(),
-            "date": datetime.utcnow().date().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
+            "date": datetime.now(UTC).date().isoformat(),
             "open": base_price,
             "high": base_price * 1.02,
             "low": base_price * 0.98,
@@ -2122,7 +2136,7 @@ class AlphaVantageProvider:
                 data_time = datetime.fromisoformat(
                     data["timestamp"].replace("Z", "+00:00")
                 )
-                age = datetime.utcnow() - data_time.replace(tzinfo=None)
+                age = datetime.now(UTC) - data_time.replace(tzinfo=None)
                 if age.total_seconds() > 86400:  # 24 hour threshold for daily data
                     issues.append(
                         f"Market data is stale " f"({age.total_seconds():.0f}s old)"

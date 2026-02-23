@@ -10,7 +10,7 @@ Tests the complete SHORT position lifecycle:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 import pandas as pd
 
@@ -34,7 +34,7 @@ class TestShortPositionBasics:
             "suggested_amount": 1000.0,  # $1000 notional
             "entry_price": 50000.0,
             "id": "test-short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -73,7 +73,7 @@ class TestShortPositionBasics:
             "suggested_amount": 1000.0,
             "entry_price": entry_price,
             "id": "test-short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         open_result = platform.execute_trade(open_decision)
         assert open_result["success"], f"Failed to open SHORT: {open_result.get('error')}"
@@ -93,7 +93,7 @@ class TestShortPositionBasics:
             "suggested_amount": notional_to_close,
             "entry_price": exit_price,
             "id": "test-short-close",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(close_decision)
@@ -130,7 +130,7 @@ class TestShortPositionBasics:
             "suggested_amount": notional,
             "entry_price": entry_price,
             "id": "short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Get actual contracts opened
@@ -147,7 +147,7 @@ class TestShortPositionBasics:
             "suggested_amount": notional_to_close,
             "entry_price": exit_price,
             "id": "short-close",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Calculate expected P&L (using actual contracts opened)
@@ -179,7 +179,7 @@ class TestShortPositionBasics:
             "suggested_amount": notional,
             "entry_price": entry_price,
             "id": "short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Get actual contracts opened
@@ -196,7 +196,7 @@ class TestShortPositionBasics:
             "suggested_amount": notional_to_close,
             "entry_price": exit_price,
             "id": "short-close",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Calculate expected P&L (should be negative, using actual contracts)
@@ -223,7 +223,7 @@ class TestShortPositionBasics:
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
             "id": "short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Try to SELL again (add to SHORT)
@@ -233,7 +233,7 @@ class TestShortPositionBasics:
             "suggested_amount": 1000.0,
             "entry_price": 49000.0,
             "id": "short-add",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         assert not result["success"], "Should not allow adding to SHORT position"
@@ -256,7 +256,7 @@ class TestShortUnrealizedPnL:
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
             "id": "short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Update current price to 48000 (price dropped = profit)
@@ -284,7 +284,7 @@ class TestShortUnrealizedPnL:
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
             "id": "short-open",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Update current price to 52000 (price rose = loss)
@@ -316,7 +316,7 @@ class TestShortAndLongMixed:
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
             "id": "btc-long",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Open SHORT on ETH
@@ -326,7 +326,7 @@ class TestShortAndLongMixed:
             "suggested_amount": 1000.0,
             "entry_price": 3000.0,
             "id": "eth-short",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         # Verify both positions exist

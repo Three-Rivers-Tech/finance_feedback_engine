@@ -15,7 +15,7 @@ import logging
 import sqlite3
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional, Tuple
@@ -389,7 +389,7 @@ class AuthManager:
         Returns:
             List of audit log dictionaries
         """
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
+        cutoff_time = datetime.now(UTC) - timedelta(hours=hours_back)
 
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -450,7 +450,7 @@ class AuthManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
+                cutoff_time = datetime.now(UTC) - timedelta(hours=hours_back)
 
                 # Total successful and failed attempts
                 cursor.execute(

@@ -2,7 +2,7 @@
 
 import logging
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class TradeTrackerThread(threading.Thread):
         self._running = False
 
         # Trade metrics
-        self.entry_time = datetime.utcnow()
+        self.entry_time = datetime.now(UTC)
         self.entry_price = float(position_data.get("entry_price", 0))
         self.position_size = float(position_data.get("contracts", 0))
         self.side = position_data.get("side", "UNKNOWN")
@@ -148,7 +148,7 @@ class TradeTrackerThread(threading.Thread):
             # Record price snapshot
             self.price_updates.append(
                 {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "price": self.current_price,
                     "pnl": self.current_pnl,
                 }
@@ -176,7 +176,7 @@ class TradeTrackerThread(threading.Thread):
         Args:
             forced_stop: True if stopped by external signal
         """
-        exit_time = datetime.utcnow()
+        exit_time = datetime.now(UTC)
         holding_duration = exit_time - self.entry_time
 
         # Calculate final metrics
@@ -266,7 +266,7 @@ class TradeTrackerThread(threading.Thread):
         Returns:
             Dictionary with current metrics
         """
-        holding_time = datetime.utcnow() - self.entry_time
+        holding_time = datetime.now(UTC) - self.entry_time
 
         return {
             "trade_id": self.trade_id,

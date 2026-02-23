@@ -1,6 +1,6 @@
 """Integration tests for trading API endpoints with mocked external dependencies."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -43,7 +43,7 @@ def mock_engine():
     engine.platform.get_balance.return_value = {"total": 10000.0}
 
     # Decisions endpoint dependencies
-    engine.analyze_asset = Mock(
+    engine.analyze_asset_async = AsyncMock(
         return_value={
             "decision_id": "decision-123",
             "asset_pair": "BTCUSD",
@@ -165,7 +165,7 @@ class TestTradingApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["decision_id"] == "decision-123"
-        mock_engine.analyze_asset.assert_called_once_with(
+        mock_engine.analyze_asset_async.assert_called_once_with(
             asset_pair="BTCUSD",
             provider="ensemble",
             include_sentiment=False,
@@ -219,7 +219,7 @@ class TestTradingApiEndpoints:
 
         bot_control._agent_instance = Mock()
         bot_control._agent_instance.stop = Mock()
-        bot_control._agent_instance.start_time = datetime.utcnow() - timedelta(seconds=5)
+        bot_control._agent_instance.start_time = datetime.now(UTC) - timedelta(seconds=5)
 
         # _agent_task.done() is checked synchronously by handler; keep it a plain Mock
         # so .done() returns bool (not coroutine) and stop path behaves realistically.

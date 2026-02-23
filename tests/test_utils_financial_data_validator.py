@@ -1,6 +1,6 @@
 """Tests for utils.financial_data_validator module."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -72,7 +72,7 @@ class TestFinancialDataValidator:
         validator = FinancialDataValidator()
 
         # Valid timestamp
-        valid_ts = datetime.utcnow().isoformat()
+        valid_ts = datetime.now(UTC).isoformat()
         result = validator.is_valid_timestamp(valid_ts)
         # Just check it doesn't raise an exception
         assert result is True
@@ -92,7 +92,7 @@ class TestFinancialDataValidator:
         # Create a sample DataFrame
         df = pd.DataFrame(
             {
-                "timestamp": [datetime.utcnow().isoformat()],
+                "timestamp": [datetime.now(UTC).isoformat()],
                 "price": [50000.0],
                 "volume": [1000],
             }
@@ -149,7 +149,7 @@ class TestIntegration:
 
         market_data = {
             "asset_pair": "BTCUSD",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "open": 50000.0,
             "high": 51000.0,
             "low": 49000.0,

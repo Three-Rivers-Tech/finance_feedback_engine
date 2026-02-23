@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
 from ..utils.circuit_breaker import CircuitBreaker, CircuitBreakerOpenError
@@ -193,7 +193,7 @@ class OandaDataProvider:
         historical: List[Dict[str, Any]] = []
         for c in candles:
             ts = c.get("timestamp")
-            dt_iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+            dt_iso = datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
             historical.append(
                 {
                     "date": dt_iso,

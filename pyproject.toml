@@ -239,3 +239,8 @@ skips = ["B101"]
 convention = "google"
 add-ignore = ["D401", "D107"]  # Imperative mood, __init__ docstrings
 max-line-length = 88
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests covering end-to-end workflows",
+]

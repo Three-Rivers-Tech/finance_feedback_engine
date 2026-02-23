@@ -1,6 +1,6 @@
 """Tests for MockTradingPlatform."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -50,7 +50,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -77,7 +77,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         platform.execute_trade(buy_decision)
 
@@ -92,7 +92,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 1000.0,
             "entry_price": 51000.0,  # Slightly higher = profit
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(sell_decision)
@@ -112,7 +112,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 20000.0,  # More than available
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -128,7 +128,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -144,7 +144,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": -100.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -160,7 +160,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -200,7 +200,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         platform.execute_trade(decision)
 
@@ -226,7 +226,7 @@ class TestMockTradingPlatform:
                 "asset_pair": "BTCUSD",
                 "suggested_amount": 500.0,
                 "entry_price": 50000.0 + (i * 100),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             platform.execute_trade(decision)
 
@@ -248,7 +248,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         platform.execute_trade(decision)
 
@@ -291,7 +291,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         platform.execute_trade(decision)
 
@@ -321,7 +321,7 @@ class TestMockTradingPlatform:
                 "asset_pair": asset_pair,
                 "suggested_amount": 100.0,
                 "entry_price": 50000.0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             result = platform.execute_trade(decision)
@@ -345,7 +345,7 @@ class TestMockTradingPlatform:
                 "asset_pair": asset,
                 "suggested_amount": 500.0,
                 "entry_price": 50000.0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             platform.execute_trade(decision)
 
@@ -375,7 +375,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)
@@ -392,7 +392,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 2000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         platform.execute_trade(buy_decision)
 
@@ -406,7 +406,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTC-USD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         result = platform.execute_trade(sell_decision)
 
@@ -429,7 +429,7 @@ class TestMockTradingPlatform:
             "asset_pair": "BTCUSD",
             "suggested_amount": 1000.0,
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         result = platform.execute_trade(decision)

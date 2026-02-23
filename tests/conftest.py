@@ -17,6 +17,61 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 logger = logging.getLogger(__name__)
 
 
+def _is_truthy_env(name: str) -> bool:
+    """Return True when an environment variable is set to a truthy value."""
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def pytest_addoption(parser):
+    """Add CLI toggle for full-suite runs that should enforce coverage gate."""
+    parser.addoption(
+        "--full-suite",
+        action="store_true",
+        default=False,
+        help="Enable full-suite mode and enforce coverage threshold.",
+    )
+
+
+def pytest_configure(config):
+    """Apply coverage behavior based on run type (full-suite vs targeted)."""
+    config.addinivalue_line(
+        "markers",
+        "full_suite: marks tests intended for full-suite coverage-gated runs",
+    )
+
+    # Full-suite coverage gate can be requested explicitly, via CI, or env override.
+    full_suite_requested = (
+        config.getoption("--full-suite")
+        or _is_truthy_env("FULL_SUITE")
+        or _is_truthy_env("CI")
+    )
+
+    # pytest-cov options only exist when plugin is installed.
+    if not hasattr(config.option, "cov_source"):
+        return
+
+    invocation_args = config.invocation_params.args
+    explicit_cov_requested = any(str(arg).startswith("--cov") for arg in invocation_args)
+
+    if full_suite_requested:
+        # Keep strict 70% gate for full-suite/CI runs.
+        if not config.option.cov_source:
+            config.option.cov_source = ["finance_feedback_engine"]
+        if not config.option.cov_report:
+            config.option.cov_report = ["term-missing"]
+        config.option.cov_fail_under = 70
+        if hasattr(config.option, "no_cov"):
+            config.option.no_cov = False
+        return
+
+    # Default local/targeted runs to --no-cov unless user explicitly asked for coverage.
+    if hasattr(config.option, "no_cov") and not explicit_cov_requested:
+        config.option.no_cov = True
+
+    # If coverage is explicitly requested for targeted runs, keep tracking but disable gate.
+    config.option.cov_fail_under = 0
+
+
 # --- Logging Configuration Fixture ---
 # This fixture ensures all logging handlers are properly cleaned up after tests
 # to prevent "I/O operation on closed file" errors.

@@ -261,7 +261,7 @@ class TestDecisionStoreCleanup:
                 "asset_pair": "BTCUSD",
                 "action": "buy",
                 "confidence": 80,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             store.save_decision(decision)
 
@@ -275,13 +275,13 @@ class TestDecisionStoreCleanup:
             "asset_pair": "ETHUSD",
             "action": "sell",
             "confidence": 75,
-            "timestamp": (datetime.utcnow() - timedelta(days=40)).isoformat(),
+            "timestamp": (datetime.now(UTC) - timedelta(days=40)).isoformat(),
         }
         store.save_decision(old_decision)
 
         # Manually adjust file timestamp to make it "old"
         filepath = list(store.storage_path.glob(f"*_{old_decision_id}.json"))[0]
-        old_timestamp = (datetime.utcnow() - timedelta(days=40)).timestamp()
+        old_timestamp = (datetime.now(UTC) - timedelta(days=40)).timestamp()
         import os
 
         os.utime(filepath, (old_timestamp, old_timestamp))

@@ -16,7 +16,7 @@ import json
 import logging
 import queue
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -513,7 +513,7 @@ async def emergency_stop(
             "status": "emergency_stopped",
             "message": "Emergency stop executed",
             "closed_positions": len(closed_positions),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         logger.critical(f"Emergency stop failed: {e}", exc_info=True)
@@ -560,7 +560,7 @@ async def pause_agent(
             uptime = None
             if hasattr(_agent_instance, "start_time"):
                 uptime = (
-                    datetime.utcnow() - _agent_instance.start_time
+                    datetime.now(UTC) - _agent_instance.start_time
                 ).total_seconds()
 
             unified_status = AgentStateMapper.get_unified_status(BotState.STOPPED, _agent_instance.state if _agent_instance else None)
@@ -632,7 +632,7 @@ async def resume_agent(
             uptime = None
             if hasattr(_agent_instance, "start_time"):
                 uptime = (
-                    datetime.utcnow() - _agent_instance.start_time
+                    datetime.now(UTC) - _agent_instance.start_time
                 ).total_seconds()
 
             unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, _agent_instance.state if _agent_instance else None)
@@ -741,7 +741,7 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
         # Calculate uptime
         uptime = None
         if _agent_instance and hasattr(_agent_instance, "start_time"):
-            uptime = (datetime.utcnow() - _agent_instance.start_time).total_seconds()
+            uptime = (datetime.now(UTC) - _agent_instance.start_time).total_seconds()
 
         # Fetch total trades and daily PnL from agent/monitor
         total_trades = 0
@@ -1133,7 +1133,7 @@ async def update_config(
         return {
             "status": "updated",
             "updates": response_updates,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -1193,7 +1193,7 @@ async def execute_manual_trade(
         return {
             "status": "executed",
             "trade": result,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -1335,7 +1335,7 @@ async def get_open_positions(
             "positions": transformed,
             "count": len(transformed),
             "total_value": total_value,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -1398,7 +1398,7 @@ async def close_position(
             "status": "closed",
             "position_id": position_id,
             "result": result,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     except HTTPException:

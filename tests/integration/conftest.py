@@ -7,6 +7,7 @@ for end-to-end trading workflow testing.
 
 import asyncio
 import logging
+import os
 import tempfile
 from decimal import Decimal
 from pathlib import Path
@@ -19,7 +20,9 @@ from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.decision_engine.engine import DecisionEngine
 from finance_feedback_engine.monitoring.trade_outcome_recorder import TradeOutcomeRecorder
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+from finance_feedback_engine.trading_platforms.coinbase_platform import CoinbaseAdvancedPlatform
 from finance_feedback_engine.trading_platforms.mock_platform import MockTradingPlatform
+from finance_feedback_engine.trading_platforms.oanda_platform import OandaPlatform
 from finance_feedback_engine.trading_platforms.unified_platform import UnifiedTradingPlatform
 
 logger = logging.getLogger(__name__)
@@ -32,6 +35,70 @@ logger = logging.getLogger(__name__)
 MOCK_BTCUSD_PRICE = Decimal("42000.00")
 MOCK_ETHUSD_PRICE = Decimal("2500.00")
 MOCK_EURUSD_PRICE = Decimal("1.0850")
+
+
+# =============================================================================
+# Integration Environment Guards
+# =============================================================================
+
+
+def _coinbase_credentials_from_env() -> Dict[str, Any]:
+    """Build Coinbase credential dictionary from environment variables."""
+    return {
+        "api_key": os.getenv("COINBASE_API_KEY") or os.getenv("COINBASE_KEY_NAME"),
+        "api_secret": os.getenv("COINBASE_API_SECRET") or os.getenv("COINBASE_PRIVATE_KEY"),
+        "passphrase": os.getenv("COINBASE_PASSPHRASE"),
+        "use_sandbox": (os.getenv("COINBASE_USE_SANDBOX", "false").lower() == "true"),
+    }
+
+
+def _oanda_credentials_from_env() -> Dict[str, Any]:
+    """Build Oanda credential dictionary from environment variables."""
+    return {
+        "access_token": os.getenv("OANDA_ACCESS_TOKEN") or os.getenv("OANDA_API_KEY"),
+        "account_id": os.getenv("OANDA_ACCOUNT_ID"),
+        "environment": os.getenv("OANDA_ENVIRONMENT", "practice"),
+    }
+
+
+@pytest.fixture
+def coinbase_credentials() -> Dict[str, Any]:
+    """Coinbase credentials for real integration tests (or skip when unavailable)."""
+    creds = _coinbase_credentials_from_env()
+    if not creds["api_key"] or not creds["api_secret"]:
+        pytest.skip("Coinbase credentials not configured")
+    return creds
+
+
+@pytest.fixture
+def oanda_credentials() -> Dict[str, Any]:
+    """Oanda credentials for real integration tests (or skip when unavailable)."""
+    creds = _oanda_credentials_from_env()
+    if not creds["access_token"] or not creds["account_id"]:
+        pytest.skip("Exchange credentials not configured")
+    return creds
+
+
+@pytest.fixture
+def live_coinbase_platform(coinbase_credentials):
+    """Real Coinbase platform fixture with service availability guard."""
+    try:
+        platform = CoinbaseAdvancedPlatform(credentials=coinbase_credentials)
+        platform.get_account_info()  # Connectivity/service probe
+        return platform
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Coinbase service unavailable: {exc}")
+
+
+@pytest.fixture
+def live_oanda_platform(oanda_credentials):
+    """Real Oanda platform fixture with service availability guard."""
+    try:
+        platform = OandaPlatform(credentials=oanda_credentials)
+        platform.get_account_info()  # Connectivity/service probe
+        return platform
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Exchange service unavailable: {exc}")
 
 
 # =============================================================================
@@ -134,7 +201,7 @@ def mock_unified_provider():
 @pytest.fixture
 def mock_coinbase_platform():
     """Mock Coinbase trading platform."""
-    platform = MagicMock(spec=MockTradingPlatform)
+    platform = MagicMock()
     platform.platform_name = "coinbase"
     
     # Mock order placement

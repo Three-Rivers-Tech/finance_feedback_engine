@@ -12,7 +12,7 @@ across the system.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -44,7 +44,7 @@ class TestAlphaVantageSessionManagement:
         # Mock the async request to avoid real API calls
         mock_response = {
             "Time Series (Digital Currency Daily)": {
-                datetime.utcnow()
+                datetime.now(UTC)
                 .date()
                 .isoformat(): {
                     "1a. open (USD)": "50000",
@@ -135,7 +135,7 @@ class TestStaleDataRejection:
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
         # Create stale Coinbase candle (older than intraday threshold)
-        stale_timestamp = int((datetime.utcnow() - timedelta(hours=4)).timestamp())
+        stale_timestamp = int((datetime.now(UTC) - timedelta(hours=4)).timestamp())
         provider.coinbase_provider = Mock()
         provider.coinbase_provider.get_candles.return_value = [
             {
@@ -163,7 +163,7 @@ class TestStaleDataRejection:
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
         # Create stale Coinbase candle
-        stale_timestamp = int((datetime.utcnow() - timedelta(hours=4)).timestamp())
+        stale_timestamp = int((datetime.now(UTC) - timedelta(hours=4)).timestamp())
         provider.coinbase_provider = Mock()
         provider.coinbase_provider.get_candles.return_value = [
             {
@@ -191,8 +191,8 @@ class TestStaleDataRejection:
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
         # Create fresh Coinbase candle (recent)
-        fresh_timestamp = int((datetime.utcnow() - timedelta(minutes=5)).timestamp())
-        expected_date = datetime.utcfromtimestamp(fresh_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+        fresh_timestamp = int((datetime.now(UTC) - timedelta(minutes=5)).timestamp())
+        expected_date = datetime.fromtimestamp(fresh_timestamp, UTC).strftime("%Y-%m-%d %H:%M:%S")
         provider.coinbase_provider = Mock()
         provider.coinbase_provider.get_candles.return_value = [
             {
@@ -220,7 +220,7 @@ class TestStaleDataRejection:
         provider = AlphaVantageProvider(api_key="test_key", is_backtest=False)
 
         # Create stale forex data
-        stale_date = (datetime.utcnow() - timedelta(days=3)).date().isoformat()
+        stale_date = (datetime.now(UTC) - timedelta(days=3)).date().isoformat()
         stale_response = {
             "Time Series FX (Daily)": {
                 stale_date: {
@@ -544,7 +544,7 @@ class TestCriticalFixesIntegration:
         assert not session.closed
 
         # Test 2: Stale data flagging (not rejection)
-        stale_date = (datetime.utcnow() - timedelta(days=2)).date().isoformat()
+        stale_date = (datetime.now(UTC) - timedelta(days=2)).date().isoformat()
         stale_response = {
             "Time Series (Digital Currency Daily)": {
                 stale_date: {

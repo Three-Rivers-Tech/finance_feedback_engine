@@ -211,7 +211,7 @@ class TestDecisionPersistence:
         # Create a test decision
         test_decision = {
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "asset_pair": "BTCUSD",
             "action": "BUY",
             "confidence": 85,
@@ -242,7 +242,7 @@ class TestDecisionPersistence:
         for i in range(5):
             decision = {
                 "id": str(uuid.uuid4()),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "asset_pair": "BTCUSD",
                 "action": "BUY",
                 "confidence": 80 + i,
@@ -351,7 +351,7 @@ class TestPlatformIntegration:
 
         decision = {
             "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "asset_pair": "BTCUSD",
             "action": "BUY",
             "confidence": 85,

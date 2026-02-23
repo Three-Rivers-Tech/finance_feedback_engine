@@ -498,6 +498,34 @@ class DecisionResponse(BaseModel):
     reasoning: str
 
 
+async def _analyze_asset_via_safe_async_path(
+    engine: FinanceFeedbackEngine,
+    *,
+    asset_pair: str,
+    provider: str,
+    include_sentiment: bool,
+    include_macro: bool,
+):
+    """Prefer async engine path; fallback to thread-wrapped sync path if needed."""
+    kwargs = {
+        "asset_pair": asset_pair,
+        "provider": provider,
+        "include_sentiment": include_sentiment,
+        "include_macro": include_macro,
+    }
+
+    async_fn = getattr(engine, "analyze_asset_async", None)
+    if callable(async_fn):
+        return await async_fn(**kwargs)
+
+    sync_fn = getattr(engine, "analyze_asset", None)
+    if callable(sync_fn):
+        logger.warning("Engine missing analyze_asset_async; using thread-wrapped analyze_asset fallback")
+        return await asyncio.to_thread(sync_fn, **kwargs)
+
+    raise RuntimeError("Engine missing analyze_asset_async and analyze_asset")
+
+
 @decisions_router.post("/decisions", response_model=DecisionResponse)
 async def create_decision(
     request: AnalysisRequest, engine: FinanceFeedbackEngine = Depends(get_engine)
@@ -515,7 +543,8 @@ async def create_decision(
     import uuid
 
     try:
-        decision = engine.analyze_asset(
+        decision = await _analyze_asset_via_safe_async_path(
+            engine,
             asset_pair=request.asset_pair,
             provider=request.provider,
             include_sentiment=request.include_sentiment,
@@ -1180,7 +1209,7 @@ async def record_approval(
             "approval_id": approval_id,
             "decision_id": request.decision_id,
             "status": request.status,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(UTC).isoformat() + "Z",
             "user_id_hash": pseudonymized_user_id,  # Pseudonymized
             "user_name_hash": pseudonymized_user_name,  # Pseudonymized
             "original_decision": request.original_decision or {},
