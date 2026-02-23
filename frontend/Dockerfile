@@ -12,7 +12,7 @@ WORKDIR /build
 COPY package.json package-lock.json ./
 
 # Install dependencies (including dev dependencies for build)
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy application source and build configuration
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html ./

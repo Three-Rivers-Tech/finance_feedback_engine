@@ -391,7 +391,7 @@ class TestValidateLeverageAndConcentration:
             allowed, message = gk.validate_trade(decision, context)
 
         assert allowed is False
-        assert "position" in message.lower()
+        assert "concentration" in message.lower()
 
     def test_leverage_and_concentration_passed(self):
         """Test that trade passes when both are within limits."""
