@@ -8,7 +8,7 @@ This demonstrates the power of inheritance for eliminating duplication.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, Optional
 
 from finance_feedback_engine.utils.rate_limiter import RateLimiter
@@ -143,7 +143,7 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
             )
 
         # Calculate time range
-        end_time = datetime.utcnow()
+        end_time = datetime.now(UTC)
         start_time = end_time - timedelta(seconds=granularity * limit)
 
         # Build request URL
@@ -203,7 +203,7 @@ class CoinbaseDataProviderRefactored(BaseDataProvider):
             "candles": candles,
             "count": len(candles),
             "provider": self.provider_name,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
 

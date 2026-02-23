@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from typing import Any, Dict, List, Optional
 
@@ -311,7 +311,7 @@ class AgentProcessMonitor:
             with self._lock:
                 self.metrics["exceptions"].append(
                     {
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "operation": operation,
                         "error": str(e),
                         "error_type": type(e).__name__,
@@ -340,7 +340,7 @@ class AgentProcessMonitor:
             cycle_metrics = {
                 "asset_pair": asset_pair,
                 "correlation_id": get_correlation_id(),
-                "start_time": datetime.utcnow().isoformat(),
+                "start_time": datetime.now(UTC).isoformat(),
             }
 
             with self.capture_execution(
@@ -364,7 +364,7 @@ class AgentProcessMonitor:
             **context: Additional context fields
         """
         transition = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "from_state": from_state,
             "to_state": to_state,
             "correlation_id": get_correlation_id(),
@@ -399,7 +399,7 @@ class AgentProcessMonitor:
             **context: Additional context fields
         """
         llm_call = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "provider": provider,
             "duration_ms": duration_ms,
             "status": status,

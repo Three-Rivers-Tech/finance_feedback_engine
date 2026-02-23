@@ -127,7 +127,7 @@ jobs:
 
       - name: Run full test suite
         run: |
-          pytest -v \
+          pytest --full-suite -v \
             --cov=finance_feedback_engine \
             --cov-report=xml \
             --cov-report=term-missing \

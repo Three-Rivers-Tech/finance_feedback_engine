@@ -14,7 +14,7 @@ a trade that results in a realized profit.
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict
 from unittest.mock import Mock, patch
 
@@ -308,7 +308,7 @@ class TestFirstProfitableTrade:
                     "action": "BUY",
                     "entry_price": 50000.0,
                     "quantity": 0.1,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
                 {
                     "id": "trade_001_close",
@@ -317,7 +317,7 @@ class TestFirstProfitableTrade:
                     "exit_price": 52000.0,
                     "quantity": 0.1,
                     "pnl": 200.0,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
             ]
 

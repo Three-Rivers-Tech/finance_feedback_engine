@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,7 +34,7 @@ def test_long_and_short_positions_can_coexist(portfolio_backtester):
     bt = portfolio_backtester
     bt.portfolio_state = PortfolioState(cash=10_000.0)
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     bt._execute_buy("AAA", 1_000.0, 100.0, now, {"action": "BUY"})
     bt._execute_short("BBB", 1_000.0, 100.0, now, {"action": "SELL"})
 
@@ -50,7 +50,7 @@ def test_short_pnl_entry_100_exit_90_is_plus_10pct(portfolio_backtester):
     bt = portfolio_backtester
     bt.portfolio_state = PortfolioState(cash=10_000.0)
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     bt._execute_short("AAA", 1_000.0, 100.0, now, {"action": "SELL"})
     bt._close_position("AAA", 90.0, "test_close", now)
 
@@ -64,7 +64,7 @@ def test_short_margin_constraint_enforces_2_to_1_leverage_limit(portfolio_backte
     bt = portfolio_backtester
     bt.portfolio_state = PortfolioState(cash=1_000.0)
 
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
 
     # First short consumes most of the 2x notional capacity
     bt._execute_short("AAA", 1_900.0, 100.0, now, {"action": "SELL"})

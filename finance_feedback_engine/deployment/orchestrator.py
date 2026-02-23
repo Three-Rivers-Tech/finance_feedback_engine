@@ -6,7 +6,7 @@ Designed with TDD - all tests written first in test_orchestrator.py
 """
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict
@@ -83,7 +83,7 @@ class DeploymentOrchestrator:
 
         # State
         self.current_stage = DeploymentStage.INITIALIZING
-        self.start_time = datetime.utcnow()
+        self.start_time = datetime.now(UTC)
         self.end_time = None
         self.errors = []
 
@@ -98,7 +98,7 @@ class DeploymentOrchestrator:
 
     def _generate_deployment_id(self) -> str:
         """Generate unique deployment ID."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
         return f"deploy-{timestamp}-{short_uuid}"
 
@@ -346,7 +346,7 @@ class DeploymentOrchestrator:
 
             # Complete
             self.current_stage = DeploymentStage.COMPLETE
-            self.end_time = datetime.utcnow()
+            self.end_time = datetime.now(UTC)
 
             duration = (self.end_time - self.start_time).total_seconds()
 
@@ -362,7 +362,7 @@ class DeploymentOrchestrator:
 
         except DeploymentError as e:
             self.current_stage = DeploymentStage.FAILED
-            self.end_time = datetime.utcnow()
+            self.end_time = datetime.now(UTC)
 
             self.logger.error(
                 f"Deployment failed: {e}",
@@ -377,7 +377,7 @@ class DeploymentOrchestrator:
 
         except Exception as e:
             self.current_stage = DeploymentStage.FAILED
-            self.end_time = datetime.utcnow()
+            self.end_time = datetime.now(UTC)
 
             self.logger.error(f"Unexpected deployment error: {e}", exc_info=True)
 
@@ -390,7 +390,7 @@ class DeploymentOrchestrator:
         if self.end_time:
             duration = (self.end_time - self.start_time).total_seconds()
         elif self.start_time:
-            duration = (datetime.utcnow() - self.start_time).total_seconds()
+            duration = (datetime.now(UTC) - self.start_time).total_seconds()
 
         return {
             "deployment_id": self.deployment_id,

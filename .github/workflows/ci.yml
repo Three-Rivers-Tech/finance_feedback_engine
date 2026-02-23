@@ -82,7 +82,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest -m "not external_service and not slow" \
+          pytest --full-suite -m "not external_service and not slow" \
             --cov=finance_feedback_engine \
             --cov-report=xml \
             --cov-report=html \

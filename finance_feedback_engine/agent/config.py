@@ -339,6 +339,9 @@ class TradingAgentConfig(BaseModel):
     # --- Timing and Retry Controls ---
     reasoning_retry_delay_seconds: int = 60
     reasoning_failure_decay_seconds: int = 3600
+    reasoning_max_concurrent_assets: int = 3
+    reasoning_rate_limit_requests_per_minute: float = 4.0
+    reasoning_rate_limit_burst: int = 1
     main_loop_error_backoff_seconds: int = 300
 
     # --- Resilience & Observability ---

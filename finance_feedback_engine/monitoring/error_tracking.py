@@ -10,7 +10,7 @@ This module provides a unified interface for error tracking that:
 
 import logging
 import traceback
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -118,14 +118,14 @@ class ErrorTracker:
         # Clean up old dumps before writing a new one
         self._cleanup_old_crash_dumps(crash_dir, max_files=max_files, max_age_days=max_age_days)
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         error_type = type(error).__name__
         dump_path = crash_dir / f"crash_{timestamp}_{error_type}.json"
 
         sanitized_context = self._sanitize_context(context or {})
 
         dump_payload: Dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "error_type": error_type,
             "error_message": str(error),
             "traceback": traceback.format_exc(),
@@ -155,7 +155,7 @@ class ErrorTracker:
             if not crash_dir.exists():
                 return
 
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             cutoff = now - timedelta(days=max_age_days)
             dumps = sorted(
                 [p for p in crash_dir.glob("crash_*.json") if p.is_file()],
@@ -165,7 +165,7 @@ class ErrorTracker:
 
             # Remove old files by age
             for dump in list(dumps):
-                mtime = datetime.utcfromtimestamp(dump.stat().st_mtime)
+                mtime = datetime.fromtimestamp(dump.stat().st_mtime, UTC)
                 if mtime < cutoff:
                     dump.unlink(missing_ok=True)
                     dumps.remove(dump)

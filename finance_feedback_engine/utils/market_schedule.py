@@ -191,5 +191,5 @@ class MarketSchedule:
             - time_to_open: minutes until next session opens (0 when already open)
             - warning: str
         """
-        now_utc = _dt.datetime.utcfromtimestamp(timestamp).replace(tzinfo=pytz.UTC)
+        now_utc = _dt.datetime.fromtimestamp(timestamp, _dt.UTC).replace(tzinfo=pytz.UTC)
         return cls.get_market_status(asset_pair, asset_type, now_utc=now_utc)

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -48,7 +48,7 @@ class TradeMetricsCollector:
             trade_id = metrics.get("trade_id", "unknown")
 
             # Add collection timestamp
-            metrics["collected_at"] = datetime.utcnow().isoformat()
+            metrics["collected_at"] = datetime.now(UTC).isoformat()
 
             # Store in memory
             self.active_metrics.append(metrics)
@@ -56,7 +56,7 @@ class TradeMetricsCollector:
 
             # Persist to disk
             filename = (
-                f"trade_{trade_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+                f"trade_{trade_id}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.json"
             )
             filepath = self.storage_dir / filename
 
@@ -183,7 +183,7 @@ class TradeMetricsCollector:
             Dictionary with training-ready metrics
         """
         training_data = {
-            "export_timestamp": datetime.utcnow().isoformat(),
+            "export_timestamp": datetime.now(UTC).isoformat(),
             "total_trades": len(self.active_metrics),
             "aggregate_stats": self.get_aggregate_statistics(),
             "trades": [],

@@ -12,7 +12,7 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -135,7 +135,7 @@ class MemoryConsistencyManager:
         # No manifest exists, create new one
         manifest = MemoryManifest(
             transaction_id=self._generate_transaction_id(),
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(UTC).isoformat()
         )
         self.current_manifest = manifest
         logger.info("Created new manifest")
@@ -190,7 +190,7 @@ class MemoryConsistencyManager:
         prep_file = self.transaction_dir / f"txn_{txn_id}_prepare.json"
         prep_data = {
             "transaction_id": txn_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "files": list(files_to_save.keys()),
             "status": "preparing"
         }
@@ -249,7 +249,7 @@ class MemoryConsistencyManager:
                         path=f"{logical_name}.json",
                         checksum=checksum,
                         size=size,
-                        timestamp=datetime.utcnow().isoformat()
+                        timestamp=datetime.now(UTC).isoformat()
                     )
                 except Exception as e:
                     # Clean up temp file on error
@@ -262,7 +262,7 @@ class MemoryConsistencyManager:
             # Step 2: Create new manifest
             new_manifest = MemoryManifest(
                 transaction_id=txn_id,
-                timestamp=datetime.utcnow().isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 files=new_entries
             )
 
@@ -288,7 +288,7 @@ class MemoryConsistencyManager:
             commit_file = self.transaction_dir / f"txn_{txn_id}_commit.json"
             commit_data = {
                 "transaction_id": txn_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "status": "committed"
             }
             self._atomic_write_json(commit_file, commit_data)
@@ -313,7 +313,7 @@ class MemoryConsistencyManager:
                 rollback_file = self.transaction_dir / f"txn_{txn_id}_rollback.json"
                 rollback_data = {
                     "transaction_id": txn_id,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "status": "rolled_back",
                     "error": str(e)
                 }
@@ -373,7 +373,7 @@ class MemoryConsistencyManager:
                     # Write rollback marker
                     rollback_data = {
                         "transaction_id": txn_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "status": "rolled_back_after_crash",
                         "error": "Incomplete transaction detected during recovery"
                     }
@@ -408,7 +408,7 @@ class MemoryConsistencyManager:
 
     def _generate_transaction_id(self) -> str:
         """Generate a unique transaction ID."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         random_suffix = hashlib.sha256(str(time.time()).encode()).hexdigest()[:8]
         return f"txn_{timestamp}_{random_suffix}"
 

@@ -1,6 +1,6 @@
 """Tests for learning.feedback_analyzer module."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from finance_feedback_engine.learning.feedback_analyzer import FeedbackAnalyzer
 
@@ -22,7 +22,7 @@ class TestFeedbackAnalyzer:
             "confidence": 75,
             "asset_pair": "BTCUSD",
             "entry_price": 50000.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         outcome = {"exit_price": 51000.0, "pnl": 1000.0, "success": True}
@@ -55,9 +55,9 @@ class TestFeedbackAnalyzer:
         analyzer = FeedbackAnalyzer()
 
         historical_data = [
-            {"timestamp": datetime.utcnow().isoformat(), "price": 50000},
-            {"timestamp": datetime.utcnow().isoformat(), "price": 51000},
-            {"timestamp": datetime.utcnow().isoformat(), "price": 49000},
+            {"timestamp": datetime.now(UTC).isoformat(), "price": 50000},
+            {"timestamp": datetime.now(UTC).isoformat(), "price": 51000},
+            {"timestamp": datetime.now(UTC).isoformat(), "price": 49000},
         ]
 
         try:

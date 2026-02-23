@@ -7,15 +7,7 @@ including order fills, error handling, and execution confirmation.
 
 import logging
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
-
 import pytest
-
-from finance_feedback_engine.exceptions import TradingError
-from finance_feedback_engine.trading_platforms.coinbase_platform import (
-    CoinbaseAdvancedPlatform,
-)
-from finance_feedback_engine.trading_platforms.oanda_platform import OandaPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +15,6 @@ logger = logging.getLogger(__name__)
 class TestCoinbaseOrderExecution:
     """Test order execution on Coinbase platform."""
 
-    @pytest.mark.integration
     def test_market_order_buy_success(self, mock_coinbase_platform, mock_coinbase_order_response):
         """Test successful market BUY order on Coinbase."""
         # Setup
@@ -54,7 +45,6 @@ class TestCoinbaseOrderExecution:
             order_type="market",
         )
 
-    @pytest.mark.integration
     def test_market_order_sell_success(self, mock_coinbase_platform):
         """Test successful market SELL order on Coinbase."""
         # Setup
@@ -82,7 +72,6 @@ class TestCoinbaseOrderExecution:
         assert result["side"] == "SELL"
         assert Decimal(result["average_filled_price"]) == Decimal("42500.00")
 
-    @pytest.mark.integration
     def test_limit_order_placement(self, mock_coinbase_platform):
         """Test limit order placement on Coinbase."""
         # Setup
@@ -113,7 +102,6 @@ class TestCoinbaseOrderExecution:
         assert result["status"] == "OPEN"
         assert Decimal(result["limit_price"]) == Decimal("2400.00")
 
-    @pytest.mark.integration
     def test_partial_fill_handling(self, mock_coinbase_platform):
         """Test handling of partially filled orders."""
         # Setup - order partially filled
@@ -146,7 +134,6 @@ class TestCoinbaseOrderExecution:
         )
         assert fill_percentage == Decimal("50")
 
-    @pytest.mark.integration
     def test_order_rejection_insufficient_funds(self, mock_coinbase_platform):
         """Test order rejection due to insufficient funds."""
         # Setup
@@ -169,7 +156,6 @@ class TestCoinbaseOrderExecution:
         assert "Insufficient" in result["error"]
         assert result["error_code"] == "INSUFFICIENT_BALANCE"
 
-    @pytest.mark.integration
     def test_order_fill_confirmation(self, mock_coinbase_platform):
         """Test order fill confirmation and details."""
         # Setup
@@ -213,7 +199,6 @@ class TestCoinbaseOrderExecution:
 class TestOandaOrderExecution:
     """Test order execution on Oanda platform."""
 
-    @pytest.mark.integration
     def test_market_order_long_success(self, mock_oanda_platform, mock_oanda_order_response):
         """Test successful LONG market order on Oanda."""
         # Setup
@@ -231,7 +216,6 @@ class TestOandaOrderExecution:
         assert result["orderFillTransaction"]["type"] == "ORDER_FILL"
         assert result["orderFillTransaction"]["id"] == "test-oanda-order-456"
 
-    @pytest.mark.integration
     def test_market_order_short_success(self, mock_oanda_platform):
         """Test successful SHORT market order on Oanda."""
         # Setup
@@ -259,7 +243,6 @@ class TestOandaOrderExecution:
         # Verify
         assert result["orderFillTransaction"]["units"] == "-1000"
 
-    @pytest.mark.integration
     def test_stop_loss_order_placement(self, mock_oanda_platform):
         """Test stop-loss order placement on Oanda."""
         # Setup
@@ -288,7 +271,6 @@ class TestOandaOrderExecution:
         assert result["orderCreateTransaction"]["type"] == "STOP_LOSS_ORDER"
         assert Decimal(result["orderCreateTransaction"]["price"]) == Decimal("1.0800")
 
-    @pytest.mark.integration
     def test_order_rejection_invalid_instrument(self, mock_oanda_platform):
         """Test order rejection for invalid instrument."""
         # Setup
@@ -314,7 +296,6 @@ class TestOandaOrderExecution:
 class TestCrossplatformOrderExecution:
     """Test order execution across multiple platforms."""
 
-    @pytest.mark.integration
     def test_simultaneous_orders_both_platforms(
         self, mock_coinbase_platform, mock_oanda_platform
     ):
@@ -346,7 +327,6 @@ class TestCrossplatformOrderExecution:
         assert oanda_result["success"] is True
         assert coinbase_result["order_id"] != oanda_result["order_id"]
 
-    @pytest.mark.integration
     def test_order_execution_error_handling(self, mock_coinbase_platform):
         """Test graceful handling of order execution errors."""
         # Setup - simulate network error
@@ -363,7 +343,6 @@ class TestCrossplatformOrderExecution:
 
         assert "Network timeout" in str(exc_info.value)
 
-    @pytest.mark.integration
     def test_order_idempotency(self, mock_coinbase_platform):
         """Test order idempotency with client_order_id."""
         # Setup
@@ -402,3 +381,21 @@ class TestCrossplatformOrderExecution:
         assert result_1["success"] is True
         assert result_2["success"] is False
         assert "Duplicate" in result_2["error"]
+
+
+@pytest.mark.integration
+@pytest.mark.external_service
+class TestLiveExchangeOrderExecution:
+    """True integration tests requiring live exchange credentials/services."""
+
+    def test_coinbase_account_info_available(self, live_coinbase_platform):
+        """Validate Coinbase account endpoint is reachable with configured credentials."""
+        account_info = live_coinbase_platform.get_account_info()
+        assert isinstance(account_info, dict)
+        assert account_info
+
+    def test_oanda_account_info_available(self, live_oanda_platform):
+        """Validate Oanda account endpoint is reachable with configured credentials."""
+        account_info = live_oanda_platform.get_account_info()
+        assert isinstance(account_info, dict)
+        assert account_info

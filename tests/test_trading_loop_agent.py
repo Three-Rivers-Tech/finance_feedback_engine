@@ -1,6 +1,7 @@
 # tests/test_trading_loop_agent.py
 
 import datetime
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -100,7 +101,7 @@ async def test_agent_process_cycle_no_action(trading_agent, mock_dependencies):
     # The cycle should go through all states and end at IDLE
     assert trading_agent.state == AgentState.IDLE
     # analyze_asset_async should be called in the REASONING state
-    mock_dependencies["engine"].analyze_asset_async.assert_called_once_with("BTCUSD")
+    mock_dependencies["engine"].analyze_asset_async.assert_any_call("BTCUSD")
     # execute_decision should NOT be called for a HOLD action
     mock_dependencies["engine"].execute_decision.assert_not_called()
     # No decisions should be left in the current_decisions list
@@ -118,3 +119,79 @@ async def test_agent_stop_method(trading_agent):
 
     # Assert
     assert trading_agent.is_running is False
+
+
+@pytest.mark.asyncio
+async def test_loop_metrics_collected_for_cycle(trading_agent, mock_dependencies):
+    """Loop metrics should include per-phase timings for each completed cycle."""
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "HOLD",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    metrics = trading_agent.get_loop_metrics()
+    assert metrics["cycles_completed"] == 1
+    assert metrics["last_cycle_phase_durations"]["PERCEPTION"] >= 0.0
+    assert metrics["last_cycle_phase_durations"]["REASONING"] >= 0.0
+    assert metrics["last_cycle_phase_durations"]["RISK_CHECK"] == 0.0
+    assert metrics["last_cycle_phase_durations"]["EXECUTION"] == 0.0
+    assert metrics["last_cycle_phase_durations"]["LEARNING"] == 0.0
+    assert metrics["last_cycle_total_duration"] >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_loop_metrics_accumulate_across_cycles(trading_agent, mock_dependencies):
+    """Cumulative phase totals should increase over multiple cycles."""
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "HOLD",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+    first_metrics = trading_agent.get_loop_metrics()
+
+    await trading_agent.process_cycle()
+    second_metrics = trading_agent.get_loop_metrics()
+
+    assert second_metrics["cycles_completed"] == 2
+    assert (
+        second_metrics["cumulative_phase_durations"]["PERCEPTION"]
+        >= first_metrics["cumulative_phase_durations"]["PERCEPTION"]
+    )
+    assert (
+        second_metrics["cumulative_phase_durations"]["REASONING"]
+        >= first_metrics["cumulative_phase_durations"]["REASONING"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_loop_metrics_logged_at_end_of_cycle(
+    trading_agent, mock_dependencies, caplog
+):
+    """Phase durations should be logged at INFO at cycle completion."""
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "HOLD",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    assert "Cycle phase durations (s):" in caplog.text

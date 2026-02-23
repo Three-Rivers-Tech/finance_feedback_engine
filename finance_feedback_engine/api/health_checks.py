@@ -6,7 +6,7 @@ Provides detailed health information about all components.
 
 import logging
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -16,7 +16,7 @@ from ..utils.ollama_readiness import resolve_debate_providers
 logger = logging.getLogger(__name__)
 
 # Track startup time
-_startup_time = datetime.utcnow()
+_startup_time = datetime.now(UTC)
 
 
 def _get_config_path() -> str:
@@ -296,7 +296,7 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     Returns:
         Detailed health report
     """
-    uptime_seconds = (datetime.utcnow() - _startup_time).total_seconds()
+    uptime_seconds = (datetime.now(UTC) - _startup_time).total_seconds()
     health_status = "healthy"
 
     # Extract a simple, JSON-safe portfolio balance
@@ -516,7 +516,7 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
 
     health = {
         "status": health_status,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "uptime_seconds": uptime_seconds,
         "portfolio_balance": portfolio_balance,
         "circuit_breakers": circuit_breakers,
@@ -559,7 +559,7 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         return payload
 
     # Check if we've been running for at least 10 seconds
-    uptime = (datetime.utcnow() - _startup_time).total_seconds()
+    uptime = (datetime.now(UTC) - _startup_time).total_seconds()
 
     if uptime < 10:
         return {
@@ -647,7 +647,7 @@ def get_readiness_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         return {
             "ready": True,
             "uptime_seconds": uptime,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "database": {
                 "available": True,
                 "schema_version": db_health.get("schema_version"),
@@ -676,6 +676,6 @@ def get_liveness_status() -> Dict[str, Any]:
     """
     return {
         "alive": True,
-        "timestamp": datetime.utcnow().isoformat(),
-        "uptime_seconds": (datetime.utcnow() - _startup_time).total_seconds(),
+        "timestamp": datetime.now(UTC).isoformat(),
+        "uptime_seconds": (datetime.now(UTC) - _startup_time).total_seconds(),
     }

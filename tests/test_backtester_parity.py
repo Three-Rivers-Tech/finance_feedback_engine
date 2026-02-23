@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -62,7 +62,7 @@ class FakeDecisionEngine:
             "action": "BUY",
             "suggested_amount": 100.0,
             "entry_price": entry_price,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
 
@@ -82,7 +82,7 @@ def test_realistic_slippage_tiers():
             "backtesting": {"slippage_model": "realistic"},
         },
     )
-    ts = datetime.utcnow()
+    ts = datetime.now(UTC)
     s_crypto = bt._calculate_realistic_slippage("BTCUSD", 500, ts)
     s_fx = bt._calculate_realistic_slippage("EURUSD", 500, ts)
     s_exotic = bt._calculate_realistic_slippage("USDMXN", 500, ts)
@@ -179,7 +179,7 @@ def test_backtester_execute_trade_limit_vs_market_fee_and_slippage():
             "backtesting": {"slippage_model": "realistic", "fee_model": "tiered"},
         },
     )
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     # Market (taker)
     nb_mkt, units_mkt, fee_mkt, details_mkt = bt._execute_trade(
         current_balance=10000.0,
@@ -226,7 +226,7 @@ def test_backtester_liquidation_slippage_multiplier():
             "backtesting": {"slippage_model": "realistic", "fee_model": "tiered"},
         },
     )
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     _, _, _, normal = bt._execute_trade(
         current_balance=10000.0,
         current_price=100.0,
@@ -267,7 +267,7 @@ def test_backtester_realistic_slippage_forex_vs_crypto():
             "backtesting": {"slippage_model": "realistic"},
         },
     )
-    ts = datetime.utcnow()
+    ts = datetime.now(UTC)
     s_btc = bt._calculate_realistic_slippage("BTCUSD", 1000.0, ts)
     s_eur = bt._calculate_realistic_slippage("EURUSD", 1000.0, ts)
     # Crypto should generally have >= slippage than major FX pairs

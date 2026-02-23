@@ -3,7 +3,7 @@
 
 import json
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # Add parent directory to path
@@ -19,7 +19,7 @@ def create_mock_trades(memory_engine: PortfolioMemoryEngine, num_trades: int = 5
     """Create mock trade outcomes for testing."""
     print(f"\n📊 Creating {num_trades} mock trades...")
 
-    base_time = datetime.utcnow() - timedelta(days=100)
+    base_time = datetime.now(UTC) - timedelta(days=100)
 
     for i in range(num_trades):
         # Distribute trades over 100 days

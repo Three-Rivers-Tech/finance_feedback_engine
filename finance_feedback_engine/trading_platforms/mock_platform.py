@@ -3,7 +3,7 @@
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 from .base_platform import BaseTradingPlatform
@@ -212,7 +212,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "platform": "mock",
                 "decision_id": decision_id,
                 "error": f"Invalid action: {action}",
-                "timestamp": decision.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": decision.get("timestamp", datetime.now(UTC).isoformat()),
             }
 
         if suggested_amount <= 0:
@@ -222,7 +222,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "platform": "mock",
                 "decision_id": decision_id,
                 "error": f"Invalid suggested_amount: {suggested_amount}",
-                "timestamp": decision.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": decision.get("timestamp", datetime.now(UTC).isoformat()),
             }
 
         # Apply slippage to execution price
@@ -288,7 +288,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                                 "decision_id": decision_id,
                                 "error": f"Insufficient SHORT position: {short_contracts:.4f} < {contracts:.4f}",
                                 "timestamp": decision.get(
-                                    "timestamp", datetime.utcnow().isoformat()
+                                    "timestamp", datetime.now(UTC).isoformat()
                                 ),
                             }
                     else:  # pos["side"] == "LONG"
@@ -308,7 +308,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                                 "decision_id": decision_id,
                                 "error": f"Insufficient balance: {futures_balance:.2f} < {required_amount:.2f}",
                                 "timestamp": decision.get(
-                                    "timestamp", datetime.utcnow().isoformat()
+                                    "timestamp", datetime.now(UTC).isoformat()
                                 ),
                             }
 
@@ -340,7 +340,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                             "decision_id": decision_id,
                             "error": f"Insufficient balance: {futures_balance:.2f} < {required_amount:.2f}",
                             "timestamp": decision.get(
-                                "timestamp", datetime.utcnow().isoformat()
+                                "timestamp", datetime.now(UTC).isoformat()
                             ),
                         }
 
@@ -397,7 +397,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                                 "decision_id": decision_id,
                                 "error": f'Insufficient position: {pos["contracts"]:.4f} < {contracts:.4f}',
                                 "timestamp": decision.get(
-                                    "timestamp", datetime.utcnow().isoformat()
+                                    "timestamp", datetime.now(UTC).isoformat()
                                 ),
                             }
                     else:  # pos["side"] == "SHORT"
@@ -409,7 +409,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                             "decision_id": decision_id,
                             "error": "Cannot add to existing SHORT position. Close SHORT first with BUY.",
                             "timestamp": decision.get(
-                                "timestamp", datetime.utcnow().isoformat()
+                                "timestamp", datetime.now(UTC).isoformat()
                             ),
                         }
                 else:
@@ -433,7 +433,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                             "decision_id": decision_id,
                             "error": f"Insufficient balance for SHORT: {futures_balance:.2f} < {required_margin:.2f}",
                             "timestamp": decision.get(
-                                "timestamp", datetime.utcnow().isoformat()
+                                "timestamp", datetime.now(UTC).isoformat()
                             ),
                         }
                     
@@ -469,7 +469,7 @@ class MockTradingPlatform(BaseTradingPlatform):
             trade_record = {
                 "order_id": f"mock-{uuid.uuid4().hex[:8]}",
                 "decision_id": decision_id,
-                "timestamp": decision.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": decision.get("timestamp", datetime.now(UTC).isoformat()),
                 "asset_pair": asset_pair_normalized,
                 "action": action,
                 "side": position_side,  # Track position side
@@ -522,7 +522,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "decision_id": decision_id,
                 "error": str(e),
                 "latency_seconds": time.time() - start_time,
-                "timestamp": decision.get("timestamp", datetime.utcnow().isoformat()),
+                "timestamp": decision.get("timestamp", datetime.now(UTC).isoformat()),
             }
 
     def get_portfolio_breakdown(self) -> Dict[str, Any]:

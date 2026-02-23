@@ -2,7 +2,7 @@
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -112,7 +112,7 @@ class PerformanceMetricsCollector:
         """
         self.trade_history.append(
             {
-                "timestamp": trade_outcome.get("exit_timestamp", datetime.utcnow()),
+                "timestamp": trade_outcome.get("exit_timestamp", datetime.now(UTC)),
                 "pnl": trade_outcome.get("realized_pnl", 0.0),
                 "pnl_pct": trade_outcome.get("pnl_percentage", 0.0),
                 "was_profitable": trade_outcome.get("was_profitable", False),
@@ -149,7 +149,7 @@ class PerformanceMetricsCollector:
 
         # Filter by time window if specified
         if window_days:
-            cutoff_time = datetime.utcnow() - timedelta(days=window_days)
+            cutoff_time = datetime.now(UTC) - timedelta(days=window_days)
             trades = [t for t in self.trade_history if t["timestamp"] >= cutoff_time]
         else:
             trades = list(self.trade_history)

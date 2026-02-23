@@ -19,7 +19,7 @@ import json
 import logging
 from collections import defaultdict, deque
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
@@ -266,7 +266,7 @@ class PortfolioMemoryEngine:
         asset_pair = decision.get("asset_pair", "UNKNOWN")
         action = decision.get("action", "HOLD")
 
-        entry_timestamp = decision.get("timestamp", datetime.utcnow().isoformat())
+        entry_timestamp = decision.get("timestamp", datetime.now(UTC).isoformat())
         entry_price = decision.get("entry_price") or decision.get(
             "market_data", {}
         ).get("close", 0)
@@ -335,7 +335,7 @@ class PortfolioMemoryEngine:
             position_value = 0
 
         # Calculate holding period
-        exit_ts = exit_timestamp or datetime.utcnow().isoformat()
+        exit_ts = exit_timestamp or datetime.now(UTC).isoformat()
         try:
             entry_dt = datetime.fromisoformat(entry_timestamp.replace("Z", "+00:00"))
             exit_dt = datetime.fromisoformat(exit_ts.replace("Z", "+00:00"))
@@ -757,7 +757,7 @@ class PortfolioMemoryEngine:
         # Filter outcomes by time window
         outcomes = self.trade_outcomes
         if window_days:
-            cutoff = datetime.utcnow() - timedelta(days=window_days)
+            cutoff = datetime.now(UTC) - timedelta(days=window_days)
             outcomes = [
                 o
                 for o in outcomes
@@ -767,7 +767,7 @@ class PortfolioMemoryEngine:
 
         if not outcomes:
             return PerformanceSnapshot(
-                timestamp=datetime.utcnow().isoformat(), total_trades=0
+                timestamp=datetime.now(UTC).isoformat(), total_trades=0
             )
 
         # Calculate aggregate metrics
@@ -831,7 +831,7 @@ class PortfolioMemoryEngine:
                 }
 
         snapshot = PerformanceSnapshot(
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             total_trades=total_trades,
             winning_trades=winning_trades,
             losing_trades=losing_trades,
@@ -1023,7 +1023,7 @@ class PortfolioMemoryEngine:
             - average_holding_hours: Avg time positions held
             - recent_momentum: Performance trend (improving/declining/stable)
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days)
 
         # Filter outcomes by time period
         period_outcomes = [
@@ -1135,7 +1135,7 @@ class PortfolioMemoryEngine:
             "has_data": True,
             "period_days": days,
             "period_start": cutoff_date.isoformat(),
-            "period_end": datetime.utcnow().isoformat(),
+            "period_end": datetime.now(UTC).isoformat(),
             # Core performance
             "realized_pnl": total_pnl,
             "total_trades": total_trades,
@@ -1707,7 +1707,7 @@ class PortfolioMemoryEngine:
 
     def _save_snapshot(self, snapshot: PerformanceSnapshot) -> None:
         """Save performance snapshot to disk."""
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         filename = f"snapshot_{timestamp}.json"
         filepath = self.storage_path / filename
 

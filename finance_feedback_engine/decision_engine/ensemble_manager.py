@@ -8,7 +8,7 @@ Implements state-of-the-art ensemble techniques inspired by:
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -520,7 +520,7 @@ class EnsembleDecisionManager:
             "confidence_variance": float(np.var(confidences)),
             "local_priority_applied": robust_weights is not None,
             "local_models_used": [],  # to be filled by engine
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "active_local_providers": active_local_providers,
             "local_quorum_met": local_quorum_met,
             "min_local_providers": self.min_local_providers,

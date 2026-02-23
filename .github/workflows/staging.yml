@@ -137,6 +137,7 @@ jobs:
         id: integration-tests
         run: |
           docker compose -f ${{ env.COMPOSE_FILE }} exec -T backend pytest \
+            --full-suite \
             -m "not external_service and not slow" \
             --cov=finance_feedback_engine \
             --cov-report=xml:/app/coverage.xml \
