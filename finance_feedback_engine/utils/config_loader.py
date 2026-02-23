@@ -212,6 +212,16 @@ def load_env_config() -> Dict[str, Any]:
         },
     }
 
+    # Risk management limits (Phase 4D deterministic enforcement)
+    config["risk"] = {
+        "max_position_size": _env_float("RISK_MAX_POSITION_SIZE", 0.05),
+        "max_drawdown_pct": _env_float("RISK_MAX_DRAWDOWN_PCT", 0.05),
+        "var_confidence": _env_float("RISK_VAR_CONFIDENCE", 0.95),
+        "max_var_pct": _env_float("RISK_MAX_VAR_PCT", 0.05),
+        "correlation_threshold": _env_float("RISK_CORRELATION_THRESHOLD", 0.7),
+        "max_correlated_assets": _env_int("RISK_MAX_CORRELATED_ASSETS", 2),
+    }
+
     config["circuit_breaker"] = {
         "enabled": True,
         "failure_threshold": _env_int("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 3),

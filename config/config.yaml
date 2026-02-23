@@ -164,6 +164,13 @@ telegram:
   enabled: false
   bot_token: ${TELEGRAM_BOT_TOKEN:YOUR_TELEGRAM_BOT_TOKEN}
   chat_id: ${TELEGRAM_CHAT_ID:YOUR_TELEGRAM_CHAT_ID}
+risk:
+  max_position_size: 0.05          # 5% max per position
+  max_drawdown_pct: 0.05           # 5% max portfolio drawdown — halt trading
+  var_confidence: 0.95             # 95% VaR confidence
+  max_var_pct: 0.05                # 5% max daily VaR
+  correlation_threshold: 0.7       # Block correlated positions above 0.7
+  max_correlated_assets: 2         # Max 2 correlated assets simultaneously
 safety:
   max_leverage: 5.0
   max_position_pct: 25.0
