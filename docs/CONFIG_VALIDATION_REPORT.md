@@ -31,11 +31,11 @@ A comprehensive configuration validation audit has identified **CRITICAL SECURIT
 ```yaml
 # THESE ARE COMPROMISED AND MUST BE ROTATED IMMEDIATELY
 
-alpha_vantage_api_key: EXAMPLE_API_KEY_ABC123XYZ456
+alpha_vantage_api_key: ${ALPHA_VANTAGE_API_KEY}
 
 platforms:
   - credentials:
-      api_key: aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
+      api_key: ${COINBASE_API_KEY}
       api_secret: |
         BEGIN EC KEY PLACEHOLDER
         [EXAMPLE PRIVATE KEY - NEVER USE REAL KEYS IN EXAMPLES]
@@ -43,11 +43,11 @@ platforms:
 
   - credentials:
       account_id: 001-001-1234567-001
-      api_key: aaaaaaaa11111111bbbbbbbb22222222-cccccccc33333333dddddddd44444444
+      api_key: ${OANDA_API_KEY}
 
 telegram:
-  bot_token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890
-  ngrok_auth_token: 1AbC2DeF3GhI4JkL5MnO6PqR7StU8VwX9YzA0BcD1EfG2HiJ
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+  ngrok_auth_token: ${NGROK_AUTH_TOKEN}
 ```
 
 **Impact**:
@@ -67,20 +67,20 @@ telegram:
 
    # Coinbase
    # Visit: https://www.coinbase.com/settings/api
-   # Revoke old key: aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee
+   # Revoke old key: ${COINBASE_API_KEY}
    # Generate new API key pair
 
    # Oanda
    # Visit: https://www.oanda.com/
-   # Revoke token: aaaaaaaa11111111bbbbbbbb22222222-cccccccc33333333dddddddd44444444
+   # Revoke token: ${OANDA_API_KEY}
    # Generate new personal access token
 
    # Telegram
-   # Contact @BotFather to revoke token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890
+   # Contact @BotFather to revoke token: ${TELEGRAM_BOT_TOKEN}
 
    # Ngrok
    # Visit: https://dashboard.ngrok.com/
-   # Revoke token: 1AbC2DeF3GhI4JkL5MnO6PqR7StU8VwX9YzA0BcD1EfG2HiJ
+   # Revoke token: ${NGROK_AUTH_TOKEN}
    ```
 
 2. **REMOVE FROM GIT HISTORY**
@@ -303,7 +303,7 @@ pytest tests/test_config_validation.py --cov=finance_feedback_engine.utils.confi
    alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY}"
 
    # Bad
-   alpha_vantage_api_key: "EXAMPLE_API_KEY_ABC123XYZ456"
+   alpha_vantage_api_key: "${ALPHA_VANTAGE_API_KEY}"
    ```
 
 2. **Store Secrets in config.local.yaml (Git-Ignored)**
@@ -669,17 +669,17 @@ Total Issues: 12
 
   Rule: exposed_secret
   Location: config/config.local.yaml:15
-  Message: Potential exposed secret detected (api_key): EXAMPLE_API_KEY_ABC123XYZ456...
+  Message: Potential exposed secret detected (api_key): ${ALPHA_VANTAGE_API_KEY}...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: exposed_secret
   Location: config/config.local.yaml:83
-  Message: Potential exposed secret detected (api_key): aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee...
+  Message: Potential exposed secret detected (api_key): ${COINBASE_API_KEY}...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: exposed_secret
   Location: config/config.local.yaml:137
-  Message: Potential exposed secret detected (token): 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890...
+  Message: Potential exposed secret detected (token): ${TELEGRAM_BOT_TOKEN}...
   Suggestion: Use environment variables: ${ENV_VAR_NAME} instead of hardcoded values
 
   Rule: debug_in_production

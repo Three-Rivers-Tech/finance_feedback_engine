@@ -83,7 +83,7 @@ Created `env_yaml_loader.py` with `substitute_env_vars()`:
 api_key: "${COINBASE_API_KEY:-YOUR_COINBASE_API_KEY}"
 
 # After substitution (with real .env):
-api_key: "organizations/123/apiKeys/456"
+api_key: "${COINBASE_API_KEY}"
 ```
 
 ## Environment Variable Precedence

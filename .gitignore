@@ -119,3 +119,15 @@ grafana-data/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
+
+# Secrets and credentials
+*.orig
+.env.backup*
+config/config.local.yaml*
+!config/config.local.yaml.example
+data/optimization/best_config_*.yaml
+mlruns/
+**/new_cred*
+test_coinbase_auth.py
+check_coinbase_raw.py
+check_production_account.py

@@ -12,7 +12,7 @@ FFE now has full integration with the Plane ticketing system running at `http://
 The n8n container on `business-tools` (192.168.1.197:5678) now has these env vars:
 
 ```bash
-PLANE_API_KEY=plane_api_382dc0b942ec4d44b2294b59da429b9e
+PLANE_API_KEY=${PLANE_API_KEY}
 PLANE_API_BASE=http://192.168.1.177:8088
 PLANE_WORKSPACE_SLUG=three-rivers-tech-llc
 PLANE_PROJECT_ID=a751111c-fa00-4004-b725-d1174e488fe0
@@ -45,7 +45,7 @@ See `examples/plane_ticketing_example.py` for:
 cd ~/finance_feedback_engine
 
 # Set API key
-export PLANE_API_KEY='plane_api_382dc0b942ec4d44b2294b59da429b9e'
+export PLANE_API_KEY='${PLANE_API_KEY}'
 
 # List existing FFE issues
 python3 examples/plane_ticketing_example.py
@@ -91,7 +91,7 @@ The governance workflows reference a credential called `GOV_PLANE_API` that need
 4. Configure:
    - **Name:** `GOV_PLANE_API`
    - **Header Name:** `X-Api-Key`
-   - **Header Value:** `plane_api_382dc0b942ec4d44b2294b59da429b9e`
+   - **Header Value:** `${PLANE_API_KEY}`
 5. Save
 
 Once created, all governance workflows will be able to create/update Plane issues automatically.
@@ -105,7 +105,7 @@ All n8n workflows can now use these variables:
 $env.PLANE_API_BASE        // http://192.168.1.177:8088
 $env.PLANE_WORKSPACE_SLUG  // three-rivers-tech-llc
 $env.PLANE_PROJECT_ID      // a751111c-fa00-4004-b725-d1174e488fe0
-$env.PLANE_API_KEY         // plane_api_382dc0b942ec4d44b2294b59da429b9e
+$env.PLANE_API_KEY         // ${PLANE_API_KEY}
 
 // Example: Build issue URL
 const issueUrl = `${$env.PLANE_API_BASE}/workspaces/${$env.PLANE_WORKSPACE_SLUG}/projects/${$env.PLANE_PROJECT_ID}/issues/${issueId}`;
@@ -242,7 +242,7 @@ if position_size > max_position_size:
 ```bash
 # Test basic connectivity
 cd ~/finance_feedback_engine
-export PLANE_API_KEY='plane_api_382dc0b942ec4d44b2294b59da429b9e'
+export PLANE_API_KEY='${PLANE_API_KEY}'
 python3 -c "from ffe_plane_client import PlaneClient; c = PlaneClient(); print('✅ Connected to Plane')"
 
 # List FFE issues
@@ -258,12 +258,12 @@ python3 -c "from ffe_plane_client import create_execution_ticket; print(create_e
 
 ### "PLANE_API_KEY not found"
 ```bash
-export PLANE_API_KEY='plane_api_382dc0b942ec4d44b2294b59da429b9e'
+export PLANE_API_KEY='${PLANE_API_KEY}'
 ```
 
 Or add to `~/.zshrc`:
 ```bash
-echo "export PLANE_API_KEY='plane_api_382dc0b942ec4d44b2294b59da429b9e'" >> ~/.zshrc
+echo "export PLANE_API_KEY='${PLANE_API_KEY}'" >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -275,7 +275,7 @@ source ~/.zshrc
 ### n8n workflows can't access Plane
 - Verify env vars in container: `docker exec n8n env | grep PLANE`
 - Verify credential exists: Check n8n UI → Credentials → GOV_PLANE_API
-- Check credential has correct header: `X-Api-Key: plane_api_382dc0b942ec4d44b2294b59da429b9e`
+- Check credential has correct header: `X-Api-Key: ${PLANE_API_KEY}`
 
 ---
 
