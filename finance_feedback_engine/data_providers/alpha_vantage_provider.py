@@ -1328,7 +1328,7 @@ class AlphaVantageProvider:
             "timeframes": {},
             "has_any_fresh_data": False,
             "all_stale": True,
-            "fetch_timestamp": datetime.now(UTC).isoformat() + "Z",
+            "fetch_timestamp": datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
         }
 
         # Fetch each timeframe independently
@@ -1565,7 +1565,7 @@ class AlphaVantageProvider:
 
             latest_candle = candles[-1]
             data_date = datetime.fromtimestamp(latest_candle["timestamp"], UTC)
-            data_timestamp = data_date.isoformat() + "Z"
+            data_timestamp = data_date.isoformat().replace('+00:00', 'Z') if data_date.tzinfo else data_date.isoformat() + 'Z'
             latest_date = data_date.strftime("%Y-%m-%d %H:%M:%S")
 
             # CRITICAL FIX: Market-aware data freshness validation
@@ -1775,13 +1775,11 @@ class AlphaVantageProvider:
                     data_date = datetime.strptime(latest_date, date_format)
                     if timeframe == "daily":
                         # Daily: use end of day
-                        data_timestamp = (
-                            data_date.replace(hour=23, minute=59, second=0).isoformat()
-                            + "Z"
-                        )
+                        ts = data_date.replace(hour=23, minute=59, second=0).isoformat()
+                        data_timestamp = ts.replace('+00:00', 'Z') if data_date.tzinfo else ts + 'Z'
                     else:
                         # Intraday: use exact timestamp from API
-                        data_timestamp = data_date.isoformat() + "Z"
+                        data_timestamp = data_date.isoformat().replace('+00:00', 'Z') if data_date.tzinfo else data_date.isoformat() + 'Z'
 
                     # Get market status for context-aware validation
                     market_status = MarketSchedule.get_market_status(
@@ -1945,10 +1943,8 @@ class AlphaVantageProvider:
 
                     # Parse the date and create an ISO timestamp at market close (assume 23:59 UTC)
                     data_date = datetime.strptime(latest_date, "%Y-%m-%d")
-                    data_timestamp = (
-                        data_date.replace(hour=23, minute=59, second=0).isoformat()
-                        + "Z"
-                    )
+                    ts = data_date.replace(hour=23, minute=59, second=0).isoformat()
+                    data_timestamp = ts.replace('+00:00', 'Z') if data_date.tzinfo else ts + 'Z'
 
                     # Get market status for context-aware validation
                     market_status = MarketSchedule.get_market_status(

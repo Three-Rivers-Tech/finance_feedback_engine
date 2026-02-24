@@ -551,12 +551,16 @@ async def create_decision(
             include_macro=request.include_macro,
         )
 
+        # Engine returns 'id', normalize to 'decision_id' for API response
+        if "decision_id" not in decision and "id" in decision:
+            decision["decision_id"] = decision["id"]
+
         required_keys = {"decision_id", "asset_pair", "action", "confidence"}
         missing_keys = required_keys - decision.keys()
         if missing_keys:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Invalid decision format",
+                detail=f"Invalid decision format, missing: {missing_keys}",
             )
 
         return DecisionResponse(
