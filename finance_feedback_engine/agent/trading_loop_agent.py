@@ -1012,7 +1012,7 @@ class TradingLoopAgent:
                         decision = {
                             "id": decision_id,
                             "asset_pair": asset_pair,
-                            "timestamp": datetime.datetime.now(datetime.UTC).isoformat() + "Z",
+                            "timestamp": datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
                             "action": "BUY" if pos["side"] == "LONG" else "SELL",
                             "confidence": 75,  # Default confidence for recovered positions
                             "recommended_position_size": pos["size"],
@@ -1046,7 +1046,7 @@ class TradingLoopAgent:
                             decision_id=decision_id,
                             asset_pair=asset_pair,
                             action="BUY" if pos["side"] == "LONG" else "SELL",
-                            entry_timestamp=datetime.datetime.now(datetime.UTC).isoformat() + "Z",
+                            entry_timestamp=datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
                             entry_price=entry_price,
                             position_size=pos["size"],
                             ai_provider="recovery",

@@ -238,7 +238,7 @@ class StructuredJSONFormatter(logging.Formatter):
         """
         # Build the base log data structure
         log_data = {
-            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat() + "Z",
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat().replace('+00:00', 'Z'),
             "correlation_id": getattr(record, "correlation_id", None),
             "level": record.levelname,
             "logger": record.name,

@@ -1199,9 +1199,9 @@ class FinanceFeedbackEngine:
 
                     # Normalize numeric timestamps to ISO for consistency
                     if isinstance(live_ts, (int, float)):
-                        live_ts = datetime.fromtimestamp(live_ts, UTC).isoformat() + "Z"
+                        live_ts = datetime.fromtimestamp(live_ts, UTC).isoformat().replace('+00:00', 'Z')
                     elif not live_ts:
-                        live_ts = datetime.now(UTC).isoformat() + "Z"
+                        live_ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
 
                     market_data["close"] = float(live_price["price"])
                     market_data["timestamp"] = live_ts

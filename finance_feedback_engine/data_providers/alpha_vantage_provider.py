@@ -598,8 +598,8 @@ class AlphaVantageProvider:
                     if timeframe == "1d":
                         candle_dt = datetime.strptime(timestamp_str, date_format).date()
                     else:
-                        # Parse full timestamp for intraday data
-                        candle_timestamp = datetime.strptime(timestamp_str, date_format)
+                        # Parse full timestamp for intraday data (assume UTC)
+                        candle_timestamp = datetime.strptime(timestamp_str, date_format).replace(tzinfo=UTC)
                         candle_dt = candle_timestamp.date()
 
                         # Track latest timestamp for staleness check
@@ -2132,7 +2132,9 @@ class AlphaVantageProvider:
                 data_time = datetime.fromisoformat(
                     data["timestamp"].replace("Z", "+00:00")
                 )
-                age = datetime.now(UTC) - data_time.replace(tzinfo=None)
+                if data_time.tzinfo is None:
+                    data_time = data_time.replace(tzinfo=UTC)
+                age = datetime.now(UTC) - data_time
                 if age.total_seconds() > 86400:  # 24 hour threshold for daily data
                     issues.append(
                         f"Market data is stale " f"({age.total_seconds():.0f}s old)"

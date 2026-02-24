@@ -1213,7 +1213,7 @@ async def record_approval(
             "approval_id": approval_id,
             "decision_id": request.decision_id,
             "status": request.status,
-            "timestamp": datetime.now(UTC).isoformat() + "Z",
+            "timestamp": datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
             "user_id_hash": pseudonymized_user_id,  # Pseudonymized
             "user_name_hash": pseudonymized_user_name,  # Pseudonymized
             "original_decision": request.original_decision or {},
