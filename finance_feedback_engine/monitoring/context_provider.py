@@ -69,11 +69,9 @@ class MonitoringContextProvider:
                 holdings = portfolio.get("holdings", [])
 
                 if asset_pair:
-                    futures_positions = [
-                        p
-                        for p in futures_positions
-                        if asset_pair in p.get("product_id", "")
-                    ]
+                    futures_positions = self._filter_positions_by_asset(
+                        futures_positions, asset_pair
+                    )
                     holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
 
                 context["active_positions"] = {
@@ -150,11 +148,9 @@ class MonitoringContextProvider:
 
                 # Filter by asset pair if specified
                 if asset_pair:
-                    futures_positions = [
-                        p
-                        for p in futures_positions
-                        if asset_pair in p.get("product_id", "")
-                    ]
+                    futures_positions = self._filter_positions_by_asset(
+                        futures_positions, asset_pair
+                    )
                     holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
 
                 context["active_positions"] = {
@@ -287,6 +283,33 @@ class MonitoringContextProvider:
                 logger.warning(f"Could not fetch multi-timeframe pulse: {e}")
 
         return context
+
+    @staticmethod
+    def _filter_positions_by_asset(
+        positions: List[Dict[str, Any]], asset_pair: str
+    ) -> List[Dict[str, Any]]:
+        """Filter positions matching an asset pair, handling CFM/INTX product ID formats.
+
+        CFM products use non-obvious IDs like BIP-20DEC30-CDE for BTC perpetuals.
+        This maps product prefixes to base assets for correct matching.
+        """
+        base = asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").upper()
+        cfm_map = {
+            "BIP": "BTC", "BIT": "BTC",
+            "ETP": "ETH", "ET": "ETH",
+            "SOL": "SOL", "SLP": "SOL",
+            "GOL": "XAU", "SLR": "XAG",
+        }
+        matched = []
+        for p in positions:
+            pid = p.get("product_id", "")
+            if asset_pair in pid:
+                matched.append(p)
+            elif "-" in pid and cfm_map.get(pid.split("-")[0]) == base:
+                matched.append(p)
+            elif base in pid.upper():
+                matched.append(p)
+        return matched
 
     def _calculate_risk_metrics(
         self, futures_positions: List[Dict[str, Any]], portfolio: Dict[str, Any]
