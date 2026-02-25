@@ -1557,12 +1557,34 @@ Format response as a structured technical analysis demonstration.
             allowed_signals = ["BUY", "SELL", "HOLD"]
             state = "UNKNOWN"
 
+        # Coinbase FCM positions use number_of_contracts / avg_entry_price;
+        # normalize to our canonical field names.
+        contracts = (
+            current_position.get("contracts")
+            or current_position.get("number_of_contracts")
+            or 0
+        )
+        entry_price = (
+            current_position.get("entry_price")
+            or current_position.get("avg_entry_price")
+            or 0
+        )
+        unrealized_pnl = (
+            current_position.get("unrealized_pnl") or 0
+        )
+
+        logger.info(
+            "Position state for %s: %s %s contracts @ $%s (PnL: $%s) [product: %s]",
+            asset_pair, state, contracts, entry_price, unrealized_pnl,
+            current_position.get("product_id", "?"),
+        )
+
         return {
             "has_position": True,
             "side": side,
-            "contracts": current_position.get("contracts", 0),
-            "entry_price": current_position.get("entry_price", 0),
-            "unrealized_pnl": current_position.get("unrealized_pnl", 0),
+            "contracts": float(contracts),
+            "entry_price": float(entry_price),
+            "unrealized_pnl": float(unrealized_pnl),
             "allowed_signals": allowed_signals,
             "state": state,
         }
