@@ -1800,10 +1800,19 @@ class FinanceFeedbackEngine:
             if breaker is None:
                 from .utils.circuit_breaker import CircuitBreaker
 
+                breaker_cfg = self.config.get("platform_execute_circuit_breaker", {})
+                failure_threshold = int(breaker_cfg.get("failure_threshold", 5))
+                recovery_timeout = float(
+                    breaker_cfg.get("recovery_timeout_seconds", 15)
+                )
                 cb_name = f"execute_trade:{self.trading_platform.__class__.__name__}"
                 breaker = CircuitBreaker(
-                    failure_threshold=3, recovery_timeout=60, name=cb_name
+                    failure_threshold=failure_threshold,
+                    recovery_timeout=recovery_timeout,
+                    name=cb_name,
                 )
+                if getattr(self.trading_platform, "set_execute_breaker", None):
+                    self.trading_platform.set_execute_breaker(breaker)
 
             # PHASE 2: Execute trade under circuit breaker protection
             result = breaker.call_sync(self.trading_platform.execute_trade, decision)
@@ -1999,10 +2008,19 @@ class FinanceFeedbackEngine:
             if breaker is None:
                 from .utils.circuit_breaker import CircuitBreaker
 
+                breaker_cfg = self.config.get("platform_execute_circuit_breaker", {})
+                failure_threshold = int(breaker_cfg.get("failure_threshold", 5))
+                recovery_timeout = float(
+                    breaker_cfg.get("recovery_timeout_seconds", 15)
+                )
                 cb_name = f"execute_trade:{self.trading_platform.__class__.__name__}"
                 breaker = CircuitBreaker(
-                    failure_threshold=3, recovery_timeout=60, name=cb_name
+                    failure_threshold=failure_threshold,
+                    recovery_timeout=recovery_timeout,
+                    name=cb_name,
                 )
+                if getattr(self.trading_platform, "set_execute_breaker", None):
+                    self.trading_platform.set_execute_breaker(breaker)
 
             result = await breaker.call(self.trading_platform.aexecute_trade, decision)
         except TradingError as e:

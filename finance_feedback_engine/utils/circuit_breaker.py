@@ -70,6 +70,7 @@ class CircuitBreaker:
         self.failure_count = 0
         self.success_count = 0
         self.last_failure_time: Optional[float] = None
+        self.last_error: Optional[Exception] = None
         self.state = CircuitState.CLOSED
         self._half_open_in_progress = False  # Track HALF_OPEN probe reservation
 
@@ -295,11 +296,13 @@ class CircuitBreaker:
             self._open_circuit()
 
         logger.warning(
-            "%s failure %d/%d (state: %s)",
+            "%s failure %d/%d (state: %s, error: %s: %s)",
             self.name,
             self.failure_count,
             self.failure_threshold,
             self.state.value,
+            type(last_error).__name__ if last_error is not None else "UnknownError",
+            str(last_error) if last_error is not None else "n/a",
         )
 
     def _open_circuit(self):
@@ -322,17 +325,28 @@ class CircuitBreaker:
 
     def get_stats(self) -> dict:
         """Get circuit breaker statistics."""
+        seconds_until_half_open = None
+        if self.state == CircuitState.OPEN and self.last_failure_time is not None:
+            seconds_until_half_open = max(
+                0.0, self.recovery_timeout - (time.time() - self.last_failure_time)
+            )
+
         return {
             "name": self.name,
             "state": self.state.value,
             "failure_count": self.failure_count,
+            "failure_threshold": self.failure_threshold,
             "success_count": self.success_count,
             "total_calls": self.total_calls,
             "total_failures": self.total_failures,
             "total_successes": self.total_successes,
             "circuit_open_count": self.circuit_open_count,
             "failure_rate": self.total_failures / max(self.total_calls, 1),
+            "recovery_timeout": self.recovery_timeout,
+            "seconds_until_half_open": seconds_until_half_open,
             "last_failure_time": self.last_failure_time,
+            "last_error_type": type(self.last_error).__name__ if self.last_error else None,
+            "last_error": str(self.last_error) if self.last_error else None,
         }
 
     def reset_manually(self):

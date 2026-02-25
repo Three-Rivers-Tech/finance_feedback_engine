@@ -515,6 +515,24 @@
         }
       }
     },
+    "platform_execute_circuit_breaker": {
+      "type": "object",
+      "description": "Trading platform execute_trade circuit breaker configuration",
+      "properties": {
+        "failure_threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 5
+        },
+        "recovery_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600,
+          "default": 15
+        }
+      }
+    },
     "logging": {
       "type": "object",
       "description": "Logging configuration",

@@ -424,6 +424,58 @@ async def liveness_check():
     return get_liveness_status()
 
 
+@health_router.post("/health/circuit-breakers/platform_execute/reset")
+async def reset_platform_execute_circuit_breaker(
+    engine: FinanceFeedbackEngine = Depends(get_engine),
+):
+    """
+    Manually reset the platform execute circuit breaker.
+
+    Useful for operator recovery after resolving the underlying execution issue.
+    """
+    try:
+        platform = getattr(engine, "trading_platform", None)
+        if platform is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Trading platform is not initialized",
+            )
+
+        breaker = getattr(platform, "_execute_breaker", None)
+        if breaker is None and getattr(platform, "get_execute_breaker", None):
+            breaker = platform.get_execute_breaker()
+        if breaker is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="platform_execute circuit breaker not found",
+            )
+
+        before = breaker.get_stats() if hasattr(breaker, "get_stats") else None
+        if hasattr(breaker, "reset_manually"):
+            breaker.reset_manually()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Circuit breaker does not support manual reset",
+            )
+        after = breaker.get_stats() if hasattr(breaker, "get_stats") else None
+
+        logger.warning(
+            "platform_execute circuit breaker reset via API. before=%s after=%s",
+            before,
+            after,
+        )
+        return {"ok": True, "before": before, "after": after}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to reset platform_execute circuit breaker")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset circuit breaker: {e}",
+        ) from e
+
+
 # Metrics endpoint
 @metrics_router.get("/metrics")
 async def metrics():

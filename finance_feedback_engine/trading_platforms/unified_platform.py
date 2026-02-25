@@ -23,7 +23,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
     (for forex).
     """
 
-    def __init__(self, credentials: Dict[str, Any]):
+    def __init__(self, credentials: Dict[str, Any], config: Dict[str, Any] = None):
         """
         Initialize the unified platform.
 
@@ -32,6 +32,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                          e.g., {'coinbase': {...}, 'oanda': {...}}
         """
         super().__init__(credentials)
+        self.config = config or {}
         self.platforms: Dict[str, BaseTradingPlatform] = {}
 
         # Support both 'coinbase' and 'coinbase_advanced' keys
@@ -170,9 +171,14 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                 else None
             )
             if cb is None:
+                breaker_config = self.config.get("platform_execute_circuit_breaker", {})
+                failure_threshold = int(breaker_config.get("failure_threshold", 5))
+                recovery_timeout = float(
+                    breaker_config.get("recovery_timeout_seconds", 15)
+                )
                 cb = CircuitBreaker(
-                    failure_threshold=5,
-                    recovery_timeout=60,
+                    failure_threshold=failure_threshold,
+                    recovery_timeout=recovery_timeout,
                     name=f"execute_trade:{target_platform.__class__.__name__.lower()}",
                 )
                 if getattr(target_platform, "set_execute_breaker", None):

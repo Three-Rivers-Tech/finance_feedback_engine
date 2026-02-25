@@ -135,6 +135,11 @@ class PlatformFactory:
         # Attach a persistent circuit breaker on the instance if possible
         try:
             from ..utils.circuit_breaker import CircuitBreaker
+            breaker_config = (config or {}).get("platform_execute_circuit_breaker", {})
+            failure_threshold = int(breaker_config.get("failure_threshold", 5))
+            recovery_timeout = float(
+                breaker_config.get("recovery_timeout_seconds", 15)
+            )
 
             # Only attach if not already present
             if (
@@ -142,8 +147,8 @@ class PlatformFactory:
                 or instance.get_execute_breaker() is None
             ):
                 breaker = CircuitBreaker(
-                    failure_threshold=5,
-                    recovery_timeout=60,
+                    failure_threshold=failure_threshold,
+                    recovery_timeout=recovery_timeout,
                     name=f"execute_trade:{platform_name}",
                 )
                 # Use set_execute_breaker accessor if available

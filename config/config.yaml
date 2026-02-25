@@ -178,6 +178,9 @@ circuit_breaker:
   failure_threshold: 3
   recovery_timeout_seconds: 300
   half_open_retry: 1
+platform_execute_circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout_seconds: 15
 signal_only_default: false
 logging:
   level: INFO

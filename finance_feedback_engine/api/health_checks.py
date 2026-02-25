@@ -348,19 +348,39 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
     # Capture circuit breaker state (data provider and platform, if available)
     circuit_breakers: Dict[str, Any] = {}
 
-    def _circuit_state(source: Any) -> Dict[str, Any]:
+    def _breaker_state(breaker: Any) -> Dict[str, Any]:
         try:
-            breaker = getattr(source, "circuit_breaker", None)
             if breaker is None:
                 return {"state": "unavailable"}
 
+            if hasattr(breaker, "get_stats"):
+                stats = breaker.get_stats()
+                return {
+                    "state": stats.get("state"),
+                    "failure_count": stats.get("failure_count"),
+                    "failure_threshold": stats.get("failure_threshold"),
+                    "total_failures": stats.get("total_failures"),
+                    "recovery_timeout": stats.get("recovery_timeout"),
+                    "seconds_until_half_open": stats.get("seconds_until_half_open"),
+                    "last_failure_time": stats.get("last_failure_time"),
+                    "last_error_type": stats.get("last_error_type"),
+                    "last_error": stats.get("last_error"),
+                }
+
             state = getattr(breaker, "state", None)
-            # Prefer named state, otherwise raw value
             state_value = getattr(state, "name", state)
             return {
                 "state": state_value,
                 "failure_count": getattr(breaker, "failure_count", None),
             }
+        except Exception as err:
+            logger.warning(f"Circuit breaker inspection failed: {err}")
+            return {"state": "unknown", "error": str(err)}
+
+    def _circuit_state(source: Any) -> Dict[str, Any]:
+        try:
+            breaker = getattr(source, "circuit_breaker", None)
+            return _breaker_state(breaker)
         except Exception as err:
             logger.warning(f"Circuit breaker inspection failed: {err}")
             return {"state": "unknown", "error": str(err)}
@@ -388,11 +408,7 @@ def get_enhanced_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
             platform = getattr(engine, "trading_platform", None)
         if platform is not None and hasattr(platform, "_execute_breaker"):
             breaker = platform._execute_breaker
-            state_value = getattr(breaker, "state", None)
-            circuit_breakers["platform_execute"] = {
-                "state": getattr(state_value, "name", state_value),
-                "failure_count": getattr(breaker, "failure_count", None),
-            }
+            circuit_breakers["platform_execute"] = _breaker_state(breaker)
     except Exception as e:
         logger.warning(f"Platform circuit breaker check failed: {e}")
         circuit_breakers["platform_execute"] = {"state": "unknown", "error": str(e)}
