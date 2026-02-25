@@ -133,13 +133,14 @@ services:
     container_name: ffe-trade-tracker
     image: finance-feedback-engine:latest
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - ffe-network
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       - PYTHONUNBUFFERED=1
       - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
-      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-ffe_user}:${POSTGRES_PASSWORD:-changeme}@localhost:5432/${POSTGRES_DB:-ffe}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ffe_user}:${POSTGRES_PASSWORD:-changeme}@ffe-postgres:5432/${POSTGRES_DB:-ffe}
     # Run trade tracker monitor script
     command: /app/scripts/run_trade_tracker.sh
     volumes:

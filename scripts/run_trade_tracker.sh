@@ -11,7 +11,8 @@ echo ""
 
 # Wait for database to be ready
 echo "Waiting for database connection..."
-until python -c "import psycopg2; psycopg2.connect('${DATABASE_URL}').close()" 2>/dev/null; do
+DB_CONNECT_URL=$(printf "%s" "${DATABASE_URL}" | sed 's#^postgresql+psycopg2://#postgresql://#')
+until python -c "import psycopg2; psycopg2.connect('${DB_CONNECT_URL}').close()" 2>/dev/null; do
   echo "Database not ready, waiting..."
   sleep 5
 done
