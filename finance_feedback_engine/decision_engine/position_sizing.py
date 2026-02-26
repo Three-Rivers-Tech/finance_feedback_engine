@@ -81,6 +81,45 @@ class PositionSizingCalculator:
             f"has_existing_position={has_existing_position}, source={balance_source}"
         )
 
+        # Fallback: derive crypto balance from richer context when balance snapshot is missing/empty
+        # (e.g., transient balance fetch issue while portfolio breakdown is still available).
+        if (not has_valid_balance) and isinstance(context, dict):
+            asset_pair = str(context.get("asset_pair", ""))
+            market_type = str(context.get("market_data", {}).get("type", "")).lower()
+            is_crypto_ctx = ("BTC" in asset_pair or "ETH" in asset_pair or market_type == "crypto")
+            if is_crypto_ctx:
+                fallback_val = None
+
+                # 1) Preferred: current balance snapshot keys
+                bs = context.get("balance_snapshot") or {}
+                if isinstance(bs, dict):
+                    for k in ("coinbase_FUTURES_USD", "FUTURES_USD", "coinbase_SPOT_USD", "SPOT_USD"):
+                        v = bs.get(k)
+                        if isinstance(v, (int, float)) and v > 0:
+                            fallback_val = float(v)
+                            break
+
+                # 2) Portfolio breakdown futures summary (buying power or total balance)
+                if fallback_val is None:
+                    pb = context.get("portfolio") or {}
+                    if isinstance(pb, dict):
+                        cb = (pb.get("platform_breakdowns") or {}).get("coinbase") or {}
+                        fs = cb.get("futures_summary") or {}
+                        for k in ("buying_power", "total_balance_usd"):
+                            v = fs.get(k)
+                            if isinstance(v, (int, float)) and v > 0:
+                                fallback_val = float(v)
+                                break
+
+                if fallback_val is not None:
+                    relevant_balance = {"coinbase_FUTURES_USD": fallback_val}
+                    balance_source = "CoinbaseFallback"
+                    has_valid_balance = True
+                    logger.info(
+                        "Recovered Coinbase balance from context fallback: $%.2f",
+                        fallback_val,
+                    )
+
         # Determine if we should calculate position sizing (no signal-only mode)
         should_calculate = has_valid_balance and (
             action in ["BUY", "SELL"]
