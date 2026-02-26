@@ -1311,7 +1311,11 @@ class FinanceFeedbackEngine:
 
                 # Derive balance from portfolio breakdown to avoid redundant API call
                 # and preserve platform-specific sizing context.
-                if portfolio.get("futures_value_usd") is not None:
+                # For execution sizing, prefer available buying power when present.
+                cb_summary = ((portfolio.get("platform_breakdowns") or {}).get("coinbase") or {}).get("futures_summary") or {}
+                if cb_summary.get("buying_power") is not None:
+                    balance["FUTURES_USD"] = float(cb_summary.get("buying_power", 0) or 0)
+                elif portfolio.get("futures_value_usd") is not None:
                     balance["FUTURES_USD"] = float(portfolio.get("futures_value_usd", 0) or 0)
                 if portfolio.get("spot_value_usd") is not None:
                     balance["SPOT_USD"] = float(portfolio.get("spot_value_usd", 0) or 0)

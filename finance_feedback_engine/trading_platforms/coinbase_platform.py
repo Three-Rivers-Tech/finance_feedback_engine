@@ -1081,10 +1081,15 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     # Use module-level helper function to handle both object and dict formats
                     balance_summary = _get_attr_value(futures_response, "balance_summary", None)
                     if balance_summary:
-
-                        futures_value_usd = _to_float_value(
+                        buying_power_usd = _to_float_value(
                             _get_attr_value(balance_summary, "futures_buying_power", 0)
                         )
+                        total_balance_usd = _to_float_value(
+                            _get_attr_value(balance_summary, "total_usd_balance", 0)
+                        )
+                        # For portfolio valuation, prefer total account balance; fall back to buying power
+                        futures_value_usd = total_balance_usd if total_balance_usd > 0 else buying_power_usd
+
                         futures_summary = {
                             "total_balance_usd": futures_value_usd,
                             "unrealized_pnl": _to_float_value(
@@ -1095,11 +1100,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                                     balance_summary, "daily_realized_pnl", 0
                                 )
                             ),
-                            "buying_power": _to_float_value(
-                                _get_attr_value(
-                                    balance_summary, "futures_buying_power", 0
-                                )
-                            ),
+                            "buying_power": buying_power_usd,
                             "initial_margin": _to_float_value(
                                 _get_attr_value(balance_summary, "initial_margin", 0)
                             ),
