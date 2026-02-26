@@ -1554,8 +1554,79 @@ class TradingLoopAgent:
         ordered_results = sorted(analysis_results, key=lambda item: item[0])
         ordered_actionable_decisions: list[dict] = []
 
+        # Safety guard: detect currently open assets and avoid opening duplicate exposure
+        # on the same standardized asset pair during decision collection.
+        open_asset_pairs: set[str] = set()
+        try:
+            portfolio_snapshot = await self.engine.get_portfolio_breakdown_async()
+            candidate_positions = []
+
+            if "platform_breakdowns" in portfolio_snapshot:
+                for _, pdata in portfolio_snapshot["platform_breakdowns"].items():
+                    candidate_positions.extend(pdata.get("futures_positions", []))
+                    candidate_positions.extend(pdata.get("positions", []))
+            else:
+                candidate_positions.extend(portfolio_snapshot.get("futures_positions", []))
+                candidate_positions.extend(portfolio_snapshot.get("positions", []))
+
+            # Coinbase CFM product prefixes -> canonical base asset
+            cfm_base_map = {
+                "BIP": "BTC", "BIT": "BTC",
+                "ETP": "ETH", "ET": "ETH",
+                "SOL": "SOL", "SLP": "SOL",
+            }
+
+            for pos in candidate_positions:
+                raw_pair = pos.get("product_id") or pos.get("instrument")
+                if not raw_pair:
+                    continue
+
+                # 1) Try direct standardization (e.g., EUR_USD, BTC-USD)
+                try:
+                    open_asset_pairs.add(standardize_asset_pair(raw_pair))
+                except Exception:
+                    pass
+
+                # 2) Also map Coinbase futures product IDs (e.g., BIP-20DEC30-CDE)
+                #    to underlying canonical pairs (e.g., BTCUSD) for duplicate blocking.
+                raw_upper = str(raw_pair).upper()
+                prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
+                mapped_base = cfm_base_map.get(prefix)
+                if mapped_base:
+                    open_asset_pairs.add(f"{mapped_base}USD")
+                    continue
+
+                # 3) Fallback: infer base from symbol text if present
+                for base in ("BTC", "ETH", "SOL"):
+                    if base in raw_upper:
+                        open_asset_pairs.add(f"{base}USD")
+                        break
+
+            if open_asset_pairs:
+                logger.info(
+                    "Open position assets detected (duplicate-entry guard active): %s",
+                    sorted(open_asset_pairs),
+                )
+        except Exception as e:
+            logger.warning("Unable to load open positions for duplicate-entry guard: %s", e)
+
         for _, decision in ordered_results:
             if decision and decision.get("action") in ["BUY", "SELL"]:
+                # Block duplicate entry when a position already exists for the same asset pair.
+                # This prevents repeated BUY/SELL stacking while positions are already open.
+                try:
+                    decision_pair = standardize_asset_pair(decision.get("asset_pair", ""))
+                except Exception:
+                    decision_pair = decision.get("asset_pair")
+
+                if decision_pair and decision_pair in open_asset_pairs:
+                    logger.info(
+                        "Skipping %s for %s: open position already exists.",
+                        decision.get("action"),
+                        decision_pair,
+                    )
+                    continue
+
                 if await self._should_execute(decision):
                     ordered_actionable_decisions.append(decision)
                     logger.info(

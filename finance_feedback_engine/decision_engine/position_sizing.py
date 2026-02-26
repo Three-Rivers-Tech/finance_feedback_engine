@@ -316,10 +316,16 @@ class PositionSizingCalculator:
             return result
 
         # CASE 2: No valid balance - use minimum order size (no signal-only mode)
-        logger.warning(
-            "No valid %s balance - using minimum order size for trade execution",
-            balance_source,
-        )
+        if str(balance_source).lower() in {"unknown", "combined"}:
+            logger.info(
+                "No valid %s balance - using minimum order size for trade execution",
+                balance_source,
+            )
+        else:
+            logger.warning(
+                "No valid %s balance - using minimum order size for trade execution",
+                balance_source,
+            )
 
         # HOLD without position: no sizing needed
         if action == "HOLD" and not has_existing_position:

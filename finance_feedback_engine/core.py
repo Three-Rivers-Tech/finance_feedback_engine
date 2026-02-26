@@ -1766,7 +1766,7 @@ class FinanceFeedbackEngine:
                     action=decision.get("action", "UNKNOWN"),
                     has_existing_position=decision.get("has_existing_position", False),
                     relevant_balance=decision.get("relevant_balance", {}),
-                    balance_source=decision.get("balance_source", "unknown"),
+                    balance_source=decision.get("balance_source", "combined"),
                 )
                 if sizing:
                     new_size = sizing.get("recommended_position_size")
@@ -1979,7 +1979,7 @@ class FinanceFeedbackEngine:
                     action=decision.get("action", "UNKNOWN"),
                     has_existing_position=decision.get("has_existing_position", False),
                     relevant_balance=decision.get("relevant_balance", {}),
-                    balance_source=decision.get("balance_source", "unknown"),
+                    balance_source=decision.get("balance_source", "combined"),
                 )
                 if sizing:
                     new_size = sizing.get("recommended_position_size")

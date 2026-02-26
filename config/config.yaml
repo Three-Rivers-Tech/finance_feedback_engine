@@ -213,7 +213,7 @@ logging:
 agent:
   autonomous_execution: true
   approval_policy: on_new_asset
-  max_daily_trades: 5
+  max_daily_trades: 0
   strategic_goal: balanced
   risk_appetite: medium
   autonomous:
@@ -221,7 +221,7 @@ agent:
     profit_target: 0.05
     stop_loss: 0.02
   max_retries_per_cycle: 3
-  dashboard_event_queue_size: 50
+  dashboard_event_queue_size: 500
   webhook:
     enabled: false
     url: ''

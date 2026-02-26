@@ -302,6 +302,17 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         try:
             return cls._to_decimal(value, field_name)
         except ValueError:
+            # Coinbase occasionally returns quote_min_size=0 on products where
+            # minimum is effectively determined by quote_increment/notional rules.
+            # Treat this as optional-missing noise instead of warning spam.
+            if field_name == "quote_min_size" and str(value).strip() in {"0", "0.0", "0.00"}:
+                logger.debug(
+                    "Ignoring optional %s from product metadata: %s",
+                    field_name,
+                    value,
+                )
+                return None
+
             logger.warning("Ignoring invalid optional %s from product metadata: %s", field_name, value)
             return None
 
