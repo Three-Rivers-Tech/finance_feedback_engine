@@ -213,9 +213,13 @@ logging:
 agent:
   autonomous_execution: true
   approval_policy: on_new_asset
-  max_daily_trades: 0
+  max_daily_trades: 6
   strategic_goal: balanced
   risk_appetite: medium
+  analysis_frequency_seconds: 60
+  main_loop_error_backoff_seconds: 60
+  reasoning_retry_delay_seconds: 20
+  reasoning_max_concurrent_assets: 2
   autonomous:
     enabled: true
     profit_target: 0.05
@@ -244,8 +248,12 @@ agent:
     target_utilization_pct: 0.02
   asset_pairs:
   - BTCUSD
-  - EURUSD
-  - GBPUSD
+  - ETHUSD
+  core_pairs:
+  - BTCUSD
+  - ETHUSD
+  watchlist:
+  - BTCUSD
   - ETHUSD
   asset_parameters:
     GBP_USD:
