@@ -125,13 +125,37 @@ class DebateManager:
             len(failed_debate_providers) / num_total if num_total > 0 else 0.0
         )
 
-        provider_decisions = {}
+        # Track decisions by role (not provider) to avoid collisions
+        # when multiple roles use same provider (e.g., all using "local")
+        role_decisions = {}
+        debate_seats = {}
+        
         if "bull" not in failed_roles:
-            provider_decisions[self.debate_providers["bull"]] = bull_case
+            role_decisions["bull"] = {
+                **bull_case,
+                "role": "bull",
+                "provider": self.debate_providers["bull"],
+            }
+            debate_seats["bull"] = self.debate_providers["bull"]
+            
         if "bear" not in failed_roles:
-            provider_decisions[self.debate_providers["bear"]] = bear_case
+            role_decisions["bear"] = {
+                **bear_case,
+                "role": "bear", 
+                "provider": self.debate_providers["bear"],
+            }
+            debate_seats["bear"] = self.debate_providers["bear"]
+            
         if "judge" not in failed_roles:
-            provider_decisions[self.debate_providers["judge"]] = judge_decision
+            role_decisions["judge"] = {
+                **judge_decision,
+                "role": "judge",
+                "provider": self.debate_providers["judge"],
+            }
+            debate_seats["judge"] = self.debate_providers["judge"]
+        
+        # Legacy field for backward compatibility (use judge provider as primary)
+        provider_decisions = {self.debate_providers.get("judge", "local"): judge_decision} if judge_decision else {}
 
         final_decision["ensemble_metadata"] = {
             "providers_used": providers_used,
@@ -144,7 +168,9 @@ class DebateManager:
             "weight_adjustment_applied": False,
             "voting_strategy": "debate",
             "fallback_tier": "none",
-            "provider_decisions": provider_decisions,
+            "provider_decisions": provider_decisions,  # Legacy (backward compat)
+            "role_decisions": role_decisions,  # NEW: decisions by role (bull/bear/judge)
+            "debate_seats": debate_seats,  # NEW: role -> provider mapping
             "agreement_score": 1.0,  # Judge makes final decision
             "confidence_variance": 0.0,
             "confidence_adjusted": False,

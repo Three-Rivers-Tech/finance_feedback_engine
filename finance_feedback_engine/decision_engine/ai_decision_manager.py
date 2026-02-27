@@ -553,7 +553,11 @@ Make your decision based on evidence, not emotion. Acknowledge when data is conf
             )
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
-            return await asyncio.to_thread(provider.query, prompt)
+            response = await asyncio.to_thread(provider.query, prompt)
+            # Add model_name to response for debate tracking
+            if isinstance(response, dict):
+                response["model_name"] = model_name or self.config.get("model_name", "llama3.1:8b")
+            return response
         except ImportError as e:
             logger.error(
                 f"Local LLM failed due to missing import: {e}",
