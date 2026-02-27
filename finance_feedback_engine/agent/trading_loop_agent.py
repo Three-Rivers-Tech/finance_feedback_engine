@@ -1644,6 +1644,8 @@ class TradingLoopAgent:
                     # Block only same-direction stacking; allow opposite-side signals
                     # to reduce/close/reverse existing exposure.
                     if existing_side == requested_side:
+                        reason = f"Duplicate entry blocked: existing {existing_side} for {decision_pair}"
+                        self._mark_decision_not_executed(decision, "DUPLICATE_ENTRY_GUARD", reason)
                         logger.info(
                             "Skipping %s for %s: %s position already exists (duplicate-entry guard).",
                             decision.get("action"),
@@ -1658,7 +1660,8 @@ class TradingLoopAgent:
                         existing_side,
                     )
 
-                if await self._should_execute(decision):
+                should_execute, reason_code, reason_msg = await self._should_execute_with_reason(decision)
+                if should_execute:
                     ordered_actionable_decisions.append(decision)
                     logger.info(
                         "Actionable decision collected for %s: %s",
@@ -1666,10 +1669,13 @@ class TradingLoopAgent:
                         decision["action"],
                     )
                 else:
+                    self._mark_decision_not_executed(decision, reason_code, reason_msg)
                     logger.info(
-                        "Decision to %s %s not executed due to policy or low confidence.",
+                        "Decision to %s %s filtered: %s (%s).",
                         decision.get("action"),
                         decision.get("asset_pair"),
+                        reason_code,
+                        reason_msg,
                     )
             elif decision:
                 logger.info(
@@ -2636,25 +2642,32 @@ class TradingLoopAgent:
 
         return True
 
-    async def _should_execute(self, decision) -> bool:
-        """
-        Determine if a decision should be collected for processing.
+    def _mark_decision_not_executed(self, decision: Dict[str, Any], reason_code: str, reason: str) -> None:
+        """Persist explicit non-execution reason on a decision for observability."""
+        try:
+            decision["executed"] = False
+            decision["execution_status"] = "filtered"
+            decision["execution_result"] = {
+                "success": False,
+                "reason_code": reason_code,
+                "error": reason,
+            }
+            if getattr(self.engine, "decision_store", None):
+                self.engine.decision_store.update_decision(decision)
+        except Exception as e:
+            logger.warning("Failed to persist non-execution reason for %s: %s", decision.get("id"), e)
 
-        Returns True if the decision should proceed to execution state, where it will
-        be either executed (autonomous mode) or sent to Telegram (signal-only mode).
-        """
-        confidence = decision.get(
-            "confidence", 0
-        )  # 0-100 scale from decision validation
-        # Normalize confidence to 0-1 for comparison with config threshold (which is auto-normalized)
+    async def _should_execute_with_reason(self, decision):
+        """Return (should_execute, reason_code, reason_message)."""
+        confidence = decision.get("confidence", 0)
         confidence_normalized = confidence / 100.0
         if confidence_normalized < self.config.min_confidence_threshold:
-            logger.info(
-                f"Skipping trade due to low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
+            msg = (
+                f"Low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
             )
-            return False
+            logger.info("Skipping trade due to %s", msg)
+            return False, "LOW_CONFIDENCE", msg
 
-        # Quality gate: reject poor asymmetry and weak high-volatility setups.
         controls = ExecutionQualityControls(
             enabled=bool(getattr(self.config, "quality_gate_enabled", True)),
             min_risk_reward_ratio=float(getattr(self.config, "min_risk_reward_ratio", 1.25)),
@@ -2687,64 +2700,57 @@ class TradingLoopAgent:
             controls=controls,
         )
         if not quality_ok:
+            msg = f"Quality gate: {','.join(quality_reasons)}"
             logger.info(
                 "Skipping trade due to quality gate (%s) for %s | metrics=%s",
                 ",".join(quality_reasons),
                 decision.get("asset_pair"),
                 quality_metrics,
             )
-            return False
+            return False, "QUALITY_GATE_BLOCK", msg
 
-        # Check daily trade limit
         if (
             self.config.max_daily_trades > 0
             and self.daily_trade_count >= self.config.max_daily_trades
         ):
-            logger.warning(
-                f"Max daily trade limit ({self.config.max_daily_trades}) reached. "
-                f"Skipping trade for {decision.get('asset_pair')}."
+            msg = (
+                f"Max daily trade limit reached ({self.daily_trade_count}/{self.config.max_daily_trades})"
             )
-            return False
+            logger.warning("%s. Skipping %s", msg, decision.get("asset_pair"))
+            return False, "DAILY_TRADE_LIMIT", msg
 
-        # Use property for cleaner autonomous mode check
         autonomous_enabled = self.is_autonomous_enabled
-
-        # If autonomous execution is enabled, always proceed
         if autonomous_enabled:
-            return True
+            return True, "OK", "Autonomous execution enabled"
 
-        # Re-validate notification config before proceeding to execution
         notification_valid, errors = self._validate_notification_config()
         if not notification_valid:
-            logger.error(
-                f"Notification delivery unavailable: {', '.join(errors)}. "
-                f"Cannot proceed with signal-only decision for {decision.get('asset_pair')}"
-            )
-            return False
+            msg = f"Notification unavailable: {', '.join(errors)}"
+            logger.error("%s", msg)
+            return False, "NOTIFICATION_UNAVAILABLE", msg
 
-        # If autonomous is disabled, check if we have Telegram configured for signal-only mode
         telegram_config = (
             self.config.telegram if hasattr(self.config, "telegram") else {}
         )
         telegram_enabled = telegram_config.get("enabled", False)
 
         if telegram_enabled:
-            # Telegram is enabled - allow decision to proceed to execution state
-            # where it will be sent as a signal for approval
-            logger.info(
-                "Decision will be sent to Telegram for approval (signal-only mode)"
-            )
-            return True
+            logger.info("Decision will be sent to Telegram for approval (signal-only mode)")
+            return True, "OK", "Signal mode with Telegram enabled"
 
-        # No execution path available (neither autonomous nor Telegram)
         if self.config.approval_policy == "never":
-            return False
+            return False, "APPROVAL_DISABLED", "Approval policy forbids execution"
 
+        msg = "Decision requires approval but Telegram is not configured"
         logger.warning(
-            "Decision requires approval but Telegram is not configured. "
-            "Enable Telegram in config or set autonomous.enabled=true to proceed."
+            "%s. Enable Telegram or autonomous mode.",
+            msg,
         )
-        return False
+        return False, "APPROVAL_PATH_UNAVAILABLE", msg
+
+    async def _should_execute(self, decision) -> bool:
+        should_execute, _, _ = await self._should_execute_with_reason(decision)
+        return should_execute
 
     async def process_cycle(self):
         """
