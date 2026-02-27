@@ -94,6 +94,9 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         super().__init__(credentials)
         self.api_key = credentials.get("api_key")
         self.api_secret = credentials.get("api_secret")
+        if isinstance(self.api_secret, str):
+            # Support docker/env-file escaped multiline PEM ("\\n" form).
+            self.api_secret = self.api_secret.replace("\\n", "\n")
         self.passphrase = credentials.get("passphrase")
         self.use_sandbox = credentials.get("use_sandbox", False)
 
