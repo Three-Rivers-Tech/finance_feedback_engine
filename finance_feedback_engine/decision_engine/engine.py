@@ -474,12 +474,46 @@ Volume: {market_data.get('volume', 0):,.0f}
 Market Cap: ${market_data.get('market_cap', 0):,.0f}
 """
 
+
         # Add technical indicators if available
         if "rsi" in market_data:
             market_info += f"""
 TECHNICAL INDICATORS:
 ---------------------
 RSI (14): {market_data.get('rsi', 0):.2f} ({market_data.get('rsi_signal', 'neutral')})
+"""
+        
+        # Add multi-timeframe trend analysis if available
+        multi_tf = market_data.get("multi_timeframe_trend")
+        if multi_tf and multi_tf.get("consensus") != "unknown":
+            score = multi_tf.get("score", 0)
+            consensus = multi_tf.get("consensus", "unknown")
+            timeframes = multi_tf.get("timeframes", {})
+            
+            market_info += f"""
+MULTI-TIMEFRAME TREND ANALYSIS:
+--------------------------------
+Weighted Trend Score: {score:.1f} (range: -100 bearish to +100 bullish)
+Consensus: {consensus.upper().replace('_', ' ')}
+
+Timeframe Breakdown:
+"""
+            
+            # Add each timeframe's trend
+            for tf in ["1d", "4h", "1h"]:
+                tf_data = timeframes.get(tf, {})
+                direction = tf_data.get("direction", "unknown")
+                tf_score = tf_data.get("score", 0)
+                weight = tf_data.get("weight", 0)
+                
+                if direction != "unknown":
+                    market_info += f"  {tf}: {direction.upper()} (score: {tf_score:.1f}, weight: {weight:.0%})\n"
+            
+            market_info += """
+⚠️ CRITICAL: Multi-timeframe trend consensus MUST be primary factor in direction decisions.
+   - Longer timeframes (1d, 4h) carry more weight than short-term (1h, 1m)
+   - Counter-trend trades against multi-timeframe consensus are HIGH RISK
+   - Respect the weighted trend score over single-candle signals
 """
 
         # Add news sentiment if available

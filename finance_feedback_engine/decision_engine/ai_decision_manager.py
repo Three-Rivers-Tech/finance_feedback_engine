@@ -167,7 +167,27 @@ class AIDecisionManager:
 
         # Query bull provider (bullish case)
         try:
-            bull_case = await self._query_single_provider(bull_provider, prompt)
+            # Add bull-specific instructions
+            bull_prompt = prompt + """
+
+DEBATE ROLE: BULLISH ADVOCATE
+==============================
+Your role is to present the STRONGEST BULLISH CASE for this asset.
+
+Focus on:
+- Positive momentum signals (RSI recovery, MACD crossovers)
+- Support levels and bounce patterns
+- Bullish news sentiment
+- Oversold conditions (potential reversal)
+
+⚠️ CRITICAL CONSTRAINT:
+If multi-timeframe trend consensus is BEARISH or STRONG_BEARISH, you must acknowledge this major headwind.
+Do NOT recommend strong bullish positions against a bearish multi-timeframe trend unless there is exceptional evidence of reversal.
+
+Be optimistic but not reckless. Respect longer-timeframe trends.
+"""
+            
+            bull_case = await self._query_single_provider(bull_provider, bull_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 bull_case, bull_provider
             ):
@@ -211,7 +231,27 @@ class AIDecisionManager:
 
         # Query bear provider (bearish case)
         try:
-            bear_case = await self._query_single_provider(bear_provider, prompt)
+            # Add bear-specific instructions
+            bear_prompt = prompt + """
+
+DEBATE ROLE: BEARISH ADVOCATE
+==============================
+Your role is to present the STRONGEST BEARISH CASE for this asset.
+
+Focus on:
+- Negative momentum signals (declining RSI, bearish MACD)
+- Resistance levels and rejection patterns
+- Bearish news sentiment
+- Overbought conditions (potential reversal)
+
+⚠️ CRITICAL CONSTRAINT:
+If multi-timeframe trend consensus is BULLISH or STRONG_BULLISH, you must acknowledge this major tailwind.
+Do NOT recommend strong bearish positions against a bullish multi-timeframe trend unless there is exceptional evidence of reversal.
+
+Be cautious but not paralyzed. Respect longer-timeframe trends.
+"""
+            
+            bear_case = await self._query_single_provider(bear_provider, bear_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 bear_case, bear_provider
             ):
@@ -255,7 +295,40 @@ class AIDecisionManager:
 
         # Query judge provider (final decision)
         try:
-            judge_decision = await self._query_single_provider(judge_provider, prompt)
+            # Add judge-specific instructions with bull/bear context
+            judge_prompt = prompt + f"""
+
+DEBATE ROLE: IMPARTIAL JUDGE
+=============================
+You have heard arguments from both bullish and bearish advocates.
+
+Bull case summary:
+{bull_case.get('reasoning', 'N/A') if bull_case else 'Bull provider failed'}
+
+Bear case summary:
+{bear_case.get('reasoning', 'N/A') if bear_case else 'Bear provider failed'}
+
+Your role is to make the FINAL DECISION weighing both perspectives.
+
+Decision Framework:
+1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
+   - If strong_bearish/bearish consensus → favor HOLD or SHORT, be very cautious on LONG
+   - If strong_bullish/bullish consensus → favor LONG, be cautious on SHORT
+   - If neutral → evaluate other factors more heavily
+
+2. Medium priority: Technical indicators (RSI, MACD, support/resistance)
+
+3. Lower priority: Single-candle patterns, short-term noise
+
+Counter-trend trades (against multi-timeframe consensus) should only be recommended with:
+- Exceptional reversal signals (RSI divergence + volume spike + news catalyst)
+- Tight stop-losses (max 2%)
+- Reduced position size (50% of normal)
+
+Make your decision based on evidence, not emotion. Acknowledge when data is conflicting.
+"""
+            
+            judge_decision = await self._query_single_provider(judge_provider, judge_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 judge_decision, judge_provider
             ):
