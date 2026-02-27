@@ -1575,11 +1575,29 @@ class TradingLoopAgent:
                 if not raw_pair:
                     continue
 
+                # Infer side from explicit side field or signed units/contracts.
+                side = str(pos.get("side") or "").upper()
+                if not side:
+                    signed = 0.0
+                    try:
+                        signed = float(pos.get("units", 0) or 0)
+                    except Exception:
+                        signed = 0.0
+                    if signed == 0:
+                        try:
+                            signed = float(pos.get("number_of_contracts", 0) or pos.get("contracts", 0) or 0)
+                        except Exception:
+                            signed = 0.0
+                    side = "LONG" if signed >= 0 else "SHORT"
+
+                canonical = None
+
                 # 1) Try direct standardization (e.g., EUR_USD, BTC-USD)
                 try:
-                    open_asset_pairs.add(standardize_asset_pair(raw_pair))
+                    canonical = standardize_asset_pair(raw_pair)
+                    open_asset_pairs.add(canonical)
                 except Exception:
-                    pass
+                    canonical = None
 
                 # 2) Also map Coinbase futures product IDs (e.g., BIP-20DEC30-CDE)
                 #    to underlying canonical pairs (e.g., BTCUSD) for duplicate blocking.
@@ -1587,14 +1605,19 @@ class TradingLoopAgent:
                 prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
                 mapped_base = cfm_base_map.get(prefix)
                 if mapped_base:
-                    open_asset_pairs.add(f"{mapped_base}USD")
-                    continue
+                    canonical = f"{mapped_base}USD"
+                    open_asset_pairs.add(canonical)
+                elif canonical is None:
+                    # 3) Fallback: infer base from symbol text if present
+                    for base in ("BTC", "ETH", "SOL"):
+                        if base in raw_upper:
+                            canonical = f"{base}USD"
+                            open_asset_pairs.add(canonical)
+                            break
 
-                # 3) Fallback: infer base from symbol text if present
-                for base in ("BTC", "ETH", "SOL"):
-                    if base in raw_upper:
-                        open_asset_pairs.add(f"{base}USD")
-                        break
+                if canonical:
+                    # Keep first observed side per asset for duplicate-entry logic.
+                    open_position_side.setdefault(canonical, side)
 
             if open_asset_pairs:
                 logger.info(
@@ -1614,12 +1637,25 @@ class TradingLoopAgent:
                     decision_pair = decision.get("asset_pair")
 
                 if decision_pair and decision_pair in open_asset_pairs:
+                    existing_side = open_position_side.get(decision_pair)
+                    requested_side = "LONG" if decision.get("action") == "BUY" else "SHORT"
+
+                    # Block only same-direction stacking; allow opposite-side signals
+                    # to reduce/close/reverse existing exposure.
+                    if existing_side == requested_side:
+                        logger.info(
+                            "Skipping %s for %s: %s position already exists (duplicate-entry guard).",
+                            decision.get("action"),
+                            decision_pair,
+                            existing_side,
+                        )
+                        continue
                     logger.info(
-                        "Skipping %s for %s: open position already exists.",
+                        "Allowing %s for %s: existing side=%s (opposite-side action for reversal/reduction).",
                         decision.get("action"),
                         decision_pair,
+                        existing_side,
                     )
-                    continue
 
                 if await self._should_execute(decision):
                     ordered_actionable_decisions.append(decision)
