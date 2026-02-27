@@ -1551,6 +1551,7 @@ class TradingLoopAgent:
         # Safety guard: detect currently open assets and avoid opening duplicate exposure
         # on the same standardized asset pair during decision collection.
         open_asset_pairs: set[str] = set()
+        open_position_side: dict[str, str] = {}
         try:
             portfolio_snapshot = await self.engine.get_portfolio_breakdown_async()
             candidate_positions = []
