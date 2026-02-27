@@ -1177,6 +1177,17 @@ class FinanceFeedbackEngine:
         # Deep-live overlay: for tradeable crypto/forex, force fresh exchange intraday
         # context from unified provider (1m/5m/15m) so decisions are not anchored to
         # delayed aggregator feeds.
+        def _to_epoch_seconds(ts_val):
+            if ts_val is None:
+                return None
+            if isinstance(ts_val, (int, float)):
+                # Heuristic: milliseconds if too large
+                return float(ts_val) / 1000.0 if float(ts_val) > 1e12 else float(ts_val)
+            if isinstance(ts_val, str):
+                t = ts_val.replace("Z", "+00:00")
+                return datetime.fromisoformat(t).timestamp()
+            return None
+
         try:
             if self.unified_provider and (
                 self.unified_provider._is_crypto(asset_pair)
@@ -1190,36 +1201,67 @@ class FinanceFeedbackEngine:
                 latest_candle = None
                 latest_provider = None
                 latest_ts = None
+                latest_epoch = None
+
                 for tf in ("1m", "5m", "15m"):
                     tf_entry = tf_data.get(tf) or {}
-                    candles = tf_entry.get("candles") or []
-                    if candles:
-                        c = candles[-1]
-                        ts = c.get("date") or c.get("timestamp")
-                        if ts and (latest_ts is None or str(ts) > str(latest_ts)):
-                            latest_ts = ts
-                            latest_candle = c
-                            latest_provider = tf_entry.get("source_provider")
+                    if not tf_entry:
+                        logger.warning("Unified overlay missing timeframe entry for %s %s", asset_pair, tf)
+                        continue
 
-                if latest_candle:
-                    market_data["close"] = float(latest_candle.get("close", market_data.get("close", 0.0)))
-                    market_data["open"] = float(latest_candle.get("open", market_data.get("open", market_data.get("close", 0.0))))
-                    market_data["high"] = float(latest_candle.get("high", market_data.get("high", market_data.get("close", 0.0))))
-                    market_data["low"] = float(latest_candle.get("low", market_data.get("low", market_data.get("close", 0.0))))
-                    market_data["volume"] = float(latest_candle.get("volume", market_data.get("volume", 0.0)) or 0.0)
-                    market_data["timestamp"] = latest_ts
-                    market_data["date"] = latest_ts
-                    market_data["data_age_seconds"] = 0
-                    market_data["data_age_hours"] = 0
-                    market_data["stale_data"] = False
-                    market_data["live_intraday_provider"] = latest_provider or "unified_provider"
-                    market_data["intraday_timeframes"] = {
-                        tf: {
-                            "provider": (tf_data.get(tf) or {}).get("source_provider"),
-                            "candles": int((tf_data.get(tf) or {}).get("candles_count", 0)),
+                    candles = tf_entry.get("candles") or []
+                    if not candles:
+                        logger.warning("Unified overlay returned 0 candles for %s %s", asset_pair, tf)
+                        continue
+
+                    c = candles[-1]
+                    ts = c.get("date") or c.get("timestamp")
+                    epoch = _to_epoch_seconds(ts)
+                    if epoch is None:
+                        logger.warning("Unified overlay invalid timestamp for %s %s: %s", asset_pair, tf, ts)
+                        continue
+
+                    if latest_epoch is None or epoch > latest_epoch:
+                        latest_epoch = epoch
+                        latest_ts = ts
+                        latest_candle = c
+                        latest_provider = tf_entry.get("source_provider")
+
+                if latest_candle and latest_epoch is not None:
+                    current_ts = market_data.get("timestamp") or market_data.get("date")
+                    current_epoch = _to_epoch_seconds(current_ts)
+
+                    # Only overlay if unified intraday data is newer than current market_data
+                    if current_epoch is None or latest_epoch >= current_epoch:
+                        market_data["close"] = float(latest_candle.get("close", market_data.get("close", 0.0)))
+                        market_data["open"] = float(latest_candle.get("open", market_data.get("open", market_data.get("close", 0.0))))
+                        market_data["high"] = float(latest_candle.get("high", market_data.get("high", market_data.get("close", 0.0))))
+                        market_data["low"] = float(latest_candle.get("low", market_data.get("low", market_data.get("close", 0.0))))
+                        market_data["volume"] = float(latest_candle.get("volume", market_data.get("volume", 0.0)) or 0.0)
+                        market_data["timestamp"] = latest_ts
+                        market_data["date"] = latest_ts
+
+                        now_epoch = datetime.now(timezone.utc).timestamp()
+                        age_seconds = max(0.0, now_epoch - latest_epoch)
+                        market_data["data_age_seconds"] = age_seconds
+                        market_data["data_age_hours"] = age_seconds / 3600.0
+                        market_data["stale_data"] = age_seconds > 90 * 60  # aligned with intraday defaults
+
+                        market_data["live_intraday_provider"] = latest_provider or "unified_provider"
+                        market_data["intraday_timeframes"] = {
+                            tf: {
+                                "provider": (tf_data.get(tf) or {}).get("source_provider"),
+                                "candles": int((tf_data.get(tf) or {}).get("candles_count", 0)),
+                            }
+                            for tf in ("1m", "5m", "15m")
                         }
-                        for tf in ("1m", "5m", "15m")
-                    }
+                    else:
+                        logger.info(
+                            "Skipping unified overlay for %s: current market_data newer (current=%s, overlay=%s)",
+                            asset_pair,
+                            current_ts,
+                            latest_ts,
+                        )
         except Exception as live_overlay_err:
             logger.warning(
                 "Unified intraday overlay failed for %s: %s", asset_pair, live_overlay_err
