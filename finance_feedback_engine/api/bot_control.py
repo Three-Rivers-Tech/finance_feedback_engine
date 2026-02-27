@@ -762,14 +762,18 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
                 except Exception:
                     pass
 
-        # Safe access to agent config (handle both dict and object forms)
-        agent_cfg = engine.config.get("agent", {})
-        if isinstance(agent_cfg, TradingAgentConfig):
-            asset_pairs = agent_cfg.asset_pairs
-        elif isinstance(agent_cfg, dict):
-            asset_pairs = agent_cfg.get("asset_pairs", [])
+        # Prefer live runtime agent config when available; fallback to engine config.
+        if _agent_instance and hasattr(_agent_instance, "config") and hasattr(_agent_instance.config, "asset_pairs"):
+            asset_pairs = _agent_instance.config.asset_pairs
         else:
-            asset_pairs = []
+            # Safe access to engine config (handle both dict and object forms)
+            agent_cfg = engine.config.get("agent", {})
+            if isinstance(agent_cfg, TradingAgentConfig):
+                asset_pairs = agent_cfg.asset_pairs
+            elif isinstance(agent_cfg, dict):
+                asset_pairs = agent_cfg.get("asset_pairs", [])
+            else:
+                asset_pairs = []
 
         # Derive bot lifecycle state from agent_running
         bot_state = BotState.RUNNING if agent_running else BotState.STOPPED
