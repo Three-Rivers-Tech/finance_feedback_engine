@@ -1397,7 +1397,18 @@ class FinanceFeedbackEngine:
         balance_source_mode = "none"
         used_cached_balance = False
 
+        # DEBUG: Log platform state before portfolio fetch attempt
+        platform_type = type(self.trading_platform).__name__ if self.trading_platform else "None"
+        has_portfolio_method = hasattr(self.trading_platform, "get_portfolio_breakdown") if self.trading_platform else False
+        logger.info(
+            "📊 Balance loading for %s: platform=%s, has_get_portfolio_breakdown=%s",
+            asset_pair,
+            platform_type,
+            has_portfolio_method
+        )
+
         if hasattr(self.trading_platform, "get_portfolio_breakdown"):
+            logger.debug("✅ Entering portfolio fetch block for %s", asset_pair)
             try:
                 # Use async version to avoid blocking the event loop
                 # Add timeout to prevent indefinite waiting on API calls
@@ -1501,6 +1512,16 @@ class FinanceFeedbackEngine:
                 )
                 # TODO: Alert on unknown portfolio fetch errors (THR-XXX)
 
+        else:
+            logger.warning(
+                "⚠️ Platform %s does not implement get_portfolio_breakdown - balance will remain empty unless fallback succeeds",
+                platform_type
+            )
+
+        # DEBUG: Log balance state after portfolio derivation attempt
+        balance_total = sum(float(v or 0) for v in balance.values()) if balance else 0
+        logger.info("💰 Balance after portfolio derivation: %s keys, $%.2f total, source=%s", len(balance), balance_total, balance_source_mode)
+
         # Fallback: if portfolio-derived balance is empty/zero OR missing
         # asset-specific platform keys, use direct platform balance.
         # This protects execution sizing when portfolio breakdown omits
@@ -1530,6 +1551,17 @@ class FinanceFeedbackEngine:
                         "Using cached last-known-good balance snapshot for sizing: %s",
                         balance,
                     )
+
+        # FINAL SAFETY CHECK: Warn if balance is still empty after all attempts
+        final_balance_total = sum(float(v or 0) for v in balance.values()) if balance else 0
+        if final_balance_total == 0:
+            logger.error(
+                "🚨 CRITICAL: Balance is EMPTY after all fallback attempts! Asset: %s, Source: %s, Has cached: %s, Balance keys: %s",
+                asset_pair,
+                balance_source_mode,
+                bool(self._last_good_balance),
+                list(balance.keys()) if balance else []
+            )
 
         # Publish balance telemetry for status/observability
         try:
