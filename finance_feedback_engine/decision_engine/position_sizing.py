@@ -67,6 +67,7 @@ class PositionSizingCalculator:
             - sizing_stop_loss_percentage: Stop loss percentage used
             - risk_percentage: Risk percentage used
         """
+        logger.critical("🔍 POSITION_SIZING_CALLED: relevant_balance=%s, balance_source=%s, action=%s", relevant_balance, balance_source, action)
         # Check if we have valid balance
         has_valid_balance = (
             relevant_balance
@@ -130,6 +131,7 @@ class PositionSizingCalculator:
 
         # Determine if we should calculate position sizing (no signal-only mode)
         should_calculate = has_valid_balance and (
+        logger.critical("🔍 SHOULD_CALCULATE: %s (has_valid=%s, action=%s)", should_calculate, has_valid_balance, action)
             action in ["BUY", "SELL"]
             or (action == "HOLD" and has_existing_position)
         )
@@ -362,19 +364,7 @@ class PositionSizingCalculator:
 
             return result
 
-        # CASE 2: No valid balance - use minimum order size (no signal-only mode)
-        if str(balance_source).lower() in {"unknown", "combined"}:
-            logger.info(
-                "No valid %s balance - using minimum order size for trade execution",
-                balance_source,
-            )
-        else:
-            logger.warning(
-                "No valid %s balance - using minimum order size for trade execution",
-                balance_source,
-            )
-
-        # HOLD without position: no sizing needed
+        # HOLD without position: no sizing needed (check BEFORE error logging)
         if action == "HOLD" and not has_existing_position:
             logger.info("HOLD without existing position - no position sizing needed")
             result["recommended_position_size"] = 0
