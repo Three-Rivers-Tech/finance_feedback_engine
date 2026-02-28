@@ -386,6 +386,7 @@ class MarketAnalysisContext:
             "asset_pair": asset_pair,
             "market_data": market_data,
             "balance": balance,
+            logger.critical("🔍 BALANCE_SNAPSHOT: balance=%s, type=%s, keys=%s", balance, type(balance), list(balance.keys()) if isinstance(balance, dict) else "N/A")
             "balance_snapshot": balance,  # FIX: Add for position_sizing fallback
             "portfolio": portfolio,
             "memory_context": memory_context,
