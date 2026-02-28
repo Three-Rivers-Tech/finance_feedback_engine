@@ -131,7 +131,6 @@ class PositionSizingCalculator:
 
         # Determine if we should calculate position sizing (no signal-only mode)
         should_calculate = has_valid_balance and (
-        logger.critical("🔍 SHOULD_CALCULATE: %s (has_valid=%s, action=%s)", should_calculate, has_valid_balance, action)
             action in ["BUY", "SELL"]
             or (action == "HOLD" and has_existing_position)
         )
