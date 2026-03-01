@@ -865,7 +865,7 @@ class TradingLoopAgent:
         logger.info("State: RECOVERING - Checking for existing positions...")
 
         max_retries = 1  # Single retry on transient failures
-        max_positions = 2  # Maximum concurrent positions allowed
+        max_positions = 10  # Keep all existing positions on recovery (bot only closes what it opened)
 
         for attempt in range(max_retries + 1):
             try:
