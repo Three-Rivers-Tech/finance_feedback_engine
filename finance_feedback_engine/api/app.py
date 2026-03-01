@@ -152,7 +152,7 @@ async def lifespan(app: FastAPI):
                 logger.warning("⚠️  Telegram bot initialization failed")
 
         # Auto-start bot in autonomous mode if configured
-        autonomous_cfg = config.get("decision_engine", {}).get("autonomous_execution", False)
+        autonomous_cfg = config.get("agent", {}).get("autonomous_execution", False)
         if autonomous_cfg:
             try:
                 from .bot_control import _enqueue_or_start_agent, AgentControlRequest
