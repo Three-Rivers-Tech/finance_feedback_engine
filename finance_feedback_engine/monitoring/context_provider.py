@@ -218,10 +218,13 @@ class MonitoringContextProvider:
             try:
                 # Use live platform positions for slot calculation (includes recovered positions)
                 live_futures = context.get("active_positions", {}).get("futures", [])
-                live_count = max(
-                    len(live_futures),
-                    len(self.trade_monitor.active_trackers)
-                )
+                tracker_count = len(self.trade_monitor.active_trackers)
+                live_count = max(len(live_futures), tracker_count)
+                if len(live_futures) != tracker_count:
+                    logger.info(
+                        "Trade count discrepancy: live_futures=%d, active_trackers=%d — using max=%d",
+                        len(live_futures), tracker_count, live_count
+                    )
                 max_trades = self.trade_monitor.MAX_CONCURRENT_TRADES
                 context["active_trades_count"] = live_count
                 context["max_concurrent_trades"] = max_trades
