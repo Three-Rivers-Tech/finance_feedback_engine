@@ -254,7 +254,8 @@ class CoinbaseDataProvider:
         # Coinbase v3 API requires named granularity, not numeric seconds
         GRANULARITY_NAMES = {
             60: "ONE_MINUTE", 300: "FIVE_MINUTE", 900: "FIFTEEN_MINUTE",
-            1800: "THIRTY_MINUTE", 3600: "ONE_HOUR", 21600: "SIX_HOUR", 86400: "ONE_DAY",
+            1800: "THIRTY_MINUTE", 3600: "ONE_HOUR", 7200: "TWO_HOUR",
+            14400: "FOUR_HOUR", 21600: "SIX_HOUR", 86400: "ONE_DAY",
         }
         granularity_name = GRANULARITY_NAMES.get(int(granularity), str(granularity))
         params = {"start": start, "end": end, "granularity": granularity_name}

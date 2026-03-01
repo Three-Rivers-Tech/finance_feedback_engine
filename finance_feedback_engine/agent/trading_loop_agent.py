@@ -1434,6 +1434,12 @@ class TradingLoopAgent:
                 self.analysis_failures.pop(key, None)
                 self.analysis_failure_timestamps.pop(key, None)
 
+        # Weekend guard: skip forex pairs when markets are closed (Sat/Sun UTC)
+        import datetime as _dt
+        _now_utc = _dt.datetime.now(_dt.timezone.utc)
+        _is_weekend = _now_utc.weekday() >= 5  # 5=Saturday, 6=Sunday
+        FOREX_PAIRS = {"EURUSD", "GBPUSD", "EUR_USD", "GBP_USD", "EUR/USD", "GBP/USD"}
+
         pairs_to_analyze: list[tuple[int, str]] = []
         for idx, asset_pair in enumerate(asset_pairs_snapshot):
             if limit_reached and len(pairs_to_analyze) >= 1:
@@ -1441,6 +1447,11 @@ class TradingLoopAgent:
                     "Daily trade limit reached; skipping analysis for remaining pairs."
                 )
                 break
+
+            # Skip forex pairs on weekends (markets closed, data stale)
+            if _is_weekend and asset_pair.replace("-", "").replace("/", "").replace("_", "").upper() in FOREX_PAIRS:
+                logger.info("Weekend: skipping forex pair %s (market closed)", asset_pair)
+                continue
 
             failure_key = f"analysis:{asset_pair}"
 
