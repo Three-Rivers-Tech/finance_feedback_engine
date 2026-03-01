@@ -733,16 +733,28 @@ async def get_portfolio_status(engine: FinanceFeedbackEngine = Depends(get_engin
 
             status_data["platform"] = platform_class_name
 
-            # Active positions count via standardized interface
-            if hasattr(engine.trading_platform, "get_active_positions"):
-                try:
-                    positions_resp = (
-                        await engine.trading_platform.aget_active_positions()
-                    )
-                    positions_list = positions_resp.get("positions", [])
-                    status_data["active_positions"] = len(positions_list)
-                except Exception:
-                    status_data["active_positions"] = 0
+            # Active positions count from portfolio breakdown (futures + spot positions)
+            # This correctly counts Coinbase futures positions which are in platform_breakdowns
+            try:
+                total_positions = 0
+                portfolio = status_data.get("portfolio", {})
+                platform_breakdowns = portfolio.get("platform_breakdowns", {})
+                
+                for platform_name, breakdown in platform_breakdowns.items():
+                    # Count futures positions
+                    futures_positions = breakdown.get("futures_positions", [])
+                    total_positions += len(futures_positions)
+                    
+                    # Count spot/forex positions with non-zero units
+                    positions = breakdown.get("positions", [])
+                    for pos in positions:
+                        units = pos.get("units", 0) or pos.get("long_units", 0) or pos.get("short_units", 0)
+                        if abs(float(units)) > 0.001:  # Non-zero position
+                            total_positions += 1
+                
+                status_data["active_positions"] = total_positions
+            except Exception:
+                status_data["active_positions"] = 0
 
             # Get max concurrent trades from config or trade monitor
             if hasattr(engine, "trade_monitor") and engine.trade_monitor:

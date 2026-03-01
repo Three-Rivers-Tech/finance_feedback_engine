@@ -720,9 +720,27 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
 
                 if isinstance(breakdown, dict):
                     portfolio_payload = breakdown
-                    # Prefer explicit positions list if available, else derive
-                    positions = breakdown.get("positions") or breakdown.get("futures_positions") or []
-                    active_positions = len(positions)
+                    # Count active positions from platform_breakdowns (handles Unified + single platforms)
+                    active_positions = 0
+                    
+                    # Check if this is UnifiedPlatform with platform_breakdowns
+                    platform_breakdowns = breakdown.get("platform_breakdowns", {})
+                    if platform_breakdowns:
+                        for platform_name, platform_data in platform_breakdowns.items():
+                            # Count futures positions
+                            futures_positions = platform_data.get("futures_positions", [])
+                            active_positions += len(futures_positions)
+                            
+                            # Count spot/forex positions with non-zero units
+                            positions = platform_data.get("positions", [])
+                            for pos in positions:
+                                units = pos.get("units", 0) or pos.get("long_units", 0) or pos.get("short_units", 0)
+                                if abs(float(units)) > 0.001:  # Non-zero position
+                                    active_positions += 1
+                    else:
+                        # Single platform: use top-level positions/futures_positions
+                        positions = breakdown.get("positions") or breakdown.get("futures_positions") or []
+                        active_positions = len(positions)
 
                     # Fallback: infer portfolio value from breakdown if balance lacks totals
                     if portfolio_value is None:
