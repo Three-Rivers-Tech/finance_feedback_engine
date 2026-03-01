@@ -195,9 +195,17 @@ class DecisionValidator:
             "balance_snapshot": context.get("balance_snapshot", context.get("balance", {})),
             "price_change": context["price_change"],
             "volatility": context["volatility"],
-            # Surface portfolio unrealized P&L if available from platform data
-            "portfolio_unrealized_pnl": (context.get("portfolio", {}) or {}).get(
-                "unrealized_pnl"
+            # Surface portfolio unrealized P&L — prefer futures P&L from monitoring_context
+            # over portfolio.unrealized_pnl which only reflects Oanda/spot
+            "portfolio_unrealized_pnl": (
+                (context.get("monitoring_context") or {})
+                .get("risk_metrics", {})
+                .get("unrealized_pnl")
+            ) or (context.get("portfolio", {}) or {}).get("unrealized_pnl"),
+            # Persist monitoring context and active positions so decisions are self-contained
+            "monitoring_context": context.get("monitoring_context"),
+            "active_positions": (
+                (context.get("monitoring_context") or {}).get("active_positions")
             ),
             "executed": False,
             # These would be set by the AIDecisionManager
