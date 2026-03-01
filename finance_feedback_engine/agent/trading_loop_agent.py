@@ -886,10 +886,10 @@ class TradingLoopAgent:
                                     "platform": platform_name,
                                     "product_id": pos.get("product_id") or pos.get("instrument"),
                                     "side": pos.get("side", "LONG"),
-                                    "size": abs(float(pos.get("contracts", 0) or pos.get("units", 0))),
-                                    "entry_price": float(pos.get("entry_price", 0)),
-                                    "current_price": float(pos.get("current_price", 0)),
-                                    "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
+                                    "size": abs(float(pos.get("number_of_contracts") or pos.get("contracts") or pos.get("units") or 0)),
+                                    "entry_price": float(pos.get("avg_entry_price") or pos.get("entry_price") or 0),
+                                    "current_price": float(pos.get("current_price") or 0),
+                                    "unrealized_pnl": float(pos.get("unrealized_pnl") or 0),
                                     "opened_at": pos.get("opened_at"),
                                 })
                         # Oanda positions
@@ -900,8 +900,8 @@ class TradingLoopAgent:
                                     "product_id": pos.get("instrument"),
                                     "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
                                     "size": abs(float(pos.get("units", 0))),
-                                    "entry_price": float(pos.get("entry_price", 0)),
-                                    "current_price": float(pos.get("current_price", 0)),
+                                    "entry_price": float(pos.get("avg_entry_price") or pos.get("entry_price") or 0),
+                                    "current_price": float(pos.get("current_price") or 0),
                                     "unrealized_pnl": float(pos.get("pnl", 0)),
                                     "opened_at": pos.get("opened_at"),
                                 })
@@ -912,10 +912,10 @@ class TradingLoopAgent:
                             "platform": "coinbase",
                             "product_id": pos.get("product_id") or pos.get("instrument"),
                             "side": pos.get("side", "LONG"),
-                            "size": abs(float(pos.get("contracts", 0) or pos.get("units", 0))),
-                            "entry_price": float(pos.get("entry_price", 0)),
-                            "current_price": float(pos.get("current_price", 0)),
-                            "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
+                            "size": abs(float(pos.get("number_of_contracts") or pos.get("contracts") or pos.get("units") or 0)),
+                            "entry_price": float(pos.get("avg_entry_price") or pos.get("entry_price") or 0),
+                            "current_price": float(pos.get("current_price") or 0),
+                            "unrealized_pnl": float(pos.get("unrealized_pnl") or 0),
                             "opened_at": pos.get("opened_at"),
                         })
                 elif "positions" in portfolio:
@@ -925,8 +925,8 @@ class TradingLoopAgent:
                             "product_id": pos.get("instrument"),
                             "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
                             "size": abs(float(pos.get("units", 0))),
-                            "entry_price": float(pos.get("entry_price", 0)),
-                            "current_price": float(pos.get("current_price", 0)),
+                            "entry_price": float(pos.get("avg_entry_price") or pos.get("entry_price") or 0),
+                            "current_price": float(pos.get("current_price") or 0),
                             "unrealized_pnl": float(pos.get("pnl", 0)),
                             "opened_at": pos.get("opened_at"),
                         })
