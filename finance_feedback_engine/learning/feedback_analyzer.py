@@ -2,6 +2,9 @@ import glob
 import json
 import logging
 import os
+import shutil
+import platform
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List
@@ -13,11 +16,16 @@ class FeedbackAnalyzer:
     for the agentic loop.
     Calculates provider accuracy and suggests weight adjustments.
     """
+    
+    # Schema version for data format migration
+    SCHEMA_VERSION = 2
+    MAX_OUTCOMES_PER_DECISION = 100  # Prevent unbounded growth
 
     def __init__(
         self,
         decisions_dir: str = "data/decisions/",
         trade_metrics_dir: str = "data/trade_metrics/",
+        persistence_path: str = "data/feedback_analyzer_state.json",
     ):
         """
         Initialize the FeedbackAnalyzer with paths to decision and
@@ -26,9 +34,16 @@ class FeedbackAnalyzer:
         Args:
             decisions_dir: Directory containing historical decision files
             trade_metrics_dir: Directory containing trade outcome files
+            persistence_path: Path to save/load analyzer state
         """
         self.decisions_dir = decisions_dir
         self.trade_metrics_dir = trade_metrics_dir
+        self.persistence_path = persistence_path
+        
+        # Internal state (will be loaded from disk)
+        self.decision_outcomes: Dict[str, List[Dict]] = {}  # decision_id -> list of outcomes
+        self.decision_stats: Dict[str, Dict] = {}  # decision_id -> aggregated stats
+        
         # Set up logging
         self.logger = logging.getLogger(__name__)
         if not self.logger.handlers:
@@ -39,6 +54,113 @@ class FeedbackAnalyzer:
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
+        
+        # Auto-load existing state
+        self.load_from_disk()
+
+    def load_from_disk(self) -> None:
+        """Load decision outcomes and stats from disk with schema validation."""
+        if not os.path.exists(self.persistence_path):
+            self.logger.info(f"{self.persistence_path} not found, starting fresh.")
+            return
+        
+        try:
+            with open(self.persistence_path, 'r') as f:
+                saved_content = json.load(f)
+            
+            # Schema version check
+            version = saved_content.get('schema_version', 1)
+            if version < self.SCHEMA_VERSION:
+                self.logger.info(f"Migrating data from schema v{version} to v{self.SCHEMA_VERSION}")
+                saved_content = self._migrate_schema(saved_content, version)
+            elif version > self.SCHEMA_VERSION:
+                raise ValueError(
+                    f"Data from future schema version {version}, current {self.SCHEMA_VERSION}"
+                )
+            
+            # Validate structure
+            self._validate_loaded_data(saved_content)
+            
+            # Restore state
+            self.decision_outcomes = saved_content.get('decision_outcomes', {})
+            self.decision_stats = saved_content.get('decision_stats', {})
+            
+            self.logger.info(
+                f"Loaded {len(self.decision_outcomes)} decisions (schema v{version})"
+            )
+            
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Corrupted data, starting fresh: {e}")
+            self.decision_outcomes = {}
+            self.decision_stats = {}
+        except Exception as e:
+            self.logger.error(f"Failed to load state: {e}", exc_info=True)
+            self.decision_outcomes = {}
+            self.decision_stats = {}
+
+    def _migrate_schema(self, data: dict, from_version: int) -> dict:
+        """Migrate data from older schema versions."""
+        if from_version == 1:
+            # v1 -> v2: Convert single outcomes to lists
+            migrated_outcomes = {}
+            for decision_id, outcome in data.get('decision_outcomes', {}).items():
+                if isinstance(outcome, dict):
+                    migrated_outcomes[decision_id] = [outcome]
+                else:
+                    migrated_outcomes[decision_id] = outcome
+            data['decision_outcomes'] = migrated_outcomes
+            data['schema_version'] = 2
+        return data
+
+    def _validate_loaded_data(self, data: dict) -> None:
+        """Validate loaded data structure."""
+        if not isinstance(data, dict):
+            raise ValueError(f"Expected dict, got {type(data)}")
+        
+        outcomes = data.get('decision_outcomes', {})
+        if not isinstance(outcomes, dict):
+            raise ValueError(f"decision_outcomes must be dict")
+        
+        stats = data.get('decision_stats', {})
+        if not isinstance(stats, dict):
+            raise ValueError(f"decision_stats must be dict")
+
+    def save_to_disk(self) -> None:
+        """Save both decision outcomes and stats to disk atomically."""
+        if not self.decision_outcomes and not self.decision_stats:
+            self.logger.info("No data to save.")
+            return
+
+        saved_content = {
+            'schema_version': self.SCHEMA_VERSION,
+            'decision_outcomes': self.decision_outcomes,
+            'decision_stats': self.decision_stats,
+            'last_saved': datetime.now(timezone.utc).isoformat(),
+        }
+        
+        temp_path = self.persistence_path + '.tmp'
+        try:
+            os.makedirs(os.path.dirname(self.persistence_path) or '.', exist_ok=True)
+            
+            with open(temp_path, 'w') as f:
+                json.dump(saved_content, f, indent=2)
+            
+            # Platform-aware atomic rename
+            if platform.system() == "Windows":
+                if os.path.exists(self.persistence_path):
+                    shutil.move(self.persistence_path, self.persistence_path + '.backup')
+                shutil.move(temp_path, self.persistence_path)
+            else:
+                os.replace(temp_path, self.persistence_path)  # Atomic on POSIX
+            
+            self.logger.info(f"Saved {len(self.decision_outcomes)} decisions")
+        except Exception as e:
+            self.logger.error(f"Save failed: {e}", exc_info=True)
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
 
     def load_historical_decisions(self) -> List[Dict]:
         """
