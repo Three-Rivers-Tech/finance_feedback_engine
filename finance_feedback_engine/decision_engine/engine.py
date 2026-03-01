@@ -755,9 +755,10 @@ Allowed signals ONLY: {", ".join(position_state["allowed_signals"])}
 If you recommend a PROHIBITED signal, your decision will be AUTOMATICALLY REJECTED.
 
 SIGNAL INTERPRETATION WITH POSITION:
-- If you recommend BUY: This will CLOSE your LONG position (if LONG) or violate constraints (if SHORT)
-- If you recommend SELL: This will CLOSE your SHORT position (if SHORT) or violate constraints (if LONG)
+- If you recommend SELL while holding LONG: This will CLOSE your LONG position (exit to profit/cut loss)
+- If you recommend BUY while holding SHORT: This will CLOSE your SHORT position (exit to profit/cut loss)
 - If you recommend HOLD: Maintains current position
+- Attempting to add to an existing position (BUY when LONG, SELL when SHORT) will be REJECTED
 
 """
         else:
