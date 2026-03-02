@@ -1,0 +1,349 @@
+from typing import Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class DevelopmentRiskLimitsConfig(BaseModel):
+    """Development/paper trading risk limits (relaxed constraints for sandbox testing)."""
+
+    correlation_threshold: float = Field(0.7, ge=0.0, le=1.0)
+    max_correlated_assets: int = Field(5, gt=0)  # 5x more permissive than production (5 vs 2)
+    max_var_pct: float = Field(0.10, ge=0.0, le=1.0)  # 10% (2x more than production 5%)
+    var_confidence: float = Field(0.90, gt=0.0, lt=1.0)  # 90% (lower precision acceptable in dev)
+
+
+class AutonomousAgentConfig(BaseModel):
+    """Configuration for the autonomous trading agent."""
+
+    enabled: bool = False
+    profit_target: float = 0.05  # 5%
+    stop_loss: float = 0.02  # 2%
+
+    @model_validator(mode="after")
+    def validate_stop_loss_below_profit_target(self) -> "AutonomousAgentConfig":
+        """Validate that stop_loss is less than profit_target.
+
+        This ensures the risk/reward ratio is sensible: we should be willing
+        to lose less than we aim to gain on each trade.
+
+        Raises:
+            ValueError: If stop_loss >= profit_target.
+        """
+        if self.stop_loss >= self.profit_target:
+            raise ValueError(
+                f"stop_loss ({self.stop_loss}) must be strictly less than "
+                f"profit_target ({self.profit_target}). "
+                f"Example: stop_loss=0.02 (2%), profit_target=0.05 (5%)"
+            )
+        return self
+
+
+class PairSelectionStatisticalConfig(BaseModel):
+    """Configuration for statistical metrics."""
+
+class SortinoConfig(BaseModel):
+    windows_days: List[int] = [7, 30, 90]
+    weights: List[float] = [0.5, 0.3, 0.2]
+
+class CorrelationConfig(BaseModel):
+    lookback_days: int = 30
+
+class GarchConfig(BaseModel):
+    p: int = 1
+    q: int = 1
+    forecast_horizon_days: int = 7
+    fitting_window_days: int = 90
+
+class AggregationWeightsConfig(BaseModel):
+    sortino: float = 0.4
+    diversification: float = 0.35
+    volatility: float = 0.25
+
+class PairSelectionStatisticalConfig(BaseModel):
+    """Configuration for statistical metrics."""
+
+    sortino: SortinoConfig = Field(default_factory=SortinoConfig)
+    correlation: CorrelationConfig = Field(default_factory=CorrelationConfig)
+    garch: GarchConfig = Field(default_factory=GarchConfig)
+    aggregation_weights: AggregationWeightsConfig = Field(default_factory=AggregationWeightsConfig)
+
+
+class PairSelectionUniverseConfig(BaseModel):
+    """Configuration for pair universe discovery."""
+
+    auto_discover: bool = True
+    blacklist: List[str] = Field(default_factory=list)
+    cache_ttl_hours: int = 24
+
+
+class PairSelectionLLMConfig(BaseModel):
+    """Configuration for LLM integration."""
+
+    enabled: bool = True
+    candidate_oversampling: int = 3
+
+
+class PairSelectionThompsonConfig(BaseModel):
+    """Configuration for Thompson Sampling."""
+
+    enabled: bool = True
+    min_trades_for_update: int = 3
+    success_threshold: float = 0.55
+    failure_threshold: float = 0.45
+
+    @field_validator("min_trades_for_update")
+    @classmethod
+    def validate_min_trades_for_update(cls, v: int) -> int:
+        """Validate that min_trades_for_update is a positive integer."""
+        if not isinstance(v, int):
+            try:
+                v = int(v)
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"min_trades_for_update must be an integer, got {type(v).__name__}"
+                ) from e
+        if v <= 0:
+            raise ValueError(
+                f"min_trades_for_update must be greater than 0, got {v}"
+            )
+        return v
+
+    @field_validator("success_threshold", "failure_threshold")
+    @classmethod
+    def validate_threshold(cls, v: float, info) -> float:
+        """Validate that thresholds are floats within [0.0, 1.0]."""
+        field_name = info.field_name
+        if not isinstance(v, (int, float)):
+            try:
+                v = float(v)
+            except (ValueError, TypeError) as e:
+                raise ValueError(
+                    f"{field_name} must be a float, got {type(v).__name__}"
+                ) from e
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(
+                f"{field_name} must be within [0.0, 1.0], got {v}"
+            )
+        return float(v)
+
+    @model_validator(mode="after")
+    def validate_threshold_ordering(self) -> "PairSelectionThompsonConfig":
+        """Validate that success_threshold is greater than failure_threshold."""
+        if self.success_threshold <= self.failure_threshold:
+            raise ValueError(
+                f"success_threshold ({self.success_threshold}) must be greater than "
+                f"failure_threshold ({self.failure_threshold})"
+            )
+        return self
+
+
+class PairSelectionPositionLockingConfig(BaseModel):
+    """Configuration for position locking."""
+
+    enabled: bool = True
+    cooldown_hours: int = 0
+
+
+class PairSelectionConfig(BaseModel):
+    """Configuration for autonomous pair selection system."""
+
+    enabled: bool = False
+    target_pair_count: int = 5
+    rotation_interval_hours: float = 1.0
+
+    universe: PairSelectionUniverseConfig = Field(
+        default_factory=PairSelectionUniverseConfig
+    )
+    statistical: PairSelectionStatisticalConfig = Field(
+        default_factory=PairSelectionStatisticalConfig
+    )
+    llm: PairSelectionLLMConfig = Field(default_factory=PairSelectionLLMConfig)
+    thompson_sampling: PairSelectionThompsonConfig = Field(
+        default_factory=PairSelectionThompsonConfig
+    )
+    position_locking: PairSelectionPositionLockingConfig = Field(
+        default_factory=PairSelectionPositionLockingConfig
+    )
+
+
+class TradingAgentConfig(BaseModel):
+    """
+    Configuration model for the Trading Agent.
+    Defines the agent's behavior, risk parameters, and operational controls.
+
+    All percentage fields use decimal fraction notation (e.g., 0.05 = 5%).
+    """
+
+    # --- Execution Controls ---
+    autonomous_execution: bool = False
+    approval_policy: Literal["always", "never", "on_new_asset"] = "on_new_asset"
+    max_daily_trades: int = 5
+    # Kill-switch thresholds (decimal fraction of portfolio P/L, e.g., 0.05 = 5%)
+    # Stop trading if portfolio gains >= kill_switch_gain_pct
+    # or losses <= -kill_switch_loss_pct
+    kill_switch_gain_pct: float = 0.05  # 5%
+    kill_switch_loss_pct: float = 0.02  # 2%
+    autonomous: AutonomousAgentConfig = Field(default_factory=AutonomousAgentConfig)
+    # Signal-only mode notification requirement: set to False to allow signal-only operation without Telegram
+    require_notifications_for_signal_only: bool = True
+
+    # --- Strategic Goals ---
+    strategic_goal: Literal["growth", "capital_preservation", "balanced"] = "balanced"
+    risk_appetite: Literal["low", "medium", "high"] = "medium"
+    max_drawdown_percent: float = (
+        0.15  # Max drawdown threshold - LIVE TRADING DEFAULT
+              # (auto-normalized: values >1 treated as percentages, <=1 as decimals)
+              # For development/paper trading: Set to 0.25 (25%) via config override
+              # to allow portfolio exploration and trade execution testing
+    )
+
+    # --- Risk Management ---
+    # Note: All percentages use decimal notation (e.g., 0.02 = 2%)
+    # - risk_percentage: Account risk per trade (used in position sizing)
+    # - sizing_stop_loss_percentage: Assumed stop loss for position sizing calculations
+    # - kill_switch_loss_pct: Portfolio-level loss threshold (decimal fraction, e.g., 0.02 = 2%) to stop trading
+    # - stop_loss (in AutonomousAgentConfig): Per-trade stop loss for autonomous execution
+    risk_percentage: float = 0.01  # Percentage of account to risk per trade (1%)
+    sizing_stop_loss_percentage: float = (
+        0.02  # Stop loss used for position sizing calculation (2%)
+    )
+
+    # RiskGatekeeper configuration (all decimals; validation enforces bounds)
+    # - correlation_threshold: Asset correlation threshold to consider positions correlated (e.g., 0.7 = 70%)
+    # - max_correlated_assets: Max number of correlated assets allowed within a category/platform before blocking
+    # - max_var_pct: Maximum acceptable portfolio VaR percentage (decimal, e.g., 0.05 = 5%)
+    # - var_confidence: Confidence level used for VaR checks (decimal, e.g., 0.95 = 95%)
+    correlation_threshold: float = Field(0.7, ge=0.0, le=1.0)
+    max_correlated_assets: int = Field(2, gt=0)
+    max_var_pct: float = Field(0.05, ge=0.0, le=1.0)
+    var_confidence: float = Field(0.95, gt=0.0, lt=1.0)
+
+    # Development risk limits (auto-applied when ENVIRONMENT=development)
+    # Relaxes gatekeeper constraints for sandbox testing and portfolio building
+    # See: TradingLoopAgent.__init__ for environment detection and auto-selection
+    development_risk_limits: DevelopmentRiskLimitsConfig = Field(default_factory=DevelopmentRiskLimitsConfig)
+
+    # Ensure field validators run for default values as well
+    model_config = ConfigDict(validate_default=True)
+
+    @field_validator(
+        "max_var_pct",
+        "var_confidence",
+        "max_drawdown_percent",
+        "min_confidence_threshold",
+        mode="before",
+    )
+    @classmethod
+    def normalize_percentage_fields(cls, v):
+        """Normalize percentage values: if value > 1, treat as percentage and divide by 100.
+
+        Handles both percentage notation (e.g., 70 -> 0.70) and decimal notation (e.g., 0.70 -> 0.70).
+        Values > 1 are assumed to be percentages and divided by 100.
+        Values <= 1 are assumed to be already in decimal format and returned as-is.
+        """
+        if isinstance(v, (int, float)) and v > 1:
+            return v / 100
+        return v
+
+    @model_validator(mode="after")
+    def normalize_default_percentages(self):
+        """Normalize default percentage values that weren't caught by field validators.
+
+        Field validators with mode='before' only run on explicitly provided values,
+        not on defaults. This model validator ensures defaults are also normalized.
+        """
+        # No longer needed when `validate_default=True` is set; keep for
+        # backward-compatibility if model_config isn't honored by runtime.
+        if (
+            hasattr(self, "min_confidence_threshold")
+            and self.min_confidence_threshold > 1
+        ):
+            self.min_confidence_threshold = self.min_confidence_threshold / 100
+        return self
+
+    @field_validator("min_confidence_threshold", mode="before")
+    @classmethod
+    def normalize_min_confidence(cls, v):
+        """Normalize `min_confidence_threshold` specifically and clamp to [0, 1].
+
+        This ensures that both defaults and explicit values pass through the
+        same normalization logic: numeric values > 1 are treated as percentages
+        (e.g., 70 -> 0.70), otherwise values are treated as already in decimal
+        notation. The result is clamped between 0.0 and 1.0.
+        """
+        try:
+            if isinstance(v, (int, float)):
+                val = float(v)
+                if val > 1:
+                    val = val / 100.0
+                # clamp
+                if val < 0.0:
+                    return 0.0
+                if val > 1.0:
+                    return 1.0
+                return val
+        except Exception:
+            # Let other validators handle type errors
+            return v
+        return v
+
+    @model_validator(mode="after")
+    def validate_asset_pairs_or_signal_only(self) -> "TradingAgentConfig":
+        """Validate that asset_pairs is non-empty unless in signal-only mode.
+
+        Signal-only mode allows autonomous execution disabled (autonomous.enabled=false)
+        without requiring asset pairs. Regular trading requires at least one asset pair.
+
+        Raises:
+            ValueError: If asset_pairs is empty and not in signal-only mode.
+        """
+        # Signal-only mode: autonomous disabled and notifications not required
+        is_signal_only = (
+            not self.autonomous.enabled
+            and not self.require_notifications_for_signal_only
+        )
+
+        if not self.asset_pairs and not is_signal_only:
+            raise ValueError(
+                "asset_pairs cannot be empty unless in signal-only mode "
+                "(autonomous.enabled=false and require_notifications_for_signal_only=false). "
+                "Provide at least one trading pair (e.g., BTCUSD, ETHUSD) or configure signal-only mode."
+            )
+
+        return self
+
+    # --- Data & Analysis Controls ---
+    # Core pairs that are always active (never removed by pair selection)
+    asset_pairs: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
+    # Core pairs that must always remain in asset_pairs (pair selection can only add to these)
+    core_pairs: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
+    analysis_frequency_seconds: int = 300
+    monitoring_frequency_seconds: int = 60
+    min_confidence_threshold: float = (
+        70.0  # Minimum confidence to execute a trade (0-100 scale, auto-normalized to 0-1)
+    )
+
+    # --- Execution Quality Controls (conservative profitability improvements) ---
+    quality_gate_enabled: bool = True
+    min_risk_reward_ratio: float = 1.25
+    high_volatility_threshold: float = 0.04
+    high_volatility_min_confidence: float = 80.0
+    position_size_full_confidence: float = 90.0
+    position_size_min_multiplier: float = 0.50
+    position_size_high_volatility_scale: float = 0.75
+    position_size_extreme_volatility_threshold: float = 0.07
+    position_size_extreme_volatility_scale: float = 0.50
+    # Asset pairs to monitor for opportunities (superset of asset_pairs for active trading)
+    watchlist: List[str] = ["BTCUSD", "ETHUSD", "EURUSD"]
+
+    # --- Timing and Retry Controls ---
+    reasoning_retry_delay_seconds: int = 60
+    reasoning_failure_decay_seconds: int = 3600
+    reasoning_max_concurrent_assets: int = 3
+    reasoning_rate_limit_requests_per_minute: float = 4.0
+    reasoning_rate_limit_burst: int = 1
+    main_loop_error_backoff_seconds: int = 300
+
+    # --- Resilience & Observability ---
+    max_retries_per_cycle: int = 3
+    dashboard_event_queue_size: int = 0  # 0 = auto-size by environment

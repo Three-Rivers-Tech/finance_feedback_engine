@@ -14,6 +14,38 @@ logger = logging.getLogger(__name__)
 
 
 class OandaPlatform(BaseTradingPlatform):
+    def get_recommended_units(self, instrument: str, current_price: float, risk_per_trade: float = 0.02) -> float:
+        """Return the maximum number of units for *instrument* based on quarter‑Kelly.
+
+        Parameters
+        ----------
+        instrument: str
+            Oanda instrument identifier (e.g., ``"EUR_USD"``).
+        current_price: float
+            Latest market price for the instrument.
+        risk_per_trade: float
+            Fraction of account balance to risk (default 2 %).
+
+        Returns
+        -------
+        float
+            Recommended maximum units (may be fractional; caller should round appropriately).
+        """
+        max_usd = self.calculate_kelly_position_size(risk_per_trade=risk_per_trade)
+        if current_price <= 0:
+            logger.warning("Current price for %s is non‑positive (%s); returning 0 units", instrument, current_price)
+            return 0.0
+        recommended_units = max_usd / current_price
+        logger.debug(
+            "Recommended units for %s at price %s: %s (max_usd=%s)",
+            instrument,
+            current_price,
+            recommended_units,
+            max_usd,
+        )
+        return recommended_units
+
+
     """
     Oanda trading platform integration for forex trading.
 
