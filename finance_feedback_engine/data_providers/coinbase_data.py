@@ -24,28 +24,35 @@ class CoinbaseDataProvider:
     - FIVE_MINUTE (300 seconds)
     - FIFTEEN_MINUTE (900 seconds)
     - ONE_HOUR (3600 seconds)
-    - FOUR_HOUR (14400 seconds)
+    - SIX_HOUR (21600 seconds) - Note: 4h requests mapped to 6h
     - ONE_DAY (86400 seconds)
 
     Uses Coinbase Advanced Trade API's public candles endpoint.
+    
+    Note: Coinbase Advanced Trade API does not support 4-hour candles.
+    Requests for "4h" or "FOUR_HOUR" are automatically mapped to 6h (SIX_HOUR).
     Rate limit: 15 requests/second (public data).
     """
 
     BASE_URL = "https://api.coinbase.com"
 
     # Granularity mappings (Coinbase uses seconds)
+    # Note: Coinbase Advanced Trade API supports: 1m, 5m, 15m, 30m, 1h, 6h, 1d
+    # 4h is NOT supported - mapped to 6h (21600s) as closest available
     GRANULARITIES = {
         "1m": 60,
         "5m": 300,
         "15m": 900,
         "1h": 3600,
-        "4h": 14400,
+        "4h": 21600,  # Mapped to 6h (Coinbase doesn't support 4h)
+        "6h": 21600,
         "1d": 86400,
         "ONE_MINUTE": 60,
         "FIVE_MINUTE": 300,
         "FIFTEEN_MINUTE": 900,
         "ONE_HOUR": 3600,
-        "FOUR_HOUR": 14400,
+        "FOUR_HOUR": 21600,  # Mapped to 6h (Coinbase doesn't support 4h)
+        "SIX_HOUR": 21600,
         "ONE_DAY": 86400,
     }
 
@@ -54,13 +61,15 @@ class CoinbaseDataProvider:
         "5m": "FIVE_MINUTE",
         "15m": "FIFTEEN_MINUTE",
         "1h": "ONE_HOUR",
-        "4h": "FOUR_HOUR",
+        "4h": "SIX_HOUR",  # Mapped to SIX_HOUR (Coinbase doesn't support 4h)
+        "6h": "SIX_HOUR",
         "1d": "ONE_DAY",
         "ONE_MINUTE": "ONE_MINUTE",
         "FIVE_MINUTE": "FIVE_MINUTE",
         "FIFTEEN_MINUTE": "FIFTEEN_MINUTE",
         "ONE_HOUR": "ONE_HOUR",
-        "FOUR_HOUR": "FOUR_HOUR",
+        "FOUR_HOUR": "SIX_HOUR",  # Mapped to SIX_HOUR (Coinbase doesn't support 4h)
+        "SIX_HOUR": "SIX_HOUR",
         "ONE_DAY": "ONE_DAY",
     }
 
