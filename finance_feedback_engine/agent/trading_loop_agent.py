@@ -856,7 +856,6 @@ class TradingLoopAgent:
         Emits recovery_complete or recovery_failed events with detailed metadata.
         Sets _startup_complete event and transitions to LEARNING state.
         """
-        try:
         import uuid as uuid_module
 
         from finance_feedback_engine.memory.portfolio_memory import TradeOutcome
