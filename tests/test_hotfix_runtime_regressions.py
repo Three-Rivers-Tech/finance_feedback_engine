@@ -25,3 +25,20 @@ def test_load_env_config_sets_default_enabled_providers():
     finally:
         if saved is not None:
             os.environ['ENSEMBLE_ENABLED_PROVIDERS'] = saved
+
+
+
+def test_core_portfolio_breakdown_async_delegates_to_platform_async():
+    import asyncio
+    from unittest.mock import patch
+    from finance_feedback_engine.core import FinanceFeedbackEngine
+
+    class _P:
+        async def aget_portfolio_breakdown(self):
+            return {'total_value_usd': 123.0}
+
+    with patch.object(FinanceFeedbackEngine, '__init__', lambda self, config: None):
+        engine = FinanceFeedbackEngine({})
+        engine.trading_platform = _P()
+        out = asyncio.run(engine.get_portfolio_breakdown_async())
+        assert out['total_value_usd'] == 123.0

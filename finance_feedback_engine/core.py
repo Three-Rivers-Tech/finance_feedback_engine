@@ -715,6 +715,24 @@ class FinanceFeedbackEngine:
 
         return (is_ready, errors)
 
+    async def get_portfolio_breakdown_async(self) -> Dict[str, Any]:
+        """Async portfolio breakdown proxy with safe fallback.
+
+        Prefer platform async API when available; otherwise run sync call in a thread.
+        """
+        if not self.trading_platform:
+            raise AttributeError("Trading platform is not initialized")
+
+        if hasattr(self.trading_platform, "aget_portfolio_breakdown"):
+            return await self.trading_platform.aget_portfolio_breakdown()
+
+        if hasattr(self.trading_platform, "get_portfolio_breakdown"):
+            return await asyncio.to_thread(self.trading_platform.get_portfolio_breakdown)
+
+        raise AttributeError(
+            f"{type(self.trading_platform).__name__} does not implement portfolio breakdown"
+        )
+
     def perform_health_check(self) -> tuple[bool, list[str]]:
         """
         Perform runtime health checks on critical systems.
