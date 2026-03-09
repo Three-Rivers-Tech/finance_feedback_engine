@@ -159,7 +159,11 @@ def load_env_config() -> Dict[str, Any]:
         "decision_threshold": _env_float("DECISION_ENGINE_DECISION_THRESHOLD", 0.7),
     }
 
+    _enabled = _env_str("ENSEMBLE_ENABLED_PROVIDERS", "local") or "local"
+    _enabled_providers = [p.strip() for p in _enabled.split(",") if p.strip()]
+
     config["ensemble"] = {
+        "enabled_providers": _enabled_providers,
         "voting_strategy": _env_str("ENSEMBLE_VOTING_STRATEGY", "weighted"),
         "provider_weights": {
             "llama": _env_float("ENSEMBLE_PROVIDER_WEIGHT_LLAMA", 0.16666667),

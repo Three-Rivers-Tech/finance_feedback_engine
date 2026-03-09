@@ -685,7 +685,7 @@ class LocalLLMProvider:
             "confidence": confidence,
             "reasoning": reasoning,
             "amount": amount,
-            "model_name": active_model,  # Include actual model used
+            "model_name": self.model_name,  # Include provider model used
         }
 
     def get_model_info(self) -> Dict[str, Any]:
