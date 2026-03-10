@@ -15,7 +15,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_HOST=http://127.0.0.1:11434
-      - FFE_ASSET_PAIRS=BTC-USD-PERP,ETH-USD-PERP,EURUSD,GBPUSD
+      - AGENT_ASSET_PAIRS=${AGENT_ASSET_PAIRS:-BTCUSD,ETHUSD}
     command: ["/app/start-with-agent.sh"]
     volumes:
       - ffe-data:/app/data

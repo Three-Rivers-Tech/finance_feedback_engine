@@ -60,6 +60,11 @@ class UnifiedDataProvider:
         self.coinbase = None
         self.oanda = None
 
+        enabled_platforms = {str(name).lower() for name in (self.config.get("enabled_platforms") or [])}
+        platform_mode = str(self.config.get("trading_platform") or "unified").lower()
+        allow_coinbase = platform_mode == "unified" or platform_mode in {"coinbase", "coinbase_advanced"} or "coinbase_advanced" in enabled_platforms or "coinbase" in enabled_platforms
+        allow_oanda = platform_mode == "unified" or platform_mode == "oanda" or "oanda" in enabled_platforms
+
         if alpha_vantage_api_key:
             try:
                 self.alpha_vantage = AlphaVantageProvider(
@@ -71,7 +76,7 @@ class UnifiedDataProvider:
             except Exception as e:
                 logger.warning(f"Failed to initialize Alpha Vantage: {e}")
 
-        if coinbase_credentials:
+        if allow_coinbase and coinbase_credentials:
             try:
                 self.coinbase = CoinbaseDataProvider(
                     credentials=coinbase_credentials, rate_limiter=self.rate_limiter
@@ -80,7 +85,7 @@ class UnifiedDataProvider:
             except Exception as e:
                 logger.warning(f"Failed to initialize Coinbase data: {e}")
 
-        if oanda_credentials:
+        if allow_oanda and oanda_credentials:
             try:
                 self.oanda = OandaDataProvider(
                     credentials=oanda_credentials, rate_limiter=self.rate_limiter

@@ -459,10 +459,10 @@ def _deep_fill_missing(target: dict, source: dict) -> dict:
 
 
 def load_tiered_config() -> dict:
-    """Environment-only configuration loader (single source of truth)."""
-    from finance_feedback_engine.utils.config_loader import load_env_config
+    """Load default config/config.yaml with environment overrides."""
+    from finance_feedback_engine.utils.config_loader import load_tiered_config as _load_tiered_config
 
-    return load_env_config()
+    return _load_tiered_config()
 
 
 def load_config(config_path: str) -> dict:
@@ -538,11 +538,11 @@ def cli(ctx, config, verbose, trace, otlp_endpoint, interactive):
 
     # If a specific config file is provided by the user
     if config:
-        raise click.ClickException(
-            "File-based configuration is disabled. Use .env as the single source of truth."
-        )
-    final_config = load_tiered_config()
-    ctx.obj["config_path"] = ".env"
+        final_config = load_config(config)
+        ctx.obj["config_path"] = config
+    else:
+        final_config = load_tiered_config()
+        ctx.obj["config_path"] = "config/config.yaml + env"
 
     # Override tracing settings from CLI flags
     if trace:

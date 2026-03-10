@@ -1407,13 +1407,9 @@ class TradingLoopAgent:
         # Guard against empty pair configuration only.
         # IMPORTANT: do not forcibly re-add hardcoded pairs here; API callers may
         # intentionally run focused universes (e.g., BTC/ETH long-short only).
-        core_pairs = ["BTCUSD", "ETHUSD"]
         if not self.config.asset_pairs:
-            logger.error(
-                "CRITICAL: No asset pairs configured! Restoring default core pairs: %s",
-                core_pairs,
-            )
-            self.config.asset_pairs = core_pairs
+            logger.error("CRITICAL: No asset pairs configured; skipping reasoning cycle")
+            return
 
         # Create a snapshot copy for iteration (prevents race conditions)
         asset_pairs_snapshot = list(self.config.asset_pairs)

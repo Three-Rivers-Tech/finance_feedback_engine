@@ -30,7 +30,7 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 # Get asset pairs from environment or use defaults
-ASSET_PAIRS=${FFE_ASSET_PAIRS:-"BTC-USD-PERP,ETH-USD-PERP,EURUSD,GBPUSD"}
+ASSET_PAIRS="${AGENT_ASSET_PAIRS:-BTCUSD,ETHUSD}"
 echo "🎯 Asset pairs: $ASSET_PAIRS"
 
 # Start the trading agent

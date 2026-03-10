@@ -1,9 +1,11 @@
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
+
+from .env_yaml_loader import load_yaml_with_env_substitution
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,149 @@ def _load_dotenv_file() -> None:
         load_dotenv(override=False)
         logger.debug("Loaded environment variables from current working directory")
 
+
+
+
+def _deep_merge(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively merge overlay into base, returning a new dict."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _dedupe_pairs(pairs: List[Any]) -> List[str]:
+    seen = set()
+    normalized: List[str] = []
+    for pair in pairs:
+        if pair is None:
+            continue
+        pair_str = str(pair).strip().upper()
+        if not pair_str or pair_str in seen:
+            continue
+        seen.add(pair_str)
+        normalized.append(pair_str)
+    return normalized
+
+
+def _normalize_asset_pairs(config: Dict[str, Any]) -> None:
+    agent_cfg = config.setdefault("agent", {})
+    raw_override = os.getenv("AGENT_ASSET_PAIRS")
+    if raw_override:
+        resolved_pairs = _dedupe_pairs(raw_override.split(","))
+    else:
+        resolved_pairs = _dedupe_pairs(
+            agent_cfg.get("asset_pairs")
+            or agent_cfg.get("watchlist")
+            or agent_cfg.get("core_pairs")
+            or []
+        )
+
+    if not resolved_pairs:
+        resolved_pairs = ["BTCUSD", "ETHUSD"]
+
+    agent_cfg["asset_pairs"] = list(resolved_pairs)
+    existing_core = _dedupe_pairs(agent_cfg.get("core_pairs") or resolved_pairs)
+    agent_cfg["core_pairs"] = existing_core or list(resolved_pairs)
+    existing_watchlist = _dedupe_pairs(agent_cfg.get("watchlist") or resolved_pairs)
+    agent_cfg["watchlist"] = existing_watchlist or list(resolved_pairs)
+
+
+def _normalize_platform_config(config: Dict[str, Any]) -> None:
+    trading_platform = str(config.get("trading_platform") or "unified").lower()
+    platforms = config.get("platforms")
+    if not isinstance(platforms, list):
+        platforms = []
+
+    normalized_platforms = []
+    for platform_cfg in platforms:
+        if not isinstance(platform_cfg, dict):
+            continue
+        name = str(platform_cfg.get("name") or "").strip().lower()
+        if not name:
+            continue
+        normalized = dict(platform_cfg)
+        normalized["name"] = name
+        normalized_platforms.append(normalized)
+
+    if not normalized_platforms:
+        normalized_platforms = [
+            {"name": "coinbase_advanced", "credentials": config.get("providers", {}).get("coinbase", {}).get("credentials", {})},
+            {"name": "oanda", "credentials": config.get("providers", {}).get("oanda", {}).get("credentials", {})},
+        ]
+
+    aliases = {"coinbase": "coinbase_advanced", "coinbase_advanced": "coinbase_advanced"}
+    selected_name = aliases.get(trading_platform, trading_platform)
+
+    if selected_name != "unified":
+        filtered = [p for p in normalized_platforms if p.get("name") == selected_name]
+        if selected_name in {"mock", "paper", "sandbox"} and not filtered:
+            filtered = [{"name": selected_name, "credentials": {}}]
+        normalized_platforms = filtered or normalized_platforms
+
+    config["platforms"] = normalized_platforms
+    config["enabled_platforms"] = [p["name"] for p in normalized_platforms]
+
+
+def _has_any_env(*names: str) -> bool:
+    return any(os.getenv(name) is not None for name in names)
+
+
+def _has_env_prefix(prefix: str) -> bool:
+    return any(name.startswith(prefix) for name in os.environ)
+
+
+def _restore_base_precedence(base_config: Dict[str, Any], merged: Dict[str, Any]) -> Dict[str, Any]:
+    if not base_config:
+        return merged
+
+    if not _has_any_env("TRADING_PLATFORM") and base_config.get("trading_platform") is not None:
+        merged["trading_platform"] = base_config.get("trading_platform")
+        if isinstance(base_config.get("platforms"), list):
+            merged["platforms"] = base_config.get("platforms")
+
+    if not _has_any_env("AGENT_ASSET_PAIRS") and isinstance(base_config.get("agent"), dict):
+        base_agent = base_config.get("agent", {})
+        merged.setdefault("agent", {})
+        for key in ("asset_pairs", "core_pairs", "watchlist"):
+            if key in base_agent:
+                merged["agent"][key] = base_agent.get(key)
+
+    if not _has_env_prefix("DECISION_ENGINE_") and isinstance(base_config.get("decision_engine"), dict):
+        merged["decision_engine"] = base_config.get("decision_engine")
+
+    if not _has_env_prefix("ENSEMBLE_") and isinstance(base_config.get("ensemble"), dict):
+        merged["ensemble"] = base_config.get("ensemble")
+
+    return merged
+
+
+def _normalize_runtime_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    _normalize_platform_config(config)
+    _normalize_asset_pairs(config)
+    return config
+
+
+def load_tiered_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """Load config defaults from YAML, then overlay env/.env runtime values."""
+    _load_dotenv_file()
+
+    yaml_path = Path(config_path) if config_path else Path(__file__).parent.parent.parent / "config" / "config.yaml"
+    base_config: Dict[str, Any] = {}
+    if yaml_path.exists():
+        try:
+            base_config = load_yaml_with_env_substitution(yaml_path) or {}
+            logger.info("Loaded base configuration from %s", yaml_path)
+        except Exception as e:
+            logger.warning("Failed to load base YAML config %s: %s", yaml_path, e)
+
+    env_config = load_env_config()
+    merged = _deep_merge(base_config, env_config)
+    merged = _restore_base_precedence(base_config, merged)
+    return _normalize_runtime_config(merged)
 
 def _env_str(name: str, default: Optional[str] = None) -> Optional[str]:
     return os.getenv(name, default)
@@ -358,9 +503,9 @@ def _validate_position_sizing_config(pos_config: Dict[str, Any]) -> None:
     )
 
 
-def load_config(_: Optional[str] = None) -> Dict[str, Any]:
-    """Backward-compatible wrapper that now always returns env-only config."""
-    return load_env_config()
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """Backward-compatible layered loader with YAML defaults and env overrides."""
+    return load_tiered_config(config_path)
 
 
 # Example Usage (for demonstration within this stub)

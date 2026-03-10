@@ -13,15 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ..auth import AuthManager
 from ..core import FinanceFeedbackEngine
-from ..utils.config_loader import load_env_config
+from ..utils.config_loader import load_tiered_config as _load_tiered_config
 from .state import app_state
 
 logger = logging.getLogger(__name__)
 
 
 def load_tiered_config() -> dict:
-    """Environment-only configuration loader for the API process."""
-    return load_env_config()
+    """Load default config/config.yaml with environment overrides for the API process."""
+    return _load_tiered_config()
 
 
 @asynccontextmanager

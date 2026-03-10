@@ -331,9 +331,9 @@ class DashboardDataAggregator:
             pulse_data = []
             config = getattr(self.agent, "config", None)
             watchlist = (
-                getattr(config, "watchlist", ["BTCUSD", "ETHUSD", "EURUSD"])
-                if config
-                else ["BTCUSD", "ETHUSD", "EURUSD"]
+                getattr(config, "watchlist", None)
+                or getattr(config, "asset_pairs", None)
+                or ["BTCUSD", "ETHUSD"]
             )
 
             for asset in watchlist:
