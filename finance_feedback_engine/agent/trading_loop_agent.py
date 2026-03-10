@@ -1621,6 +1621,19 @@ class TradingLoopAgent:
         # on the same standardized asset pair during decision collection.
         open_asset_pairs: set[str] = set()
         open_position_side: dict[str, str] = {}
+        managed_asset_pairs: set[str] = set()
+        try:
+            managed_asset_pairs = {
+                standardize_asset_pair(pair)
+                for pair in (asset_pairs_snapshot or [])
+                if pair
+            }
+        except Exception:
+            managed_asset_pairs = {
+                str(pair).upper().replace("_", "")
+                for pair in (asset_pairs_snapshot or [])
+                if pair
+            }
         margin_usage_pct = 0.0
         margin_usage_limit_pct = 0.50
         try:
@@ -1700,13 +1713,21 @@ class TradingLoopAgent:
                             open_asset_pairs.add(canonical)
                             break
 
+                if canonical and managed_asset_pairs and canonical not in managed_asset_pairs:
+                    logger.info(
+                        "Ignoring unmanaged open position for duplicate-entry guard: %s (%s)",
+                        canonical,
+                        raw_pair,
+                    )
+                    continue
+
                 if canonical:
                     # Keep first observed side per asset for duplicate-entry logic.
                     open_position_side.setdefault(canonical, side)
 
             if open_asset_pairs:
                 logger.info(
-                    "Open position assets detected (duplicate-entry guard active): %s | margin_usage=%.2f%% (limit %.2f%%)",
+                    "Managed open position assets detected (duplicate-entry guard active): %s | margin_usage=%.2f%% (limit %.2f%%)",
                     sorted(open_asset_pairs),
                     margin_usage_pct * 100,
                     margin_usage_limit_pct * 100,
