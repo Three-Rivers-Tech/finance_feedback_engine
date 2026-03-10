@@ -235,6 +235,8 @@ class TradingLoopAgent:
         self._recovered_positions = []  # List of recovered position metadata
         self._startup_retry_count = 0
         self._max_startup_retries = 3
+        self._recovery_has_run = False
+        self._recovered_position_keys: set[tuple[str | None, str | None, str, float, float]] = set()
 
         # For preventing infinite loops on rejected trades
         self._rejected_decisions_cache = (
@@ -863,6 +865,15 @@ class TradingLoopAgent:
 
         logger.info("State: RECOVERING - Checking for existing positions...")
 
+        if self._recovery_has_run:
+            logger.warning(
+                "Recovery requested after startup already completed; skipping duplicate recovery pass"
+            )
+            if not self._startup_complete.is_set():
+                self._startup_complete.set()
+            await self._transition_to(AgentState.PERCEPTION)
+            return
+
         max_retries = 1  # Single retry on transient failures
         max_positions = 2  # Maximum concurrent positions allowed
 
@@ -935,6 +946,7 @@ class TradingLoopAgent:
 
                 if not active_positions:
                     logger.info("✓ No open positions found - starting with clean slate")
+                    self._recovery_has_run = True
                     self._emit_dashboard_event({
                         "type": "recovery_complete",
                         "found": 0,
@@ -1009,6 +1021,14 @@ class TradingLoopAgent:
                             "opened_at": pos.get("opened_at"),
                         }
 
+                        recovery_key = (
+                            str(pos["platform"] or "").lower() or None,
+                            str(pos["product_id"] or "") or None,
+                            action,
+                            round(float(entry_price), 10),
+                            round(float(pos["size"]), 10),
+                        )
+
                         existing_recovery = self.engine.decision_store.find_equivalent_recovery_decision(
                             asset_pair=asset_pair,
                             action=action,
@@ -1018,8 +1038,23 @@ class TradingLoopAgent:
                             product_id=pos["product_id"],
                         )
 
-                        if existing_recovery:
+                        if recovery_key in self._recovered_position_keys and existing_recovery:
                             decision_id = existing_recovery["id"]
+                            logger.info(
+                                "↺ Skipping duplicate in-process recovery for %s (%s); reusing %s",
+                                asset_pair,
+                                pos["platform"],
+                                decision_id,
+                            )
+                        elif existing_recovery:
+                            decision_id = existing_recovery["id"]
+                            if not existing_recovery.get("recovery_metadata"):
+                                existing_recovery["recovery_metadata"] = recovery_metadata
+                                self.engine.decision_store.update_decision(existing_recovery)
+                                logger.info(
+                                    "↺ Backfilled recovery metadata for existing decision %s",
+                                    decision_id,
+                                )
                             logger.info(
                                 "↺ Reusing existing recovery decision %s for %s (%s)",
                                 decision_id,
@@ -1085,6 +1120,8 @@ class TradingLoopAgent:
                         # Associate with trade monitor
                         self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
 
+                        self._recovered_position_keys.add(recovery_key)
+
                         normalized_positions.append({
                             "decision_id": decision_id,
                             "asset_pair": asset_pair,
@@ -1116,6 +1153,7 @@ class TradingLoopAgent:
                     return
 
                 # Recovery successful!
+                self._recovery_has_run = True
                 self._recovered_positions = normalized_positions
                 total_pnl = sum(p["unrealized_pnl"] for p in normalized_positions)
 
