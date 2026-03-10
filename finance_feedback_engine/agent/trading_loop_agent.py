@@ -1800,6 +1800,7 @@ class TradingLoopAgent:
                     )
             elif decision:
                 try:
+                    self._ensure_decision_identity(decision)
                     decision["executed"] = False
                     decision["execution_status"] = "hold"
                     decision["execution_result"] = {
@@ -2779,9 +2780,19 @@ class TradingLoopAgent:
 
         return True
 
+    def _ensure_decision_identity(self, decision: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure decisions have stable identity/timestamp before persistence."""
+        if not decision.get("id"):
+            decision["id"] = str(uuid.uuid4())
+        if not decision.get("timestamp"):
+            decision["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        return decision
+
     def _mark_decision_not_executed(self, decision: Dict[str, Any], reason_code: str, reason: str) -> None:
         """Persist explicit non-execution reason on a decision for observability."""
         try:
+            had_id = bool(decision.get("id"))
+            self._ensure_decision_identity(decision)
             decision["executed"] = False
             decision["execution_status"] = "filtered"
             decision["execution_result"] = {
@@ -2790,7 +2801,7 @@ class TradingLoopAgent:
                 "error": reason,
             }
             if getattr(self.engine, "decision_store", None):
-                if decision.get("id"):
+                if had_id:
                     self.engine.decision_store.update_decision(decision)
                 else:
                     self.engine.decision_store.save_decision(decision)

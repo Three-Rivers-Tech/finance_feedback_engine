@@ -195,3 +195,50 @@ async def test_loop_metrics_logged_at_end_of_cycle(
         await trading_agent.process_cycle()
 
     assert "Cycle phase durations (s):" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_hold_decision_without_id_gets_persisted_with_generated_id(trading_agent, mock_dependencies):
+    """HOLD decisions without upstream IDs should still be persisted for observability."""
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "HOLD",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["asset_pair"] == "BTCUSD"
+    assert saved_decision["action"] == "HOLD"
+    assert saved_decision["execution_status"] == "hold"
+    assert saved_decision["executed"] is False
+    assert saved_decision.get("id")
+    assert saved_decision.get("timestamp")
+
+
+@pytest.mark.asyncio
+async def test_filtered_decision_without_id_gets_persisted_with_generated_id(trading_agent, mock_dependencies):
+    """Filtered BUY/SELL decisions without upstream IDs should still be persisted."""
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "BUY",
+            "confidence": 10,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["asset_pair"] == "BTCUSD"
+    assert saved_decision["action"] == "BUY"
+    assert saved_decision["execution_status"] == "filtered"
+    assert saved_decision["executed"] is False
+    assert saved_decision["execution_result"]["reason_code"] == "LOW_CONFIDENCE"
+    assert saved_decision.get("id")
+    assert saved_decision.get("timestamp")
