@@ -11,6 +11,7 @@ Risk Level: CRITICAL (incorrect sizing = direct financial loss)
 import pytest
 from finance_feedback_engine.decision_engine.position_sizing import (
     PositionSizingCalculator,
+    PolicySizingIntent,
     MIN_ORDER_SIZE_CRYPTO,
     MIN_ORDER_SIZE_FOREX,
     MIN_ORDER_SIZE_DEFAULT,
@@ -383,6 +384,61 @@ class TestPositionSizingCalculator:
         )
 
         assert result["recommended_position_size"] > 0
+
+    def test_build_policy_sizing_intent_is_provider_agnostic(self, calculator):
+        """Stage 1 intent layer should stay provider-agnostic and additive."""
+        intent = calculator.build_policy_sizing_intent(
+            action="BUY",
+            recommended_position_size=0.1,
+            current_price=50000.0,
+        )
+
+        typed_intent = PolicySizingIntent(**intent)
+
+        assert typed_intent.semantic_action == "BUY"
+        assert typed_intent.provider_agnostic is True
+        assert typed_intent.sizing_anchor == "quarter_kelly_conservative"
+        assert typed_intent.target_exposure_pct == pytest.approx(5000.0, rel=1e-6)
+        assert typed_intent.target_delta_pct == pytest.approx(5000.0, rel=1e-6)
+        assert typed_intent.reduction_fraction is None
+
+    def test_calculate_position_sizing_params_emits_policy_sizing_intent(self, calculator):
+        """Legacy sizing output should now also surface Stage 1 sizing intent."""
+        context = {
+            "asset_pair": "BTCUSD",
+            "market_data": {"type": "crypto"},
+        }
+
+        result = calculator.calculate_position_sizing_params(
+            context=context,
+            current_price=50000.0,
+            action="BUY",
+            has_existing_position=False,
+            relevant_balance={"USD": 10000.0},
+            balance_source="coinbase",
+        )
+
+        assert result["recommended_position_size"] is not None
+        assert "policy_sizing_intent" in result
+        assert result["policy_sizing_intent"]["semantic_action"] == "BUY"
+        assert result["policy_sizing_intent"]["provider_agnostic"] is True
+        assert result["policy_sizing_intent"]["sizing_anchor"] == "quarter_kelly_conservative"
+
+    def test_hold_without_position_emits_zero_delta_policy_sizing_intent(self, calculator):
+        """HOLD without a position should produce zero-delta intent."""
+        result = calculator.calculate_position_sizing_params(
+            context={"asset_pair": "BTCUSD"},
+            current_price=50000.0,
+            action="HOLD",
+            has_existing_position=False,
+            relevant_balance={"USD": 10000.0},
+            balance_source="coinbase",
+        )
+
+        intent = result["policy_sizing_intent"]
+        assert intent["semantic_action"] == "HOLD"
+        assert intent["target_delta_pct"] == 0.0
+        assert intent["target_exposure_pct"] is None
 
     def test_calculate_position_sizing_params_no_balance_crypto(self, calculator):
         """Test minimum order size fallback for crypto without balance."""

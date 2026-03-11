@@ -1,6 +1,7 @@
 """Position sizing calculator for trading decisions."""
 
 import logging
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -9,6 +10,19 @@ logger = logging.getLogger(__name__)
 MIN_ORDER_SIZE_CRYPTO = 10.0  # Coinbase minimum order size
 MIN_ORDER_SIZE_FOREX = 1.0  # Oanda minimum micro lot
 MIN_ORDER_SIZE_DEFAULT = 10.0  # Default minimum for unknown platforms
+
+
+@dataclass(frozen=True)
+class PolicySizingIntent:
+    """Provider-agnostic sizing intent used as a Stage 1 migration seam."""
+
+    semantic_action: str
+    target_exposure_pct: Optional[float]
+    target_delta_pct: float
+    reduction_fraction: Optional[float]
+    sizing_anchor: str
+    provider_agnostic: bool = True
+    version: int = 1
 
 
 class PositionSizingCalculator:
@@ -39,6 +53,49 @@ class PositionSizingCalculator:
                 "Kelly Criterion calculator not available, falling back to risk-based sizing"
             )
             self.kelly_calculator = None
+
+
+    def build_policy_sizing_intent(
+        self,
+        action: str,
+        recommended_position_size: Optional[float],
+        current_price: float,
+    ) -> Dict[str, Any]:
+        """Build a provider-agnostic sizing intent from current sizing outputs.
+
+        Stage 1 intentionally keeps this directional at the semantic-action layer
+        while separating shared sizing intent from provider-native quantity translation.
+        """
+        normalized_action = str(action or "HOLD").upper()
+        target_exposure_pct: Optional[float] = None
+        target_delta_pct = 0.0
+        reduction_fraction: Optional[float] = None
+
+        if (
+            normalized_action in {"BUY", "SELL"}
+            and recommended_position_size
+            and current_price > 0
+        ):
+            target_exposure_pct = float(recommended_position_size) * float(current_price)
+            target_delta_pct = target_exposure_pct
+        elif normalized_action == "HOLD":
+            target_delta_pct = 0.0
+
+        sizing_anchor = "quarter_kelly_conservative"
+        if self.kelly_calculator and hasattr(self.kelly_calculator, "get_sizing_anchor_metadata"):
+            sizing_anchor = self.kelly_calculator.get_sizing_anchor_metadata().get(
+                "sizing_anchor", sizing_anchor
+            )
+
+        return asdict(
+            PolicySizingIntent(
+                semantic_action=normalized_action,
+                target_exposure_pct=target_exposure_pct,
+                target_delta_pct=target_delta_pct,
+                reduction_fraction=reduction_fraction,
+                sizing_anchor=sizing_anchor,
+            )
+        )
 
     def calculate_position_sizing_params(
         self,
@@ -348,6 +405,11 @@ class PositionSizingCalculator:
                     "stop_loss_price": stop_loss_price,
                     "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                     "risk_percentage": risk_percentage,
+                    "policy_sizing_intent": self.build_policy_sizing_intent(
+                        action=action,
+                        recommended_position_size=recommended_position_size,
+                        current_price=current_price,
+                    ),
                 }
             )
 
@@ -388,6 +450,11 @@ class PositionSizingCalculator:
             result["stop_loss_price"] = current_price
             result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
             result["risk_percentage"] = risk_percentage
+            result["policy_sizing_intent"] = self.build_policy_sizing_intent(
+                action=action,
+                recommended_position_size=0,
+                current_price=current_price,
+            )
             return result
 
         # Determine minimum order size based on asset type
@@ -439,6 +506,11 @@ class PositionSizingCalculator:
                 "stop_loss_price": stop_loss_price,
                 "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                 "risk_percentage": risk_percentage,
+                "policy_sizing_intent": self.build_policy_sizing_intent(
+                    action=action,
+                    recommended_position_size=recommended_position_size,
+                    current_price=current_price,
+                ),
             }
         )
 
