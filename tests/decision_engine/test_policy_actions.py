@@ -3,6 +3,8 @@ import pytest
 from finance_feedback_engine.decision_engine.policy_actions import (
     POLICY_ACTION_VERSION,
     PolicyAction,
+    build_action_context,
+    build_control_outcome,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -95,3 +97,41 @@ def test_hold_is_legal_in_every_position_state():
     for state in ("flat", "long", "short"):
         assert is_structurally_valid("HOLD", state) is True
         assert invalid_action_reason("HOLD", state) is None
+
+
+
+def test_build_action_context_for_invalid_add_from_flat():
+    result = build_action_context(position_state="flat", policy_action="ADD_SMALL_LONG")
+    assert result["current_position_state"] == "flat"
+    assert result["structural_action_validity"] == "invalid"
+    assert result["invalid_action_reason"] == "action ADD_SMALL_LONG is structurally invalid for position_state=flat"
+    assert "OPEN_SMALL_LONG" in result["legal_actions"]
+    assert result["version"] == 1
+
+
+def test_build_action_context_without_position_state_is_unchecked():
+    result = build_action_context(position_state=None, policy_action="OPEN_SMALL_LONG")
+    assert result["current_position_state"] is None
+    assert result["structural_action_validity"] == "unchecked"
+    assert result["legal_actions"] is None
+    assert result["invalid_action_reason"] is None
+
+
+def test_build_control_outcome_prioritizes_invalid_then_veto():
+    invalid = build_control_outcome(
+        action="ADD_SMALL_LONG",
+        structural_action_validity="invalid",
+        invalid_action_reason_text="action ADD_SMALL_LONG is structurally invalid for position_state=flat",
+        risk_vetoed=True,
+        risk_veto_reason="Trade rejected: drawdown exceeds threshold",
+    )
+    vetoed = build_control_outcome(
+        action="OPEN_MEDIUM_LONG",
+        structural_action_validity="valid",
+        risk_vetoed=True,
+        risk_veto_reason="Trade rejected: drawdown exceeds threshold",
+    )
+    assert invalid["status"] == "invalid"
+    assert invalid["reason_code"] == "INVALID_POLICY_ACTION"
+    assert vetoed["status"] == "vetoed"
+    assert vetoed["reason_code"] == "RISK_VETO"

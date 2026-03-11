@@ -8,13 +8,11 @@ from typing import Any, Dict, Optional
 from .execution_quality import ExecutionQualityControls, calculate_size_multiplier
 from .policy_actions import (
     POLICY_ACTION_VERSION,
+    build_action_context,
+    build_control_outcome,
     get_legacy_action_compatibility,
     get_policy_action_family,
-    invalid_action_reason,
     is_policy_action,
-    is_structurally_valid,
-    legal_actions_for_position_state,
-    normalize_position_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -206,6 +204,8 @@ class DecisionValidator:
         risk_veto_reason = None
         gatekeeper_message = None
         action_context_version = None
+        canonical_action_context = None
+        canonical_control_outcome = None
 
         if is_policy_action(action):
             policy_action = action
@@ -219,20 +219,6 @@ class DecisionValidator:
                 if isinstance(context.get("position_state"), str)
                 else (context.get("position_state", {}) or {}).get("state")
             )
-            if raw_position_state is not None:
-                current_position_state = normalize_position_state(raw_position_state)
-                legal_actions = [
-                    action.value
-                    for action in legal_actions_for_position_state(current_position_state)
-                ]
-                if is_structurally_valid(action, current_position_state):
-                    structural_action_validity = "valid"
-                else:
-                    structural_action_validity = "invalid"
-                    invalid_reason = invalid_action_reason(action, current_position_state)
-            else:
-                structural_action_validity = "unchecked"
-
             veto_result = (
                 context.get("policy_action_veto_result")
                 or ai_response.get("policy_action_veto_result")
@@ -242,6 +228,25 @@ class DecisionValidator:
                 risk_vetoed = bool(veto_result.get("risk_vetoed", False))
                 risk_veto_reason = veto_result.get("risk_veto_reason")
                 gatekeeper_message = veto_result.get("gatekeeper_message")
+
+            canonical_action_context = build_action_context(
+                position_state=raw_position_state,
+                policy_action=action,
+                risk_vetoed=risk_vetoed,
+                risk_veto_reason=risk_veto_reason,
+                gatekeeper_message=gatekeeper_message,
+            )
+            current_position_state = canonical_action_context.get("current_position_state")
+            legal_actions = canonical_action_context.get("legal_actions")
+            structural_action_validity = canonical_action_context.get("structural_action_validity")
+            invalid_reason = canonical_action_context.get("invalid_action_reason")
+            canonical_control_outcome = build_control_outcome(
+                action=action,
+                structural_action_validity=structural_action_validity,
+                invalid_action_reason_text=invalid_reason,
+                risk_vetoed=risk_vetoed,
+                risk_veto_reason=risk_veto_reason,
+            )
         
         confidence_pct = float(ai_response.get("confidence", 0) or 0)
         volatility = float(context.get("volatility", 0.0) or 0.0)
@@ -275,6 +280,8 @@ class DecisionValidator:
             "risk_veto_reason": risk_veto_reason,
             "gatekeeper_message": gatekeeper_message,
             "action_context_version": action_context_version,
+            "action_context": canonical_action_context,
+            "control_outcome": canonical_control_outcome,
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),
             "suggested_amount": suggested_amount,

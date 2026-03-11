@@ -135,3 +135,87 @@ def invalid_action_reason(action: PolicyAction | str, position_state: str) -> Op
         f"action {normalized_action.value} is structurally invalid for "
         f"position_state={state}"
     )
+
+
+
+def build_action_context(
+    *,
+    position_state: object | None,
+    policy_action: PolicyAction | str,
+    risk_vetoed: bool = False,
+    risk_veto_reason: Optional[str] = None,
+    gatekeeper_message: Optional[str] = None,
+) -> dict:
+    normalized_action = normalize_policy_action(policy_action)
+    current_position_state = None
+    legal_actions = None
+    structural_action_validity = "unchecked"
+    invalid_reason = None
+
+    if position_state is not None:
+        current_position_state = normalize_position_state(position_state)
+        legal_actions = [
+            action.value for action in legal_actions_for_position_state(current_position_state)
+        ]
+        if is_structurally_valid(normalized_action, current_position_state):
+            structural_action_validity = "valid"
+        else:
+            structural_action_validity = "invalid"
+            invalid_reason = invalid_action_reason(normalized_action, current_position_state)
+
+    return {
+        "current_position_state": current_position_state,
+        "structural_action_validity": structural_action_validity,
+        "legal_actions": legal_actions,
+        "invalid_action_reason": invalid_reason,
+        "risk_vetoed": bool(risk_vetoed),
+        "risk_veto_reason": risk_veto_reason,
+        "gatekeeper_message": gatekeeper_message,
+        "version": 1,
+    }
+
+
+def build_control_outcome(
+    *,
+    action: object,
+    structural_action_validity: Optional[str] = None,
+    invalid_action_reason_text: Optional[str] = None,
+    risk_vetoed: bool = False,
+    risk_veto_reason: Optional[str] = None,
+    execution_status: Optional[str] = None,
+    execution_result: Optional[dict] = None,
+) -> dict:
+    if structural_action_validity == "invalid":
+        return {
+            "status": "invalid",
+            "reason_code": "INVALID_POLICY_ACTION",
+            "message": invalid_action_reason_text or f"Invalid policy action: {action}",
+            "version": 1,
+        }
+    if risk_vetoed:
+        return {
+            "status": "vetoed",
+            "reason_code": "RISK_VETO",
+            "message": risk_veto_reason or f"Risk vetoed action: {action}",
+            "version": 1,
+        }
+    if execution_status == "filtered" and isinstance(execution_result, dict):
+        return {
+            "status": "rejected",
+            "reason_code": execution_result.get("reason_code"),
+            "message": execution_result.get("error") or execution_result.get("message"),
+            "version": 1,
+        }
+    if execution_status == "hold":
+        return {
+            "status": "proposed",
+            "reason_code": "HOLD",
+            "message": "Hold decision - maintain current position",
+            "version": 1,
+        }
+    return {
+        "status": "proposed",
+        "reason_code": None,
+        "message": None,
+        "version": 1,
+    }

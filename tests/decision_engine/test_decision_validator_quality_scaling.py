@@ -821,3 +821,58 @@ def test_decision_validator_leaves_action_context_unchecked_without_position_sta
     assert decision["current_position_state"] is None
     assert decision["legal_actions"] is None
     assert decision["invalid_action_reason"] is None
+
+
+
+def test_decision_validator_surfaces_canonical_action_context_and_control_outcome():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+        "position_state": "flat",
+        "policy_action_veto_result": {
+            "policy_action": "OPEN_MEDIUM_LONG",
+            "risk_vetoed": True,
+            "risk_veto_reason": "Trade rejected: drawdown exceeds threshold",
+            "gatekeeper_message": "Trade rejected: drawdown exceeds threshold",
+            "version": 1,
+        },
+    }
+    ai_response = {
+        "action": "OPEN_MEDIUM_LONG",
+        "confidence": 80,
+        "reasoning": "risk vetoed",
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["action_context"]["current_position_state"] == "flat"
+    assert decision["action_context"]["structural_action_validity"] == "valid"
+    assert decision["action_context"]["risk_vetoed"] is True
+    assert decision["action_context"]["risk_vetoed"] == decision["risk_vetoed"]
+    assert decision["action_context"]["risk_veto_reason"] == decision["risk_veto_reason"]
+    assert decision["action_context"]["gatekeeper_message"] == decision["gatekeeper_message"]
+    assert decision["control_outcome"]["status"] == "vetoed"
+    assert decision["control_outcome"]["reason_code"] == "RISK_VETO"
+    assert decision["control_outcome"]["message"] == "Trade rejected: drawdown exceeds threshold"
