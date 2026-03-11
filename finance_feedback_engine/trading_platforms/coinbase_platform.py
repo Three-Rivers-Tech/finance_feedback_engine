@@ -1445,6 +1445,43 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             logger.error("Error fetching portfolio breakdown: %s", e)
             raise standardize_platform_error(e, "get_portfolio_breakdown")
 
+    def _translate_policy_sizing_intent(self, decision: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Translate shared sizing intent into Coinbase-native notional semantics.
+
+        Stage 2 intentionally keeps this additive and compatibility-preserving.
+        It does not replace the existing suggested_amount execution path; it simply
+        makes the Coinbase translation step explicit and inspectable.
+        """
+        intent = decision.get("policy_sizing_intent")
+        if not isinstance(intent, dict):
+            return None
+
+        translated_size = decision.get("suggested_amount")
+        try:
+            translated_size = float(translated_size) if translated_size is not None else None
+        except (TypeError, ValueError):
+            translated_size = None
+
+        effective_exposure_pct = intent.get("target_delta_pct")
+        semantic_drift_detected = False
+        notes = "coinbase_uses_fractional_quote_notional"
+
+        if translated_size is not None and effective_exposure_pct is not None:
+            try:
+                semantic_drift_detected = abs(float(translated_size) - float(effective_exposure_pct)) > 1e-9
+            except (TypeError, ValueError):
+                semantic_drift_detected = False
+
+        return {
+            "provider": "coinbase",
+            "policy_sizing_intent": intent,
+            "translated_size": translated_size,
+            "effective_exposure_pct": effective_exposure_pct,
+            "semantic_drift_detected": semantic_drift_detected,
+            "translation_notes": notes,
+            "version": 1,
+        }
+
     @platform_retry(max_attempts=3, min_wait=1, max_wait=10)
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -1470,6 +1507,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         action = decision.get("action")
         asset_pair = decision.get("asset_pair")
         product_id = self._format_product_id(asset_pair)
+        provider_translation_result = self._translate_policy_sizing_intent(decision)
+        if provider_translation_result and not decision.get("provider_translation_result"):
+            decision["provider_translation_result"] = provider_translation_result
+        provider_translation_result = self._translate_policy_sizing_intent(decision)
+        if provider_translation_result and not decision.get("provider_translation_result"):
+            decision["provider_translation_result"] = provider_translation_result
         requested_size_usd = decision.get("suggested_amount", 0)
         client_order_id = f"ffe-{decision.get('id', uuid.uuid4().hex)}"
 

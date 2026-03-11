@@ -1922,3 +1922,94 @@ class TestAccountInfoEdgeCases:
         # with available data rather than erroring out completely
         assert result["platform"] == "coinbase_advanced"
         assert result["status"] == "active"  # Still returns active despite partial failure
+
+
+class TestCoinbasePolicyTranslationScaffold:
+    def test_translate_policy_sizing_intent_returns_coinbase_notional_result(self, platform):
+        decision = {
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "policy_sizing_intent": {
+                "semantic_action": "BUY",
+                "target_exposure_pct": 1000.0,
+                "target_delta_pct": 1000.0,
+                "reduction_fraction": None,
+                "sizing_anchor": "quarter_kelly_conservative",
+                "provider_agnostic": True,
+                "version": 1,
+            },
+        }
+
+        result = platform._translate_policy_sizing_intent(decision)
+
+        assert result is not None
+        assert result["provider"] == "coinbase"
+        assert result["translated_size"] == 1000.0
+        assert result["effective_exposure_pct"] == 1000.0
+        assert result["semantic_drift_detected"] is False
+        assert result["translation_notes"] == "coinbase_uses_fractional_quote_notional"
+
+    def test_translate_policy_sizing_intent_detects_drift_when_suggested_amount_differs(self, platform):
+        decision = {
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 900.0,
+            "policy_sizing_intent": {
+                "semantic_action": "BUY",
+                "target_exposure_pct": 1000.0,
+                "target_delta_pct": 1000.0,
+                "reduction_fraction": None,
+                "sizing_anchor": "quarter_kelly_conservative",
+                "provider_agnostic": True,
+                "version": 1,
+            },
+        }
+
+        result = platform._translate_policy_sizing_intent(decision)
+
+        assert result is not None
+        assert result["semantic_drift_detected"] is True
+        assert result["translated_size"] == 900.0
+
+    def test_execute_trade_adds_translation_result_when_policy_intent_present(self, platform, mock_client):
+        mock_client.list_orders.return_value = []
+        order_response = MagicMock()
+        order_response.success = True
+        order_response.order_id = "order-123"
+        order_response.to_dict.return_value = {
+            "success": True,
+            "success_response": {"order_id": "order-123"},
+            "order_configuration": {},
+        }
+        mock_client.market_order_buy.return_value = order_response
+        mock_client.get_product.return_value = {
+            "quote_increment": "0.01",
+            "base_increment": "0.00000001",
+            "quote_min_size": "10",
+            "base_min_size": "0.0001",
+        }
+        platform._client = mock_client
+
+        decision = {
+            "id": "dec-translate-1",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+            "policy_sizing_intent": {
+                "semantic_action": "BUY",
+                "target_exposure_pct": 1000.0,
+                "target_delta_pct": 1000.0,
+                "reduction_fraction": None,
+                "sizing_anchor": "quarter_kelly_conservative",
+                "provider_agnostic": True,
+                "version": 1,
+            },
+        }
+
+        platform.execute_trade(decision)
+
+        assert "provider_translation_result" in decision
+        assert decision["provider_translation_result"]["provider"] == "coinbase"
+        assert decision["provider_translation_result"]["translated_size"] == 1000.0
