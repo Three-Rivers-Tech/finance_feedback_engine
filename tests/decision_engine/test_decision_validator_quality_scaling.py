@@ -638,3 +638,143 @@ def test_decision_validator_policy_action_close_has_no_legacy_compatibility():
     assert decision["policy_action"] == "CLOSE_LONG"
     assert decision["policy_action_family"] == "close_long"
     assert decision["legacy_action_compatibility"] is None
+
+
+
+def test_decision_validator_surfaces_invalid_policy_action_context():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+        "position_state": "flat",
+    }
+    ai_response = {
+        "action": "ADD_SMALL_LONG",
+        "confidence": 80,
+        "reasoning": "invalid from flat",
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["policy_action"] == "ADD_SMALL_LONG"
+    assert decision["current_position_state"] == "flat"
+    assert decision["structural_action_validity"] == "invalid"
+    assert decision["invalid_action_reason"] == "action ADD_SMALL_LONG is structurally invalid for position_state=flat"
+    assert "OPEN_SMALL_LONG" in decision["legal_actions"]
+    assert decision["risk_vetoed"] is False
+
+
+
+def test_decision_validator_surfaces_valid_policy_action_context():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+        "position_state": {"state": "LONG"},
+    }
+    ai_response = {
+        "action": "CLOSE_LONG",
+        "confidence": 80,
+        "reasoning": "valid from long",
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=True,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["current_position_state"] == "long"
+    assert decision["structural_action_validity"] == "valid"
+    assert decision["invalid_action_reason"] is None
+    assert "CLOSE_LONG" in decision["legal_actions"]
+    assert decision["action_context_version"] == 1
+
+
+
+def test_decision_validator_surfaces_policy_action_veto_metadata_additively():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+        "position_state": "flat",
+        "policy_action_veto_result": {
+            "policy_action": "OPEN_MEDIUM_LONG",
+            "risk_vetoed": True,
+            "risk_veto_reason": "Trade rejected: drawdown exceeds threshold",
+            "gatekeeper_message": "Trade rejected: drawdown exceeds threshold",
+            "version": 1,
+        },
+    }
+    ai_response = {
+        "action": "OPEN_MEDIUM_LONG",
+        "confidence": 80,
+        "reasoning": "risk vetoed",
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["structural_action_validity"] == "valid"
+    assert decision["risk_vetoed"] is True
+    assert decision["risk_veto_reason"] == "Trade rejected: drawdown exceeds threshold"
+    assert decision["gatekeeper_message"] == "Trade rejected: drawdown exceeds threshold"
+    assert decision["legacy_action_compatibility"] == "BUY"

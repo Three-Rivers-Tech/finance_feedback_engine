@@ -10,7 +10,11 @@ from .policy_actions import (
     POLICY_ACTION_VERSION,
     get_legacy_action_compatibility,
     get_policy_action_family,
+    invalid_action_reason,
     is_policy_action,
+    is_structurally_valid,
+    legal_actions_for_position_state,
+    normalize_position_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -195,13 +199,49 @@ class DecisionValidator:
         policy_action_family = None
         legacy_action_compatibility = None
         structural_action_validity = None
+        current_position_state = None
+        legal_actions = None
+        invalid_reason = None
+        risk_vetoed = False
+        risk_veto_reason = None
+        gatekeeper_message = None
+        action_context_version = None
 
         if is_policy_action(action):
             policy_action = action
             policy_action_version = POLICY_ACTION_VERSION
             policy_action_family = get_policy_action_family(action)
             legacy_action_compatibility = get_legacy_action_compatibility(action)
-            structural_action_validity = "unchecked"
+            action_context_version = 1
+
+            raw_position_state = (
+                context.get("position_state")
+                if isinstance(context.get("position_state"), str)
+                else (context.get("position_state", {}) or {}).get("state")
+            )
+            if raw_position_state is not None:
+                current_position_state = normalize_position_state(raw_position_state)
+                legal_actions = [
+                    action.value
+                    for action in legal_actions_for_position_state(current_position_state)
+                ]
+                if is_structurally_valid(action, current_position_state):
+                    structural_action_validity = "valid"
+                else:
+                    structural_action_validity = "invalid"
+                    invalid_reason = invalid_action_reason(action, current_position_state)
+            else:
+                structural_action_validity = "unchecked"
+
+            veto_result = (
+                context.get("policy_action_veto_result")
+                or ai_response.get("policy_action_veto_result")
+                or {}
+            )
+            if isinstance(veto_result, dict):
+                risk_vetoed = bool(veto_result.get("risk_vetoed", False))
+                risk_veto_reason = veto_result.get("risk_veto_reason")
+                gatekeeper_message = veto_result.get("gatekeeper_message")
         
         confidence_pct = float(ai_response.get("confidence", 0) or 0)
         volatility = float(context.get("volatility", 0.0) or 0.0)
@@ -228,6 +268,13 @@ class DecisionValidator:
             "policy_action_family": policy_action_family,
             "legacy_action_compatibility": legacy_action_compatibility,
             "structural_action_validity": structural_action_validity,
+            "current_position_state": current_position_state,
+            "legal_actions": legal_actions,
+            "invalid_action_reason": invalid_reason,
+            "risk_vetoed": risk_vetoed,
+            "risk_veto_reason": risk_veto_reason,
+            "gatekeeper_message": gatekeeper_message,
+            "action_context_version": action_context_version,
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),
             "suggested_amount": suggested_amount,
