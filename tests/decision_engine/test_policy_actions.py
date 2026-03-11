@@ -5,8 +5,12 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     PolicyAction,
     get_legacy_action_compatibility,
     get_policy_action_family,
+    invalid_action_reason,
     is_policy_action,
+    is_structurally_valid,
+    legal_actions_for_position_state,
     normalize_policy_action,
+    normalize_position_state,
 )
 
 
@@ -39,3 +43,48 @@ def test_legacy_action_compatibility_mapping_is_explicit():
     assert get_legacy_action_compatibility("HOLD") == "HOLD"
     assert get_legacy_action_compatibility("REDUCE_LONG") is None
     assert get_legacy_action_compatibility("CLOSE_SHORT") is None
+
+
+
+def test_structural_legality_for_flat_position():
+    legal = legal_actions_for_position_state("flat")
+    assert PolicyAction.OPEN_SMALL_LONG in legal
+    assert PolicyAction.OPEN_MEDIUM_SHORT in legal
+    assert PolicyAction.ADD_SMALL_LONG not in legal
+    assert PolicyAction.CLOSE_LONG not in legal
+
+
+def test_structural_legality_for_long_position():
+    legal = legal_actions_for_position_state("long")
+    assert PolicyAction.ADD_SMALL_LONG in legal
+    assert PolicyAction.REDUCE_LONG in legal
+    assert PolicyAction.CLOSE_LONG in legal
+    assert PolicyAction.OPEN_SMALL_LONG not in legal
+    assert PolicyAction.OPEN_SMALL_SHORT not in legal
+
+
+def test_structural_legality_for_short_position():
+    legal = legal_actions_for_position_state("short")
+    assert PolicyAction.ADD_SMALL_SHORT in legal
+    assert PolicyAction.REDUCE_SHORT in legal
+    assert PolicyAction.CLOSE_SHORT in legal
+    assert PolicyAction.OPEN_SMALL_SHORT not in legal
+    assert PolicyAction.OPEN_SMALL_LONG not in legal
+
+
+def test_is_structurally_valid_rejects_add_from_flat():
+    assert is_structurally_valid("ADD_SMALL_LONG", "flat") is False
+    assert (
+        invalid_action_reason("ADD_SMALL_LONG", "flat")
+        == "action ADD_SMALL_LONG is structurally invalid for position_state=flat"
+    )
+
+
+def test_is_structurally_valid_accepts_close_long_from_long():
+    assert is_structurally_valid("CLOSE_LONG", "long") is True
+    assert invalid_action_reason("CLOSE_LONG", "long") is None
+
+
+def test_normalize_position_state_rejects_invalid_state():
+    with pytest.raises(ValueError):
+        normalize_position_state("sideways")

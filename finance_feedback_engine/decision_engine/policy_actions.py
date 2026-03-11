@@ -84,3 +84,54 @@ def get_legacy_action_compatibility(action: PolicyAction | str) -> Optional[str]
     }:
         return None
     raise ValueError(f"Unsupported policy action compatibility for: {normalized}")
+
+
+VALID_POSITION_STATES = {"flat", "long", "short"}
+
+
+def normalize_position_state(value: object) -> str:
+    normalized = str(value).lower()
+    if normalized not in VALID_POSITION_STATES:
+        raise ValueError(f"Unsupported position state: {value}")
+    return normalized
+
+
+def legal_actions_for_position_state(position_state: str) -> list[PolicyAction]:
+    state = normalize_position_state(position_state)
+    if state == "flat":
+        return [
+            PolicyAction.HOLD,
+            PolicyAction.OPEN_SMALL_LONG,
+            PolicyAction.OPEN_MEDIUM_LONG,
+            PolicyAction.OPEN_SMALL_SHORT,
+            PolicyAction.OPEN_MEDIUM_SHORT,
+        ]
+    if state == "long":
+        return [
+            PolicyAction.HOLD,
+            PolicyAction.ADD_SMALL_LONG,
+            PolicyAction.REDUCE_LONG,
+            PolicyAction.CLOSE_LONG,
+        ]
+    return [
+        PolicyAction.HOLD,
+        PolicyAction.ADD_SMALL_SHORT,
+        PolicyAction.REDUCE_SHORT,
+        PolicyAction.CLOSE_SHORT,
+    ]
+
+
+def is_structurally_valid(action: PolicyAction | str, position_state: str) -> bool:
+    normalized_action = normalize_policy_action(action)
+    return normalized_action in legal_actions_for_position_state(position_state)
+
+
+def invalid_action_reason(action: PolicyAction | str, position_state: str) -> Optional[str]:
+    normalized_action = normalize_policy_action(action)
+    state = normalize_position_state(position_state)
+    if is_structurally_valid(normalized_action, state):
+        return None
+    return (
+        f"action {normalized_action.value} is structurally invalid for "
+        f"position_state={state}"
+    )
