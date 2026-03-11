@@ -148,3 +148,97 @@ def test_decision_validator_hold_preserves_zero_delta_policy_metadata():
     assert decision["policy_sizing_intent"]["target_delta_pct"] == 0.0
     assert decision["provider_translation_required"] is False
     assert decision["effective_size_basis"] == "usd_notional"
+
+
+def test_decision_validator_preserves_legacy_fields_with_policy_metadata():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 1.10},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+    }
+    ai_response = {"action": "SELL", "confidence": 85, "amount": 0}
+    position_sizing_result = {
+        "recommended_position_size": 2500.0,
+        "stop_loss_price": 1.12,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+        "policy_sizing_intent": {
+            "semantic_action": "SELL",
+            "target_exposure_pct": 2750.0,
+            "target_delta_pct": 2750.0,
+            "reduction_fraction": None,
+            "sizing_anchor": "quarter_kelly_conservative",
+            "provider_agnostic": True,
+            "version": 1,
+        },
+    }
+
+    decision = validator.create_decision(
+        asset_pair="EUR_USD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=False,
+        is_forex=True,
+    )
+
+    assert decision["action"] == "SELL"
+    assert decision["position_type"] == "SHORT"
+    assert decision["recommended_position_size"] > 0
+    assert decision["recommended_position_size"] < 2500.0
+    assert decision["suggested_amount"] == decision["recommended_position_size"]
+    assert decision["effective_size_basis"] == "asset_units"
+    assert decision["provider_translation_required"] is True
+
+
+def test_decision_validator_policy_intent_stays_provider_agnostic():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+    }
+    ai_response = {"action": "BUY", "confidence": 80, "amount": 0}
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+        "policy_sizing_intent": {
+            "semantic_action": "BUY",
+            "target_exposure_pct": 100.0,
+            "target_delta_pct": 100.0,
+            "reduction_fraction": None,
+            "sizing_anchor": "quarter_kelly_conservative",
+            "provider_agnostic": True,
+            "version": 1,
+        },
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    intent = decision["policy_sizing_intent"]
+    assert "suggested_amount" not in intent
+    assert "recommended_position_size" not in intent
+    assert "units" not in intent
+    assert intent["provider_agnostic"] is True
