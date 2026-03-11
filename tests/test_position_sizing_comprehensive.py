@@ -103,7 +103,7 @@ class TestPositionSizingCalculator:
         assert position_size == 0.0
 
     def test_calculate_position_size_zero_stop_loss(self, calculator):
-        """Test position sizing with zero stop loss (should return 0)."""
+        """Zero stop loss should be normalized to the minimum enforced stop distance."""
         position_size = calculator.calculate_position_size(
             account_balance=10000.0,
             risk_percentage=0.01,
@@ -111,7 +111,9 @@ class TestPositionSizingCalculator:
             stop_loss_percentage=0.0,
         )
 
-        assert position_size == 0.0
+        expected = 10000.0 * 0.01 / (50000.0 * 0.005)
+        assert position_size == pytest.approx(expected, rel=1e-6)
+        assert position_size == pytest.approx(0.4, rel=1e-6)
 
     def test_calculate_position_size_high_risk(self, calculator):
         """Test position sizing with high risk percentage (5%)."""
@@ -481,11 +483,11 @@ class TestPositionSizingCalculator:
         assert result["recommended_position_size"] == pytest.approx(expected_size, rel=1e-6)
 
     def test_calculate_position_sizing_params_legacy_percentage_conversion(self):
-        """Test automatic conversion of legacy percentage values (>1) to decimals."""
+        """Test automatic conversion of realistic legacy percentage values (>1) to decimals."""
         config = {
             "agent": {
-                "risk_percentage": 100.0,  # Legacy: 1% as 100.0 instead of 0.01
-                "sizing_stop_loss_percentage": 200.0,  # Legacy: 2% as 200.0
+                "risk_percentage": 1.5,  # Legacy 1.5% stored as 1.5 instead of 0.015
+                "sizing_stop_loss_percentage": 2.5,  # Legacy 2.5% stored as 2.5 instead of 0.025
                 "use_dynamic_stop_loss": False,  # Disable dynamic to test fixed conversion
             }
         }
@@ -502,10 +504,9 @@ class TestPositionSizingCalculator:
             balance_source="test",
         )
 
-        # Should convert 100.0 → 1.0 → 0.01 and 200.0 → 2.0 → 0.02
-        # Conversion happens: value > 1, so divides by 100
-        assert result["risk_percentage"] == 1.0  # 100 / 100 = 1.0
-        assert result["sizing_stop_loss_percentage"] == 2.0  # 200 / 100 = 2.0
+        # Conversion happens: values > 1 are divided by 100 and then used normally.
+        assert result["risk_percentage"] == pytest.approx(0.015, rel=1e-9)
+        assert result["sizing_stop_loss_percentage"] == pytest.approx(0.025, rel=1e-9)
 
     def test_calculate_position_sizing_params_kelly_criterion(self):
         """Test that Kelly Criterion mode is used when enabled."""
