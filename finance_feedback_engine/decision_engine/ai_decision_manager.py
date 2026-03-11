@@ -8,6 +8,11 @@ from finance_feedback_engine.utils.config_loader import normalize_decision_confi
 
 from .decision_validation import build_fallback_decision
 from .ensemble_manager import EnsembleDecisionManager
+from .policy_actions import (
+    get_legacy_action_compatibility,
+    is_policy_action,
+    normalize_policy_action,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -646,6 +651,29 @@ Make your decision based on evidence, not emotion. Acknowledge when data is conf
         # No dedicated circuit breakers at the AI manager layer today.
         return {}
 
+    def _normalize_provider_action_payload(
+        self, decision: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Normalize provider action payloads for Stage 3 compatibility.
+
+        Legacy directional actions remain valid. Bounded policy actions are
+        accepted as first-class machine outputs and get explicit compatibility
+        fields added without mutating the original action semantics.
+        """
+        if not isinstance(decision, dict):
+            return {}
+
+        normalized = dict(decision)
+        action = normalized.get("action")
+        if is_policy_action(action):
+            policy_action = normalize_policy_action(action)
+            normalized.setdefault("policy_action", policy_action.value)
+            normalized.setdefault(
+                "legacy_action_compatibility",
+                get_legacy_action_compatibility(policy_action),
+            )
+        return normalized
+
     def _is_valid_provider_response(
         self, decision: Dict[str, Any], provider: str
     ) -> bool:
@@ -663,15 +691,18 @@ Make your decision based on evidence, not emotion. Acknowledge when data is conf
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if "action" not in decision or "confidence" not in decision:
+        normalized_decision = self._normalize_provider_action_payload(decision)
+
+        if "action" not in normalized_decision or "confidence" not in normalized_decision:
             logger.warning(
                 f"Provider {provider}: missing required keys 'action' or 'confidence'"
             )
             return False
 
-        if decision.get("action") not in ["BUY", "SELL", "HOLD"]:
+        action = normalized_decision.get("action")
+        if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
             logger.warning(
-                f"Provider {provider}: invalid action '{decision.get('action')}'"
+                f"Provider {provider}: invalid action '{action}'"
             )
             return False
 

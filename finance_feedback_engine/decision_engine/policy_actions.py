@@ -32,6 +32,8 @@ def is_policy_action(value: object) -> bool:
 
 
 def normalize_policy_action(value: object) -> PolicyAction:
+    if isinstance(value, PolicyAction):
+        return value
     return PolicyAction(str(value))
 
 
