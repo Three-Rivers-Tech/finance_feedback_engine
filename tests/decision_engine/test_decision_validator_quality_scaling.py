@@ -335,3 +335,66 @@ def test_decision_validator_surfaces_provider_translation_result_additively():
     assert decision["provider_translation_result"]["provider"] == "coinbase"
     assert decision["provider_translation_result"]["translated_size"] == 100.0
     assert decision["provider_translation_result"]["semantic_drift_detected"] is False
+
+
+def test_decision_validator_surfaces_flat_translation_metadata_fields():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 100.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+    }
+    ai_response = {"action": "BUY", "confidence": 80, "amount": 0}
+    position_sizing_result = {
+        "recommended_position_size": 1.0,
+        "stop_loss_price": 98.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+        "policy_sizing_intent": {
+            "semantic_action": "BUY",
+            "target_exposure_pct": 100.0,
+            "target_delta_pct": 100.0,
+            "reduction_fraction": None,
+            "sizing_anchor": "quarter_kelly_conservative",
+            "provider_agnostic": True,
+            "version": 1,
+        },
+        "provider_translation_result": {
+            "provider": "oanda",
+            "policy_sizing_intent": {
+                "semantic_action": "BUY",
+                "target_exposure_pct": 100.0,
+                "target_delta_pct": 100.0,
+                "reduction_fraction": None,
+                "sizing_anchor": "quarter_kelly_conservative",
+                "provider_agnostic": True,
+                "version": 1,
+            },
+            "translated_size": 1000,
+            "effective_exposure_pct": 95.0,
+            "semantic_drift_detected": True,
+            "translation_notes": "oanda_integer_unit_translation",
+            "version": 1,
+        },
+    }
+
+    decision = validator.create_decision(
+        asset_pair="EURUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=False,
+        is_forex=True,
+    )
+
+    assert decision["translation_provider"] == "oanda"
+    assert decision["translated_size"] == 1000
+    assert decision["translated_effective_exposure_pct"] == 95.0
+    assert decision["semantic_drift_detected"] is True
+    assert decision["translation_notes"] == "oanda_integer_unit_translation"
