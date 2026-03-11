@@ -23,6 +23,11 @@ except ImportError:
 
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
 from .debate_manager import DebateManager
+from .policy_actions import (
+    get_legacy_action_compatibility,
+    is_policy_action,
+    normalize_policy_action,
+)
 from .performance_tracker import PerformanceTracker
 from .two_phase_aggregator import TwoPhaseAggregator
 from .voting_strategies import VotingStrategies
@@ -1143,6 +1148,87 @@ class EnsembleDecisionManager:
 
         return decision
 
+    def _normalize_ensemble_action_payload(self, action: str) -> tuple[str, str | None]:
+        """Normalize actions for ensemble voting during Stage 3 migration.
+
+        Returns a tuple of (action_key_for_voting, policy_action_or_none).
+        Legacy directional actions pass through unchanged. Bounded policy actions
+        vote on their own enum value while exposing explicit directional
+        compatibility separately.
+        """
+        if is_policy_action(action):
+            normalized = normalize_policy_action(action)
+            return normalized.value, normalized.value
+        return action, None
+
+    def _aggregate_policy_actions(
+        self,
+        providers: List[str],
+        actions: List[str],
+        confidences: List[int],
+        reasonings: List[str],
+        amounts: List[float],
+        adjusted_weights: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
+        """Policy-action-aware weighted voting for Stage 3 migration."""
+        norm_confidences = np.array(confidences) / 100.0
+
+        if adjusted_weights is not None:
+            weights = np.array([adjusted_weights.get(p, 0.0) for p in providers])
+        else:
+            weights = np.array([self.base_weights.get(p, 1.0) for p in providers])
+
+        voting_power = weights * norm_confidences
+        if voting_power.sum() == 0:
+            voting_power = np.ones(len(providers))
+        voting_power = voting_power / voting_power.sum()
+
+        action_votes: Dict[str, float] = {}
+        for action, power in zip(actions, voting_power):
+            action_key, _ = self._normalize_ensemble_action_payload(action)
+            action_votes[action_key] = action_votes.get(action_key, 0.0) + power
+
+        final_action = max(action_votes, key=action_votes.get)
+        winner_power = action_votes[final_action]
+        supporter_confidences = [
+            conf
+            for act, conf in zip(actions, confidences)
+            if self._normalize_ensemble_action_payload(act)[0] == final_action
+        ]
+
+        if supporter_confidences:
+            base_confidence = np.mean(supporter_confidences)
+            ensemble_confidence = int(base_confidence * (0.8 + 0.4 * winner_power))
+        else:
+            ensemble_confidence = 50
+
+        ensemble_confidence = np.clip(ensemble_confidence, 0, 100)
+        final_reasoning = self._aggregate_reasoning(
+            providers,
+            [self._normalize_ensemble_action_payload(a)[0] for a in actions],
+            reasonings,
+            final_action,
+        )
+        final_amount = float(np.average(amounts, weights=voting_power))
+
+        return {
+            "action": final_action,
+            "policy_action": final_action if is_policy_action(final_action) else None,
+            "legacy_action_compatibility": (
+                get_legacy_action_compatibility(final_action)
+                if is_policy_action(final_action)
+                else final_action
+            ),
+            "confidence": int(ensemble_confidence),
+            "reasoning": final_reasoning,
+            "amount": final_amount,
+            "action_votes": action_votes,
+            "voting_power": {
+                provider: float(power)
+                for provider, power in zip(providers, voting_power)
+            },
+        }
+
     def _weighted_voting(
         self,
         providers: List[str],
@@ -1186,7 +1272,18 @@ class EnsembleDecisionManager:
 
         voting_power = voting_power / voting_power.sum()
 
-        # Vote for each action
+        # If bounded policy actions are present, use policy-aware aggregation.
+        if any(is_policy_action(action) for action in actions):
+            return self._aggregate_policy_actions(
+                providers,
+                actions,
+                confidences,
+                reasonings,
+                amounts,
+                adjusted_weights,
+            )
+
+        # Vote for each legacy directional action
         action_votes = {"BUY": 0.0, "SELL": 0.0, "HOLD": 0.0}
         for action, power in zip(actions, voting_power):
             action_votes[action] += power
