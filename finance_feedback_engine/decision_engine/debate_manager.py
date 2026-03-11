@@ -12,7 +12,33 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .policy_actions import (
+    POLICY_ACTION_VERSION,
+    get_legacy_action_compatibility,
+    get_policy_action_family,
+    is_policy_action,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _with_policy_action_metadata(decision: Dict[str, Any]) -> Dict[str, Any]:
+    """Add bounded policy-action metadata to a role decision when present."""
+    enriched = deepcopy(decision)
+    action = enriched.get("action")
+    if is_policy_action(action):
+        enriched.setdefault("policy_action", action)
+        enriched.setdefault("policy_action_version", POLICY_ACTION_VERSION)
+        enriched.setdefault("policy_action_family", get_policy_action_family(action))
+        enriched.setdefault(
+            "legacy_action_compatibility", get_legacy_action_compatibility(action)
+        )
+    else:
+        enriched.setdefault("policy_action", None)
+        enriched.setdefault("policy_action_version", None)
+        enriched.setdefault("policy_action_family", None)
+        enriched.setdefault("legacy_action_compatibility", None)
+    return enriched
 
 
 class DebateManager:
@@ -91,7 +117,7 @@ class DebateManager:
             )
             raise ValueError(f"Debate results missing required keys - {error_details}")
 
-        final_decision = deepcopy(judge_decision)
+        final_decision = _with_policy_action_metadata(judge_decision)
 
         final_decision["debate_metadata"] = {
             "bull_case": bull_case,
@@ -132,7 +158,7 @@ class DebateManager:
         
         if "bull" not in failed_roles:
             role_decisions["bull"] = {
-                **bull_case,
+                **_with_policy_action_metadata(bull_case),
                 "role": "bull",
                 "provider": self.debate_providers["bull"],
             }
@@ -140,7 +166,7 @@ class DebateManager:
             
         if "bear" not in failed_roles:
             role_decisions["bear"] = {
-                **bear_case,
+                **_with_policy_action_metadata(bear_case),
                 "role": "bear", 
                 "provider": self.debate_providers["bear"],
             }
@@ -148,7 +174,7 @@ class DebateManager:
             
         if "judge" not in failed_roles:
             role_decisions["judge"] = {
-                **judge_decision,
+                **_with_policy_action_metadata(judge_decision),
                 "role": "judge",
                 "provider": self.debate_providers["judge"],
             }
