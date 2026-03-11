@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Tuple
 
+from finance_feedback_engine.decision_engine.policy_actions import is_policy_action
 from finance_feedback_engine.observability.metrics import create_counters, get_meter
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
@@ -157,6 +158,33 @@ class RiskGatekeeper:
             )
 
         return needs_override, modified_decision
+
+    def evaluate_policy_action_veto(
+        self, decision: Dict[str, Any], context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Surface veto results in policy-action terms without changing gate logic.
+
+        This is a Stage 4 compatibility helper that wraps existing validate_trade
+        behavior in an explicit policy-action-oriented result structure.
+        """
+        action = decision.get("action")
+        if not is_policy_action(action):
+            return {
+                "policy_action": None,
+                "risk_vetoed": False,
+                "risk_veto_reason": None,
+                "gatekeeper_message": None,
+                "version": 1,
+            }
+
+        allowed, message = self.validate_trade(decision, context)
+        return {
+            "policy_action": action,
+            "risk_vetoed": not allowed,
+            "risk_veto_reason": None if allowed else message,
+            "gatekeeper_message": message,
+            "version": 1,
+        }
 
     def validate_trade(
         self,
