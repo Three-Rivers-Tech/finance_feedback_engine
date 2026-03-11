@@ -260,3 +260,38 @@ async def test_empty_decision_payload_is_persisted_as_no_action(trading_agent, m
     assert saved_decision["execution_result"]["reason_code"] == "NO_DECISION_PAYLOAD"
     assert saved_decision.get("id")
     assert saved_decision.get("timestamp")
+
+
+@pytest.mark.asyncio
+async def test_hold_decision_preserves_ensemble_metadata_and_logs_council_summary(trading_agent, mock_dependencies, caplog):
+    """Debate/council summaries should be logged and preserved in persisted HOLD artifacts."""
+    decision = {
+        "action": "HOLD",
+        "confidence": 64,
+        "asset_pair": "BTCUSD",
+        "reasoning": "Judge sees conflicting signals.",
+        "ensemble_metadata": {
+            "debate_mode": True,
+            "role_decisions": {
+                "bull": {"action": "BUY", "confidence": 72, "reasoning": "Momentum continuation.", "provider": "gemini"},
+                "bear": {"action": "HOLD", "confidence": 58, "reasoning": "Overextended intraday.", "provider": "qwen"},
+                "judge": {"action": "HOLD", "confidence": 64, "reasoning": "Conflicting signals.", "provider": "mistral"},
+            },
+            "debate_seats": {"bull": "gemini", "bear": "qwen", "judge": "mistral"},
+            "providers_used": ["gemini", "qwen", "mistral"],
+            "voting_strategy": "debate",
+        },
+    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value=decision)
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["bull"]["action"] == "BUY"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+    assert "Council summary for BTCUSD" in caplog.text
+    assert "bull=gemini:BUY/72" in caplog.text
+    assert "bear=qwen:HOLD/58" in caplog.text
+    assert "judge=mistral:HOLD/64" in caplog.text

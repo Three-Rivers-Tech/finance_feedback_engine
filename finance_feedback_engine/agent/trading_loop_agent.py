@@ -1738,6 +1738,7 @@ class TradingLoopAgent:
         for index, decision in ordered_results:
             asset_pair = asset_pairs_snapshot[index] if index < len(asset_pairs_snapshot) else None
             if not decision:
+                self._log_council_summary(decision or {}, asset_pair=asset_pair)
                 self._persist_no_action_decision(
                     decision,
                     asset_pair=asset_pair or "UNKNOWN",
@@ -1749,6 +1750,7 @@ class TradingLoopAgent:
                     asset_pair,
                 )
                 continue
+            self._log_council_summary(decision, asset_pair=asset_pair)
             if decision and decision.get("action") in ["BUY", "SELL"]:
                 # Block duplicate entry when a position already exists for the same asset pair.
                 # This prevents repeated BUY/SELL stacking while positions are already open.
@@ -2800,6 +2802,34 @@ class TradingLoopAgent:
         if not decision.get("timestamp"):
             decision["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         return decision
+
+    def _log_council_summary(self, decision: Dict[str, Any], asset_pair: Optional[str] = None) -> None:
+        """Log concise bull/bear/judge council summaries when ensemble debate metadata exists."""
+        try:
+            ensemble_metadata = decision.get("ensemble_metadata") or {}
+            role_decisions = ensemble_metadata.get("role_decisions") or {}
+            if not role_decisions:
+                return
+            asset_label = asset_pair or decision.get("asset_pair") or "UNKNOWN"
+            parts = []
+            for role in ("bull", "bear", "judge"):
+                role_decision = role_decisions.get(role) or {}
+                if not role_decision:
+                    continue
+                provider = role_decision.get("provider") or (ensemble_metadata.get("debate_seats") or {}).get(role) or "unknown"
+                action = role_decision.get("action") or "UNKNOWN"
+                confidence = role_decision.get("confidence")
+                confidence_text = str(confidence) if confidence is not None else "?"
+                reasoning = str(role_decision.get("reasoning") or "")
+                reasoning_snippet = reasoning[:80] + ("..." if len(reasoning) > 80 else "")
+                if reasoning_snippet:
+                    parts.append(f"{role}={provider}:{action}/{confidence_text} ({reasoning_snippet})")
+                else:
+                    parts.append(f"{role}={provider}:{action}/{confidence_text}")
+            if parts:
+                logger.info("Council summary for %s | %s", asset_label, " | ".join(parts))
+        except Exception:
+            logger.debug("Failed to log council summary", exc_info=True)
 
     def _persist_no_action_decision(self, decision: Dict[str, Any], *, asset_pair: str, reason_code: str, reason: str) -> None:
         """Persist explicit no-action artifacts when analysis returns no materialized decision payload."""
