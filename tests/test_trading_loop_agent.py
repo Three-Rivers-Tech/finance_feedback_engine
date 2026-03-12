@@ -550,6 +550,66 @@ async def test_execution_state_updates_canonical_control_outcome_on_failure(trad
 
 
 
+
+
+@pytest.mark.asyncio
+async def test_execution_state_updates_policy_trace_control_outcome_on_success(trading_agent, mock_dependencies):
+    decision = {
+        "id": "decision-exec-trace-success",
+        "action": "OPEN_SMALL_LONG",
+        "asset_pair": "BTCUSD",
+        "control_outcome": {"status": "proposed", "version": 1},
+        "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+        "policy_trace": {
+            "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+            "decision_envelope": {"action": "OPEN_SMALL_LONG", "version": 1},
+            "decision_metadata": {"decision_id": "decision-exec-trace-success"},
+            "trace_version": 1,
+        },
+    }
+    async with trading_agent._current_decisions_lock:
+        trading_agent._current_decisions = [decision]
+    trading_agent.state = AgentState.EXECUTION
+    trading_agent.engine.execute_decision_async = AsyncMock(return_value={"success": True, "message": "order placed", "order_id": "abc123"})
+
+    await trading_agent.handle_execution_state()
+
+    assert decision["execution_status"] == "executed"
+    assert decision["control_outcome"]["status"] == "executed"
+    assert decision["policy_package"]["control_outcome"] == decision["control_outcome"]
+    assert decision["policy_trace"]["policy_package"]["control_outcome"] == decision["control_outcome"]
+    assert decision["policy_trace"]["policy_package"]["control_outcome"] is not decision["control_outcome"]
+
+
+@pytest.mark.asyncio
+async def test_execution_state_updates_policy_trace_control_outcome_on_failure(trading_agent, mock_dependencies):
+    decision = {
+        "id": "decision-exec-trace-fail",
+        "action": "OPEN_SMALL_LONG",
+        "asset_pair": "BTCUSD",
+        "control_outcome": {"status": "proposed", "version": 1},
+        "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+        "policy_trace": {
+            "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+            "decision_envelope": {"action": "OPEN_SMALL_LONG", "version": 1},
+            "decision_metadata": {"decision_id": "decision-exec-trace-fail"},
+            "trace_version": 1,
+        },
+    }
+    async with trading_agent._current_decisions_lock:
+        trading_agent._current_decisions = [decision]
+    trading_agent.state = AgentState.EXECUTION
+    trading_agent.engine.execute_decision_async = AsyncMock(return_value={"success": False, "reason_code": "EXECUTION_FAILED", "error": "broker reject"})
+
+    await trading_agent.handle_execution_state()
+
+    assert decision["execution_status"] == "execution_failed"
+    assert decision["control_outcome"]["status"] == "rejected"
+    assert decision["policy_package"]["control_outcome"] == decision["control_outcome"]
+    assert decision["policy_trace"]["policy_package"]["control_outcome"] == decision["control_outcome"]
+    assert decision["policy_trace"]["policy_package"]["control_outcome"] is not decision["control_outcome"]
+
+
 @pytest.mark.asyncio
 async def test_execution_state_policy_package_control_outcome_copy_stays_isolated(trading_agent, mock_dependencies):
     decision = {
@@ -595,3 +655,44 @@ async def test_risk_check_policy_package_control_outcome_copy_stays_isolated(tra
     saved_decision = mock_dependencies["engine"].decision_store.update_decision.call_args[0][0]
     saved_decision["control_outcome"]["message"] = "mutated later"
     assert saved_decision["policy_package"]["control_outcome"]["message"] == "Trade rejected: drawdown exceeds threshold"
+
+
+
+def test_mark_decision_not_executed_updates_policy_trace_control_outcome(trading_agent):
+    decision = {
+        "id": "decision-123",
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "structural_action_validity": "valid",
+        "risk_vetoed": False,
+        "policy_package": {
+            "policy_state": {"position_state": "flat", "version": 1},
+            "action_context": {"structural_action_validity": "valid", "version": 1},
+            "policy_sizing_intent": None,
+            "provider_translation_result": None,
+            "control_outcome": {"status": "proposed", "version": 1},
+            "version": 1,
+        },
+        "policy_trace": {
+            "policy_package": {
+                "policy_state": {"position_state": "flat", "version": 1},
+                "action_context": {"structural_action_validity": "valid", "version": 1},
+                "policy_sizing_intent": None,
+                "provider_translation_result": None,
+                "control_outcome": {"status": "proposed", "version": 1},
+                "version": 1,
+            },
+            "decision_envelope": {"action": "OPEN_SMALL_LONG", "version": 1},
+            "decision_metadata": {"decision_id": "decision-123"},
+            "trace_version": 1,
+        },
+    }
+
+    trading_agent._mark_decision_not_executed(decision, "RISK_REJECTED", "risk rejected")
+
+    assert decision["control_outcome"]["status"] == "rejected"
+    assert decision["policy_package"]["control_outcome"] == decision["control_outcome"]
+    assert decision["policy_trace"]["policy_package"]["control_outcome"] == decision["control_outcome"]
+
+
+

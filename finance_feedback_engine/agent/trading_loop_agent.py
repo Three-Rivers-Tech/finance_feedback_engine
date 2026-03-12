@@ -1946,6 +1946,8 @@ class TradingLoopAgent:
                 policy_package = decision.get("policy_package")
                 if isinstance(policy_package, dict):
                     policy_package["control_outcome"] = decision["control_outcome"].copy()
+                if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
+                    decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
                 logger.info(
                     "Trade for %s approved by RiskGatekeeper. Adding to execution queue.",
                     asset_pair,
@@ -2140,6 +2142,8 @@ class TradingLoopAgent:
                         )
                         if isinstance(decision.get("policy_package"), dict):
                             decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
+                        if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
+                            decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
                         logger.info(
                             "Trade execution succeeded for %s %s. Associating decision with monitor.",
                             action,
@@ -2187,6 +2191,8 @@ class TradingLoopAgent:
                         )
                         if isinstance(decision.get("policy_package"), dict):
                             decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
+                        if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
+                            decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
                         error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
                         logger.error(
                             f"Trade execution failed for {asset_pair}: {error_msg}. Full result: {execution_result}"
@@ -2922,6 +2928,11 @@ class TradingLoopAgent:
             policy_package = decision.get("policy_package")
             if isinstance(policy_package, dict):
                 policy_package["control_outcome"] = decision["control_outcome"].copy()
+            policy_trace = decision.get("policy_trace")
+            if isinstance(policy_trace, dict):
+                trace_package = policy_trace.get("policy_package")
+                if isinstance(trace_package, dict):
+                    trace_package["control_outcome"] = decision["control_outcome"].copy()
             if getattr(self.engine, "decision_store", None):
                 if had_id:
                     self.engine.decision_store.update_decision(decision)
