@@ -547,3 +547,16 @@ def build_policy_evaluation_summary(evaluation_run: Optional[dict]) -> dict:
         "invalid_count": invalid_count,
         "summary_version": 1,
     }
+
+
+
+def extract_policy_evaluation_runs(evaluation_batches: Optional[list[dict]]) -> list[dict]:
+    runs: list[dict] = []
+    for batch in evaluation_batches or []:
+        if not isinstance(batch, dict):
+            continue
+        rows = batch.get("rows")
+        if not isinstance(rows, list):
+            continue
+        runs.append(build_policy_evaluation_run(rows))
+    return runs

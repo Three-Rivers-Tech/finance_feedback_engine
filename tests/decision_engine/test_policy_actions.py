@@ -18,6 +18,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_batch,
     build_policy_evaluation_run,
     build_policy_evaluation_summary,
+    extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -855,3 +856,50 @@ def test_build_policy_evaluation_summary_handles_empty_run():
         "invalid_count": 0,
         "summary_version": 1,
     }
+
+
+
+def test_extract_policy_evaluation_runs_builds_runs_from_batches():
+    runs = extract_policy_evaluation_runs([
+        {
+            "rows": [
+                {
+                    "decision_id": "decision-run-export-1",
+                    "control_outcome_status": "executed",
+                    "evaluation_record_version": 1,
+                }
+            ],
+            "row_count": 1,
+            "batch_version": 1,
+        },
+        {
+            "rows": [
+                {
+                    "decision_id": "decision-run-export-2",
+                    "control_outcome_status": "vetoed",
+                    "evaluation_record_version": 1,
+                }
+            ],
+            "row_count": 1,
+            "batch_version": 1,
+        },
+    ])
+
+    assert len(runs) == 2
+    assert runs[0]["record_count"] == 1
+    assert runs[0]["records"][0]["decision_id"] == "decision-run-export-1"
+    assert runs[1]["records"][0]["control_outcome_status"] == "vetoed"
+    assert runs[1]["run_version"] == 1
+
+
+
+def test_extract_policy_evaluation_runs_skips_invalid_batches_cleanly():
+    runs = extract_policy_evaluation_runs([
+        {"rows": [{"decision_id": "decision-run-export-valid", "control_outcome_status": "executed", "evaluation_record_version": 1}], "row_count": 1, "batch_version": 1},
+        {"rows": None, "row_count": 0, "batch_version": 1},
+        {"batch_version": 1},
+        None,
+    ])
+
+    assert len(runs) == 1
+    assert runs[0]["records"][0]["decision_id"] == "decision-run-export-valid"
