@@ -70,7 +70,14 @@ def test_decision_store_update_preserves_policy_trace(tmp_path):
                 "control_outcome": {"status": "proposed", "version": 1},
                 "version": 1,
             },
-            "decision_envelope": {"action": "OPEN_SMALL_LONG", "version": 1},
+            "decision_envelope": {
+                "action": "OPEN_SMALL_LONG",
+                "policy_action": "OPEN_SMALL_LONG",
+                "legacy_action_compatibility": "BUY",
+                "confidence": 80,
+                "reasoning": "persist trace",
+                "version": 1,
+            },
             "decision_metadata": {"decision_id": "decision-trace-2"},
             "trace_version": 1,
         },
@@ -83,6 +90,7 @@ def test_decision_store_update_preserves_policy_trace(tmp_path):
 
     assert loaded is not None
     assert loaded["policy_trace"]["policy_package"]["control_outcome"]["status"] == "executed"
+    assert loaded["policy_trace"]["decision_envelope"] == decision["policy_trace"]["decision_envelope"]
 
 
 def test_decision_store_legacy_records_without_policy_trace_still_load(tmp_path):
