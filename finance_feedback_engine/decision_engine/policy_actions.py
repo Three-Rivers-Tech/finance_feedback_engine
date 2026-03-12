@@ -488,3 +488,17 @@ def build_policy_evaluation_record(dataset_row: Optional[dict]) -> Optional[dict
 
 def build_policy_evaluation_record_from_dataset_row(dataset_row: Optional[dict]) -> Optional[dict]:
     return build_policy_evaluation_record(dataset_row)
+
+
+
+def build_policy_evaluation_batch(dataset_rows: Optional[list[dict]]) -> dict:
+    rows: list[dict] = []
+    for dataset_row in dataset_rows or []:
+        record = build_policy_evaluation_record_from_dataset_row(dataset_row)
+        if record is not None:
+            rows.append(record)
+    return {
+        "rows": rows,
+        "row_count": len(rows),
+        "batch_version": 1,
+    }
