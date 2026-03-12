@@ -16,6 +16,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_record,
     build_policy_evaluation_record_from_dataset_row,
     build_policy_evaluation_batch,
+    build_policy_evaluation_run,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -790,3 +791,32 @@ def test_policy_evaluation_batch_preserves_multiple_lifecycle_outcomes():
 
     assert batch["row_count"] == 2
     assert [row["control_outcome_status"] for row in batch["rows"]] == ["executed", "vetoed"]
+
+
+
+def test_build_policy_evaluation_run_wraps_records_cleanly():
+    run = build_policy_evaluation_run([
+        {
+            "decision_id": "decision-run-1",
+            "policy_action": "OPEN_SMALL_LONG",
+            "control_outcome_status": "executed",
+            "evaluation_record_version": 1,
+        },
+        {
+            "decision_id": "decision-run-2",
+            "policy_action": "OPEN_MEDIUM_LONG",
+            "control_outcome_status": "vetoed",
+            "evaluation_record_version": 1,
+        },
+    ])
+
+    assert run["record_count"] == 2
+    assert run["run_version"] == 1
+    assert run["records"][0]["decision_id"] == "decision-run-1"
+    assert run["records"][1]["control_outcome_status"] == "vetoed"
+
+
+
+def test_build_policy_evaluation_run_handles_empty_inputs():
+    assert build_policy_evaluation_run([]) == {"records": [], "record_count": 0, "run_version": 1}
+    assert build_policy_evaluation_run(None) == {"records": [], "record_count": 0, "run_version": 1}

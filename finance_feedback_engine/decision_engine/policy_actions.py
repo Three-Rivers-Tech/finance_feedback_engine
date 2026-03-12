@@ -502,3 +502,16 @@ def build_policy_evaluation_batch(dataset_rows: Optional[list[dict]]) -> dict:
         "row_count": len(rows),
         "batch_version": 1,
     }
+
+
+
+def build_policy_evaluation_run(evaluation_records: Optional[list[dict]]) -> dict:
+    records: list[dict] = []
+    for record in evaluation_records or []:
+        if isinstance(record, dict):
+            records.append(dict(record))
+    return {
+        "records": records,
+        "record_count": len(records),
+        "run_version": 1,
+    }
