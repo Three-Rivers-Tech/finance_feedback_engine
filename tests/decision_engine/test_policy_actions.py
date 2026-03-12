@@ -12,6 +12,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_replay_record,
     build_policy_dataset_row,
     build_policy_dataset_row_from_decision,
+    extract_policy_dataset_rows,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -456,3 +457,49 @@ def test_build_policy_dataset_row_from_decision_extracts_canonical_row():
 
 def test_build_policy_dataset_row_from_decision_returns_none_for_legacy_decision():
     assert build_policy_dataset_row_from_decision({"id": "legacy-1", "action": "BUY"}) is None
+
+
+
+def test_extract_policy_dataset_rows_filters_to_canonical_rows():
+    policy_package = build_policy_package(
+        policy_state={"position_state": "flat", "version": 1},
+        action_context={"structural_action_validity": "valid", "version": 1},
+        policy_sizing_intent=None,
+        provider_translation_result=None,
+        control_outcome={"status": "executed", "version": 1},
+    )
+    policy_trace = build_policy_trace(
+        policy_package=policy_package,
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility="BUY",
+        confidence=82,
+        reasoning="bounded policy action",
+        asset_pair="BTCUSD",
+        ai_provider="ensemble",
+        timestamp="2026-03-12T16:45:00Z",
+        decision_id="decision-batch-1",
+    )
+
+    rows = extract_policy_dataset_rows([
+        {
+            "id": "decision-batch-1",
+            "asset_pair": "BTCUSD",
+            "timestamp": "2026-03-12T16:45:00Z",
+            "policy_trace": policy_trace,
+        },
+        {
+            "id": "legacy-batch-1",
+            "action": "BUY",
+        },
+    ])
+
+    assert len(rows) == 1
+    assert rows[0]["decision_id"] == "decision-batch-1"
+    assert rows[0]["policy_action"] == "OPEN_SMALL_LONG"
+
+
+
+def test_extract_policy_dataset_rows_handles_empty_inputs():
+    assert extract_policy_dataset_rows([]) == []
+    assert extract_policy_dataset_rows(None) == []

@@ -451,3 +451,13 @@ def build_policy_dataset_row_from_decision(decision: Optional[dict]) -> Optional
     if replay_record is None:
         return None
     return build_policy_dataset_row(replay_record)
+
+
+
+def extract_policy_dataset_rows(decisions: Optional[list[dict]]) -> list[dict]:
+    rows: list[dict] = []
+    for decision in decisions or []:
+        row = build_policy_dataset_row_from_decision(decision)
+        if row is not None:
+            rows.append(row)
+    return rows
