@@ -413,3 +413,33 @@ def build_policy_replay_record(decision: Optional[dict]) -> Optional[dict]:
         ),
         "replay_version": 1,
     }
+
+
+
+def build_policy_dataset_row(replay_record: Optional[dict]) -> Optional[dict]:
+    payload = dict(replay_record or {})
+    policy_trace = payload.get("policy_trace")
+    if not isinstance(policy_trace, dict):
+        return None
+
+    policy_package = policy_trace.get("policy_package")
+    if not isinstance(policy_package, dict):
+        return None
+
+    return {
+        "decision_id": payload.get("decision_id"),
+        "asset_pair": payload.get("asset_pair"),
+        "timestamp": payload.get("timestamp"),
+        "ai_provider": payload.get("ai_provider"),
+        "action": payload.get("action"),
+        "policy_action": payload.get("policy_action"),
+        "legacy_action_compatibility": payload.get("legacy_action_compatibility"),
+        "policy_state": policy_package.get("policy_state"),
+        "action_context": policy_package.get("action_context"),
+        "policy_sizing_intent": policy_package.get("policy_sizing_intent"),
+        "provider_translation_result": policy_package.get("provider_translation_result"),
+        "control_outcome": policy_package.get("control_outcome"),
+        "trace_version": policy_trace.get("trace_version"),
+        "replay_version": payload.get("replay_version"),
+        "dataset_row_version": 1,
+    }

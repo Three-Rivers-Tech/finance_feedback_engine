@@ -10,6 +10,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_state,
     build_policy_trace,
     build_policy_replay_record,
+    build_policy_dataset_row,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -357,3 +358,55 @@ def test_build_policy_replay_record_extracts_canonical_replay_surface():
 
 def test_build_policy_replay_record_returns_none_without_policy_trace():
     assert build_policy_replay_record({"id": "legacy-1", "action": "BUY"}) is None
+
+
+
+def test_build_policy_dataset_row_extracts_canonical_dataset_surface():
+    policy_package = build_policy_package(
+        policy_state={"position_state": "flat", "version": 1},
+        action_context={"structural_action_validity": "valid", "version": 1},
+        policy_sizing_intent={"semantic_action": "BUY", "version": 1},
+        provider_translation_result={"provider": "coinbase", "version": 1},
+        control_outcome={"status": "executed", "version": 1},
+    )
+    policy_trace = build_policy_trace(
+        policy_package=policy_package,
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility="BUY",
+        confidence=82,
+        reasoning="bounded policy action",
+        asset_pair="BTCUSD",
+        ai_provider="ensemble",
+        timestamp="2026-03-12T15:00:00Z",
+        decision_id="decision-dataset-1",
+    )
+    replay_record = build_policy_replay_record({
+        "id": "decision-dataset-1",
+        "asset_pair": "BTCUSD",
+        "timestamp": "2026-03-12T15:00:00Z",
+        "policy_trace": policy_trace,
+    })
+
+    row = build_policy_dataset_row(replay_record)
+
+    assert row["decision_id"] == "decision-dataset-1"
+    assert row["asset_pair"] == "BTCUSD"
+    assert row["timestamp"] == "2026-03-12T15:00:00Z"
+    assert row["ai_provider"] == "ensemble"
+    assert row["action"] == "OPEN_SMALL_LONG"
+    assert row["policy_action"] == "OPEN_SMALL_LONG"
+    assert row["legacy_action_compatibility"] == "BUY"
+    assert row["policy_state"] == policy_package["policy_state"]
+    assert row["action_context"] == policy_package["action_context"]
+    assert row["policy_sizing_intent"] == policy_package["policy_sizing_intent"]
+    assert row["provider_translation_result"] == policy_package["provider_translation_result"]
+    assert row["control_outcome"] == policy_package["control_outcome"]
+    assert row["trace_version"] == 1
+    assert row["replay_version"] == 1
+    assert row["dataset_row_version"] == 1
+
+
+
+def test_build_policy_dataset_row_returns_none_without_policy_package():
+    assert build_policy_dataset_row({"policy_trace": None}) is None
