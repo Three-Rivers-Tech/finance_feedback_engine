@@ -706,3 +706,87 @@ def test_build_policy_evaluation_batch_handles_empty_inputs():
 
     batch_none = build_policy_evaluation_batch(None)
     assert batch_none == {"rows": [], "row_count": 0, "batch_version": 1}
+
+
+
+def test_policy_evaluation_record_versions_align_with_dataset_rows():
+    dataset_row = {
+        "decision_id": "decision-eval-version-1",
+        "asset_pair": "BTCUSD",
+        "timestamp": "2026-03-12T22:00:00Z",
+        "policy_action": "OPEN_SMALL_LONG",
+        "legacy_action_compatibility": "BUY",
+        "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+        "dataset_row_version": 1,
+    }
+
+    record = build_policy_evaluation_record_from_dataset_row(dataset_row)
+
+    assert record["dataset_row_version"] == 1
+    assert record["evaluation_record_version"] == 1
+
+
+
+def test_policy_evaluation_record_preserves_lifecycle_distinctions():
+    dataset_row = {
+        "decision_id": "decision-eval-lifecycle-1",
+        "asset_pair": "BTCUSD",
+        "timestamp": "2026-03-12T22:01:00Z",
+        "policy_action": "REDUCE_LONG",
+        "legacy_action_compatibility": None,
+        "control_outcome": {"status": "vetoed", "reason_code": "RISK_VETO", "version": 1},
+        "dataset_row_version": 1,
+    }
+
+    record = build_policy_evaluation_record_from_dataset_row(dataset_row)
+
+    assert record["control_outcome_status"] == "vetoed"
+    assert record["control_outcome_reason_code"] == "RISK_VETO"
+
+
+
+def test_policy_evaluation_batch_skips_partial_rows_cleanly():
+    batch = build_policy_evaluation_batch([
+        {
+            "decision_id": "decision-eval-batch-clean-1",
+            "asset_pair": "BTCUSD",
+            "timestamp": "2026-03-12T22:02:00Z",
+            "policy_action": "OPEN_SMALL_LONG",
+            "legacy_action_compatibility": "BUY",
+            "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+            "dataset_row_version": 1,
+        },
+        {
+            "decision_id": "decision-eval-batch-partial-1",
+        },
+    ])
+
+    assert batch["row_count"] == 1
+    assert batch["rows"][0]["decision_id"] == "decision-eval-batch-clean-1"
+
+
+
+def test_policy_evaluation_batch_preserves_multiple_lifecycle_outcomes():
+    batch = build_policy_evaluation_batch([
+        {
+            "decision_id": "decision-eval-batch-executed",
+            "asset_pair": "BTCUSD",
+            "timestamp": "2026-03-12T22:03:00Z",
+            "policy_action": "OPEN_SMALL_LONG",
+            "legacy_action_compatibility": "BUY",
+            "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+            "dataset_row_version": 1,
+        },
+        {
+            "decision_id": "decision-eval-batch-vetoed",
+            "asset_pair": "BTCUSD",
+            "timestamp": "2026-03-12T22:04:00Z",
+            "policy_action": "OPEN_MEDIUM_LONG",
+            "legacy_action_compatibility": "BUY",
+            "control_outcome": {"status": "vetoed", "reason_code": "RISK_VETO", "version": 1},
+            "dataset_row_version": 1,
+        },
+    ])
+
+    assert batch["row_count"] == 2
+    assert [row["control_outcome_status"] for row in batch["rows"]] == ["executed", "vetoed"]
