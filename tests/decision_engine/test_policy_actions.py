@@ -9,6 +9,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_package,
     build_policy_state,
     build_policy_trace,
+    build_policy_replay_record,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -310,3 +311,49 @@ def test_build_policy_trace_gracefully_allows_partial_inputs():
     assert trace["decision_metadata"]["asset_pair"] is None
     assert trace["decision_metadata"]["decision_id"] is None
     assert trace["trace_version"] == 1
+
+
+
+def test_build_policy_replay_record_extracts_canonical_replay_surface():
+    policy_package = build_policy_package(
+        policy_state={"position_state": "flat", "version": 1},
+        action_context={"structural_action_validity": "valid", "version": 1},
+        policy_sizing_intent=None,
+        provider_translation_result=None,
+        control_outcome={"status": "executed", "version": 1},
+    )
+    policy_trace = build_policy_trace(
+        policy_package=policy_package,
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility="BUY",
+        confidence=82,
+        reasoning="bounded policy action",
+        asset_pair="BTCUSD",
+        ai_provider="ensemble",
+        timestamp="2026-03-12T14:10:00Z",
+        decision_id="decision-789",
+    )
+
+    record = build_policy_replay_record({
+        "id": "decision-789",
+        "asset_pair": "BTCUSD",
+        "timestamp": "2026-03-12T14:10:00Z",
+        "policy_trace": policy_trace,
+    })
+
+    assert record["policy_trace"] == policy_trace
+    assert record["decision_id"] == "decision-789"
+    assert record["asset_pair"] == "BTCUSD"
+    assert record["timestamp"] == "2026-03-12T14:10:00Z"
+    assert record["ai_provider"] == "ensemble"
+    assert record["action"] == "OPEN_SMALL_LONG"
+    assert record["policy_action"] == "OPEN_SMALL_LONG"
+    assert record["legacy_action_compatibility"] == "BUY"
+    assert record["control_outcome"]["status"] == "executed"
+    assert record["replay_version"] == 1
+
+
+
+def test_build_policy_replay_record_returns_none_without_policy_trace():
+    assert build_policy_replay_record({"id": "legacy-1", "action": "BUY"}) is None

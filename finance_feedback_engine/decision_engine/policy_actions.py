@@ -357,3 +357,59 @@ def build_policy_trace(
         },
         "trace_version": 1,
     }
+
+
+
+def build_policy_replay_record(decision: Optional[dict]) -> Optional[dict]:
+    payload = dict(decision or {})
+    policy_trace = payload.get("policy_trace")
+    if not isinstance(policy_trace, dict):
+        return None
+
+    decision_envelope = policy_trace.get("decision_envelope")
+    decision_metadata = policy_trace.get("decision_metadata")
+
+    return {
+        "policy_trace": dict(policy_trace),
+        "decision_id": (
+            (decision_metadata or {}).get("decision_id")
+            if isinstance(decision_metadata, dict)
+            else payload.get("id")
+        ),
+        "asset_pair": (
+            (decision_metadata or {}).get("asset_pair")
+            if isinstance(decision_metadata, dict)
+            else payload.get("asset_pair")
+        ),
+        "timestamp": (
+            (decision_metadata or {}).get("timestamp")
+            if isinstance(decision_metadata, dict)
+            else payload.get("timestamp")
+        ),
+        "ai_provider": (
+            (decision_metadata or {}).get("ai_provider")
+            if isinstance(decision_metadata, dict)
+            else payload.get("ai_provider")
+        ),
+        "action": (
+            (decision_envelope or {}).get("action")
+            if isinstance(decision_envelope, dict)
+            else payload.get("action")
+        ),
+        "policy_action": (
+            (decision_envelope or {}).get("policy_action")
+            if isinstance(decision_envelope, dict)
+            else payload.get("policy_action")
+        ),
+        "legacy_action_compatibility": (
+            (decision_envelope or {}).get("legacy_action_compatibility")
+            if isinstance(decision_envelope, dict)
+            else payload.get("legacy_action_compatibility")
+        ),
+        "control_outcome": (
+            ((policy_trace.get("policy_package") or {}).get("control_outcome"))
+            if isinstance(policy_trace.get("policy_package"), dict)
+            else payload.get("control_outcome")
+        ),
+        "replay_version": 1,
+    }
