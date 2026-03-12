@@ -461,3 +461,25 @@ def extract_policy_dataset_rows(decisions: Optional[list[dict]]) -> list[dict]:
         if row is not None:
             rows.append(row)
     return rows
+
+
+
+def build_policy_evaluation_record(dataset_row: Optional[dict]) -> Optional[dict]:
+    payload = dict(dataset_row or {})
+    if not payload:
+        return None
+    control_outcome = payload.get("control_outcome")
+    if not isinstance(control_outcome, dict):
+        return None
+
+    return {
+        "decision_id": payload.get("decision_id"),
+        "asset_pair": payload.get("asset_pair"),
+        "timestamp": payload.get("timestamp"),
+        "policy_action": payload.get("policy_action"),
+        "legacy_action_compatibility": payload.get("legacy_action_compatibility"),
+        "control_outcome_status": control_outcome.get("status"),
+        "control_outcome_reason_code": control_outcome.get("reason_code"),
+        "dataset_row_version": payload.get("dataset_row_version"),
+        "evaluation_record_version": 1,
+    }

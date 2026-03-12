@@ -13,6 +13,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_dataset_row,
     build_policy_dataset_row_from_decision,
     extract_policy_dataset_rows,
+    build_policy_evaluation_record,
     get_legacy_action_compatibility,
     get_policy_action_family,
     invalid_action_reason,
@@ -614,3 +615,33 @@ def test_extract_policy_dataset_rows_skips_partial_trace_rows_cleanly():
 
     assert len(rows) == 1
     assert rows[0]["decision_id"] == "decision-batch-clean-1"
+
+
+
+def test_build_policy_evaluation_record_extracts_minimal_evaluation_view():
+    row = {
+        "decision_id": "decision-eval-1",
+        "asset_pair": "BTCUSD",
+        "timestamp": "2026-03-12T18:00:00Z",
+        "policy_action": "OPEN_SMALL_LONG",
+        "legacy_action_compatibility": "BUY",
+        "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+        "dataset_row_version": 1,
+    }
+
+    record = build_policy_evaluation_record(row)
+
+    assert record["decision_id"] == "decision-eval-1"
+    assert record["asset_pair"] == "BTCUSD"
+    assert record["timestamp"] == "2026-03-12T18:00:00Z"
+    assert record["policy_action"] == "OPEN_SMALL_LONG"
+    assert record["legacy_action_compatibility"] == "BUY"
+    assert record["control_outcome_status"] == "executed"
+    assert record["control_outcome_reason_code"] == "EXECUTED"
+    assert record["dataset_row_version"] == 1
+    assert record["evaluation_record_version"] == 1
+
+
+
+def test_build_policy_evaluation_record_returns_none_without_control_outcome():
+    assert build_policy_evaluation_record({"decision_id": "decision-eval-2"}) is None
