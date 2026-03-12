@@ -408,5 +408,9 @@ def test_build_policy_dataset_row_extracts_canonical_dataset_surface():
 
 
 
-def test_build_policy_dataset_row_returns_none_without_policy_package():
+def test_build_policy_dataset_row_returns_none_without_policy_trace():
     assert build_policy_dataset_row({"policy_trace": None}) is None
+
+
+def test_build_policy_dataset_row_returns_none_without_policy_package():
+    assert build_policy_dataset_row({"policy_trace": {"trace_version": 1}, "replay_version": 1}) is None
