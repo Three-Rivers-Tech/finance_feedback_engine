@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional
 
 from .policy_actions import (
     POLICY_ACTION_VERSION,
+    build_ai_decision_envelope,
+    build_policy_package,
     get_legacy_action_compatibility,
     get_policy_action_family,
     is_policy_action,
@@ -118,6 +120,9 @@ class DebateManager:
             raise ValueError(f"Debate results missing required keys - {error_details}")
 
         final_decision = _with_policy_action_metadata(judge_decision)
+        judge_policy_package = (
+            judge_decision.get("policy_package") if isinstance(judge_decision, dict) else None
+        )
 
         final_decision["debate_metadata"] = {
             "bull_case": bull_case,
@@ -205,6 +210,21 @@ class DebateManager:
             "debate_mode": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+        final_decision = build_ai_decision_envelope(
+            decision=final_decision,
+            policy_package=(
+                build_policy_package(
+                    policy_state=judge_policy_package.get("policy_state"),
+                    action_context=judge_policy_package.get("action_context"),
+                    policy_sizing_intent=judge_policy_package.get("policy_sizing_intent"),
+                    provider_translation_result=judge_policy_package.get("provider_translation_result"),
+                    control_outcome=judge_policy_package.get("control_outcome"),
+                )
+                if isinstance(judge_policy_package, dict)
+                else None
+            ),
+        )
 
         logger.info(
             f"Debate decision: {final_decision['action']} "

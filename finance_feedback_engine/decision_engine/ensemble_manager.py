@@ -24,6 +24,8 @@ except ImportError:
 # Import InsufficientProvidersError from the main exceptions module to maintain consistency
 from .debate_manager import DebateManager
 from .policy_actions import (
+    build_ai_decision_envelope,
+    build_policy_package,
     get_legacy_action_compatibility,
     is_policy_action,
     normalize_policy_action,
@@ -45,6 +47,26 @@ class EnsembleDecisionManager:
     - Meta-feature generation from base predictions
     - Adaptive weight updates based on performance
     """
+
+    def _build_aggregated_policy_package(
+        self, provider_decisions: Dict[str, Dict[str, Any]], final_decision: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Build a thin aggregated policy package when provider packages are present."""
+        packages = [
+            decision.get("policy_package")
+            for decision in provider_decisions.values()
+            if isinstance(decision, dict) and isinstance(decision.get("policy_package"), dict)
+        ]
+        if not packages:
+            return None
+        first = packages[0]
+        return build_policy_package(
+            policy_state=first.get("policy_state"),
+            action_context=first.get("action_context"),
+            policy_sizing_intent=first.get("policy_sizing_intent"),
+            provider_translation_result=first.get("provider_translation_result"),
+            control_outcome=final_decision.get("control_outcome"),
+        )
 
     def _validate_dynamic_weights(
         self, weights: Optional[Dict[str, float]]
@@ -553,6 +575,14 @@ class EnsembleDecisionManager:
             final_decision["ensemble_metadata"]["voting_power"] = final_decision[
                 "voting_power"
             ]
+
+        aggregated_policy_package = self._build_aggregated_policy_package(
+            provider_decisions, final_decision
+        )
+        final_decision = build_ai_decision_envelope(
+            decision=final_decision,
+            policy_package=aggregated_policy_package,
+        )
 
         logger.info(
             f"Ensemble decision: {final_decision['action']} "
