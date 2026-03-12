@@ -443,3 +443,11 @@ def build_policy_dataset_row(replay_record: Optional[dict]) -> Optional[dict]:
         "replay_version": payload.get("replay_version"),
         "dataset_row_version": 1,
     }
+
+
+
+def build_policy_dataset_row_from_decision(decision: Optional[dict]) -> Optional[dict]:
+    replay_record = build_policy_replay_record(decision)
+    if replay_record is None:
+        return None
+    return build_policy_dataset_row(replay_record)
