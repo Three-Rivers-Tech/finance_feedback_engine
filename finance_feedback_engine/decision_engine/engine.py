@@ -11,6 +11,7 @@ import pytz
 from finance_feedback_engine.memory.vector_store import VectorMemory
 from finance_feedback_engine.observability.metrics import create_counters, create_histograms, get_meter
 from finance_feedback_engine.utils.config_loader import normalize_decision_config
+from finance_feedback_engine.decision_engine.policy_actions import build_policy_state_from_position_snapshot
 
 logger = logging.getLogger(__name__)
 try:
@@ -1501,6 +1502,20 @@ Format response as a structured technical analysis demonstration.
         return self.market_analyzer._has_existing_position(
             asset_pair, portfolio, monitoring_context
         )
+
+    def _extract_canonical_policy_state(
+        self, context: Dict[str, Any], asset_pair: str
+    ) -> Dict[str, Any]:
+        """Extract canonical policy_state additively from the engine position-state seam.
+
+        Note: this Stage 6 adapter maps the current position snapshot into canonical
+        policy-state form using currently available position fields. In particular,
+        the resulting `current_price` is seeded from the position snapshot entry
+        price as a compatibility shim at this boundary; it is not a fresh market-data
+        fetch.
+        """
+        position_snapshot = self._extract_position_state(context, asset_pair)
+        return build_policy_state_from_position_snapshot(position_snapshot)
 
     def _extract_position_state(
         self, context: Dict[str, Any], asset_pair: str

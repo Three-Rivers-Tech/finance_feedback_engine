@@ -221,3 +221,14 @@ def test_build_policy_package_gracefully_allows_partial_components():
     assert package["provider_translation_result"] is None
     assert package["control_outcome"] is None
     assert package["version"] == 1
+
+
+
+def test_build_policy_state_from_empty_position_snapshot():
+    from finance_feedback_engine.decision_engine.policy_actions import build_policy_state_from_position_snapshot
+
+    result = build_policy_state_from_position_snapshot(None)
+    assert result["position_state"] is None
+    assert result["current_price"] is None
+    assert result["unrealized_pnl"] is None
+    assert result["version"] == 1

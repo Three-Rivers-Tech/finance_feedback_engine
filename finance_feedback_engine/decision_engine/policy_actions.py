@@ -281,3 +281,18 @@ def build_policy_package(
         "control_outcome": control_outcome,
         "version": 1,
     }
+
+
+
+def build_policy_state_from_position_snapshot(position_snapshot: dict | None) -> dict:
+    snapshot = position_snapshot or {}
+    state = snapshot.get("state")
+    market_regime = snapshot.get("market_regime")
+    volatility = snapshot.get("volatility")
+    return build_policy_state(
+        position_state=state if state not in {None, "UNKNOWN"} else None,
+        market_data={"close": snapshot.get("entry_price")},
+        volatility=volatility,
+        portfolio={"unrealized_pnl": snapshot.get("unrealized_pnl")},
+        market_regime=market_regime,
+    )
