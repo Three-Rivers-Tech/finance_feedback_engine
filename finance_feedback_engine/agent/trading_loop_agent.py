@@ -720,6 +720,9 @@ class TradingLoopAgent:
                         q.put_nowait(event)
                     else:
                         increment_dashboard_events_dropped(queue_name)
+                        # TODO(stage7-followup): Inspect the dashboard event consumer/drain path.
+                        # The queue has remained saturated in live operation even when FFE health is otherwise healthy,
+                        # so we likely need better drain behavior, backpressure, or queue sizing visibility.
                         logger.warning(
                             f"Dashboard event queue is full ({q.qsize()} events), dropping newest event."
                         )
