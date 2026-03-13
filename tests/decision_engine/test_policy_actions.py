@@ -1412,3 +1412,97 @@ def test_extract_policy_evaluation_comparisons_handles_odd_number_of_inputs():
     assert len(comparisons) == 1
     assert comparisons[0]["left"]["avg_executed_rate"] == 0.5
     assert comparisons[0]["right"]["avg_executed_rate"] == 0.8
+
+
+
+def test_policy_evaluation_aggregate_and_comparison_versions_align():
+    result = {
+        "summary": {"record_count": 4, "summary_version": 1},
+        "scorecard": {
+            "record_count": 4,
+            "executed_rate": 0.5,
+            "vetoed_rate": 0.25,
+            "rejected_rate": 0.25,
+            "invalid_rate": 0.0,
+            "scorecard_version": 1,
+        },
+        "result_version": 1,
+    }
+
+    aggregate = build_policy_evaluation_aggregate([result])
+    comparison = build_policy_evaluation_comparison(aggregate, aggregate)
+
+    assert aggregate["aggregate_version"] == 1
+    assert comparison["comparison_version"] == 1
+
+
+
+def test_policy_evaluation_aggregate_preserves_lifecycle_rates():
+    result = {
+        "summary": {"record_count": 4, "summary_version": 1},
+        "scorecard": {
+            "record_count": 4,
+            "executed_rate": 0.25,
+            "vetoed_rate": 0.25,
+            "rejected_rate": 0.25,
+            "invalid_rate": 0.25,
+            "scorecard_version": 1,
+        },
+        "result_version": 1,
+    }
+
+    aggregate = build_policy_evaluation_aggregate([result])
+
+    assert aggregate["avg_executed_rate"] == 0.25
+    assert aggregate["avg_vetoed_rate"] == 0.25
+    assert aggregate["avg_rejected_rate"] == 0.25
+    assert aggregate["avg_invalid_rate"] == 0.25
+
+
+
+def test_extract_policy_evaluation_comparisons_skips_partial_results_cleanly():
+    comparisons = extract_policy_evaluation_comparisons([
+        {
+            "summary": {"record_count": 4, "summary_version": 1},
+            "scorecard": {
+                "record_count": 4,
+                "executed_rate": 0.5,
+                "vetoed_rate": 0.25,
+                "rejected_rate": 0.25,
+                "invalid_rate": 0.0,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        {
+            "summary": {"record_count": 4, "summary_version": 1},
+            "scorecard": {},
+            "result_version": 1,
+        },
+        {
+            "summary": {"record_count": 4, "summary_version": 1},
+            "scorecard": {
+                "record_count": 4,
+                "executed_rate": 0.8,
+                "vetoed_rate": 0.1,
+                "rejected_rate": 0.1,
+                "invalid_rate": 0.0,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+    ])
+
+    assert len(comparisons) == 1
+    assert comparisons[0]["left"]["avg_executed_rate"] == 0.5
+    assert comparisons[0]["right"]["avg_executed_rate"] == 0.0
+
+
+
+def test_policy_evaluation_comparison_handles_partial_inputs_cleanly():
+    aggregate = build_policy_evaluation_aggregate([])
+    comparison = build_policy_evaluation_comparison(aggregate, None)
+
+    assert comparison["left"]["result_count"] == 0
+    assert comparison["right"] == {}
+    assert comparison["comparison_version"] == 1
