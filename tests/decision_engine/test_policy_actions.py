@@ -1666,3 +1666,91 @@ def test_extract_policy_candidate_benchmark_summaries_skips_invalid_inputs():
 
     assert len(summaries) == 1
     assert summaries[0]["comparison_count"] == 1
+
+
+
+def test_candidate_comparison_set_and_benchmark_versions_align():
+    comparison_set = build_policy_candidate_comparison_set([
+        {
+            "left": {"avg_executed_rate": 0.5, "avg_vetoed_rate": 0.2, "aggregate_version": 1},
+            "right": {"avg_executed_rate": 0.8, "avg_vetoed_rate": 0.1, "aggregate_version": 1},
+            "comparison_version": 1,
+        }
+    ])
+
+    summary = build_policy_candidate_benchmark_summary(comparison_set)
+
+    assert comparison_set["comparison_set_version"] == 1
+    assert summary["benchmark_summary_version"] == 1
+
+
+
+def test_candidate_benchmark_summary_preserves_left_right_lifecycle_distinctions():
+    comparison_set = build_policy_candidate_comparison_set([
+        {
+            "left": {
+                "avg_executed_rate": 0.25,
+                "avg_vetoed_rate": 0.25,
+                "avg_rejected_rate": 0.25,
+                "avg_invalid_rate": 0.25,
+                "aggregate_version": 1,
+            },
+            "right": {
+                "avg_executed_rate": 0.5,
+                "avg_vetoed_rate": 0.2,
+                "avg_rejected_rate": 0.2,
+                "avg_invalid_rate": 0.1,
+                "aggregate_version": 1,
+            },
+            "comparison_version": 1,
+        }
+    ])
+
+    summary = build_policy_candidate_benchmark_summary(comparison_set)
+
+    assert summary["avg_left_executed_rate"] == pytest.approx(0.25)
+    assert summary["avg_right_executed_rate"] == pytest.approx(0.5)
+    assert summary["avg_left_vetoed_rate"] == pytest.approx(0.25)
+    assert summary["avg_right_vetoed_rate"] == pytest.approx(0.2)
+
+
+
+def test_extract_policy_candidate_benchmark_summaries_skips_partial_inputs_cleanly():
+    summaries = extract_policy_candidate_benchmark_summaries([
+        {
+            "comparisons": [
+                {
+                    "left": {"avg_executed_rate": 0.5, "avg_vetoed_rate": 0.2, "aggregate_version": 1},
+                    "right": {"avg_executed_rate": 0.8, "avg_vetoed_rate": 0.1, "aggregate_version": 1},
+                    "comparison_version": 1,
+                },
+                {
+                    "left": {},
+                    "comparison_version": 1,
+                },
+                None,
+            ],
+            "comparison_count": 3,
+            "comparison_set_version": 1,
+        },
+        None,
+    ])
+
+    assert len(summaries) == 1
+    assert summaries[0]["comparison_count"] == 2
+    assert summaries[0]["avg_left_executed_rate"] == pytest.approx(0.25)
+    assert summaries[0]["avg_right_executed_rate"] == pytest.approx(0.8)
+
+
+
+def test_candidate_benchmark_summary_handles_partial_inputs_cleanly():
+    summary = build_policy_candidate_benchmark_summary({"comparisons": [None], "comparison_set_version": 1})
+
+    assert summary == {
+        "comparison_count": 0,
+        "avg_left_executed_rate": 0.0,
+        "avg_right_executed_rate": 0.0,
+        "avg_left_vetoed_rate": 0.0,
+        "avg_right_vetoed_rate": 0.0,
+        "benchmark_summary_version": 1,
+    }
