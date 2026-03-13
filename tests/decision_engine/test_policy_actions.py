@@ -2264,3 +2264,51 @@ def test_build_policy_baseline_candidate_comparison_group_handles_empty_inputs()
         "candidate_count": 0,
         "comparison_group_version": 1,
     }
+
+
+
+def test_build_policy_baseline_candidate_comparison_group_handles_none_inputs():
+    comparison_group = build_policy_baseline_candidate_comparison_group(None, None)
+
+    assert comparison_group == {
+        "baseline_workflow_summaries": [],
+        "candidate_workflow_summaries": [],
+        "baseline_count": 0,
+        "candidate_count": 0,
+        "comparison_group_version": 1,
+    }
+
+
+
+def test_build_policy_baseline_candidate_comparison_group_filters_non_dict_items():
+    comparison_group = build_policy_baseline_candidate_comparison_group(
+        [
+            {
+                "report_count": 1,
+                "avg_left_executed_rate": 0.5,
+                "avg_right_executed_rate": 0.8,
+                "avg_left_vetoed_rate": 0.2,
+                "avg_right_vetoed_rate": 0.1,
+                "workflow_summary_version": 1,
+            },
+            None,
+            "nope",
+        ],
+        [
+            None,
+            {
+                "report_count": 1,
+                "avg_left_executed_rate": 0.6,
+                "avg_right_executed_rate": 0.7,
+                "avg_left_vetoed_rate": 0.25,
+                "avg_right_vetoed_rate": 0.15,
+                "workflow_summary_version": 1,
+            },
+            123,
+        ],
+    )
+
+    assert comparison_group["baseline_count"] == 1
+    assert comparison_group["candidate_count"] == 1
+    assert comparison_group["baseline_workflow_summaries"][0]["avg_left_executed_rate"] == 0.5
+    assert comparison_group["candidate_workflow_summaries"][0]["avg_right_executed_rate"] == 0.7
