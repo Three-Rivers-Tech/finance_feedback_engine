@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from finance_feedback_engine.persistence.decision_store import DecisionStore
-from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary
+from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary, build_policy_baseline_evaluation_set, build_policy_baseline_evaluation_report
 
 
 def _make_store(tmp_path):
@@ -607,3 +607,104 @@ def test_decision_store_loaded_legacy_decision_skips_full_candidate_ready_chain(
     assert benchmark_summary["comparison_count"] == 1
     assert benchmark_summary["avg_left_executed_rate"] == 0.0
     assert benchmark_summary["avg_right_executed_rate"] == 0.0
+
+
+
+def test_decision_store_loaded_policy_trace_extracts_full_baseline_ready_chain(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-baseline-chain-1",
+        "timestamp": "2026-03-13T12:30:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_LONG",
+        "policy_trace": {
+            "policy_package": {
+                "policy_state": {"position_state": "flat", "version": 1},
+                "action_context": {"structural_action_validity": "valid", "version": 1},
+                "policy_sizing_intent": None,
+                "provider_translation_result": None,
+                "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+                "version": 1,
+            },
+            "decision_envelope": {
+                "action": "OPEN_SMALL_LONG",
+                "policy_action": "OPEN_SMALL_LONG",
+                "legacy_action_compatibility": "BUY",
+                "confidence": 80,
+                "reasoning": "persist trace",
+                "version": 1,
+            },
+            "decision_metadata": {
+                "asset_pair": "BTCUSD",
+                "ai_provider": "ensemble",
+                "timestamp": "2026-03-13T12:30:00+00:00",
+                "decision_id": "decision-baseline-chain-1",
+            },
+            "trace_version": 1,
+        },
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-baseline-chain-1")
+    dataset_row = build_policy_dataset_row_from_decision(loaded)
+    evaluation_record = build_policy_evaluation_record_from_dataset_row(dataset_row)
+    evaluation_batch = build_policy_evaluation_batch([dataset_row])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch["rows"])
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    evaluation_scorecard = build_policy_evaluation_scorecard(evaluation_summary)
+    evaluation_result = build_policy_evaluation_result(evaluation_summary, evaluation_scorecard)
+    evaluation_aggregate = build_policy_evaluation_aggregate([evaluation_result])
+    evaluation_comparison = build_policy_evaluation_comparison(evaluation_aggregate, evaluation_aggregate)
+    comparison_set = build_policy_candidate_comparison_set([evaluation_comparison])
+    benchmark_summary = build_policy_candidate_benchmark_summary(comparison_set)
+    baseline_set = build_policy_baseline_evaluation_set([benchmark_summary])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+
+    assert dataset_row is not None
+    assert evaluation_record is not None
+    assert evaluation_batch["row_count"] == 1
+    assert evaluation_run["record_count"] == 1
+    assert evaluation_summary["executed_count"] == 1
+    assert evaluation_scorecard["executed_rate"] == 1.0
+    assert evaluation_result["result_version"] == 1
+    assert evaluation_aggregate["avg_executed_rate"] == 1.0
+    assert comparison_set["comparison_count"] == 1
+    assert benchmark_summary["comparison_count"] == 1
+    assert baseline_set["summary_count"] == 1
+    assert baseline_report["summary_count"] == 1
+    assert baseline_report["avg_left_executed_rate"] == 1.0
+    assert baseline_report["avg_right_executed_rate"] == 1.0
+    assert baseline_report["baseline_report_version"] == 1
+
+
+
+def test_decision_store_loaded_legacy_decision_skips_full_baseline_ready_chain(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-baseline-chain-legacy",
+        "timestamp": "2026-03-13T12:30:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "BUY",
+        "confidence": 75,
+        "reasoning": "legacy",
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-baseline-chain-legacy")
+    dataset_row = build_policy_dataset_row_from_decision(loaded)
+    evaluation_batch = build_policy_evaluation_batch([dataset_row] if dataset_row is not None else [])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch["rows"])
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    evaluation_scorecard = build_policy_evaluation_scorecard(evaluation_summary)
+    evaluation_result = build_policy_evaluation_result(evaluation_summary, evaluation_scorecard)
+    baseline_set = build_policy_baseline_evaluation_set([])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+
+    assert dataset_row is None
+    assert evaluation_batch["row_count"] == 0
+    assert evaluation_run["record_count"] == 0
+    assert evaluation_summary["record_count"] == 0
+    assert evaluation_scorecard["record_count"] == 0
+    assert evaluation_result["summary"]["record_count"] == 0
+    assert baseline_set["summary_count"] == 0
+    assert baseline_report["summary_count"] == 0
