@@ -1495,7 +1495,7 @@ def test_extract_policy_evaluation_comparisons_skips_partial_results_cleanly():
 
     assert len(comparisons) == 1
     assert comparisons[0]["left"]["avg_executed_rate"] == 0.5
-    assert comparisons[0]["right"]["avg_executed_rate"] == 0.0
+    assert comparisons[0]["right"]["avg_executed_rate"] == 0.8
 
 
 
