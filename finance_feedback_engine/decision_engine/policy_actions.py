@@ -677,6 +677,16 @@ def build_policy_baseline_evaluation_set(benchmark_summaries: Optional[list[dict
 
 
 
+def build_policy_baseline_evaluation_session(baseline_reports: Optional[list[dict]]) -> dict:
+    valid_reports = [report for report in (baseline_reports or []) if isinstance(report, dict)]
+    return {
+        "baseline_reports": [dict(report) for report in valid_reports],
+        "report_count": len(valid_reports),
+        "evaluation_session_version": 1,
+    }
+
+
+
 def build_policy_baseline_evaluation_report(evaluation_set: Optional[dict]) -> dict:
     payload = dict(evaluation_set or {}) if isinstance(evaluation_set, dict) else {}
     summaries = payload.get("benchmark_summaries") or []
