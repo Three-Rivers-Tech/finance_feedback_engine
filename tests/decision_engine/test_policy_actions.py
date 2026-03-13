@@ -1286,3 +1286,33 @@ def test_build_policy_evaluation_comparison_handles_none_inputs():
         "right": {},
         "comparison_version": 1,
     }
+
+
+
+def test_build_policy_evaluation_comparison_handles_mixed_none_inputs():
+    left = {"result_count": 1, "avg_executed_rate": 0.5, "aggregate_version": 1}
+
+    comparison_left = build_policy_evaluation_comparison(left, None)
+    comparison_right = build_policy_evaluation_comparison(None, left)
+
+    assert comparison_left == {
+        "left": left,
+        "right": {},
+        "comparison_version": 1,
+    }
+    assert comparison_right == {
+        "left": {},
+        "right": left,
+        "comparison_version": 1,
+    }
+
+
+
+def test_build_policy_evaluation_comparison_handles_non_dict_inputs():
+    comparison = build_policy_evaluation_comparison([], "not-a-dict")
+
+    assert comparison == {
+        "left": {},
+        "right": {},
+        "comparison_version": 1,
+    }
