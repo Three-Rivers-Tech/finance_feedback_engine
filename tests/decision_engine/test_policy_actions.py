@@ -19,6 +19,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_run,
     build_policy_evaluation_summary,
     build_policy_evaluation_scorecard,
+    build_policy_evaluation_result,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
     get_policy_action_family,
@@ -1024,3 +1025,40 @@ def test_build_policy_evaluation_scorecard_handles_none_input():
     assert scorecard["rejected_rate"] == 0.0
     assert scorecard["invalid_rate"] == 0.0
     assert scorecard["scorecard_version"] == 1
+
+
+
+def test_build_policy_evaluation_result_bundles_summary_and_scorecard():
+    summary = {
+        "record_count": 10,
+        "executed_count": 5,
+        "vetoed_count": 2,
+        "rejected_count": 2,
+        "invalid_count": 1,
+        "summary_version": 1,
+    }
+    scorecard = {
+        "record_count": 10,
+        "executed_rate": 0.5,
+        "vetoed_rate": 0.2,
+        "rejected_rate": 0.2,
+        "invalid_rate": 0.1,
+        "scorecard_version": 1,
+    }
+
+    result = build_policy_evaluation_result(summary, scorecard)
+
+    assert result["summary"] == summary
+    assert result["scorecard"] == scorecard
+    assert result["result_version"] == 1
+
+
+
+def test_build_policy_evaluation_result_handles_none_inputs():
+    result = build_policy_evaluation_result(None, None)
+
+    assert result == {
+        "summary": {},
+        "scorecard": {},
+        "result_version": 1,
+    }

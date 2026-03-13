@@ -577,6 +577,18 @@ def build_policy_evaluation_scorecard(evaluation_summary: Optional[dict]) -> dic
 
 
 
+def build_policy_evaluation_result(
+    evaluation_summary: Optional[dict],
+    evaluation_scorecard: Optional[dict],
+) -> dict:
+    return {
+        "summary": dict(evaluation_summary or {}) if isinstance(evaluation_summary, dict) else {},
+        "scorecard": dict(evaluation_scorecard or {}) if isinstance(evaluation_scorecard, dict) else {},
+        "result_version": 1,
+    }
+
+
+
 def extract_policy_evaluation_runs(evaluation_batches: Optional[list[dict]]) -> list[dict]:
     runs: list[dict] = []
     for batch in evaluation_batches or []:
