@@ -23,6 +23,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_aggregate,
     build_policy_evaluation_comparison,
     build_policy_candidate_comparison_set,
+    build_policy_candidate_benchmark_summary,
     extract_policy_evaluation_comparisons,
     extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
@@ -1538,4 +1539,43 @@ def test_build_policy_candidate_comparison_set_handles_empty_inputs():
         "comparisons": [],
         "comparison_count": 0,
         "comparison_set_version": 1,
+    }
+
+
+
+def test_build_policy_candidate_benchmark_summary_averages_left_right_rates():
+    comparison_set = build_policy_candidate_comparison_set([
+        {
+            "left": {"avg_executed_rate": 0.5, "avg_vetoed_rate": 0.2, "aggregate_version": 1},
+            "right": {"avg_executed_rate": 0.8, "avg_vetoed_rate": 0.1, "aggregate_version": 1},
+            "comparison_version": 1,
+        },
+        {
+            "left": {"avg_executed_rate": 0.6, "avg_vetoed_rate": 0.25, "aggregate_version": 1},
+            "right": {"avg_executed_rate": 0.7, "avg_vetoed_rate": 0.15, "aggregate_version": 1},
+            "comparison_version": 1,
+        },
+    ])
+
+    summary = build_policy_candidate_benchmark_summary(comparison_set)
+
+    assert summary["comparison_count"] == 2
+    assert summary["avg_left_executed_rate"] == pytest.approx(0.55)
+    assert summary["avg_right_executed_rate"] == pytest.approx(0.75)
+    assert summary["avg_left_vetoed_rate"] == pytest.approx(0.225)
+    assert summary["avg_right_vetoed_rate"] == pytest.approx(0.125)
+    assert summary["benchmark_summary_version"] == 1
+
+
+
+def test_build_policy_candidate_benchmark_summary_handles_empty_inputs():
+    summary = build_policy_candidate_benchmark_summary({"comparisons": [], "comparison_set_version": 1})
+
+    assert summary == {
+        "comparison_count": 0,
+        "avg_left_executed_rate": 0.0,
+        "avg_right_executed_rate": 0.0,
+        "avg_left_vetoed_rate": 0.0,
+        "avg_right_vetoed_rate": 0.0,
+        "benchmark_summary_version": 1,
     }

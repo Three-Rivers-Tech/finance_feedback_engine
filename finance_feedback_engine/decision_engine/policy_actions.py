@@ -632,6 +632,41 @@ def build_policy_candidate_comparison_set(comparisons: Optional[list[dict]]) -> 
 
 
 
+def build_policy_candidate_benchmark_summary(comparison_set: Optional[dict]) -> dict:
+    payload = dict(comparison_set or {}) if isinstance(comparison_set, dict) else {}
+    comparisons = payload.get("comparisons") or []
+    valid_comparisons = [c for c in comparisons if isinstance(c, dict)]
+    if not valid_comparisons:
+        return {
+            "comparison_count": 0,
+            "avg_left_executed_rate": 0.0,
+            "avg_right_executed_rate": 0.0,
+            "avg_left_vetoed_rate": 0.0,
+            "avg_right_vetoed_rate": 0.0,
+            "benchmark_summary_version": 1,
+        }
+
+    def _avg(side: str, key: str) -> float:
+        values = []
+        for comparison in valid_comparisons:
+            side_payload = comparison.get(side)
+            if isinstance(side_payload, dict):
+                values.append(side_payload.get(key, 0.0) or 0.0)
+        if not values:
+            return 0.0
+        return sum(values) / len(values)
+
+    return {
+        "comparison_count": len(valid_comparisons),
+        "avg_left_executed_rate": _avg("left", "avg_executed_rate"),
+        "avg_right_executed_rate": _avg("right", "avg_executed_rate"),
+        "avg_left_vetoed_rate": _avg("left", "avg_vetoed_rate"),
+        "avg_right_vetoed_rate": _avg("right", "avg_vetoed_rate"),
+        "benchmark_summary_version": 1,
+    }
+
+
+
 def extract_policy_evaluation_comparisons(evaluation_results: Optional[list[dict]]) -> list[dict]:
     valid_results = []
     for result in evaluation_results or []:
