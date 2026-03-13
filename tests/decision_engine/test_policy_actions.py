@@ -20,6 +20,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_summary,
     build_policy_evaluation_scorecard,
     build_policy_evaluation_result,
+    extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
     get_policy_action_family,
@@ -1062,3 +1063,50 @@ def test_build_policy_evaluation_result_handles_none_inputs():
         "scorecard": {},
         "result_version": 1,
     }
+
+
+
+def test_extract_policy_evaluation_results_builds_results_from_runs():
+    runs = [
+        {
+            "records": [
+                {"decision_id": "decision-result-export-1", "control_outcome_status": "executed", "evaluation_record_version": 1}
+            ],
+            "record_count": 1,
+            "run_version": 1,
+        },
+        {
+            "records": [
+                {"decision_id": "decision-result-export-2", "control_outcome_status": "vetoed", "evaluation_record_version": 1}
+            ],
+            "record_count": 1,
+            "run_version": 1,
+        },
+    ]
+
+    results = extract_policy_evaluation_results(runs)
+
+    assert len(results) == 2
+    assert results[0]["summary"]["executed_count"] == 1
+    assert results[0]["scorecard"]["executed_rate"] == 1.0
+    assert results[1]["summary"]["vetoed_count"] == 1
+    assert results[1]["scorecard"]["vetoed_rate"] == 1.0
+    assert results[0]["result_version"] == 1
+
+
+
+def test_extract_policy_evaluation_results_skips_invalid_runs_cleanly():
+    results = extract_policy_evaluation_results([
+        {
+            "records": [
+                {"decision_id": "decision-result-export-valid", "control_outcome_status": "executed", "evaluation_record_version": 1}
+            ],
+            "record_count": 1,
+            "run_version": 1,
+        },
+        None,
+        [],
+    ])
+
+    assert len(results) == 1
+    assert results[0]["summary"]["record_count"] == 1

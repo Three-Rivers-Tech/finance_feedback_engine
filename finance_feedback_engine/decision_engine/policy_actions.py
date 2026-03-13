@@ -589,6 +589,18 @@ def build_policy_evaluation_result(
 
 
 
+def extract_policy_evaluation_results(evaluation_runs: Optional[list[dict]]) -> list[dict]:
+    results: list[dict] = []
+    for evaluation_run in evaluation_runs or []:
+        if not isinstance(evaluation_run, dict):
+            continue
+        summary = build_policy_evaluation_summary(evaluation_run)
+        scorecard = build_policy_evaluation_scorecard(summary)
+        results.append(build_policy_evaluation_result(summary, scorecard))
+    return results
+
+
+
 def extract_policy_evaluation_runs(evaluation_batches: Optional[list[dict]]) -> list[dict]:
     runs: list[dict] = []
     for batch in evaluation_batches or []:
