@@ -22,6 +22,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_result,
     build_policy_evaluation_aggregate,
     build_policy_evaluation_comparison,
+    extract_policy_evaluation_comparisons,
     extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
@@ -1316,3 +1317,56 @@ def test_build_policy_evaluation_comparison_handles_non_dict_inputs():
         "right": {},
         "comparison_version": 1,
     }
+
+
+
+def test_extract_policy_evaluation_comparisons_builds_pairwise_comparisons():
+    results = [
+        {
+            "scorecard": {
+                "executed_rate": 0.5,
+                "vetoed_rate": 0.2,
+                "rejected_rate": 0.2,
+                "invalid_rate": 0.1,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        {
+            "scorecard": {
+                "executed_rate": 0.8,
+                "vetoed_rate": 0.1,
+                "rejected_rate": 0.05,
+                "invalid_rate": 0.05,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+    ]
+
+    comparisons = extract_policy_evaluation_comparisons(results)
+
+    assert len(comparisons) == 1
+    assert comparisons[0]["left"]["avg_executed_rate"] == 0.5
+    assert comparisons[0]["right"]["avg_executed_rate"] == 0.8
+    assert comparisons[0]["comparison_version"] == 1
+
+
+
+def test_extract_policy_evaluation_comparisons_skips_invalid_inputs_cleanly():
+    comparisons = extract_policy_evaluation_comparisons([
+        {
+            "scorecard": {
+                "executed_rate": 0.5,
+                "vetoed_rate": 0.2,
+                "rejected_rate": 0.2,
+                "invalid_rate": 0.1,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        None,
+        [],
+    ])
+
+    assert comparisons == []

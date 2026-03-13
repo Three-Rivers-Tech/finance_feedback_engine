@@ -622,6 +622,17 @@ def build_policy_evaluation_comparison(
 
 
 
+def extract_policy_evaluation_comparisons(evaluation_results: Optional[list[dict]]) -> list[dict]:
+    valid_results = [result for result in (evaluation_results or []) if isinstance(result, dict)]
+    comparisons: list[dict] = []
+    for i in range(0, len(valid_results) - 1, 2):
+        left = build_policy_evaluation_aggregate([valid_results[i]])
+        right = build_policy_evaluation_aggregate([valid_results[i + 1]])
+        comparisons.append(build_policy_evaluation_comparison(left, right))
+    return comparisons
+
+
+
 def build_policy_evaluation_result(
     evaluation_summary: Optional[dict],
     evaluation_scorecard: Optional[dict],
