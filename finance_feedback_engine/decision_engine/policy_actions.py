@@ -687,6 +687,35 @@ def build_policy_baseline_evaluation_session(baseline_reports: Optional[list[dic
 
 
 
+def build_policy_baseline_workflow_summary(evaluation_session: Optional[dict]) -> dict:
+    payload = dict(evaluation_session or {}) if isinstance(evaluation_session, dict) else {}
+    reports = payload.get("baseline_reports") or []
+    valid_reports = [report for report in reports if isinstance(report, dict)]
+    if not valid_reports:
+        return {
+            "report_count": 0,
+            "avg_left_executed_rate": 0.0,
+            "avg_right_executed_rate": 0.0,
+            "avg_left_vetoed_rate": 0.0,
+            "avg_right_vetoed_rate": 0.0,
+            "workflow_summary_version": 1,
+        }
+
+    def _avg(key: str) -> float:
+        values = [report.get(key, 0.0) or 0.0 for report in valid_reports]
+        return sum(values) / len(values) if values else 0.0
+
+    return {
+        "report_count": len(valid_reports),
+        "avg_left_executed_rate": _avg("avg_left_executed_rate"),
+        "avg_right_executed_rate": _avg("avg_right_executed_rate"),
+        "avg_left_vetoed_rate": _avg("avg_left_vetoed_rate"),
+        "avg_right_vetoed_rate": _avg("avg_right_vetoed_rate"),
+        "workflow_summary_version": 1,
+    }
+
+
+
 def build_policy_baseline_evaluation_report(evaluation_set: Optional[dict]) -> dict:
     payload = dict(evaluation_set or {}) if isinstance(evaluation_set, dict) else {}
     summaries = payload.get("benchmark_summaries") or []

@@ -26,6 +26,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_candidate_benchmark_summary,
     build_policy_baseline_evaluation_set,
     build_policy_baseline_evaluation_session,
+    build_policy_baseline_workflow_summary,
     build_policy_baseline_evaluation_report,
     extract_policy_baseline_evaluation_reports,
     extract_policy_candidate_benchmark_summaries,
@@ -2034,4 +2035,49 @@ def test_build_policy_baseline_evaluation_session_handles_empty_inputs():
         "baseline_reports": [],
         "report_count": 0,
         "evaluation_session_version": 1,
+    }
+
+
+
+def test_build_policy_baseline_workflow_summary_averages_report_rates():
+    session = build_policy_baseline_evaluation_session([
+        {
+            "summary_count": 1,
+            "avg_left_executed_rate": 0.5,
+            "avg_right_executed_rate": 0.8,
+            "avg_left_vetoed_rate": 0.2,
+            "avg_right_vetoed_rate": 0.1,
+            "baseline_report_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "avg_left_executed_rate": 0.6,
+            "avg_right_executed_rate": 0.7,
+            "avg_left_vetoed_rate": 0.25,
+            "avg_right_vetoed_rate": 0.15,
+            "baseline_report_version": 1,
+        },
+    ])
+
+    summary = build_policy_baseline_workflow_summary(session)
+
+    assert summary["report_count"] == 2
+    assert summary["avg_left_executed_rate"] == pytest.approx(0.55)
+    assert summary["avg_right_executed_rate"] == pytest.approx(0.75)
+    assert summary["avg_left_vetoed_rate"] == pytest.approx(0.225)
+    assert summary["avg_right_vetoed_rate"] == pytest.approx(0.125)
+    assert summary["workflow_summary_version"] == 1
+
+
+
+def test_build_policy_baseline_workflow_summary_handles_empty_inputs():
+    summary = build_policy_baseline_workflow_summary({"baseline_reports": [], "evaluation_session_version": 1})
+
+    assert summary == {
+        "report_count": 0,
+        "avg_left_executed_rate": 0.0,
+        "avg_right_executed_rate": 0.0,
+        "avg_left_vetoed_rate": 0.0,
+        "avg_right_vetoed_rate": 0.0,
+        "workflow_summary_version": 1,
     }
