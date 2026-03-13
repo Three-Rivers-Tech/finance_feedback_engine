@@ -716,6 +716,19 @@ def build_policy_baseline_workflow_summary(evaluation_session: Optional[dict]) -
 
 
 
+def extract_policy_baseline_workflow_summaries(evaluation_sessions: Optional[list[dict]]) -> list[dict]:
+    summaries = []
+    for evaluation_session in evaluation_sessions or []:
+        if not isinstance(evaluation_session, dict):
+            continue
+        baseline_reports = evaluation_session.get("baseline_reports")
+        if not isinstance(baseline_reports, list) or not any(isinstance(report, dict) for report in baseline_reports):
+            continue
+        summaries.append(build_policy_baseline_workflow_summary(evaluation_session))
+    return summaries
+
+
+
 def build_policy_baseline_evaluation_report(evaluation_set: Optional[dict]) -> dict:
     payload = dict(evaluation_set or {}) if isinstance(evaluation_set, dict) else {}
     summaries = payload.get("benchmark_summaries") or []
