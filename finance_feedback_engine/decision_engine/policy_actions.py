@@ -577,6 +577,39 @@ def build_policy_evaluation_scorecard(evaluation_summary: Optional[dict]) -> dic
 
 
 
+def build_policy_evaluation_aggregate(evaluation_results: Optional[list[dict]]) -> dict:
+    valid_results = [result for result in (evaluation_results or []) if isinstance(result, dict)]
+    if not valid_results:
+        return {
+            "result_count": 0,
+            "avg_executed_rate": 0.0,
+            "avg_vetoed_rate": 0.0,
+            "avg_rejected_rate": 0.0,
+            "avg_invalid_rate": 0.0,
+            "aggregate_version": 1,
+        }
+
+    def _rate(key: str) -> float:
+        values = []
+        for result in valid_results:
+            scorecard = result.get("scorecard")
+            if isinstance(scorecard, dict):
+                values.append(scorecard.get(key, 0.0) or 0.0)
+        if not values:
+            return 0.0
+        return sum(values) / len(values)
+
+    return {
+        "result_count": len(valid_results),
+        "avg_executed_rate": _rate("executed_rate"),
+        "avg_vetoed_rate": _rate("vetoed_rate"),
+        "avg_rejected_rate": _rate("rejected_rate"),
+        "avg_invalid_rate": _rate("invalid_rate"),
+        "aggregate_version": 1,
+    }
+
+
+
 def build_policy_evaluation_result(
     evaluation_summary: Optional[dict],
     evaluation_scorecard: Optional[dict],

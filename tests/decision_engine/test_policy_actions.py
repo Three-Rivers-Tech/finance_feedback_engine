@@ -20,6 +20,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_evaluation_summary,
     build_policy_evaluation_scorecard,
     build_policy_evaluation_result,
+    build_policy_evaluation_aggregate,
     extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
@@ -1181,3 +1182,50 @@ def test_policy_evaluation_result_handles_partial_inputs_cleanly():
     assert result["summary"]["record_count"] == 0
     assert result["scorecard"] == {}
     assert result["result_version"] == 1
+
+
+
+def test_build_policy_evaluation_aggregate_averages_lifecycle_rates():
+    aggregate = build_policy_evaluation_aggregate([
+        {
+            "scorecard": {
+                "executed_rate": 0.5,
+                "vetoed_rate": 0.2,
+                "rejected_rate": 0.2,
+                "invalid_rate": 0.1,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        {
+            "scorecard": {
+                "executed_rate": 0.8,
+                "vetoed_rate": 0.1,
+                "rejected_rate": 0.05,
+                "invalid_rate": 0.05,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+    ])
+
+    assert aggregate["result_count"] == 2
+    assert aggregate["avg_executed_rate"] == 0.65
+    assert aggregate["avg_vetoed_rate"] == 0.15000000000000002
+    assert aggregate["avg_rejected_rate"] == 0.125
+    assert aggregate["avg_invalid_rate"] == 0.07500000000000001
+    assert aggregate["aggregate_version"] == 1
+
+
+
+def test_build_policy_evaluation_aggregate_handles_empty_inputs():
+    aggregate = build_policy_evaluation_aggregate([])
+
+    assert aggregate == {
+        "result_count": 0,
+        "avg_executed_rate": 0.0,
+        "avg_vetoed_rate": 0.0,
+        "avg_rejected_rate": 0.0,
+        "avg_invalid_rate": 0.0,
+        "aggregate_version": 1,
+    }
