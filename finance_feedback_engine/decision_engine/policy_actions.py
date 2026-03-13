@@ -716,6 +716,22 @@ def build_policy_baseline_workflow_summary(evaluation_session: Optional[dict]) -
 
 
 
+def build_policy_baseline_candidate_comparison_group(
+    baseline_workflow_summaries: Optional[list[dict]],
+    candidate_workflow_summaries: Optional[list[dict]],
+) -> dict:
+    valid_baseline_summaries = [summary for summary in (baseline_workflow_summaries or []) if isinstance(summary, dict)]
+    valid_candidate_summaries = [summary for summary in (candidate_workflow_summaries or []) if isinstance(summary, dict)]
+    return {
+        "baseline_workflow_summaries": [dict(summary) for summary in valid_baseline_summaries],
+        "candidate_workflow_summaries": [dict(summary) for summary in valid_candidate_summaries],
+        "baseline_count": len(valid_baseline_summaries),
+        "candidate_count": len(valid_candidate_summaries),
+        "comparison_group_version": 1,
+    }
+
+
+
 def extract_policy_baseline_workflow_summaries(evaluation_sessions: Optional[list[dict]]) -> list[dict]:
     summaries = []
     for evaluation_session in evaluation_sessions or []:
