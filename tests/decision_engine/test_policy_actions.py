@@ -1370,3 +1370,45 @@ def test_extract_policy_evaluation_comparisons_skips_invalid_inputs_cleanly():
     ])
 
     assert comparisons == []
+
+
+
+def test_extract_policy_evaluation_comparisons_handles_odd_number_of_inputs():
+    results = [
+        {
+            "scorecard": {
+                "executed_rate": 0.5,
+                "vetoed_rate": 0.2,
+                "rejected_rate": 0.2,
+                "invalid_rate": 0.1,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        {
+            "scorecard": {
+                "executed_rate": 0.8,
+                "vetoed_rate": 0.1,
+                "rejected_rate": 0.05,
+                "invalid_rate": 0.05,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+        {
+            "scorecard": {
+                "executed_rate": 0.9,
+                "vetoed_rate": 0.05,
+                "rejected_rate": 0.03,
+                "invalid_rate": 0.02,
+                "scorecard_version": 1,
+            },
+            "result_version": 1,
+        },
+    ]
+
+    comparisons = extract_policy_evaluation_comparisons(results)
+
+    assert len(comparisons) == 1
+    assert comparisons[0]["left"]["avg_executed_rate"] == 0.5
+    assert comparisons[0]["right"]["avg_executed_rate"] == 0.8
