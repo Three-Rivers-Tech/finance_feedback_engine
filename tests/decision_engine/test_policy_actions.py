@@ -29,6 +29,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_baseline_workflow_summary,
     build_policy_baseline_candidate_comparison_group,
     build_policy_baseline_candidate_comparison_summary,
+    extract_policy_baseline_candidate_comparison_summaries,
     extract_policy_baseline_workflow_summaries,
     build_policy_baseline_evaluation_report,
     extract_policy_baseline_evaluation_reports,
@@ -2392,3 +2393,55 @@ def test_build_policy_baseline_candidate_comparison_summary_handles_empty_inputs
         "avg_candidate_right_vetoed_rate": 0.0,
         "comparison_summary_version": 1,
     }
+
+
+
+def test_extract_policy_baseline_candidate_comparison_summaries_builds_exportable_summaries():
+    summaries = extract_policy_baseline_candidate_comparison_summaries([
+        {
+            "baseline_workflow_summaries": [
+                {
+                    "report_count": 1,
+                    "avg_left_executed_rate": 0.5,
+                    "avg_right_executed_rate": 0.8,
+                    "avg_left_vetoed_rate": 0.2,
+                    "avg_right_vetoed_rate": 0.1,
+                    "workflow_summary_version": 1,
+                }
+            ],
+            "candidate_workflow_summaries": [
+                {
+                    "report_count": 1,
+                    "avg_left_executed_rate": 0.6,
+                    "avg_right_executed_rate": 0.7,
+                    "avg_left_vetoed_rate": 0.25,
+                    "avg_right_vetoed_rate": 0.15,
+                    "workflow_summary_version": 1,
+                }
+            ],
+            "baseline_count": 1,
+            "candidate_count": 1,
+            "comparison_group_version": 1,
+        }
+    ])
+
+    assert len(summaries) == 1
+    assert summaries[0]["baseline_count"] == 1
+    assert summaries[0]["candidate_count"] == 1
+    assert summaries[0]["avg_baseline_left_executed_rate"] == pytest.approx(0.5)
+    assert summaries[0]["avg_candidate_left_executed_rate"] == pytest.approx(0.6)
+    assert summaries[0]["comparison_summary_version"] == 1
+
+
+
+def test_extract_policy_baseline_candidate_comparison_summaries_skips_invalid_inputs():
+    summaries = extract_policy_baseline_candidate_comparison_summaries([
+        None,
+        {},
+        {"baseline_workflow_summaries": None, "candidate_workflow_summaries": []},
+        {"baseline_workflow_summaries": [], "candidate_workflow_summaries": []},
+        {"baseline_workflow_summaries": [None], "candidate_workflow_summaries": [{}]},
+        {"baseline_workflow_summaries": [{}], "candidate_workflow_summaries": [None]},
+    ])
+
+    assert summaries == []

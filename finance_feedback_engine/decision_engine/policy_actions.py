@@ -759,6 +759,24 @@ def build_policy_baseline_candidate_comparison_summary(comparison_group: Optiona
 
 
 
+def extract_policy_baseline_candidate_comparison_summaries(comparison_groups: Optional[list[dict]]) -> list[dict]:
+    summaries = []
+    for comparison_group in comparison_groups or []:
+        if not isinstance(comparison_group, dict):
+            continue
+        baseline_summaries = comparison_group.get("baseline_workflow_summaries")
+        candidate_summaries = comparison_group.get("candidate_workflow_summaries")
+        if not isinstance(baseline_summaries, list) or not isinstance(candidate_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in baseline_summaries):
+            continue
+        if not any(isinstance(summary, dict) for summary in candidate_summaries):
+            continue
+        summaries.append(build_policy_baseline_candidate_comparison_summary(comparison_group))
+    return summaries
+
+
+
 def extract_policy_baseline_workflow_summaries(evaluation_sessions: Optional[list[dict]]) -> list[dict]:
     summaries = []
     for evaluation_session in evaluation_sessions or []:
