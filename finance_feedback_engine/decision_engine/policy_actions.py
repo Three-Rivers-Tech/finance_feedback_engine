@@ -911,6 +911,51 @@ def build_policy_selection_rollout_decision_set(
 
 
 
+def build_policy_selection_rollout_decision_summary(
+    rollout_decision_set: Optional[dict],
+) -> dict:
+    payload = dict(rollout_decision_set or {}) if isinstance(rollout_decision_set, dict) else {}
+    promotion_decision_summaries = payload.get("promotion_decision_summaries") or []
+    valid_promotion_decision_summaries = [
+        summary for summary in promotion_decision_summaries if isinstance(summary, dict)
+    ]
+
+    shadow_candidate_count = 0
+    hold_baseline_count = 0
+    defer_rollout_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_promotion_decision_summaries:
+        try:
+            promote_candidate_count = int(summary.get("promote_candidate_count"))
+            keep_baseline_count = int(summary.get("keep_baseline_count"))
+            defer_count = int(summary.get("defer_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if promote_candidate_count > keep_baseline_count and promote_candidate_count > 0:
+            shadow_candidate_count += 1
+        elif keep_baseline_count > promote_candidate_count and keep_baseline_count > 0:
+            hold_baseline_count += 1
+        else:
+            defer_rollout_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_candidate_count": shadow_candidate_count,
+        "hold_baseline_count": hold_baseline_count,
+        "defer_rollout_count": defer_rollout_count,
+        "rollout_decision_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_promotion_decision_summaries(
     promotion_decision_sets: Optional[list[dict]],
 ) -> list[dict]:
