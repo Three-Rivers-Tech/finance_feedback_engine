@@ -9,6 +9,41 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+def _coerce_monitoring_float(value: Any, default: float = 0.0) -> float:
+    """Best-effort numeric coercion for monitoring payloads/tests."""
+    try:
+        if value is None or value == "":
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def enforce_slot_constraints(decision: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Prevent BUY actions when monitoring context says no trade slots remain."""
+    if not decision or not context:
+        return decision
+
+    normalized = dict(decision)
+    action = str(normalized.get("action", "")).upper()
+    slots_available = context.get("slots_available")
+
+    try:
+        slots_value = int(slots_available)
+    except (TypeError, ValueError):
+        return normalized
+
+    if action == "BUY" and slots_value <= 0:
+        normalized["action"] = "HOLD"
+        normalized.setdefault(
+            "override_reason",
+            "BUY blocked by slot enforcement: no monitoring/trade slots available.",
+        )
+        normalized.setdefault("quality_flag", "slot_constrained")
+
+    return normalized
+
+
 class MonitoringContextProvider:
     """
     Provides real-time monitoring context for AI decision making.
@@ -679,19 +714,44 @@ class MonitoringContextProvider:
 
         lines = ["\n=== LIVE TRADING CONTEXT ==="]
 
-        # Active positions summary
+        # Position-awareness directives should appear before raw data so they don't
+        # get lost in the middle of a long prompt.
         active_pos = context.get("active_positions", {})
         futures = active_pos.get("futures", [])
+        slots_available = int(_coerce_monitoring_float(context.get("slots_available"), 0))
+        active_trades = int(_coerce_monitoring_float(context.get("active_trades_count"), 0))
 
+        if futures:
+            lines.extend([
+                "",
+                "=== POSITION AWARENESS DIRECTIVES ===",
+                "- Respect live position context before proposing any action.",
+                "- HOLD = maintain current exposure when the thesis is intact.",
+                "- SELL = reduce or exit exposure when risk, invalidation, or adverse momentum dominates.",
+                "- BUY = add/new exposure only when slots are available, confidence is strong, and risk is justified.",
+                "- Explicitly weigh confidence, risk, and active exposure in your recommendation.",
+            ])
+            if slots_available <= 0:
+                lines.append("- Monitoring capacity is full, so do NOT recommend BUY until a slot opens.")
+            else:
+                lines.append(
+                    f"- {slots_available} monitoring slot(s) remain; BUY is allowed only with high confidence and clear risk control."
+                )
+
+        # Active positions summary
         if futures:
             lines.append(f"\nActive Positions: {len(futures)}")
             for pos in futures:
                 side = pos.get("side", "UNKNOWN")
                 product = pos.get("product_id", "N/A")
-                contracts = pos.get("contracts", 0)
-                entry = pos.get("entry_price", 0)
-                current = pos.get("current_price", 0)
-                pnl = pos.get("unrealized_pnl", 0)
+                contracts = _coerce_monitoring_float(
+                    pos.get("contracts", pos.get("number_of_contracts", 0))
+                )
+                entry = _coerce_monitoring_float(
+                    pos.get("entry_price", pos.get("avg_entry_price", 0))
+                )
+                current = _coerce_monitoring_float(pos.get("current_price", 0))
+                pnl = _coerce_monitoring_float(pos.get("unrealized_pnl", 0))
 
                 pnl_sign = "+" if pnl >= 0 else ""
                 lines.append(
@@ -707,11 +767,17 @@ class MonitoringContextProvider:
         if risk:
             lines.append("\nRisk Exposure:")
             lines.append(
-                f"  • Total Exposure: ${risk.get('total_exposure_usd', 0):,.2f}"
+                f"  • Total Exposure: ${_coerce_monitoring_float(risk.get('total_exposure_usd', 0)):,.2f}"
             )
-            lines.append(f"  • Unrealized P&L: ${risk.get('unrealized_pnl', 0):,.2f}")
-            lines.append(f"  • Leverage: {risk.get('leverage_estimate', 0):.2f}x")
-            lines.append(f"  • Net Exposure: ${risk.get('net_exposure', 0):,.2f}")
+            lines.append(
+                f"  • Unrealized P&L: ${_coerce_monitoring_float(risk.get('unrealized_pnl', 0)):,.2f}"
+            )
+            lines.append(
+                f"  • Leverage: {_coerce_monitoring_float(risk.get('leverage_estimate', 0)):.2f}x"
+            )
+            lines.append(
+                f"  • Net Exposure: ${_coerce_monitoring_float(risk.get('net_exposure', 0)):,.2f}"
+            )
 
         # Position concentration
         conc = context.get("position_concentration", {})
@@ -719,20 +785,20 @@ class MonitoringContextProvider:
             lines.append("\nPosition Concentration:")
             lines.append(
                 f"  • Largest Position: "
-                f"{conc.get('largest_position_pct', 0):.1f}% of portfolio"
+                f"{_coerce_monitoring_float(conc.get('largest_position_pct', 0)):.1f}% of portfolio"
             )
             lines.append(
                 f"  • Diversification Score: "
-                f"{conc.get('diversification_score', 0):.0f}/100"
+                f"{_coerce_monitoring_float(conc.get('diversification_score', 0)):.0f}/100"
             )
 
         # Active trade slots
         if context.get("max_concurrent_trades"):
             lines.append(
                 f"\nMonitoring Capacity: "
-                f"{context.get('active_trades_count', 0)}/"
-                f"{context.get('max_concurrent_trades', 0)} slots used "
-                f"({context.get('slots_available', 0)} available)"
+                f"{active_trades}/"
+                f"{int(_coerce_monitoring_float(context.get('max_concurrent_trades', 0), 0))} slots used "
+                f"({slots_available} available)"
             )
 
         # Recent performance
@@ -743,11 +809,11 @@ class MonitoringContextProvider:
             )
             lines.append(
                 f"  • Trades: {perf.get('trades_count', 0)} "
-                f"| Win Rate: {perf.get('win_rate', 0):.1f}%"
+                f"| Win Rate: {_coerce_monitoring_float(perf.get('win_rate', 0)):.1f}%"
             )
             lines.append(
-                f"  • Total P&L: ${perf.get('total_pnl', 0):,.2f} "
-                f"| Avg: ${perf.get('avg_pnl', 0):.2f}"
+                f"  • Total P&L: ${_coerce_monitoring_float(perf.get('total_pnl', 0)):,.2f} "
+                f"| Avg: ${_coerce_monitoring_float(perf.get('avg_pnl', 0)):.2f}"
             )
 
         lines.append("=" * 30 + "\n")
