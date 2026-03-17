@@ -956,6 +956,27 @@ def build_policy_selection_rollout_decision_summary(
 
 
 
+def extract_policy_selection_rollout_decision_summaries(
+    rollout_decision_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for rollout_decision_set in rollout_decision_sets or []:
+        if not isinstance(rollout_decision_set, dict):
+            continue
+        promotion_decision_summaries = rollout_decision_set.get("promotion_decision_summaries")
+        if not isinstance(promotion_decision_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in promotion_decision_summaries):
+            continue
+        rollout_decision_summary = build_policy_selection_rollout_decision_summary(rollout_decision_set)
+        if rollout_decision_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(rollout_decision_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_promotion_decision_summaries(
     promotion_decision_sets: Optional[list[dict]],
 ) -> list[dict]:
