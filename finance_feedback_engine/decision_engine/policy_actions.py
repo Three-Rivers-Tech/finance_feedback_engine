@@ -1100,6 +1100,56 @@ def build_policy_selection_orchestration_set(
 
 
 
+def build_policy_selection_orchestration_summary(
+    orchestration_set: Optional[dict],
+) -> dict:
+    payload = dict(orchestration_set or {}) if isinstance(orchestration_set, dict) else {}
+    deployment_execution_summaries = payload.get("deployment_execution_summaries") or []
+    valid_deployment_execution_summaries = [
+        summary for summary in deployment_execution_summaries if isinstance(summary, dict)
+    ]
+
+    schedule_shadow_deploy_count = 0
+    schedule_primary_cutover_count = 0
+    hold_current_schedule_count = 0
+    defer_orchestration_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_deployment_execution_summaries:
+        try:
+            deploy_shadow_only_count = int(summary.get("deploy_shadow_only_count"))
+            deploy_candidate_primary_count = int(summary.get("deploy_candidate_primary_count"))
+            retain_current_deployment_count = int(summary.get("retain_current_deployment_count"))
+            defer_deployment_count = int(summary.get("defer_deployment_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if deploy_candidate_primary_count > 0:
+            schedule_primary_cutover_count += 1
+        elif deploy_shadow_only_count > 0:
+            schedule_shadow_deploy_count += 1
+        elif retain_current_deployment_count > 0:
+            hold_current_schedule_count += 1
+        else:
+            defer_orchestration_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "schedule_shadow_deploy_count": schedule_shadow_deploy_count,
+        "schedule_primary_cutover_count": schedule_primary_cutover_count,
+        "hold_current_schedule_count": hold_current_schedule_count,
+        "defer_orchestration_count": defer_orchestration_count,
+        "orchestration_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_deployment_execution_summaries(
     deployment_execution_sets: Optional[list[dict]],
 ) -> list[dict]:

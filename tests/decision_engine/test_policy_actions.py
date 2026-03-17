@@ -40,6 +40,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_deployment_execution_set,
     build_policy_selection_deployment_execution_summary,
     build_policy_selection_orchestration_set,
+    build_policy_selection_orchestration_summary,
     extract_policy_selection_deployment_execution_summaries,
     extract_policy_selection_runtime_switch_summaries,
     extract_policy_selection_rollout_decision_summaries,
@@ -4208,6 +4209,108 @@ def test_build_policy_selection_orchestration_set_filters_non_dict_items():
 
     assert orchestration_set["summary_count"] == 1
     assert orchestration_set["deployment_execution_summaries"][0]["summary_count"] == 1
+
+
+
+
+def test_build_policy_selection_orchestration_summary_counts_outcomes_cleanly():
+    orchestration_summary = build_policy_selection_orchestration_summary({
+        "deployment_execution_summaries": [
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 1,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 1,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 1,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 1,
+                "deployment_execution_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "orchestration_set_version": 1,
+    })
+
+    assert orchestration_summary == {
+        "summary_count": 4,
+        "schedule_shadow_deploy_count": 1,
+        "schedule_primary_cutover_count": 1,
+        "hold_current_schedule_count": 1,
+        "defer_orchestration_count": 1,
+        "orchestration_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_orchestration_summary_handles_empty_inputs():
+    orchestration_summary = build_policy_selection_orchestration_summary({
+        "deployment_execution_summaries": [],
+        "summary_count": 0,
+        "orchestration_set_version": 1,
+    })
+
+    assert orchestration_summary == {
+        "summary_count": 0,
+        "schedule_shadow_deploy_count": 0,
+        "schedule_primary_cutover_count": 0,
+        "hold_current_schedule_count": 0,
+        "defer_orchestration_count": 0,
+        "orchestration_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_orchestration_summary_handles_none_inputs():
+    orchestration_summary = build_policy_selection_orchestration_summary(None)
+
+    assert orchestration_summary == {
+        "summary_count": 0,
+        "schedule_shadow_deploy_count": 0,
+        "schedule_primary_cutover_count": 0,
+        "hold_current_schedule_count": 0,
+        "defer_orchestration_count": 0,
+        "orchestration_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_orchestration_summary_skips_invalid_items_cleanly():
+    orchestration_summary = build_policy_selection_orchestration_summary({
+        "deployment_execution_summaries": [None, "bad", 123, {"deployment_execution_summary_version": 1}],
+        "summary_count": 4,
+        "orchestration_set_version": 1,
+    })
+
+    assert orchestration_summary == {
+        "summary_count": 0,
+        "schedule_shadow_deploy_count": 0,
+        "schedule_primary_cutover_count": 0,
+        "hold_current_schedule_count": 0,
+        "defer_orchestration_count": 0,
+        "orchestration_summary_version": 1,
+    }
 
 
 
