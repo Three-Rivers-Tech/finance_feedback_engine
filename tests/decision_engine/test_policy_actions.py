@@ -4506,6 +4506,74 @@ def test_extract_policy_selection_scheduler_request_summaries_skips_invalid_inpu
 
 
 
+def test_extract_policy_selection_scheduler_request_summaries_preserves_outcomes():
+    scheduler_request_set = {
+        "orchestration_summaries": [
+            {
+                "summary_count": 1,
+                "schedule_shadow_deploy_count": 1,
+                "schedule_primary_cutover_count": 0,
+                "hold_current_schedule_count": 0,
+                "defer_orchestration_count": 0,
+                "orchestration_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "schedule_shadow_deploy_count": 0,
+                "schedule_primary_cutover_count": 1,
+                "hold_current_schedule_count": 0,
+                "defer_orchestration_count": 0,
+                "orchestration_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "schedule_shadow_deploy_count": 0,
+                "schedule_primary_cutover_count": 0,
+                "hold_current_schedule_count": 1,
+                "defer_orchestration_count": 0,
+                "orchestration_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "schedule_shadow_deploy_count": 0,
+                "schedule_primary_cutover_count": 0,
+                "hold_current_schedule_count": 0,
+                "defer_orchestration_count": 1,
+                "orchestration_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "scheduler_request_set_version": 1,
+    }
+
+    direct = build_policy_selection_scheduler_request_summary(scheduler_request_set)
+    exported = extract_policy_selection_scheduler_request_summaries([scheduler_request_set])
+
+    assert exported == [direct]
+
+
+
+def test_scheduler_request_versions_align_across_export_helpers():
+    scheduler_request_set = build_policy_selection_scheduler_request_set([
+        {
+            "summary_count": 1,
+            "schedule_shadow_deploy_count": 1,
+            "schedule_primary_cutover_count": 0,
+            "hold_current_schedule_count": 0,
+            "defer_orchestration_count": 0,
+            "orchestration_summary_version": 1,
+        }
+    ])
+    scheduler_request_summary = build_policy_selection_scheduler_request_summary(scheduler_request_set)
+    exported = extract_policy_selection_scheduler_request_summaries([scheduler_request_set])
+
+    assert scheduler_request_set["scheduler_request_set_version"] == 1
+    assert scheduler_request_summary["scheduler_request_summary_version"] == 1
+    assert exported[0]["scheduler_request_summary_version"] == 1
+
+
+
+
 def test_build_policy_selection_orchestration_set_wraps_deployment_summaries_cleanly():
     orchestration_set = build_policy_selection_orchestration_set([
         {
