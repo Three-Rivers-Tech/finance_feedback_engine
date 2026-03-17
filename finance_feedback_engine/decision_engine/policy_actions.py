@@ -896,6 +896,21 @@ def build_policy_selection_promotion_decision_summary(
 
 
 
+def build_policy_selection_rollout_decision_set(
+    promotion_decision_summaries: Optional[list[dict]],
+) -> dict:
+    valid_promotion_decision_summaries = [
+        summary for summary in (promotion_decision_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "promotion_decision_summaries": [dict(summary) for summary in valid_promotion_decision_summaries],
+        "summary_count": len(valid_promotion_decision_summaries),
+        "rollout_decision_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_promotion_decision_summaries(
     promotion_decision_sets: Optional[list[dict]],
 ) -> list[dict]:

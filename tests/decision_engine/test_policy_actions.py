@@ -33,6 +33,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_recommendation_summary,
     build_policy_selection_promotion_decision_set,
     build_policy_selection_promotion_decision_summary,
+    build_policy_selection_rollout_decision_set,
     extract_policy_selection_promotion_decision_summaries,
     extract_policy_selection_recommendation_summaries,
     extract_policy_baseline_candidate_comparison_summaries,
@@ -3096,6 +3097,65 @@ def test_build_policy_selection_promotion_decision_set_defensively_copies_recomm
     recommendation_summary["better_candidate_count"] = 99
 
     assert promotion_decision_set["recommendation_summaries"][0]["better_candidate_count"] == 1
+
+
+
+
+def test_build_policy_selection_rollout_decision_set_wraps_promotion_summaries_cleanly():
+    rollout_decision_set = build_policy_selection_rollout_decision_set([
+        {
+            "summary_count": 1,
+            "promote_candidate_count": 1,
+            "keep_baseline_count": 0,
+            "defer_count": 0,
+            "promotion_decision_summary_version": 1,
+        }
+    ])
+
+    assert rollout_decision_set["summary_count"] == 1
+    assert rollout_decision_set["rollout_decision_set_version"] == 1
+    assert rollout_decision_set["promotion_decision_summaries"][0]["promote_candidate_count"] == 1
+
+
+
+def test_build_policy_selection_rollout_decision_set_handles_empty_inputs():
+    rollout_decision_set = build_policy_selection_rollout_decision_set([])
+
+    assert rollout_decision_set == {
+        "promotion_decision_summaries": [],
+        "summary_count": 0,
+        "rollout_decision_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_rollout_decision_set_handles_none_inputs():
+    rollout_decision_set = build_policy_selection_rollout_decision_set(None)
+
+    assert rollout_decision_set == {
+        "promotion_decision_summaries": [],
+        "summary_count": 0,
+        "rollout_decision_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_rollout_decision_set_filters_non_dict_items():
+    rollout_decision_set = build_policy_selection_rollout_decision_set([
+        {
+            "summary_count": 1,
+            "promote_candidate_count": 1,
+            "keep_baseline_count": 0,
+            "defer_count": 0,
+            "promotion_decision_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert rollout_decision_set["summary_count"] == 1
+    assert rollout_decision_set["promotion_decision_summaries"][0]["summary_count"] == 1
 
 
 

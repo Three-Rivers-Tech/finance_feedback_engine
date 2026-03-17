@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from finance_feedback_engine.persistence.decision_store import DecisionStore
-from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary, build_policy_baseline_evaluation_set, build_policy_baseline_evaluation_session, build_policy_baseline_workflow_summary, build_policy_baseline_candidate_comparison_group, build_policy_baseline_candidate_comparison_summary, build_policy_selection_recommendation_set, build_policy_selection_recommendation_summary, build_policy_selection_promotion_decision_set, build_policy_selection_promotion_decision_summary, extract_policy_selection_promotion_decision_summaries, extract_policy_selection_recommendation_summaries, build_policy_baseline_evaluation_report
+from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary, build_policy_baseline_evaluation_set, build_policy_baseline_evaluation_session, build_policy_baseline_workflow_summary, build_policy_baseline_candidate_comparison_group, build_policy_baseline_candidate_comparison_summary, build_policy_selection_recommendation_set, build_policy_selection_recommendation_summary, build_policy_selection_promotion_decision_set, build_policy_selection_promotion_decision_summary, build_policy_selection_rollout_decision_set, extract_policy_selection_promotion_decision_summaries, extract_policy_selection_recommendation_summaries, build_policy_baseline_evaluation_report
 
 
 def _make_store(tmp_path):
@@ -1472,6 +1472,71 @@ def test_decision_store_loaded_policy_trace_preserves_stage18_export_versions_ac
     assert promotion_decision_set["promotion_decision_set_version"] == 1
     assert promotion_decision_summary["promotion_decision_summary_version"] == 1
     assert exported[0]["promotion_decision_summary_version"] == 1
+
+
+
+
+def test_decision_store_loaded_policy_trace_extracts_selection_rollout_decision_set(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-selection-rollout-decision-chain-1",
+        "timestamp": "2026-03-13T12:30:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_LONG",
+        "policy_trace": {
+            "policy_package": {
+                "policy_state": {"position_state": "flat", "version": 1},
+                "action_context": {"structural_action_validity": "valid", "version": 1},
+                "policy_sizing_intent": None,
+                "provider_translation_result": None,
+                "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+                "version": 1,
+            },
+            "decision_envelope": {
+                "action": "OPEN_SMALL_LONG",
+                "policy_action": "OPEN_SMALL_LONG",
+                "legacy_action_compatibility": "BUY",
+                "confidence": 80,
+                "reasoning": "persist rollout decision trace",
+                "version": 1,
+            },
+            "decision_metadata": {
+                "asset_pair": "BTCUSD",
+                "ai_provider": "ensemble",
+                "timestamp": "2026-03-13T12:30:00+00:00",
+                "decision_id": "decision-selection-rollout-decision-chain-1",
+            },
+            "trace_version": 1,
+        },
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-selection-rollout-decision-chain-1")
+    dataset_row = build_policy_dataset_row_from_decision(loaded)
+    evaluation_batch = build_policy_evaluation_batch([dataset_row])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch["rows"])
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    evaluation_scorecard = build_policy_evaluation_scorecard(evaluation_summary)
+    evaluation_result = build_policy_evaluation_result(evaluation_summary, evaluation_scorecard)
+    evaluation_aggregate = build_policy_evaluation_aggregate([evaluation_result])
+    evaluation_comparison = build_policy_evaluation_comparison(evaluation_aggregate, evaluation_aggregate)
+    comparison_set = build_policy_candidate_comparison_set([evaluation_comparison])
+    benchmark_summary = build_policy_candidate_benchmark_summary(comparison_set)
+    baseline_set = build_policy_baseline_evaluation_set([benchmark_summary])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+    evaluation_session = build_policy_baseline_evaluation_session([baseline_report])
+    workflow_summary = build_policy_baseline_workflow_summary(evaluation_session)
+    comparison_group = build_policy_baseline_candidate_comparison_group([workflow_summary], [workflow_summary])
+    comparison_summary = build_policy_baseline_candidate_comparison_summary(comparison_group)
+    recommendation_set = build_policy_selection_recommendation_set([comparison_summary])
+    recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
+    promotion_decision_set = build_policy_selection_promotion_decision_set([recommendation_summary])
+    promotion_decision_summary = build_policy_selection_promotion_decision_summary(promotion_decision_set)
+    rollout_decision_set = build_policy_selection_rollout_decision_set([promotion_decision_summary])
+
+    assert rollout_decision_set["summary_count"] == 1
+    assert rollout_decision_set["promotion_decision_summaries"][0]["summary_count"] == 1
+    assert rollout_decision_set["rollout_decision_set_version"] == 1
 
 
 
