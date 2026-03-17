@@ -39,6 +39,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_runtime_switch_summary,
     build_policy_selection_deployment_execution_set,
     build_policy_selection_deployment_execution_summary,
+    build_policy_selection_orchestration_set,
     extract_policy_selection_deployment_execution_summaries,
     extract_policy_selection_runtime_switch_summaries,
     extract_policy_selection_rollout_decision_summaries,
@@ -4146,6 +4147,67 @@ def test_build_policy_selection_deployment_execution_set_defensively_copies_runt
     runtime_switch_summary["shadow_candidate_active_count"] = 99
 
     assert deployment_execution_set["runtime_switch_summaries"][0]["shadow_candidate_active_count"] == 1
+
+
+
+
+def test_build_policy_selection_orchestration_set_wraps_deployment_summaries_cleanly():
+    orchestration_set = build_policy_selection_orchestration_set([
+        {
+            "summary_count": 1,
+            "deploy_shadow_only_count": 1,
+            "deploy_candidate_primary_count": 0,
+            "retain_current_deployment_count": 0,
+            "defer_deployment_count": 0,
+            "deployment_execution_summary_version": 1,
+        }
+    ])
+
+    assert orchestration_set["summary_count"] == 1
+    assert orchestration_set["orchestration_set_version"] == 1
+    assert orchestration_set["deployment_execution_summaries"][0]["deploy_shadow_only_count"] == 1
+
+
+
+def test_build_policy_selection_orchestration_set_handles_empty_inputs():
+    orchestration_set = build_policy_selection_orchestration_set([])
+
+    assert orchestration_set == {
+        "deployment_execution_summaries": [],
+        "summary_count": 0,
+        "orchestration_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_orchestration_set_handles_none_inputs():
+    orchestration_set = build_policy_selection_orchestration_set(None)
+
+    assert orchestration_set == {
+        "deployment_execution_summaries": [],
+        "summary_count": 0,
+        "orchestration_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_orchestration_set_filters_non_dict_items():
+    orchestration_set = build_policy_selection_orchestration_set([
+        {
+            "summary_count": 1,
+            "deploy_shadow_only_count": 1,
+            "deploy_candidate_primary_count": 0,
+            "retain_current_deployment_count": 0,
+            "defer_deployment_count": 0,
+            "deployment_execution_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert orchestration_set["summary_count"] == 1
+    assert orchestration_set["deployment_execution_summaries"][0]["summary_count"] == 1
 
 
 

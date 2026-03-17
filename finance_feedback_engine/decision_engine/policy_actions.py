@@ -1085,6 +1085,21 @@ def build_policy_selection_deployment_execution_summary(
 
 
 
+def build_policy_selection_orchestration_set(
+    deployment_execution_summaries: Optional[list[dict]],
+) -> dict:
+    valid_deployment_execution_summaries = [
+        summary for summary in (deployment_execution_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "deployment_execution_summaries": [dict(summary) for summary in valid_deployment_execution_summaries],
+        "summary_count": len(valid_deployment_execution_summaries),
+        "orchestration_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_deployment_execution_summaries(
     deployment_execution_sets: Optional[list[dict]],
 ) -> list[dict]:
