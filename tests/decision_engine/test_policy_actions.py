@@ -4065,6 +4065,91 @@ def test_extract_policy_selection_deployment_execution_summaries_skips_invalid_i
 
 
 
+def test_extract_policy_selection_deployment_execution_summaries_preserves_outcomes():
+    deployment_execution_set = {
+        "runtime_switch_summaries": [
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 1,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 1,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 1,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 1,
+                "runtime_switch_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "deployment_execution_set_version": 1,
+    }
+
+    direct = build_policy_selection_deployment_execution_summary(deployment_execution_set)
+    exported = extract_policy_selection_deployment_execution_summaries([deployment_execution_set])
+
+    assert exported == [direct]
+
+
+
+def test_deployment_execution_versions_align_across_export_helpers():
+    deployment_execution_set = build_policy_selection_deployment_execution_set([
+        {
+            "summary_count": 1,
+            "keep_baseline_active_count": 0,
+            "shadow_candidate_active_count": 1,
+            "candidate_primary_active_count": 0,
+            "defer_switch_count": 0,
+            "runtime_switch_summary_version": 1,
+        }
+    ])
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary(deployment_execution_set)
+    exported = extract_policy_selection_deployment_execution_summaries([deployment_execution_set])
+
+    assert deployment_execution_set["deployment_execution_set_version"] == 1
+    assert deployment_execution_summary["deployment_execution_summary_version"] == 1
+    assert exported[0]["deployment_execution_summary_version"] == 1
+
+
+
+def test_build_policy_selection_deployment_execution_set_defensively_copies_runtime_switch_summary_inputs():
+    runtime_switch_summary = {
+        "summary_count": 1,
+        "keep_baseline_active_count": 0,
+        "shadow_candidate_active_count": 1,
+        "candidate_primary_active_count": 0,
+        "defer_switch_count": 0,
+        "runtime_switch_summary_version": 1,
+    }
+    deployment_execution_set = build_policy_selection_deployment_execution_set([runtime_switch_summary])
+
+    runtime_switch_summary["shadow_candidate_active_count"] = 99
+
+    assert deployment_execution_set["runtime_switch_summaries"][0]["shadow_candidate_active_count"] == 1
+
+
+
+
 def test_extract_policy_baseline_candidate_comparison_summaries_skips_invalid_inputs():
     summaries = extract_policy_baseline_candidate_comparison_summaries([
         None,
