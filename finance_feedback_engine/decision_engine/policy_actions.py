@@ -759,6 +759,21 @@ def build_policy_baseline_candidate_comparison_summary(comparison_group: Optiona
 
 
 
+def build_policy_selection_recommendation_set(
+    comparison_summaries: Optional[list[dict]],
+) -> dict:
+    valid_comparison_summaries = [
+        summary for summary in (comparison_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "comparison_summaries": [dict(summary) for summary in valid_comparison_summaries],
+        "summary_count": len(valid_comparison_summaries),
+        "recommendation_set_version": 1,
+    }
+
+
+
+
 def extract_policy_baseline_candidate_comparison_summaries(comparison_groups: Optional[list[dict]]) -> list[dict]:
     summaries = []
     for comparison_group in comparison_groups or []:

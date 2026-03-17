@@ -29,6 +29,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_baseline_workflow_summary,
     build_policy_baseline_candidate_comparison_group,
     build_policy_baseline_candidate_comparison_summary,
+    build_policy_selection_recommendation_set,
     extract_policy_baseline_candidate_comparison_summaries,
     extract_policy_baseline_workflow_summaries,
     build_policy_baseline_evaluation_report,
@@ -2431,6 +2432,62 @@ def test_extract_policy_baseline_candidate_comparison_summaries_builds_exportabl
     assert summaries[0]["avg_baseline_left_executed_rate"] == pytest.approx(0.5)
     assert summaries[0]["avg_candidate_left_executed_rate"] == pytest.approx(0.6)
     assert summaries[0]["comparison_summary_version"] == 1
+
+
+
+def test_build_policy_selection_recommendation_set_wraps_comparison_summaries_cleanly():
+    recommendation_set = build_policy_selection_recommendation_set([
+        {
+            "baseline_count": 1,
+            "candidate_count": 1,
+            "avg_baseline_left_executed_rate": 0.4,
+            "avg_candidate_left_executed_rate": 0.6,
+            "comparison_summary_version": 1,
+        }
+    ])
+
+    assert recommendation_set["summary_count"] == 1
+    assert recommendation_set["recommendation_set_version"] == 1
+    assert recommendation_set["comparison_summaries"][0]["avg_candidate_left_executed_rate"] == 0.6
+
+
+def test_build_policy_selection_recommendation_set_handles_empty_inputs():
+    recommendation_set = build_policy_selection_recommendation_set([])
+
+    assert recommendation_set == {
+        "comparison_summaries": [],
+        "summary_count": 0,
+        "recommendation_set_version": 1,
+    }
+
+
+def test_build_policy_selection_recommendation_set_handles_none_inputs():
+    recommendation_set = build_policy_selection_recommendation_set(None)
+
+    assert recommendation_set == {
+        "comparison_summaries": [],
+        "summary_count": 0,
+        "recommendation_set_version": 1,
+    }
+
+
+def test_build_policy_selection_recommendation_set_filters_non_dict_items():
+    recommendation_set = build_policy_selection_recommendation_set([
+        {
+            "baseline_count": 1,
+            "candidate_count": 1,
+            "avg_baseline_left_executed_rate": 0.4,
+            "avg_candidate_left_executed_rate": 0.6,
+            "comparison_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert recommendation_set["summary_count"] == 1
+    assert recommendation_set["comparison_summaries"][0]["baseline_count"] == 1
+
 
 
 
