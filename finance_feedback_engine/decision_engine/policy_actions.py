@@ -779,18 +779,19 @@ def build_policy_selection_recommendation_summary(
 ) -> dict:
     payload = dict(recommendation_set or {}) if isinstance(recommendation_set, dict) else {}
     comparison_summaries = payload.get("comparison_summaries") or []
-    valid_comparison_summaries = [
+    dict_comparison_summaries = [
         summary for summary in comparison_summaries if isinstance(summary, dict)
     ]
 
     better_candidate_count = 0
     better_baseline_count = 0
     inconclusive_count = 0
+    comparable_summary_count = 0
 
-    for summary in valid_comparison_summaries:
+    for summary in dict_comparison_summaries:
         baseline_score = 0.0
         candidate_score = 0.0
-        comparable = False
+        metric_count = 0
         for baseline_key, candidate_key in [
             ("avg_baseline_left_executed_rate", "avg_candidate_left_executed_rate"),
             ("avg_baseline_right_executed_rate", "avg_candidate_right_executed_rate"),
@@ -805,7 +806,7 @@ def build_policy_selection_recommendation_summary(
             except (TypeError, ValueError):
                 continue
 
-            comparable = True
+            metric_count += 1
             if baseline_key.endswith("executed_rate"):
                 baseline_score += baseline_value
                 candidate_score += candidate_value
@@ -813,8 +814,10 @@ def build_policy_selection_recommendation_summary(
                 baseline_score -= baseline_value
                 candidate_score -= candidate_value
 
-        if not comparable:
+        if metric_count != 4:
             continue
+
+        comparable_summary_count += 1
         if candidate_score > baseline_score:
             better_candidate_count += 1
         elif baseline_score > candidate_score:
@@ -823,7 +826,7 @@ def build_policy_selection_recommendation_summary(
             inconclusive_count += 1
 
     return {
-        "summary_count": len(valid_comparison_summaries),
+        "summary_count": comparable_summary_count,
         "better_candidate_count": better_candidate_count,
         "better_baseline_count": better_baseline_count,
         "inconclusive_count": inconclusive_count,

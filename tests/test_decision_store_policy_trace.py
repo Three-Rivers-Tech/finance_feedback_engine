@@ -1045,6 +1045,8 @@ def test_decision_store_loaded_legacy_decision_skips_full_baseline_candidate_com
     workflow_summary = build_policy_baseline_workflow_summary(evaluation_session)
     comparison_group = build_policy_baseline_candidate_comparison_group([], [])
     comparison_summary = build_policy_baseline_candidate_comparison_summary(comparison_group)
+    recommendation_set = build_policy_selection_recommendation_set([comparison_summary])
+    recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
 
     assert dataset_row is None
     assert evaluation_batch["row_count"] == 0
@@ -1063,3 +1065,12 @@ def test_decision_store_loaded_legacy_decision_skips_full_baseline_candidate_com
     assert comparison_summary["avg_baseline_left_executed_rate"] == 0.0
     assert comparison_summary["avg_candidate_left_executed_rate"] == 0.0
     assert comparison_summary["comparison_summary_version"] == 1
+    assert recommendation_set["summary_count"] == 1
+    assert recommendation_set["recommendation_set_version"] == 1
+    assert recommendation_summary == {
+        "summary_count": 1,
+        "better_candidate_count": 0,
+        "better_baseline_count": 0,
+        "inconclusive_count": 1,
+        "recommendation_summary_version": 1,
+    }
