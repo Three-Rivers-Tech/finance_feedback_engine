@@ -1237,6 +1237,63 @@ def build_policy_selection_job_spec_set(
 
 
 
+def build_policy_selection_job_spec_summary(
+    job_spec_set: Optional[dict],
+) -> dict:
+    payload = dict(job_spec_set or {}) if isinstance(job_spec_set, dict) else {}
+    summaries = payload.get("scheduler_request_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_schedule_job_spec_count": 0,
+            "primary_cutover_job_spec_count": 0,
+            "manual_hold_job_spec_count": 0,
+            "deferred_job_spec_count": 0,
+            "job_spec_summary_version": 1,
+        }
+
+    shadow_schedule_job_spec_count = 0
+    primary_cutover_job_spec_count = 0
+    manual_hold_job_spec_count = 0
+    deferred_job_spec_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            request_shadow_schedule_count = int(summary.get("request_shadow_schedule_count"))
+            request_primary_cutover_schedule_count = int(summary.get("request_primary_cutover_schedule_count"))
+            keep_manual_schedule_count = int(summary.get("keep_manual_schedule_count"))
+            defer_scheduler_request_count = int(summary.get("defer_scheduler_request_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if request_primary_cutover_schedule_count > 0:
+            primary_cutover_job_spec_count += 1
+        elif request_shadow_schedule_count > 0:
+            shadow_schedule_job_spec_count += 1
+        elif keep_manual_schedule_count > 0:
+            manual_hold_job_spec_count += 1
+        else:
+            deferred_job_spec_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_schedule_job_spec_count": shadow_schedule_job_spec_count,
+        "primary_cutover_job_spec_count": primary_cutover_job_spec_count,
+        "manual_hold_job_spec_count": manual_hold_job_spec_count,
+        "deferred_job_spec_count": deferred_job_spec_count,
+        "job_spec_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_scheduler_request_summaries(
     scheduler_request_sets: Optional[list[dict]],
 ) -> list[dict]:
