@@ -4374,6 +4374,90 @@ def test_job_spec_versions_align_across_stage24_helpers():
 
 
 
+def test_build_policy_selection_job_spec_set_defensively_copies_scheduler_request_inputs():
+    scheduler_request_summary = {
+        "summary_count": 1,
+        "request_shadow_schedule_count": 1,
+        "request_primary_cutover_schedule_count": 0,
+        "keep_manual_schedule_count": 0,
+        "defer_scheduler_request_count": 0,
+        "scheduler_request_summary_version": 1,
+    }
+    job_spec_set = build_policy_selection_job_spec_set([scheduler_request_summary])
+
+    scheduler_request_summary["request_shadow_schedule_count"] = 99
+
+    assert job_spec_set["scheduler_request_summaries"][0]["request_shadow_schedule_count"] == 1
+
+
+
+def test_job_spec_versions_align_across_stage24_layers():
+    scheduler_request_summary = {
+        "summary_count": 1,
+        "request_shadow_schedule_count": 1,
+        "request_primary_cutover_schedule_count": 0,
+        "keep_manual_schedule_count": 0,
+        "defer_scheduler_request_count": 0,
+        "scheduler_request_summary_version": 1,
+    }
+
+    job_spec_set = build_policy_selection_job_spec_set([scheduler_request_summary])
+    job_spec_summary = build_policy_selection_job_spec_summary(job_spec_set)
+
+    assert scheduler_request_summary["scheduler_request_summary_version"] == 1
+    assert job_spec_set["job_spec_set_version"] == 1
+    assert job_spec_summary["job_spec_summary_version"] == 1
+
+
+
+def test_build_policy_selection_job_spec_summary_preserves_outcomes():
+    job_spec_set = build_policy_selection_job_spec_set([
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 1,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 0,
+            "request_primary_cutover_schedule_count": 1,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 0,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 1,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 0,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 1,
+            "scheduler_request_summary_version": 1,
+        },
+    ])
+
+    assert build_policy_selection_job_spec_summary(job_spec_set) == {
+        "summary_count": 4,
+        "shadow_schedule_job_spec_count": 1,
+        "primary_cutover_job_spec_count": 1,
+        "manual_hold_job_spec_count": 1,
+        "deferred_job_spec_count": 1,
+        "job_spec_summary_version": 1,
+    }
+
+
+
+
 def test_build_policy_selection_scheduler_request_set_wraps_orchestration_summaries_cleanly():
     scheduler_request_set = build_policy_selection_scheduler_request_set([
         {
