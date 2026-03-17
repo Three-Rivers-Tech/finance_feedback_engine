@@ -836,6 +836,27 @@ def build_policy_selection_recommendation_summary(
 
 
 
+def extract_policy_selection_recommendation_summaries(
+    recommendation_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for recommendation_set in recommendation_sets or []:
+        if not isinstance(recommendation_set, dict):
+            continue
+        comparison_summaries = recommendation_set.get("comparison_summaries")
+        if not isinstance(comparison_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in comparison_summaries):
+            continue
+        recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
+        if recommendation_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(recommendation_summary)
+    return summaries
+
+
+
+
 def extract_policy_baseline_candidate_comparison_summaries(comparison_groups: Optional[list[dict]]) -> list[dict]:
     summaries = []
     for comparison_group in comparison_groups or []:

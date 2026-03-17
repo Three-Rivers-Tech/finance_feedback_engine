@@ -31,6 +31,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_baseline_candidate_comparison_summary,
     build_policy_selection_recommendation_set,
     build_policy_selection_recommendation_summary,
+    extract_policy_selection_recommendation_summaries,
     extract_policy_baseline_candidate_comparison_summaries,
     extract_policy_baseline_workflow_summaries,
     build_policy_baseline_evaluation_report,
@@ -2622,6 +2623,57 @@ def test_build_policy_selection_recommendation_summary_skips_partial_inputs_clea
         "inconclusive_count": 0,
         "recommendation_summary_version": 1,
     }
+
+
+
+
+def test_extract_policy_selection_recommendation_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_recommendation_summaries([
+        {
+            "comparison_summaries": [
+                {
+                    "avg_baseline_left_executed_rate": 0.4,
+                    "avg_candidate_left_executed_rate": 0.6,
+                    "avg_baseline_right_executed_rate": 0.5,
+                    "avg_candidate_right_executed_rate": 0.7,
+                    "avg_baseline_left_vetoed_rate": 0.2,
+                    "avg_candidate_left_vetoed_rate": 0.1,
+                    "avg_baseline_right_vetoed_rate": 0.2,
+                    "avg_candidate_right_vetoed_rate": 0.1,
+                    "comparison_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "recommendation_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "better_candidate_count": 1,
+        "better_baseline_count": 0,
+        "inconclusive_count": 0,
+        "recommendation_summary_version": 1,
+    }]
+
+
+def test_extract_policy_selection_recommendation_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_recommendation_summaries([
+        None,
+        {},
+        {"comparison_summaries": None},
+        {"comparison_summaries": []},
+        {"comparison_summaries": [None, 'bad', 123]},
+        {
+            "comparison_summaries": [
+                {"comparison_summary_version": 1},
+            ],
+            "summary_count": 1,
+            "recommendation_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
 
 
 
