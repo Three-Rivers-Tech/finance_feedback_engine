@@ -3706,6 +3706,78 @@ def test_extract_policy_selection_runtime_switch_summaries_skips_invalid_inputs(
 
 
 
+def test_extract_policy_selection_runtime_switch_summaries_preserves_outcomes():
+    runtime_switch_set = {
+        "rollout_decision_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_candidate_count": 1,
+                "hold_baseline_count": 0,
+                "defer_rollout_count": 0,
+                "rollout_decision_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_candidate_count": 0,
+                "hold_baseline_count": 1,
+                "defer_rollout_count": 0,
+                "rollout_decision_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_candidate_count": 0,
+                "hold_baseline_count": 0,
+                "defer_rollout_count": 1,
+                "rollout_decision_summary_version": 1,
+            },
+        ],
+        "summary_count": 3,
+        "runtime_switch_set_version": 1,
+    }
+
+    direct = build_policy_selection_runtime_switch_summary(runtime_switch_set)
+    exported = extract_policy_selection_runtime_switch_summaries([runtime_switch_set])
+
+    assert exported == [direct]
+
+
+
+def test_runtime_switch_versions_align_across_export_helpers():
+    runtime_switch_set = build_policy_selection_runtime_switch_set([
+        {
+            "summary_count": 1,
+            "shadow_candidate_count": 1,
+            "hold_baseline_count": 0,
+            "defer_rollout_count": 0,
+            "rollout_decision_summary_version": 1,
+        }
+    ])
+    runtime_switch_summary = build_policy_selection_runtime_switch_summary(runtime_switch_set)
+    exported = extract_policy_selection_runtime_switch_summaries([runtime_switch_set])
+
+    assert runtime_switch_set["runtime_switch_set_version"] == 1
+    assert runtime_switch_summary["runtime_switch_summary_version"] == 1
+    assert exported[0]["runtime_switch_summary_version"] == 1
+
+
+
+def test_build_policy_selection_runtime_switch_set_defensively_copies_rollout_summary_inputs():
+    rollout_decision_summary = {
+        "summary_count": 1,
+        "shadow_candidate_count": 1,
+        "hold_baseline_count": 0,
+        "defer_rollout_count": 0,
+        "rollout_decision_summary_version": 1,
+    }
+    runtime_switch_set = build_policy_selection_runtime_switch_set([rollout_decision_summary])
+
+    rollout_decision_summary["shadow_candidate_count"] = 99
+
+    assert runtime_switch_set["rollout_decision_summaries"][0]["shadow_candidate_count"] == 1
+
+
+
+
 def test_extract_policy_baseline_candidate_comparison_summaries_skips_invalid_inputs():
     summaries = extract_policy_baseline_candidate_comparison_summaries([
         None,
