@@ -1222,6 +1222,21 @@ def build_policy_selection_scheduler_request_summary(
 
 
 
+def build_policy_selection_job_spec_set(
+    scheduler_request_summaries: Optional[list[dict]],
+) -> dict:
+    valid_scheduler_request_summaries = [
+        summary for summary in (scheduler_request_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "scheduler_request_summaries": [dict(summary) for summary in valid_scheduler_request_summaries],
+        "summary_count": len(valid_scheduler_request_summaries),
+        "job_spec_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_scheduler_request_summaries(
     scheduler_request_sets: Optional[list[dict]],
 ) -> list[dict]:

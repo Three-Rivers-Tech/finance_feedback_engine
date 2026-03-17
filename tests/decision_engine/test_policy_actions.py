@@ -41,6 +41,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_deployment_execution_summary,
     build_policy_selection_orchestration_set,
     build_policy_selection_orchestration_summary,
+    build_policy_selection_job_spec_set,
     build_policy_selection_scheduler_request_set,
     build_policy_selection_scheduler_request_summary,
     extract_policy_selection_scheduler_request_summaries,
@@ -4152,6 +4153,67 @@ def test_build_policy_selection_deployment_execution_set_defensively_copies_runt
     runtime_switch_summary["shadow_candidate_active_count"] = 99
 
     assert deployment_execution_set["runtime_switch_summaries"][0]["shadow_candidate_active_count"] == 1
+
+
+
+
+def test_build_policy_selection_job_spec_set_wraps_scheduler_request_summaries_cleanly():
+    job_spec_set = build_policy_selection_job_spec_set([
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 1,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        }
+    ])
+
+    assert job_spec_set["summary_count"] == 1
+    assert job_spec_set["job_spec_set_version"] == 1
+    assert job_spec_set["scheduler_request_summaries"][0]["request_shadow_schedule_count"] == 1
+
+
+
+def test_build_policy_selection_job_spec_set_handles_empty_inputs():
+    job_spec_set = build_policy_selection_job_spec_set([])
+
+    assert job_spec_set == {
+        "scheduler_request_summaries": [],
+        "summary_count": 0,
+        "job_spec_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_job_spec_set_handles_none_inputs():
+    job_spec_set = build_policy_selection_job_spec_set(None)
+
+    assert job_spec_set == {
+        "scheduler_request_summaries": [],
+        "summary_count": 0,
+        "job_spec_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_job_spec_set_filters_non_dict_items():
+    job_spec_set = build_policy_selection_job_spec_set([
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 1,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert job_spec_set["summary_count"] == 1
+    assert job_spec_set["scheduler_request_summaries"][0]["summary_count"] == 1
 
 
 
