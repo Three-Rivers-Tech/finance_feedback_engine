@@ -4509,6 +4509,74 @@ def test_extract_policy_selection_job_spec_summaries_skips_invalid_inputs():
 
 
 
+def test_extract_policy_selection_job_spec_summaries_preserves_outcomes():
+    job_spec_set = {
+        "scheduler_request_summaries": [
+            {
+                "summary_count": 1,
+                "request_shadow_schedule_count": 1,
+                "request_primary_cutover_schedule_count": 0,
+                "keep_manual_schedule_count": 0,
+                "defer_scheduler_request_count": 0,
+                "scheduler_request_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "request_shadow_schedule_count": 0,
+                "request_primary_cutover_schedule_count": 1,
+                "keep_manual_schedule_count": 0,
+                "defer_scheduler_request_count": 0,
+                "scheduler_request_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "request_shadow_schedule_count": 0,
+                "request_primary_cutover_schedule_count": 0,
+                "keep_manual_schedule_count": 1,
+                "defer_scheduler_request_count": 0,
+                "scheduler_request_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "request_shadow_schedule_count": 0,
+                "request_primary_cutover_schedule_count": 0,
+                "keep_manual_schedule_count": 0,
+                "defer_scheduler_request_count": 1,
+                "scheduler_request_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "job_spec_set_version": 1,
+    }
+
+    direct = build_policy_selection_job_spec_summary(job_spec_set)
+    exported = extract_policy_selection_job_spec_summaries([job_spec_set])
+
+    assert exported == [direct]
+
+
+
+def test_job_spec_versions_align_across_export_helpers():
+    job_spec_set = build_policy_selection_job_spec_set([
+        {
+            "summary_count": 1,
+            "request_shadow_schedule_count": 1,
+            "request_primary_cutover_schedule_count": 0,
+            "keep_manual_schedule_count": 0,
+            "defer_scheduler_request_count": 0,
+            "scheduler_request_summary_version": 1,
+        }
+    ])
+    job_spec_summary = build_policy_selection_job_spec_summary(job_spec_set)
+    exported = extract_policy_selection_job_spec_summaries([job_spec_set])
+
+    assert job_spec_set["job_spec_set_version"] == 1
+    assert job_spec_summary["job_spec_summary_version"] == 1
+    assert exported[0]["job_spec_summary_version"] == 1
+
+
+
+
 def test_build_policy_selection_scheduler_request_set_wraps_orchestration_summaries_cleanly():
     scheduler_request_set = build_policy_selection_scheduler_request_set([
         {
