@@ -31,6 +31,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_baseline_candidate_comparison_summary,
     build_policy_selection_recommendation_set,
     build_policy_selection_recommendation_summary,
+    build_policy_selection_promotion_decision_set,
     extract_policy_selection_recommendation_summaries,
     extract_policy_baseline_candidate_comparison_summaries,
     extract_policy_baseline_workflow_summaries,
@@ -2760,6 +2761,65 @@ def test_extract_policy_selection_recommendation_summaries_preserves_recommendat
     exported = extract_policy_selection_recommendation_summaries([recommendation_set])
 
     assert exported == [direct]
+
+
+
+
+def test_build_policy_selection_promotion_decision_set_wraps_recommendation_summaries_cleanly():
+    promotion_decision_set = build_policy_selection_promotion_decision_set([
+        {
+            "summary_count": 1,
+            "better_candidate_count": 1,
+            "better_baseline_count": 0,
+            "inconclusive_count": 0,
+            "recommendation_summary_version": 1,
+        }
+    ])
+
+    assert promotion_decision_set["summary_count"] == 1
+    assert promotion_decision_set["promotion_decision_set_version"] == 1
+    assert promotion_decision_set["recommendation_summaries"][0]["better_candidate_count"] == 1
+
+
+
+def test_build_policy_selection_promotion_decision_set_handles_empty_inputs():
+    promotion_decision_set = build_policy_selection_promotion_decision_set([])
+
+    assert promotion_decision_set == {
+        "recommendation_summaries": [],
+        "summary_count": 0,
+        "promotion_decision_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_promotion_decision_set_handles_none_inputs():
+    promotion_decision_set = build_policy_selection_promotion_decision_set(None)
+
+    assert promotion_decision_set == {
+        "recommendation_summaries": [],
+        "summary_count": 0,
+        "promotion_decision_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_promotion_decision_set_filters_non_dict_items():
+    promotion_decision_set = build_policy_selection_promotion_decision_set([
+        {
+            "summary_count": 1,
+            "better_candidate_count": 1,
+            "better_baseline_count": 0,
+            "inconclusive_count": 0,
+            "recommendation_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert promotion_decision_set["summary_count"] == 1
+    assert promotion_decision_set["recommendation_summaries"][0]["summary_count"] == 1
 
 
 

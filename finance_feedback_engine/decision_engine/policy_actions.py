@@ -836,6 +836,21 @@ def build_policy_selection_recommendation_summary(
 
 
 
+def build_policy_selection_promotion_decision_set(
+    recommendation_summaries: Optional[list[dict]],
+) -> dict:
+    valid_recommendation_summaries = [
+        summary for summary in (recommendation_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "recommendation_summaries": [dict(summary) for summary in valid_recommendation_summaries],
+        "summary_count": len(valid_recommendation_summaries),
+        "promotion_decision_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_recommendation_summaries(
     recommendation_sets: Optional[list[dict]],
 ) -> list[dict]:
