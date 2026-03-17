@@ -39,6 +39,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_runtime_switch_summary,
     build_policy_selection_deployment_execution_set,
     build_policy_selection_deployment_execution_summary,
+    extract_policy_selection_deployment_execution_summaries,
     extract_policy_selection_runtime_switch_summaries,
     extract_policy_selection_rollout_decision_summaries,
     extract_policy_selection_promotion_decision_summaries,
@@ -4010,6 +4011,56 @@ def test_build_policy_selection_deployment_execution_set_defensively_copies_runt
     runtime_switch_summary["shadow_candidate_active_count"] = 99
 
     assert deployment_execution_set["runtime_switch_summaries"][0]["shadow_candidate_active_count"] == 1
+
+
+
+
+def test_extract_policy_selection_deployment_execution_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_deployment_execution_summaries([
+        {
+            "runtime_switch_summaries": [
+                {
+                    "summary_count": 1,
+                    "keep_baseline_active_count": 0,
+                    "shadow_candidate_active_count": 1,
+                    "candidate_primary_active_count": 0,
+                    "defer_switch_count": 0,
+                    "runtime_switch_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "deployment_execution_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "deploy_shadow_only_count": 1,
+        "deploy_candidate_primary_count": 0,
+        "retain_current_deployment_count": 0,
+        "defer_deployment_count": 0,
+        "deployment_execution_summary_version": 1,
+    }]
+
+
+
+def test_extract_policy_selection_deployment_execution_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_deployment_execution_summaries([
+        None,
+        {},
+        {"runtime_switch_summaries": None},
+        {"runtime_switch_summaries": []},
+        {"runtime_switch_summaries": [None, 'bad', 123]},
+        {
+            "runtime_switch_summaries": [
+                {"runtime_switch_summary_version": 1},
+            ],
+            "summary_count": 1,
+            "deployment_execution_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
 
 
 

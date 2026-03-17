@@ -1085,6 +1085,27 @@ def build_policy_selection_deployment_execution_summary(
 
 
 
+def extract_policy_selection_deployment_execution_summaries(
+    deployment_execution_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for deployment_execution_set in deployment_execution_sets or []:
+        if not isinstance(deployment_execution_set, dict):
+            continue
+        runtime_switch_summaries = deployment_execution_set.get("runtime_switch_summaries")
+        if not isinstance(runtime_switch_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in runtime_switch_summaries):
+            continue
+        deployment_execution_summary = build_policy_selection_deployment_execution_summary(deployment_execution_set)
+        if deployment_execution_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(deployment_execution_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_runtime_switch_summaries(
     runtime_switch_sets: Optional[list[dict]],
 ) -> list[dict]:
