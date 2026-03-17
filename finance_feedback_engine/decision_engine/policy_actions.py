@@ -1150,6 +1150,21 @@ def build_policy_selection_orchestration_summary(
 
 
 
+def build_policy_selection_scheduler_request_set(
+    orchestration_summaries: Optional[list[dict]],
+) -> dict:
+    valid_orchestration_summaries = [
+        summary for summary in (orchestration_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "orchestration_summaries": [dict(summary) for summary in valid_orchestration_summaries],
+        "summary_count": len(valid_orchestration_summaries),
+        "scheduler_request_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_orchestration_summaries(
     orchestration_sets: Optional[list[dict]],
 ) -> list[dict]:
