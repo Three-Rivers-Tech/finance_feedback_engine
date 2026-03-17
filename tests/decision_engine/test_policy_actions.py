@@ -44,6 +44,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_job_spec_set,
     build_policy_selection_job_spec_summary,
     build_policy_selection_scheduler_request_set,
+    extract_policy_selection_job_spec_summaries,
     build_policy_selection_scheduler_request_summary,
     extract_policy_selection_scheduler_request_summaries,
     extract_policy_selection_orchestration_summaries,
@@ -4454,6 +4455,56 @@ def test_build_policy_selection_job_spec_summary_preserves_outcomes():
         "deferred_job_spec_count": 1,
         "job_spec_summary_version": 1,
     }
+
+
+
+
+def test_extract_policy_selection_job_spec_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_job_spec_summaries([
+        {
+            "scheduler_request_summaries": [
+                {
+                    "summary_count": 1,
+                    "request_shadow_schedule_count": 1,
+                    "request_primary_cutover_schedule_count": 0,
+                    "keep_manual_schedule_count": 0,
+                    "defer_scheduler_request_count": 0,
+                    "scheduler_request_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "job_spec_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "shadow_schedule_job_spec_count": 1,
+        "primary_cutover_job_spec_count": 0,
+        "manual_hold_job_spec_count": 0,
+        "deferred_job_spec_count": 0,
+        "job_spec_summary_version": 1,
+    }]
+
+
+
+def test_extract_policy_selection_job_spec_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_job_spec_summaries([
+        None,
+        {},
+        {"scheduler_request_summaries": None},
+        {"scheduler_request_summaries": []},
+        {"scheduler_request_summaries": [None, 'bad', 123]},
+        {
+            "scheduler_request_summaries": [
+                {"scheduler_request_summary_version": 1},
+            ],
+            "summary_count": 1,
+            "job_spec_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
 
 
 

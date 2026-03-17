@@ -1294,6 +1294,27 @@ def build_policy_selection_job_spec_summary(
 
 
 
+def extract_policy_selection_job_spec_summaries(
+    job_spec_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for job_spec_set in job_spec_sets or []:
+        if not isinstance(job_spec_set, dict):
+            continue
+        scheduler_request_summaries = job_spec_set.get("scheduler_request_summaries")
+        if not isinstance(scheduler_request_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in scheduler_request_summaries):
+            continue
+        job_spec_summary = build_policy_selection_job_spec_summary(job_spec_set)
+        if job_spec_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(job_spec_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_scheduler_request_summaries(
     scheduler_request_sets: Optional[list[dict]],
 ) -> list[dict]:
