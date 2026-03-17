@@ -38,6 +38,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_runtime_switch_set,
     build_policy_selection_runtime_switch_summary,
     build_policy_selection_deployment_execution_set,
+    build_policy_selection_deployment_execution_summary,
     extract_policy_selection_runtime_switch_summaries,
     extract_policy_selection_rollout_decision_summaries,
     extract_policy_selection_promotion_decision_summaries,
@@ -3836,6 +3837,108 @@ def test_build_policy_selection_deployment_execution_set_filters_non_dict_items(
 
     assert deployment_execution_set["summary_count"] == 1
     assert deployment_execution_set["runtime_switch_summaries"][0]["summary_count"] == 1
+
+
+
+
+def test_build_policy_selection_deployment_execution_summary_counts_outcomes_cleanly():
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary({
+        "runtime_switch_summaries": [
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 1,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 1,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 1,
+                "defer_switch_count": 0,
+                "runtime_switch_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "keep_baseline_active_count": 0,
+                "shadow_candidate_active_count": 0,
+                "candidate_primary_active_count": 0,
+                "defer_switch_count": 1,
+                "runtime_switch_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "deployment_execution_set_version": 1,
+    })
+
+    assert deployment_execution_summary == {
+        "summary_count": 4,
+        "deploy_shadow_only_count": 1,
+        "deploy_candidate_primary_count": 1,
+        "retain_current_deployment_count": 1,
+        "defer_deployment_count": 1,
+        "deployment_execution_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_deployment_execution_summary_handles_empty_inputs():
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary({
+        "runtime_switch_summaries": [],
+        "summary_count": 0,
+        "deployment_execution_set_version": 1,
+    })
+
+    assert deployment_execution_summary == {
+        "summary_count": 0,
+        "deploy_shadow_only_count": 0,
+        "deploy_candidate_primary_count": 0,
+        "retain_current_deployment_count": 0,
+        "defer_deployment_count": 0,
+        "deployment_execution_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_deployment_execution_summary_handles_none_inputs():
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary(None)
+
+    assert deployment_execution_summary == {
+        "summary_count": 0,
+        "deploy_shadow_only_count": 0,
+        "deploy_candidate_primary_count": 0,
+        "retain_current_deployment_count": 0,
+        "defer_deployment_count": 0,
+        "deployment_execution_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_deployment_execution_summary_skips_invalid_items_cleanly():
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary({
+        "runtime_switch_summaries": [None, "bad", 123, {"runtime_switch_summary_version": 1}],
+        "summary_count": 4,
+        "deployment_execution_set_version": 1,
+    })
+
+    assert deployment_execution_summary == {
+        "summary_count": 0,
+        "deploy_shadow_only_count": 0,
+        "deploy_candidate_primary_count": 0,
+        "retain_current_deployment_count": 0,
+        "defer_deployment_count": 0,
+        "deployment_execution_summary_version": 1,
+    }
 
 
 

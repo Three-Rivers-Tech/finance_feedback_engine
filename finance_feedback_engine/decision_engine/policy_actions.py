@@ -1035,6 +1035,56 @@ def build_policy_selection_deployment_execution_set(
 
 
 
+def build_policy_selection_deployment_execution_summary(
+    deployment_execution_set: Optional[dict],
+) -> dict:
+    payload = dict(deployment_execution_set or {}) if isinstance(deployment_execution_set, dict) else {}
+    runtime_switch_summaries = payload.get("runtime_switch_summaries") or []
+    valid_runtime_switch_summaries = [
+        summary for summary in runtime_switch_summaries if isinstance(summary, dict)
+    ]
+
+    deploy_shadow_only_count = 0
+    deploy_candidate_primary_count = 0
+    retain_current_deployment_count = 0
+    defer_deployment_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_runtime_switch_summaries:
+        try:
+            keep_baseline_active_count = int(summary.get("keep_baseline_active_count"))
+            shadow_candidate_active_count = int(summary.get("shadow_candidate_active_count"))
+            candidate_primary_active_count = int(summary.get("candidate_primary_active_count"))
+            defer_switch_count = int(summary.get("defer_switch_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if candidate_primary_active_count > 0:
+            deploy_candidate_primary_count += 1
+        elif shadow_candidate_active_count > 0:
+            deploy_shadow_only_count += 1
+        elif keep_baseline_active_count > 0:
+            retain_current_deployment_count += 1
+        else:
+            defer_deployment_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "deploy_shadow_only_count": deploy_shadow_only_count,
+        "deploy_candidate_primary_count": deploy_candidate_primary_count,
+        "retain_current_deployment_count": retain_current_deployment_count,
+        "defer_deployment_count": defer_deployment_count,
+        "deployment_execution_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_runtime_switch_summaries(
     runtime_switch_sets: Optional[list[dict]],
 ) -> list[dict]:
