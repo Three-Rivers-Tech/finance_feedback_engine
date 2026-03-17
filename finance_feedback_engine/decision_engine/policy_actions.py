@@ -956,6 +956,21 @@ def build_policy_selection_rollout_decision_summary(
 
 
 
+def build_policy_selection_runtime_switch_set(
+    rollout_decision_summaries: Optional[list[dict]],
+) -> dict:
+    valid_rollout_decision_summaries = [
+        summary for summary in (rollout_decision_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "rollout_decision_summaries": [dict(summary) for summary in valid_rollout_decision_summaries],
+        "summary_count": len(valid_rollout_decision_summaries),
+        "runtime_switch_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_rollout_decision_summaries(
     rollout_decision_sets: Optional[list[dict]],
 ) -> list[dict]:
