@@ -4437,6 +4437,91 @@ def test_extract_policy_selection_orchestration_summaries_skips_invalid_inputs()
 
 
 
+def test_extract_policy_selection_orchestration_summaries_preserves_outcomes():
+    orchestration_set = {
+        "deployment_execution_summaries": [
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 1,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 1,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 1,
+                "defer_deployment_count": 0,
+                "deployment_execution_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "deploy_shadow_only_count": 0,
+                "deploy_candidate_primary_count": 0,
+                "retain_current_deployment_count": 0,
+                "defer_deployment_count": 1,
+                "deployment_execution_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "orchestration_set_version": 1,
+    }
+
+    direct = build_policy_selection_orchestration_summary(orchestration_set)
+    exported = extract_policy_selection_orchestration_summaries([orchestration_set])
+
+    assert exported == [direct]
+
+
+
+def test_orchestration_versions_align_across_export_helpers():
+    orchestration_set = build_policy_selection_orchestration_set([
+        {
+            "summary_count": 1,
+            "deploy_shadow_only_count": 1,
+            "deploy_candidate_primary_count": 0,
+            "retain_current_deployment_count": 0,
+            "defer_deployment_count": 0,
+            "deployment_execution_summary_version": 1,
+        }
+    ])
+    orchestration_summary = build_policy_selection_orchestration_summary(orchestration_set)
+    exported = extract_policy_selection_orchestration_summaries([orchestration_set])
+
+    assert orchestration_set["orchestration_set_version"] == 1
+    assert orchestration_summary["orchestration_summary_version"] == 1
+    assert exported[0]["orchestration_summary_version"] == 1
+
+
+
+def test_build_policy_selection_orchestration_set_defensively_copies_deployment_summary_inputs():
+    deployment_execution_summary = {
+        "summary_count": 1,
+        "deploy_shadow_only_count": 1,
+        "deploy_candidate_primary_count": 0,
+        "retain_current_deployment_count": 0,
+        "defer_deployment_count": 0,
+        "deployment_execution_summary_version": 1,
+    }
+    orchestration_set = build_policy_selection_orchestration_set([deployment_execution_summary])
+
+    deployment_execution_summary["deploy_shadow_only_count"] = 99
+
+    assert orchestration_set["deployment_execution_summaries"][0]["deploy_shadow_only_count"] == 1
+
+
+
+
 def test_extract_policy_baseline_candidate_comparison_summaries_skips_invalid_inputs():
     summaries = extract_policy_baseline_candidate_comparison_summaries([
         None,
