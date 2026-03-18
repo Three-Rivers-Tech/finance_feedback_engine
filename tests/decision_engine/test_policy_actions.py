@@ -4451,6 +4451,74 @@ def test_extract_policy_selection_submission_envelope_summaries_skips_invalid_in
 
 
 
+def test_extract_policy_selection_submission_envelope_summaries_preserves_outcomes():
+    submission_envelope_set = {
+        "job_spec_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_schedule_job_spec_count": 1,
+                "primary_cutover_job_spec_count": 0,
+                "manual_hold_job_spec_count": 0,
+                "deferred_job_spec_count": 0,
+                "job_spec_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_schedule_job_spec_count": 0,
+                "primary_cutover_job_spec_count": 1,
+                "manual_hold_job_spec_count": 0,
+                "deferred_job_spec_count": 0,
+                "job_spec_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_schedule_job_spec_count": 0,
+                "primary_cutover_job_spec_count": 0,
+                "manual_hold_job_spec_count": 1,
+                "deferred_job_spec_count": 0,
+                "job_spec_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_schedule_job_spec_count": 0,
+                "primary_cutover_job_spec_count": 0,
+                "manual_hold_job_spec_count": 0,
+                "deferred_job_spec_count": 1,
+                "job_spec_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "submission_envelope_set_version": 1,
+    }
+
+    direct = build_policy_selection_submission_envelope_summary(submission_envelope_set)
+    exported = extract_policy_selection_submission_envelope_summaries([submission_envelope_set])
+
+    assert exported == [direct]
+
+
+
+def test_submission_envelope_versions_align_across_export_helpers():
+    submission_envelope_set = build_policy_selection_submission_envelope_set([
+        {
+            "summary_count": 1,
+            "shadow_schedule_job_spec_count": 1,
+            "primary_cutover_job_spec_count": 0,
+            "manual_hold_job_spec_count": 0,
+            "deferred_job_spec_count": 0,
+            "job_spec_summary_version": 1,
+        }
+    ])
+    submission_envelope_summary = build_policy_selection_submission_envelope_summary(submission_envelope_set)
+    exported = extract_policy_selection_submission_envelope_summaries([submission_envelope_set])
+
+    assert submission_envelope_set["submission_envelope_set_version"] == 1
+    assert submission_envelope_summary["submission_envelope_summary_version"] == 1
+    assert exported[0]["submission_envelope_summary_version"] == 1
+
+
+
+
 def test_build_policy_selection_submission_envelope_set_wraps_job_spec_summaries_cleanly():
     submission_envelope_set = build_policy_selection_submission_envelope_set([
         {
