@@ -1438,6 +1438,21 @@ def build_policy_selection_adapter_payload_summary(
 
 
 
+def build_policy_selection_provider_binding_contract_set(
+    adapter_payload_summaries: Optional[list[dict]],
+) -> dict:
+    valid_adapter_payload_summaries = [
+        summary for summary in (adapter_payload_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "adapter_payload_summaries": [dict(summary) for summary in valid_adapter_payload_summaries],
+        "summary_count": len(valid_adapter_payload_summaries),
+        "provider_binding_contract_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_adapter_payload_summaries(
     adapter_payload_sets: Optional[list[dict]],
 ) -> list[dict]:

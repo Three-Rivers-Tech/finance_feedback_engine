@@ -45,6 +45,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_job_spec_summary,
     build_policy_selection_adapter_payload_set,
     build_policy_selection_adapter_payload_summary,
+    build_policy_selection_provider_binding_contract_set,
     build_policy_selection_submission_envelope_set,
     extract_policy_selection_adapter_payload_summaries,
     build_policy_selection_submission_envelope_summary,
@@ -4875,6 +4876,67 @@ def test_adapter_payload_versions_align_across_export_helpers():
     assert adapter_payload_set["adapter_payload_set_version"] == 1
     assert adapter_payload_summary["adapter_payload_summary_version"] == 1
     assert exported[0]["adapter_payload_summary_version"] == 1
+
+
+
+
+def test_build_policy_selection_provider_binding_contract_set_wraps_adapter_payload_summaries_cleanly():
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adapter_payload_count": 1,
+            "primary_cutover_adapter_payload_count": 0,
+            "manual_hold_adapter_payload_count": 0,
+            "deferred_adapter_payload_count": 0,
+            "adapter_payload_summary_version": 1,
+        }
+    ])
+
+    assert provider_binding_contract_set["summary_count"] == 1
+    assert provider_binding_contract_set["provider_binding_contract_set_version"] == 1
+    assert provider_binding_contract_set["adapter_payload_summaries"][0]["shadow_adapter_payload_count"] == 1
+
+
+
+def test_build_policy_selection_provider_binding_contract_set_handles_empty_inputs():
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([])
+
+    assert provider_binding_contract_set == {
+        "adapter_payload_summaries": [],
+        "summary_count": 0,
+        "provider_binding_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_set_handles_none_inputs():
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set(None)
+
+    assert provider_binding_contract_set == {
+        "adapter_payload_summaries": [],
+        "summary_count": 0,
+        "provider_binding_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_set_filters_non_dict_items():
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adapter_payload_count": 1,
+            "primary_cutover_adapter_payload_count": 0,
+            "manual_hold_adapter_payload_count": 0,
+            "deferred_adapter_payload_count": 0,
+            "adapter_payload_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert provider_binding_contract_set["summary_count"] == 1
+    assert provider_binding_contract_set["adapter_payload_summaries"][0]["summary_count"] == 1
 
 
 
