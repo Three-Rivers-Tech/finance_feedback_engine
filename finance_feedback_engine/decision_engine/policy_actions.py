@@ -1309,6 +1309,63 @@ def build_policy_selection_submission_envelope_set(
 
 
 
+def build_policy_selection_submission_envelope_summary(
+    submission_envelope_set: Optional[dict],
+) -> dict:
+    payload = dict(submission_envelope_set or {}) if isinstance(submission_envelope_set, dict) else {}
+    summaries = payload.get("job_spec_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_submission_envelope_count": 0,
+            "primary_cutover_submission_envelope_count": 0,
+            "manual_hold_submission_envelope_count": 0,
+            "deferred_submission_envelope_count": 0,
+            "submission_envelope_summary_version": 1,
+        }
+
+    shadow_submission_envelope_count = 0
+    primary_cutover_submission_envelope_count = 0
+    manual_hold_submission_envelope_count = 0
+    deferred_submission_envelope_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            shadow_schedule_job_spec_count = int(summary.get("shadow_schedule_job_spec_count"))
+            primary_cutover_job_spec_count = int(summary.get("primary_cutover_job_spec_count"))
+            manual_hold_job_spec_count = int(summary.get("manual_hold_job_spec_count"))
+            deferred_job_spec_count = int(summary.get("deferred_job_spec_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if primary_cutover_job_spec_count > 0:
+            primary_cutover_submission_envelope_count += 1
+        elif shadow_schedule_job_spec_count > 0:
+            shadow_submission_envelope_count += 1
+        elif manual_hold_job_spec_count > 0:
+            manual_hold_submission_envelope_count += 1
+        else:
+            deferred_submission_envelope_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_submission_envelope_count": shadow_submission_envelope_count,
+        "primary_cutover_submission_envelope_count": primary_cutover_submission_envelope_count,
+        "manual_hold_submission_envelope_count": manual_hold_submission_envelope_count,
+        "deferred_submission_envelope_count": deferred_submission_envelope_count,
+        "submission_envelope_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_job_spec_summaries(
     job_spec_sets: Optional[list[dict]],
 ) -> list[dict]:
