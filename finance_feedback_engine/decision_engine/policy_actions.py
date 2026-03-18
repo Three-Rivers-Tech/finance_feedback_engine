@@ -1438,6 +1438,27 @@ def build_policy_selection_adapter_payload_summary(
 
 
 
+def extract_policy_selection_adapter_payload_summaries(
+    adapter_payload_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for adapter_payload_set in adapter_payload_sets or []:
+        if not isinstance(adapter_payload_set, dict):
+            continue
+        submission_envelope_summaries = adapter_payload_set.get("submission_envelope_summaries")
+        if not isinstance(submission_envelope_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in submission_envelope_summaries):
+            continue
+        adapter_payload_summary = build_policy_selection_adapter_payload_summary(adapter_payload_set)
+        if adapter_payload_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(adapter_payload_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_submission_envelope_summaries(
     submission_envelope_sets: Optional[list[dict]],
 ) -> list[dict]:

@@ -46,6 +46,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adapter_payload_set,
     build_policy_selection_adapter_payload_summary,
     build_policy_selection_submission_envelope_set,
+    extract_policy_selection_adapter_payload_summaries,
     build_policy_selection_submission_envelope_summary,
     build_policy_selection_scheduler_request_set,
     extract_policy_selection_submission_envelope_summaries,
@@ -4756,6 +4757,56 @@ def test_build_policy_selection_adapter_payload_summary_preserves_outcomes():
         "deferred_adapter_payload_count": 1,
         "adapter_payload_summary_version": 1,
     }
+
+
+
+
+def test_extract_policy_selection_adapter_payload_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_adapter_payload_summaries([
+        {
+            "submission_envelope_summaries": [
+                {
+                    "summary_count": 1,
+                    "shadow_submission_envelope_count": 1,
+                    "primary_cutover_submission_envelope_count": 0,
+                    "manual_hold_submission_envelope_count": 0,
+                    "deferred_submission_envelope_count": 0,
+                    "submission_envelope_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "adapter_payload_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "shadow_adapter_payload_count": 1,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }]
+
+
+
+def test_extract_policy_selection_adapter_payload_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_adapter_payload_summaries([
+        None,
+        {},
+        {"submission_envelope_summaries": None},
+        {"submission_envelope_summaries": []},
+        {"submission_envelope_summaries": [None, 'bad', 123]},
+        {
+            "submission_envelope_summaries": [
+                {"submission_envelope_summary_version": 1},
+            ],
+            "summary_count": 1,
+            "adapter_payload_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
 
 
 
