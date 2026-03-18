@@ -1510,6 +1510,21 @@ def build_policy_selection_provider_binding_contract_summary(
 
 
 
+def build_policy_selection_provider_client_shape_set(
+    provider_binding_contract_summaries: Optional[list[dict]],
+) -> dict:
+    valid_provider_binding_contract_summaries = [
+        summary for summary in (provider_binding_contract_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "provider_binding_contract_summaries": [dict(summary) for summary in valid_provider_binding_contract_summaries],
+        "summary_count": len(valid_provider_binding_contract_summaries),
+        "provider_client_shape_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_provider_binding_contract_summaries(
     provider_binding_contract_sets: Optional[list[dict]],
 ) -> list[dict]:

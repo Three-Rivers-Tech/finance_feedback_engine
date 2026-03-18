@@ -47,6 +47,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adapter_payload_summary,
     build_policy_selection_provider_binding_contract_set,
     build_policy_selection_provider_binding_contract_summary,
+    build_policy_selection_provider_client_shape_set,
     build_policy_selection_submission_envelope_set,
     extract_policy_selection_provider_binding_contract_summaries,
     extract_policy_selection_adapter_payload_summaries,
@@ -5235,6 +5236,67 @@ def test_provider_binding_contract_versions_align_across_export_helpers():
     assert provider_binding_contract_set["provider_binding_contract_set_version"] == 1
     assert provider_binding_contract_summary["provider_binding_contract_summary_version"] == 1
     assert exported[0]["provider_binding_contract_summary_version"] == 1
+
+
+
+
+def test_build_policy_selection_provider_client_shape_set_wraps_provider_binding_contract_summaries_cleanly():
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([
+        {
+            "summary_count": 1,
+            "shadow_provider_binding_contract_count": 1,
+            "primary_cutover_provider_binding_contract_count": 0,
+            "manual_hold_provider_binding_contract_count": 0,
+            "deferred_provider_binding_contract_count": 0,
+            "provider_binding_contract_summary_version": 1,
+        }
+    ])
+
+    assert provider_client_shape_set["summary_count"] == 1
+    assert provider_client_shape_set["provider_client_shape_set_version"] == 1
+    assert provider_client_shape_set["provider_binding_contract_summaries"][0]["shadow_provider_binding_contract_count"] == 1
+
+
+
+def test_build_policy_selection_provider_client_shape_set_handles_empty_inputs():
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([])
+
+    assert provider_client_shape_set == {
+        "provider_binding_contract_summaries": [],
+        "summary_count": 0,
+        "provider_client_shape_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_client_shape_set_handles_none_inputs():
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set(None)
+
+    assert provider_client_shape_set == {
+        "provider_binding_contract_summaries": [],
+        "summary_count": 0,
+        "provider_client_shape_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_client_shape_set_filters_non_dict_items():
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([
+        {
+            "summary_count": 1,
+            "shadow_provider_binding_contract_count": 1,
+            "primary_cutover_provider_binding_contract_count": 0,
+            "manual_hold_provider_binding_contract_count": 0,
+            "deferred_provider_binding_contract_count": 0,
+            "provider_binding_contract_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert provider_client_shape_set["summary_count"] == 1
+    assert provider_client_shape_set["provider_binding_contract_summaries"][0]["summary_count"] == 1
 
 
 
