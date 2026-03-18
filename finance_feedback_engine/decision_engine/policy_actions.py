@@ -1818,6 +1818,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_execution_request_summaries(
+    execution_request_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for execution_request_set in execution_request_sets or []:
+        if not isinstance(execution_request_set, dict):
+            continue
+        execution_interface_contract_summaries = execution_request_set.get(
+            "execution_interface_contract_summaries"
+        )
+        if not isinstance(execution_interface_contract_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in execution_interface_contract_summaries):
+            continue
+        execution_request_summary = build_policy_selection_execution_request_summary(
+            execution_request_set
+        )
+        if execution_request_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(execution_request_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_execution_interface_contract_summaries(
     execution_interface_contract_sets: Optional[list[dict]],
 ) -> list[dict]:
