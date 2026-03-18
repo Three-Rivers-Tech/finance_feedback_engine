@@ -48,6 +48,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_provider_binding_contract_set,
     build_policy_selection_provider_binding_contract_summary,
     build_policy_selection_provider_client_shape_set,
+    extract_policy_selection_provider_client_shape_summaries,
     build_policy_selection_provider_client_shape_summary,
     build_policy_selection_submission_envelope_set,
     extract_policy_selection_provider_binding_contract_summaries,
@@ -5476,6 +5477,56 @@ def test_build_policy_selection_provider_client_shape_summary_preserves_outcomes
         "deferred_provider_client_shape_count": 1,
         "provider_client_shape_summary_version": 1,
     }
+
+
+
+
+def test_extract_policy_selection_provider_client_shape_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_provider_client_shape_summaries([
+        {
+            "provider_binding_contract_summaries": [
+                {
+                    "summary_count": 1,
+                    "shadow_provider_binding_contract_count": 1,
+                    "primary_cutover_provider_binding_contract_count": 0,
+                    "manual_hold_provider_binding_contract_count": 0,
+                    "deferred_provider_binding_contract_count": 0,
+                    "provider_binding_contract_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "provider_client_shape_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "shadow_provider_client_shape_count": 1,
+        "primary_cutover_provider_client_shape_count": 0,
+        "manual_hold_provider_client_shape_count": 0,
+        "deferred_provider_client_shape_count": 0,
+        "provider_client_shape_summary_version": 1,
+    }]
+
+
+
+def test_extract_policy_selection_provider_client_shape_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_provider_client_shape_summaries([
+        None,
+        {},
+        {"provider_binding_contract_summaries": None},
+        {"provider_binding_contract_summaries": []},
+        {"provider_binding_contract_summaries": [None, 'bad', 123]},
+        {
+            "provider_binding_contract_summaries": [
+                {"provider_binding_contract_summary_version": 1},
+            ],
+            "summary_count": 1,
+            "provider_client_shape_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
 
 
 

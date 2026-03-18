@@ -1582,6 +1582,27 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_provider_client_shape_summaries(
+    provider_client_shape_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for provider_client_shape_set in provider_client_shape_sets or []:
+        if not isinstance(provider_client_shape_set, dict):
+            continue
+        provider_binding_contract_summaries = provider_client_shape_set.get("provider_binding_contract_summaries")
+        if not isinstance(provider_binding_contract_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in provider_binding_contract_summaries):
+            continue
+        provider_client_shape_summary = build_policy_selection_provider_client_shape_summary(provider_client_shape_set)
+        if provider_client_shape_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(provider_client_shape_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_provider_binding_contract_summaries(
     provider_binding_contract_sets: Optional[list[dict]],
 ) -> list[dict]:
