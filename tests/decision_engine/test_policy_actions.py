@@ -4676,6 +4676,90 @@ def test_adapter_payload_versions_align_across_stage26_helpers():
 
 
 
+def test_build_policy_selection_adapter_payload_set_defensively_copies_submission_envelope_inputs():
+    submission_envelope_summary = {
+        "summary_count": 1,
+        "shadow_submission_envelope_count": 1,
+        "primary_cutover_submission_envelope_count": 0,
+        "manual_hold_submission_envelope_count": 0,
+        "deferred_submission_envelope_count": 0,
+        "submission_envelope_summary_version": 1,
+    }
+    adapter_payload_set = build_policy_selection_adapter_payload_set([submission_envelope_summary])
+
+    submission_envelope_summary["shadow_submission_envelope_count"] = 99
+
+    assert adapter_payload_set["submission_envelope_summaries"][0]["shadow_submission_envelope_count"] == 1
+
+
+
+def test_adapter_payload_versions_align_across_stage26_layers():
+    submission_envelope_summary = {
+        "summary_count": 1,
+        "shadow_submission_envelope_count": 1,
+        "primary_cutover_submission_envelope_count": 0,
+        "manual_hold_submission_envelope_count": 0,
+        "deferred_submission_envelope_count": 0,
+        "submission_envelope_summary_version": 1,
+    }
+
+    adapter_payload_set = build_policy_selection_adapter_payload_set([submission_envelope_summary])
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary(adapter_payload_set)
+
+    assert submission_envelope_summary["submission_envelope_summary_version"] == 1
+    assert adapter_payload_set["adapter_payload_set_version"] == 1
+    assert adapter_payload_summary["adapter_payload_summary_version"] == 1
+
+
+
+def test_build_policy_selection_adapter_payload_summary_preserves_outcomes():
+    adapter_payload_set = build_policy_selection_adapter_payload_set([
+        {
+            "summary_count": 1,
+            "shadow_submission_envelope_count": 1,
+            "primary_cutover_submission_envelope_count": 0,
+            "manual_hold_submission_envelope_count": 0,
+            "deferred_submission_envelope_count": 0,
+            "submission_envelope_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_submission_envelope_count": 0,
+            "primary_cutover_submission_envelope_count": 1,
+            "manual_hold_submission_envelope_count": 0,
+            "deferred_submission_envelope_count": 0,
+            "submission_envelope_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_submission_envelope_count": 0,
+            "primary_cutover_submission_envelope_count": 0,
+            "manual_hold_submission_envelope_count": 1,
+            "deferred_submission_envelope_count": 0,
+            "submission_envelope_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_submission_envelope_count": 0,
+            "primary_cutover_submission_envelope_count": 0,
+            "manual_hold_submission_envelope_count": 0,
+            "deferred_submission_envelope_count": 1,
+            "submission_envelope_summary_version": 1,
+        },
+    ])
+
+    assert build_policy_selection_adapter_payload_summary(adapter_payload_set) == {
+        "summary_count": 4,
+        "shadow_adapter_payload_count": 1,
+        "primary_cutover_adapter_payload_count": 1,
+        "manual_hold_adapter_payload_count": 1,
+        "deferred_adapter_payload_count": 1,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+
 def test_build_policy_selection_adapter_payload_set_wraps_submission_envelope_summaries_cleanly():
     adapter_payload_set = build_policy_selection_adapter_payload_set([
         {
