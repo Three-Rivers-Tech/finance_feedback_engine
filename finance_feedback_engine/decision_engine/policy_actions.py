@@ -1761,6 +1761,21 @@ def build_policy_selection_execution_request_summary(
 
 
 
+def build_policy_selection_submission_transport_envelope_set(
+    execution_request_summaries: Optional[list[dict]],
+) -> dict:
+    valid_execution_request_summaries = [
+        summary for summary in (execution_request_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "execution_request_summaries": [dict(summary) for summary in valid_execution_request_summaries],
+        "summary_count": len(valid_execution_request_summaries),
+        "submission_transport_envelope_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_provider_client_shape_summary(
     provider_client_shape_set: Optional[dict],
 ) -> dict:
