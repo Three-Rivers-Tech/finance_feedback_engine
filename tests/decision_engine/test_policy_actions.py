@@ -46,6 +46,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adapter_payload_set,
     build_policy_selection_adapter_payload_summary,
     build_policy_selection_provider_binding_contract_set,
+    build_policy_selection_provider_binding_contract_summary,
     build_policy_selection_submission_envelope_set,
     extract_policy_selection_adapter_payload_summaries,
     build_policy_selection_submission_envelope_summary,
@@ -4876,6 +4877,161 @@ def test_adapter_payload_versions_align_across_export_helpers():
     assert adapter_payload_set["adapter_payload_set_version"] == 1
     assert adapter_payload_summary["adapter_payload_summary_version"] == 1
     assert exported[0]["adapter_payload_summary_version"] == 1
+
+
+
+
+def test_build_policy_selection_provider_binding_contract_summary_counts_outcomes_cleanly():
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary({
+        "adapter_payload_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_adapter_payload_count": 1,
+                "primary_cutover_adapter_payload_count": 0,
+                "manual_hold_adapter_payload_count": 0,
+                "deferred_adapter_payload_count": 0,
+                "adapter_payload_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_adapter_payload_count": 0,
+                "primary_cutover_adapter_payload_count": 1,
+                "manual_hold_adapter_payload_count": 0,
+                "deferred_adapter_payload_count": 0,
+                "adapter_payload_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_adapter_payload_count": 0,
+                "primary_cutover_adapter_payload_count": 0,
+                "manual_hold_adapter_payload_count": 1,
+                "deferred_adapter_payload_count": 0,
+                "adapter_payload_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_adapter_payload_count": 0,
+                "primary_cutover_adapter_payload_count": 0,
+                "manual_hold_adapter_payload_count": 0,
+                "deferred_adapter_payload_count": 1,
+                "adapter_payload_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "provider_binding_contract_set_version": 1,
+    })
+
+    assert provider_binding_contract_summary == {
+        "summary_count": 4,
+        "shadow_provider_binding_contract_count": 1,
+        "primary_cutover_provider_binding_contract_count": 1,
+        "manual_hold_provider_binding_contract_count": 1,
+        "deferred_provider_binding_contract_count": 1,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_summary_handles_empty_inputs():
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary({
+        "adapter_payload_summaries": [],
+        "summary_count": 0,
+        "provider_binding_contract_set_version": 1,
+    })
+
+    assert provider_binding_contract_summary == {
+        "summary_count": 0,
+        "shadow_provider_binding_contract_count": 0,
+        "primary_cutover_provider_binding_contract_count": 0,
+        "manual_hold_provider_binding_contract_count": 0,
+        "deferred_provider_binding_contract_count": 0,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_summary_handles_none_inputs():
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary(None)
+
+    assert provider_binding_contract_summary == {
+        "summary_count": 0,
+        "shadow_provider_binding_contract_count": 0,
+        "primary_cutover_provider_binding_contract_count": 0,
+        "manual_hold_provider_binding_contract_count": 0,
+        "deferred_provider_binding_contract_count": 0,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_summary_skips_invalid_items_cleanly():
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary({
+        "adapter_payload_summaries": [None, "bad", 123, {"adapter_payload_summary_version": 1}],
+        "summary_count": 4,
+        "provider_binding_contract_set_version": 1,
+    })
+
+    assert provider_binding_contract_summary == {
+        "summary_count": 0,
+        "shadow_provider_binding_contract_count": 0,
+        "primary_cutover_provider_binding_contract_count": 0,
+        "manual_hold_provider_binding_contract_count": 0,
+        "deferred_provider_binding_contract_count": 0,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_binding_contract_summary_skips_partial_inputs_cleanly():
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary({
+        "adapter_payload_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_adapter_payload_count": 1,
+                "primary_cutover_adapter_payload_count": 0,
+                "manual_hold_adapter_payload_count": 0,
+                "deferred_adapter_payload_count": 0,
+                "adapter_payload_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "primary_cutover_adapter_payload_count": 1,
+                "adapter_payload_summary_version": 1,
+            },
+            {
+                "adapter_payload_summary_version": 1,
+            },
+        ],
+        "summary_count": 3,
+        "provider_binding_contract_set_version": 1,
+    })
+
+    assert provider_binding_contract_summary == {
+        "summary_count": 1,
+        "shadow_provider_binding_contract_count": 1,
+        "primary_cutover_provider_binding_contract_count": 0,
+        "manual_hold_provider_binding_contract_count": 0,
+        "deferred_provider_binding_contract_count": 0,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+def test_provider_binding_contract_versions_align_across_stage27_helpers():
+    adapter_payload_summary = {
+        "summary_count": 1,
+        "shadow_adapter_payload_count": 1,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }
+
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([adapter_payload_summary])
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary(provider_binding_contract_set)
+
+    assert provider_binding_contract_set["provider_binding_contract_set_version"] == 1
+    assert provider_binding_contract_summary["provider_binding_contract_summary_version"] == 1
 
 
 

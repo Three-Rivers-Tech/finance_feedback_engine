@@ -1453,6 +1453,63 @@ def build_policy_selection_provider_binding_contract_set(
 
 
 
+def build_policy_selection_provider_binding_contract_summary(
+    provider_binding_contract_set: Optional[dict],
+) -> dict:
+    payload = dict(provider_binding_contract_set or {}) if isinstance(provider_binding_contract_set, dict) else {}
+    summaries = payload.get("adapter_payload_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_provider_binding_contract_count": 0,
+            "primary_cutover_provider_binding_contract_count": 0,
+            "manual_hold_provider_binding_contract_count": 0,
+            "deferred_provider_binding_contract_count": 0,
+            "provider_binding_contract_summary_version": 1,
+        }
+
+    shadow_provider_binding_contract_count = 0
+    primary_cutover_provider_binding_contract_count = 0
+    manual_hold_provider_binding_contract_count = 0
+    deferred_provider_binding_contract_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            shadow_adapter_payload_count = int(summary.get("shadow_adapter_payload_count"))
+            primary_cutover_adapter_payload_count = int(summary.get("primary_cutover_adapter_payload_count"))
+            manual_hold_adapter_payload_count = int(summary.get("manual_hold_adapter_payload_count"))
+            deferred_adapter_payload_count = int(summary.get("deferred_adapter_payload_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if primary_cutover_adapter_payload_count > 0:
+            primary_cutover_provider_binding_contract_count += 1
+        elif shadow_adapter_payload_count > 0:
+            shadow_provider_binding_contract_count += 1
+        elif manual_hold_adapter_payload_count > 0:
+            manual_hold_provider_binding_contract_count += 1
+        else:
+            deferred_provider_binding_contract_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_provider_binding_contract_count": shadow_provider_binding_contract_count,
+        "primary_cutover_provider_binding_contract_count": primary_cutover_provider_binding_contract_count,
+        "manual_hold_provider_binding_contract_count": manual_hold_provider_binding_contract_count,
+        "deferred_provider_binding_contract_count": deferred_provider_binding_contract_count,
+        "provider_binding_contract_summary_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_adapter_payload_summaries(
     adapter_payload_sets: Optional[list[dict]],
 ) -> list[dict]:
