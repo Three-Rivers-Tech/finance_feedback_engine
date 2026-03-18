@@ -44,6 +44,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_job_spec_set,
     build_policy_selection_job_spec_summary,
     build_policy_selection_adapter_payload_set,
+    build_policy_selection_adapter_payload_summary,
     build_policy_selection_submission_envelope_set,
     build_policy_selection_submission_envelope_summary,
     build_policy_selection_scheduler_request_set,
@@ -4516,6 +4517,161 @@ def test_submission_envelope_versions_align_across_export_helpers():
     assert submission_envelope_set["submission_envelope_set_version"] == 1
     assert submission_envelope_summary["submission_envelope_summary_version"] == 1
     assert exported[0]["submission_envelope_summary_version"] == 1
+
+
+
+
+def test_build_policy_selection_adapter_payload_summary_counts_outcomes_cleanly():
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary({
+        "submission_envelope_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_submission_envelope_count": 1,
+                "primary_cutover_submission_envelope_count": 0,
+                "manual_hold_submission_envelope_count": 0,
+                "deferred_submission_envelope_count": 0,
+                "submission_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_envelope_count": 0,
+                "primary_cutover_submission_envelope_count": 1,
+                "manual_hold_submission_envelope_count": 0,
+                "deferred_submission_envelope_count": 0,
+                "submission_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_envelope_count": 0,
+                "primary_cutover_submission_envelope_count": 0,
+                "manual_hold_submission_envelope_count": 1,
+                "deferred_submission_envelope_count": 0,
+                "submission_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_envelope_count": 0,
+                "primary_cutover_submission_envelope_count": 0,
+                "manual_hold_submission_envelope_count": 0,
+                "deferred_submission_envelope_count": 1,
+                "submission_envelope_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "adapter_payload_set_version": 1,
+    })
+
+    assert adapter_payload_summary == {
+        "summary_count": 4,
+        "shadow_adapter_payload_count": 1,
+        "primary_cutover_adapter_payload_count": 1,
+        "manual_hold_adapter_payload_count": 1,
+        "deferred_adapter_payload_count": 1,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adapter_payload_summary_handles_empty_inputs():
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary({
+        "submission_envelope_summaries": [],
+        "summary_count": 0,
+        "adapter_payload_set_version": 1,
+    })
+
+    assert adapter_payload_summary == {
+        "summary_count": 0,
+        "shadow_adapter_payload_count": 0,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adapter_payload_summary_handles_none_inputs():
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary(None)
+
+    assert adapter_payload_summary == {
+        "summary_count": 0,
+        "shadow_adapter_payload_count": 0,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adapter_payload_summary_skips_invalid_items_cleanly():
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary({
+        "submission_envelope_summaries": [None, "bad", 123, {"submission_envelope_summary_version": 1}],
+        "summary_count": 4,
+        "adapter_payload_set_version": 1,
+    })
+
+    assert adapter_payload_summary == {
+        "summary_count": 0,
+        "shadow_adapter_payload_count": 0,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adapter_payload_summary_skips_partial_inputs_cleanly():
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary({
+        "submission_envelope_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_submission_envelope_count": 1,
+                "primary_cutover_submission_envelope_count": 0,
+                "manual_hold_submission_envelope_count": 0,
+                "deferred_submission_envelope_count": 0,
+                "submission_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "primary_cutover_submission_envelope_count": 1,
+                "submission_envelope_summary_version": 1,
+            },
+            {
+                "submission_envelope_summary_version": 1,
+            },
+        ],
+        "summary_count": 3,
+        "adapter_payload_set_version": 1,
+    })
+
+    assert adapter_payload_summary == {
+        "summary_count": 1,
+        "shadow_adapter_payload_count": 1,
+        "primary_cutover_adapter_payload_count": 0,
+        "manual_hold_adapter_payload_count": 0,
+        "deferred_adapter_payload_count": 0,
+        "adapter_payload_summary_version": 1,
+    }
+
+
+
+def test_adapter_payload_versions_align_across_stage26_helpers():
+    submission_envelope_summary = {
+        "summary_count": 1,
+        "shadow_submission_envelope_count": 1,
+        "primary_cutover_submission_envelope_count": 0,
+        "manual_hold_submission_envelope_count": 0,
+        "deferred_submission_envelope_count": 0,
+        "submission_envelope_summary_version": 1,
+    }
+
+    adapter_payload_set = build_policy_selection_adapter_payload_set([submission_envelope_summary])
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary(adapter_payload_set)
+
+    assert adapter_payload_set["adapter_payload_set_version"] == 1
+    assert adapter_payload_summary["adapter_payload_summary_version"] == 1
 
 
 
