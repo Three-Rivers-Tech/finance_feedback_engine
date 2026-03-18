@@ -1366,6 +1366,27 @@ def build_policy_selection_submission_envelope_summary(
 
 
 
+def extract_policy_selection_submission_envelope_summaries(
+    submission_envelope_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for submission_envelope_set in submission_envelope_sets or []:
+        if not isinstance(submission_envelope_set, dict):
+            continue
+        job_spec_summaries = submission_envelope_set.get("job_spec_summaries")
+        if not isinstance(job_spec_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in job_spec_summaries):
+            continue
+        submission_envelope_summary = build_policy_selection_submission_envelope_summary(submission_envelope_set)
+        if submission_envelope_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(submission_envelope_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_job_spec_summaries(
     job_spec_sets: Optional[list[dict]],
 ) -> list[dict]:
