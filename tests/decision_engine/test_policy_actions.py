@@ -50,6 +50,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_provider_client_shape_set,
     build_policy_selection_provider_implementation_contract_set,
     build_policy_selection_provider_implementation_contract_summary,
+    build_policy_selection_execution_interface_contract_set,
     extract_policy_selection_provider_implementation_contract_summaries,
     extract_policy_selection_provider_client_shape_summaries,
     build_policy_selection_provider_client_shape_summary,
@@ -7552,3 +7553,83 @@ def test_provider_implementation_contract_versions_align_across_export_helpers()
     assert provider_implementation_contract_set["provider_implementation_contract_set_version"] == 1
     assert provider_implementation_contract_summary["provider_implementation_contract_summary_version"] == 1
     assert exported[0]["provider_implementation_contract_summary_version"] == 1
+
+
+
+def test_build_policy_selection_execution_interface_contract_set_wraps_provider_implementation_contract_summaries_cleanly():
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_provider_implementation_contract_count": 1,
+            "primary_cutover_provider_implementation_contract_count": 0,
+            "manual_hold_provider_implementation_contract_count": 0,
+            "deferred_provider_implementation_contract_count": 0,
+            "provider_implementation_contract_summary_version": 1,
+        }
+    ])
+
+    assert execution_interface_contract_set["summary_count"] == 1
+    assert execution_interface_contract_set["execution_interface_contract_set_version"] == 1
+    assert execution_interface_contract_set["provider_implementation_contract_summaries"][0]["shadow_provider_implementation_contract_count"] == 1
+
+
+
+def test_build_policy_selection_execution_interface_contract_set_handles_empty_inputs():
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([])
+
+    assert execution_interface_contract_set == {
+        "provider_implementation_contract_summaries": [],
+        "summary_count": 0,
+        "execution_interface_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_interface_contract_set_handles_none_inputs():
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set(None)
+
+    assert execution_interface_contract_set == {
+        "provider_implementation_contract_summaries": [],
+        "summary_count": 0,
+        "execution_interface_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_interface_contract_set_filters_non_dict_items():
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_provider_implementation_contract_count": 1,
+            "primary_cutover_provider_implementation_contract_count": 0,
+            "manual_hold_provider_implementation_contract_count": 0,
+            "deferred_provider_implementation_contract_count": 0,
+            "provider_implementation_contract_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert execution_interface_contract_set["summary_count"] == 1
+    assert execution_interface_contract_set["provider_implementation_contract_summaries"][0]["summary_count"] == 1
+
+
+
+def test_build_policy_selection_execution_interface_contract_set_defensively_copies_provider_implementation_contract_inputs():
+    provider_implementation_contract_summary = {
+        "summary_count": 1,
+        "shadow_provider_implementation_contract_count": 1,
+        "primary_cutover_provider_implementation_contract_count": 0,
+        "manual_hold_provider_implementation_contract_count": 0,
+        "deferred_provider_implementation_contract_count": 0,
+        "provider_implementation_contract_summary_version": 1,
+    }
+
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([
+        provider_implementation_contract_summary
+    ])
+
+    provider_implementation_contract_summary["shadow_provider_implementation_contract_count"] = 99
+
+    assert execution_interface_contract_set["provider_implementation_contract_summaries"][0]["shadow_provider_implementation_contract_count"] == 1
