@@ -5531,6 +5531,77 @@ def test_extract_policy_selection_provider_client_shape_summaries_skips_invalid_
 
 
 
+def test_extract_policy_selection_provider_client_shape_summaries_preserves_outcomes():
+    provider_client_shape_set = {
+        "provider_binding_contract_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_provider_binding_contract_count": 1,
+                "primary_cutover_provider_binding_contract_count": 0,
+                "manual_hold_provider_binding_contract_count": 0,
+                "deferred_provider_binding_contract_count": 0,
+                "provider_binding_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_binding_contract_count": 0,
+                "primary_cutover_provider_binding_contract_count": 1,
+                "manual_hold_provider_binding_contract_count": 0,
+                "deferred_provider_binding_contract_count": 0,
+                "provider_binding_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_binding_contract_count": 0,
+                "primary_cutover_provider_binding_contract_count": 0,
+                "manual_hold_provider_binding_contract_count": 1,
+                "deferred_provider_binding_contract_count": 0,
+                "provider_binding_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_binding_contract_count": 0,
+                "primary_cutover_provider_binding_contract_count": 0,
+                "manual_holdProviderBindingContract_count": 0,
+                "deferred_provider_binding_contract_count": 1,
+                "provider_binding_contract_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "provider_client_shape_set_version": 1,
+    }
+
+    # fix typo in local fixture so the intent still matches the contract
+    provider_client_shape_set["provider_binding_contract_summaries"][3]["manual_hold_provider_binding_contract_count"] = 0
+
+    direct = build_policy_selection_provider_client_shape_summary(provider_client_shape_set)
+    exported = extract_policy_selection_provider_client_shape_summaries([provider_client_shape_set])
+
+    assert exported == [direct]
+
+
+
+def test_provider_client_shape_versions_align_across_export_helpers():
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([
+        {
+            "summary_count": 1,
+            "shadow_provider_binding_contract_count": 1,
+            "primary_cutover_provider_binding_contract_count": 0,
+            "manual_hold_provider_binding_contract_count": 0,
+            "deferred_provider_binding_contract_count": 0,
+            "provider_binding_contract_summary_version": 1,
+        }
+    ])
+    provider_client_shape_summary = build_policy_selection_provider_client_shape_summary(provider_client_shape_set)
+    exported = extract_policy_selection_provider_client_shape_summaries([provider_client_shape_set])
+
+    assert provider_client_shape_set["provider_client_shape_set_version"] == 1
+    assert provider_client_shape_summary["provider_client_shape_summary_version"] == 1
+    assert exported[0]["provider_client_shape_summary_version"] == 1
+
+
+
+
 def test_build_policy_selection_provider_client_shape_set_wraps_provider_binding_contract_summaries_cleanly():
     provider_client_shape_set = build_policy_selection_provider_client_shape_set([
         {
