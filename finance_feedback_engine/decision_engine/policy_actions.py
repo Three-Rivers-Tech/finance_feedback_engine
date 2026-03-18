@@ -1366,6 +1366,21 @@ def build_policy_selection_submission_envelope_summary(
 
 
 
+def build_policy_selection_adapter_payload_set(
+    submission_envelope_summaries: Optional[list[dict]],
+) -> dict:
+    valid_submission_envelope_summaries = [
+        summary for summary in (submission_envelope_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "submission_envelope_summaries": [dict(summary) for summary in valid_submission_envelope_summaries],
+        "summary_count": len(valid_submission_envelope_summaries),
+        "adapter_payload_set_version": 1,
+    }
+
+
+
+
 def extract_policy_selection_submission_envelope_summaries(
     submission_envelope_sets: Optional[list[dict]],
 ) -> list[dict]:
