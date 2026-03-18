@@ -1525,6 +1525,21 @@ def build_policy_selection_provider_client_shape_set(
 
 
 
+def build_policy_selection_provider_implementation_contract_set(
+    provider_client_shape_summaries: Optional[list[dict]],
+) -> dict:
+    valid_provider_client_shape_summaries = [
+        summary for summary in (provider_client_shape_summaries or []) if isinstance(summary, dict)
+    ]
+    return {
+        "provider_client_shape_summaries": [dict(summary) for summary in valid_provider_client_shape_summaries],
+        "summary_count": len(valid_provider_client_shape_summaries),
+        "provider_implementation_contract_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_provider_client_shape_summary(
     provider_client_shape_set: Optional[dict],
 ) -> dict:
