@@ -59,6 +59,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_provider_dispatch_contract_set,
     build_policy_selection_provider_dispatch_contract_summary,
     build_policy_selection_dispatch_attempt_contract_set,
+    build_policy_selection_dispatch_attempt_contract_summary,
     extract_policy_selection_provider_dispatch_contract_summaries,
     extract_policy_selection_submission_transport_envelope_summaries,
     extract_policy_selection_execution_request_summaries,
@@ -9077,3 +9078,162 @@ def test_build_policy_selection_dispatch_attempt_contract_set_defensively_copies
     provider_dispatch_contract_summary["shadow_provider_dispatch_contract_count"] = 99
 
     assert dispatch_attempt_contract_set["provider_dispatch_contract_summaries"][0]["shadow_provider_dispatch_contract_count"] == 1
+
+
+
+def test_build_policy_selection_dispatch_attempt_contract_summary_counts_outcomes_cleanly():
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary({
+        "provider_dispatch_contract_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_provider_dispatch_contract_count": 1,
+                "primary_cutover_provider_dispatch_contract_count": 0,
+                "manual_hold_provider_dispatch_contract_count": 0,
+                "deferred_provider_dispatch_contract_count": 0,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_dispatch_contract_count": 0,
+                "primary_cutover_provider_dispatch_contract_count": 1,
+                "manual_hold_provider_dispatch_contract_count": 0,
+                "deferred_provider_dispatch_contract_count": 0,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_dispatch_contract_count": 0,
+                "primary_cutover_provider_dispatch_contract_count": 0,
+                "manual_hold_provider_dispatch_contract_count": 1,
+                "deferred_provider_dispatch_contract_count": 0,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_provider_dispatch_contract_count": 0,
+                "primary_cutover_provider_dispatch_contract_count": 0,
+                "manual_hold_provider_dispatch_contract_count": 0,
+                "deferred_provider_dispatch_contract_count": 1,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "dispatch_attempt_contract_set_version": 1,
+    })
+
+    assert dispatch_attempt_contract_summary == {
+        "summary_count": 4,
+        "shadow_dispatch_attempt_contract_count": 1,
+        "primary_cutover_dispatch_attempt_contract_count": 1,
+        "manual_hold_dispatch_attempt_contract_count": 1,
+        "deferred_dispatch_attempt_contract_count": 1,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_dispatch_attempt_contract_summary_handles_empty_inputs():
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary({
+        "provider_dispatch_contract_summaries": [],
+        "summary_count": 0,
+        "dispatch_attempt_contract_set_version": 1,
+    })
+
+    assert dispatch_attempt_contract_summary == {
+        "summary_count": 0,
+        "shadow_dispatch_attempt_contract_count": 0,
+        "primary_cutover_dispatch_attempt_contract_count": 0,
+        "manual_hold_dispatch_attempt_contract_count": 0,
+        "deferred_dispatch_attempt_contract_count": 0,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_dispatch_attempt_contract_summary_handles_none_inputs():
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary(None)
+
+    assert dispatch_attempt_contract_summary == {
+        "summary_count": 0,
+        "shadow_dispatch_attempt_contract_count": 0,
+        "primary_cutover_dispatch_attempt_contract_count": 0,
+        "manual_hold_dispatch_attempt_contract_count": 0,
+        "deferred_dispatch_attempt_contract_count": 0,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_dispatch_attempt_contract_summary_skips_invalid_items_cleanly():
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary({
+        "provider_dispatch_contract_summaries": [
+            None,
+            "bad",
+            123,
+            {"provider_dispatch_contract_summary_version": 1},
+        ],
+        "summary_count": 4,
+        "dispatch_attempt_contract_set_version": 1,
+    })
+
+    assert dispatch_attempt_contract_summary == {
+        "summary_count": 0,
+        "shadow_dispatch_attempt_contract_count": 0,
+        "primary_cutover_dispatch_attempt_contract_count": 0,
+        "manual_hold_dispatch_attempt_contract_count": 0,
+        "deferred_dispatch_attempt_contract_count": 0,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_dispatch_attempt_contract_summary_skips_partial_inputs_cleanly():
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary({
+        "provider_dispatch_contract_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_provider_dispatch_contract_count": 1,
+                "primary_cutover_provider_dispatch_contract_count": 0,
+                "manual_hold_provider_dispatch_contract_count": 0,
+                "deferred_provider_dispatch_contract_count": 0,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "primary_cutover_provider_dispatch_contract_count": 1,
+                "provider_dispatch_contract_summary_version": 1,
+            },
+            {
+                "provider_dispatch_contract_summary_version": 1,
+            },
+        ],
+        "summary_count": 3,
+        "dispatch_attempt_contract_set_version": 1,
+    })
+
+    assert dispatch_attempt_contract_summary == {
+        "summary_count": 1,
+        "shadow_dispatch_attempt_contract_count": 1,
+        "primary_cutover_dispatch_attempt_contract_count": 0,
+        "manual_hold_dispatch_attempt_contract_count": 0,
+        "deferred_dispatch_attempt_contract_count": 0,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+def test_dispatch_attempt_contract_versions_align_across_stage34_helpers():
+    provider_dispatch_contract_summary = {
+        "summary_count": 1,
+        "shadow_provider_dispatch_contract_count": 1,
+        "primary_cutover_provider_dispatch_contract_count": 0,
+        "manual_hold_provider_dispatch_contract_count": 0,
+        "deferred_provider_dispatch_contract_count": 0,
+        "provider_dispatch_contract_summary_version": 1,
+    }
+
+    dispatch_attempt_contract_set = build_policy_selection_dispatch_attempt_contract_set([provider_dispatch_contract_summary])
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary(dispatch_attempt_contract_set)
+
+    assert dispatch_attempt_contract_set["dispatch_attempt_contract_set_version"] == 1
+    assert dispatch_attempt_contract_summary["dispatch_attempt_contract_summary_version"] == 1

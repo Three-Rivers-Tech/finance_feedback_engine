@@ -1936,6 +1936,67 @@ def build_policy_selection_dispatch_attempt_contract_set(
 
 
 
+def build_policy_selection_dispatch_attempt_contract_summary(
+    dispatch_attempt_contract_set: Optional[dict],
+) -> dict:
+    payload = (
+        dict(dispatch_attempt_contract_set or {})
+        if isinstance(dispatch_attempt_contract_set, dict)
+        else {}
+    )
+    summaries = payload.get("provider_dispatch_contract_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_dispatch_attempt_contract_count": 0,
+            "primary_cutover_dispatch_attempt_contract_count": 0,
+            "manual_hold_dispatch_attempt_contract_count": 0,
+            "deferred_dispatch_attempt_contract_count": 0,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+
+    shadow_dispatch_attempt_contract_count = 0
+    primary_cutover_dispatch_attempt_contract_count = 0
+    manual_hold_dispatch_attempt_contract_count = 0
+    deferred_dispatch_attempt_contract_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            shadow_provider_dispatch_contract_count = int(summary.get("shadow_provider_dispatch_contract_count"))
+            primary_cutover_provider_dispatch_contract_count = int(summary.get("primary_cutover_provider_dispatch_contract_count"))
+            manual_hold_provider_dispatch_contract_count = int(summary.get("manual_hold_provider_dispatch_contract_count"))
+            deferred_provider_dispatch_contract_count = int(summary.get("deferred_provider_dispatch_contract_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if primary_cutover_provider_dispatch_contract_count > 0:
+            primary_cutover_dispatch_attempt_contract_count += 1
+        elif shadow_provider_dispatch_contract_count > 0:
+            shadow_dispatch_attempt_contract_count += 1
+        elif manual_hold_provider_dispatch_contract_count > 0:
+            manual_hold_dispatch_attempt_contract_count += 1
+        else:
+            deferred_dispatch_attempt_contract_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_dispatch_attempt_contract_count": shadow_dispatch_attempt_contract_count,
+        "primary_cutover_dispatch_attempt_contract_count": primary_cutover_dispatch_attempt_contract_count,
+        "manual_hold_dispatch_attempt_contract_count": manual_hold_dispatch_attempt_contract_count,
+        "deferred_dispatch_attempt_contract_count": deferred_dispatch_attempt_contract_count,
+        "dispatch_attempt_contract_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_provider_client_shape_summary(
     provider_client_shape_set: Optional[dict],
 ) -> dict:
