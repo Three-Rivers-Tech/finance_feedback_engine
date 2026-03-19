@@ -2054,6 +2054,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_dispatch_attempt_contract_summaries(
+    dispatch_attempt_contract_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for dispatch_attempt_contract_set in dispatch_attempt_contract_sets or []:
+        if not isinstance(dispatch_attempt_contract_set, dict):
+            continue
+        provider_dispatch_contract_summaries = dispatch_attempt_contract_set.get(
+            "provider_dispatch_contract_summaries"
+        )
+        if not isinstance(provider_dispatch_contract_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in provider_dispatch_contract_summaries):
+            continue
+        dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary(
+            dispatch_attempt_contract_set
+        )
+        if dispatch_attempt_contract_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(dispatch_attempt_contract_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_provider_dispatch_contract_summaries(
     provider_dispatch_contract_sets: Optional[list[dict]],
 ) -> list[dict]:
