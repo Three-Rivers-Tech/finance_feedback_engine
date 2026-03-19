@@ -1894,6 +1894,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_submission_transport_envelope_summaries(
+    submission_transport_envelope_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for submission_transport_envelope_set in submission_transport_envelope_sets or []:
+        if not isinstance(submission_transport_envelope_set, dict):
+            continue
+        execution_request_summaries = submission_transport_envelope_set.get(
+            "execution_request_summaries"
+        )
+        if not isinstance(execution_request_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in execution_request_summaries):
+            continue
+        submission_transport_envelope_summary = build_policy_selection_submission_transport_envelope_summary(
+            submission_transport_envelope_set
+        )
+        if submission_transport_envelope_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(submission_transport_envelope_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_execution_request_summaries(
     execution_request_sets: Optional[list[dict]],
 ) -> list[dict]:
