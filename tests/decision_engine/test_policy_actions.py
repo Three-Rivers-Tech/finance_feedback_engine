@@ -62,6 +62,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_dispatch_attempt_contract_summary,
     build_policy_selection_execution_result_set,
     build_policy_selection_execution_result_summary,
+    extract_policy_selection_execution_result_summaries,
     extract_policy_selection_dispatch_attempt_contract_summaries,
     extract_policy_selection_provider_dispatch_contract_summaries,
     extract_policy_selection_submission_transport_envelope_summaries,
@@ -9672,3 +9673,51 @@ def test_build_policy_selection_execution_result_summary_accumulates_multiple_co
         "deferred_execution_result_count": 1,
         "execution_result_summary_version": 1,
     }
+
+
+
+def test_extract_policy_selection_execution_result_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
+    execution_result_set = {
+        "dispatch_attempt_contract_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_dispatch_attempt_contract_count": 1,
+                "primary_cutover_dispatch_attempt_contract_count": 0,
+                "manual_hold_dispatch_attempt_contract_count": 0,
+                "deferred_dispatch_attempt_contract_count": 0,
+                "dispatch_attempt_contract_summary_version": 1,
+            }
+        ],
+        "summary_count": 1,
+        "execution_result_set_version": 1,
+    }
+
+    direct = build_policy_selection_execution_result_summary(execution_result_set)
+    exported = extract_policy_selection_execution_result_summaries([None, "skip", execution_result_set, {"dispatch_attempt_contract_summaries": []}])
+
+    assert exported == [direct]
+
+
+
+def test_extract_policy_selection_execution_result_summaries_preserves_deferred_counts_for_export():
+    execution_result_set = build_policy_selection_execution_result_set([
+        {
+            "summary_count": 1,
+            "shadow_dispatch_attempt_contract_count": 0,
+            "primary_cutover_dispatch_attempt_contract_count": 0,
+            "manual_hold_dispatch_attempt_contract_count": 0,
+            "deferred_dispatch_attempt_contract_count": 1,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+    ])
+
+    exported = extract_policy_selection_execution_result_summaries([execution_result_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 1,
+        "execution_result_summary_version": 1,
+    }]
