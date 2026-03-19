@@ -58,6 +58,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_submission_transport_envelope_summary,
     build_policy_selection_provider_dispatch_contract_set,
     build_policy_selection_provider_dispatch_contract_summary,
+    extract_policy_selection_provider_dispatch_contract_summaries,
     extract_policy_selection_submission_transport_envelope_summaries,
     extract_policy_selection_execution_request_summaries,
     extract_policy_selection_execution_interface_contract_summaries,
@@ -8876,3 +8877,122 @@ def test_provider_dispatch_contract_versions_align_across_stage33_helpers():
 
     assert provider_dispatch_contract_set["provider_dispatch_contract_set_version"] == 1
     assert provider_dispatch_contract_summary["provider_dispatch_contract_summary_version"] == 1
+
+
+
+def test_extract_policy_selection_provider_dispatch_contract_summaries_builds_exportable_summaries():
+    summaries = extract_policy_selection_provider_dispatch_contract_summaries([
+        {
+            "submission_transport_envelope_summaries": [
+                {
+                    "summary_count": 1,
+                    "shadow_submission_transport_envelope_count": 1,
+                    "primary_cutover_submission_transport_envelope_count": 0,
+                    "manual_hold_submission_transport_envelope_count": 0,
+                    "deferred_submission_transport_envelope_count": 0,
+                    "submission_transport_envelope_summary_version": 1,
+                }
+            ],
+            "summary_count": 1,
+            "provider_dispatch_contract_set_version": 1,
+        }
+    ])
+
+    assert summaries == [{
+        "summary_count": 1,
+        "shadow_provider_dispatch_contract_count": 1,
+        "primary_cutover_provider_dispatch_contract_count": 0,
+        "manual_hold_provider_dispatch_contract_count": 0,
+        "deferred_provider_dispatch_contract_count": 0,
+        "provider_dispatch_contract_summary_version": 1,
+    }]
+
+
+
+def test_extract_policy_selection_provider_dispatch_contract_summaries_skips_invalid_inputs():
+    summaries = extract_policy_selection_provider_dispatch_contract_summaries([
+        None,
+        "bad",
+        123,
+        {"submission_transport_envelope_summaries": None},
+        {"submission_transport_envelope_summaries": []},
+        {
+            "submission_transport_envelope_summaries": [None, 'bad', 123],
+            "provider_dispatch_contract_set_version": 1,
+        },
+        {
+            "submission_transport_envelope_summaries": [
+                {"submission_transport_envelope_summary_version": 1},
+            ],
+            "provider_dispatch_contract_set_version": 1,
+        },
+    ])
+
+    assert summaries == []
+
+
+
+def test_extract_policy_selection_provider_dispatch_contract_summaries_preserves_outcomes():
+    provider_dispatch_contract_set = {
+        "submission_transport_envelope_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_submission_transport_envelope_count": 1,
+                "primary_cutover_submission_transport_envelope_count": 0,
+                "manual_hold_submission_transport_envelope_count": 0,
+                "deferred_submission_transport_envelope_count": 0,
+                "submission_transport_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_transport_envelope_count": 0,
+                "primary_cutover_submission_transport_envelope_count": 1,
+                "manual_hold_submission_transport_envelope_count": 0,
+                "deferred_submission_transport_envelope_count": 0,
+                "submission_transport_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_transport_envelope_count": 0,
+                "primary_cutover_submission_transport_envelope_count": 0,
+                "manual_hold_submission_transport_envelope_count": 1,
+                "deferred_submission_transport_envelope_count": 0,
+                "submission_transport_envelope_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_submission_transport_envelope_count": 0,
+                "primary_cutover_submission_transport_envelope_count": 0,
+                "manual_hold_submission_transport_envelope_count": 0,
+                "deferred_submission_transport_envelope_count": 1,
+                "submission_transport_envelope_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "provider_dispatch_contract_set_version": 1,
+    }
+
+    direct = build_policy_selection_provider_dispatch_contract_summary(provider_dispatch_contract_set)
+    exported = extract_policy_selection_provider_dispatch_contract_summaries([provider_dispatch_contract_set])
+
+    assert exported == [direct]
+
+
+
+def test_provider_dispatch_contract_versions_align_across_export_helpers():
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_submission_transport_envelope_count": 1,
+            "primary_cutover_submission_transport_envelope_count": 0,
+            "manual_hold_submission_transport_envelope_count": 0,
+            "deferred_submission_transport_envelope_count": 0,
+            "submission_transport_envelope_summary_version": 1,
+        }
+    ])
+    provider_dispatch_contract_summary = build_policy_selection_provider_dispatch_contract_summary(provider_dispatch_contract_set)
+    exported = extract_policy_selection_provider_dispatch_contract_summaries([provider_dispatch_contract_set])
+
+    assert provider_dispatch_contract_set["provider_dispatch_contract_set_version"] == 1
+    assert provider_dispatch_contract_summary["provider_dispatch_contract_summary_version"] == 1
+    assert exported[0]["provider_dispatch_contract_summary_version"] == 1

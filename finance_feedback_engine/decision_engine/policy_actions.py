@@ -1974,6 +1974,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_provider_dispatch_contract_summaries(
+    provider_dispatch_contract_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for provider_dispatch_contract_set in provider_dispatch_contract_sets or []:
+        if not isinstance(provider_dispatch_contract_set, dict):
+            continue
+        submission_transport_envelope_summaries = provider_dispatch_contract_set.get(
+            "submission_transport_envelope_summaries"
+        )
+        if not isinstance(submission_transport_envelope_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in submission_transport_envelope_summaries):
+            continue
+        provider_dispatch_contract_summary = build_policy_selection_provider_dispatch_contract_summary(
+            provider_dispatch_contract_set
+        )
+        if provider_dispatch_contract_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(provider_dispatch_contract_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_submission_transport_envelope_summaries(
     submission_transport_envelope_sets: Optional[list[dict]],
 ) -> list[dict]:
