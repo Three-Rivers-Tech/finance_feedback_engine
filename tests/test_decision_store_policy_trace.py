@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from finance_feedback_engine.persistence.decision_store import DecisionStore
-from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary, build_policy_baseline_evaluation_set, build_policy_baseline_evaluation_session, build_policy_baseline_workflow_summary, build_policy_baseline_candidate_comparison_group, build_policy_baseline_candidate_comparison_summary, build_policy_selection_recommendation_set, build_policy_selection_recommendation_summary, build_policy_selection_promotion_decision_set, build_policy_selection_promotion_decision_summary, build_policy_selection_rollout_decision_set, build_policy_selection_rollout_decision_summary, build_policy_selection_runtime_switch_set, build_policy_selection_runtime_switch_summary, build_policy_selection_deployment_execution_set, build_policy_selection_deployment_execution_summary, build_policy_selection_orchestration_set, build_policy_selection_orchestration_summary, build_policy_selection_job_spec_set, build_policy_selection_job_spec_summary, build_policy_selection_adapter_payload_set, build_policy_selection_adapter_payload_summary, build_policy_selection_provider_binding_contract_set, build_policy_selection_provider_binding_contract_summary, build_policy_selection_provider_client_shape_set, build_policy_selection_provider_client_shape_summary, build_policy_selection_provider_implementation_contract_set, build_policy_selection_provider_implementation_contract_summary, build_policy_selection_execution_interface_contract_set, build_policy_selection_execution_interface_contract_summary, build_policy_selection_execution_request_set, build_policy_selection_execution_request_summary, build_policy_selection_submission_transport_envelope_set, build_policy_selection_submission_transport_envelope_summary, build_policy_selection_provider_dispatch_contract_set, build_policy_selection_provider_dispatch_contract_summary, build_policy_selection_dispatch_attempt_contract_set, build_policy_selection_dispatch_attempt_contract_summary, build_policy_selection_submission_envelope_set, build_policy_selection_submission_envelope_summary, build_policy_selection_scheduler_request_set, build_policy_selection_scheduler_request_summary, extract_policy_selection_provider_dispatch_contract_summaries, extract_policy_selection_dispatch_attempt_contract_summaries, extract_policy_selection_submission_transport_envelope_summaries, extract_policy_selection_execution_request_summaries, extract_policy_selection_execution_interface_contract_summaries, extract_policy_selection_provider_implementation_contract_summaries, extract_policy_selection_provider_client_shape_summaries, extract_policy_selection_provider_binding_contract_summaries, extract_policy_selection_adapter_payload_summaries, extract_policy_selection_submission_envelope_summaries, extract_policy_selection_job_spec_summaries, extract_policy_selection_scheduler_request_summaries, extract_policy_selection_orchestration_summaries, extract_policy_selection_deployment_execution_summaries, extract_policy_selection_runtime_switch_summaries, extract_policy_selection_rollout_decision_summaries, extract_policy_selection_promotion_decision_summaries, extract_policy_selection_recommendation_summaries, build_policy_baseline_evaluation_report
+from finance_feedback_engine.decision_engine.policy_actions import build_policy_dataset_row_from_decision, build_policy_evaluation_record_from_dataset_row, build_policy_evaluation_batch, build_policy_evaluation_run, build_policy_evaluation_summary, build_policy_evaluation_scorecard, build_policy_evaluation_result, build_policy_evaluation_aggregate, build_policy_evaluation_comparison, build_policy_candidate_comparison_set, build_policy_candidate_benchmark_summary, build_policy_baseline_evaluation_set, build_policy_baseline_evaluation_session, build_policy_baseline_workflow_summary, build_policy_baseline_candidate_comparison_group, build_policy_baseline_candidate_comparison_summary, build_policy_selection_recommendation_set, build_policy_selection_recommendation_summary, build_policy_selection_promotion_decision_set, build_policy_selection_promotion_decision_summary, build_policy_selection_rollout_decision_set, build_policy_selection_rollout_decision_summary, build_policy_selection_runtime_switch_set, build_policy_selection_runtime_switch_summary, build_policy_selection_deployment_execution_set, build_policy_selection_deployment_execution_summary, build_policy_selection_orchestration_set, build_policy_selection_orchestration_summary, build_policy_selection_job_spec_set, build_policy_selection_job_spec_summary, build_policy_selection_adapter_payload_set, build_policy_selection_adapter_payload_summary, build_policy_selection_provider_binding_contract_set, build_policy_selection_provider_binding_contract_summary, build_policy_selection_provider_client_shape_set, build_policy_selection_provider_client_shape_summary, build_policy_selection_provider_implementation_contract_set, build_policy_selection_provider_implementation_contract_summary, build_policy_selection_execution_interface_contract_set, build_policy_selection_execution_interface_contract_summary, build_policy_selection_execution_request_set, build_policy_selection_execution_request_summary, build_policy_selection_submission_transport_envelope_set, build_policy_selection_submission_transport_envelope_summary, build_policy_selection_provider_dispatch_contract_set, build_policy_selection_provider_dispatch_contract_summary, build_policy_selection_dispatch_attempt_contract_set, build_policy_selection_dispatch_attempt_contract_summary, build_policy_selection_execution_result_set, build_policy_selection_execution_result_summary, build_policy_selection_submission_envelope_set, build_policy_selection_submission_envelope_summary, build_policy_selection_scheduler_request_set, build_policy_selection_scheduler_request_summary, extract_policy_selection_provider_dispatch_contract_summaries, extract_policy_selection_dispatch_attempt_contract_summaries, extract_policy_selection_execution_result_summaries, extract_policy_selection_submission_transport_envelope_summaries, extract_policy_selection_execution_request_summaries, extract_policy_selection_execution_interface_contract_summaries, extract_policy_selection_provider_implementation_contract_summaries, extract_policy_selection_provider_client_shape_summaries, extract_policy_selection_provider_binding_contract_summaries, extract_policy_selection_adapter_payload_summaries, extract_policy_selection_submission_envelope_summaries, extract_policy_selection_job_spec_summaries, extract_policy_selection_scheduler_request_summaries, extract_policy_selection_orchestration_summaries, extract_policy_selection_deployment_execution_summaries, extract_policy_selection_runtime_switch_summaries, extract_policy_selection_rollout_decision_summaries, extract_policy_selection_promotion_decision_summaries, extract_policy_selection_recommendation_summaries, build_policy_baseline_evaluation_report
 
 
 def _make_store(tmp_path):
@@ -5839,3 +5839,164 @@ def test_decision_store_loaded_policy_trace_extracts_selection_dispatch_attempt_
         "deferred_dispatch_attempt_contract_count": 1,
         "dispatch_attempt_contract_summary_version": 1,
     }]
+
+
+
+def test_decision_store_loaded_policy_trace_extracts_selection_execution_result_export_summary(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-selection-execution-result-export-chain-1",
+        "timestamp": "2026-03-13T12:40:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_LONG",
+        "policy_trace": {
+            "policy_package": {"policy_state": {"position_state": "flat", "version": 1}, "action_context": {"structural_action_validity": "valid", "version": 1}, "policy_sizing_intent": None, "provider_translation_result": None, "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1}, "version": 1},
+            "decision_envelope": {"action": "OPEN_SMALL_LONG", "policy_action": "OPEN_SMALL_LONG", "legacy_action_compatibility": "BUY", "confidence": 82, "reasoning": "persist execution result export trace", "version": 1},
+            "decision_metadata": {"asset_pair": "BTCUSD", "ai_provider": "ensemble", "timestamp": "2026-03-13T12:40:00+00:00", "decision_id": "decision-selection-execution-result-export-chain-1"},
+            "trace_version": 1,
+        },
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-selection-execution-result-export-chain-1")
+    dataset_row = build_policy_dataset_row_from_decision(loaded)
+    evaluation_batch = build_policy_evaluation_batch([dataset_row])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch["rows"])
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    evaluation_scorecard = build_policy_evaluation_scorecard(evaluation_summary)
+    evaluation_result = build_policy_evaluation_result(evaluation_summary, evaluation_scorecard)
+    evaluation_aggregate = build_policy_evaluation_aggregate([evaluation_result])
+    evaluation_comparison = build_policy_evaluation_comparison(evaluation_aggregate, evaluation_aggregate)
+    comparison_set = build_policy_candidate_comparison_set([evaluation_comparison])
+    benchmark_summary = build_policy_candidate_benchmark_summary(comparison_set)
+    baseline_set = build_policy_baseline_evaluation_set([benchmark_summary])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+    evaluation_session = build_policy_baseline_evaluation_session([baseline_report])
+    workflow_summary = build_policy_baseline_workflow_summary(evaluation_session)
+    comparison_group = build_policy_baseline_candidate_comparison_group([workflow_summary], [workflow_summary])
+    comparison_summary = build_policy_baseline_candidate_comparison_summary(comparison_group)
+    recommendation_set = build_policy_selection_recommendation_set([comparison_summary])
+    recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
+    promotion_decision_set = build_policy_selection_promotion_decision_set([recommendation_summary])
+    promotion_decision_summary = build_policy_selection_promotion_decision_summary(promotion_decision_set)
+    rollout_decision_set = build_policy_selection_rollout_decision_set([promotion_decision_summary])
+    rollout_decision_summary = build_policy_selection_rollout_decision_summary(rollout_decision_set)
+    runtime_switch_set = build_policy_selection_runtime_switch_set([rollout_decision_summary])
+    runtime_switch_summary = build_policy_selection_runtime_switch_summary(runtime_switch_set)
+    deployment_execution_set = build_policy_selection_deployment_execution_set([runtime_switch_summary])
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary(deployment_execution_set)
+    orchestration_set = build_policy_selection_orchestration_set([deployment_execution_summary])
+    orchestration_summary = build_policy_selection_orchestration_summary(orchestration_set)
+    scheduler_request_set = build_policy_selection_scheduler_request_set([orchestration_summary])
+    scheduler_request_summary = build_policy_selection_scheduler_request_summary(scheduler_request_set)
+    job_spec_set = build_policy_selection_job_spec_set([scheduler_request_summary])
+    job_spec_summary = build_policy_selection_job_spec_summary(job_spec_set)
+    submission_envelope_set = build_policy_selection_submission_envelope_set([job_spec_summary])
+    submission_envelope_summary = build_policy_selection_submission_envelope_summary(submission_envelope_set)
+    adapter_payload_set = build_policy_selection_adapter_payload_set([submission_envelope_summary])
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary(adapter_payload_set)
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([adapter_payload_summary])
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary(provider_binding_contract_set)
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([provider_binding_contract_summary])
+    provider_client_shape_summary = build_policy_selection_provider_client_shape_summary(provider_client_shape_set)
+    provider_implementation_contract_set = build_policy_selection_provider_implementation_contract_set([provider_client_shape_summary])
+    provider_implementation_contract_summary = build_policy_selection_provider_implementation_contract_summary(provider_implementation_contract_set)
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([provider_implementation_contract_summary])
+    execution_interface_contract_summary = build_policy_selection_execution_interface_contract_summary(execution_interface_contract_set)
+    execution_request_set = build_policy_selection_execution_request_set([execution_interface_contract_summary])
+    execution_request_summary = build_policy_selection_execution_request_summary(execution_request_set)
+    submission_transport_envelope_set = build_policy_selection_submission_transport_envelope_set([execution_request_summary])
+    submission_transport_envelope_summary = build_policy_selection_submission_transport_envelope_summary(submission_transport_envelope_set)
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([submission_transport_envelope_summary])
+    provider_dispatch_contract_summary = build_policy_selection_provider_dispatch_contract_summary(provider_dispatch_contract_set)
+    dispatch_attempt_contract_set = build_policy_selection_dispatch_attempt_contract_set([provider_dispatch_contract_summary])
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary(dispatch_attempt_contract_set)
+    execution_result_set = build_policy_selection_execution_result_set([dispatch_attempt_contract_summary])
+    exported = extract_policy_selection_execution_result_summaries([execution_result_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 1,
+        "execution_result_summary_version": 1,
+    }]
+
+
+
+def test_decision_store_loaded_policy_trace_preserves_stage35_versions_across_execution_result_chain(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-stage35-version-chain-1",
+        "timestamp": "2026-03-13T12:40:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_LONG",
+        "policy_trace": {
+            "policy_package": {"policy_state": {"position_state": "flat", "version": 1}, "action_context": {"structural_action_validity": "valid", "version": 1}, "policy_sizing_intent": None, "provider_translation_result": None, "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1}, "version": 1},
+            "decision_envelope": {"action": "OPEN_SMALL_LONG", "policy_action": "OPEN_SMALL_LONG", "legacy_action_compatibility": "BUY", "confidence": 82, "reasoning": "persist stage35 version chain", "version": 1},
+            "decision_metadata": {"asset_pair": "BTCUSD", "ai_provider": "ensemble", "timestamp": "2026-03-13T12:40:00+00:00", "decision_id": "decision-stage35-version-chain-1"},
+            "trace_version": 1,
+        },
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-stage35-version-chain-1")
+    dataset_row = build_policy_dataset_row_from_decision(loaded)
+    evaluation_batch = build_policy_evaluation_batch([dataset_row])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch["rows"])
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    evaluation_scorecard = build_policy_evaluation_scorecard(evaluation_summary)
+    evaluation_result = build_policy_evaluation_result(evaluation_summary, evaluation_scorecard)
+    evaluation_aggregate = build_policy_evaluation_aggregate([evaluation_result])
+    evaluation_comparison = build_policy_evaluation_comparison(evaluation_aggregate, evaluation_aggregate)
+    comparison_set = build_policy_candidate_comparison_set([evaluation_comparison])
+    benchmark_summary = build_policy_candidate_benchmark_summary(comparison_set)
+    baseline_set = build_policy_baseline_evaluation_set([benchmark_summary])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+    evaluation_session = build_policy_baseline_evaluation_session([baseline_report])
+    workflow_summary = build_policy_baseline_workflow_summary(evaluation_session)
+    comparison_group = build_policy_baseline_candidate_comparison_group([workflow_summary], [workflow_summary])
+    comparison_summary = build_policy_baseline_candidate_comparison_summary(comparison_group)
+    recommendation_set = build_policy_selection_recommendation_set([comparison_summary])
+    recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
+    promotion_decision_set = build_policy_selection_promotion_decision_set([recommendation_summary])
+    promotion_decision_summary = build_policy_selection_promotion_decision_summary(promotion_decision_set)
+    rollout_decision_set = build_policy_selection_rollout_decision_set([promotion_decision_summary])
+    rollout_decision_summary = build_policy_selection_rollout_decision_summary(rollout_decision_set)
+    runtime_switch_set = build_policy_selection_runtime_switch_set([rollout_decision_summary])
+    runtime_switch_summary = build_policy_selection_runtime_switch_summary(runtime_switch_set)
+    deployment_execution_set = build_policy_selection_deployment_execution_set([runtime_switch_summary])
+    deployment_execution_summary = build_policy_selection_deployment_execution_summary(deployment_execution_set)
+    orchestration_set = build_policy_selection_orchestration_set([deployment_execution_summary])
+    orchestration_summary = build_policy_selection_orchestration_summary(orchestration_set)
+    scheduler_request_set = build_policy_selection_scheduler_request_set([orchestration_summary])
+    scheduler_request_summary = build_policy_selection_scheduler_request_summary(scheduler_request_set)
+    job_spec_set = build_policy_selection_job_spec_set([scheduler_request_summary])
+    job_spec_summary = build_policy_selection_job_spec_summary(job_spec_set)
+    submission_envelope_set = build_policy_selection_submission_envelope_set([job_spec_summary])
+    submission_envelope_summary = build_policy_selection_submission_envelope_summary(submission_envelope_set)
+    adapter_payload_set = build_policy_selection_adapter_payload_set([submission_envelope_summary])
+    adapter_payload_summary = build_policy_selection_adapter_payload_summary(adapter_payload_set)
+    provider_binding_contract_set = build_policy_selection_provider_binding_contract_set([adapter_payload_summary])
+    provider_binding_contract_summary = build_policy_selection_provider_binding_contract_summary(provider_binding_contract_set)
+    provider_client_shape_set = build_policy_selection_provider_client_shape_set([provider_binding_contract_summary])
+    provider_client_shape_summary = build_policy_selection_provider_client_shape_summary(provider_client_shape_set)
+    provider_implementation_contract_set = build_policy_selection_provider_implementation_contract_set([provider_client_shape_summary])
+    provider_implementation_contract_summary = build_policy_selection_provider_implementation_contract_summary(provider_implementation_contract_set)
+    execution_interface_contract_set = build_policy_selection_execution_interface_contract_set([provider_implementation_contract_summary])
+    execution_interface_contract_summary = build_policy_selection_execution_interface_contract_summary(execution_interface_contract_set)
+    execution_request_set = build_policy_selection_execution_request_set([execution_interface_contract_summary])
+    execution_request_summary = build_policy_selection_execution_request_summary(execution_request_set)
+    submission_transport_envelope_set = build_policy_selection_submission_transport_envelope_set([execution_request_summary])
+    submission_transport_envelope_summary = build_policy_selection_submission_transport_envelope_summary(submission_transport_envelope_set)
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([submission_transport_envelope_summary])
+    provider_dispatch_contract_summary = build_policy_selection_provider_dispatch_contract_summary(provider_dispatch_contract_set)
+    dispatch_attempt_contract_set = build_policy_selection_dispatch_attempt_contract_set([provider_dispatch_contract_summary])
+    dispatch_attempt_contract_summary = build_policy_selection_dispatch_attempt_contract_summary(dispatch_attempt_contract_set)
+    execution_result_set = build_policy_selection_execution_result_set([dispatch_attempt_contract_summary])
+    execution_result_summary = build_policy_selection_execution_result_summary(execution_result_set)
+
+    assert dispatch_attempt_contract_summary["dispatch_attempt_contract_summary_version"] == 1
+    assert execution_result_set["execution_result_set_version"] == 1
+    assert execution_result_summary["execution_result_summary_version"] == 1
