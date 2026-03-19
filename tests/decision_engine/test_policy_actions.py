@@ -64,6 +64,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_execution_result_summary,
     build_policy_selection_execution_receipt_set,
     build_policy_selection_execution_receipt_summary,
+    build_policy_selection_execution_tracking_set,
     extract_policy_selection_execution_receipt_summaries,
     extract_policy_selection_execution_result_summaries,
     extract_policy_selection_dispatch_attempt_contract_summaries,
@@ -10209,3 +10210,80 @@ def test_extract_policy_selection_execution_receipt_summaries_preserves_deferred
         "deferred_execution_receipt_count": 1,
         "execution_receipt_summary_version": 1,
     }]
+
+
+
+def test_build_policy_selection_execution_tracking_set_wraps_execution_receipt_summaries_cleanly():
+    execution_tracking_set = build_policy_selection_execution_tracking_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_receipt_count": 1,
+            "primary_cutover_execution_receipt_count": 0,
+            "manual_hold_execution_receipt_count": 0,
+            "deferred_execution_receipt_count": 0,
+            "execution_receipt_summary_version": 1,
+        }
+    ])
+
+    assert execution_tracking_set["summary_count"] == 1
+    assert execution_tracking_set["execution_tracking_set_version"] == 1
+    assert execution_tracking_set["execution_receipt_summaries"][0]["shadow_execution_receipt_count"] == 1
+
+
+
+def test_build_policy_selection_execution_tracking_set_handles_empty_inputs():
+    execution_tracking_set = build_policy_selection_execution_tracking_set([])
+
+    assert execution_tracking_set == {
+        "execution_receipt_summaries": [],
+        "summary_count": 0,
+        "execution_tracking_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_tracking_set_handles_none_inputs():
+    execution_tracking_set = build_policy_selection_execution_tracking_set(None)
+
+    assert execution_tracking_set == {
+        "execution_receipt_summaries": [],
+        "summary_count": 0,
+        "execution_tracking_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_tracking_set_filters_non_dict_items():
+    execution_tracking_set = build_policy_selection_execution_tracking_set([
+        None,
+        "skip",
+        7,
+        {
+            "summary_count": 1,
+            "shadow_execution_receipt_count": 0,
+            "primary_cutover_execution_receipt_count": 1,
+            "manual_hold_execution_receipt_count": 0,
+            "deferred_execution_receipt_count": 0,
+            "execution_receipt_summary_version": 1,
+        },
+    ])
+
+    assert execution_tracking_set["summary_count"] == 1
+    assert execution_tracking_set["execution_receipt_summaries"][0]["summary_count"] == 1
+
+
+
+def test_build_policy_selection_execution_tracking_set_defensively_copies_execution_receipt_inputs():
+    summary = {
+        "summary_count": 1,
+        "shadow_execution_receipt_count": 1,
+        "primary_cutover_execution_receipt_count": 0,
+        "manual_hold_execution_receipt_count": 0,
+        "deferred_execution_receipt_count": 0,
+        "execution_receipt_summary_version": 1,
+    }
+
+    execution_tracking_set = build_policy_selection_execution_tracking_set([summary])
+    summary["shadow_execution_receipt_count"] = 99
+
+    assert execution_tracking_set["execution_receipt_summaries"][0]["shadow_execution_receipt_count"] == 1

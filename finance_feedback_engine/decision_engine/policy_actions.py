@@ -1936,6 +1936,25 @@ def build_policy_selection_execution_receipt_set(
 
 
 
+def build_policy_selection_execution_tracking_set(
+    execution_receipt_summaries: Optional[list[dict]],
+) -> dict:
+    valid_execution_receipt_summaries = [
+        summary
+        for summary in (execution_receipt_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "execution_receipt_summaries": [
+            dict(summary) for summary in valid_execution_receipt_summaries
+        ],
+        "summary_count": len(valid_execution_receipt_summaries),
+        "execution_tracking_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_execution_receipt_summary(
     execution_receipt_set: Optional[dict],
 ) -> dict:
