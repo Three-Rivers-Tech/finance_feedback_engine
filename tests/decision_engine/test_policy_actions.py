@@ -61,6 +61,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_dispatch_attempt_contract_set,
     build_policy_selection_dispatch_attempt_contract_summary,
     build_policy_selection_execution_result_set,
+    build_policy_selection_execution_result_summary,
     extract_policy_selection_dispatch_attempt_contract_summaries,
     extract_policy_selection_provider_dispatch_contract_summaries,
     extract_policy_selection_submission_transport_envelope_summaries,
@@ -9435,3 +9436,154 @@ def test_build_policy_selection_execution_result_set_defensively_copies_dispatch
     summary["shadow_dispatch_attempt_contract_count"] = 99
 
     assert execution_result_set["dispatch_attempt_contract_summaries"][0]["shadow_dispatch_attempt_contract_count"] == 1
+
+
+
+def test_build_policy_selection_execution_result_summary_counts_shadow_paths_from_dispatch_attempt_summaries():
+    execution_result_set = build_policy_selection_execution_result_set([
+        {
+            "summary_count": 1,
+            "shadow_dispatch_attempt_contract_count": 1,
+            "primary_cutover_dispatch_attempt_contract_count": 0,
+            "manual_hold_dispatch_attempt_contract_count": 0,
+            "deferred_dispatch_attempt_contract_count": 0,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+    ])
+
+    execution_result_summary = build_policy_selection_execution_result_summary(execution_result_set)
+
+    assert execution_result_summary == {
+        "summary_count": 1,
+        "shadow_execution_result_count": 1,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 0,
+        "execution_result_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_result_summary_counts_primary_cutover_paths_from_dispatch_attempt_summaries():
+    execution_result_set = build_policy_selection_execution_result_set([
+        {
+            "summary_count": 1,
+            "shadow_dispatch_attempt_contract_count": 0,
+            "primary_cutover_dispatch_attempt_contract_count": 1,
+            "manual_hold_dispatch_attempt_contract_count": 0,
+            "deferred_dispatch_attempt_contract_count": 0,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+    ])
+
+    execution_result_summary = build_policy_selection_execution_result_summary(execution_result_set)
+
+    assert execution_result_summary == {
+        "summary_count": 1,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 1,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 0,
+        "execution_result_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_result_summary_counts_manual_hold_paths_from_dispatch_attempt_summaries():
+    execution_result_set = build_policy_selection_execution_result_set([
+        {
+            "summary_count": 1,
+            "shadow_dispatch_attempt_contract_count": 0,
+            "primary_cutover_dispatch_attempt_contract_count": 0,
+            "manual_hold_dispatch_attempt_contract_count": 1,
+            "deferred_dispatch_attempt_contract_count": 0,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+    ])
+
+    execution_result_summary = build_policy_selection_execution_result_summary(execution_result_set)
+
+    assert execution_result_summary == {
+        "summary_count": 1,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 1,
+        "deferred_execution_result_count": 0,
+        "execution_result_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_result_summary_defaults_to_deferred_paths_from_dispatch_attempt_summaries():
+    execution_result_set = build_policy_selection_execution_result_set([
+        {
+            "summary_count": 1,
+            "shadow_dispatch_attempt_contract_count": 0,
+            "primary_cutover_dispatch_attempt_contract_count": 0,
+            "manual_hold_dispatch_attempt_contract_count": 0,
+            "deferred_dispatch_attempt_contract_count": 1,
+            "dispatch_attempt_contract_summary_version": 1,
+        }
+    ])
+
+    execution_result_summary = build_policy_selection_execution_result_summary(execution_result_set)
+
+    assert execution_result_summary == {
+        "summary_count": 1,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 1,
+        "execution_result_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_result_summary_handles_empty_inputs():
+    execution_result_summary = build_policy_selection_execution_result_summary({})
+
+    assert execution_result_summary == {
+        "summary_count": 0,
+        "shadow_execution_result_count": 0,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 0,
+        "execution_result_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_result_summary_skips_non_comparable_entries():
+    execution_result_summary = build_policy_selection_execution_result_summary({
+        "dispatch_attempt_contract_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 0,
+                "shadow_dispatch_attempt_contract_count": 1,
+                "primary_cutover_dispatch_attempt_contract_count": 0,
+                "manual_hold_dispatch_attempt_contract_count": 0,
+                "deferred_dispatch_attempt_contract_count": 0,
+                "dispatch_attempt_contract_summary_version": 1,
+            },
+            {
+                "summary_count": 1,
+                "shadow_dispatch_attempt_contract_count": 1,
+                "primary_cutover_dispatch_attempt_contract_count": 0,
+                "manual_hold_dispatch_attempt_contract_count": 0,
+                "deferred_dispatch_attempt_contract_count": 0,
+                "dispatch_attempt_contract_summary_version": 1,
+            },
+        ],
+        "summary_count": 4,
+        "execution_result_set_version": 1,
+    })
+
+    assert execution_result_summary == {
+        "summary_count": 1,
+        "shadow_execution_result_count": 1,
+        "primary_cutover_execution_result_count": 0,
+        "manual_hold_execution_result_count": 0,
+        "deferred_execution_result_count": 0,
+        "execution_result_summary_version": 1,
+    }
