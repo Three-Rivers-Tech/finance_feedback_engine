@@ -2530,6 +2530,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_learning_feedback_summaries(
+    learning_feedback_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for learning_feedback_set in learning_feedback_sets or []:
+        if not isinstance(learning_feedback_set, dict):
+            continue
+        trade_outcome_summaries = learning_feedback_set.get(
+            "trade_outcome_summaries"
+        )
+        if not isinstance(trade_outcome_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in trade_outcome_summaries):
+            continue
+        learning_feedback_summary = build_policy_selection_learning_feedback_summary(
+            learning_feedback_set
+        )
+        if learning_feedback_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(learning_feedback_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_trade_outcome_summaries(
     trade_outcome_sets: Optional[list[dict]],
 ) -> list[dict]:
