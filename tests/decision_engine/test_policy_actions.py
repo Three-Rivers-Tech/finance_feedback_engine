@@ -70,6 +70,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_execution_fill_summary,
     build_policy_selection_trade_outcome_set,
     build_policy_selection_trade_outcome_summary,
+    extract_policy_selection_trade_outcome_summaries,
     extract_policy_selection_execution_fill_summaries,
     extract_policy_selection_execution_tracking_summaries,
     extract_policy_selection_execution_receipt_summaries,
@@ -11594,3 +11595,51 @@ def test_trade_outcome_chain_skips_non_comparable_upstream_summaries_without_mut
         "deferred_trade_outcome_count": 0,
         "trade_outcome_summary_version": 1,
     }
+
+
+
+def test_extract_policy_selection_trade_outcome_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
+    trade_outcome_set = {
+        "execution_fill_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_execution_fill_count": 1,
+                "primary_cutover_execution_fill_count": 0,
+                "manual_hold_execution_fill_count": 0,
+                "deferred_execution_fill_count": 0,
+                "execution_fill_summary_version": 1,
+            }
+        ],
+        "summary_count": 1,
+        "trade_outcome_set_version": 1,
+    }
+
+    direct = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+    exported = extract_policy_selection_trade_outcome_summaries([None, "skip", trade_outcome_set, {"execution_fill_summaries": []}])
+
+    assert exported == [direct]
+
+
+
+def test_extract_policy_selection_trade_outcome_summaries_preserves_deferred_counts_for_export():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 1,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    exported = extract_policy_selection_trade_outcome_summaries([trade_outcome_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 1,
+        "trade_outcome_summary_version": 1,
+    }]

@@ -2450,6 +2450,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_trade_outcome_summaries(
+    trade_outcome_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for trade_outcome_set in trade_outcome_sets or []:
+        if not isinstance(trade_outcome_set, dict):
+            continue
+        execution_fill_summaries = trade_outcome_set.get(
+            "execution_fill_summaries"
+        )
+        if not isinstance(execution_fill_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in execution_fill_summaries):
+            continue
+        trade_outcome_summary = build_policy_selection_trade_outcome_summary(
+            trade_outcome_set
+        )
+        if trade_outcome_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(trade_outcome_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_execution_fill_summaries(
     execution_fill_sets: Optional[list[dict]],
 ) -> list[dict]:
