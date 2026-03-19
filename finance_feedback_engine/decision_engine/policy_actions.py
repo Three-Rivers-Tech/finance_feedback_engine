@@ -2370,6 +2370,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_execution_fill_summaries(
+    execution_fill_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for execution_fill_set in execution_fill_sets or []:
+        if not isinstance(execution_fill_set, dict):
+            continue
+        execution_tracking_summaries = execution_fill_set.get(
+            "execution_tracking_summaries"
+        )
+        if not isinstance(execution_tracking_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in execution_tracking_summaries):
+            continue
+        execution_fill_summary = build_policy_selection_execution_fill_summary(
+            execution_fill_set
+        )
+        if execution_fill_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(execution_fill_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_execution_tracking_summaries(
     execution_tracking_sets: Optional[list[dict]],
 ) -> list[dict]:
