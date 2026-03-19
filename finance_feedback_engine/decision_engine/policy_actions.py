@@ -1974,6 +1974,67 @@ def build_policy_selection_execution_fill_set(
 
 
 
+def build_policy_selection_execution_fill_summary(
+    execution_fill_set: Optional[dict],
+) -> dict:
+    payload = (
+        dict(execution_fill_set or {})
+        if isinstance(execution_fill_set, dict)
+        else {}
+    )
+    summaries = payload.get("execution_tracking_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+
+    shadow_execution_fill_count = 0
+    primary_cutover_execution_fill_count = 0
+    manual_hold_execution_fill_count = 0
+    deferred_execution_fill_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            shadow_execution_tracking_count = int(summary.get("shadow_execution_tracking_count"))
+            primary_cutover_execution_tracking_count = int(summary.get("primary_cutover_execution_tracking_count"))
+            manual_hold_execution_tracking_count = int(summary.get("manual_hold_execution_tracking_count"))
+            deferred_execution_tracking_count = int(summary.get("deferred_execution_tracking_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if primary_cutover_execution_tracking_count > 0:
+            primary_cutover_execution_fill_count += 1
+        elif shadow_execution_tracking_count > 0:
+            shadow_execution_fill_count += 1
+        elif manual_hold_execution_tracking_count > 0:
+            manual_hold_execution_fill_count += 1
+        else:
+            deferred_execution_fill_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_execution_fill_count": shadow_execution_fill_count,
+        "primary_cutover_execution_fill_count": primary_cutover_execution_fill_count,
+        "manual_hold_execution_fill_count": manual_hold_execution_fill_count,
+        "deferred_execution_fill_count": deferred_execution_fill_count,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_execution_tracking_summary(
     execution_tracking_set: Optional[dict],
 ) -> dict:

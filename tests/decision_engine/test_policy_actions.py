@@ -67,6 +67,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_execution_tracking_set,
     build_policy_selection_execution_tracking_summary,
     build_policy_selection_execution_fill_set,
+    build_policy_selection_execution_fill_summary,
     extract_policy_selection_execution_tracking_summaries,
     extract_policy_selection_execution_receipt_summaries,
     extract_policy_selection_execution_result_summaries,
@@ -10765,3 +10766,260 @@ def test_build_policy_selection_execution_fill_set_defensively_copies_execution_
     summary["shadow_execution_tracking_count"] = 99
 
     assert execution_fill_set["execution_tracking_summaries"][0]["shadow_execution_tracking_count"] == 1
+
+
+
+def test_build_policy_selection_execution_fill_summary_counts_shadow_paths_from_execution_tracking_summaries():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 1,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        }
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_summary == {
+        "summary_count": 1,
+        "shadow_execution_fill_count": 1,
+        "primary_cutover_execution_fill_count": 0,
+        "manual_hold_execution_fill_count": 0,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_counts_primary_cutover_paths_from_execution_tracking_summaries():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 1,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        }
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_summary == {
+        "summary_count": 1,
+        "shadow_execution_fill_count": 0,
+        "primary_cutover_execution_fill_count": 1,
+        "manual_hold_execution_fill_count": 0,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_counts_manual_hold_paths_from_execution_tracking_summaries():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 1,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        }
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_summary == {
+        "summary_count": 1,
+        "shadow_execution_fill_count": 0,
+        "primary_cutover_execution_fill_count": 0,
+        "manual_hold_execution_fill_count": 1,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_defaults_to_deferred_paths_from_execution_tracking_summaries():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 1,
+            "execution_tracking_summary_version": 1,
+        }
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_summary == {
+        "summary_count": 1,
+        "shadow_execution_fill_count": 0,
+        "primary_cutover_execution_fill_count": 0,
+        "manual_hold_execution_fill_count": 0,
+        "deferred_execution_fill_count": 1,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_handles_empty_inputs():
+    execution_fill_summary = build_policy_selection_execution_fill_summary({})
+
+    assert execution_fill_summary == {
+        "summary_count": 0,
+        "shadow_execution_fill_count": 0,
+        "primary_cutover_execution_fill_count": 0,
+        "manual_hold_execution_fill_count": 0,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_skips_non_comparable_entries():
+    execution_fill_summary = build_policy_selection_execution_fill_summary({
+        "execution_tracking_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 0,
+                "shadow_execution_tracking_count": 1,
+                "primary_cutover_execution_tracking_count": 0,
+                "manual_hold_execution_tracking_count": 0,
+                "deferred_execution_tracking_count": 0,
+            },
+            {
+                "summary_count": "bad",
+                "shadow_execution_tracking_count": 0,
+                "primary_cutover_execution_tracking_count": 1,
+                "manual_hold_execution_tracking_count": 0,
+                "deferred_execution_tracking_count": 0,
+            },
+            {
+                "summary_count": 1,
+                "shadow_execution_tracking_count": 0,
+                "primary_cutover_execution_tracking_count": 1,
+                "manual_hold_execution_tracking_count": 0,
+                "deferred_execution_tracking_count": 0,
+            },
+        ]
+    })
+
+    assert execution_fill_summary == {
+        "summary_count": 1,
+        "shadow_execution_fill_count": 0,
+        "primary_cutover_execution_fill_count": 1,
+        "manual_hold_execution_fill_count": 0,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_round_trips_with_set_builder_and_preserves_versions():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 1,
+            "execution_tracking_summary_version": 1,
+        }
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_set["execution_fill_set_version"] == 1
+    assert execution_fill_summary["summary_count"] == 1
+    assert execution_fill_summary["deferred_execution_fill_count"] == 1
+    assert execution_fill_summary["execution_fill_summary_version"] == 1
+
+
+
+def test_build_policy_selection_execution_fill_summary_matches_direct_and_export_ready_counts():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 1,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 1,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        },
+    ])
+
+    direct = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert direct == {
+        "summary_count": 2,
+        "shadow_execution_fill_count": 1,
+        "primary_cutover_execution_fill_count": 0,
+        "manual_hold_execution_fill_count": 1,
+        "deferred_execution_fill_count": 0,
+        "execution_fill_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_execution_fill_summary_accumulates_multiple_comparable_entries():
+    execution_fill_set = build_policy_selection_execution_fill_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 1,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 1,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 1,
+            "deferred_execution_tracking_count": 0,
+            "execution_tracking_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_tracking_count": 0,
+            "primary_cutover_execution_tracking_count": 0,
+            "manual_hold_execution_tracking_count": 0,
+            "deferred_execution_tracking_count": 1,
+            "execution_tracking_summary_version": 1,
+        },
+    ])
+
+    execution_fill_summary = build_policy_selection_execution_fill_summary(execution_fill_set)
+
+    assert execution_fill_summary == {
+        "summary_count": 4,
+        "shadow_execution_fill_count": 1,
+        "primary_cutover_execution_fill_count": 1,
+        "manual_hold_execution_fill_count": 1,
+        "deferred_execution_fill_count": 1,
+        "execution_fill_summary_version": 1,
+    }
