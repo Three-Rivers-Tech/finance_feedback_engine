@@ -15,6 +15,7 @@ env:
   ENVIRONMENT: ci
 
 jobs:
+  # Keep the required gate intentionally small and stable.
   backend-quality:
     name: Backend quality + tests
     runs-on: ubuntu-latest
