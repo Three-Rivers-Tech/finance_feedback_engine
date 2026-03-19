@@ -1837,6 +1837,25 @@ def build_policy_selection_submission_transport_envelope_summary(
 
 
 
+def build_policy_selection_provider_dispatch_contract_set(
+    submission_transport_envelope_summaries: Optional[list[dict]],
+) -> dict:
+    valid_submission_transport_envelope_summaries = [
+        summary
+        for summary in (submission_transport_envelope_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "submission_transport_envelope_summaries": [
+            dict(summary) for summary in valid_submission_transport_envelope_summaries
+        ],
+        "summary_count": len(valid_submission_transport_envelope_summaries),
+        "provider_dispatch_contract_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_provider_client_shape_summary(
     provider_client_shape_set: Optional[dict],
 ) -> dict:

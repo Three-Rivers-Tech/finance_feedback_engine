@@ -56,6 +56,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_execution_request_summary,
     build_policy_selection_submission_transport_envelope_set,
     build_policy_selection_submission_transport_envelope_summary,
+    build_policy_selection_provider_dispatch_contract_set,
     extract_policy_selection_submission_transport_envelope_summaries,
     extract_policy_selection_execution_request_summaries,
     extract_policy_selection_execution_interface_contract_summaries,
@@ -8635,3 +8636,83 @@ def test_submission_transport_envelope_versions_align_across_export_helpers():
     assert submission_transport_envelope_set["submission_transport_envelope_set_version"] == 1
     assert submission_transport_envelope_summary["submission_transport_envelope_summary_version"] == 1
     assert exported[0]["submission_transport_envelope_summary_version"] == 1
+
+
+
+def test_build_policy_selection_provider_dispatch_contract_set_wraps_submission_transport_envelope_summaries_cleanly():
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_submission_transport_envelope_count": 1,
+            "primary_cutover_submission_transport_envelope_count": 0,
+            "manual_hold_submission_transport_envelope_count": 0,
+            "deferred_submission_transport_envelope_count": 0,
+            "submission_transport_envelope_summary_version": 1,
+        }
+    ])
+
+    assert provider_dispatch_contract_set["summary_count"] == 1
+    assert provider_dispatch_contract_set["provider_dispatch_contract_set_version"] == 1
+    assert provider_dispatch_contract_set["submission_transport_envelope_summaries"][0]["shadow_submission_transport_envelope_count"] == 1
+
+
+
+def test_build_policy_selection_provider_dispatch_contract_set_handles_empty_inputs():
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([])
+
+    assert provider_dispatch_contract_set == {
+        "submission_transport_envelope_summaries": [],
+        "summary_count": 0,
+        "provider_dispatch_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_dispatch_contract_set_handles_none_inputs():
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set(None)
+
+    assert provider_dispatch_contract_set == {
+        "submission_transport_envelope_summaries": [],
+        "summary_count": 0,
+        "provider_dispatch_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_provider_dispatch_contract_set_filters_non_dict_items():
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_submission_transport_envelope_count": 1,
+            "primary_cutover_submission_transport_envelope_count": 0,
+            "manual_hold_submission_transport_envelope_count": 0,
+            "deferred_submission_transport_envelope_count": 0,
+            "submission_transport_envelope_summary_version": 1,
+        },
+        None,
+        "bad",
+        123,
+    ])
+
+    assert provider_dispatch_contract_set["summary_count"] == 1
+    assert provider_dispatch_contract_set["submission_transport_envelope_summaries"][0]["summary_count"] == 1
+
+
+
+def test_build_policy_selection_provider_dispatch_contract_set_defensively_copies_submission_transport_envelope_inputs():
+    submission_transport_envelope_summary = {
+        "summary_count": 1,
+        "shadow_submission_transport_envelope_count": 1,
+        "primary_cutover_submission_transport_envelope_count": 0,
+        "manual_hold_submission_transport_envelope_count": 0,
+        "deferred_submission_transport_envelope_count": 0,
+        "submission_transport_envelope_summary_version": 1,
+    }
+
+    provider_dispatch_contract_set = build_policy_selection_provider_dispatch_contract_set([
+        submission_transport_envelope_summary
+    ])
+
+    submission_transport_envelope_summary["shadow_submission_transport_envelope_count"] = 99
+
+    assert provider_dispatch_contract_set["submission_transport_envelope_summaries"][0]["shadow_submission_transport_envelope_count"] == 1
