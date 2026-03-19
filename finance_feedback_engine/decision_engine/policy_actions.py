@@ -1993,6 +1993,67 @@ def build_policy_selection_trade_outcome_set(
 
 
 
+def build_policy_selection_trade_outcome_summary(
+    trade_outcome_set: Optional[dict],
+) -> dict:
+    payload = (
+        dict(trade_outcome_set or {})
+        if isinstance(trade_outcome_set, dict)
+        else {}
+    )
+    summaries = payload.get("execution_fill_summaries") or []
+    valid_summaries = [summary for summary in summaries if isinstance(summary, dict)]
+    if not valid_summaries:
+        return {
+            "summary_count": 0,
+            "shadow_trade_outcome_count": 0,
+            "primary_cutover_trade_outcome_count": 0,
+            "manual_hold_trade_outcome_count": 0,
+            "deferred_trade_outcome_count": 0,
+            "trade_outcome_summary_version": 1,
+        }
+
+    shadow_trade_outcome_count = 0
+    primary_cutover_trade_outcome_count = 0
+    manual_hold_trade_outcome_count = 0
+    deferred_trade_outcome_count = 0
+    comparable_summary_count = 0
+
+    for summary in valid_summaries:
+        try:
+            shadow_execution_fill_count = int(summary.get("shadow_execution_fill_count"))
+            primary_cutover_execution_fill_count = int(summary.get("primary_cutover_execution_fill_count"))
+            manual_hold_execution_fill_count = int(summary.get("manual_hold_execution_fill_count"))
+            deferred_execution_fill_count = int(summary.get("deferred_execution_fill_count"))
+            summary_count = int(summary.get("summary_count"))
+        except (TypeError, ValueError):
+            continue
+
+        if summary_count <= 0:
+            continue
+
+        comparable_summary_count += 1
+        if primary_cutover_execution_fill_count > 0:
+            primary_cutover_trade_outcome_count += 1
+        elif shadow_execution_fill_count > 0:
+            shadow_trade_outcome_count += 1
+        elif manual_hold_execution_fill_count > 0:
+            manual_hold_trade_outcome_count += 1
+        else:
+            deferred_trade_outcome_count += 1
+
+    return {
+        "summary_count": comparable_summary_count,
+        "shadow_trade_outcome_count": shadow_trade_outcome_count,
+        "primary_cutover_trade_outcome_count": primary_cutover_trade_outcome_count,
+        "manual_hold_trade_outcome_count": manual_hold_trade_outcome_count,
+        "deferred_trade_outcome_count": deferred_trade_outcome_count,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_execution_fill_summary(
     execution_fill_set: Optional[dict],
 ) -> dict:

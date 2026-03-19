@@ -69,6 +69,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_execution_fill_set,
     build_policy_selection_execution_fill_summary,
     build_policy_selection_trade_outcome_set,
+    build_policy_selection_trade_outcome_summary,
     extract_policy_selection_execution_fill_summaries,
     extract_policy_selection_execution_tracking_summaries,
     extract_policy_selection_execution_receipt_summaries,
@@ -11243,3 +11244,260 @@ def test_build_policy_selection_trade_outcome_set_defensively_copies_execution_f
     summary["shadow_execution_fill_count"] = 99
 
     assert trade_outcome_set["execution_fill_summaries"][0]["shadow_execution_fill_count"] == 1
+
+
+
+def test_build_policy_selection_trade_outcome_summary_counts_shadow_paths_from_execution_fill_summaries():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 1,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_summary == {
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 1,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_counts_primary_cutover_paths_from_execution_fill_summaries():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 1,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_summary == {
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 1,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_counts_manual_hold_paths_from_execution_fill_summaries():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 1,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_summary == {
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 1,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_defaults_to_deferred_paths_from_execution_fill_summaries():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 1,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_summary == {
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 1,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_handles_empty_inputs():
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary({})
+
+    assert trade_outcome_summary == {
+        "summary_count": 0,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_skips_non_comparable_entries():
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary({
+        "execution_fill_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 0,
+                "shadow_execution_fill_count": 1,
+                "primary_cutover_execution_fill_count": 0,
+                "manual_hold_execution_fill_count": 0,
+                "deferred_execution_fill_count": 0,
+            },
+            {
+                "summary_count": "bad",
+                "shadow_execution_fill_count": 0,
+                "primary_cutover_execution_fill_count": 1,
+                "manual_hold_execution_fill_count": 0,
+                "deferred_execution_fill_count": 0,
+            },
+            {
+                "summary_count": 1,
+                "shadow_execution_fill_count": 0,
+                "primary_cutover_execution_fill_count": 1,
+                "manual_hold_execution_fill_count": 0,
+                "deferred_execution_fill_count": 0,
+            },
+        ]
+    })
+
+    assert trade_outcome_summary == {
+        "summary_count": 1,
+        "shadow_trade_outcome_count": 0,
+        "primary_cutover_trade_outcome_count": 1,
+        "manual_hold_trade_outcome_count": 0,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_round_trips_with_set_builder_and_preserves_versions():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 1,
+            "execution_fill_summary_version": 1,
+        }
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_set["trade_outcome_set_version"] == 1
+    assert trade_outcome_summary["summary_count"] == 1
+    assert trade_outcome_summary["deferred_trade_outcome_count"] == 1
+    assert trade_outcome_summary["trade_outcome_summary_version"] == 1
+
+
+
+def test_build_policy_selection_trade_outcome_summary_matches_direct_and_export_ready_counts():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 1,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 1,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        },
+    ])
+
+    direct = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert direct == {
+        "summary_count": 2,
+        "shadow_trade_outcome_count": 1,
+        "primary_cutover_trade_outcome_count": 0,
+        "manual_hold_trade_outcome_count": 1,
+        "deferred_trade_outcome_count": 0,
+        "trade_outcome_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_trade_outcome_summary_accumulates_multiple_comparable_entries():
+    trade_outcome_set = build_policy_selection_trade_outcome_set([
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 1,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 1,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 1,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 1,
+            "execution_fill_summary_version": 1,
+        },
+    ])
+
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+
+    assert trade_outcome_summary == {
+        "summary_count": 4,
+        "shadow_trade_outcome_count": 1,
+        "primary_cutover_trade_outcome_count": 1,
+        "manual_hold_trade_outcome_count": 1,
+        "deferred_trade_outcome_count": 1,
+        "trade_outcome_summary_version": 1,
+    }
