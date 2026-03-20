@@ -2690,6 +2690,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_adaptive_recommendation_summaries(
+    adaptive_recommendation_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for adaptive_recommendation_set in adaptive_recommendation_sets or []:
+        if not isinstance(adaptive_recommendation_set, dict):
+            continue
+        learning_analytics_summaries = adaptive_recommendation_set.get(
+            "learning_analytics_summaries"
+        )
+        if not isinstance(learning_analytics_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in learning_analytics_summaries):
+            continue
+        adaptive_recommendation_summary = build_policy_selection_adaptive_recommendation_summary(
+            adaptive_recommendation_set
+        )
+        if adaptive_recommendation_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(adaptive_recommendation_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_learning_analytics_summaries(
     learning_analytics_sets: Optional[list[dict]],
 ) -> list[dict]:

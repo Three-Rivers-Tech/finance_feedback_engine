@@ -76,6 +76,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_learning_analytics_summary,
     build_policy_selection_adaptive_recommendation_set,
     build_policy_selection_adaptive_recommendation_summary,
+    extract_policy_selection_adaptive_recommendation_summaries,
     extract_policy_selection_learning_analytics_summaries,
     extract_policy_selection_learning_feedback_summaries,
     extract_policy_selection_trade_outcome_summaries,
@@ -13028,3 +13029,51 @@ def test_adaptive_recommendation_chain_skips_non_comparable_upstream_summaries_w
         "deferred_adaptive_recommendation_count": 0,
         "adaptive_recommendation_summary_version": 1,
     }
+
+
+
+def test_extract_policy_selection_adaptive_recommendation_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
+    adaptive_recommendation_set = {
+        "learning_analytics_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_learning_analytics_count": 1,
+                "primary_cutover_learning_analytics_count": 0,
+                "manual_hold_learning_analytics_count": 0,
+                "deferred_learning_analytics_count": 0,
+                "learning_analytics_summary_version": 1,
+            }
+        ],
+        "summary_count": 1,
+        "adaptive_recommendation_set_version": 1,
+    }
+
+    direct = build_policy_selection_adaptive_recommendation_summary(adaptive_recommendation_set)
+    exported = extract_policy_selection_adaptive_recommendation_summaries([None, "skip", adaptive_recommendation_set, {"learning_analytics_summaries": []}])
+
+    assert exported == [direct]
+
+
+
+def test_extract_policy_selection_adaptive_recommendation_summaries_preserves_deferred_counts_for_export():
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set([
+        {
+            "summary_count": 1,
+            "shadow_learning_analytics_count": 0,
+            "primary_cutover_learning_analytics_count": 0,
+            "manual_hold_learning_analytics_count": 0,
+            "deferred_learning_analytics_count": 1,
+            "learning_analytics_summary_version": 1,
+        }
+    ])
+
+    exported = extract_policy_selection_adaptive_recommendation_summaries([adaptive_recommendation_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_adaptive_recommendation_count": 0,
+        "primary_cutover_adaptive_recommendation_count": 0,
+        "manual_hold_adaptive_recommendation_count": 0,
+        "deferred_adaptive_recommendation_count": 1,
+        "adaptive_recommendation_summary_version": 1,
+    }]
