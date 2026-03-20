@@ -97,6 +97,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_health_readiness_observability_contract_set,
     build_policy_selection_adaptive_control_health_readiness_observability_contract_summary,
     build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set,
+    build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary,
     extract_policy_selection_adaptive_control_health_readiness_observability_contract_summaries,
     extract_policy_selection_adaptive_control_agent_lifecycle_control_contract_summaries,
     extract_policy_selection_adaptive_control_config_update_transport_contract_summaries,
@@ -17792,6 +17793,169 @@ def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_co
         "adaptive_control_health_readiness_observability_contract_summaries": [first, second],
         "adaptive_control_dashboard_status_aggregation_contract_set_version": 1,
     }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_counts_shadow_paths_from_health_readiness_observability_contract_summaries():
+    dashboard_status_aggregation_contract_set = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_health_readiness_observability_contract_count": 1,
+            "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 0,
+            "manual_hold_adaptive_control_health_readiness_observability_contract_count": 0,
+            "deferred_adaptive_control_health_readiness_observability_contract_count": 0,
+            "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary(dashboard_status_aggregation_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 1,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_counts_primary_cutover_paths_from_health_readiness_observability_contract_summaries():
+    dashboard_status_aggregation_contract_set = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_health_readiness_observability_contract_count": 0,
+            "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 1,
+            "manual_hold_adaptive_control_health_readiness_observability_contract_count": 0,
+            "deferred_adaptive_control_health_readiness_observability_contract_count": 0,
+            "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary(dashboard_status_aggregation_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 1,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_counts_manual_hold_paths_from_health_readiness_observability_contract_summaries():
+    dashboard_status_aggregation_contract_set = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_health_readiness_observability_contract_count": 0,
+            "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 0,
+            "manual_hold_adaptive_control_health_readiness_observability_contract_count": 1,
+            "deferred_adaptive_control_health_readiness_observability_contract_count": 0,
+            "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary(dashboard_status_aggregation_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 1,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_defaults_to_deferred_paths_from_health_readiness_observability_contract_summaries():
+    dashboard_status_aggregation_contract_set = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_health_readiness_observability_contract_count": 0,
+            "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 0,
+            "manual_hold_adaptive_control_health_readiness_observability_contract_count": 0,
+            "deferred_adaptive_control_health_readiness_observability_contract_count": 1,
+            "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary(dashboard_status_aggregation_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 1,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_handles_empty_inputs():
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary({})
+
+    assert summary == {
+        "summary_count": 0,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_skips_non_comparable_entries():
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary({
+        "adaptive_control_health_readiness_observability_contract_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_health_readiness_observability_contract_count": 0,
+                "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 1,
+                "manual_hold_adaptive_control_health_readiness_observability_contract_count": 0,
+                "deferred_adaptive_control_health_readiness_observability_contract_count": 0,
+                "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+            },
+        ],
+        "adaptive_control_dashboard_status_aggregation_contract_set_version": 1,
+    })
+
+    assert summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "primary_cutover_adaptive_control_dashboard_status_aggregation_contract_count": 1,
+        "manual_hold_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "deferred_adaptive_control_dashboard_status_aggregation_contract_count": 0,
+        "adaptive_control_dashboard_status_aggregation_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary_round_trips_with_set_builder_and_preserves_versions():
+    dashboard_status_aggregation_contract_set = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_health_readiness_observability_contract_count": 0,
+            "primary_cutover_adaptive_control_health_readiness_observability_contract_count": 0,
+            "manual_hold_adaptive_control_health_readiness_observability_contract_count": 0,
+            "deferred_adaptive_control_health_readiness_observability_contract_count": 1,
+            "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summary(dashboard_status_aggregation_contract_set)
+
+    assert dashboard_status_aggregation_contract_set["adaptive_control_dashboard_status_aggregation_contract_set_version"] == 1
+    assert summary["summary_count"] == 1
+    assert summary["deferred_adaptive_control_dashboard_status_aggregation_contract_count"] == 1
+    assert summary["adaptive_control_dashboard_status_aggregation_contract_summary_version"] == 1
 
 
 
