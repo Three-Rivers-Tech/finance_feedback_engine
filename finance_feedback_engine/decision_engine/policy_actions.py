@@ -2272,6 +2272,18 @@ def build_policy_selection_adaptive_control_config_patch_contract_summary(
 
 
 
+def extract_policy_selection_adaptive_control_config_patch_contract_summaries(
+    adaptive_control_config_patch_contract_sets: Optional[list[dict]],
+) -> list[dict]:
+    return [
+        build_policy_selection_adaptive_control_config_patch_contract_summary(config_patch_contract_set)
+        for config_patch_contract_set in (adaptive_control_config_patch_contract_sets or [])
+        if isinstance(config_patch_contract_set, dict)
+    ]
+
+
+
+
 def build_policy_selection_adaptive_control_persistence_set(
     adaptive_weight_mutation_summaries: Optional[list[dict]],
 ) -> dict:
