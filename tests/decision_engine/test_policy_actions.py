@@ -88,6 +88,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_runtime_apply_summary,
     build_policy_selection_adaptive_control_config_patch_contract_set,
     build_policy_selection_adaptive_control_config_patch_contract_summary,
+    build_policy_selection_adaptive_control_runtime_config_materialization_set,
     extract_policy_selection_adaptive_control_config_patch_contract_summaries,
     extract_policy_selection_adaptive_control_persistence_summaries,
     extract_policy_selection_adaptive_control_runtime_apply_summaries,
@@ -15993,3 +15994,80 @@ def test_extract_policy_selection_adaptive_control_config_patch_contract_summari
             "adaptive_control_config_patch_contract_summary_version": 1,
         }
     ]
+
+
+
+def test_build_policy_selection_adaptive_control_runtime_config_materialization_set_wraps_adaptive_control_config_patch_contract_summaries_cleanly():
+    adaptive_control_runtime_config_materialization_set = build_policy_selection_adaptive_control_runtime_config_materialization_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_config_patch_contract_count": 1,
+            "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+            "manual_hold_adaptive_control_config_patch_contract_count": 0,
+            "deferred_adaptive_control_config_patch_contract_count": 0,
+            "adaptive_control_config_patch_contract_summary_version": 1,
+        }
+    ])
+
+    assert adaptive_control_runtime_config_materialization_set["summary_count"] == 1
+    assert adaptive_control_runtime_config_materialization_set["adaptive_control_runtime_config_materialization_set_version"] == 1
+    assert adaptive_control_runtime_config_materialization_set["adaptive_control_config_patch_contract_summaries"][0]["shadow_adaptive_control_config_patch_contract_count"] == 1
+
+
+
+def test_build_policy_selection_adaptive_control_runtime_config_materialization_set_handles_empty_inputs():
+    adaptive_control_runtime_config_materialization_set = build_policy_selection_adaptive_control_runtime_config_materialization_set([])
+
+    assert adaptive_control_runtime_config_materialization_set == {
+        "adaptive_control_config_patch_contract_summaries": [],
+        "summary_count": 0,
+        "adaptive_control_runtime_config_materialization_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_runtime_config_materialization_set_handles_none_inputs():
+    adaptive_control_runtime_config_materialization_set = build_policy_selection_adaptive_control_runtime_config_materialization_set(None)
+
+    assert adaptive_control_runtime_config_materialization_set == {
+        "adaptive_control_config_patch_contract_summaries": [],
+        "summary_count": 0,
+        "adaptive_control_runtime_config_materialization_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_runtime_config_materialization_set_filters_non_dict_items():
+    adaptive_control_runtime_config_materialization_set = build_policy_selection_adaptive_control_runtime_config_materialization_set([
+        None,
+        "skip",
+        7,
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_config_patch_contract_count": 0,
+            "primary_cutover_adaptive_control_config_patch_contract_count": 1,
+            "manual_hold_adaptive_control_config_patch_contract_count": 0,
+            "deferred_adaptive_control_config_patch_contract_count": 0,
+            "adaptive_control_config_patch_contract_summary_version": 1,
+        },
+    ])
+
+    assert adaptive_control_runtime_config_materialization_set["summary_count"] == 1
+    assert adaptive_control_runtime_config_materialization_set["adaptive_control_config_patch_contract_summaries"][0]["summary_count"] == 1
+
+
+
+def test_build_policy_selection_adaptive_control_runtime_config_materialization_set_defensively_copies_adaptive_control_config_patch_contract_inputs():
+    summary = {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 1,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+    adaptive_control_runtime_config_materialization_set = build_policy_selection_adaptive_control_runtime_config_materialization_set([summary])
+    summary["shadow_adaptive_control_config_patch_contract_count"] = 99
+
+    assert adaptive_control_runtime_config_materialization_set["adaptive_control_config_patch_contract_summaries"][0]["shadow_adaptive_control_config_patch_contract_count"] == 1
