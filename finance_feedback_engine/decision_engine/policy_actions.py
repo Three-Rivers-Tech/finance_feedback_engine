@@ -2363,6 +2363,50 @@ def build_policy_selection_adaptive_control_runtime_config_materialization_set(
 
 
 
+def build_policy_selection_adaptive_control_health_readiness_observability_contract_summary(
+    adaptive_control_health_readiness_observability_contract_set: Optional[dict],
+) -> dict:
+    comparable_summaries = [
+        summary
+        for summary in (adaptive_control_health_readiness_observability_contract_set or {}).get(
+            "adaptive_control_agent_lifecycle_control_contract_summaries", []
+        )
+        if isinstance(summary, dict)
+    ]
+
+    shadow_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("shadow_adaptive_control_agent_lifecycle_control_contract_count", 0) > 0
+    )
+    primary_cutover_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("primary_cutover_adaptive_control_agent_lifecycle_control_contract_count", 0) > 0
+    )
+    manual_hold_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("manual_hold_adaptive_control_agent_lifecycle_control_contract_count", 0) > 0
+    )
+    deferred_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("deferred_adaptive_control_agent_lifecycle_control_contract_count", 0) > 0
+    )
+
+    return {
+        "summary_count": len(comparable_summaries),
+        "shadow_adaptive_control_health_readiness_observability_contract_count": shadow_count,
+        "primary_cutover_adaptive_control_health_readiness_observability_contract_count": primary_cutover_count,
+        "manual_hold_adaptive_control_health_readiness_observability_contract_count": manual_hold_count,
+        "deferred_adaptive_control_health_readiness_observability_contract_count": deferred_count,
+        "adaptive_control_health_readiness_observability_contract_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_control_health_readiness_observability_contract_set(
     adaptive_control_agent_lifecycle_control_contract_summaries: Optional[list[dict]],
 ) -> dict:
