@@ -2424,6 +2424,18 @@ def build_policy_selection_adaptive_control_runtime_config_materialization_summa
 
 
 
+def extract_policy_selection_adaptive_control_config_update_transport_contract_summaries(
+    adaptive_control_config_update_transport_contract_sets: Optional[list[dict]],
+) -> list[dict]:
+    return [
+        build_policy_selection_adaptive_control_config_update_transport_contract_summary(transport_contract_set)
+        for transport_contract_set in (adaptive_control_config_update_transport_contract_sets or [])
+        if isinstance(transport_contract_set, dict)
+    ]
+
+
+
+
 def extract_policy_selection_adaptive_control_runtime_config_materialization_summaries(
     adaptive_control_runtime_config_materialization_sets: Optional[list[dict]],
 ) -> list[dict]:
