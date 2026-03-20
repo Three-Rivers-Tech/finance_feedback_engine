@@ -2088,6 +2088,25 @@ def build_policy_selection_adaptive_weight_mutation_set(
 
 
 
+def build_policy_selection_adaptive_control_persistence_set(
+    adaptive_weight_mutation_summaries: Optional[list[dict]],
+) -> dict:
+    valid_adaptive_weight_mutation_summaries = [
+        summary
+        for summary in (adaptive_weight_mutation_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "adaptive_weight_mutation_summaries": [
+            dict(summary) for summary in valid_adaptive_weight_mutation_summaries
+        ],
+        "summary_count": len(valid_adaptive_weight_mutation_summaries),
+        "adaptive_control_persistence_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_weight_mutation_summary(
     adaptive_weight_mutation_set: Optional[dict],
 ) -> dict:
