@@ -14,6 +14,7 @@ This directory tracks the seam-by-seam migration path used to keep the policy-se
 - Stage 44 — adaptive weight mutation
 - Stage 45 — adaptive control persistence
 - Stage 46 — adaptive control snapshot
+- Stage 47 — adaptive control runtime apply
 
 ## Conventions
 Each stage should keep the same five-step PR flow:
