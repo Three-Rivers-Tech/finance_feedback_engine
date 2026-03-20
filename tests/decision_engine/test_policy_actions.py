@@ -87,6 +87,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_runtime_apply_set,
     build_policy_selection_adaptive_control_runtime_apply_summary,
     build_policy_selection_adaptive_control_config_patch_contract_set,
+    build_policy_selection_adaptive_control_config_patch_contract_summary,
     extract_policy_selection_adaptive_control_persistence_summaries,
     extract_policy_selection_adaptive_control_runtime_apply_summaries,
     extract_policy_selection_adaptive_control_snapshot_summaries,
@@ -15577,3 +15578,260 @@ def test_build_policy_selection_adaptive_control_config_patch_contract_set_defen
     summary["shadow_adaptive_control_runtime_apply_count"] = 99
 
     assert adaptive_control_config_patch_contract_set["adaptive_control_runtime_apply_summaries"][0]["shadow_adaptive_control_runtime_apply_count"] == 1
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_counts_shadow_paths_from_adaptive_control_runtime_apply_summaries():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 1,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        }
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 1,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_counts_primary_cutover_paths_from_adaptive_control_runtime_apply_summaries():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 1,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        }
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 0,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 1,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_counts_manual_hold_paths_from_adaptive_control_runtime_apply_summaries():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 1,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        }
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 0,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 1,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_defaults_to_deferred_paths_from_adaptive_control_runtime_apply_summaries():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 1,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        }
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 0,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 1,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_handles_empty_inputs():
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary({})
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 0,
+        "shadow_adaptive_control_config_patch_contract_count": 0,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_skips_non_comparable_entries():
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary({
+        "adaptive_control_runtime_apply_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 0,
+                "shadow_adaptive_control_runtime_apply_count": 1,
+                "primary_cutover_adaptive_control_runtime_apply_count": 0,
+                "manual_hold_adaptive_control_runtime_apply_count": 0,
+                "deferred_adaptive_control_runtime_apply_count": 0,
+            },
+            {
+                "summary_count": "bad",
+                "shadow_adaptive_control_runtime_apply_count": 0,
+                "primary_cutover_adaptive_control_runtime_apply_count": 1,
+                "manual_hold_adaptive_control_runtime_apply_count": 0,
+                "deferred_adaptive_control_runtime_apply_count": 0,
+            },
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_runtime_apply_count": 0,
+                "primary_cutover_adaptive_control_runtime_apply_count": 1,
+                "manual_hold_adaptive_control_runtime_apply_count": 0,
+                "deferred_adaptive_control_runtime_apply_count": 0,
+            },
+        ]
+    })
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_patch_contract_count": 0,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 1,
+        "manual_hold_adaptive_control_config_patch_contract_count": 0,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_round_trips_with_set_builder_and_preserves_versions():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 1,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        }
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_set["adaptive_control_config_patch_contract_set_version"] == 1
+    assert adaptive_control_config_patch_contract_summary["summary_count"] == 1
+    assert adaptive_control_config_patch_contract_summary["deferred_adaptive_control_config_patch_contract_count"] == 1
+    assert adaptive_control_config_patch_contract_summary["adaptive_control_config_patch_contract_summary_version"] == 1
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_matches_direct_and_export_ready_counts():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 1,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 1,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+    ])
+
+    direct = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert direct == {
+        "summary_count": 2,
+        "shadow_adaptive_control_config_patch_contract_count": 1,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+        "manual_hold_adaptive_control_config_patch_contract_count": 1,
+        "deferred_adaptive_control_config_patch_contract_count": 0,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_patch_contract_summary_accumulates_multiple_comparable_entries():
+    adaptive_control_config_patch_contract_set = build_policy_selection_adaptive_control_config_patch_contract_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 1,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 1,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 1,
+            "deferred_adaptive_control_runtime_apply_count": 0,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_control_runtime_apply_count": 0,
+            "primary_cutover_adaptive_control_runtime_apply_count": 0,
+            "manual_hold_adaptive_control_runtime_apply_count": 0,
+            "deferred_adaptive_control_runtime_apply_count": 1,
+            "adaptive_control_runtime_apply_summary_version": 1,
+        },
+    ])
+
+    adaptive_control_config_patch_contract_summary = build_policy_selection_adaptive_control_config_patch_contract_summary(adaptive_control_config_patch_contract_set)
+
+    assert adaptive_control_config_patch_contract_summary == {
+        "summary_count": 4,
+        "shadow_adaptive_control_config_patch_contract_count": 1,
+        "primary_cutover_adaptive_control_config_patch_contract_count": 1,
+        "manual_hold_adaptive_control_config_patch_contract_count": 1,
+        "deferred_adaptive_control_config_patch_contract_count": 1,
+        "adaptive_control_config_patch_contract_summary_version": 1,
+    }
