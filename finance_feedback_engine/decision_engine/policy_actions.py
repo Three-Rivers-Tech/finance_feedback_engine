@@ -2364,6 +2364,18 @@ def build_policy_selection_adaptive_control_runtime_config_materialization_summa
 
 
 
+def extract_policy_selection_adaptive_control_runtime_config_materialization_summaries(
+    adaptive_control_runtime_config_materialization_sets: Optional[list[dict]],
+) -> list[dict]:
+    return [
+        build_policy_selection_adaptive_control_runtime_config_materialization_summary(runtime_config_materialization_set)
+        for runtime_config_materialization_set in (adaptive_control_runtime_config_materialization_sets or [])
+        if isinstance(runtime_config_materialization_set, dict)
+    ]
+
+
+
+
 def build_policy_selection_adaptive_control_persistence_set(
     adaptive_weight_mutation_summaries: Optional[list[dict]],
 ) -> dict:
