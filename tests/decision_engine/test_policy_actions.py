@@ -16699,6 +16699,112 @@ def test_build_policy_selection_adaptive_control_config_update_transport_contrac
 
 
 
+def test_build_policy_selection_adaptive_control_config_update_transport_contract_summary_chain_progresses_runtime_config_materialization_outputs_end_to_end():
+    runtime_config_materialization_summary = build_policy_selection_adaptive_control_runtime_config_materialization_summary(
+        build_policy_selection_adaptive_control_runtime_config_materialization_set([
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_config_patch_contract_count": 0,
+                "primary_cutover_adaptive_control_config_patch_contract_count": 1,
+                "manual_hold_adaptive_control_config_patch_contract_count": 0,
+                "deferred_adaptive_control_config_patch_contract_count": 0,
+                "adaptive_control_config_patch_contract_summary_version": 1,
+            }
+        ])
+    )
+
+    transport_contract_set = build_policy_selection_adaptive_control_config_update_transport_contract_set(
+        [runtime_config_materialization_summary]
+    )
+    transport_contract_summary = build_policy_selection_adaptive_control_config_update_transport_contract_summary(
+        transport_contract_set
+    )
+
+    assert transport_contract_set == {
+        "adaptive_control_runtime_config_materialization_summaries": [runtime_config_materialization_summary],
+        "adaptive_control_config_update_transport_contract_set_version": 1,
+    }
+    assert transport_contract_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_control_config_update_transport_contract_count": 0,
+        "primary_cutover_adaptive_control_config_update_transport_contract_count": 1,
+        "manual_hold_adaptive_control_config_update_transport_contract_count": 0,
+        "deferred_adaptive_control_config_update_transport_contract_count": 0,
+        "adaptive_control_config_update_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_update_transport_contract_summary_chain_handles_mixed_transport_path_counts():
+    first_runtime_config_materialization_summary = build_policy_selection_adaptive_control_runtime_config_materialization_summary(
+        build_policy_selection_adaptive_control_runtime_config_materialization_set([
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_config_patch_contract_count": 1,
+                "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+                "manual_hold_adaptive_control_config_patch_contract_count": 0,
+                "deferred_adaptive_control_config_patch_contract_count": 0,
+                "adaptive_control_config_patch_contract_summary_version": 1,
+            }
+        ])
+    )
+    second_runtime_config_materialization_summary = build_policy_selection_adaptive_control_runtime_config_materialization_summary(
+        build_policy_selection_adaptive_control_runtime_config_materialization_set([
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_config_patch_contract_count": 0,
+                "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+                "manual_hold_adaptive_control_config_patch_contract_count": 0,
+                "deferred_adaptive_control_config_patch_contract_count": 1,
+                "adaptive_control_config_patch_contract_summary_version": 1,
+            }
+        ])
+    )
+
+    transport_contract_summary = build_policy_selection_adaptive_control_config_update_transport_contract_summary(
+        build_policy_selection_adaptive_control_config_update_transport_contract_set([
+            first_runtime_config_materialization_summary,
+            second_runtime_config_materialization_summary,
+        ])
+    )
+
+    assert transport_contract_summary == {
+        "summary_count": 2,
+        "shadow_adaptive_control_config_update_transport_contract_count": 1,
+        "primary_cutover_adaptive_control_config_update_transport_contract_count": 0,
+        "manual_hold_adaptive_control_config_update_transport_contract_count": 0,
+        "deferred_adaptive_control_config_update_transport_contract_count": 1,
+        "adaptive_control_config_update_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_config_update_transport_contract_summary_chain_preserves_deferred_counts_for_downstream_export():
+    runtime_config_materialization_summary = build_policy_selection_adaptive_control_runtime_config_materialization_summary(
+        build_policy_selection_adaptive_control_runtime_config_materialization_set([
+            {
+                "summary_count": 1,
+                "shadow_adaptive_control_config_patch_contract_count": 0,
+                "primary_cutover_adaptive_control_config_patch_contract_count": 0,
+                "manual_hold_adaptive_control_config_patch_contract_count": 0,
+                "deferred_adaptive_control_config_patch_contract_count": 1,
+                "adaptive_control_config_patch_contract_summary_version": 1,
+            }
+        ])
+    )
+
+    transport_contract_summary = build_policy_selection_adaptive_control_config_update_transport_contract_summary(
+        build_policy_selection_adaptive_control_config_update_transport_contract_set([
+            runtime_config_materialization_summary
+        ])
+    )
+
+    assert transport_contract_summary["summary_count"] == 1
+    assert transport_contract_summary["deferred_adaptive_control_config_update_transport_contract_count"] == 1
+    assert transport_contract_summary["adaptive_control_config_update_transport_contract_summary_version"] == 1
+
+
+
 def test_extract_policy_selection_adaptive_control_runtime_config_materialization_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
     adaptive_control_runtime_config_materialization_summaries = extract_policy_selection_adaptive_control_runtime_config_materialization_summaries([
         None,
