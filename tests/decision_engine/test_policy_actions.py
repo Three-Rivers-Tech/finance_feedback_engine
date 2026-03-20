@@ -82,6 +82,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_weight_mutation_summary,
     build_policy_selection_adaptive_control_persistence_set,
     build_policy_selection_adaptive_control_persistence_summary,
+    extract_policy_selection_adaptive_control_persistence_summaries,
     extract_policy_selection_adaptive_weight_mutation_summaries,
     extract_policy_selection_adaptive_activation_summaries,
     extract_policy_selection_adaptive_recommendation_summaries,
@@ -14462,3 +14463,51 @@ def test_adaptive_control_persistence_chain_skips_non_comparable_upstream_summar
         "deferred_adaptive_control_persistence_count": 0,
         "adaptive_control_persistence_summary_version": 1,
     }
+
+
+
+def test_extract_policy_selection_adaptive_control_persistence_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
+    adaptive_control_persistence_set = {
+        "adaptive_weight_mutation_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_adaptive_weight_mutation_count": 1,
+                "primary_cutover_adaptive_weight_mutation_count": 0,
+                "manual_hold_adaptive_weight_mutation_count": 0,
+                "deferred_adaptive_weight_mutation_count": 0,
+                "adaptive_weight_mutation_summary_version": 1,
+            }
+        ],
+        "summary_count": 1,
+        "adaptive_control_persistence_set_version": 1,
+    }
+
+    direct = build_policy_selection_adaptive_control_persistence_summary(adaptive_control_persistence_set)
+    exported = extract_policy_selection_adaptive_control_persistence_summaries([None, "skip", adaptive_control_persistence_set, {"adaptive_weight_mutation_summaries": []}])
+
+    assert exported == [direct]
+
+
+
+def test_extract_policy_selection_adaptive_control_persistence_summaries_preserves_deferred_counts_for_export():
+    adaptive_control_persistence_set = build_policy_selection_adaptive_control_persistence_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_weight_mutation_count": 0,
+            "primary_cutover_adaptive_weight_mutation_count": 0,
+            "manual_hold_adaptive_weight_mutation_count": 0,
+            "deferred_adaptive_weight_mutation_count": 1,
+            "adaptive_weight_mutation_summary_version": 1,
+        }
+    ])
+
+    exported = extract_policy_selection_adaptive_control_persistence_summaries([adaptive_control_persistence_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_adaptive_control_persistence_count": 0,
+        "primary_cutover_adaptive_control_persistence_count": 0,
+        "manual_hold_adaptive_control_persistence_count": 0,
+        "deferred_adaptive_control_persistence_count": 1,
+        "adaptive_control_persistence_summary_version": 1,
+    }]

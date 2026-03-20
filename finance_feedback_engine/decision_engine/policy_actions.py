@@ -2930,6 +2930,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_adaptive_control_persistence_summaries(
+    adaptive_control_persistence_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for adaptive_control_persistence_set in adaptive_control_persistence_sets or []:
+        if not isinstance(adaptive_control_persistence_set, dict):
+            continue
+        adaptive_weight_mutation_summaries = adaptive_control_persistence_set.get(
+            "adaptive_weight_mutation_summaries"
+        )
+        if not isinstance(adaptive_weight_mutation_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in adaptive_weight_mutation_summaries):
+            continue
+        adaptive_control_persistence_summary = build_policy_selection_adaptive_control_persistence_summary(
+            adaptive_control_persistence_set
+        )
+        if adaptive_control_persistence_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(adaptive_control_persistence_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_adaptive_weight_mutation_summaries(
     adaptive_weight_mutation_sets: Optional[list[dict]],
 ) -> list[dict]:
