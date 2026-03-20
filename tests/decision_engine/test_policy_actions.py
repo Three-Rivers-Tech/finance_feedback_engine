@@ -78,6 +78,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_recommendation_summary,
     build_policy_selection_adaptive_activation_set,
     build_policy_selection_adaptive_activation_summary,
+    extract_policy_selection_adaptive_activation_summaries,
     extract_policy_selection_adaptive_recommendation_summaries,
     extract_policy_selection_learning_analytics_summaries,
     extract_policy_selection_learning_feedback_summaries,
@@ -13506,3 +13507,51 @@ def test_adaptive_activation_chain_skips_non_comparable_upstream_summaries_witho
         "deferred_adaptive_activation_count": 0,
         "adaptive_activation_summary_version": 1,
     }
+
+
+
+def test_extract_policy_selection_adaptive_activation_summaries_skips_invalid_sets_and_returns_direct_summary_shape():
+    adaptive_activation_set = {
+        "adaptive_recommendation_summaries": [
+            {
+                "summary_count": 1,
+                "shadow_adaptive_recommendation_count": 1,
+                "primary_cutover_adaptive_recommendation_count": 0,
+                "manual_hold_adaptive_recommendation_count": 0,
+                "deferred_adaptive_recommendation_count": 0,
+                "adaptive_recommendation_summary_version": 1,
+            }
+        ],
+        "summary_count": 1,
+        "adaptive_activation_set_version": 1,
+    }
+
+    direct = build_policy_selection_adaptive_activation_summary(adaptive_activation_set)
+    exported = extract_policy_selection_adaptive_activation_summaries([None, "skip", adaptive_activation_set, {"adaptive_recommendation_summaries": []}])
+
+    assert exported == [direct]
+
+
+
+def test_extract_policy_selection_adaptive_activation_summaries_preserves_deferred_counts_for_export():
+    adaptive_activation_set = build_policy_selection_adaptive_activation_set([
+        {
+            "summary_count": 1,
+            "shadow_adaptive_recommendation_count": 0,
+            "primary_cutover_adaptive_recommendation_count": 0,
+            "manual_hold_adaptive_recommendation_count": 0,
+            "deferred_adaptive_recommendation_count": 1,
+            "adaptive_recommendation_summary_version": 1,
+        }
+    ])
+
+    exported = extract_policy_selection_adaptive_activation_summaries([adaptive_activation_set])
+
+    assert exported == [{
+        "summary_count": 1,
+        "shadow_adaptive_activation_count": 0,
+        "primary_cutover_adaptive_activation_count": 0,
+        "manual_hold_adaptive_activation_count": 0,
+        "deferred_adaptive_activation_count": 1,
+        "adaptive_activation_summary_version": 1,
+    }]

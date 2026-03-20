@@ -2770,6 +2770,31 @@ def build_policy_selection_provider_client_shape_summary(
 
 
 
+def extract_policy_selection_adaptive_activation_summaries(
+    adaptive_activation_sets: Optional[list[dict]],
+) -> list[dict]:
+    summaries = []
+    for adaptive_activation_set in adaptive_activation_sets or []:
+        if not isinstance(adaptive_activation_set, dict):
+            continue
+        adaptive_recommendation_summaries = adaptive_activation_set.get(
+            "adaptive_recommendation_summaries"
+        )
+        if not isinstance(adaptive_recommendation_summaries, list):
+            continue
+        if not any(isinstance(summary, dict) for summary in adaptive_recommendation_summaries):
+            continue
+        adaptive_activation_summary = build_policy_selection_adaptive_activation_summary(
+            adaptive_activation_set
+        )
+        if adaptive_activation_summary.get("summary_count", 0) <= 0:
+            continue
+        summaries.append(adaptive_activation_summary)
+    return summaries
+
+
+
+
 def extract_policy_selection_adaptive_recommendation_summaries(
     adaptive_recommendation_sets: Optional[list[dict]],
 ) -> list[dict]:
