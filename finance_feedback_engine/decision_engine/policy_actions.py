@@ -2031,6 +2031,25 @@ def build_policy_selection_learning_analytics_set(
 
 
 
+def build_policy_selection_adaptive_recommendation_set(
+    learning_analytics_summaries: Optional[list[dict]],
+) -> dict:
+    valid_learning_analytics_summaries = [
+        summary
+        for summary in (learning_analytics_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "learning_analytics_summaries": [
+            dict(summary) for summary in valid_learning_analytics_summaries
+        ],
+        "summary_count": len(valid_learning_analytics_summaries),
+        "adaptive_recommendation_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_learning_analytics_summary(
     learning_analytics_set: Optional[dict],
 ) -> dict:

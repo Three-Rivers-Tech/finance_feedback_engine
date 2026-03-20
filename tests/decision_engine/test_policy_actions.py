@@ -74,6 +74,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_learning_feedback_summary,
     build_policy_selection_learning_analytics_set,
     build_policy_selection_learning_analytics_summary,
+    build_policy_selection_adaptive_recommendation_set,
     extract_policy_selection_learning_analytics_summaries,
     extract_policy_selection_learning_feedback_summaries,
     extract_policy_selection_trade_outcome_summaries,
@@ -12599,3 +12600,80 @@ def test_extract_policy_selection_learning_analytics_summaries_preserves_deferre
         "deferred_learning_analytics_count": 1,
         "learning_analytics_summary_version": 1,
     }]
+
+
+
+def test_build_policy_selection_adaptive_recommendation_set_wraps_learning_analytics_summaries_cleanly():
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set([
+        {
+            "summary_count": 1,
+            "shadow_learning_analytics_count": 1,
+            "primary_cutover_learning_analytics_count": 0,
+            "manual_hold_learning_analytics_count": 0,
+            "deferred_learning_analytics_count": 0,
+            "learning_analytics_summary_version": 1,
+        }
+    ])
+
+    assert adaptive_recommendation_set["summary_count"] == 1
+    assert adaptive_recommendation_set["adaptive_recommendation_set_version"] == 1
+    assert adaptive_recommendation_set["learning_analytics_summaries"][0]["shadow_learning_analytics_count"] == 1
+
+
+
+def test_build_policy_selection_adaptive_recommendation_set_handles_empty_inputs():
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set([])
+
+    assert adaptive_recommendation_set == {
+        "learning_analytics_summaries": [],
+        "summary_count": 0,
+        "adaptive_recommendation_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_recommendation_set_handles_none_inputs():
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set(None)
+
+    assert adaptive_recommendation_set == {
+        "learning_analytics_summaries": [],
+        "summary_count": 0,
+        "adaptive_recommendation_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_recommendation_set_filters_non_dict_items():
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set([
+        None,
+        "skip",
+        7,
+        {
+            "summary_count": 1,
+            "shadow_learning_analytics_count": 0,
+            "primary_cutover_learning_analytics_count": 1,
+            "manual_hold_learning_analytics_count": 0,
+            "deferred_learning_analytics_count": 0,
+            "learning_analytics_summary_version": 1,
+        },
+    ])
+
+    assert adaptive_recommendation_set["summary_count"] == 1
+    assert adaptive_recommendation_set["learning_analytics_summaries"][0]["summary_count"] == 1
+
+
+
+def test_build_policy_selection_adaptive_recommendation_set_defensively_copies_learning_analytics_inputs():
+    summary = {
+        "summary_count": 1,
+        "shadow_learning_analytics_count": 1,
+        "primary_cutover_learning_analytics_count": 0,
+        "manual_hold_learning_analytics_count": 0,
+        "deferred_learning_analytics_count": 0,
+        "learning_analytics_summary_version": 1,
+    }
+
+    adaptive_recommendation_set = build_policy_selection_adaptive_recommendation_set([summary])
+    summary["shadow_learning_analytics_count"] = 99
+
+    assert adaptive_recommendation_set["learning_analytics_summaries"][0]["shadow_learning_analytics_count"] == 1
