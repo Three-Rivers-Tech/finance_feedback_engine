@@ -13891,3 +13891,96 @@ def test_build_policy_selection_adaptive_weight_mutation_summary_accumulates_mul
         "deferred_adaptive_weight_mutation_count": 1,
         "adaptive_weight_mutation_summary_version": 1,
     }
+
+
+
+def test_adaptive_weight_mutation_chain_preserves_shadow_path_from_adaptive_activation_summary():
+    adaptive_activation_summary = {
+        "summary_count": 1,
+        "shadow_adaptive_activation_count": 1,
+        "primary_cutover_adaptive_activation_count": 0,
+        "manual_hold_adaptive_activation_count": 0,
+        "deferred_adaptive_activation_count": 0,
+        "adaptive_activation_summary_version": 1,
+    }
+
+    adaptive_weight_mutation_set = build_policy_selection_adaptive_weight_mutation_set([adaptive_activation_summary])
+    adaptive_weight_mutation_summary = build_policy_selection_adaptive_weight_mutation_summary(adaptive_weight_mutation_set)
+
+    assert adaptive_weight_mutation_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_weight_mutation_count": 1,
+        "primary_cutover_adaptive_weight_mutation_count": 0,
+        "manual_hold_adaptive_weight_mutation_count": 0,
+        "deferred_adaptive_weight_mutation_count": 0,
+        "adaptive_weight_mutation_summary_version": 1,
+    }
+
+
+
+def test_adaptive_weight_mutation_chain_preserves_manual_hold_and_deferred_mix_from_adaptive_activation_summaries():
+    adaptive_activation_summaries = [
+        {
+            "summary_count": 1,
+            "shadow_adaptive_activation_count": 0,
+            "primary_cutover_adaptive_activation_count": 0,
+            "manual_hold_adaptive_activation_count": 1,
+            "deferred_adaptive_activation_count": 0,
+            "adaptive_activation_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_activation_count": 0,
+            "primary_cutover_adaptive_activation_count": 0,
+            "manual_hold_adaptive_activation_count": 0,
+            "deferred_adaptive_activation_count": 1,
+            "adaptive_activation_summary_version": 1,
+        },
+    ]
+
+    adaptive_weight_mutation_set = build_policy_selection_adaptive_weight_mutation_set(adaptive_activation_summaries)
+    adaptive_weight_mutation_summary = build_policy_selection_adaptive_weight_mutation_summary(adaptive_weight_mutation_set)
+
+    assert adaptive_weight_mutation_set["summary_count"] == 2
+    assert adaptive_weight_mutation_summary == {
+        "summary_count": 2,
+        "shadow_adaptive_weight_mutation_count": 0,
+        "primary_cutover_adaptive_weight_mutation_count": 0,
+        "manual_hold_adaptive_weight_mutation_count": 1,
+        "deferred_adaptive_weight_mutation_count": 1,
+        "adaptive_weight_mutation_summary_version": 1,
+    }
+
+
+
+def test_adaptive_weight_mutation_chain_skips_non_comparable_upstream_summaries_without_mutating_versions():
+    adaptive_weight_mutation_set = build_policy_selection_adaptive_weight_mutation_set([
+        {
+            "summary_count": 0,
+            "shadow_adaptive_activation_count": 1,
+            "primary_cutover_adaptive_activation_count": 0,
+            "manual_hold_adaptive_activation_count": 0,
+            "deferred_adaptive_activation_count": 0,
+            "adaptive_activation_summary_version": 1,
+        },
+        {
+            "summary_count": 1,
+            "shadow_adaptive_activation_count": 0,
+            "primary_cutover_adaptive_activation_count": 1,
+            "manual_hold_adaptive_activation_count": 0,
+            "deferred_adaptive_activation_count": 0,
+            "adaptive_activation_summary_version": 1,
+        },
+    ])
+
+    adaptive_weight_mutation_summary = build_policy_selection_adaptive_weight_mutation_summary(adaptive_weight_mutation_set)
+
+    assert adaptive_weight_mutation_set["adaptive_weight_mutation_set_version"] == 1
+    assert adaptive_weight_mutation_summary == {
+        "summary_count": 1,
+        "shadow_adaptive_weight_mutation_count": 0,
+        "primary_cutover_adaptive_weight_mutation_count": 1,
+        "manual_hold_adaptive_weight_mutation_count": 0,
+        "deferred_adaptive_weight_mutation_count": 0,
+        "adaptive_weight_mutation_summary_version": 1,
+    }
