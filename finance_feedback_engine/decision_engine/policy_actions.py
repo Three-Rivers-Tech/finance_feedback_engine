@@ -2303,6 +2303,22 @@ def build_policy_selection_adaptive_control_runtime_config_materialization_set(
 
 
 
+def build_policy_selection_adaptive_control_config_update_transport_contract_set(
+    adaptive_control_runtime_config_materialization_summaries: Optional[list[dict]],
+) -> dict:
+    comparable_summaries = [
+        dict(summary)
+        for summary in (adaptive_control_runtime_config_materialization_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "adaptive_control_runtime_config_materialization_summaries": comparable_summaries,
+        "adaptive_control_config_update_transport_contract_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_control_runtime_config_materialization_summary(
     adaptive_control_runtime_config_materialization_set: Optional[dict],
 ) -> dict:
