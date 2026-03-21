@@ -110,6 +110,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_exchange_authentication_contract_summary,
     build_policy_selection_adaptive_control_exchange_credential_wiring_contract_set,
     build_policy_selection_adaptive_control_exchange_credential_wiring_contract_summary,
+    build_policy_selection_adaptive_control_exchange_http_transport_contract_set,
     extract_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summaries,
     extract_policy_selection_adaptive_control_notification_delivery_contract_summaries,
     extract_policy_selection_adaptive_control_health_readiness_observability_contract_summaries,
@@ -19898,6 +19899,126 @@ def test_build_policy_selection_adaptive_control_exchange_credential_wiring_cont
     assert summary["summary_count"] == 1
     assert summary["credential_resolved_adaptive_control_exchange_credential_wiring_contract_count"] == 1
     assert summary["adaptive_control_exchange_credential_wiring_contract_summary_version"] == 1
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_set_wraps_exchange_credential_wiring_contract_summaries_cleanly():
+    credential_wiring_contract_summary = {
+        "summary_count": 1,
+        "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 1,
+        "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+    }
+
+    result = build_policy_selection_adaptive_control_exchange_http_transport_contract_set(
+        [credential_wiring_contract_summary]
+    )
+
+    assert result == {
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [credential_wiring_contract_summary],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_set_filters_non_mapping_entries():
+    credential_wiring_contract_summary = {
+        "summary_count": 1,
+        "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 1,
+        "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+    }
+
+    result = build_policy_selection_adaptive_control_exchange_http_transport_contract_set(
+        [credential_wiring_contract_summary, None, "skip", 7]
+    )
+
+    assert result == {
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [credential_wiring_contract_summary],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_set_defaults_to_empty_summary_list():
+    result = build_policy_selection_adaptive_control_exchange_http_transport_contract_set(None)
+
+    assert result == {
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_set_copies_summary_entries():
+    source_summary = {
+        "summary_count": 1,
+        "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 1,
+        "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+    }
+
+    result = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([source_summary])
+    source_summary["vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count"] = 99
+
+    assert result == {
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [
+            {
+                "summary_count": 1,
+                "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 1,
+                "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+            }
+        ],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_set_preserves_multiple_exchange_credential_wiring_contract_summaries_in_order():
+    first = {
+        "summary_count": 1,
+        "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 1,
+        "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+    }
+    second = {
+        "summary_count": 1,
+        "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 1,
+        "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+        "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+    }
+
+    result = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([first, second])
+
+    assert result == {
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [first, second],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    }
 
 
 
