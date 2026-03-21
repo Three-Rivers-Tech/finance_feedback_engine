@@ -31,7 +31,7 @@ class ReservedExposure:
     action: str  # BUY or SELL
     position_size: float  # In base currency units
     notional_value: float  # In USD
-    reserved_at: datetime = field(default_factory=datetime.utcnow)
+    reserved_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     ttl_seconds: int = 300  # 5 minute expiry for stale reservations
 
 

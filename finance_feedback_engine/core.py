@@ -866,14 +866,27 @@ class FinanceFeedbackEngine:
             )
 
         # Phase 2 Pre-flight: Data provider credentials present
+        # Only check for the Alpha Vantage key when the alpha_vantage provider is
+        # explicitly configured in data_providers (i.e. the section exists), not
+        # merely referenced as a default preference.  This mirrors the pattern used
+        # for the Ollama check above, which is skipped unless "local" appears in the
+        # ensemble provider list.
         try:
-            api_key = os.environ.get("ALPHA_VANTAGE_API_KEY") or self.config.get(
-                "alpha_vantage_api_key"
+            data_providers_cfg = self.config.get("data_providers", {})
+            alpha_vantage_explicitly_configured = (
+                "alpha_vantage" in data_providers_cfg
+                or "alpha_vantage_api_key" in self.config
             )
-            if not api_key:
-                errors.append(
-                    "Alpha Vantage API key missing. Set ALPHA_VANTAGE_API_KEY or configure in config.local.yaml."
+            if alpha_vantage_explicitly_configured:
+                api_key = (
+                    os.environ.get("ALPHA_VANTAGE_API_KEY")
+                    or self.config.get("alpha_vantage_api_key")
+                    or data_providers_cfg.get("alpha_vantage", {}).get("api_key")
                 )
+                if not api_key:
+                    errors.append(
+                        "Alpha Vantage API key missing. Set ALPHA_VANTAGE_API_KEY or configure in config.local.yaml."
+                    )
         except Exception:
             # Non-fatal; init may succeed if alternative providers are wired later
             logger.debug("Alpha Vantage key readiness check failed", exc_info=True)

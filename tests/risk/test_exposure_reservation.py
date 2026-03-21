@@ -13,7 +13,7 @@ The exposure reservation system implements a "reserve-commit-rollback" pattern:
 
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -264,7 +264,7 @@ class TestExposureReservationManager:
 
         # Manually make it stale by modifying reserved_at
         reservation = fresh_manager._reservations["decision-001"]
-        reservation.reserved_at = datetime.now() - timedelta(seconds=600)  # 10 minutes ago
+        reservation.reserved_at = datetime.now(timezone.utc) - timedelta(seconds=600)  # 10 minutes ago
         reservation.ttl_seconds = 300  # 5 minute TTL
 
         cleared = fresh_manager.clear_stale_reservations()
