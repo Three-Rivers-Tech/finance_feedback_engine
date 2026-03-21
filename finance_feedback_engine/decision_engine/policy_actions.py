@@ -2622,6 +2622,22 @@ def build_policy_selection_adaptive_control_exchange_authentication_contract_sum
 
 
 
+def build_policy_selection_adaptive_control_exchange_credential_wiring_contract_set(
+    adaptive_control_exchange_authentication_contract_summaries: Optional[list[dict]],
+) -> dict:
+    comparable_summaries = [
+        dict(summary)
+        for summary in (adaptive_control_exchange_authentication_contract_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "adaptive_control_exchange_authentication_contract_summaries": comparable_summaries,
+        "adaptive_control_exchange_credential_wiring_contract_set_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_control_exchange_authentication_contract_set(
     adaptive_control_exchange_order_placement_contract_summaries: Optional[list[dict]],
 ) -> dict:
