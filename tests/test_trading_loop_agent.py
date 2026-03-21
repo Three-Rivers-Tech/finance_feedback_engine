@@ -696,3 +696,74 @@ def test_mark_decision_not_executed_updates_policy_trace_control_outcome(trading
 
 
 
+
+
+@pytest.mark.asyncio
+async def test_reasoning_state_keeps_close_long_policy_action_actionable(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-close-long",
+            "action": "CLOSE_LONG",
+            "policy_action": "CLOSE_LONG",
+            "confidence": 82,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_positions": [
+                        {"product_id": "SOL-USD-PERP", "side": "LONG", "contracts": 1.0}
+                    ]
+                }
+            }
+        }
+    )
+    trading_agent._should_execute_with_reason = AsyncMock(return_value=(True, "OK", "Autonomous execution enabled"))
+    trading_agent.state = AgentState.REASONING
+
+    await trading_agent.handle_reasoning_state()
+
+    async with trading_agent._current_decisions_lock:
+        assert len(trading_agent._current_decisions) == 1
+        assert trading_agent._current_decisions[0]["policy_action"] == "CLOSE_LONG"
+    assert trading_agent.state == AgentState.RISK_CHECK
+
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_reasoning_state_blocks_duplicate_same_direction_policy_entry(trading_agent, mock_dependencies):
+    trading_agent.config.asset_pairs = ["BTCUSD"]
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-open-long",
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 82,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_positions": [
+                        {"product_id": "BIP-20DEC30-CDE", "side": "LONG", "contracts": 1.0}
+                    ],
+                    "futures_summary": {"initial_margin": 6000.0, "total_balance_usd": 10000.0},
+                }
+            }
+        }
+    )
+    trading_agent._should_execute_with_reason = AsyncMock(return_value=(True, "OK", "Autonomous execution enabled"))
+    trading_agent.state = AgentState.REASONING
+
+    await trading_agent.handle_reasoning_state()
+
+    async with trading_agent._current_decisions_lock:
+        assert trading_agent._current_decisions == []
+    saved_decision = mock_dependencies["engine"].decision_store.update_decision.call_args[0][0]
+    assert saved_decision["asset_pair"] == "BTCUSD"
+    assert saved_decision["execution_result"]["reason_code"] == "DUPLICATE_ENTRY_GUARD"
+    assert trading_agent.state == AgentState.IDLE

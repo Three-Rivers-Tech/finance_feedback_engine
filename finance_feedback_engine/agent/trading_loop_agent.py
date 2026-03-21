@@ -31,7 +31,11 @@ from finance_feedback_engine.decision_engine.execution_quality import (
     ExecutionQualityControls,
     evaluate_signal_quality,
 )
-from finance_feedback_engine.decision_engine.policy_actions import build_control_outcome
+from finance_feedback_engine.decision_engine.policy_actions import (
+    build_control_outcome,
+    get_policy_action_family,
+    is_policy_action,
+)
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
@@ -45,6 +49,82 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
+
+
+def _derive_execution_intent(decision: Dict[str, Any]) -> Dict[str, Optional[str] | bool]:
+    """Derive execution intent from canonical policy actions or legacy actions.
+
+    Entry-like policy actions expose an ``entry_side`` for duplicate-entry guards.
+    Reduce/close actions remain actionable but skip duplicate-entry blocking because
+    they unwind or reduce existing exposure rather than stack it.
+    """
+    raw_action = None
+    if isinstance(decision, dict):
+        raw_action = decision.get("policy_action") or decision.get("action")
+
+    if raw_action is None:
+        return {
+            "canonical_action": None,
+            "policy_action": None,
+            "policy_action_family": None,
+            "legacy_action": None,
+            "entry_side": None,
+            "position_side": None,
+            "is_actionable": False,
+        }
+
+    if is_policy_action(raw_action):
+        family = get_policy_action_family(raw_action)
+        entry_side = None
+        position_side = None
+        legacy_action = None
+        is_actionable = family != "hold"
+
+        if family in {"open_long", "add_long"}:
+            entry_side = "LONG"
+            position_side = "LONG"
+            legacy_action = "BUY"
+        elif family in {"open_short", "add_short"}:
+            entry_side = "SHORT"
+            position_side = "SHORT"
+            legacy_action = "SELL"
+        elif family in {"reduce_long", "close_long"}:
+            position_side = "LONG"
+        elif family in {"reduce_short", "close_short"}:
+            position_side = "SHORT"
+
+        return {
+            "canonical_action": str(raw_action),
+            "policy_action": str(raw_action),
+            "policy_action_family": family,
+            "legacy_action": legacy_action,
+            "entry_side": entry_side,
+            "position_side": position_side,
+            "is_actionable": is_actionable,
+        }
+
+    legacy_action = str(raw_action).upper()
+    if legacy_action not in {"BUY", "SELL", "HOLD"}:
+        return {
+            "canonical_action": legacy_action,
+            "policy_action": None,
+            "policy_action_family": None,
+            "legacy_action": None,
+            "entry_side": None,
+            "position_side": None,
+            "is_actionable": False,
+        }
+
+    side = "LONG" if legacy_action == "BUY" else "SHORT" if legacy_action == "SELL" else None
+    return {
+        "canonical_action": legacy_action,
+        "policy_action": None,
+        "policy_action_family": None,
+        "legacy_action": legacy_action,
+        "entry_side": side,
+        "position_side": side,
+        "is_actionable": legacy_action in {"BUY", "SELL"},
+    }
 
 
 class AgentState(Enum):
@@ -1755,35 +1835,31 @@ class TradingLoopAgent:
                 )
                 continue
             self._log_council_summary(decision, asset_pair=asset_pair)
-            # Check for trade signals using only the bounded policy_action framework.
-            policy_action = decision.get("policy_action") if decision else None
+            intent = _derive_execution_intent(decision)
+            action_label = intent["canonical_action"] or (decision.get("policy_action") or decision.get("action"))
 
-            # Trade directions are derived from policy actions only.
-            effective_action = None
-            if policy_action in ["OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG"]:
-                effective_action = "BUY"
-            elif policy_action in ["OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "ADD_SMALL_SHORT"]:
-                effective_action = "SELL"
-            
-            if effective_action:
-                # This prevents repeated BUY/SELL stacking while positions are already open.
+            if intent["policy_action"] and not decision.get("policy_action"):
+                decision["policy_action"] = intent["policy_action"]
+            if intent["policy_action_family"] and not decision.get("policy_action_family"):
+                decision["policy_action_family"] = intent["policy_action_family"]
+
+            if intent["is_actionable"]:
+                # Block only same-direction entry stacking; allow reduce/close flows to proceed.
                 try:
                     decision_pair = standardize_asset_pair(decision.get("asset_pair", ""))
                 except Exception:
                     decision_pair = decision.get("asset_pair")
 
-                if decision_pair and decision_pair in open_asset_pairs:
+                requested_side = intent["entry_side"]
+                if requested_side and decision_pair and decision_pair in open_asset_pairs:
                     existing_side = open_position_side.get(decision_pair)
-                    requested_side = "LONG" if effective_action == "BUY" else "SHORT"
 
-                    # Block only same-direction stacking; allow opposite-side signals
-                    # to reduce/close/reverse existing exposure.
                     if existing_side == requested_side:
                         # Allow same-direction scaling on BTC/ETH futures rails until margin usage reaches 50%.
                         if decision_pair in {"BTCUSD", "ETHUSD"} and margin_usage_pct < margin_usage_limit_pct:
                             logger.info(
                                 "Allowing scale-in %s for %s: existing side=%s, margin usage %.2f%% < %.2f%% limit.",
-                                effective_action,
+                                action_label,
                                 decision_pair,
                                 existing_side,
                                 margin_usage_pct * 100,
@@ -1797,14 +1873,14 @@ class TradingLoopAgent:
                             self._mark_decision_not_executed(decision, "DUPLICATE_ENTRY_GUARD", reason)
                             logger.info(
                                 "Skipping %s for %s: %s position already exists (duplicate-entry guard).",
-                                effective_action,
+                                action_label,
                                 decision_pair,
                                 existing_side,
                             )
                             continue
                     logger.info(
-                        "Allowing %s for %s: existing side=%s (opposite-side action for reversal/reduction).",
-                        effective_action,
+                        "Allowing %s for %s: existing side=%s (non-duplicate execution path).",
+                        action_label,
                         decision_pair,
                         existing_side,
                     )
@@ -1815,13 +1891,13 @@ class TradingLoopAgent:
                     logger.info(
                         "Actionable decision collected for %s: %s",
                         decision.get("asset_pair"),
-                        decision.get("policy_action") or decision.get("action"),
+                        action_label,
                     )
                 else:
                     self._mark_decision_not_executed(decision, reason_code, reason_msg)
                     logger.info(
                         "Decision to %s %s filtered: %s (%s).",
-                        decision.get("policy_action") or decision.get("action"),
+                        action_label,
                         decision.get("asset_pair"),
                         reason_code,
                         reason_msg,
