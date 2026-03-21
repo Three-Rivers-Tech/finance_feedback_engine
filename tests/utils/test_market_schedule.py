@@ -131,16 +131,13 @@ def test_forex_overlap_session():
     assert status["session"] == "Overlap"
 
 
-def test_forex_saturday_open_with_warning():
-    """Forex should stay open on weekends but emit liquidity warning."""
+def test_forex_saturday_closed_with_weekend_warning():
+    """Forex should be closed on Saturday and explicitly marked non-viable."""
     dt_saturday = _to_utc(dt.datetime(2024, 5, 11, 12, 0), MarketSchedule.NY_TZ)
     status = MarketSchedule.get_market_status("EURUSD", "forex", now_utc=dt_saturday)
-    assert status["is_open"] is True
-    assert status["session"] == "Weekend"
-    assert (
-        status["warning"]
-        == "Weekend forex trading has reduced liquidity and wider spreads"
-    )
+    assert status["is_open"] is False
+    assert status["session"] == "Closed"
+    assert status["warning"] == "Weekend forex market is closed"
 
 
 def test_forex_time_to_close_friday():
