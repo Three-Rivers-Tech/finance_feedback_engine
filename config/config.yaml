@@ -148,7 +148,7 @@ database:
   url: ${DATABASE_URL:-postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}
 debate:
   bear_model: llama3.1:8b
-  bull_model: mistral:latest
+  bull_model: gemma2:9b
   consensus_threshold: 0.6
   enabled: true
   judge_model: deepseek-r1:8b
@@ -168,12 +168,12 @@ ensemble:
   debate_mode: true
   debate_providers:
     bear: llama3.1:8b
-    bull: mistral:latest
+    bull: gemma2:9b
     judge: deepseek-r1:8b
   enabled_providers:
   - llama3.1:8b
   - deepseek-r1:8b
-  - mistral:latest
+  - gemma2:9b
   - gemma2:9b
   - gemma3:4b
   learning_rate: 0.1
@@ -182,7 +182,6 @@ ensemble:
     gemma2:9b: 0.2
     gemma3:4b: 0.2
     llama3.1:8b: 0.2
-    mistral:latest: 0.2
   two_phase:
     asset_routing:
       codex_as_tiebreaker: true
