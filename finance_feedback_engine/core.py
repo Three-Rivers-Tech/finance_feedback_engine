@@ -1361,7 +1361,6 @@ class FinanceFeedbackEngine:
         include_sentiment: bool = True,
         include_macro: bool = False,
         use_memory_context: bool = True,
-        provider: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Analyze an asset and generate trading decision (async API)."""
         from .utils.validation import standardize_asset_pair
@@ -1373,165 +1372,8 @@ class FinanceFeedbackEngine:
 
         # Fetch comprehensive market data
         market_data = await self.data_provider.get_comprehensive_market_data(
-            asset_pair,
-            include_sentiment=include_sentiment,
-            include_macro=include_macro,
+            asset_pair, include_sentiment=include_sentiment, include_macro=include_macro
         )
-
-        # Deep-live overlay: for tradeable crypto/forex, force fresh exchange intraday
-        # context from unified provider (1m/5m/15m) so decisions are not anchored to
-        # delayed aggregator feeds.
-        def _to_epoch_seconds(ts_val):
-            if ts_val is None:
-                return None
-            if isinstance(ts_val, (int, float)):
-                # Heuristic: milliseconds if too large
-                return float(ts_val) / 1000.0 if float(ts_val) > 1e12 else float(ts_val)
-            if isinstance(ts_val, str):
-                t = ts_val.replace("Z", "+00:00")
-                return datetime.fromisoformat(t).timestamp()
-            return None
-
-        try:
-            if self.unified_provider and (
-                self.unified_provider._is_crypto(asset_pair)
-                or self.unified_provider._is_forex(asset_pair)
-            ):
-                mtf = self.unified_provider.aggregate_all_timeframes(
-                    asset_pair, ["1m", "5m", "15m"]
-                )
-                tf_data = mtf.get("timeframes", {}) if isinstance(mtf, dict) else {}
-
-                latest_candle = None
-                latest_provider = None
-                latest_ts = None
-                latest_epoch = None
-
-                for tf in ("1m", "5m", "15m"):
-                    tf_entry = tf_data.get(tf) or {}
-                    if not tf_entry:
-                        logger.warning("Unified overlay missing timeframe entry for %s %s", asset_pair, tf)
-                        continue
-
-                    candles = tf_entry.get("candles") or []
-                    if not candles:
-                        logger.warning("Unified overlay returned 0 candles for %s %s", asset_pair, tf)
-                        continue
-
-                    c = candles[-1]
-                    ts = c.get("date") or c.get("timestamp")
-                    epoch = _to_epoch_seconds(ts)
-                    if epoch is None:
-                        logger.warning("Unified overlay invalid timestamp for %s %s: %s", asset_pair, tf, ts)
-                        continue
-
-                    if latest_epoch is None or epoch > latest_epoch:
-                        latest_epoch = epoch
-                        latest_ts = ts
-                        latest_candle = c
-                        latest_provider = tf_entry.get("source_provider")
-
-                if latest_candle and latest_epoch is not None:
-                    current_ts = market_data.get("timestamp") or market_data.get("date")
-                    current_epoch = _to_epoch_seconds(current_ts)
-
-                    # Normalize overlay timestamp to ISO-8601 string to satisfy
-                    # downstream freshness validation contract.
-                    if isinstance(latest_ts, (int, float)):
-                        latest_ts_iso = datetime.fromtimestamp(float(latest_epoch), timezone.utc).isoformat().replace('+00:00', 'Z')
-                    elif isinstance(latest_ts, str):
-                        latest_ts_iso = latest_ts
-                    else:
-                        latest_ts_iso = datetime.fromtimestamp(float(latest_epoch), timezone.utc).isoformat().replace('+00:00', 'Z')
-
-                    # Only overlay if unified intraday data is newer than current market_data
-                    if current_epoch is None or latest_epoch >= current_epoch:
-                        market_data["close"] = float(latest_candle.get("close", market_data.get("close", 0.0)))
-                        market_data["open"] = float(latest_candle.get("open", market_data.get("open", market_data.get("close", 0.0))))
-                        market_data["high"] = float(latest_candle.get("high", market_data.get("high", market_data.get("close", 0.0))))
-                        market_data["low"] = float(latest_candle.get("low", market_data.get("low", market_data.get("close", 0.0))))
-                        market_data["volume"] = float(latest_candle.get("volume", market_data.get("volume", 0.0)) or 0.0)
-                        market_data["timestamp"] = latest_ts_iso
-                        market_data["date"] = latest_ts_iso
-
-                        now_epoch = datetime.now(timezone.utc).timestamp()
-                        age_seconds = max(0.0, now_epoch - latest_epoch)
-                        market_data["data_age_seconds"] = age_seconds
-                        market_data["data_age_hours"] = age_seconds / 3600.0
-                        market_data["stale_data"] = age_seconds > 90 * 60  # aligned with intraday defaults
-
-                        market_data["live_intraday_provider"] = latest_provider or "unified_provider"
-                        market_data["intraday_timeframes"] = {
-                            tf: {
-                                "provider": (tf_data.get(tf) or {}).get("source_provider"),
-                                "candles": int((tf_data.get(tf) or {}).get("candles_count", 0)),
-                            }
-                            for tf in ("1m", "5m", "15m")
-                        }
-                    else:
-                        logger.info(
-                            "Skipping unified overlay for %s: current market_data newer (current=%s, overlay=%s)",
-                            asset_pair,
-                            current_ts,
-                            latest_ts,
-                        )
-        except Exception as live_overlay_err:
-            logger.warning(
-                "Unified intraday overlay failed for %s: %s", asset_pair, live_overlay_err
-            )
-
-        # If provider reported stale data, force one cache-bypassing refresh before
-        # decisioning. This prevents cache age from repeatedly triggering HOLD.
-        if market_data.get("stale_data"):
-            logger.warning(
-                "Stale market data detected for %s; forcing fresh provider fetch.",
-                asset_pair,
-            )
-            try:
-                market_data = await self.data_provider.get_comprehensive_market_data(
-                    asset_pair,
-                    include_sentiment=include_sentiment,
-                    include_macro=include_macro,
-                    force_refresh=True,
-                )
-            except Exception as refresh_err:
-                logger.warning(
-                    "Forced refresh failed for %s; using previous data: %s",
-                    asset_pair,
-                    refresh_err,
-                )
-
-        # Live price overlay: refresh the tradeable spot from exchange pricing for
-        # both forex and crypto. This updates both `timestamp` and `date` so all
-        # downstream freshness checks see the latest provider time.
-        try:
-            if self.unified_provider and (
-                self.unified_provider._is_forex(asset_pair)
-                or self.unified_provider._is_crypto(asset_pair)
-            ):
-                live_price = self.unified_provider.get_current_price(asset_pair)
-                if live_price and live_price.get("price") is not None:
-                    live_ts = live_price.get("timestamp")
-
-                    # Normalize numeric timestamps to ISO for consistency
-                    if isinstance(live_ts, (int, float)):
-                        live_ts = datetime.fromtimestamp(live_ts, UTC).isoformat().replace('+00:00', 'Z')
-                    elif not live_ts:
-                        live_ts = datetime.now(UTC).isoformat().replace('+00:00', 'Z')
-
-                    market_data["close"] = float(live_price["price"])
-                    market_data["timestamp"] = live_ts
-                    market_data["date"] = live_ts
-                    market_data["data_age_seconds"] = 0
-                    market_data["data_age_hours"] = 0
-                    market_data["stale_data"] = False
-                    market_data["live_price_provider"] = live_price.get(
-                        "provider", "exchange_live_price"
-                    )
-        except Exception as _e:
-            logger.debug(
-                "Unable to overlay live exchange price for %s: %s", asset_pair, _e
-            )
 
         # Compare Alpha Vantage price with real-time platform data (THR-22 fix)
         # This validates data quality and detects price divergence
@@ -1571,48 +1413,15 @@ class FinanceFeedbackEngine:
                     f"Price check: Alpha Vantage ${av_price:.2f} ({data_age_minutes:.1f}min old) | "
                     f"Platform price unavailable"
                 )
-        except (KeyError, TypeError) as e:
-            logger.warning(
-                "Price comparison skipped due to data format issue",
-                extra={
-                    "asset_pair": asset_pair,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                    "has_platform_data": bool(platform_price_data),
-                    "has_av_price": bool(av_price)
-                }
-            )
         except Exception as e:
-            logger.warning(
-                "Price comparison failed unexpectedly",
-                extra={
-                    "asset_pair": asset_pair,
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                },
-                exc_info=True
-            )
-            # TODO: Alert if price comparison consistently fails (THR-XXX)
+            logger.debug(f"Price comparison failed for {asset_pair}: {e}")
 
         # Get portfolio breakdown with caching (Phase 2 optimization)
         # This replaces the separate get_balance() call (which was redundant)
         portfolio = None
         balance = {}  # Will be derived from portfolio if available
-        balance_source_mode = "none"
-        used_cached_balance = False
-
-        # DEBUG: Log platform state before portfolio fetch attempt
-        platform_type = type(self.trading_platform).__name__ if self.trading_platform else "None"
-        has_portfolio_method = hasattr(self.trading_platform, "get_portfolio_breakdown") if self.trading_platform else False
-        logger.info(
-            "📊 Balance loading for %s: platform=%s, has_get_portfolio_breakdown=%s",
-            asset_pair,
-            platform_type,
-            has_portfolio_method
-        )
 
         if hasattr(self.trading_platform, "get_portfolio_breakdown"):
-            logger.debug("✅ Entering portfolio fetch block for %s", asset_pair)
             try:
                 # Use async version to avoid blocking the event loop
                 # Add timeout to prevent indefinite waiting on API calls
@@ -1627,158 +1436,33 @@ class FinanceFeedbackEngine:
                 )
 
                 # Derive balance from portfolio breakdown to avoid redundant API call
-                # and preserve platform-specific sizing context.
-                # For execution sizing, prefer available buying power when present.
-                cb_summary = ((portfolio.get("platform_breakdowns") or {}).get("coinbase") or {}).get("futures_summary") or {}
-                if cb_summary.get("buying_power") is not None:
-                    balance["FUTURES_USD"] = float(cb_summary.get("buying_power", 0) or 0)
-                elif portfolio.get("futures_value_usd") is not None:
-                    balance["FUTURES_USD"] = float(portfolio.get("futures_value_usd", 0) or 0)
+                # Portfolio contains futures_value_usd and spot_value_usd from the same
+                # API calls that get_balance() would make separately
+                if portfolio.get("futures_value_usd") is not None:
+                    balance["FUTURES_USD"] = portfolio.get("futures_value_usd", 0)
                 if portfolio.get("spot_value_usd") is not None:
-                    balance["SPOT_USD"] = float(portfolio.get("spot_value_usd", 0) or 0)
+                    balance["SPOT_USD"] = portfolio.get("spot_value_usd", 0)
 
-                # Include per-platform cash balances if present.
-                for platform_name, cash_val in (portfolio.get("per_platform_cash") or {}).items():
-                    try:
-                        balance[f"{platform_name}_USD"] = float(cash_val or 0)
-                    except (TypeError, ValueError):
-                        pass
-
-                # Include platform breakdown totals for robust platform routing.
-                platform_breakdowns = portfolio.get("platform_breakdowns") or {}
-                coinbase_bd = platform_breakdowns.get("coinbase") or {}
-                oanda_bd = platform_breakdowns.get("oanda") or {}
-
-                coinbase_total = coinbase_bd.get("total_value_usd")
-                if coinbase_total is not None:
-                    try:
-                        balance["coinbase_FUTURES_USD"] = float(coinbase_total or 0)
-                    except (TypeError, ValueError):
-                        pass
-
-                oanda_balance = oanda_bd.get("balance")
-                if oanda_balance is not None:
-                    try:
-                        balance["oanda_USD"] = float(oanda_balance or 0)
-                    except (TypeError, ValueError):
-                        pass
-
-                logger.debug("Balance derived from portfolio: %s", balance)
-
-                # Persist last known-good positive snapshot for resilience.
-                if any(float(v or 0) > 0 for v in balance.values()):
-                    self._last_good_balance = dict(balance)
-                balance_source_mode = "portfolio_breakdown"
-
-            except (AttributeError, TypeError) as e:
-                logger.error(
-                    "Portfolio breakdown fetch failed - data format error",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "platform_type": type(self.trading_platform).__name__
-                    }
-                )
-                # TODO: Track portfolio fetch data errors for platform health (THR-XXX)
-            except asyncio.TimeoutError:
-                logger.error(
-                    "Portfolio breakdown fetch timed out",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "timeout_seconds": 15.0,
-                        "platform_type": type(self.trading_platform).__name__
-                    }
-                )
-                # TODO: Alert on portfolio fetch timeouts - impacts position sizing (THR-XXX)
-            except (ConnectionError, ValueError) as e:
-                logger.error(
-                    "Portfolio breakdown fetch failed - connection/validation error",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "platform_type": type(self.trading_platform).__name__
-                    },
-                    exc_info=True
-                )
-                # TODO: Alert on repeated connection failures (THR-XXX)
-            except Exception as e:
-                logger.error(
-                    "Portfolio breakdown fetch failed unexpectedly",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "platform_type": type(self.trading_platform).__name__
-                    },
-                    exc_info=True
-                )
-                # TODO: Alert on unknown portfolio fetch errors (THR-XXX)
-
-        else:
-            logger.warning(
-                "⚠️ Platform %s does not implement get_portfolio_breakdown - balance will remain empty unless fallback succeeds",
-                platform_type
-            )
-
-        # DEBUG: Log balance state after portfolio derivation attempt
-        balance_total = sum(float(v or 0) for v in balance.values()) if balance else 0
-        logger.info("💰 Balance after portfolio derivation: %s keys, $%.2f total, source=%s", len(balance), balance_total, balance_source_mode)
-
-        # Fallback: if portfolio-derived balance is empty/zero OR missing
-        # asset-specific platform keys, use direct platform balance.
-        # This protects execution sizing when portfolio breakdown omits
-        # platform-prefixed balances (e.g., oanda_USD for forex).
-        if self._should_refresh_balance_for_asset(balance, asset_pair):
-            try:
-                balance = await asyncio.wait_for(
-                    self.trading_platform.aget_balance(), timeout=10.0
-                )
-                logger.info(
-                    "Using direct platform balance fallback for sizing: %s",
+                logger.debug(
+                    "Balance derived from portfolio: %s",
                     balance,
                 )
-                if any(float(v or 0) > 0 for v in balance.values()):
-                    self._last_good_balance = dict(balance)
-                balance_source_mode = "direct_platform_balance"
-            except Exception as e:
+
+            except (AttributeError, TypeError) as e:
                 logger.warning(
-                    "Direct balance fallback failed; sizing may use minimum order: %s",
+                    "Could not fetch portfolio breakdown due to data format error: %s",
                     e,
                 )
-                if self._last_good_balance:
-                    balance = dict(self._last_good_balance)
-                    used_cached_balance = True
-                    balance_source_mode = "last_known_good_cache"
-                    logger.warning(
-                        "Using cached last-known-good balance snapshot for sizing: %s",
-                        balance,
-                    )
-
-        # FINAL SAFETY CHECK: Warn if balance is still empty after all attempts
-        final_balance_total = sum(float(v or 0) for v in balance.values()) if balance else 0
-        if final_balance_total == 0:
-            logger.error(
-                "🚨 CRITICAL: Balance is EMPTY after all fallback attempts! Asset: %s, Source: %s, Has cached: %s, Balance keys: %s",
-                asset_pair,
-                balance_source_mode,
-                bool(self._last_good_balance),
-                list(balance.keys()) if balance else []
-            )
-
-        # Publish balance telemetry for status/observability
-        try:
-            numeric_vals = [float(v) for v in balance.values() if isinstance(v, (int, float))]
-            self._last_balance_telemetry = {
-                "balance_source": balance_source_mode,
-                "used_cached_balance": used_cached_balance,
-                "balance_total": float(sum(numeric_vals)) if numeric_vals else None,
-                "balance_keys": sorted(list(balance.keys())),
-                "updated_at": datetime.now(UTC).isoformat(),
-            }
-        except Exception:
-            pass
+            except (ConnectionError, TimeoutError, ValueError) as e:
+                logger.warning(
+                    "Could not fetch portfolio breakdown due to connection issue: %s",
+                    e,
+                    exc_info=True,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not fetch portfolio breakdown: %s", e, exc_info=True
+                )
 
         # Get memory context if enabled
         memory_context = None
@@ -1802,28 +1486,9 @@ class FinanceFeedbackEngine:
                         cost_stats.get("avg_total_cost_pct", 0),
                         cost_stats.get("sample_size", 0),
                     )
-            except (ValueError, TypeError, KeyError) as e:
-                logger.warning(
-                    "Transaction cost calculation failed - data issue",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-                memory_context["transaction_costs"] = {"has_data": False}
             except Exception as e:
-                logger.error(
-                    "Transaction cost calculation failed unexpectedly",
-                    extra={
-                        "asset_pair": asset_pair,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    },
-                    exc_info=True
-                )
+                logger.warning(f"Could not calculate transaction costs: {e}")
                 memory_context["transaction_costs"] = {"has_data": False}
-                # TODO: Monitor transaction cost calculation failures (THR-XXX)
 
         # Generate decision using AI engine (with Phase 1 quorum failure handling)
         from .monitoring.prometheus import (
@@ -1832,4 +1497,115 @@ class FinanceFeedbackEngine:
         )
 
         _decision_start = time.perf_counter()
-    pass  # placeholder to avoid syntax error
+        try:
+            decision = await self.decision_engine.generate_decision(
+                asset_pair=asset_pair,
+                market_data=market_data,
+                balance=balance,
+                portfolio=portfolio,
+                memory_context=memory_context,
+            )
+        except InsufficientProvidersError as e:
+            # Phase 1 quorum failure - log and return NO_DECISION
+            logger.error("Phase 1 quorum failure for %s: %s", asset_pair, e)
+
+            asset_type = market_data.get("type", "unknown")
+
+            # Extract provider information from the exception object
+            providers_succeeded = getattr(e, "providers_succeeded", [])
+            providers_failed = getattr(e, "providers_failed", [])
+
+            # Combine succeeded and failed to get all attempted providers
+            providers_attempted = providers_succeeded + providers_failed
+
+            # Log failure for monitoring
+            log_path = log_quorum_failure(
+                asset=asset_pair,
+                asset_type=asset_type,
+                providers_attempted=providers_attempted,
+                providers_succeeded=providers_succeeded,
+                quorum_required=3,
+                config=self.config,
+            )
+
+            # Return NO_DECISION with detailed reasoning
+            decision = {
+                "action": "NO_DECISION",
+                "confidence": 0,
+                "reasoning": (
+                    f"Phase 1 quorum failure: {str(e)}. "
+                    f"Manual position review required. "
+                    f"See failure log: {log_path}"
+                ),
+                "amount": 0,
+                "asset_pair": asset_pair,
+                "timestamp": datetime.now().isoformat(),
+                "ai_provider": self.decision_engine.ai_provider,
+                "ensemble_metadata": {
+                    "error_type": "quorum_failure",
+                    "error_message": str(e),
+                },
+            }
+        except Exception as e:
+            # Capture unexpected exceptions for error tracking
+            self.error_tracker.capture_exception(
+                e,
+                {
+                    "asset_pair": asset_pair,
+                    "module": "core",
+                    "operation": "analyze_asset",
+                    "include_sentiment": include_sentiment,
+                    "include_macro": include_macro,
+                },
+            )
+            # Re-raise to preserve existing error handling behavior
+            raise
+
+        # Record aggregated decision latency metric
+        try:
+            _duration = time.perf_counter() - _decision_start
+            record_decision_latency(
+                provider="ensemble", asset_pair=asset_pair, duration_seconds=_duration
+            )
+        except Exception:
+            # Metrics should never break the flow
+            pass
+
+        # Persist decision
+        self.decision_store.save_decision(decision)
+
+        # Record metrics: decision created
+        action = decision.get("action", "UNKNOWN")
+        # Determine asset type from market data or use heuristic
+        crypto_symbols = {
+            "BTC",
+            "ETH",
+            "SOL",
+            "DOGE",
+            "XRP",
+            "ADA",
+            "LTC",
+            "AVAX",
+            "DOT",
+            "MATIC",
+        }
+        asset_type = (
+            "crypto" if any(sym in asset_pair for sym in crypto_symbols) else "forex"
+        )
+        # Consider removing asset_pair label to avoid high cardinality
+        if self._metrics:
+            self._metrics["ffe_decisions_created_total"].add(
+                1, {"action": action, "asset_type": asset_type}
+            )
+
+        # Update decision confidence gauge (aggregated)
+        try:
+            conf = float(decision.get("confidence", 0))
+            update_decision_confidence(
+                asset_pair=asset_pair, action=action, confidence=conf
+            )
+        except Exception:
+            pass
+
+        return decision
+
