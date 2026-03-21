@@ -570,6 +570,57 @@ class DecisionValidator:
             orchestration_set = build_policy_selection_orchestration_set([deployment_execution_summary])
             orchestration_summary = build_policy_selection_orchestration_summary(orchestration_set)
             
+            # Stage 59-62: Exchange execution confirmation contracts
+            exchange_execution = {}
+            
+            # Stage 59: Order placement contracts
+            order_placement_set = build_policy_selection_adaptive_control_exchange_order_placement_contract_set(
+                [orchestration_summary]
+            )
+            if order_placement_set:
+                exchange_execution["order_placement_contract"] = build_policy_selection_adaptive_control_exchange_order_placement_contract_summary(
+                    order_placement_set
+                )
+            
+            # Stage 60: Authentication contracts
+            auth_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([orchestration_summary])
+            if auth_set:
+                exchange_execution["authentication_contract"] = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(
+                    auth_set
+                )
+            
+            # Stage 60b: Credential wiring contracts
+            credential_set = build_policy_selection_adaptive_control_exchange_credential_wiring_contract_set([orchestration_summary])
+            if credential_set:
+                exchange_execution["credential_wiring_contract"] = build_policy_selection_adaptive_control_exchange_credential_wiring_contract_summary(
+                    credential_set
+                )
+            
+            # Stage 61: HTTP transport contracts
+            transport_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([orchestration_summary])
+            if transport_set:
+                exchange_execution["http_transport_contract"] = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(
+                    transport_set
+                )
+            
+            # Stage 61b: Response handling contracts
+            response_set = build_policy_selection_adaptive_control_exchange_response_handling_contract_set([orchestration_summary])
+            if response_set:
+                exchange_execution["response_handling_contract"] = build_policy_selection_adaptive_control_exchange_response_handling_contract_summary(
+                    response_set
+                )
+            
+            # Stage 62: Execution confirmation contracts
+            exec_conf_set = build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_set([orchestration_summary])
+            if exec_conf_set:
+                exchange_execution["execution_confirmation_contract"] = build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_summary(
+                    exec_conf_set
+                )
+            
+            # Attach exchange execution to orchestration summary
+            if exchange_execution:
+                orchestration_summary["exchange_execution"] = exchange_execution
+            
             return {
                 "dataset_row": dataset_row,
                 "evaluation_summary": evaluation_summary,
