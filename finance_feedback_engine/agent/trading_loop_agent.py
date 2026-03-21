@@ -2147,6 +2147,10 @@ class TradingLoopAgent:
                             decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
                         if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
                             decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
+                        
+                        # Update Stage 62 execution confirmation contract
+                        self._update_execution_confirmation_contract(decision)
+                        
                         logger.info(
                             "Trade execution succeeded for %s %s. Associating decision with monitor.",
                             action,
@@ -2196,6 +2200,10 @@ class TradingLoopAgent:
                             decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
                         if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
                             decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
+                        
+                        # Update Stage 62 execution confirmation contract
+                        self._update_execution_confirmation_contract(decision)
+                        
                         error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
                         logger.error(
                             f"Trade execution failed for {asset_pair}: {error_msg}. Full result: {execution_result}"
@@ -2887,6 +2895,40 @@ class TradingLoopAgent:
                 logger.info("Council summary for %s | %s", asset_label, " | ".join(parts))
         except Exception:
             logger.debug("Failed to log council summary", exc_info=True)
+
+
+
+    def _update_execution_confirmation_contract(self, decision: Dict[str, Any]) -> None:
+        """Update execution confirmation contract after trade execution."""
+        try:
+            policy_trace = decision.get("policy_trace")
+            if not isinstance(policy_trace, dict):
+                return
+            
+            chain = policy_trace.get("stage_49_62_contract_chain", {})
+            orch = chain.get("orchestration_summary", {})
+            exec_ex = orch.get("exchange_execution", {})
+            
+            if "execution_confirmation_contract" not in exec_ex:
+                return
+            
+            exec_result = decision.get("execution_result", {})
+            exec_conf = exec_ex["execution_confirmation_contract"]
+            
+            # Map execution result to contract
+            exec_conf["execution_status"] = decision.get("execution_status", "unknown")
+            exec_conf["execution_success"] = exec_result.get("success", False)
+            exec_conf["execution_timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            
+            if exec_result.get("order_id"):
+                exec_conf["order_id"] = exec_result["order_id"]
+            if exec_result.get("platform"):
+                exec_conf["platform"] = exec_result["platform"]
+            if exec_result.get("message"):
+                exec_conf["execution_message"] = exec_result["message"]
+                
+        except Exception as e:
+            logger.warning(f"Failed to update execution confirmation contract: {e}")
 
     def _persist_no_action_decision(self, decision: Dict[str, Any], *, asset_pair: str, reason_code: str, reason: str) -> None:
         """Persist explicit no-action artifacts when analysis returns no materialized decision payload."""
