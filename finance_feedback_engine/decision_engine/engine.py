@@ -1545,8 +1545,8 @@ Format response as a structured technical analysis demonstration.
                 "state": "FLAT" | "LONG" | "SHORT" | "UNKNOWN"
             }
         """
-        monitoring = context.get("monitoring_context", {})
-        active_positions = monitoring.get("active_positions", {})
+        monitoring = context.get("monitoring_context") or {}
+        active_positions = monitoring.get("active_positions") or {}
         futures = active_positions.get("futures", [])
 
         # Find position for this asset.

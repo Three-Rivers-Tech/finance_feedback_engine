@@ -488,13 +488,13 @@ class PositionSizingCalculator:
         # HOLD without position: no sizing needed
         if action == "HOLD" and not has_existing_position:
             logger.info("HOLD without existing position - no position sizing needed")
-            result["recommended_position_size"] = 0
-            result["stop_loss_price"] = current_price
+            result["recommended_position_size"] = None
+            result["stop_loss_price"] = None
             result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
             result["risk_percentage"] = risk_percentage
             result["policy_sizing_intent"] = self.build_policy_sizing_intent(
                 action=action,
-                recommended_position_size=0,
+                recommended_position_size=None,
                 current_price=current_price,
             )
             return result
