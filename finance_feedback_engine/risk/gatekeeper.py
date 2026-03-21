@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
-from finance_feedback_engine.decision_engine.policy_actions import is_policy_action
+from finance_feedback_engine.decision_engine.policy_actions import (
+    get_legacy_action_compatibility,
+    is_policy_action,
+)
 from finance_feedback_engine.observability.metrics import create_counters, get_meter
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
@@ -81,6 +84,16 @@ class RiskGatekeeper:
             counts[category] = counts.get(category, 0) + 1
         return counts
 
+    @staticmethod
+    def _extract_gate_action(decision: Dict[str, Any]) -> str:
+        """Normalize policy actions to legacy trade direction semantics for gate checks."""
+        raw_action = decision.get("policy_action") or decision.get("action") or "HOLD"
+        if is_policy_action(raw_action):
+            compat = get_legacy_action_compatibility(raw_action)
+            return compat or "HOLD"
+        return str(raw_action).upper()
+
+
     def check_market_hours(self, decision: Dict) -> Tuple[bool, Dict]:
         """
         Check market hours and data freshness, overriding decision if needed.
@@ -98,7 +111,7 @@ class RiskGatekeeper:
             - needs_override: True if decision was modified
             - modified_decision: Updated decision dict (or original if no changes)
         """
-        action = decision.get("action", "HOLD")
+        action = self._extract_gate_action(decision)
         market_data = decision.get("market_data", {})
         market_status = market_data.get("market_status", {})
         data_freshness = market_data.get("data_freshness", {})
@@ -118,6 +131,7 @@ class RiskGatekeeper:
                 f"Overriding {action} → HOLD. Session: {market_status.get('session', 'Unknown')}"
             )
             modified_decision["action"] = "HOLD"
+            modified_decision["policy_action"] = "HOLD"
             modified_decision["suggested_amount"] = 0
             modified_decision["recommended_position_size"] = None
             modified_decision["reasoning"] = (
@@ -138,6 +152,7 @@ class RiskGatekeeper:
                 f"Overriding {action} → HOLD. {freshness_msg}"
             )
             modified_decision["action"] = "HOLD"
+            modified_decision["policy_action"] = "HOLD"
             modified_decision["suggested_amount"] = 0
             modified_decision["recommended_position_size"] = None
 
@@ -167,7 +182,7 @@ class RiskGatekeeper:
         This is a Stage 4 compatibility helper that wraps existing validate_trade
         behavior in an explicit policy-action-oriented result structure.
         """
-        action = decision.get("action")
+        action = decision.get("policy_action") or decision.get("action")
         if not is_policy_action(action):
             return {
                 "policy_action": None,
@@ -232,6 +247,7 @@ class RiskGatekeeper:
         # 0B. Market Schedule Check (Legacy: from context for backward compatibility)
         # This provides additional validation using context data
         asset_pair = decision.get("asset_pair", "")
+        normalized_action = self._extract_gate_action(decision)
         asset_type = context.get("asset_type", "crypto")
         timestamp = context.get(
             "timestamp"

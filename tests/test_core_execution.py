@@ -710,3 +710,26 @@ class TestProviderRecommendations:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+from finance_feedback_engine.core import FinanceFeedbackEngine
+
+
+def test_validate_execution_decision_accepts_policy_action_without_legacy_action():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 80,
+        "suggested_amount": 100.0,
+    }
+    errors = engine._validate_execution_decision(decision)
+    assert errors == []
+
+
+def test_validate_execution_decision_rejects_hold_without_amount_requirement():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "HOLD",
+        "confidence": 50,
+    }
+    errors = engine._validate_execution_decision(decision)
+    assert errors == []

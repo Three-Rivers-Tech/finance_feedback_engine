@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from .data_providers.alpha_vantage_provider import AlphaVantageProvider
 from .data_providers.historical_data_provider import HistoricalDataProvider
 from .decision_engine.engine import DecisionEngine
+from .decision_engine.policy_actions import get_legacy_action_compatibility, is_policy_action
 from .exceptions import (
     ConfigurationError,
     FFEMemoryError,
@@ -493,6 +494,8 @@ class FinanceFeedbackEngine:
         prepared = dict(decision)
         prepared.setdefault("id", decision_id)
         prepared.setdefault("timestamp", datetime.now(UTC).isoformat())
+        if prepared.get("policy_action") and not prepared.get("action"):
+            prepared["action"] = self._normalize_execution_action(prepared)
 
         market_data = prepared.get("market_data") or {}
         if prepared.get("entry_price") is None:
@@ -517,9 +520,17 @@ class FinanceFeedbackEngine:
 
         return prepared
 
+
+    @staticmethod
+    def _normalize_execution_action(decision: Dict[str, Any]) -> str:
+        raw_action = decision.get("policy_action") or decision.get("action") or "HOLD"
+        if is_policy_action(raw_action):
+            return get_legacy_action_compatibility(raw_action) or "HOLD"
+        return str(raw_action).upper()
+
     def _validate_execution_decision(self, decision: Dict[str, Any]) -> List[str]:
         errors: List[str] = []
-        action = str(decision.get("action", "")).upper()
+        action = self._normalize_execution_action(decision)
         if action not in {"BUY", "SELL", "HOLD"}:
             errors.append(f"Invalid action '{action}'")
 
@@ -567,6 +578,8 @@ class FinanceFeedbackEngine:
         result = self._execution_breaker.call_sync(self.trading_platform.execute_trade, decision)
         decision["execution_result"] = result
         decision["executed_at"] = datetime.now(UTC).isoformat()
+        if decision.get("policy_action") and not decision.get("action"):
+            decision["action"] = self._normalize_execution_action(decision)
         if result.get("execution_price") and not decision.get("entry_price"):
             decision["entry_price"] = result.get("execution_price")
 
