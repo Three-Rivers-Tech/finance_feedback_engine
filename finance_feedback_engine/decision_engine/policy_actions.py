@@ -2364,6 +2364,22 @@ def build_policy_selection_adaptive_control_runtime_config_materialization_set(
 
 
 
+def extract_policy_selection_adaptive_control_exchange_execution_confirmation_contract_summaries(
+    adaptive_control_exchange_execution_confirmation_contract_sets: Optional[list[dict]],
+) -> list[dict]:
+    comparable_sets = [
+        set_item
+        for set_item in (adaptive_control_exchange_execution_confirmation_contract_sets or [])
+        if isinstance(set_item, dict)
+    ]
+    return [
+        build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_summary(set_item)
+        for set_item in comparable_sets
+    ]
+
+
+
+
 def extract_policy_selection_adaptive_control_exchange_response_handling_contract_summaries(
     adaptive_control_exchange_response_handling_contract_sets: Optional[list[dict]],
 ) -> list[dict]:
