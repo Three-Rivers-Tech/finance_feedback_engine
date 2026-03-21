@@ -400,7 +400,9 @@ class MarketAnalysisContext:
         context["regime"] = regime
 
         # Add market schedule status
-        asset_type = market_data.get("asset_type", "crypto")
+        asset_type = market_data.get("asset_type")
+        if not asset_type:
+            asset_type = "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
         try:
             market_status = self.market_schedule.get_market_status(
                 asset_pair, asset_type
@@ -417,8 +419,12 @@ class MarketAnalysisContext:
 
         if data_timestamp is not None:
             try:
+                validation_timeframe = market_data.get("timeframe", "intraday")
                 is_fresh, age_minutes, freshness_message = validate_data_freshness(
-                    data_timestamp, asset_type
+                    data_timestamp,
+                    asset_type,
+                    validation_timeframe,
+                    context.get("market_status"),
                 )
                 context["data_freshness"] = {
                     "is_fresh": is_fresh,
