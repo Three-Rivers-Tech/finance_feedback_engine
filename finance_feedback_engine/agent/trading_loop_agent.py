@@ -3044,6 +3044,9 @@ class TradingLoopAgent:
             normalized.setdefault("action", "HOLD")
             self._ensure_decision_identity(normalized)
             normalized["executed"] = False
+            normalized["actionable"] = False
+            normalized["filtered_reason_code"] = reason_code
+            normalized["filtered_reason_text"] = reason
             normalized["execution_status"] = "no_action"
             normalized["execution_result"] = {
                 "success": True,
@@ -3061,6 +3064,9 @@ class TradingLoopAgent:
             had_id = bool(decision.get("id"))
             self._ensure_decision_identity(decision)
             decision["executed"] = False
+            decision["actionable"] = False
+            decision["filtered_reason_code"] = reason_code
+            decision["filtered_reason_text"] = reason
             decision["execution_status"] = "filtered"
             decision["execution_result"] = {
                 "success": False,

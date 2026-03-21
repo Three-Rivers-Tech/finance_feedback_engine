@@ -245,6 +245,25 @@ async def test_filtered_decision_without_id_gets_persisted_with_generated_id(tra
 
 
 @pytest.mark.asyncio
+async def test_filtered_low_confidence_decision_sets_observability_fields(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "BUY",
+            "confidence": 10,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["actionable"] is False
+    assert saved_decision["filtered_reason_code"] == "LOW_CONFIDENCE"
+    assert "Low confidence" in saved_decision["filtered_reason_text"]
+
+
+@pytest.mark.asyncio
 async def test_empty_decision_payload_is_persisted_as_no_action(trading_agent, mock_dependencies):
     """Falsey no-action payloads should not disappear silently."""
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value={})
@@ -781,6 +800,42 @@ async def test_reasoning_state_keeps_close_long_policy_action_actionable(trading
         assert len(trading_agent._current_decisions) == 1
         assert trading_agent._current_decisions[0]["policy_action"] == "CLOSE_LONG"
     assert trading_agent.state == AgentState.RISK_CHECK
+
+
+@pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_duplicate_entry_block_sets_observability_fields(trading_agent, mock_dependencies):
+    trading_agent.config.asset_pairs = ["BTCUSD"]
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-open-long-observability",
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 82,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_positions": [
+                        {"product_id": "BIP-20DEC30-CDE", "side": "LONG", "contracts": 1.0}
+                    ],
+                    "futures_summary": {"initial_margin": 6000.0, "total_balance_usd": 10000.0},
+                }
+            }
+        }
+    )
+    trading_agent._should_execute_with_reason = AsyncMock(return_value=(True, "OK", "Autonomous execution enabled"))
+    trading_agent.state = AgentState.REASONING
+
+    await trading_agent.handle_reasoning_state()
+
+    saved_decision = mock_dependencies["engine"].decision_store.update_decision.call_args[0][0]
+    assert saved_decision["actionable"] is False
+    assert saved_decision["filtered_reason_code"] == "DUPLICATE_ENTRY_GUARD"
+    assert "Duplicate entry blocked" in saved_decision["filtered_reason_text"]
 
 
 @pytest.mark.asyncio
