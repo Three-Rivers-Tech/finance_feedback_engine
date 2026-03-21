@@ -384,7 +384,7 @@ def load_env_config() -> Dict[str, Any]:
     # Decision engine / ensemble
     config["decision_engine"] = {
         "ai_provider": _env_str("DECISION_ENGINE_AI_PROVIDER", "local"),
-        "model_name": _env_str("DECISION_ENGINE_MODEL_NAME", "llama3.2:3b-instruct-fp16"),
+        "model_name": _env_str("DECISION_ENGINE_MODEL_NAME", "llama3.1:8b-instruct-fp16"),
         "decision_threshold": _env_float("DECISION_ENGINE_DECISION_THRESHOLD", 0.7),
     }
 

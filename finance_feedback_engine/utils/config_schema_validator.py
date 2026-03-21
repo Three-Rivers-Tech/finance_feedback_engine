@@ -17,7 +17,7 @@ class DecisionEngineConfig(BaseModel):
     """Decision engine configuration schema."""
 
     ai_provider: str = Field(default="local", pattern="^(local|cli|codex|qwen|gemini|ensemble)$")
-    model_name: str = Field(default="llama3.2:3b-instruct-fp16")
+    model_name: str = Field(default="llama3.1:8b-instruct-fp16")
     default_position_size: float = Field(default=0.1, ge=0.001, le=1.0)
     max_retries: int = Field(default=3, ge=1, le=10)
     ensemble_timeout: int = Field(default=30, ge=5, le=300)

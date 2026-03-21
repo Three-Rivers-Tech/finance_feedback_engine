@@ -235,7 +235,7 @@ def check_ollama(ctx):
                 console.print("[yellow]No models installed yet[/yellow]")
                 console.print(
                     "\n[cyan]To download models, run:[/cyan]\n"
-                    "  ollama pull llama3.2:3b-instruct-fp16\n"
+                    "  ollama pull llama3.1:8b-instruct-fp16\n"
                     "  ollama pull mistral:7b-instruct"
                 )
         else:
