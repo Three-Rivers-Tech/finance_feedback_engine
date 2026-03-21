@@ -109,6 +109,28 @@ async def test_perception_uses_fresh_default_crypto_context_even_with_stale_puls
 
 
 @pytest.mark.asyncio
+async def test_perception_prefers_fresher_market_data_timestamp_for_crypto(trading_agent, mock_dependencies):
+    stale_ts = "2024-01-01T00:00:00Z"
+    fresh_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    context = {
+        "latest_market_data_timestamp": stale_ts,
+        "market_data_timestamp": fresh_ts,
+        "asset_type": "crypto",
+        "timeframe": "intraday",
+        "market_status": {"is_open": True, "session": "Regular"},
+        "unrealized_pnl_percent": 0.0,
+    }
+    mock_dependencies["trade_monitor"].monitoring_context_provider.get_monitoring_context.return_value = context
+    trading_agent.trade_monitor.monitoring_context_provider.get_monitoring_context.return_value = context
+
+    trading_agent.state = AgentState.PERCEPTION
+
+    await trading_agent.handle_perception_state()
+
+    assert trading_agent.state == AgentState.REASONING
+
+
+@pytest.mark.asyncio
 async def test_agent_process_cycle_no_action(trading_agent, mock_dependencies):
     """Test a full agent cycle where the AI decides to HOLD."""
     # Arrange

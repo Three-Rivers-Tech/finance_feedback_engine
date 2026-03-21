@@ -1314,8 +1314,12 @@ class TradingLoopAgent:
         # --- Data Freshness Validation ---
         # Fetch monitoring context and cache for reuse throughout PERCEPTION state
         market_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
-        data_timestamp = market_context.get("latest_market_data_timestamp")
         asset_type = market_context.get("asset_type", "crypto")
+        data_timestamp = market_context.get("latest_market_data_timestamp")
+        if str(asset_type).lower() == "crypto":
+            market_data_timestamp = market_context.get("market_data_timestamp")
+            if market_data_timestamp:
+                data_timestamp = market_data_timestamp
         timeframe = market_context.get("timeframe", "intraday")
         market_status = market_context.get("market_status")
         
