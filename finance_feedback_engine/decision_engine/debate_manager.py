@@ -226,8 +226,9 @@ class DebateManager:
             ),
         )
 
+        decision_label = final_decision.get("policy_action") or final_decision.get("action")
         logger.info(
-            f"Debate decision: {final_decision['action']} "
+            f"Debate decision: {decision_label} "
             f"({final_decision['confidence']}%) - "
             f"Judge: {self.debate_providers['judge']}"
         )

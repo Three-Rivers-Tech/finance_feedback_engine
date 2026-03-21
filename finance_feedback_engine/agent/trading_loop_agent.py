@@ -1755,11 +1755,10 @@ class TradingLoopAgent:
                 )
                 continue
             self._log_council_summary(decision, asset_pair=asset_pair)
-            # Check for trade signals using ONLY policy_action framework (BUY/SELL deprecated)
-            # Check for trade signals using ONLY policy_action framework (BUY/SELL deprecated)
+            # Check for trade signals using only the bounded policy_action framework.
             policy_action = decision.get("policy_action") if decision else None
-            
-            # Trade signals from policy framework ONLY
+
+            # Trade directions are derived from policy actions only.
             effective_action = None
             if policy_action in ["OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG"]:
                 effective_action = "BUY"
@@ -1816,13 +1815,13 @@ class TradingLoopAgent:
                     logger.info(
                         "Actionable decision collected for %s: %s",
                         decision.get("asset_pair"),
-                        decision["action"],
+                        decision.get("policy_action") or decision.get("action"),
                     )
                 else:
                     self._mark_decision_not_executed(decision, reason_code, reason_msg)
                     logger.info(
                         "Decision to %s %s filtered: %s (%s).",
-                        decision.get("action"),
+                        decision.get("policy_action") or decision.get("action"),
                         decision.get("asset_pair"),
                         reason_code,
                         reason_msg,

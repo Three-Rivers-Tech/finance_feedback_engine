@@ -209,7 +209,12 @@ class DecisionValidator:
 
         # Extract basic decision parameters
         current_price = context.get("market_data", {}).get("close", 0)
-        action = ai_response.get("action", "HOLD")
+        action = ai_response.get("policy_action") or ai_response.get("action", "HOLD")
+        effective_legacy_action = (
+            get_legacy_action_compatibility(action)
+            if is_policy_action(action)
+            else action
+        )
 
         # Extract position sizing results
         # Use calculated position size from position_sizing_result
@@ -243,7 +248,7 @@ class DecisionValidator:
             sizing_anchor = policy_sizing_intent.get("sizing_anchor")
             provider_translation_required = bool(
                 policy_sizing_intent.get("provider_agnostic", False)
-            ) and action in ["BUY", "SELL"]
+            ) and effective_legacy_action in ["BUY", "SELL"]
 
         if isinstance(provider_translation_result, dict):
             translation_provider = provider_translation_result.get("provider")
@@ -265,7 +270,7 @@ class DecisionValidator:
         suggested_amount = ai_response.get("amount", 0)
 
         # Override suggested_amount to 0 for HOLD with no position
-        if action == "HOLD" and not has_existing_position:
+        if effective_legacy_action == "HOLD" and not has_existing_position:
             suggested_amount = 0
             logger.debug("Overriding suggested_amount to 0 (HOLD with no position)")
 
@@ -273,7 +278,7 @@ class DecisionValidator:
         # convert to USD notional by multiplying by current_price when the quote is USD/USDT
         if (
             not signal_only
-            and action in ["BUY", "SELL"]
+            and effective_legacy_action in ["BUY", "SELL"]
             and recommended_position_size
             and current_price > 0
         ):
@@ -402,7 +407,7 @@ class DecisionValidator:
             controls=controls,
         )
 
-        if action in ["BUY", "SELL"] and recommended_position_size:
+        if effective_legacy_action in ["BUY", "SELL"] and recommended_position_size:
             recommended_position_size = float(recommended_position_size) * size_multiplier
             if suggested_amount:
                 suggested_amount = float(suggested_amount) * size_multiplier
