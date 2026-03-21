@@ -117,6 +117,29 @@ class TestPulseFormatting:
         assert "multi_timeframe_pulse" in context
         assert context["multi_timeframe_pulse"] is None
 
+    def test_crypto_context_keeps_fresh_timestamp_when_pulse_is_stale(self, context_provider, mock_trade_monitor):
+        stale_pulse = mock_trade_monitor.get_latest_market_context.return_value.copy()
+        stale_pulse["asset_type"] = "crypto"
+        stale_pulse["latest_market_data_timestamp"] = "2024-01-01T00:00:00Z"
+        mock_trade_monitor.get_latest_market_context.return_value = stale_pulse
+
+        context = context_provider.get_monitoring_context(asset_pair="BTCUSD")
+
+        assert context["asset_type"] == "crypto"
+        assert context["latest_market_data_timestamp"] != "2024-01-01T00:00:00Z"
+
+    def test_forex_context_accepts_pulse_timestamp_override(self, context_provider, mock_trade_monitor):
+        pulse = mock_trade_monitor.get_latest_market_context.return_value.copy()
+        pulse["asset_type"] = "forex"
+        pulse["latest_market_data_timestamp"] = "2024-01-01T00:00:00Z"
+        mock_trade_monitor.get_latest_market_context.return_value = pulse
+
+        context = context_provider.get_monitoring_context(asset_pair="EURUSD")
+
+        assert context["asset_type"] == "forex"
+        assert context["latest_market_data_timestamp"] == "2024-01-01T00:00:00Z"
+
+
     def test_format_pulse_summary_includes_all_indicators(self, context_provider):
         """Test that _format_pulse_summary includes RSI, MACD, BBands, ADX, ATR."""
         pulse = {

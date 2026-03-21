@@ -331,11 +331,12 @@ class MonitoringContextProvider:
                 pulse = self.trade_monitor.get_latest_market_context(asset_pair)
                 if pulse:
                     context["multi_timeframe_pulse"] = pulse
+                    pulse_asset_type = pulse.get("asset_type", context["asset_type"])
                     pulse_timestamp = pulse.get("latest_market_data_timestamp") or pulse.get("market_data_timestamp")
-                    if pulse_timestamp:
+                    if pulse_timestamp and str(pulse_asset_type).lower() != "crypto":
                         context["latest_market_data_timestamp"] = pulse_timestamp
                         context["market_data_timestamp"] = pulse_timestamp
-                    context["asset_type"] = pulse.get("asset_type", context["asset_type"])
+                    context["asset_type"] = pulse_asset_type
                     context["timeframe"] = pulse.get("timeframe", context["timeframe"])
                     context["market_status"] = pulse.get("market_status", context["market_status"])
                     context["has_monitoring_data"] = True
