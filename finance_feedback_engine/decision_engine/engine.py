@@ -1991,7 +1991,9 @@ Format response as a structured technical analysis demonstration.
                 ai_response["veto_metadata"] = veto_metadata
 
             # Validate AI response action to ensure it's one of the allowed values
-            if ai_response.get("action") not in ["BUY", "SELL", "HOLD"]:
+            action = ai_response.get("action", "HOLD")
+            valid_actions = ["BUY", "SELL", "HOLD", "OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "ADD_SMALL_SHORT", "REDUCE_LONG", "CLOSE_LONG", "REDUCE_SHORT", "CLOSE_SHORT"]
+            if action not in valid_actions:
                 logger.warning(
                     f"AI provider returned an invalid action: "
                     f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
