@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from enum import Enum
 from typing import Optional
 
@@ -2798,6 +2799,22 @@ def build_policy_selection_adaptive_control_exchange_response_handling_contract_
         "payload_validated_adaptive_control_exchange_response_handling_contract_count": payload_validated_count,
         "parse_failed_adaptive_control_exchange_response_handling_contract_count": parse_failed_count,
         "adaptive_control_exchange_response_handling_contract_summary_version": 1,
+    }
+
+
+
+
+def build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_set(
+    adaptive_control_exchange_response_handling_contract_summaries: Optional[list[dict]],
+) -> dict:
+    comparable_summaries = [
+        summary
+        for summary in (adaptive_control_exchange_response_handling_contract_summaries or [])
+        if isinstance(summary, dict)
+    ]
+    return {
+        "adaptive_control_exchange_execution_confirmation_contract_set_version": 1,
+        "adaptive_control_exchange_response_handling_contract_summaries": copy.deepcopy(comparable_summaries),
     }
 
 
