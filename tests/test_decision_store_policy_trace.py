@@ -13572,3 +13572,108 @@ def test_decision_store_loaded_policy_trace_preserves_stage54_versions_across_ad
     assert adaptive_control_dashboard_status_aggregation_contract_summary["adaptive_control_dashboard_status_aggregation_contract_summary_version"] == 1
     assert adaptive_control_notification_delivery_contract_set["adaptive_control_notification_delivery_contract_set_version"] == 1
     assert adaptive_control_notification_delivery_contract_summary["adaptive_control_notification_delivery_contract_summary_version"] == 1
+
+def test_decision_store_loaded_policy_trace_preserves_exchange_execution_sub_contracts(tmp_path):
+    """Verify exchange_execution sub-contracts survive persistence round-trip."""
+    from datetime import UTC, datetime
+    
+    config = {"storage_path": str(tmp_path)}
+    store = DecisionStore(config)
+    
+    # Build complete Stage 49-62 chain
+    dataset_row = build_policy_dataset_row_from_decision({"action": "BUY", "asset_pair": "BTCUSD", "confidence": 85})
+    evaluation_batch = build_policy_evaluation_batch([dataset_row])
+    evaluation_run = build_policy_evaluation_run(evaluation_batch.get("rows", []))
+    evaluation_summary = build_policy_evaluation_summary(evaluation_run)
+    
+    comparison_set = build_policy_candidate_comparison_set([evaluation_summary])
+    benchmark_summary = build_policy_candidate_benchmark_summary(comparison_set)
+    
+    baseline_set = build_policy_baseline_evaluation_set([benchmark_summary])
+    baseline_report = build_policy_baseline_evaluation_report(baseline_set)
+    evaluation_session = build_policy_baseline_evaluation_session([baseline_report])
+    workflow_summary = build_policy_baseline_workflow_summary(evaluation_session)
+    
+    comparison_group = build_policy_baseline_candidate_comparison_group([workflow_summary], [workflow_summary])
+    comparison_summary = build_policy_baseline_candidate_comparison_summary(comparison_group)
+    
+    recommendation_set = build_policy_selection_recommendation_set([comparison_summary])
+    recommendation_summary = build_policy_selection_recommendation_summary(recommendation_set)
+    
+    promotion_set = build_policy_selection_promotion_decision_set([recommendation_summary])
+    promotion_summary = build_policy_selection_promotion_decision_summary(promotion_set)
+    
+    rollout_set = build_policy_selection_rollout_decision_set([promotion_summary])
+    rollout_summary = build_policy_selection_rollout_decision_summary(rollout_set)
+    
+    runtime_set = build_policy_selection_runtime_switch_set([rollout_summary])
+    runtime_summary = build_policy_selection_runtime_switch_summary(runtime_set)
+    
+    deployment_set = build_policy_selection_deployment_execution_set([runtime_summary])
+    deployment_summary = build_policy_selection_deployment_execution_summary(deployment_set)
+    
+    orchestration_set = build_policy_selection_orchestration_set([deployment_summary])
+    orchestration_summary = build_policy_selection_orchestration_summary(orchestration_set)
+    
+    # Add exchange execution sub-contracts (as done in decision_validator)
+    exchange_execution = {}
+    
+    order_placement_set = build_policy_selection_adaptive_control_exchange_order_placement_contract_set([orchestration_summary])
+    if order_placement_set:
+        exchange_execution["order_placement_contract"] = build_policy_selection_adaptive_control_exchange_order_placement_contract_summary(order_placement_set)
+    
+    auth_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([orchestration_summary])
+    if auth_set:
+        exchange_execution["authentication_contract"] = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_set)
+    
+    credential_set = build_policy_selection_adaptive_control_exchange_credential_wiring_contract_set([orchestration_summary])
+    if credential_set:
+        exchange_execution["credential_wiring_contract"] = build_policy_selection_adaptive_control_exchange_credential_wiring_contract_summary(credential_set)
+    
+    transport_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([orchestration_summary])
+    if transport_set:
+        exchange_execution["http_transport_contract"] = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(transport_set)
+    
+    response_set = build_policy_selection_adaptive_control_exchange_response_handling_contract_set([orchestration_summary])
+    if response_set:
+        exchange_execution["response_handling_contract"] = build_policy_selection_adaptive_control_exchange_response_handling_contract_summary(response_set)
+    
+    exec_conf_set = build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_set([orchestration_summary])
+    if exec_conf_set:
+        exchange_execution["execution_confirmation_contract"] = build_policy_selection_adaptive_control_exchange_execution_confirmation_contract_summary(exec_conf_set)
+    
+    # Attach to orchestration summary
+    orchestration_summary["exchange_execution"] = exchange_execution
+    
+    decision = {
+        "id": "decision-exchange-execution-test-1",
+        "asset_pair": "BTCUSD",
+        "action": "BUY",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "policy_trace": {
+            "stage_49_62_contract_chain": {
+                "orchestration_summary": orchestration_summary,
+            },
+            "trace_version": 1,
+        },
+    }
+    
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-exchange-execution-test-1")
+    
+    # Verify exchange_execution survived persistence
+    chain = loaded["policy_trace"]["stage_49_62_contract_chain"]
+    orch = chain["orchestration_summary"]
+    exec_ex = orch["exchange_execution"]
+    
+    assert "order_placement_contract" in exec_ex, "order_placement_contract missing"
+    assert "authentication_contract" in exec_ex, "authentication_contract missing"
+    assert "credential_wiring_contract" in exec_ex, "credential_wiring_contract missing"
+    assert "http_transport_contract" in exec_ex, "http_transport_contract missing"
+    assert "response_handling_contract" in exec_ex, "response_handling_contract missing"
+    assert "execution_confirmation_contract" in exec_ex, "execution_confirmation_contract missing"
+    
+    # Verify execution_confirmation_contract structure
+    exec_conf = exec_ex["execution_confirmation_contract"]
+    assert "summary_count" in exec_conf
+    assert exec_conf["adaptive_control_exchange_execution_confirmation_contract_summary_version"] == 1
