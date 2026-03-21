@@ -35,6 +35,33 @@ from .two_phase_aggregator import TwoPhaseAggregator
 from .voting_strategies import VotingStrategies
 
 
+def _normalize_ensemble_decision_payload(decision: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize ensemble decisions so policy actions remain canonical."""
+    if not isinstance(decision, dict):
+        return {}
+
+    normalized = dict(decision)
+    action = normalized.get("action")
+    policy_action = normalized.get("policy_action")
+
+    if is_policy_action(policy_action):
+        canonical = normalize_policy_action(policy_action)
+        normalized["action"] = canonical.value
+        normalized["policy_action"] = canonical.value
+    elif is_policy_action(action):
+        canonical = normalize_policy_action(action)
+        normalized["action"] = canonical.value
+        normalized["policy_action"] = canonical.value
+    else:
+        canonical = None
+
+    if canonical is not None:
+        normalized.setdefault(
+            "legacy_action_compatibility", get_legacy_action_compatibility(canonical)
+        )
+    return normalized
+
+
 class EnsembleDecisionManager:
     """
     Manages multiple AI providers and combines their decisions using
@@ -1053,13 +1080,14 @@ class EnsembleDecisionManager:
             )
         )
 
-        return {
+        result = {
             "action": final_action,
             "confidence": final_confidence,
             "reasoning": final_reasoning,
             "amount": final_amount,
             "simple_average_used": True,
         }
+        return _normalize_ensemble_decision_payload(result)
 
     def _validate_decision(self, decision: Dict[str, Any]) -> bool:
         """
@@ -1072,27 +1100,29 @@ class EnsembleDecisionManager:
             True if valid, False otherwise
         """
         required_keys = ["action", "confidence", "reasoning", "amount"]
+        normalized_decision = _normalize_ensemble_decision_payload(decision)
 
         # Check required keys exist
-        if not all(key in decision for key in required_keys):
+        if not all(key in normalized_decision for key in required_keys):
             return False
 
         # Validate action
-        if decision["action"] not in ["BUY", "SELL", "HOLD"]:
+        action = normalized_decision["action"]
+        if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
             return False
 
         # Validate confidence
-        conf = decision["confidence"]
+        conf = normalized_decision["confidence"]
         if not isinstance(conf, (int, float)) or conf < 0 or conf > 100:
             return False
 
         # Validate reasoning
-        reasoning = decision["reasoning"]
+        reasoning = normalized_decision["reasoning"]
         if not isinstance(reasoning, str) or not reasoning.strip():
             return False
 
         # Validate amount
-        amt = decision["amount"]
+        amt = normalized_decision["amount"]
         if not isinstance(amt, (int, float)) or amt < 0:
             return False
 
@@ -1115,19 +1145,21 @@ class EnsembleDecisionManager:
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if "action" not in decision or "confidence" not in decision:
+        normalized_decision = _normalize_ensemble_decision_payload(decision)
+
+        if "action" not in normalized_decision or "confidence" not in normalized_decision:
             logger.warning(
                 f"Provider {provider}: missing required keys 'action' or 'confidence'"
             )
             return False
 
-        if decision["action"] not in ["BUY", "SELL", "HOLD"]:
+        if normalized_decision["action"] not in ["BUY", "SELL", "HOLD"] and not is_policy_action(normalized_decision["action"]):
             logger.warning(
-                f"Provider {provider}: invalid action '{decision['action']}'"
+                f"Provider {provider}: invalid action '{normalized_decision['action']}'"
             )
             return False
 
-        conf = decision["confidence"]
+        conf = normalized_decision["confidence"]
         if not isinstance(conf, (int, float)):
             logger.warning(f"Provider {provider}: confidence is not numeric")
             return False

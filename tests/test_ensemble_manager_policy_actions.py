@@ -204,3 +204,59 @@ class EnsemblePolicyActionAggregationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
+def test_simple_average_preserves_policy_action_metadata():
+    config = {
+        "ensemble": {
+            "enabled_providers": ["local", "cli"],
+            "provider_weights": {"local": 0.5, "cli": 0.5},
+            "voting_strategy": "weighted",
+        }
+    }
+    manager = EnsembleDecisionManager(config)
+
+    result = manager._simple_average(
+        providers=["local", "cli"],
+        actions=["OPEN_SMALL_LONG", "OPEN_SMALL_LONG"],
+        confidences=[80, 60],
+        reasonings=["bullish", "still bullish"],
+        amounts=[100.0, 80.0],
+    )
+
+    assert result["action"] == "OPEN_SMALL_LONG"
+    assert result["policy_action"] == "OPEN_SMALL_LONG"
+    assert result["legacy_action_compatibility"] == "BUY"
+
+
+
+def test_validate_decision_accepts_policy_action_payload():
+    config = {"ensemble": {"enabled_providers": ["local"], "provider_weights": {"local": 1.0}}}
+    manager = EnsembleDecisionManager(config)
+
+    assert manager._validate_decision(
+        {
+            "action": "OPEN_MEDIUM_SHORT",
+            "policy_action": "OPEN_MEDIUM_SHORT",
+            "confidence": 71,
+            "reasoning": "policy valid",
+            "amount": 42.0,
+        }
+    ) is True
+
+
+
+def test_is_valid_provider_response_accepts_policy_action_payload():
+    config = {"ensemble": {"enabled_providers": ["local"], "provider_weights": {"local": 1.0}}}
+    manager = EnsembleDecisionManager(config)
+
+    assert manager._is_valid_provider_response(
+        {
+            "action": "REDUCE_LONG",
+            "confidence": 66,
+            "reasoning": "trim exposure",
+            "amount": 0.0,
+        },
+        "local",
+    ) is True
