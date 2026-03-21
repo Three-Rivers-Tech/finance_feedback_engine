@@ -6,6 +6,8 @@ Remove legacy `BUY` / `SELL` / `HOLD` semantics from live decision and execution
 ## Current status
 - PR-1 (`ad4c749`): policy-aware validation and fallback cleanup
 - PR-2 (`33f7098`): policy-aware ensemble voting cleanup
+- PR-2.5 (`84433b2`): trading-loop execution intent derives actionability from policy semantics
+- PR-3 (current draft): engine prompt/validation/forced-hold path migrated to policy-action semantics
 - Gemini review completed against PR-1 + PR-2 patch set
 
 ## Gemini review integration
@@ -31,10 +33,10 @@ Remove legacy `BUY` / `SELL` / `HOLD` semantics from live decision and execution
 - Add regression tests for valid close/reduce actions and directional entry actions
 
 ### PR-3 — `decision_engine/engine.py` migration slice
-- Rewrite prompts and allowed-signal guidance away from legacy BUY/SELL/HOLD worldview
-- Make forced-HOLD handling policy-aware
-- Tighten validation around legal policy actions and position-state constraints
-- Preserve compatibility only at integration boundaries
+- [x] Rewrite prompt position-state guidance around canonical policy actions
+- [x] Make forced-HOLD handling policy-aware
+- [x] Tighten validation around legal policy actions and position-state constraints
+- [ ] Preserve compatibility only at integration boundaries across remaining legacy educational text and adapters
 
 ### PR-4 — downstream execution / adapters
 - Audit execution interfaces, platform adapters, monitoring, and alerting for legacy-only assumptions

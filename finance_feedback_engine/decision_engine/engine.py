@@ -11,7 +11,15 @@ import pytz
 from finance_feedback_engine.memory.vector_store import VectorMemory
 from finance_feedback_engine.observability.metrics import create_counters, create_histograms, get_meter
 from finance_feedback_engine.utils.config_loader import normalize_decision_config
-from finance_feedback_engine.decision_engine.policy_actions import build_policy_state_from_position_snapshot
+from finance_feedback_engine.decision_engine.policy_actions import (
+    PolicyAction,
+    build_policy_state_from_position_snapshot,
+    invalid_action_reason,
+    is_policy_action,
+    legal_actions_for_position_state,
+    normalize_position_state,
+    normalize_policy_action,
+)
 
 logger = logging.getLogger(__name__)
 try:
@@ -621,7 +629,7 @@ Allocation: {current_holding.get('allocation_pct', 0):.1f}%
 
         # Add live monitoring context if available
         monitoring_context = context.get("monitoring_context")
-        if monitoring_context and monitoring_context.get("has_monitoring_data"):
+        if monitoring_context and monitoring_context.get("has_monitoring_data") and self.monitoring_provider:
             monitoring_text = self.monitoring_provider.format_for_ai_prompt(
                 monitoring_context
             )
@@ -751,28 +759,30 @@ Entry Price: ${position_state["entry_price"]:.2f}
 Unrealized P&L: {pnl_sign}${position_state["unrealized_pnl"]:.2f}
 
 ⚠️ CRITICAL CONSTRAINT: You currently have a {position_state["state"]} position.
-Allowed signals ONLY: {", ".join(position_state["allowed_signals"])}
+Allowed policy actions ONLY: {", ".join(position_state["allowed_policy_actions"])}
 
-If you recommend a PROHIBITED signal, your decision will be AUTOMATICALLY REJECTED.
+If you recommend a PROHIBITED policy action, your decision will be AUTOMATICALLY REJECTED.
+Legacy BUY/SELL/HOLD wording is deprecated here; use canonical policy actions.
 
-SIGNAL INTERPRETATION WITH POSITION:
-- If you recommend BUY: This will CLOSE your LONG position (if LONG) or violate constraints (if SHORT)
-- If you recommend SELL: This will CLOSE your SHORT position (if SHORT) or violate constraints (if LONG)
-- If you recommend HOLD: Maintains current position
+POLICY ACTION INTERPRETATION WITH POSITION:
+- ADD_SMALL_LONG / ADD_SMALL_SHORT: scale into an existing position on that side
+- REDUCE_LONG / REDUCE_SHORT: trim an existing position on that side
+- CLOSE_LONG / CLOSE_SHORT: fully exit the existing position on that side
+- HOLD: maintain current exposure
 
 """
         else:
             position_state_section = f"""
 === YOUR CURRENT POSITION STATE ===
 Status: 📊 FLAT (no active position in {asset_pair})
-Allowed signals: BUY (open LONG), SELL (open SHORT), HOLD
+Allowed policy actions: HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, OPEN_SMALL_SHORT, OPEN_MEDIUM_SHORT
 
-You can freely open either a LONG or SHORT position based on your analysis.
+You can open either a LONG or SHORT position, but use canonical policy actions rather than legacy BUY/SELL labels.
 
-SIGNAL INTERPRETATION WHEN FLAT:
-- BUY signal → Opens LONG position (profit when price rises)
-- SELL signal → Opens SHORT position (profit when price falls)
-- HOLD signal → Remain flat, no position
+POLICY ACTION INTERPRETATION WHEN FLAT:
+- OPEN_SMALL_LONG / OPEN_MEDIUM_LONG → Open LONG exposure
+- OPEN_SMALL_SHORT / OPEN_MEDIUM_SHORT → Open SHORT exposure
+- HOLD → Remain flat, no position
 
 """
 
@@ -782,9 +792,9 @@ SIGNAL INTERPRETATION WHEN FLAT:
 ANALYSIS OUTPUT REQUIRED:
 =========================
 Demonstrate a technical analysis for {asset_pair} showing:
-1. Signal Type: Based on position state above, recommend ONE of your allowed signals
+1. Policy Action: Based on position state above, recommend ONE allowed policy action
    - Respect the position state constraints listed above
-   - BUY/SELL/HOLD must be from your allowed signal list
+   - Use canonical policy-action labels, not deprecated BUY/SELL/HOLD wording
 2. Signal Strength: 0-100% (how strong the technical indicators align)
 3. Technical Reasoning: Brief explanation of what the indicators show (reference long/short mechanics)
 4. Example Position Size: Demonstrate position sizing calculation for risk management education
@@ -1424,7 +1434,8 @@ Format response as a structured technical analysis demonstration.
             )
             return False
 
-        if decision.get("action") not in ["BUY", "SELL", "HOLD"]:
+        action = decision.get("policy_action") or decision.get("action")
+        if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
             logger.warning(
                 f"Provider {provider}: invalid action '{decision.get('action')}'"
             )
@@ -1456,6 +1467,13 @@ Format response as a structured technical analysis demonstration.
         Returns:
             Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
         """
+        if is_policy_action(action):
+            family = normalize_policy_action(action)
+            if family in {PolicyAction.OPEN_SMALL_LONG, PolicyAction.OPEN_MEDIUM_LONG, PolicyAction.ADD_SMALL_LONG, PolicyAction.REDUCE_LONG, PolicyAction.CLOSE_LONG}:
+                return "LONG"
+            if family in {PolicyAction.OPEN_SMALL_SHORT, PolicyAction.OPEN_MEDIUM_SHORT, PolicyAction.ADD_SMALL_SHORT, PolicyAction.REDUCE_SHORT, PolicyAction.CLOSE_SHORT}:
+                return "SHORT"
+            return None
         if action == "BUY":
             return "LONG"
         elif action == "SELL":
@@ -1587,6 +1605,7 @@ Format response as a structured technical analysis demonstration.
                 "entry_price": 0,
                 "unrealized_pnl": 0,
                 "allowed_signals": ["BUY", "SELL", "HOLD"],
+                "allowed_policy_actions": [action.value for action in legal_actions_for_position_state("flat")],
                 "state": "FLAT",
             }
 
@@ -1595,15 +1614,18 @@ Format response as a structured technical analysis demonstration.
         if side == "LONG":
             # Have LONG - can only SELL (close) or HOLD
             allowed_signals = ["SELL", "HOLD"]
+            allowed_policy_actions = [action.value for action in legal_actions_for_position_state("long")]
             state = "LONG"
         elif side == "SHORT":
             # Have SHORT - can only BUY (close) or HOLD
             allowed_signals = ["BUY", "HOLD"]
+            allowed_policy_actions = [action.value for action in legal_actions_for_position_state("short")]
             state = "SHORT"
         else:
             # Unknown side - default to allow all
             logger.warning(f"Unknown position side: {side} for {asset_pair}")
             allowed_signals = ["BUY", "SELL", "HOLD"]
+            allowed_policy_actions = [action.value for action in legal_actions_for_position_state("flat")]
             state = "UNKNOWN"
 
         # Coinbase FCM positions use number_of_contracts / avg_entry_price;
@@ -1635,6 +1657,7 @@ Format response as a structured technical analysis demonstration.
             "entry_price": float(entry_price),
             "unrealized_pnl": float(unrealized_pnl),
             "allowed_signals": allowed_signals,
+            "allowed_policy_actions": allowed_policy_actions,
             "state": state,
         }
 
@@ -1657,9 +1680,24 @@ Format response as a structured technical analysis demonstration.
             (is_valid, error_message)
         """
         allowed = position_state.get("allowed_signals", ["BUY", "SELL", "HOLD"])
+        state = position_state.get("state", "UNKNOWN")
+
+        if is_policy_action(action):
+            policy_state = "flat" if state == "UNKNOWN" else normalize_position_state(state)
+            reason = invalid_action_reason(action, policy_state)
+            if reason:
+                allowed_policy_actions = position_state.get(
+                    "allowed_policy_actions",
+                    [item.value for item in legal_actions_for_position_state(policy_state)],
+                )
+                error = (
+                    f"{reason}. Current position: {position_state.get('side', 'NONE')} {asset_pair}. "
+                    f"Allowed policy actions: {', '.join(allowed_policy_actions)}"
+                )
+                return False, error
+            return True, None
 
         if action not in allowed:
-            state = position_state.get("state", "UNKNOWN")
             error = (
                 f"Signal {action} not allowed when {state}. "
                 f"Current position: {position_state.get('side', 'NONE')} {asset_pair}. "
@@ -1991,14 +2029,18 @@ Format response as a structured technical analysis demonstration.
                 ai_response["veto_metadata"] = veto_metadata
 
             # Validate AI response action to ensure it's one of the allowed values
-            action = ai_response.get("action", "HOLD")
-            valid_actions = ["BUY", "SELL", "HOLD", "OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "ADD_SMALL_SHORT", "REDUCE_LONG", "CLOSE_LONG", "REDUCE_SHORT", "CLOSE_SHORT"]
-            if action not in valid_actions:
+            action = ai_response.get("policy_action") or ai_response.get("action", "HOLD")
+            if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
                 logger.warning(
                     f"AI provider returned an invalid action: "
                     f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
                 )
                 ai_response["action"] = "HOLD"
+                ai_response["policy_action"] = "HOLD"
+            elif is_policy_action(action):
+                normalized_action = normalize_policy_action(action).value
+                ai_response["action"] = normalized_action
+                ai_response["policy_action"] = normalized_action
 
             # Validate signal against position state (SHORT position support)
             position_state = self._extract_position_state(context, asset_pair)
@@ -2014,6 +2056,7 @@ Format response as a structured technical analysis demonstration.
                 original_action = ai_response.get("action")
                 original_reasoning = ai_response.get("reasoning", "N/A")
                 ai_response["action"] = "HOLD"
+                ai_response["policy_action"] = "HOLD"
                 ai_response["reasoning"] = (
                     f"[FORCED HOLD - Position State Violation] "
                     f"{error_msg} | "

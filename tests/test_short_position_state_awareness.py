@@ -301,8 +301,8 @@ class TestPromptGeneration:
 
         assert "YOUR CURRENT POSITION STATE" in prompt
         assert "FLAT" in prompt
-        assert "no active position in BTC-USD" in prompt.lower()
-        assert "BUY (open LONG), SELL (open SHORT), HOLD" in prompt
+        assert "no active position in btc-usd" in prompt.lower()
+        assert "Allowed policy actions: HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, OPEN_SMALL_SHORT, OPEN_MEDIUM_SHORT" in prompt
 
     def test_prompt_includes_long_state(self, decision_engine):
         """Test that prompt includes LONG position state with warnings."""
@@ -340,9 +340,9 @@ class TestPromptGeneration:
         assert "LONG position in BTC-USD" in prompt
         assert "Entry Price: $50000.00" in prompt
         assert "Unrealized P&L: +$1000.00" in prompt
-        assert "SELL, HOLD" in prompt  # Allowed signals
+        assert "ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG" in prompt
         assert "CRITICAL CONSTRAINT" in prompt
-        assert "PROHIBITED" in prompt
+        assert "PROHIBITED policy action" in prompt
 
     def test_prompt_includes_short_state(self, decision_engine):
         """Test that prompt includes SHORT position state with warnings."""
@@ -380,9 +380,53 @@ class TestPromptGeneration:
         assert "SHORT position in EUR-USD" in prompt
         assert "Entry Price: $1.10" in prompt
         assert "Unrealized P&L: +$200.00" in prompt
-        assert "BUY, HOLD" in prompt  # Allowed signals (can only BUY to close SHORT)
+        assert "ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT" in prompt
         assert "CRITICAL CONSTRAINT" in prompt
 
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestPolicyActionValidation:
+    """Policy-action aware validation should become canonical in engine.py."""
+
+    @pytest.fixture
+    def decision_engine(self):
+        config = {"decision_engine": {"ai_provider": "mock", "enable_veto_logic": False}}
+        return DecisionEngine(config=config)
+
+    def test_flat_state_exposes_allowed_policy_actions(self, decision_engine):
+        state = decision_engine._extract_position_state({"monitoring_context": {"active_positions": {"futures": []}}}, "BTC-USD")
+        assert set(state["allowed_policy_actions"]) == {
+            "HOLD", "OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT"
+        }
+
+    def test_open_long_when_already_long_is_policy_invalid(self, decision_engine):
+        position_state = {
+            "has_position": True,
+            "side": "LONG",
+            "state": "LONG",
+            "allowed_signals": ["SELL", "HOLD"],
+            "allowed_policy_actions": ["HOLD", "ADD_SMALL_LONG", "REDUCE_LONG", "CLOSE_LONG"],
+        }
+        is_valid, error = decision_engine._validate_signal_against_position(
+            "OPEN_SMALL_LONG", position_state, "BTC-USD"
+        )
+        assert is_valid is False
+        assert "structurally invalid" in error
+        assert "position_state=long" in error
+
+    def test_close_long_when_long_is_policy_valid(self, decision_engine):
+        position_state = {
+            "has_position": True,
+            "side": "LONG",
+            "state": "LONG",
+            "allowed_signals": ["SELL", "HOLD"],
+            "allowed_policy_actions": ["HOLD", "ADD_SMALL_LONG", "REDUCE_LONG", "CLOSE_LONG"],
+        }
+        is_valid, error = decision_engine._validate_signal_against_position(
+            "CLOSE_LONG", position_state, "BTC-USD"
+        )
+        assert is_valid is True
+        assert error is None

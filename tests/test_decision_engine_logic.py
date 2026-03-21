@@ -675,5 +675,46 @@ class TestBacktestMode:
                 ), f"Expected deprecation warning, got: {warning_calls}"
 
 
+@pytest.mark.asyncio
+async def test_generate_decision_forces_hold_on_policy_position_violation(
+    decision_engine, sample_market_data, sample_balance
+):
+    monitoring_context = {
+        "has_monitoring_data": True,
+        "active_positions": {
+            "futures": [
+                {
+                    "product_id": "BTCUSD",
+                    "side": "LONG",
+                    "contracts": 1.0,
+                    "entry_price": 50000.0,
+                    "unrealized_pnl": 100.0,
+                }
+            ]
+        },
+        "slots_available": 0,
+    }
+
+    with patch.object(decision_engine, "_query_ai", new_callable=AsyncMock) as mock_query:
+        mock_query.return_value = {
+            "action": "OPEN_SMALL_LONG",
+            "confidence": 88,
+            "reasoning": "double down",
+            "amount": 0.05,
+        }
+
+        decision = await decision_engine.generate_decision(
+            asset_pair="BTCUSD",
+            market_data=sample_market_data,
+            balance=sample_balance,
+            monitoring_context=monitoring_context,
+        )
+
+        assert decision["action"] == "HOLD"
+        assert decision["policy_action"] == "HOLD"
+        assert decision["reasoning"].startswith("[FORCED HOLD - Position State Violation]")
+        assert "Allowed policy actions: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG" in decision["reasoning"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
