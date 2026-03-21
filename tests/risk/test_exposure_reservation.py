@@ -12,7 +12,6 @@ The exposure reservation system implements a "reserve-commit-rollback" pattern:
 """
 
 import threading
-import time
 from datetime import datetime, timedelta, timezone
 
 import pytest

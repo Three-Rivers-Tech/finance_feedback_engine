@@ -4,13 +4,11 @@ import asyncio
 import json
 import logging
 import os
-import socket
 import time
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-import pandas as pd
 
 from .data_providers.alpha_vantage_provider import AlphaVantageProvider
 from .data_providers.historical_data_provider import HistoricalDataProvider
@@ -20,8 +18,6 @@ from .exceptions import (
     FFEMemoryError,
     InsufficientProvidersError,
     ModelInstallationError,
-    RiskValidationError,
-    TradingError,
 )
 from .memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from .monitoring.error_tracking import ErrorTracker
@@ -41,7 +37,7 @@ from .utils.model_installer import ensure_models_installed
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from .backtesting.backtester import Backtester
+    pass
 
 
 class FinanceFeedbackEngine:
