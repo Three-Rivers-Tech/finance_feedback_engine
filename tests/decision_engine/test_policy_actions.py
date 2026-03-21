@@ -111,6 +111,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_exchange_credential_wiring_contract_set,
     build_policy_selection_adaptive_control_exchange_credential_wiring_contract_summary,
     build_policy_selection_adaptive_control_exchange_http_transport_contract_set,
+    build_policy_selection_adaptive_control_exchange_http_transport_contract_summary,
     extract_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summaries,
     extract_policy_selection_adaptive_control_notification_delivery_contract_summaries,
     extract_policy_selection_adaptive_control_health_readiness_observability_contract_summaries,
@@ -20019,6 +20020,164 @@ def test_build_policy_selection_adaptive_control_exchange_http_transport_contrac
         "adaptive_control_exchange_credential_wiring_contract_summaries": [first, second],
         "adaptive_control_exchange_http_transport_contract_set_version": 1,
     }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_counts_pending_transport_paths_from_exchange_credential_wiring_contract_summaries():
+    http_transport_contract_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([
+        {
+            "summary_count": 1,
+            "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 1,
+            "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(http_transport_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": 1,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": 0,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": 0,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": 0,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_counts_request_built_paths_from_credential_resolved_contracts():
+    http_transport_contract_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([
+        {
+            "summary_count": 1,
+            "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 1,
+            "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(http_transport_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": 0,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": 1,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": 0,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": 0,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_counts_vault_lookup_failed_as_transport_failed():
+    http_transport_contract_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([
+        {
+            "summary_count": 1,
+            "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 1,
+            "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(http_transport_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": 0,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": 0,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": 0,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": 1,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_handles_empty_inputs():
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary({})
+
+    assert summary == {
+        "summary_count": 0,
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": 0,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": 0,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": 0,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": 0,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_skips_non_comparable_entries():
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary({
+        "adaptive_control_exchange_credential_wiring_contract_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 1,
+                "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 1,
+                "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+                "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+            },
+        ],
+        "adaptive_control_exchange_http_transport_contract_set_version": 1,
+    })
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": 0,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": 1,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": 0,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": 0,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": 0,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_http_transport_contract_summary_round_trips_with_set_builder_and_preserves_versions():
+    http_transport_contract_set = build_policy_selection_adaptive_control_exchange_http_transport_contract_set([
+        {
+            "summary_count": 1,
+            "vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_resolved_adaptive_control_exchange_credential_wiring_contract_count": 1,
+            "auth_flow_initiated_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "token_acquired_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "credential_injected_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count": 0,
+            "adaptive_control_exchange_credential_wiring_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(http_transport_contract_set)
+
+    assert http_transport_contract_set["adaptive_control_exchange_http_transport_contract_set_version"] == 1
+    assert summary["summary_count"] == 1
+    assert summary["request_built_adaptive_control_exchange_http_transport_contract_count"] == 1
+    assert summary["adaptive_control_exchange_http_transport_contract_summary_version"] == 1
 
 
 

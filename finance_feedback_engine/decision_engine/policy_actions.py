@@ -2683,6 +2683,50 @@ def build_policy_selection_adaptive_control_exchange_credential_wiring_contract_
 
 
 
+def build_policy_selection_adaptive_control_exchange_http_transport_contract_summary(
+    adaptive_control_exchange_http_transport_contract_set: Optional[dict],
+) -> dict:
+    comparable_summaries = [
+        summary
+        for summary in (adaptive_control_exchange_http_transport_contract_set or {}).get(
+            "adaptive_control_exchange_credential_wiring_contract_summaries", []
+        )
+        if isinstance(summary, dict)
+    ]
+
+    pending_transport_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("vault_lookup_pending_adaptive_control_exchange_credential_wiring_contract_count", 0) > 0
+    )
+    request_built_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("credential_resolved_adaptive_control_exchange_credential_wiring_contract_count", 0) > 0
+    )
+    response_received_count = 0
+    retry_pending_count = 0
+    timeout_pending_count = 0
+    transport_failed_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("vault_lookup_failed_adaptive_control_exchange_credential_wiring_contract_count", 0) > 0
+    )
+
+    return {
+        "summary_count": len(comparable_summaries),
+        "pending_transport_adaptive_control_exchange_http_transport_contract_count": pending_transport_count,
+        "request_built_adaptive_control_exchange_http_transport_contract_count": request_built_count,
+        "response_received_adaptive_control_exchange_http_transport_contract_count": response_received_count,
+        "retry_pending_adaptive_control_exchange_http_transport_contract_count": retry_pending_count,
+        "timeout_pending_adaptive_control_exchange_http_transport_contract_count": timeout_pending_count,
+        "transport_failed_adaptive_control_exchange_http_transport_contract_count": transport_failed_count,
+        "adaptive_control_exchange_http_transport_contract_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_control_exchange_http_transport_contract_set(
     adaptive_control_exchange_credential_wiring_contract_summaries: Optional[list[dict]],
 ) -> dict:
