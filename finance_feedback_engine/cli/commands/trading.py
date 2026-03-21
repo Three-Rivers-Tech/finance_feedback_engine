@@ -8,7 +8,22 @@ from rich.console import Console
 from rich.table import Table
 
 from finance_feedback_engine.core import FinanceFeedbackEngine
+from finance_feedback_engine.decision_engine.policy_actions import (
+    get_legacy_action_compatibility,
+    is_policy_action,
+)
 from finance_feedback_engine.utils.environment import get_environment_name
+
+
+def _decision_display_action(decision):
+    return decision.get("policy_action") or decision.get("action") or "HOLD"
+
+
+def _is_executable_decision(decision):
+    raw_action = decision.get("policy_action") or decision.get("action") or "HOLD"
+    if is_policy_action(raw_action):
+        return raw_action != "HOLD"
+    return str(raw_action).upper() != "HOLD"
 
 console = Console()
 
@@ -91,13 +106,13 @@ def execute(ctx, decision_id):
                 except Exception:
                     decisions = []
 
-            # Filter out HOLD decisions since they don't execute trades
-            decisions = [d for d in decisions if d.get("action") != "HOLD"]
+            # Filter out non-executable decisions using policy semantics first
+            decisions = [d for d in decisions if _is_executable_decision(d)]
 
             if not decisions:
                 console.print(
                     "[yellow]No executable decisions found. Generate some "
-                    "BUY/SELL decisions first with 'analyze' command.[/yellow]"
+                    "actionable decisions first with 'analyze' command.[/yellow]"
                 )
                 return
 
@@ -124,7 +139,7 @@ def execute(ctx, decision_id):
                     str(i),
                     timestamp,
                     decision["asset_pair"],
-                    decision["action"],
+                    _decision_display_action(decision),
                     f"{decision.get('confidence', '')}%",
                     executed,
                 )

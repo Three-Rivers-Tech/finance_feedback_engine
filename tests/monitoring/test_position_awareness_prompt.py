@@ -4,7 +4,7 @@ TDD tests for position-awareness prompt improvements.
 Two changes under test:
 1. format_for_ai_prompt() includes POSITION AWARENESS DIRECTIVES when positions exist,
    and directives appear BEFORE the data block (lost-in-the-middle mitigation)
-2. Hard code enforcement: BUY blocked when slots_available == 0
+2. Hard code enforcement: slot-consuming entry actions are blocked when slots_available == 0
 """
 
 import pytest
@@ -80,13 +80,13 @@ class TestPositionAwarenessDirectives:
         ctx = make_context(futures=[make_eth_position(), make_eth_position()],
                            slots_available=0, active_trades=2)
         result = provider.format_for_ai_prompt(ctx)
-        assert "do NOT recommend BUY" in result
+        assert "do NOT recommend OPEN_*" in result
 
     def test_directive_defines_hold_sell_buy(self):
         provider = get_provider()
         ctx = make_context(futures=[make_eth_position()], slots_available=1, active_trades=1)
         result = provider.format_for_ai_prompt(ctx)
-        assert "HOLD" in result and "SELL" in result and "BUY" in result
+        assert "HOLD" in result and "OPEN_*" in result and "REDUCE_* / CLOSE_*" in result
 
     def test_directive_mentions_confidence_and_risk(self):
         provider = get_provider()
@@ -108,7 +108,7 @@ class TestPositionAwarenessDirectives:
 
 
 # ---------------------------------------------------------------------------
-# Change 2: enforce_slot_constraints — hard code BUY block
+# Change 2: enforce_slot_constraints — block slot-consuming entry actions
 # ---------------------------------------------------------------------------
 
 class TestHardSlotEnforcement:
@@ -120,6 +120,7 @@ class TestHardSlotEnforcement:
                            slots_available=0, active_trades=2)
         result = enforce_slot_constraints(decision, ctx)
         assert result["action"] == "HOLD"
+        assert result["policy_action"] == "HOLD"
 
     def test_buy_blocked_result_has_reason(self):
         from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
@@ -158,3 +159,18 @@ class TestHardSlotEnforcement:
         decision = {"action": "BUY", "confidence": 75, "asset_pair": "ETHUSD"}
         result = enforce_slot_constraints(decision, {})
         assert result["action"] == "BUY"
+
+
+    def test_open_policy_action_blocked_when_slots_zero(self):
+        from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
+        decision = {"policy_action": "OPEN_SMALL_LONG", "action": "OPEN_SMALL_LONG", "confidence": 75, "asset_pair": "ETHUSD"}
+        result = enforce_slot_constraints(decision, make_context(slots_available=0))
+        assert result["action"] == "HOLD"
+        assert result["policy_action"] == "HOLD"
+
+    def test_reduce_policy_action_allowed_when_slots_zero(self):
+        from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
+        decision = {"policy_action": "REDUCE_LONG", "action": "REDUCE_LONG", "confidence": 75, "asset_pair": "ETHUSD"}
+        result = enforce_slot_constraints(decision, make_context(slots_available=0))
+        assert result["action"] == "REDUCE_LONG"
+        assert result["policy_action"] == "REDUCE_LONG"

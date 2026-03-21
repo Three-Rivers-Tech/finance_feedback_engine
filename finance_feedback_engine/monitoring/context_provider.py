@@ -6,6 +6,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from finance_feedback_engine.decision_engine.policy_actions import (
+    get_policy_action_family,
+    get_legacy_action_compatibility,
+    is_policy_action,
+    normalize_policy_action,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,12 +27,13 @@ def _coerce_monitoring_float(value: Any, default: float = 0.0) -> float:
 
 
 def enforce_slot_constraints(decision: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Prevent BUY actions when monitoring context says no trade slots remain."""
+    """Prevent slot-consuming entry actions when monitoring context says no trade slots remain."""
     if not decision or not context:
         return decision
 
     normalized = dict(decision)
-    action = str(normalized.get("action", "")).upper()
+    raw_action = normalized.get("policy_action") or normalized.get("action")
+    action = str(raw_action or "").upper()
     slots_available = context.get("slots_available")
 
     try:
@@ -33,11 +41,19 @@ def enforce_slot_constraints(decision: Dict[str, Any], context: Optional[Dict[st
     except (TypeError, ValueError):
         return normalized
 
-    if action == "BUY" and slots_value <= 0:
+    blocks_slot = False
+    if is_policy_action(action):
+        family = get_policy_action_family(normalize_policy_action(action))
+        blocks_slot = family in {"open_long", "open_short"}
+    else:
+        blocks_slot = action == "BUY"
+
+    if blocks_slot and slots_value <= 0:
         normalized["action"] = "HOLD"
+        normalized["policy_action"] = "HOLD"
         normalized.setdefault(
             "override_reason",
-            "BUY blocked by slot enforcement: no monitoring/trade slots available.",
+            "Entry blocked by slot enforcement: no monitoring/trade slots available.",
         )
         normalized.setdefault("quality_flag", "slot_constrained")
 
@@ -727,15 +743,16 @@ class MonitoringContextProvider:
                 "=== POSITION AWARENESS DIRECTIVES ===",
                 "- Respect live position context before proposing any action.",
                 "- HOLD = maintain current exposure when the thesis is intact.",
-                "- SELL = reduce or exit exposure when risk, invalidation, or adverse momentum dominates.",
-                "- BUY = add/new exposure only when slots are available, confidence is strong, and risk is justified.",
+                "- REDUCE_* / CLOSE_* = trim or fully exit exposure when risk, invalidation, or adverse momentum dominates.",
+                "- OPEN_* = initiate new exposure only when slots are available, confidence is strong, and risk is justified.",
+                "- ADD_* = scale an existing same-side position only when conviction and risk budget clearly justify it.",
                 "- Explicitly weigh confidence, risk, and active exposure in your recommendation.",
             ])
             if slots_available <= 0:
-                lines.append("- Monitoring capacity is full, so do NOT recommend BUY until a slot opens.")
+                lines.append("- Monitoring capacity is full, so do NOT recommend OPEN_* actions until a slot opens.")
             else:
                 lines.append(
-                    f"- {slots_available} monitoring slot(s) remain; BUY is allowed only with high confidence and clear risk control."
+                    f"- {slots_available} monitoring slot(s) remain; OPEN_* actions are allowed only with high confidence and clear risk control."
                 )
 
         # Active positions summary

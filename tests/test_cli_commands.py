@@ -45,3 +45,14 @@ def test_analyze_command_network_failure():
     else:
         # Handled failure: CLI should surface an error message (structured logs may include traceback)
         assert "Error:" in result.output
+
+
+
+def test_cli_execute_policy_action_helpers():
+    from finance_feedback_engine.cli.commands.trading import _decision_display_action, _is_executable_decision
+
+    assert _is_executable_decision({"policy_action": "OPEN_SMALL_LONG"}) is True
+    assert _is_executable_decision({"policy_action": "HOLD"}) is False
+    assert _is_executable_decision({"action": "BUY"}) is True
+    assert _is_executable_decision({"action": "HOLD"}) is False
+    assert _decision_display_action({"policy_action": "REDUCE_LONG", "action": "SELL"}) == "REDUCE_LONG"
