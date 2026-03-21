@@ -2563,6 +2563,49 @@ def build_policy_selection_adaptive_control_exchange_order_placement_contract_su
 
 
 
+def build_policy_selection_adaptive_control_exchange_authentication_contract_summary(
+    adaptive_control_exchange_authentication_contract_set: Optional[dict],
+) -> dict:
+    comparable_summaries = [
+        summary
+        for summary in (adaptive_control_exchange_authentication_contract_set or {}).get(
+            "adaptive_control_exchange_order_placement_contract_summaries", []
+        )
+        if isinstance(summary, dict)
+    ]
+
+    pending_auth_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("pending_submission_adaptive_control_exchange_order_placement_contract_count", 0) > 0
+    )
+    authenticated_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("acknowledged_adaptive_control_exchange_order_placement_contract_count", 0) > 0
+        or summary.get("fully_filled_adaptive_control_exchange_order_placement_contract_count", 0) > 0
+    )
+    auth_failed_count = sum(
+        1
+        for summary in comparable_summaries
+        if summary.get("rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count", 0) > 0
+    )
+    rate_limited_count = 0
+    credential_expired_count = 0
+
+    return {
+        "summary_count": len(comparable_summaries),
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": pending_auth_count,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": authenticated_count,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": auth_failed_count,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": rate_limited_count,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": credential_expired_count,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+
 def build_policy_selection_adaptive_control_exchange_authentication_contract_set(
     adaptive_control_exchange_order_placement_contract_summaries: Optional[list[dict]],
 ) -> dict:

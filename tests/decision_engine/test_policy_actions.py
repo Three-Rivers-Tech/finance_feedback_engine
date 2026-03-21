@@ -107,6 +107,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     build_policy_selection_adaptive_control_exchange_order_placement_contract_set,
     build_policy_selection_adaptive_control_exchange_order_placement_contract_summary,
     build_policy_selection_adaptive_control_exchange_authentication_contract_set,
+    build_policy_selection_adaptive_control_exchange_authentication_contract_summary,
     extract_policy_selection_adaptive_control_dashboard_status_aggregation_contract_summaries,
     extract_policy_selection_adaptive_control_notification_delivery_contract_summaries,
     extract_policy_selection_adaptive_control_health_readiness_observability_contract_summaries,
@@ -19425,6 +19426,181 @@ def test_build_policy_selection_adaptive_control_exchange_authentication_contrac
         "adaptive_control_exchange_order_placement_contract_summaries": [first, second],
         "adaptive_control_exchange_authentication_contract_set_version": 1,
     }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_counts_pending_auth_paths_from_exchange_order_placement_contract_summaries():
+    auth_contract_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([
+        {
+            "summary_count": 1,
+            "pending_submission_adaptive_control_exchange_order_placement_contract_count": 1,
+            "acknowledged_adaptive_control_exchange_order_placement_contract_count": 0,
+            "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 0,
+            "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "fully_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 1,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 0,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 0,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_counts_acknowledged_paths_as_authenticated():
+    auth_contract_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([
+        {
+            "summary_count": 1,
+            "pending_submission_adaptive_control_exchange_order_placement_contract_count": 0,
+            "acknowledged_adaptive_control_exchange_order_placement_contract_count": 1,
+            "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 0,
+            "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "fully_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 0,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 1,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 0,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_counts_rejected_paths_as_auth_failed():
+    auth_contract_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([
+        {
+            "summary_count": 1,
+            "pending_submission_adaptive_control_exchange_order_placement_contract_count": 0,
+            "acknowledged_adaptive_control_exchange_order_placement_contract_count": 0,
+            "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 1,
+            "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "fully_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 0,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 0,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 1,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_counts_fully_filled_as_authenticated():
+    auth_contract_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([
+        {
+            "summary_count": 1,
+            "pending_submission_adaptive_control_exchange_order_placement_contract_count": 0,
+            "acknowledged_adaptive_control_exchange_order_placement_contract_count": 0,
+            "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 0,
+            "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "fully_filled_adaptive_control_exchange_order_placement_contract_count": 1,
+            "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_contract_set)
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 0,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 1,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 0,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_handles_empty_inputs():
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary({})
+
+    assert summary == {
+        "summary_count": 0,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 0,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 0,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 0,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_skips_non_comparable_entries():
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary({
+        "adaptive_control_exchange_order_placement_contract_summaries": [
+            None,
+            "skip",
+            {
+                "summary_count": 1,
+                "pending_submission_adaptive_control_exchange_order_placement_contract_count": 0,
+                "acknowledged_adaptive_control_exchange_order_placement_contract_count": 1,
+                "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 0,
+                "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+                "fully_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+                "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+            },
+        ],
+        "adaptive_control_exchange_authentication_contract_set_version": 1,
+    })
+
+    assert summary == {
+        "summary_count": 1,
+        "pending_auth_adaptive_control_exchange_authentication_contract_count": 0,
+        "authenticated_adaptive_control_exchange_authentication_contract_count": 1,
+        "auth_failed_adaptive_control_exchange_authentication_contract_count": 0,
+        "rate_limited_adaptive_control_exchange_authentication_contract_count": 0,
+        "credential_expired_adaptive_control_exchange_authentication_contract_count": 0,
+        "adaptive_control_exchange_authentication_contract_summary_version": 1,
+    }
+
+
+
+def test_build_policy_selection_adaptive_control_exchange_authentication_contract_summary_round_trips_with_set_builder_and_preserves_versions():
+    auth_contract_set = build_policy_selection_adaptive_control_exchange_authentication_contract_set([
+        {
+            "summary_count": 1,
+            "pending_submission_adaptive_control_exchange_order_placement_contract_count": 0,
+            "acknowledged_adaptive_control_exchange_order_placement_contract_count": 0,
+            "rejected_by_exchange_adaptive_control_exchange_order_placement_contract_count": 0,
+            "partially_filled_adaptive_control_exchange_order_placement_contract_count": 0,
+            "fully_filled_adaptive_control_exchange_order_placement_contract_count": 1,
+            "adaptive_control_exchange_order_placement_contract_summary_version": 1,
+        }
+    ])
+
+    summary = build_policy_selection_adaptive_control_exchange_authentication_contract_summary(auth_contract_set)
+
+    assert auth_contract_set["adaptive_control_exchange_authentication_contract_set_version"] == 1
+    assert summary["summary_count"] == 1
+    assert summary["authenticated_adaptive_control_exchange_authentication_contract_count"] == 1
+    assert summary["adaptive_control_exchange_authentication_contract_summary_version"] == 1
 
 
 
