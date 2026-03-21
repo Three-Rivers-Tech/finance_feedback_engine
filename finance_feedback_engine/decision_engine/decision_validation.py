@@ -161,7 +161,7 @@ def try_parse_decision_json(payload: str) -> Optional[Dict[str, Any]]:
 
 
 def build_fallback_decision(
-    reasoning: str, fallback_confidence: int = 50
+    reasoning: str, fallback_confidence: int = 50, reason_code: str = "MALFORMED_PROVIDER_RESPONSE"
 ) -> Dict[str, Any]:
     """Standardized fallback decision structure using canonical policy metadata."""
     policy_hold = {
@@ -173,5 +173,8 @@ def build_fallback_decision(
         "confidence": fallback_confidence,
         "reasoning": reasoning,
         "amount": 0,
+        "decision_origin": "fallback",
+        "hold_origin": "provider_fallback",
+        "filtered_reason_code": reason_code,
     }
     return build_ai_decision_envelope(decision=policy_hold, policy_package=None)

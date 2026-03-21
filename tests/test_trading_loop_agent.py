@@ -263,6 +263,32 @@ async def test_empty_decision_payload_is_persisted_as_no_action(trading_agent, m
 
 
 @pytest.mark.asyncio
+async def test_fallback_hold_decision_preserves_origin_metadata(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Provider fallback due to malformed response.",
+            "decision_origin": "fallback",
+            "hold_origin": "provider_fallback",
+            "filtered_reason_code": "MALFORMED_PROVIDER_RESPONSE",
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["execution_status"] == "filtered"
+    assert saved_decision["execution_result"]["reason_code"] == "MALFORMED_PROVIDER_RESPONSE"
+    assert saved_decision["decision_origin"] == "fallback"
+    assert saved_decision["hold_origin"] == "provider_fallback"
+    assert saved_decision["filtered_reason_code"] == "MALFORMED_PROVIDER_RESPONSE"
+
+
+@pytest.mark.asyncio
 async def test_hold_decision_preserves_ensemble_metadata_and_logs_council_summary(trading_agent, mock_dependencies, caplog):
     """Debate/council summaries should be logged and preserved in persisted HOLD artifacts."""
     decision = {

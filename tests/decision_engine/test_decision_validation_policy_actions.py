@@ -58,6 +58,14 @@ def test_build_fallback_decision_is_policy_driven_hold_envelope():
     assert fallback["version"] == 1
     assert fallback["policy_package"] is None
 
+def test_build_fallback_decision_marks_malformed_provider_origin():
+    fallback = build_fallback_decision("fallback", reason_code="MALFORMED_PROVIDER_RESPONSE")
+
+    assert fallback["decision_origin"] == "fallback"
+    assert fallback["hold_origin"] == "provider_fallback"
+    assert fallback["filtered_reason_code"] == "MALFORMED_PROVIDER_RESPONSE"
+    assert fallback["policy_package"] is None
+
 
 def test_validate_decision_rejects_non_policy_non_legacy_action():
     ok, errors = validate_decision_comprehensive(

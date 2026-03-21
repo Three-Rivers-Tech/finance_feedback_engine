@@ -1908,12 +1908,21 @@ class TradingLoopAgent:
                 try:
                     self._ensure_decision_identity(decision)
                     decision["executed"] = False
-                    decision["execution_status"] = "hold"
-                    decision["execution_result"] = {
-                        "success": True,
-                        "reason_code": "HOLD",
-                        "message": "Hold decision - maintain current position",
-                    }
+                    fallback_reason_code = decision.get("filtered_reason_code")
+                    if decision.get("decision_origin") == "fallback" and fallback_reason_code:
+                        decision["execution_status"] = "filtered"
+                        decision["execution_result"] = {
+                            "success": False,
+                            "reason_code": fallback_reason_code,
+                            "error": decision.get("reasoning") or "Provider fallback decision",
+                        }
+                    else:
+                        decision["execution_status"] = "hold"
+                        decision["execution_result"] = {
+                            "success": True,
+                            "reason_code": "HOLD",
+                            "message": "Hold decision - maintain current position",
+                        }
                     if getattr(self.engine, "decision_store", None):
                         self.engine.decision_store.save_decision(decision)
                 except Exception as e:
