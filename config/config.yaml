@@ -389,3 +389,9 @@ trading:
     - BTCUSD
     - ETHUSD
   paper_mode: true
+debate:
+  enabled: true
+  bull_model: mistral:latest
+  bear_model: llama3.2:3b-instruct-fp16
+  judge_model: deepseek-r1:8b
+  consensus_threshold: 0.6
