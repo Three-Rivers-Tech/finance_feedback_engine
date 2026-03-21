@@ -81,6 +81,27 @@ def resolve_debate_seats(
         judge = explicit_debate_providers.get("judge", "").strip()
 
         if bull and bear and judge:
+            available_local = get_available_local_models()
+
+            def _normalize_explicit_provider(provider: str) -> str:
+                provider_str = str(provider).strip()
+                if not provider_str:
+                    return provider_str
+                if provider_str in LOCAL_OLLAMA_MODELS:
+                    return provider_str
+                provider_family = provider_str.split(":", 1)[0].lower()
+                curated_match = next(
+                    (
+                        model for model in LOCAL_OLLAMA_MODELS
+                        if model in available_local and model.split(":", 1)[0].lower() == provider_family
+                    ),
+                    None,
+                )
+                return curated_match or provider_str
+
+            bull = _normalize_explicit_provider(bull)
+            bear = _normalize_explicit_provider(bear)
+            judge = _normalize_explicit_provider(judge)
             logger.info(
                 f"Using explicit debate seat assignment: "
                 f"bull={bull}, bear={bear}, judge={judge}"

@@ -18,6 +18,29 @@ def test_resolve_seats_explicit_override():
     assert result == {"bull": "claude", "bear": "gpt4", "judge": "custom"}
 
 
+def test_resolve_seats_ignores_non_curated_explicit_local_override_when_curated_models_available():
+    explicit = {"bull": "mistral:latest", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"}
+    local_models = [
+        "mistral:latest",
+        "mistral:7b-instruct",
+        "llama3.1:8b",
+        "deepseek-r1:8b",
+    ]
+
+    with patch(
+        "finance_feedback_engine.decision_engine.debate_seat_resolver.get_available_local_models",
+        return_value=local_models,
+    ):
+        result = resolve_debate_seats(
+            enabled_providers=["mistral:latest", "llama3.1:8b", "deepseek-r1:8b"],
+            explicit_debate_providers=explicit,
+        )
+
+        assert result["bull"] == "mistral:7b-instruct"
+        assert result["bear"] == "llama3.1:8b"
+        assert result["judge"] == "deepseek-r1:8b"
+
+
 def test_resolve_seats_prefers_local_ollama():
     """When 3+ local Ollama models available, prefer them."""
     local_models = [
