@@ -128,8 +128,8 @@ def validate_decision_comprehensive(decision: Dict[str, Any]) -> Tuple[bool, Lis
 
     try:
         conf = int(normalized_decision.get("confidence", -1))
-        if not 0 <= conf <= 100:
-            errors.append(f"Confidence {conf} out of range [0, 100]")
+        if not 1 <= conf <= 100:
+            errors.append(f"Confidence {conf} out of range [1, 100]")
     except (TypeError, ValueError) as e:
         errors.append(f"Invalid confidence value: {e}")
 

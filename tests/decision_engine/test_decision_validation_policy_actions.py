@@ -78,3 +78,16 @@ def test_validate_decision_rejects_non_policy_non_legacy_action():
 
     assert ok is False
     assert any("Invalid action" in error for error in errors)
+
+
+def test_validate_decision_rejects_zero_confidence_payloads():
+    ok, errors = validate_decision_comprehensive(
+        {
+            "action": "HOLD",
+            "confidence": 0,
+            "reasoning": "model expressed no confidence",
+        }
+    )
+
+    assert ok is False
+    assert any("Confidence 0 out of range" in error for error in errors)

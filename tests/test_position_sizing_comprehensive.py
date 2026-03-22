@@ -833,3 +833,39 @@ if __name__ == "__main__":
 
         assert result["recommended_position_size"] is not None
         assert result["recommended_position_size"] > 0
+
+
+import logging
+
+
+class TestPositionSizingLogBehavior:
+    def test_hold_without_position_does_not_emit_no_valid_balance_warning(self, caplog):
+        calculator = PositionSizingCalculator({"agent": {"risk_percentage": 0.01, "sizing_stop_loss_percentage": 0.02, "use_dynamic_stop_loss": False, "use_kelly_criterion": False}})
+        with caplog.at_level(logging.INFO):
+            result = calculator.calculate_position_sizing_params(
+                context={"asset_pair": "BTCUSD", "market_data": {"type": "crypto"}},
+                current_price=50000.0,
+                action="HOLD",
+                has_existing_position=False,
+                relevant_balance={"FUTURES_USD": 749.04, "SPOT_USD": 0.0},
+                balance_source="Coinbase",
+            )
+
+        assert result["recommended_position_size"] == 0
+        assert "No valid Coinbase balance - using minimum order size" not in caplog.text
+        assert "HOLD without existing position - no position sizing needed" in caplog.text
+
+    def test_position_sizing_input_debug_does_not_emit_critical(self, caplog):
+        calculator = PositionSizingCalculator({"agent": {"risk_percentage": 0.01, "sizing_stop_loss_percentage": 0.02, "use_dynamic_stop_loss": False, "use_kelly_criterion": False}})
+        with caplog.at_level(logging.DEBUG):
+            calculator.calculate_position_sizing_params(
+                context={"asset_pair": "BTCUSD", "market_data": {"type": "crypto"}},
+                current_price=50000.0,
+                action="BUY",
+                has_existing_position=False,
+                relevant_balance={"FUTURES_USD": 749.04, "SPOT_USD": 0.0},
+                balance_source="Coinbase",
+            )
+
+        assert "POSITION_SIZING INPUT" in caplog.text
+        assert all(record.levelno < logging.CRITICAL for record in caplog.records if "POSITION_SIZING INPUT" in record.getMessage())

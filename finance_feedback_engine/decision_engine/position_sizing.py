@@ -173,8 +173,13 @@ class PositionSizingCalculator:
             and sum(relevant_balance.values()) > 0
         )
         
-        # CRITICAL DEBUG: Log what we received
-        logger.critical("🎯 POSITION_SIZING INPUT: relevant_balance=%s, has_valid=%s, balance_source=%s, context_balance_snapshot=%s", relevant_balance, has_valid_balance, balance_source, context.get("balance_snapshot") if isinstance(context, dict) else None)
+        logger.debug(
+            "POSITION_SIZING INPUT: relevant_balance=%s, has_valid=%s, balance_source=%s, context_balance_snapshot=%s",
+            relevant_balance,
+            has_valid_balance,
+            balance_source,
+            context.get("balance_snapshot") if isinstance(context, dict) else None,
+        )
 
         # Debug logging for position sizing
         logger.debug(
@@ -186,13 +191,11 @@ class PositionSizingCalculator:
         # Fallback: derive crypto balance from richer context when balance snapshot is missing/empty
         # (e.g., transient balance fetch issue while portfolio breakdown is still available).
         if (not has_valid_balance) and isinstance(context, dict):
-            logger.critical("🔄 ENTERING FALLBACK: has_valid_balance=False, context_type=%s", type(context).__name__)
-            logger.critical("🔄 ENTERING FALLBACK: has_valid_balance=False, context_type=%s", type(context).__name__)
+            logger.debug("ENTERING FALLBACK: has_valid_balance=False, context_type=%s", type(context).__name__)
             asset_pair = str(context.get("asset_pair", ""))
             market_type = str(context.get("market_data", {}).get("type", "")).lower()
             is_crypto_ctx = ("BTC" in asset_pair or "ETH" in asset_pair or market_type == "crypto")
-            logger.critical("🔄 FALLBACK CRYPTO CHECK: asset_pair=%s, market_type=%s, is_crypto=%s", asset_pair, market_type, is_crypto_ctx)
-            logger.critical("🔄 FALLBACK CRYPTO CHECK: asset_pair=%s, market_type=%s, is_crypto=%s", asset_pair, market_type, is_crypto_ctx)
+            logger.debug("FALLBACK CRYPTO CHECK: asset_pair=%s, market_type=%s, is_crypto=%s", asset_pair, market_type, is_crypto_ctx)
             if is_crypto_ctx:
                 fallback_val = None
 
@@ -478,6 +481,20 @@ class PositionSizingCalculator:
 
             return result
 
+        # HOLD without position: no sizing needed
+        if action == "HOLD" and not has_existing_position:
+            logger.info("HOLD without existing position - no position sizing needed")
+            result["recommended_position_size"] = 0
+            result["stop_loss_price"] = current_price
+            result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
+            result["risk_percentage"] = risk_percentage
+            result["policy_sizing_intent"] = self.build_policy_sizing_intent(
+                action=action,
+                recommended_position_size=0,
+                current_price=current_price,
+            )
+            return result
+
         # CASE 2: No valid balance - use minimum order size (no signal-only mode)
         if str(balance_source).lower() in {"unknown", "combined"}:
             logger.info(
@@ -489,20 +506,6 @@ class PositionSizingCalculator:
                 "No valid %s balance - using minimum order size for trade execution",
                 balance_source,
             )
-
-        # HOLD without position: no sizing needed
-        if action == "HOLD" and not has_existing_position:
-            logger.info("HOLD without existing position - no position sizing needed")
-            result["recommended_position_size"] = None
-            result["stop_loss_price"] = None
-            result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
-            result["risk_percentage"] = risk_percentage
-            result["policy_sizing_intent"] = self.build_policy_sizing_intent(
-                action=action,
-                recommended_position_size=None,
-                current_price=current_price,
-            )
-            return result
 
         # Determine minimum order size based on asset type
         is_crypto = (
