@@ -14,6 +14,21 @@ class ProviderCredentials:
     oanda: Optional[Dict[str, Any]]
 
 
+def _is_crypto_only_runtime(config: Dict[str, Any]) -> bool:
+    enabled_platforms = {str(name).lower() for name in (config.get("enabled_platforms") or [])}
+    agent_cfg = config.get("agent") or {}
+    pairs = [str(p).upper() for p in (agent_cfg.get("asset_pairs") or [])]
+    if not pairs:
+        return False
+    crypto_markers = ("BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK")
+    fiat_markers = ("EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD")
+    crypto_only_pairs = all(
+        any(sym in pair for sym in crypto_markers) and not any(code in pair for code in fiat_markers)
+        for pair in pairs
+    )
+    return crypto_only_pairs and (not enabled_platforms or 'oanda' not in enabled_platforms)
+
+
 def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
     """Resolve provider credentials from legacy and nested configuration layouts."""
     providers_cfg = config.get("providers", {}) if isinstance(config.get("providers"), dict) else {}
@@ -43,6 +58,9 @@ def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
             platform_list,
             names={"coinbase", "coinbase_advanced"},
         )
+
+    if _is_crypto_only_runtime(config):
+        oanda_credentials = None
 
     return ProviderCredentials(
         coinbase=coinbase_credentials if _is_dict_credentials(coinbase_credentials) else None,
