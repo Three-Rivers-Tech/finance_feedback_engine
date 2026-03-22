@@ -23,6 +23,8 @@ from .policy_actions import (
 
 logger = logging.getLogger(__name__)
 
+MATERIAL_CONFIDENCE_GAP = 15
+
 
 def _with_policy_action_metadata(decision: Dict[str, Any]) -> Dict[str, Any]:
     """Add bounded policy-action metadata to a role decision when present."""
@@ -42,6 +44,52 @@ def _with_policy_action_metadata(decision: Dict[str, Any]) -> Dict[str, Any]:
         enriched.setdefault("legacy_action_compatibility", None)
     return enriched
 
+
+
+
+def _directional_side(action: Optional[str]) -> Optional[str]:
+    action = str(action or '').upper()
+    if action == 'HOLD':
+        return None
+    if action.endswith('_LONG') or 'LONG' in action or action == 'BUY':
+        return 'bull'
+    if action.endswith('_SHORT') or 'SHORT' in action or action == 'SELL':
+        return 'bear'
+    return None
+
+
+def _judge_hold_override(
+    bull_case: Dict[str, Any],
+    bear_case: Dict[str, Any],
+    judge_decision: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    if str(judge_decision.get('action', '')).upper() != 'HOLD':
+        return None
+
+    bull_side = _directional_side(bull_case.get('action'))
+    bear_side = _directional_side(bear_case.get('action'))
+    if bull_side != 'bull' or bear_side != 'bear':
+        return None
+
+    bull_conf = int(bull_case.get('confidence', 0) or 0)
+    bear_conf = int(bear_case.get('confidence', 0) or 0)
+    gap = abs(bull_conf - bear_conf)
+    if gap < MATERIAL_CONFIDENCE_GAP:
+        return None
+
+    stronger_side = 'bull' if bull_conf > bear_conf else 'bear'
+    stronger_case = bull_case if stronger_side == 'bull' else bear_case
+    override = deepcopy(stronger_case)
+    override['reasoning'] = (
+        f"Judge HOLD overridden: {stronger_side} case materially stronger by confidence gap {gap}. | "
+        f"Judge said HOLD ({judge_decision.get('confidence', 0)}). | "
+        f"Original {stronger_side} reasoning: {stronger_case.get('reasoning', '')}"
+    )
+    override['judge_hold_override_applied'] = True
+    override['judge_hold_override_side'] = stronger_side
+    override['judge_hold_override_gap'] = gap
+    override['original_judge_decision'] = deepcopy(judge_decision)
+    return override
 
 class DebateManager:
     """
@@ -119,7 +167,9 @@ class DebateManager:
             )
             raise ValueError(f"Debate results missing required keys - {error_details}")
 
-        final_decision = _with_policy_action_metadata(judge_decision)
+        hold_override = _judge_hold_override(bull_case, bear_case, judge_decision)
+        final_decision_source = hold_override if hold_override is not None else judge_decision
+        final_decision = _with_policy_action_metadata(final_decision_source)
         judge_policy_package = (
             judge_decision.get("policy_package") if isinstance(judge_decision, dict) else None
         )
@@ -130,6 +180,9 @@ class DebateManager:
             "judge_reasoning": judge_decision.get("reasoning", ""),
             "debate_providers": self.debate_providers,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "judge_hold_override_applied": bool(hold_override),
+            "judge_hold_override_side": hold_override.get("judge_hold_override_side") if hold_override else None,
+            "judge_hold_override_gap": hold_override.get("judge_hold_override_gap") if hold_override else None,
         }
         providers_used = list(
             set(
@@ -209,6 +262,9 @@ class DebateManager:
             "local_models_used": [],
             "debate_mode": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "judge_hold_override_applied": bool(hold_override),
+            "judge_hold_override_side": hold_override.get("judge_hold_override_side") if hold_override else None,
+            "judge_hold_override_gap": hold_override.get("judge_hold_override_gap") if hold_override else None,
         }
 
         final_decision = build_ai_decision_envelope(
