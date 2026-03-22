@@ -181,6 +181,27 @@ class MarketAnalysisContext:
 
         return relevant_balance, balance_source, is_crypto, is_forex
 
+    def _enabled_platform_aliases(self) -> set[str]:
+        enabled = {str(name).lower() for name in (self.config.get("enabled_platforms") or [])}
+        aliases = set(enabled)
+        if "coinbase_advanced" in enabled:
+            aliases.add("coinbase")
+        return aliases
+
+    def _risk_platform_inputs(self, portfolio: Optional[Dict[str, Any]]) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        if not portfolio:
+            return {}, {}, {}, {}
+
+        enabled = self._enabled_platform_aliases()
+        coinbase_enabled = (not enabled) or ("coinbase" in enabled)
+        oanda_enabled = (not enabled) or ("oanda" in enabled)
+
+        coinbase_holdings = portfolio.get("coinbase_holdings", {}) if coinbase_enabled else {}
+        coinbase_history = portfolio.get("coinbase_price_history", {}) if coinbase_enabled else {}
+        oanda_holdings = portfolio.get("oanda_holdings", {}) if oanda_enabled else {}
+        oanda_history = portfolio.get("oanda_price_history", {}) if oanda_enabled else {}
+        return coinbase_holdings, coinbase_history, oanda_holdings, oanda_history
+
     def _has_existing_position(
         self,
         asset_pair: str,
@@ -459,17 +480,13 @@ class MarketAnalysisContext:
 
             var_calc = VaRCalculator()
             corr_analyzer = CorrelationAnalyzer()
-            # Portfolio breakdowns for dual-platform risk (if available)
-            coinbase_holdings = (
-                portfolio.get("coinbase_holdings", {}) if portfolio else {}
-            )
-            coinbase_history = (
-                portfolio.get("coinbase_price_history", {}) if portfolio else {}
-            )
-            oanda_holdings = portfolio.get("oanda_holdings", {}) if portfolio else {}
-            oanda_history = (
-                portfolio.get("oanda_price_history", {}) if portfolio else {}
-            )
+            # Portfolio breakdowns for active-platform risk only
+            (
+                coinbase_holdings,
+                coinbase_history,
+                oanda_holdings,
+                oanda_history,
+            ) = self._risk_platform_inputs(portfolio)
             # Compute VaR (95% and 99%)
             var_95 = var_calc.calculate_dual_portfolio_var(
                 coinbase_holdings,
