@@ -107,6 +107,27 @@ def _normalize_asset_pairs(config: Dict[str, Any]) -> None:
     agent_cfg["watchlist"] = existing_watchlist or list(resolved_pairs)
 
 
+def _effective_asset_pairs(config: Dict[str, Any]) -> list[str]:
+    agent = config.get("agent") or {}
+    pairs = agent.get("asset_pairs") or []
+    if isinstance(pairs, list):
+        return [str(p).upper() for p in pairs]
+    return []
+
+
+def _is_crypto_only_watchlist(config: Dict[str, Any]) -> bool:
+    pairs = _effective_asset_pairs(config)
+    if not pairs:
+        return False
+    fiat_markers = ("EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD")
+    for pair in pairs:
+        up = str(pair).upper()
+        if not any(sym in up for sym in ("BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK")):
+            if any(code in up for code in fiat_markers):
+                return False
+    return True
+
+
 def _normalize_platform_config(config: Dict[str, Any]) -> None:
     trading_platform = str(config.get("trading_platform") or "unified").lower()
     platforms = config.get("platforms")
@@ -128,6 +149,11 @@ def _normalize_platform_config(config: Dict[str, Any]) -> None:
         normalized_platforms = [
             {"name": "coinbase_advanced", "credentials": config.get("providers", {}).get("coinbase", {}).get("credentials", {})},
             {"name": "oanda", "credentials": config.get("providers", {}).get("oanda", {}).get("credentials", {})},
+        ]
+
+    if trading_platform == "unified" and _is_crypto_only_watchlist(config):
+        normalized_platforms = [
+            p for p in normalized_platforms if str(p.get("name", "")).lower() in {"coinbase", "coinbase_advanced"}
         ]
 
     aliases = {"coinbase": "coinbase_advanced", "coinbase_advanced": "coinbase_advanced"}
