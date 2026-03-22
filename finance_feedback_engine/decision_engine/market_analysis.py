@@ -485,6 +485,9 @@ class MarketAnalysisContext:
                 oanda_history,
                 confidence_level=0.99,
             )
+            active_platforms = var_95.get("active_platforms", [])
+            primary_platform = active_platforms[0] if active_platforms else "coinbase"
+            primary_var = var_95.get(f"{primary_platform}_var", {})
             context["var_snapshot"] = {
                 "portfolio_value": var_95.get("total_portfolio_value", 0.0),
                 "var_95": (
@@ -497,9 +500,7 @@ class MarketAnalysisContext:
                     if "combined_var" in var_99
                     else 0.0
                 ),
-                "data_quality": var_95.get("coinbase_var", {}).get(
-                    "data_quality", "unknown"
-                ),
+                "data_quality": primary_var.get("data_quality", "unknown"),
             }
             # Correlation analysis
             correlation_result = corr_analyzer.analyze_dual_platform_correlations(

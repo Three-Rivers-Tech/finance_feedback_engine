@@ -353,6 +353,26 @@ class CorrelationAnalyzer:
 
         return result
 
+    def _resolve_active_platform_inputs(
+        self,
+        coinbase_holdings: Dict[str, Dict[str, Any]],
+        coinbase_price_history: Dict[str, List[Dict[str, float]]],
+        oanda_holdings: Dict[str, Dict[str, Any]],
+        oanda_price_history: Dict[str, List[Dict[str, float]]],
+    ) -> Dict[str, Dict[str, Any]]:
+        platforms = {}
+        if coinbase_holdings or coinbase_price_history:
+            platforms["coinbase"] = {
+                "holdings": coinbase_holdings,
+                "price_history": coinbase_price_history,
+            }
+        if oanda_holdings or oanda_price_history:
+            platforms["oanda"] = {
+                "holdings": oanda_holdings,
+                "price_history": oanda_price_history,
+            }
+        return platforms
+
     def analyze_dual_platform_correlations(
         self,
         coinbase_holdings: Dict[str, Dict[str, Any]],
@@ -360,98 +380,87 @@ class CorrelationAnalyzer:
         oanda_holdings: Dict[str, Dict[str, Any]],
         oanda_price_history: Dict[str, List[Dict[str, float]]],
     ) -> Dict[str, Any]:
-        """
-        Comprehensive correlation analysis for dual isolated platforms.
-
-        Args:
-            coinbase_holdings: Coinbase holdings
-            coinbase_price_history: Coinbase price history
-            oanda_holdings: Oanda holdings
-            oanda_price_history: Oanda price history
-
-        Returns:
-            Dictionary with complete correlation analysis for both platforms
-        """
-        logger.info("Performing dual-platform correlation analysis")
-
-        # Analyze each platform separately
-        coinbase_analysis = self.analyze_platform_correlations(
-            coinbase_holdings, coinbase_price_history, "coinbase"
+        """Comprehensive correlation analysis for the active platform set."""
+        active_inputs = self._resolve_active_platform_inputs(
+            coinbase_holdings,
+            coinbase_price_history,
+            oanda_holdings,
+            oanda_price_history,
         )
+        active_platforms = list(active_inputs.keys())
 
-        oanda_analysis = self.analyze_platform_correlations(
-            oanda_holdings, oanda_price_history, "oanda"
-        )
+        if len(active_platforms) > 1:
+            logger.info("Performing dual-platform correlation analysis")
+        elif len(active_platforms) == 1:
+            logger.info("Performing single-platform correlation analysis for %s", active_platforms[0])
+        else:
+            logger.info("Performing correlation analysis with no active platforms")
 
-        # Analyze cross-platform correlations
-        cross_platform = self.analyze_cross_platform_correlation(
-            coinbase_price_history, oanda_price_history
-        )
-
-        # Combine results
         result = {
-            "coinbase": coinbase_analysis,
-            "oanda": oanda_analysis,
-            "cross_platform": cross_platform,
+            "active_platforms": active_platforms,
             "overall_warnings": [],
         }
 
-        # Collect all warnings
-        if coinbase_analysis["concentration_warning"]:
-            result["overall_warnings"].append(
-                coinbase_analysis["concentration_warning"]
+        for platform_name, inputs in active_inputs.items():
+            analysis = self.analyze_platform_correlations(
+                inputs["holdings"], inputs["price_history"], platform_name
             )
-        if oanda_analysis["concentration_warning"]:
-            result["overall_warnings"].append(oanda_analysis["concentration_warning"])
-        if cross_platform["warning"]:
-            result["overall_warnings"].append(cross_platform["warning"])
+            result[platform_name] = analysis
+            if analysis.get("concentration_warning"):
+                result["overall_warnings"].append(analysis["concentration_warning"])
 
-        logger.info(
-            "Dual-platform correlation analysis complete: %d warnings",
-            len(result["overall_warnings"]),
-        )
+        if len(active_platforms) > 1:
+            cross_platform = self.analyze_cross_platform_correlation(
+                coinbase_price_history, oanda_price_history
+            )
+            result["cross_platform"] = cross_platform
+            if cross_platform.get("warning"):
+                result["overall_warnings"].append(cross_platform["warning"])
+            logger.info(
+                "Dual-platform correlation analysis complete: %d warnings",
+                len(result["overall_warnings"]),
+            )
+        else:
+            logger.info(
+                "Single-platform correlation analysis complete: %d warnings",
+                len(result["overall_warnings"]),
+            )
 
         return result
 
     def format_correlation_summary(self, analysis: Dict[str, Any]) -> str:
-        """
-        Generate human-readable correlation summary.
-
-        Args:
-            analysis: Result from analyze_dual_platform_correlations()
-
-        Returns:
-            Formatted text summary
-        """
+        """Generate human-readable correlation summary."""
         lines = ["=== Correlation Analysis Summary ===", ""]
+        active_platforms = analysis.get("active_platforms") or [
+            name for name in ("coinbase", "oanda") if name in analysis
+        ]
 
-        # Coinbase correlations
-        cb = analysis["coinbase"]
-        lines.append("Coinbase (%d holdings):" % cb["num_holdings"])
-        lines.append(f"  Max Correlation: {cb['max_correlation']:.3f}")
-        if cb["highly_correlated"]:
-            lines.append("  Highly Correlated Pairs:")
-            for asset_a, asset_b, corr in cb["highly_correlated"][:3]:
-                lines.append(f"    • {asset_a} ↔ {asset_b}: {corr:.3f}")
+        for idx, platform_name in enumerate(active_platforms):
+            platform_analysis = analysis.get(platform_name, {})
+            if idx > 0:
+                lines.append("")
+            lines.append(
+                f"{platform_name.title()} ({platform_analysis.get('num_holdings', 0)} holdings):"
+            )
+            lines.append(
+                f"  Max Correlation: {platform_analysis.get('max_correlation', 0.0):.3f}"
+            )
+            if platform_analysis.get("highly_correlated"):
+                lines.append("  Highly Correlated Pairs:")
+                for asset_a, asset_b, corr in platform_analysis["highly_correlated"][:3]:
+                    lines.append(f"    • {asset_a} ↔ {asset_b}: {corr:.3f}")
 
-        # Oanda correlations
-        oa = analysis["oanda"]
-        lines.append("\nOanda (%d holdings):" % oa["num_holdings"])
-        lines.append(f"  Max Correlation: {oa['max_correlation']:.3f}")
-        if oa["highly_correlated"]:
-            lines.append("  Highly Correlated Pairs:")
-            for asset_a, asset_b, corr in oa["highly_correlated"][:3]:
-                lines.append(f"    • {asset_a} ↔ {asset_b}: {corr:.3f}")
+        cp = analysis.get("cross_platform")
+        if cp is not None:
+            lines.append("")
+            lines.append("Cross-Platform:")
+            lines.append(f"  Max Correlation: {cp.get('max_correlation', 0.0):.3f}")
 
-        # Cross-platform
-        cp = analysis["cross_platform"]
-        lines.append("\nCross-Platform:")
-        lines.append(f"  Max Correlation: {cp['max_correlation']:.3f}")
-
-        # Warnings
-        if analysis["overall_warnings"]:
-            lines.append("\n⚠️  Warnings:")
+        if analysis.get("overall_warnings"):
+            lines.append("")
+            lines.append("⚠️  Warnings:")
             for warning in analysis["overall_warnings"]:
                 lines.append(f"  • {warning}")
 
         return "\n".join(lines)
+

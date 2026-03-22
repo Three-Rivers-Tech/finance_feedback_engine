@@ -234,6 +234,26 @@ class VaRCalculator:
 
         return result
 
+    def _resolve_active_platform_inputs(
+        self,
+        coinbase_holdings: Dict[str, Dict[str, Any]],
+        coinbase_price_history: Dict[str, List[Dict[str, float]]],
+        oanda_holdings: Dict[str, Dict[str, Any]],
+        oanda_price_history: Dict[str, List[Dict[str, float]]],
+    ) -> Dict[str, Dict[str, Any]]:
+        platforms = {}
+        if coinbase_holdings or coinbase_price_history:
+            platforms["coinbase"] = {
+                "holdings": coinbase_holdings,
+                "price_history": coinbase_price_history,
+            }
+        if oanda_holdings or oanda_price_history:
+            platforms["oanda"] = {
+                "holdings": oanda_holdings,
+                "price_history": oanda_price_history,
+            }
+        return platforms
+
     def calculate_dual_portfolio_var(
         self,
         coinbase_holdings: Dict[str, Dict[str, Any]],
@@ -243,55 +263,47 @@ class VaRCalculator:
         confidence_level: float = 0.95,
     ) -> Dict[str, Any]:
         """
-        Calculate VaR for dual isolated portfolios (Coinbase + Oanda).
+        Calculate VaR for the active platform set.
 
-        Since funds cannot be transferred between platforms, calculates:
-        1. Coinbase portfolio VaR (crypto)
-        2. Oanda portfolio VaR (forex)
-        3. Combined portfolio VaR (simple sum, platforms uncorrelated)
-
-        Args:
-            coinbase_holdings: Coinbase holdings
-            coinbase_price_history: Coinbase historical prices
-            oanda_holdings: Oanda holdings
-            oanda_price_history: Oanda historical prices
-            confidence_level: Confidence level (0.95 or 0.99)
-
-        Returns:
-            Dictionary with:
-            - coinbase_var: VaR metrics for Coinbase portfolio
-            - oanda_var: VaR metrics for Oanda portfolio
-            - combined_var: VaR metrics for combined portfolio
-            - total_portfolio_value: Sum of both portfolios
-            - risk_concentration: Risk concentration analysis
+        Preserves the legacy combined_var contract while adapting to single-platform
+        runtimes that no longer have both Coinbase and Oanda active.
         """
-        logger.info(
-            f"Calculating dual-portfolio VaR at {confidence_level*100}% confidence"
+        active_inputs = self._resolve_active_platform_inputs(
+            coinbase_holdings,
+            coinbase_price_history,
+            oanda_holdings,
+            oanda_price_history,
         )
+        active_platforms = list(active_inputs.keys())
 
-        # Calculate individual portfolio VaRs
-        coinbase_var = self.calculate_portfolio_var(
-            coinbase_holdings, coinbase_price_history, confidence_level
-        )
+        if len(active_platforms) > 1:
+            logger.info(
+                f"Calculating dual-portfolio VaR at {confidence_level*100}% confidence"
+            )
+        elif len(active_platforms) == 1:
+            logger.info(
+                "Calculating single-platform VaR for %s at %.1f%% confidence",
+                active_platforms[0],
+                confidence_level * 100,
+            )
+        else:
+            logger.info(
+                "Calculating portfolio VaR at %.1f%% confidence with no active platforms",
+                confidence_level * 100,
+            )
 
-        oanda_var = self.calculate_portfolio_var(
-            oanda_holdings, oanda_price_history, confidence_level
-        )
+        platform_vars: Dict[str, Dict[str, Any]] = {}
+        for platform_name, inputs in active_inputs.items():
+            platform_vars[platform_name] = self.calculate_portfolio_var(
+                inputs["holdings"], inputs["price_history"], confidence_level
+            )
 
-        # Calculate combined metrics
-        total_value = coinbase_var["portfolio_value"] + oanda_var["portfolio_value"]
-
-        # Combined VaR (simple sum, assuming platforms are uncorrelated)
-        # This is conservative - real combined VaR would be lower due to diversification
-        combined_var_usd = coinbase_var["var_usd"] + oanda_var["var_usd"]
-        combined_var = combined_var_usd / total_value if total_value > 0 else 0
-
-        # Risk concentration analysis
-        risk_concentration = self._analyze_risk_concentration(coinbase_var, oanda_var)
+        total_value = sum(v.get("portfolio_value", 0.0) for v in platform_vars.values())
+        combined_var_usd = sum(v.get("var_usd", 0.0) for v in platform_vars.values())
+        combined_var = combined_var_usd / total_value if total_value > 0 else 0.0
 
         result = {
-            "coinbase_var": coinbase_var,
-            "oanda_var": oanda_var,
+            "active_platforms": active_platforms,
             "combined_var": {
                 "var": round(combined_var, 4),
                 "var_usd": round(combined_var_usd, 2),
@@ -299,86 +311,102 @@ class VaRCalculator:
                 "confidence_level": confidence_level,
             },
             "total_portfolio_value": round(total_value, 2),
-            "risk_concentration": risk_concentration,
+            "risk_concentration": self._analyze_risk_concentration(platform_vars),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        result.update({f"{name}_var": value for name, value in platform_vars.items()})
 
-        logger.info(
-            f"Dual-portfolio VaR: Coinbase=${coinbase_var['var_usd']:.2f}, "
-            f"Oanda=${oanda_var['var_usd']:.2f}, "
-            f"Combined=${combined_var_usd:.2f} ({confidence_level*100}%)"
-        )
+        if len(active_platforms) == 1:
+            only = active_platforms[0]
+            logger.info(
+                "Single-platform VaR: %s=$%.2f (%.1f%%)",
+                only,
+                platform_vars[only].get("var_usd", 0.0),
+                confidence_level * 100,
+            )
+        else:
+            logger.info(
+                "Dual-portfolio VaR: Coinbase=$%.2f, Oanda=$%.2f, Combined=$%.2f (%.1f%%)",
+                platform_vars.get("coinbase", {}).get("var_usd", 0.0),
+                platform_vars.get("oanda", {}).get("var_usd", 0.0),
+                combined_var_usd,
+                confidence_level * 100,
+            )
 
         return result
 
     def _analyze_risk_concentration(
-        self, coinbase_var: Dict[str, Any], oanda_var: Dict[str, Any]
+        self, platform_vars: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Analyze risk concentration between platforms.
-
-        Args:
-            coinbase_var: Coinbase VaR results
-            oanda_var: Oanda VaR results
-
-        Returns:
-            Risk concentration metrics
-        """
-        coinbase_value = coinbase_var.get("portfolio_value", 0)
-        oanda_value = oanda_var.get("portfolio_value", 0)
-        total_value = coinbase_value + oanda_value
+        """Analyze concentration across the currently active platforms."""
+        total_value = sum(v.get("portfolio_value", 0.0) for v in platform_vars.values())
+        allocations = {}
 
         if total_value == 0:
-            return {
-                "coinbase_pct": 0.0,
-                "oanda_pct": 0.0,
-                "concentration_warning": None,
-            }
+            return {"platform_allocations": {}, "concentration_warning": None}
 
-        coinbase_pct = (coinbase_value / total_value) * 100
-        oanda_pct = (oanda_value / total_value) * 100
+        dominant_platform = None
+        dominant_pct = 0.0
+        for platform_name, var_result in platform_vars.items():
+            pct = (var_result.get("portfolio_value", 0.0) / total_value) * 100
+            allocations[platform_name] = round(pct, 1)
+            if pct > dominant_pct:
+                dominant_pct = pct
+                dominant_platform = platform_name
 
-        # Check for concentration warnings
         warning = None
-        if coinbase_pct > 80 or oanda_pct > 80:
-            dominant = "Coinbase" if coinbase_pct > 80 else "Oanda"
-            warning = f"{dominant} accounts for >{int(max(coinbase_pct, oanda_pct))}% of portfolio"
+        if len(platform_vars) > 1 and dominant_pct > 80 and dominant_platform:
+            warning = (
+                f"{dominant_platform.title()} accounts for >{int(dominant_pct)}% of portfolio"
+            )
 
-        return {
-            "coinbase_pct": round(coinbase_pct, 1),
-            "oanda_pct": round(oanda_pct, 1),
+        result = {
+            "platform_allocations": allocations,
             "concentration_warning": warning,
         }
+        if "coinbase" in allocations:
+            result["coinbase_pct"] = allocations["coinbase"]
+        if "oanda" in allocations:
+            result["oanda_pct"] = allocations["oanda"]
+        return result
 
     def format_var_summary(self, var_result: Dict[str, Any]) -> str:
-        """
-        Generate human-readable VaR summary.
-
-        Args:
-            var_result: Result from calculate_dual_portfolio_var()
-
-        Returns:
-            Formatted text summary
-        """
+        """Generate human-readable VaR summary."""
+        confidence_pct = var_result["combined_var"]["confidence_level"] * 100
         lines = [
             "=== Value at Risk (VaR) Summary ===",
-            f"Confidence Level: {var_result['combined_var']['confidence_level']*100}%",
+            f"Confidence Level: {confidence_pct}%",
             f"Total Portfolio Value: ${var_result['total_portfolio_value']:,.2f}",
             "",
             "Platform Breakdown:",
-            f"  Coinbase: ${var_result['coinbase_var']['portfolio_value']:,.2f} "
-            f"(VaR: ${var_result['coinbase_var']['var_usd']:,.2f})",
-            f"  Oanda:    ${var_result['oanda_var']['portfolio_value']:,.2f} "
-            f"(VaR: ${var_result['oanda_var']['var_usd']:,.2f})",
-            "",
-            f"Combined Portfolio VaR: ${var_result['combined_var']['var_usd']:,.2f} "
-            f"({var_result['combined_var']['var']*100:.2f}%)",
         ]
 
-        if var_result["risk_concentration"]["concentration_warning"]:
-            lines.append("")
+        active_platforms = var_result.get("active_platforms") or [
+            name.replace("_var", "")
+            for name in ("coinbase_var", "oanda_var")
+            if name in var_result
+        ]
+
+        for platform_name in active_platforms:
+            key = f"{platform_name}_var"
+            details = var_result.get(key, {})
             lines.append(
-                f"⚠️  {var_result['risk_concentration']['concentration_warning']}"
+                f"  {platform_name.title()}: ${details.get('portfolio_value', 0.0):,.2f} "
+                f"(VaR: ${details.get('var_usd', 0.0):,.2f})"
             )
 
+        lines.extend(
+            [
+                "",
+                f"Combined Portfolio VaR: ${var_result['combined_var']['var_usd']:,.2f} "
+                f"({var_result['combined_var']['var']*100:.2f}%)",
+            ]
+        )
+
+        warning = var_result.get("risk_concentration", {}).get("concentration_warning")
+        if warning:
+            lines.append("")
+            lines.append(f"⚠️  {warning}")
+
         return "\n".join(lines)
+
