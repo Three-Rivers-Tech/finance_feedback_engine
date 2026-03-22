@@ -386,7 +386,9 @@ Bear case summary:
 
 Your role is to make the FINAL DECISION weighing both perspectives.
 Do NOT reward persuasive writing. Judge evidence quality, trend alignment, actionability, and execution suitability.
-Prefer no trade over a weak trade.
+HOLD is an active decision, not the default fallback.
+Do not choose HOLD merely because the bull and bear disagree. Disagreement is expected.
+If one case is materially stronger, more specific, and more actionable, prefer that side.
 
 Decision Framework:
 1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
@@ -399,11 +401,16 @@ Decision Framework:
 5. Lower priority: short-term noise and isolated candle signals
 
 MANDATORY HOLD CONDITIONS:
-- Bull and bear evidence are closely matched
-- Both cases are weak or low-conviction
+- Both directional cases are weak, generic, or poorly grounded
+- Evidence is too mixed to justify positive expected value even for a small position
 - Data is stale, degraded, or market is closed
 - Execution or sizing context is incomplete or unreliable
 - Proposed trade is counter-trend without exceptional reversal evidence
+
+IMPORTANT HOLD RULE:
+- Disagreement alone is not sufficient for HOLD.
+- If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
+- Choose HOLD only if neither side clears the threshold for an actionable trade.
 
 Counter-trend trades should only be recommended with:
 - Exceptional reversal signals
@@ -420,10 +427,18 @@ Return ONLY valid JSON with these exact keys:
 In reasoning, use this exact mini-structure:
 Winning Thesis: <bull|bear|neither>
 Decision Basis: <main factor that decided the outcome>
-Why Not Other Side: <brief reason the losing case did not win>
+Why Not Bull: <required when final action is HOLD or bear-side action>
+Why Not Bear: <required when final action is HOLD or bull-side action>
 Actionability: <actionable_now|monitor|no_trade>
 Data Quality: <good|degraded|stale>
+Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
 Final Rationale: <clear final explanation>
+
+When choosing HOLD:
+- Winning Thesis should normally be 'neither'
+- You must explicitly explain why the bullish case is not strong enough
+- You must explicitly explain why the bearish case is not strong enough
+- You must state what missing evidence or condition would justify action
 """
             
             judge_decision = await self._query_single_provider(judge_provider, judge_prompt)

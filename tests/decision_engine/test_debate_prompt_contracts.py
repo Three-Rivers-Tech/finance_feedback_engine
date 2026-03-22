@@ -37,7 +37,13 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Data Quality:' in bear_prompt
 
     assert 'MANDATORY HOLD CONDITIONS' in judge_prompt
+    assert 'HOLD is an active decision, not the default fallback' in judge_prompt
+    assert 'Do not choose HOLD merely because the bull and bear disagree' in judge_prompt
+    assert 'Disagreement alone is not sufficient for HOLD' in judge_prompt
+    assert 'If one case is materially stronger' in judge_prompt
     assert 'Winning Thesis:' in judge_prompt
     assert 'Decision Basis:' in judge_prompt
-    assert 'Why Not Other Side:' in judge_prompt
+    assert 'Why Not Bull:' in judge_prompt
+    assert 'Why Not Bear:' in judge_prompt
     assert 'Data Quality:' in judge_prompt
+    assert 'Missing Evidence:' in judge_prompt
