@@ -341,7 +341,6 @@ platforms:
     account_id: ${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}
     api_key: ${OANDA_API_KEY:YOUR_OANDA_API_KEY}
     environment: ${OANDA_ENVIRONMENT:practice}
-  name: oanda
 portfolio_memory:
   context_window: 20
   enabled: true
@@ -355,11 +354,6 @@ providers:
       api_key: ${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}
       api_secret: ${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}
       use_sandbox: false
-  oanda:
-    credentials:
-      account_id: ${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}
-      api_key: ${OANDA_API_KEY:YOUR_OANDA_API_KEY}
-      environment: ${OANDA_ENVIRONMENT:practice}
 refactoring:
   auto_rollback: true
   benchmark_frequency: 5
