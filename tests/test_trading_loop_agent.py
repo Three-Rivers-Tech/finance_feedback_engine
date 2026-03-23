@@ -839,6 +839,45 @@ async def test_execution_state_requires_engine_async_entrypoint(trading_agent, m
 
 
 @pytest.mark.asyncio
+async def test_execution_state_registers_pending_order_from_nested_success_response(trading_agent, mock_dependencies):
+    decision = {
+        "id": "decision-order-tracking",
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "asset_pair": "BTCUSD",
+        "entry_price": 50000.0,
+        "recommended_position_size": 0.25,
+        "control_outcome": {"status": "proposed", "version": 1},
+        "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+    }
+    async with trading_agent._current_decisions_lock:
+        trading_agent._current_decisions = [decision]
+    trading_agent.state = AgentState.EXECUTION
+    trading_agent.engine.order_status_worker = MagicMock()
+    trading_agent.engine.execute_decision_async = AsyncMock(return_value={
+        "success": True,
+        "platform": "coinbase_advanced",
+        "response": {"success": True, "success_response": {"order_id": "nested-abc123"}},
+    })
+
+    await trading_agent.handle_execution_state()
+
+    trading_agent.engine.order_status_worker.add_pending_order.assert_called_once_with(
+        order_id="nested-abc123",
+        decision_id="decision-order-tracking",
+        asset_pair="BTCUSD",
+        platform="coinbase_advanced",
+        action="BUY",
+        size=0.25,
+        entry_price=50000.0,
+    )
+    assert decision["execution_result"]["order_id"] == "nested-abc123"
+    assert decision["execution_status"] == "executed"
+    assert decision["executed"] is True
+    assert trading_agent.daily_trade_count == 1
+
+
+@pytest.mark.asyncio
 async def test_execution_state_updates_canonical_control_outcome_on_success(trading_agent, mock_dependencies):
     decision = {
         "id": "decision-exec-success",

@@ -2343,8 +2343,13 @@ class TradingLoopAgent:
                         decision_id
                     )
                     action = decision.get("policy_action") or decision.get("action") or "UNKNOWN"
+                    normalized_action = self._normalize_execution_action(decision)
+                    extracted_order_id = self._extract_order_id_from_execution_result(execution_result)
+                    if extracted_order_id and not execution_result.get("order_id"):
+                        execution_result["order_id"] = extracted_order_id
                     if execution_result.get("success"):
                         decision["execution_status"] = "executed"
+                        decision["executed"] = True
                         decision["execution_result"] = execution_result
                         decision["control_outcome"] = build_control_outcome(
                             action=decision.get("action"),
@@ -2386,6 +2391,41 @@ class TradingLoopAgent:
                         self.trade_monitor.associate_decision_to_trade(
                             decision_id, asset_pair
                         )
+
+                        order_status_worker = getattr(self.engine, "order_status_worker", None)
+                        if order_status_worker and extracted_order_id and normalized_action:
+                            try:
+                                order_status_worker.add_pending_order(
+                                    order_id=extracted_order_id,
+                                    decision_id=decision_id,
+                                    asset_pair=asset_pair,
+                                    platform=execution_result.get("platform") or "unknown",
+                                    action=normalized_action,
+                                    size=float(
+                                        decision.get("recommended_position_size")
+                                        or decision.get("translated_size")
+                                        or decision.get("suggested_amount")
+                                        or 0
+                                    ),
+                                    entry_price=decision.get("entry_price"),
+                                )
+                                logger.info(
+                                    "Registered executed order %s for outcome tracking on %s",
+                                    extracted_order_id,
+                                    asset_pair,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    "Failed to register order %s for outcome tracking: %s",
+                                    extracted_order_id,
+                                    e,
+                                )
+                        elif execution_result.get("success") and not extracted_order_id:
+                            logger.warning(
+                                "Execution succeeded for %s but no concrete order_id was extracted; outcome tracking skipped.",
+                                asset_pair,
+                            )
+
                         # THR-134: Commit reservation - actual position now exists
                         try:
                             exposure_manager = get_exposure_manager()
@@ -2398,6 +2438,7 @@ class TradingLoopAgent:
                             logger.warning(f"Failed to finalize reservation for {decision_id}: {e}")
                     else:
                         decision["execution_status"] = "execution_failed"
+                        decision["executed"] = False
                         decision["execution_result"] = execution_result
                         decision["control_outcome"] = build_control_outcome(
                             action=decision.get("action"),
@@ -2997,6 +3038,41 @@ class TradingLoopAgent:
             )
             return False
 
+    def _extract_order_id_from_execution_result(
+        self, execution_result: Optional[Dict[str, Any]]
+    ) -> Optional[str]:
+        """Extract a concrete platform order id from normalized or nested execution payloads."""
+        if not isinstance(execution_result, dict):
+            return None
+
+        response = execution_result.get("response") or {}
+        success_response = response.get("success_response") or {}
+        candidates = [
+            execution_result.get("order_id"),
+            response.get("order_id") if isinstance(response, dict) else None,
+            success_response.get("order_id") if isinstance(success_response, dict) else None,
+        ]
+        for candidate in candidates:
+            if candidate:
+                return str(candidate)
+        return None
+
+    def _normalize_execution_action(self, decision: Dict[str, Any]) -> Optional[str]:
+        """Normalize canonical policy actions to adapter-edge BUY/SELL semantics."""
+        raw_action = decision.get("policy_action") or decision.get("action", "")
+        if is_policy_action(raw_action):
+            legacy = get_legacy_action_compatibility(raw_action)
+            if legacy:
+                return legacy
+            family = get_policy_action_family(raw_action)
+            if family in {"reduce_long", "close_long", "open_short", "add_short"}:
+                return "SELL"
+            if family in {"reduce_short", "close_short", "open_long", "add_long"}:
+                return "BUY"
+            return None
+        normalized = str(raw_action).upper()
+        return normalized if normalized in {"BUY", "SELL"} else None
+
     def _counts_toward_daily_trade_limit(
         self, decision: Dict[str, Any], execution_result: Dict[str, Any]
     ) -> bool:
@@ -3012,20 +3088,12 @@ class TradingLoopAgent:
         if not execution_result or not execution_result.get("success"):
             return False
 
-        raw_action = decision.get("policy_action") or decision.get("action", "")
-        action = (
-            get_legacy_action_compatibility(raw_action)
-            or (
-                "SELL" if get_policy_action_family(raw_action) in {"reduce_long", "close_long", "open_short", "add_short"}
-                else "BUY" if get_policy_action_family(raw_action) in {"reduce_short", "close_short", "open_long", "add_long"}
-                else None
-            )
-        ) if is_policy_action(raw_action) else str(raw_action).upper()
+        action = self._normalize_execution_action(decision)
         if action not in {"BUY", "SELL"}:
             return False
 
         response = execution_result.get("response") or {}
-        order_id = execution_result.get("order_id") or response.get("order_id")
+        order_id = self._extract_order_id_from_execution_result(execution_result)
         if not order_id:
             # No concrete order => do not burn daily quota
             return False
