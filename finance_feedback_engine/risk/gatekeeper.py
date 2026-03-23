@@ -647,8 +647,21 @@ class RiskGatekeeper:
                 portfolio_value
             )
 
+        normalized_action = str(
+            decision.get("policy_action") or decision.get("action") or ""
+        ).upper()
+        is_derisking_action = normalized_action.startswith(("CLOSE_", "REDUCE_"))
+
         # Validate leverage
         if leverage and leverage > max_leverage:
+            if is_derisking_action:
+                logger.info(
+                    "Allowing de-risking action despite leverage breach: action=%s leverage=%.2f max=%.2f",
+                    normalized_action,
+                    leverage,
+                    max_leverage,
+                )
+                return True, "De-risking action bypassed leverage limit"
             logger.warning(f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}")
             asset_pair = decision.get("asset_pair", "UNKNOWN")
             asset_type = (
@@ -680,7 +693,7 @@ class RiskGatekeeper:
                 1, {"reason": "concentration", "asset_type": asset_type}
             )
             return False, (
-                f"Effective concentration {effective_concentration:.1f}% exceeds max {max_concentration}% "
+                f"Effective position concentration {effective_concentration:.1f}% exceeds max {max_concentration}% "
                 f"(includes {asset_reserved_pct:.1f}% reserved from pending trades)"
             )
 

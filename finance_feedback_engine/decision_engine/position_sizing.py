@@ -510,6 +510,25 @@ class PositionSizingCalculator:
             )
             return result
 
+        # CLOSE/REDUCE actions are de-risking actions, not entry-sized actions.
+        # They should never fall through to minimum-order fallback sizing.
+        if has_existing_position and str(normalized_action).startswith(("CLOSE_", "REDUCE_")):
+            logger.info(
+                "Position sizing skipped for de-risking action: action=%s, has_existing=%s",
+                normalized_action,
+                has_existing_position,
+            )
+            result["recommended_position_size"] = 0
+            result["stop_loss_price"] = current_price
+            result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
+            result["risk_percentage"] = risk_percentage
+            result["policy_sizing_intent"] = self.build_policy_sizing_intent(
+                action=normalized_action,
+                recommended_position_size=0,
+                current_price=current_price,
+            )
+            return result
+
         # CASE 2: No valid balance - use minimum order size (no signal-only mode)
         if str(balance_source).lower() in {"unknown", "combined"}:
             logger.info(

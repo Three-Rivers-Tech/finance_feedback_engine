@@ -151,6 +151,25 @@ class TestLeverageAndConcentrationValidation:
 
         assert approved is True
 
+
+    def test_reduce_or_close_action_bypasses_leverage_block(self):
+        decision = {
+            "asset_pair": "BTCUSD",
+            "action": "CLOSE_SHORT",
+            "policy_action": "CLOSE_SHORT",
+        }
+        context = {
+            "risk_metrics": {"leverage_estimate": 473.37},
+            "position_concentration": {"largest_position_pct": 15.0},
+            "max_leverage": 5.0,
+            "max_concentration": 25.0,
+        }
+
+        approved, reason = self.gatekeeper._validate_leverage_and_concentration(decision, context)
+
+        assert approved is True
+        assert "de-risking" in reason.lower()
+
     def test_forex_asset_with_high_leverage_fails(self):
         """Test that forex assets respect leverage limits."""
         decision = {
