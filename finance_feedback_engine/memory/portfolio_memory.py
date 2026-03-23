@@ -35,9 +35,12 @@ class TradeOutcome:
 
     decision_id: str
     asset_pair: str
-    action: str  # BUY/SELL/HOLD
+    action: str  # BUY/SELL/HOLD compatibility field
     entry_timestamp: str
     exit_timestamp: Optional[str] = None
+    policy_action: Optional[str] = None
+    policy_action_family: Optional[str] = None
+    legacy_action_compatibility: Optional[str] = None
     entry_price: float = 0.0
     exit_price: Optional[float] = None
     position_size: float = 0.0
@@ -265,6 +268,9 @@ class PortfolioMemoryEngine:
         decision_id = decision.get("id", "unknown")
         asset_pair = decision.get("asset_pair", "UNKNOWN")
         action = decision.get("action", "HOLD")
+        policy_action = decision.get("policy_action")
+        policy_action_family = decision.get("policy_action_family")
+        legacy_action_compatibility = decision.get("legacy_action_compatibility")
 
         entry_timestamp = decision.get("timestamp", datetime.now(UTC).isoformat())
         entry_price = decision.get("entry_price") or decision.get(
@@ -350,6 +356,9 @@ class PortfolioMemoryEngine:
             decision_id=decision_id,
             asset_pair=asset_pair,
             action=action,
+            policy_action=policy_action,
+            policy_action_family=policy_action_family,
+            legacy_action_compatibility=legacy_action_compatibility,
             entry_timestamp=entry_timestamp,
             exit_timestamp=exit_ts,
             entry_price=entry_price,

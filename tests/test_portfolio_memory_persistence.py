@@ -18,6 +18,9 @@ def sample_decision():
         "decision_id": "test_123",
         "asset_pair": "BTCUSD",
         "action": "BUY",
+        "policy_action": "OPEN_SMALL_LONG",
+        "policy_action_family": "open_long",
+        "legacy_action_compatibility": "BUY",
         "entry_price": 50000.0,
         "position_size": 0.1,
         "confidence": 85,
@@ -89,6 +92,17 @@ class TestRecordTradeOutcome:
 
         assert outcome.hit_take_profit is True
         assert outcome.realized_pnl > 0
+
+    def test_record_trade_preserves_policy_action_metadata(self, memory_engine, sample_decision):
+        outcome = memory_engine.record_trade_outcome(
+            sample_decision, exit_price=52000.0, exit_timestamp="2024-12-04T12:00:00Z"
+        )
+
+        assert outcome.action == "BUY"
+        assert outcome.policy_action == "OPEN_SMALL_LONG"
+        assert outcome.policy_action_family == "open_long"
+        assert outcome.legacy_action_compatibility == "BUY"
+
 
 
 class TestSaveToDisk:
@@ -175,6 +189,8 @@ class TestLoadFromDisk:
 
         assert len(loaded_engine.trade_outcomes) == 1
         assert loaded_engine.trade_outcomes[0].asset_pair == "BTCUSD"
+        assert loaded_engine.trade_outcomes[0].policy_action == "OPEN_SMALL_LONG"
+        assert loaded_engine.trade_outcomes[0].legacy_action_compatibility == "BUY"
 
     def test_load_nonexistent_file_creates_new(self, tmp_path):
         """Test loading non-existent file returns new instance."""
