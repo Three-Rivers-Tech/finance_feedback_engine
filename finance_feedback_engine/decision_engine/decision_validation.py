@@ -190,6 +190,15 @@ def try_parse_decision_json(payload: str) -> Optional[Dict[str, Any]]:
         return None
 
     normalized = normalize_decision_action_payload(data)
+
+    if str(normalized.get("action", "")).upper() == POLICY_OR_LEGACY_HOLD:
+        try:
+            confidence = int(normalized.get("confidence", -1))
+        except (TypeError, ValueError):
+            confidence = -1
+        if confidence == 0:
+            normalized["confidence"] = 50
+
     return normalized if is_valid_decision(normalized) else None
 
 
