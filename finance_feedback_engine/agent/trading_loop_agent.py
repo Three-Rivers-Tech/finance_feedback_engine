@@ -968,6 +968,7 @@ class TradingLoopAgent:
                 # Query platform for current portfolio state
                 portfolio = await self.engine.get_portfolio_breakdown_async()
                 logger.info("Portfolio breakdown retrieved: %s", portfolio)
+                self._log_portfolio_risk_snapshot("Recovery portfolio snapshot", portfolio)
 
                 # Extract positions from platform response
                 raw_positions = []
@@ -1839,6 +1840,14 @@ class TradingLoopAgent:
                     # Keep first observed side per asset for duplicate-entry logic.
                     open_position_side.setdefault(canonical, side)
 
+            self._log_portfolio_risk_snapshot(
+                "Portfolio risk snapshot (decision loop)",
+                portfolio_snapshot,
+                open_asset_pairs=open_asset_pairs,
+                open_position_side=open_position_side,
+                managed_asset_pairs=managed_asset_pairs,
+                margin_usage_pct=margin_usage_pct,
+            )
             if open_asset_pairs:
                 logger.info(
                     "Managed open position assets detected (duplicate-entry guard active): %s | margin_usage=%.2f%% (limit %.2f%%)",
@@ -3028,6 +3037,95 @@ class TradingLoopAgent:
             "provider_decisions": ((decision.get("ensemble_metadata") or {}).get("provider_decisions")),
         }
         return decision
+
+    def _log_portfolio_risk_snapshot(
+        self,
+        label: str,
+        portfolio_snapshot: Optional[Dict[str, Any]],
+        *,
+        open_asset_pairs: Optional[set[str]] = None,
+        open_position_side: Optional[Dict[str, str]] = None,
+        managed_asset_pairs: Optional[set[str]] = None,
+        margin_usage_pct: Optional[float] = None,
+    ) -> None:
+        """Log a compact portfolio/position awareness snapshot for operator visibility."""
+        try:
+            portfolio_snapshot = portfolio_snapshot or {}
+            candidate_positions = []
+            total_balance = 0.0
+            buying_power = 0.0
+            initial_margin = 0.0
+            unrealized_pnl = 0.0
+
+            if "platform_breakdowns" in portfolio_snapshot:
+                for platform_name, platform_data in (portfolio_snapshot.get("platform_breakdowns") or {}).items():
+                    candidate_positions.extend((platform_data.get("futures_positions") or []))
+                    candidate_positions.extend((platform_data.get("positions") or []))
+                    if str(platform_name).lower() == "coinbase":
+                        futures_summary = platform_data.get("futures_summary") or {}
+                        total_balance = float(
+                            futures_summary.get("total_balance_usd", 0.0)
+                            or platform_data.get("total_value_usd", 0.0)
+                            or total_balance
+                            or 0.0
+                        )
+                        buying_power = float(futures_summary.get("buying_power", 0.0) or buying_power or 0.0)
+                        initial_margin = float(futures_summary.get("initial_margin", 0.0) or initial_margin or 0.0)
+                        unrealized_pnl = float(futures_summary.get("unrealized_pnl", 0.0) or unrealized_pnl or 0.0)
+            else:
+                candidate_positions.extend((portfolio_snapshot.get("futures_positions") or []))
+                candidate_positions.extend((portfolio_snapshot.get("positions") or []))
+                total_balance = float(portfolio_snapshot.get("total_value_usd", 0.0) or 0.0)
+                buying_power = float(portfolio_snapshot.get("buying_power", 0.0) or 0.0)
+                initial_margin = float(portfolio_snapshot.get("initial_margin", 0.0) or 0.0)
+                unrealized_pnl = float(portfolio_snapshot.get("unrealized_pnl", 0.0) or 0.0)
+
+            raw_products = []
+            derived_assets = set(open_asset_pairs or [])
+            side_summary = dict(open_position_side or {})
+
+            cfm_base_map = {"BIP": "BTC", "BIT": "BTC", "ETP": "ETH", "ET": "ETH", "SOL": "SOL", "SLP": "SOL"}
+            for pos in candidate_positions:
+                raw_pair = pos.get("product_id") or pos.get("instrument")
+                if raw_pair:
+                    raw_products.append(str(raw_pair))
+                raw_upper = str(raw_pair or "").upper()
+                prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
+                mapped_base = cfm_base_map.get(prefix)
+                canonical = None
+                if mapped_base:
+                    canonical = f"{mapped_base}USD"
+                else:
+                    try:
+                        canonical = standardize_asset_pair(raw_pair) if raw_pair else None
+                    except Exception:
+                        canonical = None
+                if canonical:
+                    derived_assets.add(canonical)
+                    if canonical not in side_summary:
+                        side_summary[canonical] = str(pos.get("side") or "UNKNOWN").upper()
+
+            positions_count = len(candidate_positions)
+            margin_usage_effective = margin_usage_pct
+            if margin_usage_effective is None and total_balance > 0 and initial_margin > 0:
+                margin_usage_effective = initial_margin / total_balance
+
+            logger.info(
+                "%s | managed_positions=%d | managed_assets=%s | sides=%s | total_balance=$%.2f | buying_power=$%.2f | unrealized_pnl=$%.2f | initial_margin=$%.2f | margin_usage=%s | managed_asset_scope=%s | raw_products=%s",
+                label,
+                positions_count,
+                sorted(derived_assets),
+                {k: side_summary[k] for k in sorted(side_summary)},
+                total_balance,
+                buying_power,
+                unrealized_pnl,
+                initial_margin,
+                f"{margin_usage_effective * 100:.2f}%" if margin_usage_effective is not None else "n/a",
+                sorted(managed_asset_pairs) if managed_asset_pairs else [],
+                sorted(raw_products),
+            )
+        except Exception:
+            logger.debug("Failed to log portfolio risk snapshot", exc_info=True)
 
     def _log_council_summary(self, decision: Dict[str, Any], asset_pair: Optional[str] = None) -> None:
         """Log concise bull/bear/judge council summaries with canonical policy-action labels."""

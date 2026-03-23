@@ -456,6 +456,94 @@ async def test_hold_decision_preserves_ensemble_metadata_and_logs_council_summar
 
 
 
+def test_log_portfolio_risk_snapshot_summarizes_positions_and_balance(trading_agent, caplog):
+    snapshot = {
+        "platform_breakdowns": {
+            "coinbase": {
+                "futures_positions": [
+                    {
+                        "product_id": "BIP-20DEC30-CDE",
+                        "side": "SHORT",
+                        "number_of_contracts": "5",
+                    },
+                    {
+                        "product_id": "ETP-20DEC30-CDE",
+                        "side": "SHORT",
+                        "number_of_contracts": "5",
+                    },
+                ],
+                "futures_summary": {
+                    "total_balance_usd": 749.04,
+                    "buying_power": 232.31,
+                    "unrealized_pnl": -109.8,
+                    "initial_margin": 437.53,
+                },
+            }
+        }
+    }
+
+    with caplog.at_level(logging.INFO):
+        trading_agent._log_portfolio_risk_snapshot("Portfolio risk snapshot (decision loop)", snapshot)
+
+    assert "Portfolio risk snapshot (decision loop) | managed_positions=2" in caplog.text
+    assert "total_balance=$749.04" in caplog.text
+    assert "buying_power=$232.31" in caplog.text
+    assert "margin_usage=58.41%" in caplog.text
+    assert "BIP-20DEC30-CDE" in caplog.text
+    assert "ETP-20DEC30-CDE" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_process_cycle_logs_portfolio_risk_snapshot_for_managed_positions(trading_agent, mock_dependencies, caplog):
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_positions": [
+                        {
+                            "product_id": "BIP-20DEC30-CDE",
+                            "side": "SHORT",
+                            "number_of_contracts": "5",
+                        }
+                    ],
+                    "futures_summary": {
+                        "total_balance_usd": 749.04,
+                        "buying_power": 232.31,
+                        "unrealized_pnl": -98.35,
+                        "initial_margin": 374.52,
+                    },
+                }
+            }
+        }
+    )
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "OPEN_SMALL_SHORT",
+            "confidence": 85,
+            "asset_pair": "BTCUSD",
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "OPEN_SMALL_LONG", "confidence": 65, "provider": "gemma2:9b"},
+                    "bear": {"action": "OPEN_SMALL_SHORT", "confidence": 85, "provider": "llama3.1:8b"},
+                    "judge": {"action": "OPEN_SMALL_SHORT", "confidence": 85, "provider": "deepseek-r1:8b"},
+                }
+            },
+        }
+    )
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    assert "Portfolio risk snapshot (decision loop) | managed_positions=1" in caplog.text
+    assert "managed_assets=['BIP20DEC30CDE', 'BTCUSD']" in caplog.text
+    assert "managed_asset_scope=['BTCUSD']" in caplog.text
+    assert "margin_usage=50.00%" in caplog.text
+    assert "Skipping OPEN_SMALL_SHORT for BTCUSD: SHORT position already exists (duplicate-entry guard)." in caplog.text
+
+
+
 @pytest.mark.asyncio
 async def test_risk_check_persists_invalid_policy_action_distinctly(trading_agent, mock_dependencies):
     decision = {
