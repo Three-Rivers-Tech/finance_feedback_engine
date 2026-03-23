@@ -4,6 +4,8 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
+from .policy_actions import get_legacy_action_compatibility
+
 logger = logging.getLogger(__name__)
 
 # Minimum order sizes for different platforms (USD notional value)
@@ -37,6 +39,17 @@ class ProviderTranslationResult:
     translation_notes: Optional[str]
     version: int = 1
 
+
+
+
+def _normalize_action_for_sizing(action: str | None) -> tuple[str, str]:
+    """Return (normalized_action, legacy_action) for legacy and policy actions."""
+    normalized_action = str(action or "HOLD").upper()
+    try:
+        legacy_action = get_legacy_action_compatibility(normalized_action) or normalized_action
+    except ValueError:
+        legacy_action = normalized_action
+    return normalized_action, legacy_action
 
 class PositionSizingCalculator:
     """
@@ -166,6 +179,8 @@ class PositionSizingCalculator:
             - sizing_stop_loss_percentage: Stop loss percentage used
             - risk_percentage: Risk percentage used
         """
+        normalized_action, legacy_action = _normalize_action_for_sizing(action)
+
         # Check if we have valid balance
         has_valid_balance = (
             relevant_balance
@@ -184,7 +199,7 @@ class PositionSizingCalculator:
         # Debug logging for position sizing
         logger.debug(
             f"Position sizing inputs: relevant_balance={relevant_balance}, "
-            f"has_valid={has_valid_balance}, action={action}, "
+            f"has_valid={has_valid_balance}, action={normalized_action}, legacy_action={legacy_action}, "
             f"has_existing_position={has_existing_position}, source={balance_source}"
         )
 
@@ -244,8 +259,8 @@ class PositionSizingCalculator:
         # notion of usable balance so logs and execution behavior stay consistent.
         # Determine if we should calculate position sizing (no signal-only mode)
         should_calculate = has_valid_balance and (
-            action in ["BUY", "SELL"]
-            or (action == "HOLD" and has_existing_position)
+            legacy_action in ["BUY", "SELL"]
+            or (legacy_action == "HOLD" and has_existing_position)
         )
         
         if not should_calculate:
@@ -456,14 +471,14 @@ class PositionSizingCalculator:
                     "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                     "risk_percentage": risk_percentage,
                     "policy_sizing_intent": self.build_policy_sizing_intent(
-                        action=action,
+                        action=normalized_action,
                         recommended_position_size=recommended_position_size,
                         current_price=current_price,
                     ),
                 }
             )
 
-            if action == "HOLD" and has_existing_position:
+            if legacy_action == "HOLD" and has_existing_position:
                 logger.info(
                     "HOLD with existing position: sizing (%.4f units) from %s",
                     recommended_position_size,
@@ -482,14 +497,14 @@ class PositionSizingCalculator:
             return result
 
         # HOLD without position: no sizing needed
-        if action == "HOLD" and not has_existing_position:
+        if legacy_action == "HOLD" and not has_existing_position:
             logger.info("HOLD without existing position - no position sizing needed")
             result["recommended_position_size"] = 0
             result["stop_loss_price"] = current_price
             result["sizing_stop_loss_percentage"] = sizing_stop_loss_percentage
             result["risk_percentage"] = risk_percentage
             result["policy_sizing_intent"] = self.build_policy_sizing_intent(
-                action=action,
+                action=normalized_action,
                 recommended_position_size=0,
                 current_price=current_price,
             )
@@ -557,7 +572,7 @@ class PositionSizingCalculator:
                 "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
                 "risk_percentage": risk_percentage,
                 "policy_sizing_intent": self.build_policy_sizing_intent(
-                    action=action,
+                    action=normalized_action,
                     recommended_position_size=recommended_position_size,
                     current_price=current_price,
                 ),
@@ -784,13 +799,14 @@ class PositionSizingCalculator:
         Determine position type from action.
 
         Args:
-            action: Trading action (BUY, SELL, or HOLD)
+            action: Trading action (legacy BUY/SELL/HOLD or policy action)
 
         Returns:
-            Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
+            Position type: 'LONG' for BUY-compatible actions, 'SHORT' for SELL-compatible actions, None for HOLD/close-reduce actions
         """
-        if action == "BUY":
+        normalized_action, legacy_action = _normalize_action_for_sizing(action)
+        if legacy_action == "BUY":
             return "LONG"
-        elif action == "SELL":
+        elif legacy_action == "SELL":
             return "SHORT"
         return None
