@@ -9,6 +9,7 @@ import logging
 
 import click
 
+from finance_feedback_engine.cli.commands.trading import _decision_display_label
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.utils.config_loader import load_config
 
@@ -69,7 +70,7 @@ def _demo_quick(engine: FinanceFeedbackEngine, asset: str) -> None:
 
         if result:
             click.echo("✅ Analysis Complete")
-            click.echo(f"   Action: {result.get('action', 'N/A')}")
+            click.echo(f"   Action: {_decision_display_label(result)}")
             click.echo(f"   Confidence: {result.get('confidence', 'N/A')}%")
             click.echo(f"   Position Size: {result.get('position_size', 'N/A')}")
             click.echo("\n📄 Full decision saved to: data/decisions/")
