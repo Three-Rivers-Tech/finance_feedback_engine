@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import json
 import uuid
+from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -158,10 +159,41 @@ async def test_recovery_seeds_outcome_recorder_for_kept_positions(agent, mock_en
 
     calls = mock_engine.trade_outcome_recorder.update_positions.call_args_list
     assert len(calls) >= 2
+    assert calls[0].args[0][0].get("decision_id") is None
     seeded_positions = calls[-1].args[0]
     assert len(seeded_positions) == 1
     assert seeded_positions[0]["product_id"] == "BTC-USD"
     assert seeded_positions[0]["decision_id"]
+
+
+def test_trade_outcome_recorder_backfills_decision_id_for_existing_position(tmp_path):
+    from finance_feedback_engine.monitoring.trade_outcome_recorder import TradeOutcomeRecorder
+
+    recorder = TradeOutcomeRecorder(data_dir=tmp_path)
+    recorder.open_positions = {
+        "BTC-USD_LONG": {
+            "trade_id": "trade-1",
+            "product": "BTC-USD",
+            "side": "LONG",
+            "entry_time": "2026-03-23T20:00:00Z",
+            "entry_price": Decimal("45000"),
+            "entry_size": Decimal("0.5"),
+            "last_price": Decimal("45100"),
+            "decision_id": None,
+        }
+    }
+
+    recorder.update_positions([
+        {
+            "product_id": "BTC-USD",
+            "side": "LONG",
+            "size": 0.5,
+            "current_price": 45200,
+            "decision_id": "decision-abc",
+        }
+    ])
+
+    assert recorder.open_positions["BTC-USD_LONG"]["decision_id"] == "decision-abc"
 
 
 @pytest.mark.asyncio

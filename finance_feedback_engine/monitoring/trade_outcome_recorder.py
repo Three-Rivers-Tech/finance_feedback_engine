@@ -288,6 +288,9 @@ class TradeOutcomeRecorder:
                 # Keep most recent observed mark/current price for close-time fallback
                 if current_price > 0:
                     self.open_positions[pos_key]["last_price"] = current_price
+                if pos.get("decision_id") and not self.open_positions[pos_key].get("decision_id"):
+                    self.open_positions[pos_key]["decision_id"] = pos.get("decision_id")
+                    self._save_state()
         
         # Detect closed positions (in state but not in current)
         closed_keys = set(self.open_positions.keys()) - current_keys
