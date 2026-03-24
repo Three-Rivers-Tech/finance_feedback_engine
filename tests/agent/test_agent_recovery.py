@@ -55,6 +55,9 @@ def mock_engine():
     # Mock decision_store with save_decision method
     engine.decision_store = MagicMock()
     engine.decision_store.save_decision = MagicMock()
+    engine.trade_outcome_recorder = MagicMock()
+    engine.trade_outcome_recorder.update_positions.return_value = []
+    engine.record_trade_outcome = MagicMock()
     return engine
 
 
@@ -131,6 +134,60 @@ async def test_recovery_no_positions(agent, mock_engine):
     recovery_events = [e for e in events if e.get("type") == "recovery_complete"]
     assert len(recovery_events) > 0
     assert recovery_events[0]["found"] == 0
+
+
+@pytest.mark.asyncio
+async def test_recovery_seeds_outcome_recorder_for_kept_positions(agent, mock_engine):
+    """Recovered positions should be seeded into the outcome recorder with decision IDs."""
+    mock_engine.get_portfolio_breakdown_async.return_value = {
+        "futures_positions": [
+            {
+                "product_id": "BTC-USD",
+                "side": "LONG",
+                "contracts": 0.5,
+                "units": 0.5,
+                "entry_price": 45000.0,
+                "current_price": 46000.0,
+                "unrealized_pnl": 500.0,
+                "opened_at": "2024-01-01T12:00:00Z",
+            }
+        ]
+    }
+
+    await agent.handle_recovering_state()
+
+    calls = mock_engine.trade_outcome_recorder.update_positions.call_args_list
+    assert len(calls) >= 2
+    seeded_positions = calls[-1].args[0]
+    assert len(seeded_positions) == 1
+    assert seeded_positions[0]["product_id"] == "BTC-USD"
+    assert seeded_positions[0]["decision_id"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_no_positions_flushes_stale_outcomes_into_learning(agent, mock_engine):
+    """Startup recovery should forward stale closed positions from recorder into learning."""
+    mock_engine.get_portfolio_breakdown_async.return_value = {
+        "futures_positions": [],
+        "positions": [],
+    }
+    mock_engine.trade_outcome_recorder.update_positions.return_value = [
+        {
+            "decision_id": "decision-stale",
+            "product": "ETH-USD",
+            "exit_price": "2010.0",
+            "exit_time": "2026-03-23T20:00:00Z",
+            "realized_pnl": "-12.5",
+        }
+    ]
+
+    await agent.handle_recovering_state()
+
+    mock_engine.record_trade_outcome.assert_called_once_with(
+        "decision-stale",
+        exit_price=2010.0,
+        exit_timestamp="2026-03-23T20:00:00Z",
+    )
 
 
 @pytest.mark.asyncio

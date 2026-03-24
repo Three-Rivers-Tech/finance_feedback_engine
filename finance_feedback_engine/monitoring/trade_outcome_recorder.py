@@ -279,6 +279,7 @@ class TradeOutcomeRecorder:
                     "entry_price": entry_price,
                     "entry_size": size,
                     "last_price": current_price,
+                    "decision_id": pos.get("decision_id"),
                 }
                 logger.info(f"New position opened: {pos_key} @ {entry_price}")
                 # Save state immediately when new position detected
@@ -408,6 +409,7 @@ class TradeOutcomeRecorder:
             
             outcome = {
                 "trade_id": trade_data["trade_id"],
+                "decision_id": trade_data.get("decision_id"),
                 "product": trade_data["product"],
                 "side": side,
                 "entry_time": trade_data["entry_time"],

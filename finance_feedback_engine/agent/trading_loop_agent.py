@@ -1044,6 +1044,8 @@ class TradingLoopAgent:
                 # Filter out positions with zero size
                 active_positions = [p for p in raw_positions if p["size"] > 0]
 
+                self._sync_trade_outcome_recorder(active_positions)
+
                 if not active_positions:
                     logger.info("✓ No open positions found - starting with clean slate")
                     self._recovery_has_run = True
@@ -1106,6 +1108,7 @@ class TradingLoopAgent:
                 # Normalize and validate kept positions
                 normalized_positions = []
                 validation_errors = []
+                recorder_positions = []
 
                 for pos in positions_to_keep:
                     try:
@@ -1231,6 +1234,15 @@ class TradingLoopAgent:
                             "unrealized_pnl": pos["unrealized_pnl"],
                             "platform": pos["platform"],
                         })
+                        recorder_positions.append({
+                            "product_id": pos["product_id"],
+                            "side": pos["side"],
+                            "size": pos["size"],
+                            "entry_price": entry_price,
+                            "current_price": pos.get("current_price"),
+                            "opened_at": pos.get("opened_at"),
+                            "decision_id": decision_id,
+                        })
 
                     except Exception as e:
                         validation_errors.append({
@@ -1251,6 +1263,8 @@ class TradingLoopAgent:
                     self._startup_complete.set()
                     await self._transition_to(AgentState.PERCEPTION)
                     return
+
+                self._sync_trade_outcome_recorder(recorder_positions)
 
                 # Recovery successful!
                 self._recovery_has_run = True
@@ -1794,6 +1808,8 @@ class TradingLoopAgent:
                 "ETP": "ETH", "ET": "ETH",
                 "SOL": "SOL", "SLP": "SOL",
             }
+
+            self._sync_trade_outcome_recorder(candidate_positions)
 
             for pos in candidate_positions:
                 raw_pair = pos.get("product_id") or pos.get("instrument")
@@ -2698,6 +2714,66 @@ class TradingLoopAgent:
                 f"⚠️ Partial signal delivery failure: {signals_failed}/{len(self._current_decisions)} failed"
             )
             logger.warning(f"Failed signals: {'; '.join(failure_reasons)}")
+
+    def _sync_trade_outcome_recorder(self, current_positions: list[dict[str, Any]]) -> None:
+        """Sync the outcome recorder with live positions and forward closes into learning."""
+        recorder = getattr(self.engine, "trade_outcome_recorder", None)
+        if recorder is None:
+            return
+
+        try:
+            outcomes = recorder.update_positions(current_positions or [])
+        except Exception as e:
+            logger.warning("Trade outcome recorder sync failed: %s", e, exc_info=True)
+            return
+
+        if not outcomes:
+            return
+
+        logger.info(
+            "Trade outcome recorder detected %d closed position(s)",
+            len(outcomes),
+        )
+
+        for outcome in outcomes:
+            decision_id = outcome.get("decision_id")
+            product = outcome.get("product") or "UNKNOWN"
+            if not decision_id:
+                logger.warning(
+                    "Closed position %s missing decision_id; durable artifact recorded but learning update skipped",
+                    product,
+                )
+                continue
+
+            try:
+                memory_outcome = self.engine.record_trade_outcome(
+                    decision_id,
+                    exit_price=float(outcome["exit_price"]),
+                    exit_timestamp=outcome.get("exit_time"),
+                )
+                realized_pnl = getattr(memory_outcome, "realized_pnl", None)
+                if realized_pnl is None:
+                    realized_pnl = outcome.get("realized_pnl", 0)
+                pnl_value = float(realized_pnl or 0.0)
+                self._update_performance_metrics(
+                    {
+                        "realized_pnl": pnl_value,
+                        "was_profitable": pnl_value > 0,
+                    }
+                )
+                logger.info(
+                    "Recorded learning outcome for decision %s from closed position %s",
+                    decision_id,
+                    product,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to forward closed position %s into learning for decision %s: %s",
+                    product,
+                    decision_id,
+                    e,
+                    exc_info=True,
+                )
 
     async def handle_learning_state(self):
         """

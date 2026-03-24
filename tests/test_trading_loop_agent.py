@@ -80,6 +80,32 @@ async def test_agent_initial_state(trading_agent):
     assert trading_agent.is_running is False
 
 
+
+def test_sync_trade_outcome_recorder_forwards_closed_positions_into_learning(trading_agent, mock_dependencies):
+    recorder = MagicMock()
+    recorder.update_positions.return_value = [
+        {
+            "decision_id": "decision-123",
+            "product": "ETH-USD",
+            "exit_price": "2100.5",
+            "exit_time": "2026-03-23T20:00:00Z",
+            "realized_pnl": "42.0",
+        }
+    ]
+    mock_dependencies["engine"].trade_outcome_recorder = recorder
+    mock_dependencies["engine"].record_trade_outcome.return_value = MagicMock(realized_pnl=42.0)
+
+    trading_agent._sync_trade_outcome_recorder([])
+
+    recorder.update_positions.assert_called_once_with([])
+    mock_dependencies["engine"].record_trade_outcome.assert_called_once_with(
+        "decision-123",
+        exit_price=2100.5,
+        exit_timestamp="2026-03-23T20:00:00Z",
+    )
+
+
+
 @pytest.mark.asyncio
 async def test_perception_uses_fresh_default_crypto_context_even_with_stale_pulse(trading_agent, mock_dependencies):
     stale_context = {
