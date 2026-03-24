@@ -13677,3 +13677,129 @@ def test_decision_store_loaded_policy_trace_preserves_exchange_execution_sub_con
     exec_conf = exec_ex["execution_confirmation_contract"]
     assert "summary_count" in exec_conf
     assert exec_conf["adaptive_control_exchange_execution_confirmation_contract_summary_version"] == 1
+
+
+
+def test_build_policy_selection_learning_export_proof_from_linked_trade_outcome_record():
+    from finance_feedback_engine.decision_engine.policy_actions import (
+        build_policy_selection_learning_export_proof_from_linked_trade_outcome_record,
+    )
+
+    decision = {
+        "id": "aa65f852-06b1-4109-90b0-c8ee20a44de0",
+        "asset_pair": "BTCUSD",
+        "action": "CLOSE_SHORT",
+        "policy_action": "CLOSE_SHORT",
+        "confidence": 95,
+        "timestamp": "2026-03-24T04:31:14.284236+00:00",
+        "ai_provider": "ensemble",
+        "policy_trace": {
+            "policy_package": {
+                "policy_state": {"position_state": None, "volatility": 0.0078, "current_price": 70539.0, "version": 1},
+                "action_context": {"structural_action_validity": "unchecked", "version": 1},
+                "policy_sizing_intent": {"semantic_action": "CLOSE_SHORT", "target_delta_pct": 0.0, "provider_agnostic": True, "version": 1},
+                "provider_translation_result": None,
+                "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+                "version": 1,
+            },
+            "decision_envelope": {
+                "action": "CLOSE_SHORT",
+                "policy_action": "CLOSE_SHORT",
+                "legacy_action_compatibility": "BUY",
+                "confidence": 95,
+                "reasoning": "linked live-style close",
+                "version": 1,
+            },
+            "decision_metadata": {
+                "asset_pair": "BTCUSD",
+                "ai_provider": "ensemble",
+                "timestamp": "2026-03-24T04:31:14.284236+00:00",
+                "decision_id": "aa65f852-06b1-4109-90b0-c8ee20a44de0",
+            },
+            "trace_version": 1,
+        },
+        "execution_result": {
+            "success": True,
+            "platform": "coinbase_advanced",
+            "decision_id": "aa65f852-06b1-4109-90b0-c8ee20a44de0",
+            "response": {
+                "success": True,
+                "success_response": {
+                    "order_id": "b631f899-888b-4faa-bb21-105b83e24725",
+                    "product_id": "BIP-20DEC30-CDE",
+                    "side": "BUY",
+                }
+            },
+            "timestamp": "2026-03-24T04:31:14.284236+00:00",
+        },
+        "executed": True,
+        "executed_at": "2026-03-24T04:31:34.116507+00:00",
+    }
+    trade_outcome_record = {
+        "trade_id": "ac052c97-d228-4e2b-a660-616f3d4fce7b",
+        "decision_id": "aa65f852-06b1-4109-90b0-c8ee20a44de0",
+        "product": "BIP-20DEC30-CDE",
+        "side": "SHORT",
+        "entry_time": "2026-03-24T03:54:12.105427+00:00",
+        "entry_price": "70540",
+        "entry_size": "0",
+        "exit_time": "2026-03-24T04:35:03.368795+00:00",
+        "exit_price": "70405.0",
+        "realized_pnl": "0.0",
+        "roi_percent": "0",
+    }
+
+    proof = build_policy_selection_learning_export_proof_from_linked_trade_outcome_record(
+        decision,
+        trade_outcome_record,
+    )
+
+    assert proof["dataset_row"]["decision_id"] == "aa65f852-06b1-4109-90b0-c8ee20a44de0"
+    assert proof["trade_outcome_record"]["product"] == "BIP-20DEC30-CDE"
+    assert proof["execution_fill_summary"]["primary_cutover_execution_fill_count"] == 1
+    assert proof["trade_outcome_summary"]["primary_cutover_trade_outcome_count"] == 1
+    assert proof["learning_feedback_summary"]["primary_cutover_learning_feedback_count"] == 1
+    assert proof["learning_analytics_summary"]["primary_cutover_learning_analytics_count"] == 1
+
+
+
+def test_build_policy_selection_learning_export_proof_batch_filters_to_linked_records():
+    from finance_feedback_engine.decision_engine.policy_actions import (
+        build_policy_selection_learning_export_proof_batch,
+    )
+
+    decisions_by_id = {
+        "decision-1": {
+            "id": "decision-1",
+            "asset_pair": "BTCUSD",
+            "action": "CLOSE_SHORT",
+            "policy_action": "CLOSE_SHORT",
+            "executed": True,
+            "execution_result": {"success": True},
+            "policy_trace": {
+                "policy_package": {
+                    "policy_state": {"position_state": None, "version": 1},
+                    "action_context": {"structural_action_validity": "unchecked", "version": 1},
+                    "policy_sizing_intent": {"semantic_action": "CLOSE_SHORT", "target_delta_pct": 0.0, "provider_agnostic": True, "version": 1},
+                    "provider_translation_result": None,
+                    "control_outcome": {"status": "executed", "reason_code": "EXECUTED", "version": 1},
+                    "version": 1,
+                },
+                "decision_envelope": {"action": "CLOSE_SHORT", "policy_action": "CLOSE_SHORT", "legacy_action_compatibility": "BUY", "confidence": 95, "reasoning": "batch proof", "version": 1},
+                "decision_metadata": {"asset_pair": "BTCUSD", "ai_provider": "ensemble", "timestamp": "2026-03-24T04:31:14.284236+00:00", "decision_id": "decision-1"},
+                "trace_version": 1,
+            },
+        }
+    }
+    records = [
+        {"decision_id": "decision-1", "product": "BIP-20DEC30-CDE", "realized_pnl": "0.0"},
+        {"decision_id": None, "product": "EUR_USD", "realized_pnl": "-0.01"},
+        {"decision_id": "missing-decision", "product": "GBP_USD", "realized_pnl": "-0.02"},
+    ]
+
+    batch = build_policy_selection_learning_export_proof_batch(decisions_by_id, records)
+
+    assert len(batch) == 1
+    assert batch[0]["dataset_row"]["decision_id"] == "decision-1"
+    assert batch[0]["trade_outcome_record"]["product"] == "BIP-20DEC30-CDE"
+    assert batch[0]["learning_feedback_summary"]["primary_cutover_learning_feedback_count"] == 1

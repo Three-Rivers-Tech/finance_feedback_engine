@@ -4438,6 +4438,110 @@ def extract_policy_selection_learning_feedback_summaries(
 
 
 
+def build_policy_selection_learning_export_proof_from_linked_trade_outcome_record(
+    decision: Optional[dict],
+    trade_outcome_record: Optional[dict],
+) -> dict:
+    normalized_decision = dict(decision or {}) if isinstance(decision, dict) else {}
+    normalized_trade_outcome = (
+        dict(trade_outcome_record or {})
+        if isinstance(trade_outcome_record, dict)
+        else {}
+    )
+
+    dataset_row = build_policy_dataset_row_from_decision(normalized_decision)
+
+    decision_id = (
+        normalized_decision.get("id")
+        or normalized_decision.get("decision_id")
+        or dataset_row.get("decision_id")
+    )
+    linked_decision_id = normalized_trade_outcome.get("decision_id")
+    decision_matched = bool(decision_id and linked_decision_id and decision_id == linked_decision_id)
+
+    control_outcome = dataset_row.get("control_outcome") or {}
+    execution_result = normalized_decision.get("execution_result") or {}
+    is_executed = bool(
+        normalized_decision.get("executed")
+        or control_outcome.get("status") == "executed"
+        or execution_result.get("success") is True
+    )
+    is_hold = str(dataset_row.get("policy_action") or dataset_row.get("action") or "").upper() == "HOLD"
+
+    if decision_matched and is_executed:
+        execution_fill_summary = {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 1,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+    elif is_hold:
+        execution_fill_summary = {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 1,
+            "deferred_execution_fill_count": 0,
+            "execution_fill_summary_version": 1,
+        }
+    else:
+        execution_fill_summary = {
+            "summary_count": 1,
+            "shadow_execution_fill_count": 0,
+            "primary_cutover_execution_fill_count": 0,
+            "manual_hold_execution_fill_count": 0,
+            "deferred_execution_fill_count": 1,
+            "execution_fill_summary_version": 1,
+        }
+
+    trade_outcome_set = build_policy_selection_trade_outcome_set([execution_fill_summary])
+    trade_outcome_summary = build_policy_selection_trade_outcome_summary(trade_outcome_set)
+    learning_feedback_set = build_policy_selection_learning_feedback_set([trade_outcome_summary])
+    learning_feedback_summary = build_policy_selection_learning_feedback_summary(learning_feedback_set)
+    learning_analytics_set = build_policy_selection_learning_analytics_set([learning_feedback_summary])
+    learning_analytics_summary = build_policy_selection_learning_analytics_summary(learning_analytics_set)
+
+    return {
+        "dataset_row": dataset_row,
+        "trade_outcome_record": normalized_trade_outcome,
+        "decision_linked": decision_matched,
+        "execution_fill_summary": execution_fill_summary,
+        "trade_outcome_set": trade_outcome_set,
+        "trade_outcome_summary": trade_outcome_summary,
+        "learning_feedback_set": learning_feedback_set,
+        "learning_feedback_summary": learning_feedback_summary,
+        "learning_analytics_set": learning_analytics_set,
+        "learning_analytics_summary": learning_analytics_summary,
+        "export_proof_version": 1,
+    }
+
+
+def build_policy_selection_learning_export_proof_batch(
+    decisions_by_id: Optional[dict],
+    trade_outcome_records: Optional[list[dict]],
+) -> list[dict]:
+    decision_map = dict(decisions_by_id or {}) if isinstance(decisions_by_id, dict) else {}
+    proofs = []
+    for record in trade_outcome_records or []:
+        if not isinstance(record, dict):
+            continue
+        decision_id = record.get("decision_id")
+        if not decision_id:
+            continue
+        decision = decision_map.get(decision_id)
+        if not isinstance(decision, dict):
+            continue
+        proof = build_policy_selection_learning_export_proof_from_linked_trade_outcome_record(
+            decision,
+            record,
+        )
+        if proof.get("decision_linked"):
+            proofs.append(proof)
+    return proofs
+
+
 def extract_policy_selection_trade_outcome_summaries(
     trade_outcome_sets: Optional[list[dict]],
 ) -> list[dict]:
