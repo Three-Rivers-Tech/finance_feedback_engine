@@ -243,3 +243,42 @@ class TestRiskGatekeeperWithLeverageCheck:
         # Should fail due to concentration
         assert approved is False
         assert "concentration" in reason.lower() or "position" in reason.lower()
+
+
+
+def test_concentration_uses_target_asset_not_largest_overall_position():
+    gatekeeper = RiskGatekeeper()
+    decision = {"asset_pair": "BTCUSD", "action": "BUY"}
+    context = {
+        "risk_metrics": {"leverage_estimate": 2.0},
+        "position_concentration": {
+            "largest_position_pct": 26.6,
+            "asset_position_pct": {"ETHUSD": 26.6, "BTCUSD": 0.0},
+        },
+        "max_leverage": 5.0,
+        "max_concentration": 25.0,
+    }
+
+    approved, reason = gatekeeper._validate_leverage_and_concentration(decision, context)
+
+    assert approved is True
+    assert "passed" in reason.lower()
+
+
+def test_concentration_allows_derisking_when_same_asset_is_over_limit():
+    gatekeeper = RiskGatekeeper()
+    decision = {"asset_pair": "ETHUSD", "action": "CLOSE_SHORT", "policy_action": "CLOSE_SHORT"}
+    context = {
+        "risk_metrics": {"leverage_estimate": 2.0},
+        "position_concentration": {
+            "largest_position_pct": 26.6,
+            "asset_position_pct": {"ETHUSD": 26.6},
+        },
+        "max_leverage": 5.0,
+        "max_concentration": 25.0,
+    }
+
+    approved, reason = gatekeeper._validate_leverage_and_concentration(decision, context)
+
+    assert approved is True
+    assert "de-risking" in reason.lower()

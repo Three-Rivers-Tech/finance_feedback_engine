@@ -629,6 +629,7 @@ class RiskGatekeeper:
         # Extract concentration metrics
         position_concentration = context.get("position_concentration", {})
         largest_pct = position_concentration.get("largest_position_pct", 0)
+        asset_position_pct = position_concentration.get("asset_position_pct", {}) or {}
 
         # Get configurable thresholds (could be passed via context or use defaults)
         # For now, use sensible defaults that match the original _preexecution_checks
@@ -674,17 +675,30 @@ class RiskGatekeeper:
 
         # Validate concentration (including reserved exposure from pending trades)
         asset_pair = decision.get("asset_pair", "UNKNOWN")
+        normalized_asset_pair = str(asset_pair).upper().replace("-", "").replace("_", "")
+        current_asset_pct = asset_position_pct.get(normalized_asset_pair, largest_pct if not asset_position_pct else 0.0)
         asset_reserved_pct = reserved_concentration.get(asset_pair, 0.0)
+        if not asset_reserved_pct:
+            asset_reserved_pct = reserved_concentration.get(normalized_asset_pair, 0.0)
 
-        # Calculate effective concentration for this asset
-        # This includes existing position + reserved exposure from pending trades
-        effective_concentration = largest_pct + asset_reserved_pct
+        # Calculate effective concentration for the target asset only
+        # This includes existing exposure in the same asset + reserved exposure from pending trades
+        effective_concentration = current_asset_pct + asset_reserved_pct
 
         if effective_concentration > max_concentration:
+            if is_derisking_action:
+                logger.info(
+                    "Allowing de-risking action despite concentration breach: action=%s asset=%s concentration=%.2f max=%.2f",
+                    normalized_action,
+                    normalized_asset_pair,
+                    effective_concentration,
+                    max_concentration,
+                )
+                return True, "De-risking action bypassed concentration limit"
             logger.warning(
                 f"Position concentration limit exceeded (including reserved): "
                 f"{effective_concentration:.1f}% > {max_concentration}% "
-                f"(existing={largest_pct:.1f}%, reserved={asset_reserved_pct:.1f}%)"
+                f"(asset={normalized_asset_pair}, existing={current_asset_pct:.1f}%, reserved={asset_reserved_pct:.1f}%, largest_overall={largest_pct:.1f}%)"
             )
             asset_type = (
                 "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
@@ -693,8 +707,8 @@ class RiskGatekeeper:
                 1, {"reason": "concentration", "asset_type": asset_type}
             )
             return False, (
-                f"Effective position concentration {effective_concentration:.1f}% exceeds max {max_concentration}% "
-                f"(includes {asset_reserved_pct:.1f}% reserved from pending trades)"
+                f"Effective position concentration for {normalized_asset_pair} {effective_concentration:.1f}% exceeds max {max_concentration}% "
+                f"(existing {current_asset_pct:.1f}%, reserved {asset_reserved_pct:.1f}%)"
             )
 
         logger.debug(

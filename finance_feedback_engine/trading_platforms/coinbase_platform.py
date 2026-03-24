@@ -1312,6 +1312,8 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         or f"coinbase_position_{len(futures_positions)}"
                     )
 
+                    contract_size = float(safe_get(pos, "contract_size", 0.1) or 0.1)
+
                     # Create PositionInfo instance for type safety
                     position_info = PositionInfo(
                         id=str(position_id),
@@ -1327,6 +1329,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         unrealized_pnl=unrealized_pnl,
                         daily_pnl=float(safe_get(pos, "daily_realized_pnl", 0)),
                         leverage=leverage_value,
+                        contract_size=contract_size,
                     )
 
                     futures_positions.append(position_info)

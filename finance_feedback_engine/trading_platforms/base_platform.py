@@ -33,6 +33,7 @@ class PositionInfo(PositionInfoRequired, total=False):
     side: str  # LONG or SHORT
     unrealized_pnl: float  # Unrealized P&L
     daily_pnl: float  # Daily realized P&L
+    contract_size: float  # Futures contract multiplier / size
 
 
 PositionsResponse = Dict[str, List[PositionInfo]]

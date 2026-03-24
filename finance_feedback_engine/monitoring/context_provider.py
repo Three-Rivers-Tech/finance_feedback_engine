@@ -26,6 +26,50 @@ def _coerce_monitoring_float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
+def _normalize_asset_key(value: Any) -> str:
+    """Normalize asset identifiers (BTC-USD/BTC_USD/BTCUSD) into BTCUSD form."""
+    return str(value or "").upper().replace("-", "").replace("_", "").strip()
+
+
+def _position_asset_keys(pos: Dict[str, Any]) -> set[str]:
+    """Return candidate canonical asset keys for a position payload."""
+    keys: set[str] = set()
+    cfm_map = {"BIP": "BTC", "BIT": "BTC", "ETP": "ETH", "ET": "ETH", "SOL": "SOL", "SLP": "SOL", "GOL": "XAU", "SLR": "XAG"}
+    for field in ("asset_pair", "product_id", "instrument", "symbol", "asset"):
+        raw = str(pos.get(field) or "").strip().upper()
+        if not raw:
+            continue
+        normalized = _normalize_asset_key(raw)
+        if normalized:
+            keys.add(normalized)
+        if "-" in raw:
+            mapped = cfm_map.get(raw.split("-")[0])
+            if mapped:
+                keys.add(f"{mapped}USD")
+        elif "_" in raw:
+            parts = raw.split("_")
+            if len(parts) == 2:
+                keys.add(_normalize_asset_key("".join(parts)))
+    return keys
+
+
+def _estimate_position_notional_usd(pos: Dict[str, Any]) -> float:
+    """Best-effort USD notional estimate for monitoring/risk math."""
+    contracts = abs(_coerce_monitoring_float(pos.get("contracts", 0) or pos.get("number_of_contracts", 0) or pos.get("units", 0) or pos.get("amount", 0) or pos.get("size", 0), 0.0))
+    if contracts <= 0:
+        return 0.0
+    explicit_value = _coerce_monitoring_float(pos.get("notional_value") or pos.get("value_usd") or pos.get("usd_value"), 0.0)
+    if explicit_value > 0:
+        return abs(explicit_value)
+    current_price = _coerce_monitoring_float(pos.get("current_price") or pos.get("mark_price") or pos.get("price"), 0.0)
+    if current_price <= 0:
+        return 0.0
+    contract_size = _coerce_monitoring_float(pos.get("contract_size") or pos.get("contract_multiplier"), 1.0)
+    if contract_size <= 0:
+        contract_size = 1.0
+    return contracts * current_price * contract_size
+
+
 def enforce_slot_constraints(decision: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """Prevent slot-consuming entry actions when monitoring context says no trade slots remain."""
     if not decision or not context:
@@ -412,16 +456,8 @@ class MonitoringContextProvider:
         short_exposure = 0.0
 
         for pos in futures_positions:
-            contracts = _coerce_monitoring_float(
-                pos.get("contracts", 0)
-                or pos.get("number_of_contracts", 0)
-                or pos.get("units", 0),
-                0.0,
-            )
-            current_price = _coerce_monitoring_float(pos.get("current_price", 0), 0.0)
             side = str(pos.get("side", "LONG")).upper()
-
-            notional = abs(contracts * current_price)
+            notional = _estimate_position_notional_usd(pos)
             total_exposure += notional
             unrealized_pnl += _coerce_monitoring_float(pos.get("unrealized_pnl", 0), 0.0)
 
@@ -488,19 +524,17 @@ class MonitoringContextProvider:
                 "diversification_score": 0,
             }
 
-        # Calculate position sizes as % of portfolio
+        # Calculate position sizes as % of portfolio and keep per-asset breakdown
         position_sizes = []
+        asset_position_pct: Dict[str, float] = {}
         for pos in futures_positions:
-            contracts = abs(_coerce_monitoring_float(
-                pos.get("contracts", 0)
-                or pos.get("number_of_contracts", 0)
-                or pos.get("units", 0),
-                0.0,
-            ))
-            current_price = _coerce_monitoring_float(pos.get("current_price", 0), 0.0)
-            notional = contracts * current_price
+            notional = _estimate_position_notional_usd(pos)
+            if notional <= 0:
+                continue
             pct = (notional / total_value) * 100
             position_sizes.append(pct)
+            for asset_key in _position_asset_keys(pos):
+                asset_position_pct[asset_key] = max(asset_position_pct.get(asset_key, 0.0), pct)
 
         position_sizes.sort(reverse=True)
 
@@ -517,6 +551,7 @@ class MonitoringContextProvider:
             "largest_position_pct": largest_pct,
             "top_3_concentration": top_3_pct,
             "diversification_score": diversification,
+            "asset_position_pct": asset_position_pct,
         }
 
     def _get_recent_performance(
