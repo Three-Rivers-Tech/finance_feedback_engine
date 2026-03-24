@@ -13990,3 +13990,63 @@ def test_build_policy_selection_eval_seed_batch_sorts_by_exit_time_then_decision
     )
 
     assert [row["decision_id"] for row in rows] == ["a-dec", "b-dec"]
+
+
+
+def test_build_policy_selection_eval_seed_summary_reports_coverage_and_outcomes():
+    from finance_feedback_engine.decision_engine.policy_actions import (
+        build_policy_selection_eval_seed_summary,
+    )
+
+    eval_seed_batch = [
+        {
+            "decision_id": "24ac30f9-5b6d-496c-8da8-19797b2c0a79",
+            "asset_pair": "ETP20DEC30CDE",
+            "policy_action": "OPEN_SMALL_SHORT",
+            "trade_outcome_product": "ETP-20DEC30-CDE",
+            "realized_pnl": 4.5,
+            "outcome_label": "win",
+            "learning_eligible": True,
+        },
+        {
+            "decision_id": "c8813b99-e6de-4c88-9028-e6477011211a",
+            "asset_pair": "ETP20DEC30CDE",
+            "policy_action": "OPEN_SMALL_SHORT",
+            "trade_outcome_product": "ETP-20DEC30-CDE",
+            "realized_pnl": -5.0,
+            "outcome_label": "loss",
+            "learning_eligible": True,
+        },
+        {
+            "decision_id": "89881302-466a-44dd-a9e3-6c0d31d9ec6a",
+            "asset_pair": "BTCUSD",
+            "policy_action": "CLOSE_SHORT",
+            "trade_outcome_product": "BIP-20DEC30-CDE",
+            "realized_pnl": 0.0,
+            "outcome_label": "flat",
+            "learning_eligible": True,
+        },
+        {
+            "decision_id": None,
+            "asset_pair": None,
+            "policy_action": None,
+            "trade_outcome_product": "EUR_USD",
+            "realized_pnl": -0.0187,
+            "outcome_label": "loss",
+            "learning_eligible": False,
+        },
+    ]
+
+    summary = build_policy_selection_eval_seed_summary(eval_seed_batch)
+
+    assert summary["summary_count"] == 4
+    assert summary["learning_eligible_count"] == 3
+    assert summary["excluded_count"] == 1
+    assert summary["win_count"] == 1
+    assert summary["loss_count"] == 2
+    assert summary["flat_count"] == 1
+    assert summary["policy_action_family_counts"]["open_short"] == 2
+    assert summary["policy_action_family_counts"]["close_short"] == 1
+    assert summary["total_realized_pnl"] == -0.5187
+    assert summary["linked_product_counts"]["ETP-20DEC30-CDE"] == 2
+    assert summary["linked_product_counts"]["BIP-20DEC30-CDE"] == 1

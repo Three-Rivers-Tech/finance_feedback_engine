@@ -4595,6 +4595,62 @@ def build_policy_selection_eval_seed_batch(
     return rows
 
 
+def build_policy_selection_eval_seed_summary(
+    eval_seed_batch: Optional[list[dict]],
+) -> dict:
+    rows = [dict(row) for row in (eval_seed_batch or []) if isinstance(row, dict)]
+    policy_action_family_counts = {}
+    linked_product_counts = {}
+    learning_eligible_count = 0
+    excluded_count = 0
+    win_count = 0
+    loss_count = 0
+    flat_count = 0
+    total_realized_pnl = 0.0
+
+    for row in rows:
+        learning_eligible = bool(row.get("learning_eligible"))
+        if learning_eligible:
+            learning_eligible_count += 1
+        else:
+            excluded_count += 1
+
+        outcome_label = str(row.get("outcome_label") or "").lower()
+        if outcome_label == "win":
+            win_count += 1
+        elif outcome_label == "loss":
+            loss_count += 1
+        elif outcome_label == "flat":
+            flat_count += 1
+
+        try:
+            total_realized_pnl += float(row.get("realized_pnl", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            pass
+
+        policy_action = row.get("policy_action")
+        if policy_action and is_policy_action(policy_action):
+            family = get_policy_action_family(policy_action)
+            policy_action_family_counts[family] = policy_action_family_counts.get(family, 0) + 1
+
+        product = row.get("trade_outcome_product")
+        if product and learning_eligible:
+            linked_product_counts[product] = linked_product_counts.get(product, 0) + 1
+
+    return {
+        "summary_count": len(rows),
+        "learning_eligible_count": learning_eligible_count,
+        "excluded_count": excluded_count,
+        "win_count": win_count,
+        "loss_count": loss_count,
+        "flat_count": flat_count,
+        "policy_action_family_counts": dict(sorted(policy_action_family_counts.items())),
+        "linked_product_counts": dict(sorted(linked_product_counts.items())),
+        "total_realized_pnl": round(total_realized_pnl, 10),
+        "eval_seed_summary_version": 1,
+    }
+
+
 def extract_policy_selection_trade_outcome_summaries(
     trade_outcome_sets: Optional[list[dict]],
 ) -> list[dict]:
