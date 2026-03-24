@@ -223,6 +223,34 @@ async def test_recovery_no_positions_flushes_stale_outcomes_into_learning(agent,
 
 
 @pytest.mark.asyncio
+async def test_recovery_uses_current_price_when_entry_price_missing(agent, mock_engine):
+    """Recovery decisions should not persist zero entry prices for live recovered positions."""
+    mock_engine.get_portfolio_breakdown_async.return_value = {
+        "futures_positions": [
+            {
+                "product_id": "ETP-20DEC30-CDE",
+                "side": "SHORT",
+                "contracts": 1.0,
+                "units": 1.0,
+                "entry_price": 0.0,
+                "current_price": 2142.5,
+                "unrealized_pnl": -8.74,
+                "opened_at": None,
+            }
+        ]
+    }
+    mock_engine.decision_store.find_equivalent_recovery_decision.return_value = None
+
+    await agent.handle_recovering_state()
+
+    saved = mock_engine.decision_store.save_decision.call_args.args[0]
+    assert saved["entry_price"] == 2142.5
+    assert agent._recovered_positions[0]["entry_price"] == 2142.5
+    recorder_calls = mock_engine.trade_outcome_recorder.update_positions.call_args_list
+    assert recorder_calls[-1].args[0][0]["decision_id"]
+
+
+@pytest.mark.asyncio
 async def test_recovery_single_position(agent, mock_engine):
     """Test recovery with single position - should be normalized and kept."""
     # Setup: one position

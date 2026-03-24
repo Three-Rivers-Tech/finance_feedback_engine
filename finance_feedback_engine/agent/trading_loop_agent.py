@@ -1116,7 +1116,9 @@ class TradingLoopAgent:
 
                         # Generate stable recovery metadata first so repeated startups
                         # can reuse the same synthetic decision instead of spamming history.
-                        entry_price = pos["entry_price"]
+                        entry_price = float(pos.get("entry_price") or 0.0)
+                        if entry_price <= 0:
+                            entry_price = float(pos.get("current_price") or 0.0)
                         action = "BUY" if pos["side"] == "LONG" else "SELL"
                         recovery_metadata = {
                             "platform": pos["platform"],
