@@ -447,6 +447,27 @@ class TestCreateDecisionIntegration:
         assert decision["confidence"] == 61
 
 
+    def test_create_decision_close_short_does_not_use_entry_sizing_path(self, decision_engine):
+        context = {
+            "market_data": {"close": 3000.0, "type": "crypto"},
+            "balance": {"coinbase_USD": 10000.0},
+            "price_change": -1.2,
+            "volatility": 1.1,
+        }
+        ai_response = {
+            "policy_action": "CLOSE_SHORT",
+            "confidence": 82,
+            "reasoning": "Take profit",
+            "amount": 0,
+        }
+
+        decision = decision_engine._create_decision("ETHUSD", context, ai_response)
+
+        assert decision["policy_action"] == "CLOSE_SHORT"
+        assert decision["position_type"] == "LONG"
+        assert decision["suggested_amount"] == 0
+
+
 def test_select_relevant_balance_plain_forex_pair_uses_oanda_balance(decision_engine):
     balance = {"coinbase_FUTURES_USD": 741.15, "oanda_USD": 166.72}
 

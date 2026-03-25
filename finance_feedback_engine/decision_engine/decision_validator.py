@@ -220,8 +220,8 @@ class DecisionValidator:
             else action
         )
         canonical_entry_action = bool(is_policy_action(action) and is_entry_policy_action(action))
-        legacy_entry_action = effective_legacy_action in ["BUY", "SELL"]
-        entry_sizing_required = canonical_entry_action or (not is_policy_action(action) and legacy_entry_action)
+        legacy_entry_action = (not is_policy_action(action)) and effective_legacy_action in ["BUY", "SELL"]
+        entry_sizing_required = canonical_entry_action or legacy_entry_action
 
         # Extract position sizing results
         # Use calculated position size from position_sizing_result
