@@ -168,6 +168,21 @@ class TestHardSlotEnforcement:
         assert result["action"] == "HOLD"
         assert result["policy_action"] == "HOLD"
 
+
+    def test_open_short_policy_action_blocked_when_slots_zero(self):
+        from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
+        decision = {"policy_action": "OPEN_SMALL_SHORT", "action": "OPEN_SMALL_SHORT", "confidence": 75, "asset_pair": "ETHUSD"}
+        result = enforce_slot_constraints(decision, make_context(slots_available=0))
+        assert result["action"] == "HOLD"
+        assert result["policy_action"] == "HOLD"
+
+    def test_close_short_policy_action_allowed_when_slots_zero(self):
+        from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
+        decision = {"policy_action": "CLOSE_SHORT", "action": "CLOSE_SHORT", "confidence": 75, "asset_pair": "ETHUSD"}
+        result = enforce_slot_constraints(decision, make_context(slots_available=0))
+        assert result["action"] == "CLOSE_SHORT"
+        assert result["policy_action"] == "CLOSE_SHORT"
+
     def test_reduce_policy_action_allowed_when_slots_zero(self):
         from finance_feedback_engine.monitoring.context_provider import enforce_slot_constraints
         decision = {"policy_action": "REDUCE_LONG", "action": "REDUCE_LONG", "confidence": 75, "asset_pair": "ETHUSD"}
