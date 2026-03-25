@@ -24,9 +24,27 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
+from finance_feedback_engine.decision_engine.policy_actions import get_position_orientation
+
 from .consistency import MemoryConsistencyManager
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_position_orientation_for_outcome(action: Any, policy_action: Any) -> str | None:
+    """Return the underlying LONG/SHORT position orientation for P&L calculation."""
+    canonical = str(policy_action or "").upper()
+    if canonical in {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG", "REDUCE_LONG", "CLOSE_LONG"}:
+        return "LONG"
+    if canonical in {"OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "ADD_SMALL_SHORT", "REDUCE_SHORT", "CLOSE_SHORT"}:
+        return "SHORT"
+
+    normalized = str(action or "").upper()
+    if normalized in {"BUY", "LONG"}:
+        return "LONG"
+    if normalized in {"SELL", "SHORT"}:
+        return "SHORT"
+    return None
 
 
 @dataclass
@@ -321,21 +339,22 @@ class PortfolioMemoryEngine:
         # Total transaction cost
         total_transaction_cost = fee_cost + slippage_cost + spread_cost
 
-        # Calculate P&L
-        if exit_price is None and action in ["BUY", "SELL", "LONG", "SHORT"]:
+        # Calculate P&L using canonical-first orientation semantics.
+        orientation = _resolve_position_orientation_for_outcome(action, policy_action)
+        if exit_price is None and orientation in ["LONG", "SHORT"]:
             logger.warning(f"exit_price is None for {action} action on {decision_id}, skipping P&L calculation")
             pnl = None
             pnl_pct = None
             position_value = entry_price * position_size if entry_price and position_size else 0
-        elif action == "BUY" or action == "LONG":
+        elif orientation == "LONG":
             pnl = (exit_price - entry_price) * position_size - total_transaction_cost
             position_value = entry_price * position_size
             pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
-        elif action == "SELL" or action == "SHORT":
+        elif orientation == "SHORT":
             pnl = (entry_price - exit_price) * position_size - total_transaction_cost
             position_value = entry_price * position_size
             pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
-        else:  # HOLD
+        else:  # HOLD / flat / unknown
             pnl = 0
             pnl_pct = 0
             position_value = 0
