@@ -424,6 +424,12 @@ class PositionSizingCalculator:
                 stop_loss_price = 0
             else:
                 position_type = self._determine_position_type(action)
+                if position_type is None and legacy_action == "HOLD" and has_existing_position:
+                    context_position_state = str(context.get("position_state") or "").upper()
+                    if context_position_state == "LONG":
+                        position_type = "LONG"
+                    elif context_position_state == "SHORT":
+                        position_type = "SHORT"
 
                 if position_type == "LONG":
                     stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
