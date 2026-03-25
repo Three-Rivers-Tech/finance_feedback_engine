@@ -27,11 +27,13 @@ def _safe_git(*args: str) -> str | None:
 
 
 def get_version_info() -> Dict[str, Any]:
+    explicit_version = os.getenv("FFE_BUILD_VERSION")
     sha = os.getenv("FFE_BUILD_SHA") or _safe_git("rev-parse", "--short", "HEAD")
     describe = os.getenv("FFE_BUILD_DESCRIBE") or _safe_git("describe", "--tags", "--always", "--dirty")
     branch = os.getenv("FFE_BUILD_BRANCH") or _safe_git("branch", "--show-current")
     return {
-        "version": __version__,
+        "version": explicit_version or __version__,
+        "package_version": __version__,
         "git_sha": sha,
         "git_describe": describe,
         "git_branch": branch,

@@ -5,6 +5,7 @@ Handles Docker image building, container management, and compose operations.
 Designed with TDD - all tests written first in test_docker.py
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -60,10 +61,22 @@ class DockerOperations:
             if image_tag not in deduped_tags:
                 deduped_tags.append(image_tag)
 
+        build_version = os.getenv("FFE_BUILD_VERSION") or __version__
+        build_sha = os.getenv("FFE_BUILD_SHA") or "unknown"
+        build_describe = os.getenv("FFE_BUILD_DESCRIBE") or build_version
+        build_branch = os.getenv("FFE_BUILD_BRANCH") or "unknown"
+
         cmd = ["docker", "build"]
         for image_tag in deduped_tags:
             cmd.extend(["-t", image_tag])
-        cmd.extend(["-f", dockerfile])
+        cmd.extend([
+            "--build-arg", f"FFE_BUILD_VERSION={build_version}",
+            "--build-arg", f"FFE_BUILD_SHA={build_sha}",
+            "--build-arg", f"FFE_BUILD_DESCRIBE={build_describe}",
+            "--build-arg", f"FFE_BUILD_BRANCH={build_branch}",
+            "--build-arg", f"SETUPTOOLS_SCM_PRETEND_VERSION={build_version}",
+            "-f", dockerfile
+        ])
 
         if no_cache:
             cmd.append("--no-cache")

@@ -5,6 +5,7 @@ Main orchestration logic that coordinates the entire deployment process.
 Designed with TDD - all tests written first in test_orchestrator.py
 """
 
+import os
 import uuid
 from datetime import UTC, datetime
 from enum import Enum
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from finance_feedback_engine import __version__
+from finance_feedback_engine.utils.versioning import get_version_info
 
 from .docker import DockerError, DockerOperations
 from .health import HealthChecker, HealthCheckError
@@ -85,7 +87,11 @@ class DeploymentOrchestrator:
 
         # State
         self.current_stage = DeploymentStage.INITIALIZING
-        self.release_version = __version__
+        build_info = get_version_info()
+        self.release_version = build_info.get("version") or __version__
+        self.release_sha = build_info.get("git_sha") or "unknown"
+        self.release_describe = build_info.get("git_describe") or self.release_version
+        self.release_branch = build_info.get("git_branch") or "unknown"
         self.start_time = datetime.now(UTC)
         self.end_time = None
         self.errors = []
@@ -193,6 +199,11 @@ class DeploymentOrchestrator:
         self.logger.info("Building Docker images")
 
         try:
+            os.environ["FFE_BUILD_VERSION"] = self.release_version
+            os.environ["FFE_BUILD_SHA"] = self.release_sha
+            os.environ["FFE_BUILD_DESCRIBE"] = self.release_describe
+            os.environ["FFE_BUILD_BRANCH"] = self.release_branch
+
             # Build backend
             self.logger.info("Building backend image")
             self.docker_ops.build_image(
