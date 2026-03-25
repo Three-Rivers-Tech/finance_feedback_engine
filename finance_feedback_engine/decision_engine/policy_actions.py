@@ -102,6 +102,24 @@ def get_position_orientation(action: object) -> Optional[str]:
     return None
 
 
+def get_position_side(action: object) -> Optional[str]:
+    """Return the underlying LONG/SHORT position side for canonical or legacy actions."""
+    if is_policy_action(action):
+        family = get_policy_action_family(action)
+        if family in {"open_long", "add_long", "reduce_long", "close_long"}:
+            return "LONG"
+        if family in {"open_short", "add_short", "reduce_short", "close_short"}:
+            return "SHORT"
+        return None
+
+    normalized = str(action or "").upper()
+    if normalized in {"BUY", "LONG"}:
+        return "LONG"
+    if normalized in {"SELL", "SHORT"}:
+        return "SHORT"
+    return None
+
+
 def to_adapter_side(action: PolicyAction | str) -> str:
     normalized = normalize_policy_action(action)
     if normalized == PolicyAction.HOLD:

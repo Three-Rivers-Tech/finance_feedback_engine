@@ -24,27 +24,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
-from finance_feedback_engine.decision_engine.policy_actions import get_position_orientation
+from finance_feedback_engine.decision_engine.policy_actions import get_position_side
 
 from .consistency import MemoryConsistencyManager
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_position_orientation_for_outcome(action: Any, policy_action: Any) -> str | None:
-    """Return the underlying LONG/SHORT position orientation for P&L calculation."""
-    canonical = str(policy_action or "").upper()
-    if canonical in {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "ADD_SMALL_LONG", "REDUCE_LONG", "CLOSE_LONG"}:
-        return "LONG"
-    if canonical in {"OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "ADD_SMALL_SHORT", "REDUCE_SHORT", "CLOSE_SHORT"}:
-        return "SHORT"
-
-    normalized = str(action or "").upper()
-    if normalized in {"BUY", "LONG"}:
-        return "LONG"
-    if normalized in {"SELL", "SHORT"}:
-        return "SHORT"
-    return None
 
 
 @dataclass
@@ -340,7 +324,7 @@ class PortfolioMemoryEngine:
         total_transaction_cost = fee_cost + slippage_cost + spread_cost
 
         # Calculate P&L using canonical-first orientation semantics.
-        orientation = _resolve_position_orientation_for_outcome(action, policy_action)
+        orientation = get_position_side(policy_action) or get_position_side(action)
         if exit_price is None and orientation in ["LONG", "SHORT"]:
             logger.warning(f"exit_price is None for {action} action on {decision_id}, skipping P&L calculation")
             pnl = None

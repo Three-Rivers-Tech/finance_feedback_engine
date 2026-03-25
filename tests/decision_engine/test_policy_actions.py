@@ -168,6 +168,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
+    get_position_orientation,
     get_policy_action_family,
     invalid_action_reason,
     is_derisking_policy_action,
@@ -182,6 +183,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     normalize_policy_action,
     normalize_position_state,
     to_adapter_side,
+    get_position_side,
 )
 
 
@@ -248,6 +250,27 @@ def test_to_adapter_side_is_boundary_only_mapping():
     assert to_adapter_side("OPEN_MEDIUM_SHORT") == "SELL"
     assert to_adapter_side("CLOSE_SHORT") == "BUY"
     assert to_adapter_side("HOLD") == "HOLD"
+
+
+
+def test_get_position_orientation_reflects_execution_side_semantics():
+    assert get_position_orientation("OPEN_SMALL_LONG") == "LONG"
+    assert get_position_orientation("CLOSE_SHORT") == "LONG"
+    assert get_position_orientation("OPEN_SMALL_SHORT") == "SHORT"
+    assert get_position_orientation("CLOSE_LONG") == "SHORT"
+
+
+def test_get_position_side_reflects_underlying_trade_side_semantics():
+    assert get_position_side("OPEN_SMALL_LONG") == "LONG"
+    assert get_position_side("ADD_SMALL_LONG") == "LONG"
+    assert get_position_side("REDUCE_LONG") == "LONG"
+    assert get_position_side("CLOSE_LONG") == "LONG"
+    assert get_position_side("OPEN_SMALL_SHORT") == "SHORT"
+    assert get_position_side("ADD_SMALL_SHORT") == "SHORT"
+    assert get_position_side("REDUCE_SHORT") == "SHORT"
+    assert get_position_side("CLOSE_SHORT") == "SHORT"
+    assert get_position_side("BUY") == "LONG"
+    assert get_position_side("SELL") == "SHORT"
 
 
 def test_structural_legality_for_flat_position():
