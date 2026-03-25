@@ -12,4 +12,4 @@ Architecture: Lakehouse pattern with Delta Lake storage
 Layers: Bronze (raw) → Silver (curated) → Gold (aggregated marts)
 """
 
-__version__ = "1.0.0"
+from finance_feedback_engine import __version__
