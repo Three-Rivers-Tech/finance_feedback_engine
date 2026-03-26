@@ -63,7 +63,7 @@ def test_normalize_provider_action_payload_keeps_legacy_directional_action_uncha
     assert "legacy_action_compatibility" not in normalized
 
 
-def test_normalize_provider_action_payload_close_action_has_explicit_none_compatibility(manager):
+def test_normalize_provider_action_payload_close_action_keeps_sell_compatibility(manager):
     decision = {
         "action": "CLOSE_LONG",
         "confidence": 75,
@@ -74,7 +74,7 @@ def test_normalize_provider_action_payload_close_action_has_explicit_none_compat
     assert normalized["action"] == "CLOSE_LONG"
     assert normalized["policy_action"] == "CLOSE_LONG"
     assert "legacy_action_compatibility" in normalized
-    assert normalized["legacy_action_compatibility"] is None
+    assert normalized["legacy_action_compatibility"] == "SELL"
 
 
 
