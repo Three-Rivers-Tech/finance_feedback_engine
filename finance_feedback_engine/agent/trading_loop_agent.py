@@ -2726,6 +2726,41 @@ class TradingLoopAgent:
             )
             logger.warning(f"Failed signals: {'; '.join(failure_reasons)}")
 
+    def _recover_decision_id_for_closed_outcome(self, outcome: Dict[str, Any]) -> Optional[str]:
+        """Best-effort recovery of decision lineage for recorder close events."""
+        product = outcome.get("product")
+        if not product:
+            return None
+
+        try:
+            asset_pair = standardize_asset_pair(product)
+        except Exception:
+            asset_pair = None
+
+        trade_monitor = getattr(self, "trade_monitor", None)
+        if trade_monitor and asset_pair:
+            try:
+                expected = getattr(trade_monitor, "expected_trades", None)
+                if isinstance(expected, dict):
+                    association = expected.get(asset_pair)
+                    if isinstance(association, tuple) and association:
+                        decision_id = association[0]
+                        if decision_id:
+                            return decision_id
+                getter = getattr(trade_monitor, "get_decision_id_by_asset", None)
+                if callable(getter):
+                    decision_id = getter(asset_pair)
+                    if decision_id:
+                        return decision_id
+            except Exception:
+                logger.debug(
+                    "Failed trade-monitor decision recovery for closed outcome %s",
+                    product,
+                    exc_info=True,
+                )
+
+        return None
+
     def _sync_trade_outcome_recorder(self, current_positions: list[dict[str, Any]]) -> None:
         """Sync the outcome recorder with live positions and forward closes into learning."""
         recorder = getattr(self.engine, "trade_outcome_recorder", None)
@@ -2750,11 +2785,20 @@ class TradingLoopAgent:
             decision_id = outcome.get("decision_id")
             product = outcome.get("product") or "UNKNOWN"
             if not decision_id:
-                logger.warning(
-                    "Closed position %s missing decision_id; durable artifact recorded but learning update skipped",
-                    product,
-                )
-                continue
+                decision_id = self._recover_decision_id_for_closed_outcome(outcome)
+                if decision_id:
+                    outcome["decision_id"] = decision_id
+                    logger.info(
+                        "Recovered decision_id %s for closed position %s",
+                        decision_id,
+                        product,
+                    )
+                else:
+                    logger.warning(
+                        "Closed position %s missing decision_id; durable artifact recorded but learning update skipped",
+                        product,
+                    )
+                    continue
 
             try:
                 memory_outcome = self.engine.record_trade_outcome(
