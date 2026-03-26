@@ -8,7 +8,7 @@ and trading decisions using AI models and real-time market data.
 try:
     from ._version import version as __version__
 except Exception:  # pragma: no cover - fallback when scm metadata is unavailable
-    __version__ = "0.9.10"
+    __version__ = "0.9.11"
 
 __author__ = "Three Rivers Tech"
 

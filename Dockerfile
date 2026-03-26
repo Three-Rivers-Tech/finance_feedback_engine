@@ -6,11 +6,11 @@
 # =============================================================================
 FROM python:3.13-slim AS builder
 
-ARG FFE_BUILD_VERSION=0.9.10
+ARG FFE_BUILD_VERSION=0.9.11
 ARG FFE_BUILD_SHA=unknown
 ARG FFE_BUILD_DESCRIBE=unknown
 ARG FFE_BUILD_BRANCH=unknown
-ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.9.10
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.9.11
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -55,7 +55,7 @@ RUN pip install -e .
 # =============================================================================
 FROM python:3.13-slim AS runtime
 
-ARG FFE_BUILD_VERSION=0.9.10
+ARG FFE_BUILD_VERSION=0.9.11
 ARG FFE_BUILD_SHA=unknown
 ARG FFE_BUILD_DESCRIBE=unknown
 ARG FFE_BUILD_BRANCH=unknown
