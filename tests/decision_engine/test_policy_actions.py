@@ -273,6 +273,31 @@ def test_get_position_side_reflects_underlying_trade_side_semantics():
     assert get_position_side("SELL") == "SHORT"
 
 
+
+@pytest.mark.parametrize(
+    "action,expected_adapter_side,expected_execution_orientation,expected_position_side",
+    [
+        ("OPEN_SMALL_LONG", "BUY", "LONG", "LONG"),
+        ("OPEN_MEDIUM_LONG", "BUY", "LONG", "LONG"),
+        ("ADD_SMALL_LONG", "BUY", "LONG", "LONG"),
+        ("REDUCE_LONG", "SELL", "SHORT", "LONG"),
+        ("CLOSE_LONG", "SELL", "SHORT", "LONG"),
+        ("OPEN_SMALL_SHORT", "SELL", "SHORT", "SHORT"),
+        ("OPEN_MEDIUM_SHORT", "SELL", "SHORT", "SHORT"),
+        ("ADD_SMALL_SHORT", "SELL", "SHORT", "SHORT"),
+        ("REDUCE_SHORT", "BUY", "LONG", "SHORT"),
+        ("CLOSE_SHORT", "BUY", "LONG", "SHORT"),
+        ("HOLD", "HOLD", None, None),
+    ],
+)
+def test_policy_action_helper_contract_matrix(
+    action, expected_adapter_side, expected_execution_orientation, expected_position_side
+):
+    assert to_adapter_side(action) == expected_adapter_side
+    assert get_position_orientation(action) == expected_execution_orientation
+    assert get_position_side(action) == expected_position_side
+
+
 def test_structural_legality_for_flat_position():
     legal = legal_actions_for_position_state("flat")
     assert PolicyAction.OPEN_SMALL_LONG in legal
