@@ -6,10 +6,21 @@
 # =============================================================================
 FROM python:3.13-slim AS builder
 
+ARG FFE_BUILD_VERSION=0.9.10
+ARG FFE_BUILD_SHA=unknown
+ARG FFE_BUILD_DESCRIBE=unknown
+ARG FFE_BUILD_BRANCH=unknown
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.9.10
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    FFE_BUILD_VERSION=${FFE_BUILD_VERSION} \
+    FFE_BUILD_SHA=${FFE_BUILD_SHA} \
+    FFE_BUILD_DESCRIBE=${FFE_BUILD_DESCRIBE} \
+    FFE_BUILD_BRANCH=${FFE_BUILD_BRANCH} \
+    SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 
 WORKDIR /build
 
@@ -44,9 +55,23 @@ RUN pip install -e .
 # =============================================================================
 FROM python:3.13-slim AS runtime
 
+ARG FFE_BUILD_VERSION=0.9.10
+ARG FFE_BUILD_SHA=unknown
+ARG FFE_BUILD_DESCRIBE=unknown
+ARG FFE_BUILD_BRANCH=unknown
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    FFE_BUILD_VERSION=${FFE_BUILD_VERSION} \
+    FFE_BUILD_SHA=${FFE_BUILD_SHA} \
+    FFE_BUILD_DESCRIBE=${FFE_BUILD_DESCRIBE} \
+    FFE_BUILD_BRANCH=${FFE_BUILD_BRANCH}
+
+LABEL org.opencontainers.image.version=${FFE_BUILD_VERSION} \
+      org.opencontainers.image.revision=${FFE_BUILD_SHA} \
+      org.opencontainers.image.ref.name=${FFE_BUILD_DESCRIBE} \
+      org.opencontainers.image.source_branch=${FFE_BUILD_BRANCH}
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser

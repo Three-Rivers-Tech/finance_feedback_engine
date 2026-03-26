@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "finance-feedback-engine-2.0"
-version = "0.9.10"
+dynamic = ["version"]
 description = "A sophisticated Python-based trading system designed to provide validation and feedback for financial data processing"
 readme = "README.md"
 authors = [{name = "Three Rivers Tech", email = "dev@threerivers.tech"}]
@@ -244,3 +244,9 @@ max-line-length = 88
 markers = [
     "integration: marks tests as integration tests covering end-to-end workflows",
 ]
+
+[tool.setuptools_scm]
+fallback_version = "0.9.10"
+write_to = "finance_feedback_engine/_version.py"
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"

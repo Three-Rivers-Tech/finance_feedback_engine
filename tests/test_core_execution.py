@@ -747,3 +747,91 @@ def test_prepare_execution_decision_backfills_derisking_notional_from_current_po
     prepared = engine._prepare_execution_decision("decision-derisk", decision)
 
     assert prepared["recommended_position_size"] == 0.004889383822138393
+
+
+def test_prepare_execution_decision_recomputes_nonpositive_derisking_amount_from_size_and_price():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "CLOSE_SHORT",
+        "confidence": 100,
+        "entry_price": 2156.06,
+        "recommended_position_size": 0.1468458480421945,
+        "suggested_amount": 0,
+    }
+
+    prepared = engine._prepare_execution_decision("decision-zero-amount", decision)
+
+    assert prepared["suggested_amount"] == pytest.approx(0.1468458480421945 * 2156.06, rel=1e-9)
+    assert engine._validate_execution_decision(prepared) == []
+
+
+def test_prepare_execution_decision_prefers_canonical_close_short_over_stale_legacy_sell_action():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "CLOSE_SHORT",
+        "action": "SELL",
+        "confidence": 91,
+        "entry_price": 50000.0,
+        "recommended_position_size": 0.1,
+        "suggested_amount": 0,
+    }
+
+    prepared = engine._prepare_execution_decision("decision-canonical-close-short", decision)
+
+    assert engine._normalize_execution_action(prepared) == "BUY"
+    assert prepared["suggested_amount"] == pytest.approx(5000.0)
+    assert engine._validate_execution_decision(prepared) == []
+
+
+def test_prepare_execution_decision_prefers_canonical_close_long_over_stale_legacy_buy_action():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "CLOSE_LONG",
+        "action": "BUY",
+        "confidence": 91,
+        "entry_price": 50000.0,
+        "recommended_position_size": 0.1,
+        "suggested_amount": 0,
+    }
+
+    prepared = engine._prepare_execution_decision("decision-canonical-close-long", decision)
+
+    assert engine._normalize_execution_action(prepared) == "SELL"
+    assert prepared["suggested_amount"] == pytest.approx(5000.0)
+    assert engine._validate_execution_decision(prepared) == []
+
+
+def test_prepare_execution_decision_prefers_canonical_reduce_short_over_stale_legacy_sell_action():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "REDUCE_SHORT",
+        "action": "SELL",
+        "confidence": 88,
+        "entry_price": 2500.0,
+        "recommended_position_size": 0.2,
+        "suggested_amount": 0,
+    }
+
+    prepared = engine._prepare_execution_decision("decision-canonical-reduce-short", decision)
+
+    assert engine._normalize_execution_action(prepared) == "BUY"
+    assert prepared["suggested_amount"] == pytest.approx(500.0)
+    assert engine._validate_execution_decision(prepared) == []
+
+
+def test_prepare_execution_decision_prefers_canonical_reduce_long_over_stale_legacy_buy_action():
+    engine = FinanceFeedbackEngine.__new__(FinanceFeedbackEngine)
+    decision = {
+        "policy_action": "REDUCE_LONG",
+        "action": "BUY",
+        "confidence": 88,
+        "entry_price": 2500.0,
+        "recommended_position_size": 0.2,
+        "suggested_amount": 0,
+    }
+
+    prepared = engine._prepare_execution_decision("decision-canonical-reduce-long", decision)
+
+    assert engine._normalize_execution_action(prepared) == "SELL"
+    assert prepared["suggested_amount"] == pytest.approx(500.0)
+    assert engine._validate_execution_decision(prepared) == []

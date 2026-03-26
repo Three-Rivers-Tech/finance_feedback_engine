@@ -592,11 +592,11 @@ When choosing HOLD:
 
         try:
             results = await asyncio.wait_for(
-                asyncio.gather(*tasks, return_exceptions=True), timeout=ENSEMBLE_TIMEOUT
+                asyncio.gather(*tasks, return_exceptions=True), timeout=self.ensemble_timeout
             )
         except asyncio.TimeoutError:
             logger.error(
-                f"Parallel ensemble timed out after {ENSEMBLE_TIMEOUT}s; cancelling provider tasks"
+                f"Parallel ensemble timed out after {self.ensemble_timeout}s; cancelling provider tasks"
             )
             for task in tasks:
                 task.cancel()

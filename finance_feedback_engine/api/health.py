@@ -7,6 +7,7 @@ from typing import Any, Dict
 
 from ..core import FinanceFeedbackEngine
 from ..database import check_database_health
+from ..utils.versioning import get_version_info
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def get_health_status(engine: FinanceFeedbackEngine) -> Dict[str, Any]:
         "circuit_breakers": {},
         "last_decision_at": None,
         "portfolio_balance": None,
+        "build": get_version_info(),
     }
 
     # Check database health

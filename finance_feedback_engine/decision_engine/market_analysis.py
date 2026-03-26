@@ -297,10 +297,28 @@ class MarketAnalysisContext:
             else:
                 futures_positions = []
 
+            cfm_base_map = {
+                "BIP": "BTC", "BIT": "BTC",
+                "ETP": "ETH", "ET": "ETH",
+                "SOL": "SOL", "SLP": "SOL",
+            }
+            normalized_asset_pair = asset_pair.upper()
+            base_asset = normalized_asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").replace("_", "")
+
             for position in futures_positions:
-                if isinstance(position, dict) and asset_pair in position.get(
-                    "product_id", ""
-                ):
+                if not isinstance(position, dict):
+                    continue
+                product_id = str(position.get("product_id", "")).upper()
+                if not product_id:
+                    continue
+                if product_id == normalized_asset_pair:
+                    has_position = True
+                    break
+                prefix = product_id.split("-")[0] if "-" in product_id else ""
+                if cfm_base_map.get(prefix) == base_asset:
+                    has_position = True
+                    break
+                if base_asset and base_asset in product_id:
                     has_position = True
                     break
 

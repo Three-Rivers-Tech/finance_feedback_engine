@@ -12,9 +12,39 @@ from ..exceptions import APIConnectionError, APIRateLimitError
 from ..observability.context import get_trace_headers
 from .base_platform import BaseTradingPlatform, PositionInfo
 from .retry_handler import platform_retry, get_timeout_config, standardize_platform_error
-from finance_feedback_engine.decision_engine.policy_actions import get_legacy_action_compatibility, get_policy_action_family, is_policy_action
+from finance_feedback_engine.decision_engine.policy_actions import (
+    get_legacy_action_compatibility,
+    get_policy_action_family,
+    is_entry_policy_action,
+    is_long_policy_action,
+    is_policy_action,
+    is_short_policy_action,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_execution_action(decision: Dict[str, Any]) -> str | None:
+    """Map canonical policy actions onto execution-side BUY/SELL semantics."""
+    policy_action = decision.get("policy_action") or decision.get("action")
+    if is_policy_action(policy_action):
+        if is_long_policy_action(policy_action):
+            return "BUY"
+        if is_short_policy_action(policy_action):
+            return "SELL"
+        return None
+
+    legacy_action = str(decision.get("action") or "").upper()
+    if legacy_action in {"BUY", "SELL"}:
+        return legacy_action
+    return None
+
+
+def _is_entry_execution(decision: Dict[str, Any]) -> bool:
+    policy_action = decision.get("policy_action") or decision.get("action")
+    if is_policy_action(policy_action):
+        return is_entry_policy_action(policy_action)
+    return str(decision.get("action") or "").upper() == "BUY"
 
 
 def _get_attr_value(obj: Any, attr: str, default: Any = None) -> Any:
@@ -1581,7 +1611,10 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         except Exception as e:
             logger.debug("No existing order found or error checking: %s", e)
 
-        if action not in ["BUY", "SELL"] or float(requested_size_usd) <= 0:
+        execution_action = _resolve_execution_action(decision)
+        is_entry_execution = _is_entry_execution(decision)
+
+        if execution_action not in ["BUY", "SELL"] or float(requested_size_usd) <= 0:
             logger.warning("Invalid trade decision: %s", decision)
             return {
                 "success": False,
@@ -1662,7 +1695,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             )
 
             buying_power_snapshot = (
-                self._extract_buying_power_snapshot() if action == "BUY" else {}
+                self._extract_buying_power_snapshot() if is_entry_execution else {}
             )
             quote_size = None
 
@@ -1679,7 +1712,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     requested_size_usd_decimal,
                 )
 
-                if action == "BUY":
+                if execution_action == "BUY":
                     logger.info(
                         "[COINBASE_FUTURES_ORDER] endpoint=market_order_buy payload_mode=base_size product_id=%s base_size=%s",
                         product_id,
@@ -1701,7 +1734,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         product_id=product_id,
                         base_size=base_size,
                     )
-            elif action == "BUY":
+            elif execution_action == "BUY":
                 futures_total = buying_power_snapshot.get("futures_total", Decimal("0"))
                 spot_total = buying_power_snapshot.get("spot_total", Decimal("0"))
 
@@ -1764,7 +1797,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 )
 
                 logger.info(
-                    "Calculated quote_size for BUY: %s "
+                    "Calculated quote_size for entry-side BUY: %s "
                     "(requested_usd=%s, spot_total=%s, safe_cap=%s, increment=%s)",
                     quote_size,
                     requested_size_usd_decimal,
@@ -1778,7 +1811,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                     product_id=product_id,
                     quote_size=quote_size,
                 )
-            else:  # SELL
+            else:  # execution_action == SELL
                 try:
                     current_price = float(self._get_product_field(product_response, "price", 0))
                     if current_price <= 0:
@@ -1805,7 +1838,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                         min_size=base_min_size,
                     )
                     logger.info(
-                        "Calculated base_size for SELL: %s (price: %.2f, usd_size: %s, increment=%s)",
+                        "Calculated base_size for sell-side execution: %s (price: %.2f, usd_size: %s, increment=%s)",
                         base_size,
                         current_price,
                         requested_size_usd_decimal,
@@ -1860,7 +1893,7 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 # Single adaptive retry for quote_size BUY orders that fail due to
                 # insufficient funds: refresh balances and downsize to a safer cap.
                 if (
-                    action == "BUY"
+                    execution_action == "BUY"
                     and not use_futures_size_mode
                     and quote_size is not None
                     and self._is_insufficient_fund_response(order_result_dict)

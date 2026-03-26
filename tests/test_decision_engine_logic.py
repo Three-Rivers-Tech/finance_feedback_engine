@@ -371,6 +371,30 @@ class TestDecisionGeneration:
             assert decision["action"] == "HOLD"
 
     @pytest.mark.asyncio
+    async def test_generate_decision_policy_action_only_payload(
+        self, decision_engine, sample_market_data, sample_balance
+    ):
+        with patch.object(
+            decision_engine, "_query_ai", new_callable=AsyncMock
+        ) as mock_query:
+            mock_query.return_value = {
+                "policy_action": "OPEN_SMALL_SHORT",
+                "confidence": 70,
+                "reasoning": "Canonical short setup",
+                "amount": 0.05,
+            }
+
+            decision = await decision_engine.generate_decision(
+                asset_pair="BTCUSD",
+                market_data=sample_market_data,
+                balance=sample_balance,
+            )
+
+            assert decision["policy_action"] == "OPEN_SMALL_SHORT"
+            assert decision["action"] == "OPEN_SMALL_SHORT"
+            assert decision["position_type"] == "SHORT"
+
+    @pytest.mark.asyncio
     async def test_generate_decision_with_monitoring_context(
         self, decision_engine, sample_market_data, sample_balance
     ):

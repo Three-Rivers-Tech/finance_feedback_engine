@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 
@@ -14,8 +14,11 @@ from finance_feedback_engine.utils.config_loader import normalize_decision_confi
 from finance_feedback_engine.decision_engine.policy_actions import (
     PolicyAction,
     build_policy_state_from_position_snapshot,
+    get_position_orientation,
     invalid_action_reason,
+    is_long_policy_action,
     is_policy_action,
+    is_short_policy_action,
     legal_actions_for_position_state,
     normalize_position_state,
     normalize_policy_action,
@@ -28,6 +31,21 @@ try:
     tracer = trace.get_tracer(__name__)
 except Exception:  # OpenTelemetry optional
     tracer = None
+
+
+def _legacy_allowed_signals_from_policy_actions(allowed_policy_actions: List[str]) -> List[str]:
+    """Derive coarse legacy BUY/SELL/HOLD compatibility from canonical policy-action legality."""
+    allowed = {"HOLD"}
+    canonical = set(allowed_policy_actions or [])
+
+    # Legacy BUY/SELL is a coarse compatibility layer. Keep it aligned to the
+    # old open/close semantics rather than exposing add/reduce nuance here.
+    if canonical & {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "CLOSE_SHORT"}:
+        allowed.add("BUY")
+    if canonical & {"OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT", "CLOSE_LONG"}:
+        allowed.add("SELL")
+
+    return [signal for signal in ["BUY", "SELL", "HOLD"] if signal in allowed]
 
 
 class DecisionEngine:
@@ -1428,16 +1446,19 @@ Format response as a structured technical analysis demonstration.
             logger.warning(f"Provider {provider}: decision is not a dict")
             return False
 
-        if "action" not in decision or "confidence" not in decision:
-            logger.warning(
-                f"Provider {provider}: missing required keys 'action' or 'confidence'"
-            )
+        if "confidence" not in decision:
+            logger.warning(f"Provider {provider}: missing required key 'confidence'")
             return False
 
         action = decision.get("policy_action") or decision.get("action")
+        if not action:
+            logger.warning(
+                f"Provider {provider}: missing required action field ('policy_action' or 'action')"
+            )
+            return False
         if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
             logger.warning(
-                f"Provider {provider}: invalid action '{decision.get('action')}'"
+                f"Provider {provider}: invalid action '{action}'"
             )
             return False
 
@@ -1458,27 +1479,8 @@ Format response as a structured technical analysis demonstration.
 
     @staticmethod
     def _determine_position_type(action: str) -> Optional[str]:
-        """
-        Determine position type from action.
-
-        Args:
-            action: Trading action (BUY, SELL, or HOLD)
-
-        Returns:
-            Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
-        """
-        if is_policy_action(action):
-            family = normalize_policy_action(action)
-            if family in {PolicyAction.OPEN_SMALL_LONG, PolicyAction.OPEN_MEDIUM_LONG, PolicyAction.ADD_SMALL_LONG, PolicyAction.REDUCE_LONG, PolicyAction.CLOSE_LONG}:
-                return "LONG"
-            if family in {PolicyAction.OPEN_SMALL_SHORT, PolicyAction.OPEN_MEDIUM_SHORT, PolicyAction.ADD_SMALL_SHORT, PolicyAction.REDUCE_SHORT, PolicyAction.CLOSE_SHORT}:
-                return "SHORT"
-            return None
-        if action == "BUY":
-            return "LONG"
-        elif action == "SELL":
-            return "SHORT"
-        return None
+        """Determine coarse position orientation from shared canonical-first semantics."""
+        return get_position_orientation(action)
 
     def _select_relevant_balance(
         self, balance: Dict[str, float], asset_pair: str, asset_type: str
@@ -1542,11 +1544,11 @@ Format response as a structured technical analysis demonstration.
         Extract current position state for the given asset (for SHORT position awareness).
 
         This method provides detailed position state information to enable proper
-        signal interpretation:
-        - BUY when LONG = invalid (can't add to long)
-        - SELL when LONG = valid (closes long)
-        - BUY when SHORT = valid (closes short)
-        - SELL when SHORT = invalid (can't add to short)
+        canonical action interpretation:
+        - open/add long when LONG = structurally invalid
+        - reduce/close long when LONG = valid
+        - open/add short when SHORT = structurally invalid
+        - reduce/close short when SHORT = valid
 
         Args:
             context: Decision context with monitoring_context
@@ -1598,34 +1600,33 @@ Format response as a structured technical analysis demonstration.
 
         if not current_position:
             # FLAT - can open either LONG or SHORT
+            allowed_policy_actions = [action.value for action in legal_actions_for_position_state("flat")]
             return {
                 "has_position": False,
                 "side": None,
                 "contracts": 0,
                 "entry_price": 0,
                 "unrealized_pnl": 0,
-                "allowed_signals": ["BUY", "SELL", "HOLD"],
-                "allowed_policy_actions": [action.value for action in legal_actions_for_position_state("flat")],
+                "allowed_signals": _legacy_allowed_signals_from_policy_actions(allowed_policy_actions),
+                "allowed_policy_actions": allowed_policy_actions,
                 "state": "FLAT",
             }
 
         side = current_position.get("side", "UNKNOWN").upper()
 
         if side == "LONG":
-            # Have LONG - can only SELL (close) or HOLD
-            allowed_signals = ["SELL", "HOLD"]
             allowed_policy_actions = [action.value for action in legal_actions_for_position_state("long")]
+            allowed_signals = _legacy_allowed_signals_from_policy_actions(allowed_policy_actions)
             state = "LONG"
         elif side == "SHORT":
-            # Have SHORT - can only BUY (close) or HOLD
-            allowed_signals = ["BUY", "HOLD"]
             allowed_policy_actions = [action.value for action in legal_actions_for_position_state("short")]
+            allowed_signals = _legacy_allowed_signals_from_policy_actions(allowed_policy_actions)
             state = "SHORT"
         else:
-            # Unknown side - default to allow all
+            # Unknown side - default to flat compatibility while preserving canonical source.
             logger.warning(f"Unknown position side: {side} for {asset_pair}")
-            allowed_signals = ["BUY", "SELL", "HOLD"]
             allowed_policy_actions = [action.value for action in legal_actions_for_position_state("flat")]
+            allowed_signals = _legacy_allowed_signals_from_policy_actions(allowed_policy_actions)
             state = "UNKNOWN"
 
         # Coinbase FCM positions use number_of_contracts / avg_entry_price;
@@ -1665,21 +1666,26 @@ Format response as a structured technical analysis demonstration.
         self, action: str, position_state: Dict[str, Any], asset_pair: str
     ) -> Tuple[bool, Optional[str]]:
         """
-        Validate that the signal is allowed given current position state.
+        Validate that the action is allowed given current position state.
 
-        Prevents invalid signals like:
-        - BUY when already LONG (can't add to long, must close first)
-        - SELL when already SHORT (can't add to short, must close first)
+        Canonical policy actions are the primary source of truth. Legacy
+        BUY/SELL/HOLD remains a compatibility layer derived from canonical
+        legality when available.
 
         Args:
-            action: The signal action (BUY, SELL, HOLD)
+            action: Canonical policy action or legacy compatibility action
             position_state: Current position state from _extract_position_state
             asset_pair: Asset pair for logging
 
         Returns:
             (is_valid, error_message)
         """
-        allowed = position_state.get("allowed_signals", ["BUY", "SELL", "HOLD"])
+        allowed_policy_actions = position_state.get("allowed_policy_actions")
+        if allowed_policy_actions:
+            derived_allowed = _legacy_allowed_signals_from_policy_actions(allowed_policy_actions)
+        else:
+            derived_allowed = ["BUY", "SELL", "HOLD"]
+        allowed = position_state.get("allowed_signals", derived_allowed)
         state = position_state.get("state", "UNKNOWN")
 
         if is_policy_action(action):
@@ -1698,29 +1704,22 @@ Format response as a structured technical analysis demonstration.
             return True, None
 
         if action not in allowed:
+            allowed_policy_actions = position_state.get("allowed_policy_actions") or []
+            canonical_clause = (
+                f"Allowed policy actions: {', '.join(allowed_policy_actions)}. "
+                if allowed_policy_actions
+                else ""
+            )
             error = (
                 f"Signal {action} not allowed when {state}. "
                 f"Current position: {position_state.get('side', 'NONE')} {asset_pair}. "
-                f"Allowed signals: {', '.join(allowed)}"
+                f"{canonical_clause}Allowed signals: {', '.join(allowed)}"
             )
             return False, error
 
-        # Additional validation: Don't allow BUY when already LONG
-        if action == "BUY" and position_state.get("side") == "LONG":
-            error = (
-                f"Cannot BUY when already LONG {asset_pair}. "
-                f"Use HOLD to keep position or SELL to close."
-            )
-            return False, error
-
-        # Additional validation: Don't allow SELL when already SHORT
-        if action == "SELL" and position_state.get("side") == "SHORT":
-            error = (
-                f"Cannot SELL when already SHORT {asset_pair}. "
-                f"Use HOLD to keep position or BUY to close."
-            )
-            return False, error
-
+        # Legacy BUY/SELL validation is fully governed by `allowed_signals`
+        # above. Keep canonical policy-action legality as the source of truth
+        # and avoid duplicating stale side-specific compatibility rules here.
         return True, None
 
     def _calculate_position_sizing_params(
@@ -1776,7 +1775,7 @@ Format response as a structured technical analysis demonstration.
         """
         # Extract basic decision parameters
         balance = context.get("balance", {})
-        action = ai_response.get("action", "HOLD")
+        action = ai_response.get("policy_action") or ai_response.get("action", "HOLD")
         asset_type = context["market_data"].get("type", "unknown")
 
         # Select relevant balance based on asset type
@@ -2009,6 +2008,10 @@ Format response as a structured technical analysis demonstration.
                         logger.debug("Decisions error counter not available for metrics recording")
                     context["semantic_memory"] = []
 
+            # Attach extracted position snapshot to decision context so downstream
+            # sizing/validation paths can reason about current LONG/SHORT state.
+            context["position_state"] = self._extract_position_state(context, asset_pair)
+
             # Generate AI prompt
             prompt = self._create_ai_prompt(context)
 
@@ -2028,19 +2031,21 @@ Format response as a structured technical analysis demonstration.
             if veto_metadata:
                 ai_response["veto_metadata"] = veto_metadata
 
-            # Validate AI response action to ensure it's one of the allowed values
+            # Validate AI response action with canonical policy_action as the
+            # primary source of truth and legacy action as compatibility fallback.
             action = ai_response.get("policy_action") or ai_response.get("action", "HOLD")
             if action not in ["BUY", "SELL", "HOLD"] and not is_policy_action(action):
                 logger.warning(
-                    f"AI provider returned an invalid action: "
-                    f"'{ai_response.get('action')}'. Defaulting to 'HOLD'."
+                    f"AI provider returned an invalid action: '{action}'. Defaulting to 'HOLD'."
                 )
                 ai_response["action"] = "HOLD"
                 ai_response["policy_action"] = "HOLD"
             elif is_policy_action(action):
                 normalized_action = normalize_policy_action(action).value
-                ai_response["action"] = normalized_action
                 ai_response["policy_action"] = normalized_action
+                ai_response["action"] = ai_response.get("action") or normalized_action
+            else:
+                ai_response["action"] = action
 
             # Validate signal against position state (SHORT position support)
             position_state = self._extract_position_state(context, asset_pair)

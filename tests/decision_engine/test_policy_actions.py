@@ -168,13 +168,22 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     extract_policy_evaluation_results,
     extract_policy_evaluation_runs,
     get_legacy_action_compatibility,
+    get_position_orientation,
     get_policy_action_family,
     invalid_action_reason,
+    is_derisking_policy_action,
+    is_entry_policy_action,
+    is_exit_policy_action,
+    is_long_policy_action,
     is_policy_action,
+    is_reduce_policy_action,
+    is_short_policy_action,
     is_structurally_valid,
     legal_actions_for_position_state,
     normalize_policy_action,
     normalize_position_state,
+    to_adapter_side,
+    get_position_side,
 )
 
 
@@ -208,6 +217,85 @@ def test_legacy_action_compatibility_mapping_is_explicit():
     assert get_legacy_action_compatibility("REDUCE_LONG") == "SELL"
     assert get_legacy_action_compatibility("CLOSE_SHORT") == "BUY"
 
+
+
+def test_policy_action_intent_helpers_are_explicit():
+    assert is_entry_policy_action("OPEN_SMALL_LONG") is True
+    assert is_entry_policy_action("ADD_SMALL_SHORT") is True
+    assert is_entry_policy_action("CLOSE_LONG") is False
+
+    assert is_exit_policy_action("REDUCE_LONG") is True
+    assert is_exit_policy_action("CLOSE_SHORT") is True
+    assert is_exit_policy_action("OPEN_MEDIUM_SHORT") is False
+
+    assert is_reduce_policy_action("REDUCE_SHORT") is True
+    assert is_reduce_policy_action("CLOSE_SHORT") is False
+
+    assert is_derisking_policy_action("REDUCE_LONG") is True
+    assert is_derisking_policy_action("CLOSE_SHORT") is True
+    assert is_derisking_policy_action("OPEN_SMALL_LONG") is False
+
+    assert is_long_policy_action("OPEN_SMALL_LONG") is True
+    assert is_long_policy_action("CLOSE_SHORT") is True
+    assert is_long_policy_action("OPEN_SMALL_SHORT") is False
+
+    assert is_short_policy_action("OPEN_SMALL_SHORT") is True
+    assert is_short_policy_action("CLOSE_LONG") is True
+    assert is_short_policy_action("OPEN_SMALL_LONG") is False
+
+
+def test_to_adapter_side_is_boundary_only_mapping():
+    assert to_adapter_side("OPEN_SMALL_LONG") == "BUY"
+    assert to_adapter_side("REDUCE_LONG") == "SELL"
+    assert to_adapter_side("OPEN_MEDIUM_SHORT") == "SELL"
+    assert to_adapter_side("CLOSE_SHORT") == "BUY"
+    assert to_adapter_side("HOLD") == "HOLD"
+
+
+
+def test_get_position_orientation_reflects_execution_side_semantics():
+    assert get_position_orientation("OPEN_SMALL_LONG") == "LONG"
+    assert get_position_orientation("CLOSE_SHORT") == "LONG"
+    assert get_position_orientation("OPEN_SMALL_SHORT") == "SHORT"
+    assert get_position_orientation("CLOSE_LONG") == "SHORT"
+
+
+def test_get_position_side_reflects_underlying_trade_side_semantics():
+    assert get_position_side("OPEN_SMALL_LONG") == "LONG"
+    assert get_position_side("ADD_SMALL_LONG") == "LONG"
+    assert get_position_side("REDUCE_LONG") == "LONG"
+    assert get_position_side("CLOSE_LONG") == "LONG"
+    assert get_position_side("OPEN_SMALL_SHORT") == "SHORT"
+    assert get_position_side("ADD_SMALL_SHORT") == "SHORT"
+    assert get_position_side("REDUCE_SHORT") == "SHORT"
+    assert get_position_side("CLOSE_SHORT") == "SHORT"
+    assert get_position_side("BUY") == "LONG"
+    assert get_position_side("SELL") == "SHORT"
+
+
+
+@pytest.mark.parametrize(
+    "action,expected_adapter_side,expected_execution_orientation,expected_position_side",
+    [
+        ("OPEN_SMALL_LONG", "BUY", "LONG", "LONG"),
+        ("OPEN_MEDIUM_LONG", "BUY", "LONG", "LONG"),
+        ("ADD_SMALL_LONG", "BUY", "LONG", "LONG"),
+        ("REDUCE_LONG", "SELL", "SHORT", "LONG"),
+        ("CLOSE_LONG", "SELL", "SHORT", "LONG"),
+        ("OPEN_SMALL_SHORT", "SELL", "SHORT", "SHORT"),
+        ("OPEN_MEDIUM_SHORT", "SELL", "SHORT", "SHORT"),
+        ("ADD_SMALL_SHORT", "SELL", "SHORT", "SHORT"),
+        ("REDUCE_SHORT", "BUY", "LONG", "SHORT"),
+        ("CLOSE_SHORT", "BUY", "LONG", "SHORT"),
+        ("HOLD", "HOLD", None, None),
+    ],
+)
+def test_policy_action_helper_contract_matrix(
+    action, expected_adapter_side, expected_execution_orientation, expected_position_side
+):
+    assert to_adapter_side(action) == expected_adapter_side
+    assert get_position_orientation(action) == expected_execution_orientation
+    assert get_position_side(action) == expected_position_side
 
 
 def test_structural_legality_for_flat_position():
@@ -468,6 +556,95 @@ def test_build_policy_trace_gracefully_allows_partial_inputs():
     assert trace["decision_metadata"]["asset_pair"] is None
     assert trace["decision_metadata"]["decision_id"] is None
     assert trace["trace_version"] == 1
+
+
+
+def test_build_policy_trace_allows_canonical_decision_without_legacy_compatibility():
+    trace = build_policy_trace(
+        policy_package={"policy_state": {"position_state": "flat", "version": 1}},
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility=None,
+        confidence=88,
+        reasoning="canonical first",
+    )
+
+    assert trace["decision_envelope"]["action"] == "OPEN_SMALL_LONG"
+    assert trace["decision_envelope"]["policy_action"] == "OPEN_SMALL_LONG"
+    assert trace["decision_envelope"]["legacy_action_compatibility"] is None
+
+
+def test_build_policy_replay_record_preserves_missing_legacy_compatibility_for_canonical_decision():
+    policy_trace = build_policy_trace(
+        policy_package={"policy_state": {"position_state": "flat", "version": 1}},
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility=None,
+        confidence=82,
+        reasoning="canonical replay",
+        asset_pair="BTCUSD",
+        decision_id="decision-no-legacy",
+    )
+    record = build_policy_replay_record({"id": "decision-no-legacy", "asset_pair": "BTCUSD", "policy_trace": policy_trace})
+
+    assert record["policy_action"] == "OPEN_SMALL_LONG"
+    assert record["legacy_action_compatibility"] is None
+
+
+def test_build_policy_dataset_row_preserves_missing_legacy_compatibility_for_canonical_decision():
+    policy_trace = build_policy_trace(
+        policy_package=build_policy_package(
+            policy_state={"position_state": "flat", "version": 1},
+            action_context={"structural_action_validity": "valid", "version": 1},
+            policy_sizing_intent=None,
+            provider_translation_result=None,
+            control_outcome={"status": "executed", "version": 1},
+        ),
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility=None,
+        confidence=82,
+        reasoning="canonical dataset",
+        asset_pair="BTCUSD",
+        decision_id="decision-dataset-no-legacy",
+    )
+    row = build_policy_dataset_row_from_decision({
+        "id": "decision-dataset-no-legacy",
+        "asset_pair": "BTCUSD",
+        "policy_trace": policy_trace,
+    })
+
+    assert row["policy_action"] == "OPEN_SMALL_LONG"
+    assert row["legacy_action_compatibility"] is None
+
+
+
+def test_build_policy_evaluation_record_preserves_missing_legacy_compatibility_for_canonical_decision():
+    policy_trace = build_policy_trace(
+        policy_package=build_policy_package(
+            policy_state={"position_state": "flat", "version": 1},
+            action_context={"structural_action_validity": "valid", "version": 1},
+            policy_sizing_intent=None,
+            provider_translation_result=None,
+            control_outcome={"status": "executed", "reason_code": "ok", "version": 1},
+        ),
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        legacy_action_compatibility=None,
+        confidence=82,
+        reasoning="canonical eval",
+        asset_pair="BTCUSD",
+        decision_id="decision-eval-no-legacy",
+    )
+    row = build_policy_dataset_row_from_decision({
+        "id": "decision-eval-no-legacy",
+        "asset_pair": "BTCUSD",
+        "policy_trace": policy_trace,
+    })
+    record = build_policy_evaluation_record_from_dataset_row(row)
+
+    assert record["policy_action"] == "OPEN_SMALL_LONG"
+    assert record["legacy_action_compatibility"] is None
 
 
 

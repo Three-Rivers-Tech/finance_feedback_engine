@@ -231,6 +231,7 @@ class TradeOutcomeRecorder:
                     pos.get("size") or 
                     pos.get("units") or 
                     pos.get("contracts") or 
+                    pos.get("number_of_contracts") or 
                     pos.get("quantity") or 
                     "0"
                 )

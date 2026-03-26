@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
@@ -668,6 +669,87 @@ def test_derisking_execution_metadata_uses_active_position_size(trading_agent):
     assert decision["suggested_amount"] == 10635.0
 
 
+
+def test_performance_risk_checks_allow_derisking_actions(trading_agent):
+    trading_agent._performance_metrics.update(
+        {
+            "current_streak": 0,
+            "total_trades": 12,
+            "win_rate": 80,
+            "avg_loss": -10,
+            "avg_win": 40,
+            "total_pnl": 100.0,
+        }
+    )
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "CLOSE_SHORT",
+        "policy_action": "CLOSE_SHORT",
+        "confidence": 95,
+        "entry_price": 70535.0,
+        "stop_loss_price": 0.0,
+        "recommended_position_size": 0.293,
+    }
+
+    approved, reason = trading_agent._check_performance_based_risks(decision)
+
+    assert approved is True
+    assert "derisking" in reason.lower()
+
+
+
+def test_performance_risk_checks_do_not_block_derisking_high_risk_to_recent_pnl(trading_agent):
+    trading_agent._performance_metrics.update(
+        {
+            "current_streak": 0,
+            "total_trades": 12,
+            "win_rate": 80,
+            "avg_loss": -10,
+            "avg_win": 40,
+            "total_pnl": 100.0,
+        }
+    )
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "CLOSE_SHORT",
+        "policy_action": "CLOSE_SHORT",
+        "confidence": 95,
+        "entry_price": 70535.0,
+        "stop_loss_price": 69000.0,
+        "recommended_position_size": 0.293,
+    }
+
+    approved, reason = trading_agent._check_performance_based_risks(decision)
+
+    assert approved is True
+    assert "derisking" in reason.lower()
+
+
+
+
+
+def test_sync_trade_outcome_recorder_recovers_missing_decision_id_from_trade_monitor(trading_agent, mock_dependencies):
+    recorder = mock_dependencies["engine"].trade_outcome_recorder
+    recorder.update_positions.return_value = [
+        {
+            "product": "ETP-20DEC30-CDE",
+            "side": "SHORT",
+            "exit_price": "2073.0",
+            "exit_time": "2026-03-26T14:15:43+00:00",
+            "realized_pnl": "-7.5",
+            "decision_id": None,
+        }
+    ]
+    mock_dependencies["engine"].record_trade_outcome.return_value = SimpleNamespace(realized_pnl=-7.5)
+    trading_agent.trade_monitor.get_decision_id_by_asset = Mock(return_value="decision-eth-close")
+
+    trading_agent._sync_trade_outcome_recorder([])
+
+    mock_dependencies["engine"].record_trade_outcome.assert_called_once_with(
+        "decision-eth-close",
+        exit_price=2073.0,
+        exit_timestamp="2026-03-26T14:15:43+00:00",
+    )
 
 
 @pytest.mark.asyncio

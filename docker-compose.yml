@@ -4,6 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
+      args:
+        FFE_BUILD_VERSION: ${FFE_BUILD_VERSION:-0.9.10}
+        FFE_BUILD_SHA: ${FFE_BUILD_SHA:-unknown}
+        FFE_BUILD_DESCRIBE: ${FFE_BUILD_DESCRIBE:-unknown}
+        FFE_BUILD_BRANCH: ${FFE_BUILD_BRANCH:-unknown}
+        SETUPTOOLS_SCM_PRETEND_VERSION: ${FFE_BUILD_VERSION:-0.9.10}
     container_name: ffe-backend
     depends_on:
       postgres:

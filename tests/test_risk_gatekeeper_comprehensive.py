@@ -122,6 +122,20 @@ class TestMarketHoursCheck:
         assert modified["action"] == "HOLD"
         assert modified["policy_action"] == "HOLD"
 
+    def test_policy_close_short_not_overridden_when_stock_market_closed(self, risk_gatekeeper):
+        decision = {
+            "policy_action": "CLOSE_SHORT",
+            "action": "CLOSE_SHORT",
+            "asset_pair": "AAPL",
+            "market_data": {
+                "market_status": {"is_open": False, "session": "closed"},
+                "asset_type": "stock",
+            },
+        }
+        needs_override, modified = risk_gatekeeper.check_market_hours(decision)
+        assert needs_override is False
+        assert modified["policy_action"] == "CLOSE_SHORT"
+
     def test_stock_market_closed_overrides_to_hold(self, risk_gatekeeper):
         """Closed stock market should override BUY/SELL to HOLD."""
         decision = {

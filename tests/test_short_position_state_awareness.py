@@ -430,3 +430,44 @@ class TestPolicyActionValidation:
         )
         assert is_valid is True
         assert error is None
+
+
+    def test_legacy_sell_derives_allowed_signals_from_allowed_policy_actions(self, decision_engine):
+        position_state = {
+            "has_position": True,
+            "side": "LONG",
+            "state": "LONG",
+            "allowed_policy_actions": ["HOLD", "ADD_SMALL_LONG", "REDUCE_LONG", "CLOSE_LONG"],
+        }
+        is_valid, error = decision_engine._validate_signal_against_position(
+            "SELL", position_state, "BTC-USD"
+        )
+        assert is_valid is True
+        assert error is None
+
+    def test_legacy_sell_rejected_for_short_when_only_buy_compat_is_legal(self, decision_engine):
+        position_state = {
+            "has_position": True,
+            "side": "SHORT",
+            "state": "SHORT",
+            "allowed_policy_actions": ["HOLD", "ADD_SMALL_SHORT", "REDUCE_SHORT", "CLOSE_SHORT"],
+        }
+        is_valid, error = decision_engine._validate_signal_against_position(
+            "SELL", position_state, "BTC-USD"
+        )
+        assert is_valid is False
+        assert "Allowed signals: BUY, HOLD" in error
+
+
+    def test_legacy_signal_error_includes_allowed_policy_actions_when_available(self, decision_engine):
+        position_state = {
+            "has_position": True,
+            "side": "SHORT",
+            "state": "SHORT",
+            "allowed_policy_actions": ["HOLD", "ADD_SMALL_SHORT", "REDUCE_SHORT", "CLOSE_SHORT"],
+        }
+        is_valid, error = decision_engine._validate_signal_against_position(
+            "SELL", position_state, "BTC-USD"
+        )
+        assert is_valid is False
+        assert "Allowed policy actions: HOLD, ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT." in error

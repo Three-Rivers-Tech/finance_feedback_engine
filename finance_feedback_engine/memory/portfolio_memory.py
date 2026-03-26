@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
+from finance_feedback_engine.decision_engine.policy_actions import get_position_side
+
 from .consistency import MemoryConsistencyManager
 
 logger = logging.getLogger(__name__)
@@ -321,21 +323,22 @@ class PortfolioMemoryEngine:
         # Total transaction cost
         total_transaction_cost = fee_cost + slippage_cost + spread_cost
 
-        # Calculate P&L
-        if exit_price is None and action in ["BUY", "SELL", "LONG", "SHORT"]:
+        # Calculate P&L using canonical-first orientation semantics.
+        orientation = get_position_side(policy_action) or get_position_side(action)
+        if exit_price is None and orientation in ["LONG", "SHORT"]:
             logger.warning(f"exit_price is None for {action} action on {decision_id}, skipping P&L calculation")
             pnl = None
             pnl_pct = None
             position_value = entry_price * position_size if entry_price and position_size else 0
-        elif action == "BUY" or action == "LONG":
+        elif orientation == "LONG":
             pnl = (exit_price - entry_price) * position_size - total_transaction_cost
             position_value = entry_price * position_size
             pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
-        elif action == "SELL" or action == "SHORT":
+        elif orientation == "SHORT":
             pnl = (entry_price - exit_price) * position_size - total_transaction_cost
             position_value = entry_price * position_size
             pnl_pct = (pnl / position_value * 100) if position_value > 0 else 0
-        else:  # HOLD
+        else:  # HOLD / flat / unknown
             pnl = 0
             pnl_pct = 0
             position_value = 0

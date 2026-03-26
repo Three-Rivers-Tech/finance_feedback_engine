@@ -131,3 +131,6 @@ mlruns/
 test_coinbase_auth.py
 check_coinbase_raw.py
 check_production_account.py
+
+# setuptools-scm generated version file
+finance_feedback_engine/_version.py

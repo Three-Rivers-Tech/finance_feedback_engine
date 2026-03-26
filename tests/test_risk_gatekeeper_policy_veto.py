@@ -69,6 +69,17 @@ def test_policy_action_veto_helper_is_noop_for_legacy_action():
 
 
 
+def test_entry_trade_detection_uses_canonical_policy_actions():
+    gatekeeper = RiskGatekeeper()
+
+    assert gatekeeper._is_entry_trade_action({"policy_action": "OPEN_SMALL_LONG"}) is True
+    assert gatekeeper._is_entry_trade_action({"policy_action": "ADD_SMALL_SHORT"}) is True
+    assert gatekeeper._is_entry_trade_action({"policy_action": "CLOSE_SHORT"}) is False
+    assert gatekeeper._is_entry_trade_action({"policy_action": "REDUCE_LONG"}) is False
+    assert gatekeeper._is_entry_trade_action({"action": "BUY"}) is True
+    assert gatekeeper._is_entry_trade_action({"action": "HOLD"}) is False
+
+
 @patch("finance_feedback_engine.risk.gatekeeper.MarketSchedule")
 def test_policy_action_veto_helper_keeps_human_and_machine_messages_aligned_on_rejection(mock_schedule):
     mock_schedule.get_market_status.return_value = {"is_open": True, "warning": None}

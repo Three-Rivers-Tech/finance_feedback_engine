@@ -7,6 +7,7 @@ from typing import Any, Dict, Tuple
 
 from finance_feedback_engine.decision_engine.policy_actions import (
     get_legacy_action_compatibility,
+    is_entry_policy_action,
     is_policy_action,
 )
 from finance_feedback_engine.observability.metrics import create_counters, get_meter
@@ -86,12 +87,19 @@ class RiskGatekeeper:
 
     @staticmethod
     def _extract_gate_action(decision: Dict[str, Any]) -> str:
-        """Normalize policy actions to legacy trade direction semantics for gate checks."""
+        """Return a normalized display action for logs/compatibility only."""
         raw_action = decision.get("policy_action") or decision.get("action") or "HOLD"
         if is_policy_action(raw_action):
-            compat = get_legacy_action_compatibility(raw_action)
-            return compat or "HOLD"
+            return str(raw_action)
         return str(raw_action).upper()
+
+    @staticmethod
+    def _is_entry_trade_action(decision: Dict[str, Any]) -> bool:
+        """Canonical entry trade detection with legacy BUY/SELL fallback."""
+        raw_action = decision.get("policy_action") or decision.get("action") or "HOLD"
+        if is_policy_action(raw_action):
+            return is_entry_policy_action(raw_action)
+        return str(raw_action).upper() in {"BUY", "SELL"}
 
 
     def check_market_hours(self, decision: Dict) -> Tuple[bool, Dict]:
@@ -125,7 +133,7 @@ class RiskGatekeeper:
         asset_type = market_data.get("asset_type", market_data.get("type", "crypto"))
 
         # Crypto markets are 24/7, so only enforce for forex/stocks
-        if not is_open and asset_type != "crypto" and action in ["BUY", "SELL"]:
+        if not is_open and asset_type != "crypto" and self._is_entry_trade_action(decision):
             logger.warning(
                 f"[GATEKEEPER] Market is CLOSED for {asset_type}. "
                 f"Overriding {action} → HOLD. Session: {market_status.get('session', 'Unknown')}"
@@ -145,7 +153,7 @@ class RiskGatekeeper:
         is_fresh = data_freshness.get("is_fresh", True)
         freshness_msg = data_freshness.get("message", "")
 
-        if not self.is_backtest and not is_fresh and action in ["BUY", "SELL"]:
+        if not self.is_backtest and not is_fresh and self._is_entry_trade_action(decision):
             age_str = data_freshness.get("age_minutes", "Unknown age")
             logger.error(
                 f"[GATEKEEPER] Data is STALE ({age_str}). "
@@ -527,10 +535,9 @@ class RiskGatekeeper:
             if asset_category is not None:
                 holdings = context.get("holdings", {})
                 category_counts = self._count_holdings_by_category(holdings)
-                fallback_action = self._extract_gate_action(decision)
                 if (
                     category_counts.get(asset_category, 0) >= self.max_correlated_assets
-                    and fallback_action == "BUY"
+                    and self._is_entry_trade_action(decision)
                 ):
                     logger.warning(
                         f"Category correlation limit: {category_counts.get(asset_category, 0)} "

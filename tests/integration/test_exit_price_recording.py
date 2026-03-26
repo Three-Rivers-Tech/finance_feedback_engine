@@ -284,6 +284,43 @@ class TestExitPriceRecordingFix:
         assert any("42000" in record.message for record in caplog.records)
 
 
+
+
+    @pytest.mark.integration
+    def test_recorder_repairs_zero_size_from_number_of_contracts_snapshot(
+        self, trade_outcome_recorder, mock_unified_provider, caplog
+    ):
+        """Coinbase futures snapshots may omit size/units but include number_of_contracts."""
+        entry_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+        open_positions = [
+            {
+                "product_id": "ETP-20DEC30-CDE",
+                "side": "SHORT",
+                "number_of_contracts": "1",
+                "entry_price": "2123.5",
+                "current_price": "2123.5",
+                "entry_time": entry_time.isoformat(),
+                "decision_id": "decision-eth-close",
+            }
+        ]
+        trade_outcome_recorder.update_positions(open_positions)
+
+        assert trade_outcome_recorder.open_positions["ETP-20DEC30-CDE_SHORT"]["entry_size"] == Decimal("1")
+
+        mock_unified_provider.get_current_price = MagicMock(return_value={
+            "price": "2119.5",
+            "provider": "coinbase",
+        })
+
+        with caplog.at_level(logging.INFO):
+            outcomes = trade_outcome_recorder.update_positions([])
+
+        assert len(outcomes) == 1
+        outcome = outcomes[0]
+        assert outcome["decision_id"] == "decision-eth-close"
+        assert Decimal(outcome["exit_size"]) == Decimal("1")
+        assert Decimal(outcome["realized_pnl"]) == Decimal("4.0")
+        assert "PnL anomaly persisted" not in caplog.text
 class TestExitPriceEdgeCases:
     """Test edge cases in exit price recording."""
 

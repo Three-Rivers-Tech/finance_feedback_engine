@@ -473,6 +473,25 @@ class TestVetoLogic:
         assert 0 <= threshold <= 100
 
 
+class TestProviderDecisionValidation:
+    def test_validate_provider_decision_accepts_policy_action_only(self):
+        engine = DecisionEngine(config={"decision_engine": {"ai_provider": "mock", "enable_veto_logic": False}})
+        decision = {
+            "policy_action": "OPEN_SMALL_SHORT",
+            "confidence": 60,
+            "reasoning": "Short setup",
+        }
+        assert engine._is_valid_provider_response(decision, "mock") is True
+
+    def test_validate_provider_decision_rejects_missing_action_and_policy_action(self):
+        engine = DecisionEngine(config={"decision_engine": {"ai_provider": "mock", "enable_veto_logic": False}})
+        decision = {
+            "confidence": 60,
+            "reasoning": "Missing action fields",
+        }
+        assert engine._is_valid_provider_response(decision, "mock") is False
+
+
 class TestPositionSizingHelpers:
     """Test position sizing helper methods."""
 
@@ -489,6 +508,12 @@ class TestPositionSizingHelpers:
         # Test with HOLD action - returns None
         pos_type = engine._determine_position_type("HOLD")
         assert pos_type is None
+
+        pos_type = engine._determine_position_type("OPEN_SMALL_LONG")
+        assert pos_type == "LONG"
+
+        pos_type = engine._determine_position_type("OPEN_SMALL_SHORT")
+        assert pos_type == "SHORT"
 
     def test_select_relevant_balance(self, engine):
         """Test _select_relevant_balance helper."""

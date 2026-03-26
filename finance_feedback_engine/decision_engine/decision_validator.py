@@ -16,7 +16,11 @@ from .policy_actions import (
     build_policy_state,
     get_legacy_action_compatibility,
     get_policy_action_family,
+    get_position_orientation,
+    is_entry_policy_action,
+    is_long_policy_action,
     is_policy_action,
+    is_short_policy_action,
     # Stage 49-62: Policy trace contract builders
     build_policy_dataset_row_from_decision,
     build_policy_evaluation_batch,
@@ -215,6 +219,9 @@ class DecisionValidator:
             if is_policy_action(action)
             else action
         )
+        canonical_entry_action = bool(is_policy_action(action) and is_entry_policy_action(action))
+        legacy_entry_action = (not is_policy_action(action)) and effective_legacy_action in ["BUY", "SELL"]
+        entry_sizing_required = canonical_entry_action or legacy_entry_action
 
         # Extract position sizing results
         # Use calculated position size from position_sizing_result
@@ -248,7 +255,7 @@ class DecisionValidator:
             sizing_anchor = policy_sizing_intent.get("sizing_anchor")
             provider_translation_required = bool(
                 policy_sizing_intent.get("provider_agnostic", False)
-            ) and effective_legacy_action in ["BUY", "SELL"]
+            ) and entry_sizing_required
 
         if isinstance(provider_translation_result, dict):
             translation_provider = provider_translation_result.get("provider")
@@ -278,7 +285,7 @@ class DecisionValidator:
         # convert to USD notional by multiplying by current_price when the quote is USD/USDT
         if (
             not signal_only
-            and effective_legacy_action in ["BUY", "SELL"]
+            and entry_sizing_required
             and recommended_position_size
             and current_price > 0
         ):
@@ -340,6 +347,7 @@ class DecisionValidator:
             policy_action_family = get_policy_action_family(action)
             legacy_action_compatibility = get_legacy_action_compatibility(action)
             action_context_version = 1
+
 
             raw_position_state = (
                 context.get("position_state")
@@ -407,7 +415,7 @@ class DecisionValidator:
             controls=controls,
         )
 
-        if effective_legacy_action in ["BUY", "SELL"] and recommended_position_size:
+        if entry_sizing_required and recommended_position_size:
             recommended_position_size = float(recommended_position_size) * size_multiplier
             if suggested_amount:
                 suggested_amount = float(suggested_amount) * size_multiplier
@@ -515,20 +523,8 @@ class DecisionValidator:
 
     @staticmethod
     def _determine_position_type(action: str) -> Optional[str]:
-        """
-        Determine position type from action.
-
-        Args:
-            action: Trading action (BUY, SELL, or HOLD)
-
-        Returns:
-            Position type: 'LONG' for BUY, 'SHORT' for SELL, None for HOLD
-        """
-        if action == "BUY":
-            return "LONG"
-        elif action == "SELL":
-            return "SHORT"
-        return None
+        """Determine coarse position orientation from shared canonical-first semantics."""
+        return get_position_orientation(action)
 
 
     def _build_stage_49_62_contract_chain(self, decision: dict) -> dict:

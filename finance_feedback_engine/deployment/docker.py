@@ -5,9 +5,13 @@ Handles Docker image building, container management, and compose operations.
 Designed with TDD - all tests written first in test_docker.py
 """
 
+import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Dict
+
+from finance_feedback_engine import __version__
 
 from .logger import get_logger
 
@@ -18,6 +22,11 @@ class DockerError(Exception):
     """Custom exception for Docker operation failures."""
 
     pass
+
+
+def _sanitize_docker_tag(tag: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]", "-", tag)
+    return sanitized.strip(".-") or "unknown"
 
 
 class DockerOperations:
@@ -40,16 +49,34 @@ class DockerOperations:
         """Build a Docker image."""
         logger.info(f"Building {service} image with tag {tag}")
 
-        cmd = [
-            "docker",
-            "build",
-            "-t",
-            f"finance-feedback-engine-{service}:{tag}",
-            "-t",
+        requested_tag = _sanitize_docker_tag(tag)
+        version_tag = _sanitize_docker_tag(__version__)
+        image_tags = [
+            f"finance-feedback-engine-{service}:{requested_tag}",
+            f"finance-feedback-engine-{service}:{version_tag}",
             f"finance-feedback-engine-{service}:latest",
-            "-f",
-            dockerfile,
         ]
+        deduped_tags = []
+        for image_tag in image_tags:
+            if image_tag not in deduped_tags:
+                deduped_tags.append(image_tag)
+
+        build_version = os.getenv("FFE_BUILD_VERSION") or __version__
+        build_sha = os.getenv("FFE_BUILD_SHA") or "unknown"
+        build_describe = os.getenv("FFE_BUILD_DESCRIBE") or build_version
+        build_branch = os.getenv("FFE_BUILD_BRANCH") or "unknown"
+
+        cmd = ["docker", "build"]
+        for image_tag in deduped_tags:
+            cmd.extend(["-t", image_tag])
+        cmd.extend([
+            "--build-arg", f"FFE_BUILD_VERSION={build_version}",
+            "--build-arg", f"FFE_BUILD_SHA={build_sha}",
+            "--build-arg", f"FFE_BUILD_DESCRIBE={build_describe}",
+            "--build-arg", f"FFE_BUILD_BRANCH={build_branch}",
+            "--build-arg", f"SETUPTOOLS_SCM_PRETEND_VERSION={build_version}",
+            "-f", dockerfile
+        ])
 
         if no_cache:
             cmd.append("--no-cache")

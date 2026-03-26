@@ -61,6 +61,75 @@ def get_policy_action_family(action: PolicyAction | str) -> str:
     raise ValueError(f"Unsupported policy action family for: {normalized}")
 
 
+def is_entry_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"open_long", "add_long", "open_short", "add_short"}
+
+
+def is_exit_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"reduce_long", "close_long", "reduce_short", "close_short"}
+
+
+def is_reduce_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"reduce_long", "reduce_short"}
+
+
+def is_derisking_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"reduce_long", "close_long", "reduce_short", "close_short"}
+
+
+def is_long_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"open_long", "add_long", "reduce_short", "close_short"}
+
+
+def is_short_policy_action(action: PolicyAction | str) -> bool:
+    return get_policy_action_family(action) in {"open_short", "add_short", "reduce_long", "close_long"}
+
+
+def get_position_orientation(action: object) -> Optional[str]:
+    """Return LONG/SHORT/None from canonical-first action semantics."""
+    if is_policy_action(action):
+        if is_long_policy_action(action):
+            return "LONG"
+        if is_short_policy_action(action):
+            return "SHORT"
+        return None
+
+    normalized = str(action or "").upper()
+    if normalized == "BUY":
+        return "LONG"
+    if normalized == "SELL":
+        return "SHORT"
+    return None
+
+
+def get_position_side(action: object) -> Optional[str]:
+    """Return the underlying LONG/SHORT position side for canonical or legacy actions."""
+    if is_policy_action(action):
+        family = get_policy_action_family(action)
+        if family in {"open_long", "add_long", "reduce_long", "close_long"}:
+            return "LONG"
+        if family in {"open_short", "add_short", "reduce_short", "close_short"}:
+            return "SHORT"
+        return None
+
+    normalized = str(action or "").upper()
+    if normalized in {"BUY", "LONG"}:
+        return "LONG"
+    if normalized in {"SELL", "SHORT"}:
+        return "SHORT"
+    return None
+
+
+def to_adapter_side(action: PolicyAction | str) -> str:
+    normalized = normalize_policy_action(action)
+    if normalized == PolicyAction.HOLD:
+        return "HOLD"
+    legacy = get_legacy_action_compatibility(normalized)
+    if legacy not in {"BUY", "SELL", "HOLD"}:
+        raise ValueError(f"Unsupported adapter-side action for: {normalized}")
+    return legacy
+
+
 def get_legacy_action_compatibility(action: PolicyAction | str) -> Optional[str]:
     normalized = normalize_policy_action(action)
     if normalized == PolicyAction.HOLD:

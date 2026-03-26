@@ -47,6 +47,12 @@ class TestDeterminePositionType:
         """Invalid action should return None."""
         assert DecisionEngine._determine_position_type("INVALID") is None
 
+    def test_determine_position_type_policy_actions(self):
+        assert DecisionEngine._determine_position_type("OPEN_SMALL_LONG") == "LONG"
+        assert DecisionEngine._determine_position_type("CLOSE_SHORT") == "LONG"
+        assert DecisionEngine._determine_position_type("OPEN_SMALL_SHORT") == "SHORT"
+        assert DecisionEngine._determine_position_type("CLOSE_LONG") == "SHORT"
+
 
 class TestSelectRelevantBalance:
     """Tests for _select_relevant_balance method."""
@@ -188,6 +194,21 @@ class TestHasExistingPosition:
             is True
         )
 
+
+    def test_detects_coinbase_cfm_futures_position_by_base_asset(self, decision_engine):
+        """Should detect Coinbase CFM futures positions via canonical base-asset mapping."""
+        monitoring_context = {
+            "active_positions": {"futures": [{"product_id": "BIP-20DEC30-CDE"}]}
+        }
+        assert decision_engine._has_existing_position("BTCUSD", None, monitoring_context) is True
+
+    def test_detects_coinbase_cfm_eth_position_by_base_asset(self, decision_engine):
+        """Should detect ETH CFM futures positions via canonical base-asset mapping."""
+        monitoring_context = {
+            "active_positions": {"futures": [{"product_id": "ETP-20DEC30-CDE"}]}
+        }
+        assert decision_engine._has_existing_position("ETHUSD", None, monitoring_context) is True
+
     def test_handles_usdt_suffix(self, decision_engine):
         """Should handle USDT suffix when extracting base currency."""
         portfolio = {"holdings": [{"currency": "BTC", "amount": 0.5}]}
@@ -276,6 +297,53 @@ class TestCalculatePositionSizingParams:
 
         assert params["recommended_position_size"] is not None
 
+
+    def test_hold_with_existing_short_uses_short_stop_loss_direction(self, decision_engine):
+        context = {"market_data": {"close": 50000.0}, "position_state": "SHORT"}
+        relevant_balance = {"USD": 10000.0}
+
+        params = decision_engine._calculate_position_sizing_params(
+            context=context,
+            current_price=50000.0,
+            action="HOLD",
+            has_existing_position=True,
+            relevant_balance=relevant_balance,
+            balance_source="Coinbase",
+        )
+
+        assert params["stop_loss_price"] > 50000.0
+
+    def test_hold_with_existing_long_uses_long_stop_loss_direction(self, decision_engine):
+        context = {"market_data": {"close": 50000.0}, "position_state": "LONG"}
+        relevant_balance = {"USD": 10000.0}
+
+        params = decision_engine._calculate_position_sizing_params(
+            context=context,
+            current_price=50000.0,
+            action="HOLD",
+            has_existing_position=True,
+            relevant_balance=relevant_balance,
+            balance_source="Coinbase",
+        )
+
+        assert params["stop_loss_price"] < 50000.0
+
+
+    def test_hold_with_existing_short_accepts_dict_position_state(self, decision_engine):
+        context = {"market_data": {"close": 50000.0}, "position_state": {"state": "SHORT", "side": "SHORT"}}
+        relevant_balance = {"USD": 10000.0}
+
+        params = decision_engine._calculate_position_sizing_params(
+            context=context,
+            current_price=50000.0,
+            action="HOLD",
+            has_existing_position=True,
+            relevant_balance=relevant_balance,
+            balance_source="Coinbase",
+        )
+
+        assert params["stop_loss_price"] > 50000.0
+
     def test_legacy_percentage_conversion(self):
         """Legacy percentage values (>1) should be converted to decimals."""
         # Create engine with legacy percentage values (>1)
@@ -355,6 +423,48 @@ class TestCreateDecisionIntegration:
 
         assert decision["action"] == "HOLD"
         assert decision["position_type"] is None
+        assert decision["suggested_amount"] == 0
+
+
+    def test_create_decision_policy_action_only_prefers_canonical_action(self, decision_engine):
+        context = {
+            "market_data": {"close": 3000.0, "type": "crypto"},
+            "balance": {"coinbase_USD": 10000.0},
+            "price_change": -1.2,
+            "volatility": 1.1,
+        }
+        ai_response = {
+            "policy_action": "OPEN_SMALL_SHORT",
+            "confidence": 61,
+            "reasoning": "Bearish setup",
+            "amount": 0,
+        }
+
+        decision = decision_engine._create_decision("ETHUSD", context, ai_response)
+
+        assert decision["policy_action"] == "OPEN_SMALL_SHORT"
+        assert decision["position_type"] == "SHORT"
+        assert decision["confidence"] == 61
+
+
+    def test_create_decision_close_short_does_not_use_entry_sizing_path(self, decision_engine):
+        context = {
+            "market_data": {"close": 3000.0, "type": "crypto"},
+            "balance": {"coinbase_USD": 10000.0},
+            "price_change": -1.2,
+            "volatility": 1.1,
+        }
+        ai_response = {
+            "policy_action": "CLOSE_SHORT",
+            "confidence": 82,
+            "reasoning": "Take profit",
+            "amount": 0,
+        }
+
+        decision = decision_engine._create_decision("ETHUSD", context, ai_response)
+
+        assert decision["policy_action"] == "CLOSE_SHORT"
+        assert decision["position_type"] == "LONG"
         assert decision["suggested_amount"] == 0
 
 

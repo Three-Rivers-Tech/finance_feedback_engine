@@ -104,6 +104,55 @@ class TestRecordTradeOutcome:
         assert outcome.legacy_action_compatibility == "BUY"
 
 
+    def test_policy_open_small_short_uses_short_pnl_even_without_legacy_sell_action(self, memory_engine, sample_decision):
+        sample_decision["action"] = "OPEN_SMALL_SHORT"
+        sample_decision["policy_action"] = "OPEN_SMALL_SHORT"
+        sample_decision["legacy_action_compatibility"] = "SELL"
+        sample_decision["policy_action_family"] = "open_short"
+        sample_decision["entry_price"] = 50000.0
+        sample_decision["recommended_position_size"] = 0.1
+
+        outcome = memory_engine.record_trade_outcome(sample_decision, exit_price=48000.0)
+
+        assert outcome.realized_pnl == pytest.approx(200.0, rel=0.01)
+
+    def test_policy_open_small_long_uses_long_pnl_even_without_legacy_buy_action(self, memory_engine, sample_decision):
+        sample_decision["action"] = "OPEN_SMALL_LONG"
+        sample_decision["policy_action"] = "OPEN_SMALL_LONG"
+        sample_decision["legacy_action_compatibility"] = "BUY"
+        sample_decision["policy_action_family"] = "open_long"
+        sample_decision["entry_price"] = 50000.0
+        sample_decision["recommended_position_size"] = 0.1
+
+        outcome = memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)
+
+        assert outcome.realized_pnl == pytest.approx(200.0, rel=0.01)
+
+    def test_policy_action_wins_when_legacy_action_disagrees_for_close_short(self, memory_engine, sample_decision):
+        sample_decision["action"] = "BUY"
+        sample_decision["policy_action"] = "CLOSE_SHORT"
+        sample_decision["legacy_action_compatibility"] = "BUY"
+        sample_decision["policy_action_family"] = "close_short"
+        sample_decision["entry_price"] = 50000.0
+        sample_decision["recommended_position_size"] = 0.1
+
+        outcome = memory_engine.record_trade_outcome(sample_decision, exit_price=48000.0)
+
+        assert outcome.realized_pnl == pytest.approx(200.0, rel=0.01)
+
+    def test_policy_action_wins_when_legacy_action_disagrees_for_open_long(self, memory_engine, sample_decision):
+        sample_decision["action"] = "SELL"
+        sample_decision["policy_action"] = "OPEN_SMALL_LONG"
+        sample_decision["legacy_action_compatibility"] = "SELL"
+        sample_decision["policy_action_family"] = "open_long"
+        sample_decision["entry_price"] = 50000.0
+        sample_decision["recommended_position_size"] = 0.1
+
+        outcome = memory_engine.record_trade_outcome(sample_decision, exit_price=52000.0)
+
+        assert outcome.realized_pnl == pytest.approx(200.0, rel=0.01)
+
+
 
 class TestSaveToDisk:
     """Test save_to_disk() with atomic writes."""

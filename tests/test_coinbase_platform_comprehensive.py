@@ -947,7 +947,7 @@ class TestExecuteTrade:
             "order_id": "order-sell-precision",
             "status": "OPEN",
         }
-        mock_client.market_order_sell.return_value = order_result
+        mock_client.market_order_buy.return_value = order_result
         mock_client.list_orders.return_value = []
         platform._client = mock_client
 
@@ -1050,6 +1050,71 @@ class TestExecuteTrade:
         result = platform.execute_trade(decision)
 
         assert result["success"] is True
+
+
+    def test_execute_trade_close_short_policy_action_routes_to_buy_execution(self, platform, mock_client):
+        platform._client = mock_client
+        mock_client.list_orders.return_value = []
+        product = MagicMock()
+        product.price = "50000.0"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+        mock_client.get_product.return_value = product
+        platform._resolve_futures_product = MagicMock(return_value=("BTC-PERP-INTX", product))
+        platform._must_use_futures_path = MagicMock(return_value=True)
+        platform._is_futures_product = MagicMock(return_value=True)
+        platform._build_futures_base_size = MagicMock(return_value="1")
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {"success": True, "order_id": "order-close-short", "status": "OPEN"}
+        mock_client.market_order_sell.return_value = order_result
+
+        decision = {
+            "id": "dec-close-short",
+            "policy_action": "CLOSE_SHORT",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        mock_client.market_order_buy.assert_called_once()
+        mock_client.market_order_sell.assert_not_called()
+
+    def test_execute_trade_open_short_policy_action_routes_to_sell_execution(self, platform, mock_client):
+        platform._client = mock_client
+        mock_client.list_orders.return_value = []
+        product = MagicMock()
+        product.price = "50000.0"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+        mock_client.get_product.return_value = product
+        platform._resolve_futures_product = MagicMock(return_value=("BTC-PERP-INTX", product))
+        platform._must_use_futures_path = MagicMock(return_value=True)
+        platform._is_futures_product = MagicMock(return_value=True)
+        platform._build_futures_base_size = MagicMock(return_value="1")
+        order_result = MagicMock()
+        order_result.to_dict.return_value = {"success": True, "order_id": "order-open-short", "status": "OPEN"}
+        mock_client.market_order_sell.return_value = order_result
+
+        decision = {
+            "id": "dec-open-short",
+            "policy_action": "OPEN_SMALL_SHORT",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "timestamp": "2024-01-01T00:00:00Z",
+        }
+
+        result = platform.execute_trade(decision)
+
+        assert result["success"] is True
+        mock_client.market_order_sell.assert_called_once()
+        mock_client.market_order_buy.assert_not_called()
 
     def test_execute_trade_invalid_action(self, platform, mock_client):
         """Test trade execution with invalid action."""

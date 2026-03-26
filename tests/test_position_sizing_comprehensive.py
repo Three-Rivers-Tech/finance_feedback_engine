@@ -387,6 +387,32 @@ class TestPositionSizingCalculator:
 
         assert result["recommended_position_size"] > 0
 
+
+    @pytest.mark.parametrize(
+        "asset_pair,current_price,position_state",
+        [
+            ("BTCUSD", 71110.0, "SHORT"),
+            ("ETHUSD", 2163.0, "SHORT"),
+            ("BTCUSD", 71110.0, {"state": "SHORT", "side": "SHORT"}),
+            ("ETHUSD", 2163.0, {"state": "SHORT", "side": "SHORT"}),
+        ],
+    )
+    def test_calculate_position_sizing_params_hold_with_existing_short_live_like_cases(self, calculator, asset_pair, current_price, position_state):
+        context = {"asset_pair": asset_pair, "position_state": position_state}
+
+        result = calculator.calculate_position_sizing_params(
+            context=context,
+            current_price=current_price,
+            action="HOLD",
+            has_existing_position=True,
+            relevant_balance={"USD": 10000.0},
+            balance_source="coinbase",
+        )
+
+        assert result["recommended_position_size"] > 0
+        assert result["stop_loss_price"] > current_price
+        assert result["position_sizing_method"] in {"risk_based", "minimum_order_size", "kelly_criterion", "existing_position_hold"}
+
     def test_build_policy_sizing_intent_is_provider_agnostic(self, calculator):
         """Stage 1 intent layer should stay provider-agnostic and additive."""
         intent = calculator.build_policy_sizing_intent(
@@ -871,6 +897,31 @@ class TestPositionSizingLogBehavior:
         assert result["recommended_position_size"] > 0
         assert "No valid Coinbase balance - using minimum order size" not in caplog.text
         assert "Position sizing:" in caplog.text
+
+
+    def test_policy_open_short_minimum_sizing_uses_short_stop_loss_direction(self):
+        calculator = PositionSizingCalculator({"agent": {"risk_percentage": 0.01, "sizing_stop_loss_percentage": 0.02, "use_dynamic_stop_loss": False, "use_kelly_criterion": False}})
+        result = calculator.calculate_position_sizing_params(
+            context={"asset_pair": "ETHUSD", "market_data": {"type": "crypto"}},
+            current_price=2000.0,
+            action="OPEN_SMALL_SHORT",
+            has_existing_position=False,
+            relevant_balance={"USD": 0.0},
+            balance_source="Coinbase",
+        )
+        assert result["stop_loss_price"] > 2000.0
+
+    def test_policy_open_long_minimum_sizing_uses_long_stop_loss_direction(self):
+        calculator = PositionSizingCalculator({"agent": {"risk_percentage": 0.01, "sizing_stop_loss_percentage": 0.02, "use_dynamic_stop_loss": False, "use_kelly_criterion": False}})
+        result = calculator.calculate_position_sizing_params(
+            context={"asset_pair": "ETHUSD", "market_data": {"type": "crypto"}},
+            current_price=2000.0,
+            action="OPEN_SMALL_LONG",
+            has_existing_position=False,
+            relevant_balance={"USD": 0.0},
+            balance_source="Coinbase",
+        )
+        assert result["stop_loss_price"] < 2000.0
 
     def test_position_sizing_input_debug_does_not_emit_critical(self, caplog):
         calculator = PositionSizingCalculator({"agent": {"risk_percentage": 0.01, "sizing_stop_loss_percentage": 0.02, "use_dynamic_stop_loss": False, "use_kelly_criterion": False}})

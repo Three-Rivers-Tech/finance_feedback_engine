@@ -4,7 +4,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
-from .policy_actions import get_legacy_action_compatibility
+from .policy_actions import get_legacy_action_compatibility, get_position_orientation
 
 logger = logging.getLogger(__name__)
 
@@ -424,6 +424,16 @@ class PositionSizingCalculator:
                 stop_loss_price = 0
             else:
                 position_type = self._determine_position_type(action)
+                if position_type is None and legacy_action == "HOLD" and has_existing_position:
+                    raw_position_state = context.get("position_state")
+                    if isinstance(raw_position_state, dict):
+                        context_position_state = str(raw_position_state.get("state") or raw_position_state.get("side") or "").upper()
+                    else:
+                        context_position_state = str(raw_position_state or "").upper()
+                    if context_position_state == "LONG":
+                        position_type = "LONG"
+                    elif context_position_state == "SHORT":
+                        position_type = "SHORT"
 
                 if position_type == "LONG":
                     stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
@@ -575,12 +585,15 @@ class PositionSizingCalculator:
             recommended_position_size = 0
             logger.warning("Price unavailable; cannot compute minimum position size")
 
-        # Calculate stop loss price
+        # Calculate stop loss price using canonical-first orientation semantics.
         if current_price > 0 and sizing_stop_loss_percentage > 0:
-            if action == "BUY":
+            orientation = self._determine_position_type(action)
+            if orientation == "LONG":
                 stop_loss_price = current_price * (1 - sizing_stop_loss_percentage)
-            else:
+            elif orientation == "SHORT":
                 stop_loss_price = current_price * (1 + sizing_stop_loss_percentage)
+            else:
+                stop_loss_price = current_price
         else:
             stop_loss_price = current_price
 
@@ -814,18 +827,5 @@ class PositionSizingCalculator:
 
     @staticmethod
     def _determine_position_type(action: str) -> Optional[str]:
-        """
-        Determine position type from action.
-
-        Args:
-            action: Trading action (legacy BUY/SELL/HOLD or policy action)
-
-        Returns:
-            Position type: 'LONG' for BUY-compatible actions, 'SHORT' for SELL-compatible actions, None for HOLD/close-reduce actions
-        """
-        normalized_action, legacy_action = _normalize_action_for_sizing(action)
-        if legacy_action == "BUY":
-            return "LONG"
-        elif legacy_action == "SELL":
-            return "SHORT"
-        return None
+        """Determine position type from shared canonical-first action semantics."""
+        return get_position_orientation(action)

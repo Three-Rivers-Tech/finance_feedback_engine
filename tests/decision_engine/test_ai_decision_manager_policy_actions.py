@@ -1,3 +1,6 @@
+import asyncio
+from unittest.mock import Mock
+
 import pytest
 
 from finance_feedback_engine.decision_engine.ai_decision_manager import AIDecisionManager
@@ -60,7 +63,7 @@ def test_normalize_provider_action_payload_keeps_legacy_directional_action_uncha
     assert "legacy_action_compatibility" not in normalized
 
 
-def test_normalize_provider_action_payload_close_action_has_explicit_none_compatibility(manager):
+def test_normalize_provider_action_payload_close_action_keeps_sell_compatibility(manager):
     decision = {
         "action": "CLOSE_LONG",
         "confidence": 75,
@@ -71,7 +74,7 @@ def test_normalize_provider_action_payload_close_action_has_explicit_none_compat
     assert normalized["action"] == "CLOSE_LONG"
     assert normalized["policy_action"] == "CLOSE_LONG"
     assert "legacy_action_compatibility" in normalized
-    assert normalized["legacy_action_compatibility"] is None
+    assert normalized["legacy_action_compatibility"] == "SELL"
 
 
 
@@ -116,6 +119,24 @@ async def test_query_ai_mock_provider_keeps_compatibility_fields_at_top_level(ma
     assert result["reasoning"] == "Mock decision for backtesting"
     assert "policy_package" in result
     assert result["version"] == 1
+
+
+
+@pytest.mark.asyncio
+async def test_simple_parallel_ensemble_uses_instance_timeout():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    manager.ensemble_timeout = 0.01
+    manager.ensemble_manager = Mock()
+    manager.ensemble_manager.enabled_providers = ["slow-provider"]
+
+    async def slow_query(provider_name, prompt):
+        await asyncio.sleep(0.05)
+        return {"action": "HOLD", "confidence": 50, "reasoning": "slow"}
+
+    manager._query_single_provider = slow_query
+
+    with pytest.raises(asyncio.TimeoutError):
+        await manager._simple_parallel_ensemble("test prompt")
 
 
 
