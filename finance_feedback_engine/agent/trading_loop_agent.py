@@ -957,7 +957,7 @@ class TradingLoopAgent:
             )
             if not self._startup_complete.is_set():
                 self._startup_complete.set()
-            await self._transition_to(AgentState.PERCEPTION)
+            await self._transition_to(AgentState.IDLE)
             return
 
         max_retries = 1  # Single retry on transient failures
@@ -2807,19 +2807,31 @@ class TradingLoopAgent:
         except Exception:
             asset_pair = None
 
+        candidate_asset_pairs: list[str] = []
+        if asset_pair:
+            candidate_asset_pairs.append(asset_pair)
+        raw_upper = str(product or "").upper()
+        if raw_upper.startswith(("ETP", "ET", "ETH")) and "ETHUSD" not in candidate_asset_pairs:
+            candidate_asset_pairs.append("ETHUSD")
+        if raw_upper.startswith(("BIP", "BIT", "BTC")) and "BTCUSD" not in candidate_asset_pairs:
+            candidate_asset_pairs.append("BTCUSD")
+        if raw_upper.startswith(("SLP", "SOL")) and "SOLUSD" not in candidate_asset_pairs:
+            candidate_asset_pairs.append("SOLUSD")
+
         trade_monitor = getattr(self, "trade_monitor", None)
-        if trade_monitor and asset_pair:
+        if trade_monitor and candidate_asset_pairs:
             try:
                 expected = getattr(trade_monitor, "expected_trades", None)
                 attempted_sources.append("trade_monitor.expected_trades")
                 if isinstance(expected, dict):
-                    association = expected.get(asset_pair)
-                    if isinstance(association, tuple) and association:
-                        decision_id = association[0]
-                        if decision_id:
-                            return decision_id, "trade_monitor.expected_trades", attempted_sources
-                    elif association:
-                        return association, "trade_monitor.expected_trades", attempted_sources
+                    for candidate_asset_pair in candidate_asset_pairs:
+                        association = expected.get(candidate_asset_pair)
+                        if isinstance(association, tuple) and association:
+                            decision_id = association[0]
+                            if decision_id:
+                                return decision_id, "trade_monitor.expected_trades", attempted_sources
+                        elif association:
+                            return association, "trade_monitor.expected_trades", attempted_sources
 
                 active_trackers = getattr(trade_monitor, "active_trackers", None)
                 attempted_sources.append("trade_monitor.active_trackers")
@@ -2832,7 +2844,15 @@ class TradingLoopAgent:
                             tracker_pair = standardize_asset_pair(raw_product)
                         except Exception:
                             tracker_pair = None
-                        if tracker_pair == asset_pair:
+                        tracker_raw_upper = str(raw_product or "").upper()
+                        tracker_candidates = [tracker_pair] if tracker_pair else []
+                        if tracker_raw_upper.startswith(("ETP", "ET", "ETH")):
+                            tracker_candidates.append("ETHUSD")
+                        if tracker_raw_upper.startswith(("BIP", "BIT", "BTC")):
+                            tracker_candidates.append("BTCUSD")
+                        if tracker_raw_upper.startswith(("SLP", "SOL")):
+                            tracker_candidates.append("SOLUSD")
+                        if any(candidate in tracker_candidates for candidate in candidate_asset_pairs):
                             decision_id = getattr(tracker, "decision_id", None)
                             if isinstance(decision_id, tuple) and decision_id:
                                 decision_id = decision_id[0]
@@ -2842,11 +2862,12 @@ class TradingLoopAgent:
                 getter = getattr(trade_monitor, "get_decision_id_by_asset", None)
                 attempted_sources.append("trade_monitor.get_decision_id_by_asset")
                 if callable(getter):
-                    decision_id = getter(asset_pair)
-                    if isinstance(decision_id, tuple) and decision_id:
-                        decision_id = decision_id[0]
-                    if decision_id:
-                        return decision_id, "trade_monitor.get_decision_id_by_asset", attempted_sources
+                    for candidate_asset_pair in candidate_asset_pairs:
+                        decision_id = getter(candidate_asset_pair)
+                        if isinstance(decision_id, tuple) and decision_id:
+                            decision_id = decision_id[0]
+                        if decision_id:
+                            return decision_id, "trade_monitor.get_decision_id_by_asset", attempted_sources
             except Exception:
                 logger.debug(
                     "Failed trade-monitor decision recovery for closed outcome %s",
@@ -2957,8 +2978,8 @@ class TradingLoopAgent:
                 except Exception as e:
                     logger.error(f"Error recording trade outcome: {e}", exc_info=True)
 
-        # After processing, transition to perception to gather fresh market data
-        await self._transition_to(AgentState.PERCEPTION)
+        # After processing, end this cycle cleanly; the next process_cycle() call will start PERCEPTION
+        await self._transition_to(AgentState.IDLE)
 
     def _update_performance_metrics(self, trade_outcome: Dict[str, Any]) -> None:
         """

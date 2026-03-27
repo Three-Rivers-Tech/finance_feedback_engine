@@ -196,3 +196,27 @@ def test_get_decision_id_by_asset_unwraps_active_tracker_tuple(trade_monitor):
     }
 
     assert trade_monitor.get_decision_id_by_asset("BTCUSD") == "decision-btc"
+
+
+
+def test_detect_new_trades_matches_expected_trade_via_canonical_futures_alias(mocker):
+    from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
+
+    platform = mocker.Mock()
+    platform.get_portfolio_breakdown.return_value = {
+        "futures_positions": [
+            {
+                "product_id": "ETP-20DEC30-CDE",
+                "side": "SHORT",
+                "entry_price": 2000.0,
+                "contracts": 1.0,
+            }
+        ]
+    }
+    monitor = TradeMonitor(platform=platform)
+    monitor.expected_trades = {"ETHUSD": ("decision-eth-open", 123.0)}
+
+    monitor._detect_new_trades()
+
+    queued = monitor.pending_queue.get_nowait()
+    assert queued["decision_id"] == "decision-eth-open"

@@ -423,8 +423,21 @@ class TradeMonitor:
                 from ..utils.validation import standardize_asset_pair
 
                 standardized_key = standardize_asset_pair(product_id)
+                candidate_keys = [standardized_key]
+                raw_upper = str(product_id or "").upper()
+                if raw_upper.startswith(("ETP", "ET", "ETH")) and "ETHUSD" not in candidate_keys:
+                    candidate_keys.append("ETHUSD")
+                if raw_upper.startswith(("BIP", "BIT", "BTC")) and "BTCUSD" not in candidate_keys:
+                    candidate_keys.append("BTCUSD")
+                if raw_upper.startswith(("SLP", "SOL")) and "SOLUSD" not in candidate_keys:
+                    candidate_keys.append("SOLUSD")
+
+                association = None
                 with self._expected_trades_lock:
-                    association = self.expected_trades.pop(standardized_key, None)
+                    for candidate_key in candidate_keys:
+                        association = self.expected_trades.pop(candidate_key, None)
+                        if association is not None:
+                            break
                 decision_id = association[0] if isinstance(association, tuple) and association else association
                 if decision_id:
                     logger.info(

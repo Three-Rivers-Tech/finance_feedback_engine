@@ -1520,3 +1520,56 @@ async def test_process_cycle_logs_reasoning_cycle_summary(trading_agent, mock_de
 
     assert "Reasoning cycle summary | analyzed_pairs=[(0, 'BTCUSD')]" in caplog.text
     assert "actionable_count=0" in caplog.text
+
+
+
+@pytest.mark.asyncio
+async def test_process_cycle_stops_at_idle_after_execution_path(trading_agent, mock_dependencies):
+    from finance_feedback_engine.agent.trading_loop_agent import AgentState
+
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(return_value={})
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-open-1",
+            "action": "OPEN_SMALL_SHORT",
+            "confidence": 80,
+            "asset_pair": "BTCUSD",
+            "legacy_action_compatibility": "OPEN_SHORT",
+        }
+    )
+    mock_dependencies["engine"].validate_decision = Mock(return_value=True)
+    trading_agent.risk_gatekeeper.validate_trade = Mock(return_value=(True, None))
+    trading_agent.engine.execute_decision_async = AsyncMock(return_value={"success": True, "order_id": "abc123", "order_status": "FILLED", "response": {}})
+    trading_agent.autonomous_execution = False
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    assert trading_agent.state == AgentState.IDLE
+
+
+def test_sync_trade_outcome_recorder_recovers_missing_decision_id_from_trade_monitor_expected_trade_alias(trading_agent, mock_dependencies):
+    from types import SimpleNamespace
+    recorder = mock_dependencies["engine"].trade_outcome_recorder
+    recorder.update_positions.return_value = [
+        {
+            "product": "ETP-20DEC30-CDE",
+            "side": "SHORT",
+            "exit_price": "1986.0",
+            "exit_time": "2026-03-27T22:25:38+00:00",
+            "realized_pnl": "0.85",
+            "decision_id": None,
+        }
+    ]
+    mock_dependencies["engine"].record_trade_outcome.return_value = SimpleNamespace(realized_pnl=0.85)
+    trading_agent.trade_monitor.expected_trades = {"ETHUSD": ("decision-eth-open", 0.0)}
+    trading_agent.trade_monitor.active_trackers = {}
+    trading_agent.trade_monitor.get_decision_id_by_asset = Mock(return_value=None)
+
+    trading_agent._sync_trade_outcome_recorder([])
+
+    mock_dependencies["engine"].record_trade_outcome.assert_called_once_with(
+        "decision-eth-open",
+        exit_price=1986.0,
+        exit_timestamp="2026-03-27T22:25:38+00:00",
+    )
