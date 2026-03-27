@@ -339,6 +339,8 @@ class OrderStatusWorker:
                 client = self.platform.rest_client
             elif hasattr(self.platform, "_get_client"):
                 client = self.platform._get_client()
+            elif hasattr(self.platform, "_client"):
+                client = self.platform._client
             elif hasattr(self.platform, "client"):
                 client = self.platform.client
 

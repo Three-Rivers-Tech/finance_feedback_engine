@@ -185,3 +185,43 @@ def test_coinbase_platform_without_rest_client_no_longer_ages_out_immediately(tm
     recorder.record_order_outcome.assert_not_called()
     assert "cb-order-2" in worker._pending_cache
     assert worker._pending_cache["cb-order-2"]["checks"] == 1
+
+
+class _CoinbaseUnderscoreClientPlatform:
+    def __init__(self, order_payload):
+        self._client = MagicMock()
+        self._client.get_order.return_value = order_payload
+
+
+def test_coinbase_platform_with_private_client_attr_is_polled_and_recorded(tmp_path):
+    recorder = MagicMock()
+    recorder.record_order_outcome.return_value = {"realized_pnl": "2.34"}
+    order_payload = {
+        "status": "FILLED",
+        "average_filled_price": "50010",
+        "filled_size": "0.2",
+        "total_fees": "2.0",
+    }
+    worker = OrderStatusWorker(
+        trading_platform=_CoinbaseUnderscoreClientPlatform(order_payload),
+        outcome_recorder=recorder,
+        data_dir=str(tmp_path),
+        poll_interval=1,
+        flush_every_cycles=1,
+        max_stale_checks=20,
+    )
+
+    worker.add_pending_order(
+        order_id="cb-order-3",
+        decision_id="decision-3",
+        asset_pair="BTCUSD",
+        platform="coinbase",
+        action="BUY",
+        size=0.2,
+        entry_price=50010,
+    )
+
+    worker._check_pending_orders()
+
+    recorder.record_order_outcome.assert_called_once()
+    assert "cb-order-3" not in worker._pending_cache

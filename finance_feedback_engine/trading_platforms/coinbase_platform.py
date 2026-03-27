@@ -501,20 +501,31 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
         for candidate in unique_candidates:
             try:
                 product = client.get_product(product_id=candidate)
-                product_type = str(
-                    self._get_product_field(product, "product_type", "")
-                ).upper()
-                has_future_details = (
-                    self._get_product_field(product, "future_product_details", None)
-                    is not None
-                )
-                trading_disabled = bool(
-                    self._get_product_field(product, "trading_disabled", False)
-                    or self._get_product_field(product, "is_disabled", False)
-                    or self._get_product_field(product, "cancel_only", False)
-                )
+                product_type_raw = self._get_product_field(product, "product_type", "")
+                product_type = str(product_type_raw).upper() if isinstance(product_type_raw, (str, bytes)) else ""
+                future_details = self._get_product_field(product, "future_product_details", None)
+                has_future_details = future_details not in (None, "", {}, [])
 
-                if (has_future_details or any(tag in product_type for tag in ("FUTURE", "PERP"))) and not trading_disabled:
+                def _truthy_flag(value):
+                    if isinstance(value, bool):
+                        return value
+                    if isinstance(value, (int, float)):
+                        return bool(value)
+                    if isinstance(value, str):
+                        return value.strip().lower() in {"1", "true", "yes", "on"}
+                    return False
+
+                trading_disabled = any(
+                    _truthy_flag(self._get_product_field(product, field, False))
+                    for field in ("trading_disabled", "is_disabled", "cancel_only")
+                )
+                candidate_looks_futures = ('PERP' in candidate) or candidate.endswith('-CDE')
+
+                if not trading_disabled and (
+                    has_future_details
+                    or any(tag in product_type for tag in ("FUTURE", "PERP"))
+                    or candidate_looks_futures
+                ):
                     return candidate, product
             except Exception as exc:
                 last_error = exc
@@ -653,20 +664,33 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             ):
                 return
             session_headers = self._client.session.headers
+            update_failed = False
             if hasattr(session_headers, "update"):
                 try:
                     session_headers.update(trace_headers)
+                    return
                 except TypeError as e:
+                    update_failed = True
                     logger.warning(
                         f"Failed to update session headers with trace context: {e}"
                     )
-            else:
-                # Fallback: set headers individually
-                for key, value in trace_headers.items():
-                    try:
-                        session_headers[key] = value
-                    except TypeError as e:
-                        logger.debug(f"Failed to set header {key}: {e}")
+
+            # Fallback: set headers individually, including odd SDK wrapper objects
+            for key, value in trace_headers.items():
+                try:
+                    session_headers[key] = value
+                except Exception:
+                    setitem = getattr(session_headers, "__setitem__", None)
+                    if callable(setitem):
+                        try:
+                            setitem(key, value)
+                            continue
+                        except Exception as e:
+                            logger.debug(f"Failed to set header {key}: {e}")
+                    elif update_failed:
+                        logger.debug(
+                            "Session headers object does not support per-key trace header assignment"
+                        )
         except Exception as e:
             logger.debug(
                 f"Error injecting per-request trace headers: {e}", exc_info=True
