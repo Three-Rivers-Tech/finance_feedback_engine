@@ -13,8 +13,8 @@ This cleanup effort modernized and consolidated the project's git hooks system b
 ### 2. Multiple Configuration Files
 Three different pre-commit configs without clear documentation:
 - `.pre-commit-config.yaml` (default)
-- `.pre-commit-config-enhanced.yaml` (thorough)
-- `.pre-commit-config-progressive.yaml` (gradual adoption)
+- `.pre-commit-config.yaml` (thorough)
+- `.pre-commit-config.yaml` (gradual adoption)
 
 ### 3. No Developer Onboarding
 - No setup script
@@ -116,7 +116,7 @@ Enhancements:
 - Essential checks: formatting, linting, type checking, security, tests
 - 70% coverage requirement
 
-### Enhanced (`.pre-commit-config-enhanced.yaml`)
+### Enhanced (`.pre-commit-config.yaml`)
 **Best for:** Release branches, thorough reviews
 - Slower (~2-5 minutes)
 - All default checks PLUS:
@@ -126,7 +126,7 @@ Enhancements:
   - Import cycle detection
 - Comprehensive quality gates
 
-### Progressive (`.pre-commit-config-progressive.yaml`)
+### Progressive (`.pre-commit-config.yaml`)
 **Best for:** Legacy codebases, learning
 - Very fast (~10-20 seconds)
 - Relaxed rules

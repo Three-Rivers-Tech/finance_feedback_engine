@@ -22,10 +22,10 @@
 │  └─ black, isort, flake8, mypy, bandit                 │
 │  └─ ❌ MISSING custom hooks                            │
 │                                                          │
-│  .pre-commit-config-enhanced.yaml                       │
+│  .pre-commit-config.yaml                       │
 │  └─ ❓ UNCLEAR PURPOSE                                 │
 │                                                          │
-│  .pre-commit-config-progressive.yaml                    │
+│  .pre-commit-config.yaml                    │
 │  └─ ❓ UNCLEAR PURPOSE                                 │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
@@ -58,12 +58,12 @@ Problems:
 │      │   └─ ✅ prevent-secrets integrated              │
 │      │   └─ ✅ pytest-fast (70% coverage)              │
 │      │                                                   │
-│      ├─> .pre-commit-config-enhanced.yaml              │
+│      ├─> .pre-commit-config.yaml              │
 │      │   └─ Thorough, all checks                       │
 │      │   └─ Release preparation                         │
 │      │   └─ ✅ Documented purpose                      │
 │      │                                                   │
-│      └─> .pre-commit-config-progressive.yaml           │
+│      └─> .pre-commit-config.yaml           │
 │          └─ Fast, relaxed rules                         │
 │          └─ Learning & gradual adoption                 │
 │          └─ ✅ Documented purpose                       │
@@ -106,8 +106,8 @@ pre-commit install                   # Or this?
 
 # Which config to use?
 # .pre-commit-config.yaml
-# .pre-commit-config-enhanced.yaml
-# .pre-commit-config-progressive.yaml
+# .pre-commit-config.yaml
+# .pre-commit-config.yaml
 # ❓ No documentation to help decide
 
 # Secret detection?

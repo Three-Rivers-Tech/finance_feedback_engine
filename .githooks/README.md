@@ -56,8 +56,8 @@ git commit --no-verify
 ## Configuration Files
 
 - **`.pre-commit-config.yaml`** - Default configuration (recommended)
-- **`.pre-commit-config-enhanced.yaml`** - Extended checks for thorough validation
-- **`.pre-commit-config-progressive.yaml`** - Gradual adoption for legacy projects
+- **`.pre-commit-config.yaml`** - Extended checks for thorough validation
+- **`.pre-commit-config.yaml`** - Gradual adoption for legacy projects
 
 See the root-level `CONTRIBUTING.md` or `docs/DEVELOPMENT.md` for more details.
 

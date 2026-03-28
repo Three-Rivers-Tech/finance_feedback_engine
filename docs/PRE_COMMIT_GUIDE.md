@@ -44,7 +44,7 @@ pre-commit install
 
 ---
 
-### 2. Enhanced Configuration (`.pre-commit-config-enhanced.yaml`)
+### 2. Enhanced Configuration (`.pre-commit-config.yaml`)
 
 **Recommended for:** Release branches, thorough code reviews, security audits
 
@@ -75,12 +75,12 @@ pre-commit install
 ```bash
 ./scripts/setup-hooks.sh --config enhanced
 # or
-pre-commit install -c .pre-commit-config-enhanced.yaml
+pre-commit install -c .pre-commit-config.yaml
 ```
 
 ---
 
-### 3. Progressive Configuration (`.pre-commit-config-progressive.yaml`)
+### 3. Progressive Configuration (`.pre-commit-config.yaml`)
 
 **Recommended for:** Legacy codebases, gradual adoption, learning
 
@@ -177,11 +177,11 @@ To switch between configurations:
 ./scripts/setup-hooks.sh --config enhanced
 
 # Method 2: Manual symlink
-ln -sf .pre-commit-config-enhanced.yaml .pre-commit-config.yaml
+ln -sf .pre-commit-config.yaml .pre-commit-config.yaml
 pre-commit install
 
 # Method 3: Specify directly
-pre-commit run --config .pre-commit-config-enhanced.yaml --all-files
+pre-commit run --config .pre-commit-config.yaml --all-files
 ```
 
 ---

@@ -2,10 +2,10 @@
 # Start with minimal checks and gradually enable more as tests stabilize
 #
 # Usage:
-#   Phase 1 (Current): cp .pre-commit-config-progressive.yaml .pre-commit-config.yaml
+#   Phase 1 (Current): cp .pre-commit-config.yaml .pre-commit-config.yaml
 #   Phase 2: Uncomment "Phase 2" sections
 #   Phase 3: Uncomment "Phase 3" sections
-#   Phase 4: Use .pre-commit-config-enhanced.yaml for full strictness
+#   Phase 4: Use .pre-commit-config.yaml for full strictness
 
 repos:
   # =============================================================================

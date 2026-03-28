@@ -3,10 +3,9 @@
 # Installs and configures pre-commit hooks for the Finance Feedback Engine project
 #
 # Usage:
-#   ./scripts/setup-hooks.sh [--config CONFIG_FILE]
+#   ./scripts/setup-hooks.sh
 #
 # Options:
-#   --config CONFIG_FILE    Use specific pre-commit config (default, enhanced, or progressive)
 #   --help                  Show this help message
 
 set -e
@@ -24,30 +23,10 @@ CONFIG_FILE=".pre-commit-config.yaml"
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --config)
-            case $2 in
-                default)
-                    CONFIG_FILE=".pre-commit-config.yaml"
-                    ;;
-                enhanced)
-                    CONFIG_FILE=".pre-commit-config-enhanced.yaml"
-                    ;;
-                progressive)
-                    CONFIG_FILE=".pre-commit-config-progressive.yaml"
-                    ;;
-                *)
-                    CONFIG_FILE="$2"
-                    ;;
-            esac
-            shift 2
-            ;;
         --help)
-            echo "Usage: $0 [--config CONFIG_FILE]"
+            echo "Usage: $0"
             echo ""
             echo "Options:"
-            echo "  --config default      Use .pre-commit-config.yaml (recommended)"
-            echo "  --config enhanced     Use .pre-commit-config-enhanced.yaml (thorough checks)"
-            echo "  --config progressive  Use .pre-commit-config-progressive.yaml (gradual adoption)"
             echo "  --help               Show this help message"
             exit 0
             ;;
@@ -101,23 +80,9 @@ else
 fi
 echo ""
 
-# Step 3: Set up config symlink (if using non-default)
+# Step 3: Confirm active config
 echo -e "${BLUE}[3/5]${NC} Configuring pre-commit..."
-if [ "$CONFIG_FILE" != ".pre-commit-config.yaml" ]; then
-    echo "Creating symlink to $CONFIG_FILE..."
-
-    # Check if .pre-commit-config.yaml exists and is not a symlink
-    if [ -f .pre-commit-config.yaml ] && [ ! -L .pre-commit-config.yaml ]; then
-        echo -e "${YELLOW}⚠  Warning: .pre-commit-config.yaml exists and will be replaced${NC}"
-        echo "Creating backup: .pre-commit-config.yaml.backup"
-        cp .pre-commit-config.yaml .pre-commit-config.yaml.backup
-    fi
-
-    ln -sf "$CONFIG_FILE" .pre-commit-config.yaml
-    echo -e "${GREEN}✓ Symlink created${NC}"
-else
-    echo -e "${GREEN}✓ Using default config${NC}"
-fi
+echo -e "${GREEN}✓ Using repository default config${NC}"
 echo ""
 
 # Step 4: Install pre-commit hooks
@@ -169,7 +134,7 @@ else
 fi
 echo ""
 echo -e "${BLUE}Configuration:${NC}"
-echo "  Config: $CONFIG_FILE"
+echo "  Config: .pre-commit-config.yaml"
 echo ""
 echo -e "${BLUE}Documentation:${NC}"
 echo "  • Pre-commit hooks: .pre-commit-hooks/README.md"
