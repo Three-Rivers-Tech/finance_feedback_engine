@@ -13,42 +13,41 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.utils.config_loader import load_config
 
 # Setup logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 def validate_live_credentials() -> bool:
     """Validate that live trading credentials are present."""
-    logger.info("\n" + "="*80)
+    logger.info("\n" + "=" * 80)
     logger.info("CREDENTIAL VALIDATION FOR LIVE TRADING")
-    logger.info("="*80)
+    logger.info("=" * 80)
 
     required = {
-        'ALPHA_VANTAGE_API_KEY': 'Alpha Vantage API Key',
-        'COINBASE_API_KEY': 'Coinbase API Key',
-        'COINBASE_API_SECRET': 'Coinbase API Secret',
-        'OANDA_API_KEY': 'Oanda API Token',
-        'OANDA_ACCOUNT_ID': 'Oanda Account ID',
+        "ALPHA_VANTAGE_API_KEY": "Alpha Vantage API Key",
+        "COINBASE_API_KEY": "Coinbase API Key",
+        "COINBASE_API_SECRET": "Coinbase API Secret",
+        "OANDA_API_KEY": "Oanda API Token",
+        "OANDA_ACCOUNT_ID": "Oanda Account ID",
     }
 
     missing = []
     for env_var, description in required.items():
         value = os.getenv(env_var)
-        if not value or value.startswith('YOUR_'):
+        if not value or value.startswith("YOUR_"):
             missing.append(f"  ✗ {description} ({env_var}) - NOT SET")
         else:
             # Mask sensitive values
-            masked = value[:6] + '*' * (len(value) - 6) if len(value) > 6 else '***'
+            masked = value[:6] + "*" * (len(value) - 6) if len(value) > 6 else "***"
             logger.info(f"  ✓ {description}: {masked}")
 
     if missing:
@@ -58,33 +57,35 @@ def validate_live_credentials() -> bool:
 
     # Check platform configuration
     logger.info("\n  Platform Configuration:")
-    platform = os.getenv('TRADING_PLATFORM', 'unknown')
+    platform = os.getenv("TRADING_PLATFORM", "unknown")
     logger.info(f"    Trading Platform: {platform}")
 
-    if platform != 'unified':
+    if platform != "unified":
         logger.error(f"    ✗ Expected 'unified', got '{platform}'")
         return False
 
     # Check live mode settings
-    coinbase_sandbox = os.getenv('COINBASE_USE_SANDBOX', 'true').lower()
-    oanda_env = os.getenv('OANDA_ENVIRONMENT', 'practice').lower()
+    coinbase_sandbox = os.getenv("COINBASE_USE_SANDBOX", "true").lower()
+    oanda_env = os.getenv("OANDA_ENVIRONMENT", "practice").lower()
 
-    if coinbase_sandbox != 'false':
+    if coinbase_sandbox != "false":
         logger.error("    ✗ COINBASE_USE_SANDBOX should be 'false' for live trading")
         return False
     else:
         logger.info("    ✓ Coinbase: LIVE (sandbox disabled)")
 
-    if oanda_env != 'live':
+    if oanda_env != "live":
         logger.error(f"    ✗ OANDA_ENVIRONMENT should be 'live', got '{oanda_env}'")
         return False
     else:
         logger.info("    ✓ Oanda: LIVE")
 
     # Check autonomous mode
-    autonomous = os.getenv('AGENT_AUTONOMOUS_ENABLED', 'false').lower() == 'true'
+    autonomous = os.getenv("AGENT_AUTONOMOUS_ENABLED", "false").lower() == "true"
     if not autonomous:
-        logger.warning("    ⚠️  AGENT_AUTONOMOUS_ENABLED is false - trades won't execute automatically")
+        logger.warning(
+            "    ⚠️  AGENT_AUTONOMOUS_ENABLED is false - trades won't execute automatically"
+        )
     else:
         logger.info("    ✓ Autonomous Mode: ENABLED")
 
@@ -94,9 +95,9 @@ def validate_live_credentials() -> bool:
 
 async def test_live_single_cycle():
     """Test a single OODA cycle with live credentials."""
-    logger.info("\n" + "="*80)
+    logger.info("\n" + "=" * 80)
     logger.info("INITIALIZING LIVE TRADING ENVIRONMENT")
-    logger.info("="*80)
+    logger.info("=" * 80)
 
     try:
         # Validate credentials first
@@ -111,20 +112,14 @@ async def test_live_single_cycle():
 
         # Initialize engine
         logger.info("\n[2/5] Initializing FinanceFeedbackEngine...")
-        engine = FinanceFeedbackEngine(
-            config_dict=config,
-            asset_pair="BTCUSD"
-        )
+        engine = FinanceFeedbackEngine(config_dict=config, asset_pair="BTCUSD")
         logger.info("✓ Engine initialized with BTCUSD")
 
         # Setup agent config
         logger.info("\n[3/5] Configuring trading agent...")
         agent_config_data = config.get("agent", {})
         agent_config_data["asset_pairs"] = ["BTCUSD", "ETHUSD"]  # Trade both
-        agent_config_data["autonomous"] = {
-            "enabled": True,
-            "approval_required": False
-        }
+        agent_config_data["autonomous"] = {"enabled": True, "approval_required": False}
 
         agent_config = TradingAgentConfig(**agent_config_data)
         logger.info(f"✓ Agent will trade: {agent_config.asset_pairs}")
@@ -134,7 +129,7 @@ async def test_live_single_cycle():
         trade_monitor = TradeMonitor(
             platform=engine.trading_platform,
             portfolio_take_profit_percentage=0.03,  # 3% take profit (live)
-            portfolio_stop_loss_percentage=0.02     # 2% stop loss (live)
+            portfolio_stop_loss_percentage=0.02,  # 2% stop loss (live)
         )
 
         # Enable monitoring integration
@@ -156,18 +151,22 @@ async def test_live_single_cycle():
         logger.info(f"✓ Agent initialized. State: {agent.state.name}")
 
         # SAFETY CHECK
-        logger.info("\n" + "="*80)
+        logger.info("\n" + "=" * 80)
         logger.info("⚠️  LIVE TRADING SAFETY CHECK")
-        logger.info("="*80)
-        logger.info("\nThis agent will execute REAL trades with your actual credentials.")
+        logger.info("=" * 80)
+        logger.info(
+            "\nThis agent will execute REAL trades with your actual credentials."
+        )
         logger.info(f"Platform: {engine.trading_platform.__class__.__name__}")
         logger.info(f"Assets: {agent_config.asset_pairs}")
         logger.info(f"Stop Loss: {trade_monitor.portfolio_stop_loss_percentage:.2%}")
-        logger.info(f"Take Profit: {trade_monitor.portfolio_take_profit_percentage:.2%}")
+        logger.info(
+            f"Take Profit: {trade_monitor.portfolio_take_profit_percentage:.2%}"
+        )
         logger.info("\nProceed? (yes/no): ", end="", flush=True)
 
         response = input().strip().lower()
-        if response not in ['yes', 'y']:
+        if response not in ["yes", "y"]:
             logger.info("❌ Aborted by user")
             return False
 
@@ -237,10 +236,7 @@ async def test_live_multi_cycle(num_cycles: int):
         config = load_config()
 
         # Initialize engine
-        engine = FinanceFeedbackEngine(
-            config_dict=config,
-            asset_pair="BTCUSD"
-        )
+        engine = FinanceFeedbackEngine(config_dict=config, asset_pair="BTCUSD")
 
         # Setup agent config
         agent_config_data = config.get("agent", {})
@@ -252,7 +248,7 @@ async def test_live_multi_cycle(num_cycles: int):
         trade_monitor = TradeMonitor(
             platform=engine.trading_platform,
             portfolio_take_profit_percentage=0.03,
-            portfolio_stop_loss_percentage=0.02
+            portfolio_stop_loss_percentage=0.02,
         )
         engine.enable_monitoring_integration(trade_monitor=trade_monitor)
         trade_monitor.start()
@@ -274,7 +270,7 @@ async def test_live_multi_cycle(num_cycles: int):
         logger.info("\nProceed? (yes/no): ", end="", flush=True)
 
         response = input().strip().lower()
-        if response not in ['yes', 'y']:
+        if response not in ["yes", "y"]:
             logger.info("❌ Aborted by user")
             return False
 
@@ -298,7 +294,9 @@ async def test_live_multi_cycle(num_cycles: int):
                     logger.info(f"✓ Cycle {cycle_num + 1} succeeded")
                 else:
                     failed_cycles += 1
-                    logger.warning(f"⚠️  Cycle {cycle_num + 1} completed but reported failure")
+                    logger.warning(
+                        f"⚠️  Cycle {cycle_num + 1} completed but reported failure"
+                    )
 
             except Exception as e:
                 failed_cycles += 1
@@ -335,9 +333,9 @@ async def test_live_multi_cycle(num_cycles: int):
 
 async def main():
     """Interactive menu for live trading tests."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("FINANCE FEEDBACK ENGINE - LIVE TRADING DEBUGGER")
-    print("="*80)
+    print("=" * 80)
     print("\nSelect test mode:")
     print("  1. Single cycle (basic test)")
     print("  2. 3 cycles (stability)")
@@ -348,20 +346,20 @@ async def main():
 
     choice = input("Enter choice (0-4): ").strip()
 
-    if choice == '1':
+    if choice == "1":
         success = await test_live_single_cycle()
-    elif choice == '2':
+    elif choice == "2":
         success = await test_live_multi_cycle(3)
-    elif choice == '3':
+    elif choice == "3":
         success = await test_live_multi_cycle(10)
-    elif choice == '4':
+    elif choice == "4":
         try:
             num = int(input("Enter number of cycles: "))
             success = await test_live_multi_cycle(num)
         except ValueError:
             logger.error("Invalid number")
             success = False
-    elif choice == '0':
+    elif choice == "0":
         logger.info("Exiting")
         return
     else:

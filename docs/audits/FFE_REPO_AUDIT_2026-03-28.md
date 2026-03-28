@@ -50,9 +50,11 @@ Suggested remediation:
 ## Architectural Issues
 
 ### Duplicate Module Families
-Potentially overlapping or stale pairs:
+Potentially overlapping or stale pairs still considered real after follow-up verification:
 - `backtest/` vs `backtesting/`
 - `monitoring/` vs `observability/`
+
+False positives from the first broad pass (now corrected):
 - `coinbase_data.py` vs `coinbase_data_refactored.py`
 - `decision_validation.py` vs `decision_validator.py`
 
@@ -126,3 +128,19 @@ The audit reported:
 ## Guardrail
 This audit creates a repository-hygiene / architecture-debt workstream.
 It does **not** outrank newly exposed live Track 0 regressions in the learning chain.
+
+
+## Remediation Log
+
+### P0 remediated
+- `14e04ff` — aligned mypy to Python 3.13 and extended `.gitignore` for generated artifacts; previously tracked report/result artifacts were removed from Git index
+- `1c2655c` — clarified in roadmap docs that CI really enforces `--cov-fail-under=70`
+
+### P1 remediated
+- `1a7a1af` — removed stale pre-commit config variants, removed stale root `core.py`, and relocated root diagnostic `test_*.py` scripts to `scripts/legacy_root_tests/`
+- current cleanup batch — moved active roadmap into `docs/plans/`, archived remaining root markdown clutter into `docs/archive/`, and synced references
+
+### Corrected audit notes
+- `coinbase_data.py` vs `coinbase_data_refactored.py` was a false positive from the broader audit; no real duplicate pair remains there
+- `decision_validation.py` vs `decision_validator.py` was also a false positive
+- the real remaining duplicate-family concerns are still: `backtest/` vs `backtesting/` and `monitoring/` vs `observability/`

@@ -12,16 +12,15 @@ from pathlib import Path
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from finance_feedback_engine.core import FinanceFeedbackEngine
-from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
 from finance_feedback_engine.agent.config import TradingAgentConfig
+from finance_feedback_engine.agent.trading_loop_agent import TradingLoopAgent
+from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.utils.config_loader import load_config
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -36,23 +35,24 @@ async def test_single_cycle():
         # Load configuration
         logger.info("\n[1/5] Loading configuration...")
         config = load_config()
-        logger.info(f"✓ Config loaded. Environment: {config.get('environment', 'unknown')}")
+        logger.info(
+            f"✓ Config loaded. Environment: {config.get('environment', 'unknown')}"
+        )
 
         # Initialize engine
         logger.info("\n[2/5] Initializing FinanceFeedbackEngine...")
-        engine = FinanceFeedbackEngine(
-            config_dict=config,
-            asset_pair="BTCUSD"
-        )
+        engine = FinanceFeedbackEngine(config_dict=config, asset_pair="BTCUSD")
         logger.info("✓ Engine initialized")
 
         # Setup agent config
         logger.info("\n[3/5] Configuring trading agent...")
         agent_config_data = config.get("agent", {})
-        agent_config_data["asset_pairs"] = ["BTCUSD"]  # Start with single pair for testing
+        agent_config_data["asset_pairs"] = [
+            "BTCUSD"
+        ]  # Start with single pair for testing
         agent_config_data["autonomous"] = {
             "enabled": True,  # Enable autonomous for testing
-            "approval_required": False
+            "approval_required": False,
         }
 
         agent_config = TradingAgentConfig(**agent_config_data)
@@ -63,7 +63,7 @@ async def test_single_cycle():
         trade_monitor = TradeMonitor(
             platform=engine.trading_platform,
             portfolio_take_profit_percentage=0.10,  # 10%
-            portfolio_stop_loss_percentage=0.05     # 5%
+            portfolio_stop_loss_percentage=0.05,  # 5%
         )
 
         # Enable monitoring integration
@@ -110,7 +110,7 @@ async def test_single_cycle():
         logger.info(f"  Current Decisions: {len(agent._current_decisions)}")
 
         # Print performance metrics if available
-        if hasattr(agent, '_performance_metrics'):
+        if hasattr(agent, "_performance_metrics"):
             metrics = agent._performance_metrics
             logger.info(f"\n📈 Performance Metrics:")
             logger.info(f"  Total Trades: {metrics.get('total_trades', 0)}")
@@ -126,9 +126,9 @@ async def test_single_cycle():
         # Cleanup
         logger.info("\n🧹 Cleaning up...")
         try:
-            if 'trade_monitor' in locals():
+            if "trade_monitor" in locals():
                 trade_monitor.stop()
-            if 'engine' in locals() and hasattr(engine, 'close'):
+            if "engine" in locals() and hasattr(engine, "close"):
                 await engine.close()
         except Exception as cleanup_err:
             logger.warning(f"Cleanup error: {cleanup_err}")
@@ -143,18 +143,12 @@ async def test_multi_cycle(num_cycles=3):
         config = load_config()
 
         # Initialize engine
-        engine = FinanceFeedbackEngine(
-            config_dict=config,
-            asset_pair="BTCUSD"
-        )
+        engine = FinanceFeedbackEngine(config_dict=config, asset_pair="BTCUSD")
 
         # Setup agent config
         agent_config_data = config.get("agent", {})
         agent_config_data["asset_pairs"] = ["BTCUSD", "ETHUSD"]  # Multiple pairs
-        agent_config_data["autonomous"] = {
-            "enabled": True,
-            "approval_required": False
-        }
+        agent_config_data["autonomous"] = {"enabled": True, "approval_required": False}
         agent_config_data["analysis_frequency_seconds"] = 2  # Fast cycles for testing
 
         agent_config = TradingAgentConfig(**agent_config_data)
@@ -163,7 +157,7 @@ async def test_multi_cycle(num_cycles=3):
         trade_monitor = TradeMonitor(
             platform=engine.trading_platform,
             portfolio_take_profit_percentage=0.10,
-            portfolio_stop_loss_percentage=0.05
+            portfolio_stop_loss_percentage=0.05,
         )
 
         engine.enable_monitoring_integration(trade_monitor=trade_monitor)
@@ -205,7 +199,9 @@ async def test_multi_cycle(num_cycles=3):
                 await asyncio.sleep(agent_config.analysis_frequency_seconds)
 
         logger.info(f"\n{'='*60}")
-        logger.info(f"Multi-Cycle Test Complete: {successful_cycles}/{num_cycles} successful")
+        logger.info(
+            f"Multi-Cycle Test Complete: {successful_cycles}/{num_cycles} successful"
+        )
         logger.info(f"{'='*60}")
 
         return successful_cycles == num_cycles
@@ -216,9 +212,9 @@ async def test_multi_cycle(num_cycles=3):
     finally:
         # Cleanup
         try:
-            if 'trade_monitor' in locals():
+            if "trade_monitor" in locals():
                 trade_monitor.stop()
-            if 'engine' in locals() and hasattr(engine, 'close'):
+            if "engine" in locals() and hasattr(engine, "close"):
                 await engine.close()
         except Exception as cleanup_err:
             logger.warning(f"Cleanup error: {cleanup_err}")

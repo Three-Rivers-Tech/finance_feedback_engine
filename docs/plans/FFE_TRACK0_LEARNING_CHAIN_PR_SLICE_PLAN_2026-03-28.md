@@ -3,7 +3,7 @@
 Date: 2026-03-28
 Status: active
 Source of truth for live/dev verification: `asus-rog-old-laptop:/home/cmp6510/finance_feedback_engine`
-Roadmap anchor: `FFE_1_0_HARDENING_ROADMAP_2026-03-27.md` → Track 0
+Roadmap anchor: `docs/plans/FFE_1_0_HARDENING_ROADMAP_2026-03-27.md` → Track 0
 
 ## Objective
 
