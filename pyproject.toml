@@ -114,7 +114,7 @@ pipeline = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 
 # Strict typing for core safety-critical modules
 # All other code follows relaxed rules to maintain productivity

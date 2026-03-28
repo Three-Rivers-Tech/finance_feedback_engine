@@ -14,7 +14,15 @@ venv/
 .coverage.*
 htmlcov/
 coverage.xml
+coverage.json
 coverage/
+
+# Generated reports / result artifacts
+*.csv
+*.patch
+bandit_report*.json
+*_results.json
+*_summary.json
 
 # Build artifacts
 build/
