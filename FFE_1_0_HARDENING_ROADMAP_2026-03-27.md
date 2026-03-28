@@ -170,6 +170,21 @@ Do not treat FFE as meaningfully adaptive until we can demonstrate, on live or n
 5. durable memory/performance state changes
 6. a later weight/config/selection behavior reflects the update
 
+### Audit notes / execution plan
+Track 0 is being executed as a phased five-PR slice plan documented here:
+- `docs/plans/FFE_TRACK0_LEARNING_CHAIN_PR_SLICE_PLAN_2026-03-28.md`
+
+Current intended slice order:
+1. preserve decision lineage while positions are still open
+2. make learning ingestion explicit and non-silent
+3. prove durable before/after memory/performance mutation
+4. prove provider/model adaptation from outcomes rather than config normalization
+5. ship an end-to-end audit harness / live verification runbook
+
+Audit rule:
+- do not mark Track 0 complete based on logs that merely show outcome recording
+- completion requires evidence for the full chain from execution through adaptive effect
+
 ---
 
 ## Track A — Observability clarity
