@@ -2880,6 +2880,37 @@ class TradingLoopAgent:
                     exc_info=True,
                 )
 
+        decision_store = getattr(self.engine, "decision_store", None)
+        if decision_store:
+            expected_action = None
+            normalized_side = str(side or "").upper()
+            if normalized_side == "SHORT":
+                expected_action = "SELL"
+            elif normalized_side == "LONG":
+                expected_action = "BUY"
+
+            attempted_sources.append("decision_store.recovery_metadata_product")
+            try:
+                recent_decisions = decision_store.get_recent_decisions(limit=250)
+                for decision in recent_decisions:
+                    recovery_metadata = decision.get("recovery_metadata") or {}
+                    recovery_product = recovery_metadata.get("product_id")
+                    decision_id = normalize_scalar_id(decision.get("id"))
+                    decision_action = str(decision.get("action") or "").upper()
+                    if not recovery_product or not decision_id:
+                        continue
+                    if str(recovery_product).upper() != str(product).upper():
+                        continue
+                    if expected_action and decision_action and decision_action != expected_action:
+                        continue
+                    return decision_id, "decision_store.recovery_metadata_product", attempted_sources
+            except Exception:
+                logger.debug(
+                    "Failed decision-store recovery by product metadata for closed outcome %s",
+                    product,
+                    exc_info=True,
+                )
+
         return None, "no-hit", attempted_sources
 
     def _recover_decision_id_for_closed_outcome(self, outcome: Dict[str, Any]) -> Optional[str]:

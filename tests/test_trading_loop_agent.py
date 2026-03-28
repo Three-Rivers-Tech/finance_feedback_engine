@@ -182,6 +182,35 @@ def test_sync_trade_outcome_recorder_logs_learning_handoff_skip(trading_agent, m
     assert "Learning handoff SKIPPED for closed position ETH-USD | order_id=order-456 | reason=missing_decision_id | attempted_sources=['trade_monitor.expected_trades']" in caplog.text
 
 
+def test_recover_decision_lineage_for_closed_outcome_falls_back_to_decision_store_recovery_metadata(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].trade_outcome_recorder = MagicMock(open_positions={})
+    mock_dependencies["trade_monitor"].expected_trades = {}
+    mock_dependencies["trade_monitor"].active_trackers = {}
+    mock_dependencies["trade_monitor"].closed_trades_queue = MagicMock(queue=[])
+    mock_dependencies["trade_monitor"].get_decision_id_by_asset.return_value = None
+    mock_dependencies["engine"].decision_store.get_recent_decisions.return_value = [
+        {
+            "id": "decision-recovery-btc",
+            "asset_pair": "BIP20DEC30CDE",
+            "action": "SELL",
+            "ai_provider": "recovery",
+            "recovery_metadata": {"product_id": "BIP-20DEC30-CDE", "platform": "coinbase"},
+        }
+    ]
+
+    decision_id, lineage_source, attempted_sources = trading_agent._recover_decision_lineage_for_closed_outcome(
+        {
+            "product": "BIP-20DEC30-CDE",
+            "side": "SHORT",
+            "order_id": "order-btc-close",
+        }
+    )
+
+    assert decision_id == "decision-recovery-btc"
+    assert lineage_source == "decision_store.recovery_metadata_product"
+    assert "decision_store.recovery_metadata_product" in attempted_sources
+
+
 @pytest.mark.asyncio
 async def test_perception_uses_fresh_default_crypto_context_even_with_stale_pulse(trading_agent, mock_dependencies):
     stale_context = {
