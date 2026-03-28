@@ -254,6 +254,35 @@ class TestSaveToDisk:
         expected_path = tmp_path / "memory" / "portfolio_memory.json"
         assert f"Portfolio memory state updated for decision {outcome.decision_id} | snapshot={expected_path} | provider=local | provider_total_trades=1 | provider_total_pnl=200.0" in caplog.text
 
+    def test_save_to_disk_tolerates_dict_entries_in_memory_buffers(self, memory_engine, tmp_path):
+        memory_engine.trade_outcomes.append({
+            "decision_id": "dict-outcome-1",
+            "asset_pair": "BTCUSD",
+            "action": "SELL",
+            "entry_price": 50000.0,
+            "exit_price": 49000.0,
+            "realized_pnl": 100.0,
+            "was_profitable": True,
+        })
+        memory_engine.experience_buffer.append({
+            "decision_id": "dict-outcome-2",
+            "asset_pair": "ETHUSD",
+            "action": "BUY",
+            "entry_price": 2000.0,
+            "exit_price": 2100.0,
+            "realized_pnl": 100.0,
+            "was_profitable": True,
+        })
+
+        filepath = tmp_path / "mixed_memory.json"
+        memory_engine.save_to_disk(str(filepath))
+
+        with open(filepath) as f:
+            data = json.load(f)
+
+        assert data["trade_history"][0]["decision_id"] == "dict-outcome-1"
+        assert data["experience_buffer"][0]["decision_id"] == "dict-outcome-2"
+
 
 class TestLoadFromDisk:
     """Test load_from_disk() class method."""

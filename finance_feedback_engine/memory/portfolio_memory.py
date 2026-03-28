@@ -428,6 +428,17 @@ class PortfolioMemoryEngine:
 
         return outcome
 
+    def _serialize_memory_entry(self, entry: Any) -> Dict[str, Any]:
+        """Serialize mixed TradeOutcome/dict entries without assuming object shape."""
+        if isinstance(entry, dict):
+            return dict(entry)
+        to_dict = getattr(entry, "to_dict", None)
+        if callable(to_dict):
+            return to_dict()
+        if hasattr(entry, "__dict__"):
+            return dict(entry.__dict__)
+        raise TypeError(f"Unsupported memory entry type for serialization: {type(entry)!r}")
+
     def save_to_disk(self, filepath: Optional[str] = None) -> None:
         """
         Save portfolio memory to disk with atomic writes and file locking.
@@ -455,10 +466,12 @@ class PortfolioMemoryEngine:
         data = {
             "version": "1.0",
             "saved_at": datetime.now(timezone.utc).isoformat(),
-            "trade_history": [outcome.to_dict() for outcome in self.trade_outcomes],
+            "trade_history": [
+                self._serialize_memory_entry(outcome) for outcome in self.trade_outcomes
+            ],
             "provider_performance": dict(self.provider_performance),
             "experience_buffer": [
-                outcome.to_dict() for outcome in self.experience_buffer
+                self._serialize_memory_entry(outcome) for outcome in self.experience_buffer
             ],
             "veto_metrics": {
                 **self.veto_metrics,
