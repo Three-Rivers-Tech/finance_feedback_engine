@@ -156,7 +156,43 @@ def test_coinbase_platform_with_get_client_is_polled_and_recorded(tmp_path):
     worker._check_pending_orders()
 
     recorder.record_order_outcome.assert_called_once()
+    assert recorder.record_order_outcome.call_args.kwargs["side"] == "BUY"
     assert "cb-order-1" not in worker._pending_cache
+
+
+def test_record_completed_order_prefers_canonical_side_when_present(tmp_path):
+    recorder = MagicMock()
+    recorder.record_order_outcome.return_value = {"realized_pnl": "1.23"}
+    order_payload = {
+        "status": "FILLED",
+        "average_filled_price": "50000",
+        "filled_size": "0.1",
+        "total_fees": "1.5",
+    }
+    worker = OrderStatusWorker(
+        trading_platform=_CoinbaseGetClientPlatform(order_payload),
+        outcome_recorder=recorder,
+        data_dir=str(tmp_path),
+        poll_interval=1,
+        flush_every_cycles=1,
+        max_stale_checks=20,
+    )
+
+    worker.add_pending_order(
+        order_id="cb-order-side",
+        decision_id="decision-side",
+        asset_pair="BTCUSD",
+        platform="coinbase",
+        action="BUY",
+        side="SHORT",
+        size=0.1,
+        entry_price=50000,
+    )
+
+    worker._check_pending_orders()
+
+    recorder.record_order_outcome.assert_called_once()
+    assert recorder.record_order_outcome.call_args.kwargs["side"] == "SHORT"
 
 
 def test_coinbase_platform_without_rest_client_no_longer_ages_out_immediately(tmp_path):

@@ -81,6 +81,7 @@ class OrderStatusWorker:
         action: str,
         size: float,
         entry_price: Optional[float] = None,
+        side: Optional[str] = None,
     ) -> None:
         """
         Add an order to pending outcomes tracking.
@@ -93,12 +94,14 @@ class OrderStatusWorker:
             action: Trade action ("BUY", "SELL")
             size: Order size
             entry_price: Entry price (if known)
+            side: Canonical position side ("LONG", "SHORT") when known
         """
         pending_entry = {
             "decision_id": decision_id,
             "asset_pair": asset_pair,
             "platform": platform,
             "action": action,
+            "side": side,
             "size": str(size),
             "entry_price": str(entry_price) if entry_price else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -440,7 +443,7 @@ class OrderStatusWorker:
                 order_id=order_id,
                 decision_id=order_data["decision_id"],
                 asset_pair=order_data["asset_pair"],
-                side=order_data["action"],
+                side=order_data.get("side") or order_data["action"],
                 entry_time=order_data["timestamp"],
                 entry_price=Decimal(str(fill_info["fill_price"])),
                 size=Decimal(str(fill_info["filled_size"])),

@@ -2840,6 +2840,7 @@ class TradingLoopAgent:
                             and normalized_action
                         ):
                             try:
+                                execution_intent = _derive_execution_intent(decision)
                                 order_status_worker.add_pending_order(
                                     order_id=extracted_order_id,
                                     decision_id=decision_id,
@@ -2854,6 +2855,7 @@ class TradingLoopAgent:
                                         or 0
                                     ),
                                     entry_price=decision.get("entry_price"),
+                                    side=execution_intent.get("position_side"),
                                 )
                                 logger.info(
                                     "Registered executed order %s for outcome tracking on %s",
@@ -3422,6 +3424,22 @@ class TradingLoopAgent:
 
         return enriched_positions
 
+    @staticmethod
+    def _normalize_trade_outcome_product_aliases(
+        trade_outcome: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Populate both `product` and `product_id` aliases for close outcomes."""
+        if not isinstance(trade_outcome, dict):
+            return trade_outcome
+
+        product = trade_outcome.get("product")
+        product_id = trade_outcome.get("product_id")
+        if product and not product_id:
+            trade_outcome = {**trade_outcome, "product_id": product}
+        elif product_id and not product:
+            trade_outcome = {**trade_outcome, "product": product_id}
+        return trade_outcome
+
     def _sync_trade_outcome_recorder(
         self, current_positions: list[dict[str, Any]]
     ) -> None:
@@ -3449,8 +3467,9 @@ class TradingLoopAgent:
         )
 
         for outcome in outcomes:
+            outcome = self._normalize_trade_outcome_product_aliases(outcome)
             decision_id = outcome.get("decision_id")
-            product = outcome.get("product") or "UNKNOWN"
+            product = outcome.get("product") or outcome.get("product_id") or "UNKNOWN"
             order_id = outcome.get("order_id") or outcome.get("trade_id") or "UNKNOWN"
             lineage_source = "outcome"
             attempted_sources: list[str] = []
@@ -3551,11 +3570,9 @@ class TradingLoopAgent:
         else:
             logger.info(f"Processing {len(closed_trades)} closed trades...")
             for trade_outcome in closed_trades:
-                if "product" not in trade_outcome and "product_id" in trade_outcome:
-                    trade_outcome = {
-                        **trade_outcome,
-                        "product": trade_outcome["product_id"],
-                    }
+                trade_outcome = self._normalize_trade_outcome_product_aliases(
+                    trade_outcome
+                )
 
                 decision_id = trade_outcome.get("decision_id")
                 product = (

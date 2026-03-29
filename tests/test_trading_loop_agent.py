@@ -296,6 +296,20 @@ async def test_handle_learning_state_uses_existing_decision_id_without_recovery(
     trading_agent._recover_decision_lineage_for_closed_outcome = original_recovery
 
 
+def test_normalize_trade_outcome_product_aliases_populates_both_keys(trading_agent):
+    product_only = trading_agent._normalize_trade_outcome_product_aliases(
+        {"product": "ETP-20DEC30-CDE", "side": "SHORT"}
+    )
+    assert product_only["product"] == "ETP-20DEC30-CDE"
+    assert product_only["product_id"] == "ETP-20DEC30-CDE"
+
+    product_id_only = trading_agent._normalize_trade_outcome_product_aliases(
+        {"product_id": "BIP-20DEC30-CDE", "side": "LONG"}
+    )
+    assert product_id_only["product"] == "BIP-20DEC30-CDE"
+    assert product_id_only["product_id"] == "BIP-20DEC30-CDE"
+
+
 @pytest.mark.asyncio
 async def test_perception_uses_fresh_default_crypto_context_even_with_stale_pulse(trading_agent, mock_dependencies):
     stale_context = {
@@ -392,6 +406,7 @@ async def test_execution_round_trip_registers_derisk_order_and_forwards_close_in
         action="BUY",
         size=1.0,
         entry_price=2166.5,
+        side="SHORT",
     )
     assert trading_agent.daily_trade_count == 11
 
@@ -1258,6 +1273,7 @@ async def test_execution_state_registers_pending_order_from_nested_success_respo
         action="BUY",
         size=0.25,
         entry_price=50000.0,
+        side="LONG",
     )
     assert decision["execution_result"]["order_id"] == "nested-abc123"
     assert decision["execution_status"] == "executed"
