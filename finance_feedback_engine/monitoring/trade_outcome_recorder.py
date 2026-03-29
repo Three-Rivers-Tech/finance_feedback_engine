@@ -300,8 +300,10 @@ class TradeOutcomeRecorder:
                     )
                     self.open_positions[pos_key]["entry_size"] = size
                     state_changed = True
-                if pos.get("decision_id") and not self.open_positions[pos_key].get("decision_id"):
-                    self.open_positions[pos_key]["decision_id"] = pos.get("decision_id")
+                incoming_decision_id = pos.get("decision_id")
+                existing_decision_id = self.open_positions[pos_key].get("decision_id")
+                if incoming_decision_id and incoming_decision_id != existing_decision_id:
+                    self.open_positions[pos_key]["decision_id"] = incoming_decision_id
                     state_changed = True
                 if state_changed:
                     self._save_state()

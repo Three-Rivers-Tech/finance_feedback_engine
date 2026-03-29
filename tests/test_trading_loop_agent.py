@@ -140,6 +140,37 @@ def test_sync_trade_outcome_recorder_annotates_active_positions_with_decision_id
     assert synced_positions[0]["decision_id"] == "decision-btc-1"
 
 
+def test_sync_trade_outcome_recorder_prefers_fresh_trade_monitor_decision_id_over_stale_recorder_state(trading_agent, mock_dependencies):
+    recorder = MagicMock()
+    recorder.update_positions.return_value = []
+    recorder.open_positions = {
+        "BTC-USD_SHORT": {
+            "product": "BTC-USD",
+            "side": "SHORT",
+            "decision_id": "recovery-btc-old",
+        }
+    }
+    mock_dependencies["engine"].trade_outcome_recorder = recorder
+    mock_dependencies["trade_monitor"].get_decision_id_by_asset.return_value = "ensemble-btc-fresh"
+
+    trading_agent._sync_trade_outcome_recorder([
+        {
+            "platform": "coinbase",
+            "product_id": "BTC-USD",
+            "side": "SHORT",
+            "size": 1.0,
+            "entry_price": 50000.0,
+            "current_price": 49900.0,
+            "unrealized_pnl": 100.0,
+            "opened_at": "2026-03-28T09:00:00Z",
+        }
+    ])
+
+    recorder.update_positions.assert_called_once()
+    synced_positions = recorder.update_positions.call_args.args[0]
+    assert synced_positions[0]["decision_id"] == "ensemble-btc-fresh"
+
+
 def test_sync_trade_outcome_recorder_logs_learning_handoff_acceptance(trading_agent, mock_dependencies, caplog):
     recorder = MagicMock()
     recorder.update_positions.return_value = [

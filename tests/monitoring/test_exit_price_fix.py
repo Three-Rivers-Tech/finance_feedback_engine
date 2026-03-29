@@ -391,5 +391,35 @@ def test_provider_price_different_from_entry_price_records_outcome(tmp_path):
         assert float(outcomes[0]["realized_pnl"]) > 0
 
 
+def test_update_positions_overwrites_stale_decision_id_when_live_position_has_fresh_one(tmp_path):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        recorder = TradeOutcomeRecorder(data_dir=temp_dir, unified_provider=MagicMock())
+        recorder.open_positions = {
+            "BTC-USD_SHORT": {
+                "trade_id": "sticky-lineage-1",
+                "product": "BTC-USD",
+                "side": "SHORT",
+                "entry_price": Decimal("50000.00"),
+                "entry_size": Decimal("1.0"),
+                "entry_time": "2024-01-01T00:00:00+00:00",
+                "last_price": Decimal("49950.00"),
+                "decision_id": "recovery-btc-old",
+            }
+        }
+
+        recorder.update_positions([
+            {
+                "product_id": "BTC-USD",
+                "side": "SHORT",
+                "size": "1.0",
+                "current_price": "49900.00",
+                "entry_price": "50000.00",
+                "decision_id": "ensemble-btc-fresh",
+            }
+        ])
+
+        assert recorder.open_positions["BTC-USD_SHORT"]["decision_id"] == "ensemble-btc-fresh"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

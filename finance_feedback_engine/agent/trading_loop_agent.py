@@ -3389,6 +3389,21 @@ class TradingLoopAgent:
             side = position.get("side")
             decision_id = None
 
+            trade_monitor_decision_id = None
+            if trade_monitor and product_id:
+                getter = getattr(trade_monitor, "get_decision_id_by_asset", None)
+                if callable(getter):
+                    try:
+                        trade_monitor_decision_id = _normalize_lineage_candidate(
+                            getter(product_id)
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Failed trade-monitor lookup while annotating active position %s",
+                            product_id,
+                            exc_info=True,
+                        )
+
             if recorder and product_id and side:
                 try:
                     pos_key = f"{product_id}_{side}"
@@ -3405,17 +3420,8 @@ class TradingLoopAgent:
                         exc_info=True,
                     )
 
-            if not decision_id and trade_monitor and product_id:
-                getter = getattr(trade_monitor, "get_decision_id_by_asset", None)
-                if callable(getter):
-                    try:
-                        decision_id = _normalize_lineage_candidate(getter(product_id))
-                    except Exception:
-                        logger.debug(
-                            "Failed trade-monitor lookup while annotating active position %s",
-                            product_id,
-                            exc_info=True,
-                        )
+            if trade_monitor_decision_id:
+                decision_id = trade_monitor_decision_id
 
             if decision_id:
                 position["decision_id"] = decision_id
