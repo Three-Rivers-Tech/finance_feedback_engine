@@ -1,11 +1,18 @@
-import os
+"""Write a local .env template with placeholder values only.
 
-env_content = """COINBASE_API_KEY=organizations/97bc271d-9497-424e-9a75-a7a850037063/apiKeys/c7894411-2b20-453d-b4e0-e82a06eff656
-COINBASE_API_SECRET=\"-----BEGIN EC PRIVATE KEY-----\\\\nMHcCAQEEINA7mZSvzQmUPoKkN304ixVRDytyIn+6N6GJGlB+JZ6+oAoGCCqGSM49\\\\nAwEHoUQDQgAEFXpwOQ0RRM/0Hm9arMVFh94zc6fkYQ0nUoPwFSBMypOs0E4BRDaqp+rW5y6Ve2kI8PoYRPwoJ31tT5YF0uHcFQ==\\\\n-----END EC PRIVATE KEY-----\"
-OANDA_API_KEY=b41902046f2950ee3fa50a1f93b3c28f-0fc06cbfa4edc4b5233d88c6a028263e
-OANDA_ACCOUNT_ID=001-001-8530782-001
-OANDA_ENVIRONMENT=live
-ALPHA_VANTAGE_API_KEY=X74XIZNU1F9YW72O
+This helper intentionally contains no real credentials.
+Populate the generated .env manually or via a secret manager.
+"""
+
+from pathlib import Path
+
+env_content = """# Placeholder values only. Replace locally.
+COINBASE_API_KEY=YOUR_COINBASE_API_KEY
+COINBASE_API_SECRET=YOUR_COINBASE_API_SECRET
+OANDA_API_KEY=YOUR_OANDA_API_KEY
+OANDA_ACCOUNT_ID=YOUR_OANDA_ACCOUNT_ID
+OANDA_ENVIRONMENT=practice
+ALPHA_VANTAGE_API_KEY=YOUR_ALPHA_VANTAGE_API_KEY
 COINBASE_USE_SANDBOX=false
 OLLAMA_HOST=http://127.0.0.1:11434
 POSTGRES_HOST=127.0.0.1
@@ -13,13 +20,11 @@ POSTGRES_PORT=5432
 POSTGRES_USER=ffe_user
 POSTGRES_PASSWORD=ffe_pass
 POSTGRES_DB=ffe
-FINANCE_FEEDBACK_API_KEY=gpu-laptop-key
+FINANCE_FEEDBACK_API_KEY=local-dev-key
 LOGGING_LEVEL=INFO
 MONITORING_ENABLED=true
-RUN_OANDA_KELLY=true
+RUN_OANDA_KELLY=false
 """
 
-with open(".env", "w") as f:
-    f.write(env_content)
-
-print("Updated .env with local Postgres")
+Path('.env').write_text(env_content)
+print('Wrote .env template with placeholder values only')

@@ -6,19 +6,12 @@ import logging
 import queue
 import time
 import uuid
-from datetime import date
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from enum import Enum, auto
 from typing import Any, Dict, Optional
 
 from opentelemetry import metrics, trace
-
-from finance_feedback_engine.monitoring.prometheus import (
-    increment_dashboard_events_dropped,
-    update_agent_state,
-    update_decision_confidence,
-    update_dashboard_queue_metrics,
-)
 
 from finance_feedback_engine.agent.config import TradingAgentConfig
 from finance_feedback_engine.agent.trade_execution_safety import (
@@ -26,7 +19,6 @@ from finance_feedback_engine.agent.trade_execution_safety import (
     finalize_trade_reservation,
     reserve_trade_exposure,
 )
-from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 from finance_feedback_engine.decision_engine.execution_quality import (
     ExecutionQualityControls,
     evaluate_signal_quality,
@@ -38,15 +30,24 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     is_policy_action,
     normalize_policy_action,
 )
+from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.monitoring.prometheus import (
+    increment_dashboard_events_dropped,
+    update_agent_state,
+    update_dashboard_queue_metrics,
+    update_decision_confidence,
+)
 from finance_feedback_engine.monitoring.trade_monitor import TradeMonitor
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 from finance_feedback_engine.trading_platforms.base_platform import BaseTradingPlatform
-
-from finance_feedback_engine.utils.environment import is_development, is_production
 from finance_feedback_engine.utils import validate_data_freshness
-from finance_feedback_engine.utils.retry import exponential_backoff_retry, RetryConfig
-from finance_feedback_engine.utils.shape_normalization import asset_key_candidates, normalize_scalar_id
+from finance_feedback_engine.utils.environment import is_development, is_production
+from finance_feedback_engine.utils.retry import RetryConfig, exponential_backoff_retry
+from finance_feedback_engine.utils.shape_normalization import (
+    asset_key_candidates,
+    normalize_scalar_id,
+)
 from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,9 @@ tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
 
 
-def _derive_execution_intent(decision: Dict[str, Any]) -> Dict[str, Optional[str] | bool]:
+def _derive_execution_intent(
+    decision: Dict[str, Any]
+) -> Dict[str, Optional[str] | bool]:
     """Derive execution intent from canonical policy actions or legacy actions.
 
     Entry-like policy actions expose an ``entry_side`` for duplicate-entry guards.
@@ -118,7 +121,11 @@ def _derive_execution_intent(decision: Dict[str, Any]) -> Dict[str, Optional[str
             "is_actionable": False,
         }
 
-    side = "LONG" if legacy_action == "BUY" else "SHORT" if legacy_action == "SELL" else None
+    side = (
+        "LONG"
+        if legacy_action == "BUY"
+        else "SHORT" if legacy_action == "SELL" else None
+    )
     return {
         "canonical_action": legacy_action,
         "policy_action": None,
@@ -240,24 +247,33 @@ class TradingLoopAgent:
         def _normalize_pct(value: float) -> float:
             try:
                 return value / 100.0 if value > 1.0 else value
-            except Exception :
+            except Exception:
                 return value
 
         # Environment-aware risk configuration
         import os
+
         is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
 
         # Get risk parameters: use development defaults if in dev mode, else use config
-        if is_development and hasattr(self.config, '__dict__'):
+        if is_development and hasattr(self.config, "__dict__"):
             # In development mode, use relaxed defaults from config.development_risk_limits
             # These allow portfolio building and testing without over-restrictive gates
-            dev_limits = getattr(self.config, 'development_risk_limits', {})
+            dev_limits = getattr(self.config, "development_risk_limits", {})
             if isinstance(dev_limits, dict):
-                correlation_threshold = dev_limits.get('correlation_threshold', self.config.correlation_threshold)
-                max_correlated_assets = dev_limits.get('max_correlated_assets', self.config.max_correlated_assets)
-                max_var_pct = dev_limits.get('max_var_pct', self.config.max_var_pct)
-                var_confidence = dev_limits.get('var_confidence', self.config.var_confidence)
-                logger.info("RiskGatekeeper: Using development-mode relaxed constraints")
+                correlation_threshold = dev_limits.get(
+                    "correlation_threshold", self.config.correlation_threshold
+                )
+                max_correlated_assets = dev_limits.get(
+                    "max_correlated_assets", self.config.max_correlated_assets
+                )
+                max_var_pct = dev_limits.get("max_var_pct", self.config.max_var_pct)
+                var_confidence = dev_limits.get(
+                    "var_confidence", self.config.var_confidence
+                )
+                logger.info(
+                    "RiskGatekeeper: Using development-mode relaxed constraints"
+                )
             else:
                 # Fallback to config defaults
                 correlation_threshold = self.config.correlation_threshold
@@ -281,7 +297,9 @@ class TradingLoopAgent:
         self.is_running = False
 
         # Health check configuration
-        self._health_check_frequency = getattr(self.config, "health_check_frequency_decisions", 10)
+        self._health_check_frequency = getattr(
+            self.config, "health_check_frequency_decisions", 10
+        )
         self._decisions_since_health_check = 0
         self._paused = False
         self.state = AgentState.IDLE
@@ -320,7 +338,9 @@ class TradingLoopAgent:
         self._startup_retry_count = 0
         self._max_startup_retries = 3
         self._recovery_has_run = False
-        self._recovered_position_keys: set[tuple[str | None, str | None, str, float, float]] = set()
+        self._recovered_position_keys: set[
+            tuple[str | None, str | None, str, float, float]
+        ] = set()
 
         # For preventing infinite loops on rejected trades
         self._rejected_decisions_cache = (
@@ -379,7 +399,9 @@ class TradingLoopAgent:
             is_ready, readiness_errors = readiness_result
         elif isinstance(readiness_result, list) and len(readiness_result) == 2:
             is_ready, readiness_errors = readiness_result
-        elif hasattr(readiness_result, "__iter__") and not isinstance(readiness_result, str):
+        elif hasattr(readiness_result, "__iter__") and not isinstance(
+            readiness_result, str
+        ):
             try:
                 is_ready, readiness_errors = list(readiness_result)[:2]
             except Exception:
@@ -407,12 +429,14 @@ class TradingLoopAgent:
         # Validate Ollama readiness for local/debate mode
         # Centralized Ollama skip logic for tests and mocks
         import os
+
         skip_ollama = False
         if os.environ.get("PYTEST_CURRENT_TEST"):
             skip_ollama = True
         else:
             try:
-                from unittest.mock import Mock, MagicMock
+                from unittest.mock import MagicMock, Mock
+
                 if isinstance(self.engine, (Mock, MagicMock)):
                     skip_ollama = True
             except ImportError:
@@ -486,7 +510,9 @@ class TradingLoopAgent:
         """Public accessor for start time (returns datetime object)."""
         if self._start_time is None:
             return None
-        return datetime.datetime.fromtimestamp(self._start_time, tz=datetime.timezone.utc)
+        return datetime.datetime.fromtimestamp(
+            self._start_time, tz=datetime.timezone.utc
+        )
 
     @property
     def is_autonomous_enabled(self) -> bool:
@@ -538,14 +564,16 @@ class TradingLoopAgent:
             ValueError: If Ollama check fails
         """
         import os
+
         # Skip Ollama check in test environments (pytest or mock engine)
         skip_ollama = False
         if os.environ.get("PYTEST_CURRENT_TEST"):
             skip_ollama = True
         else:
             try:
-                from unittest.mock import Mock, MagicMock
-                if isinstance(getattr(self, 'engine', None), (Mock, MagicMock)):
+                from unittest.mock import MagicMock, Mock
+
+                if isinstance(getattr(self, "engine", None), (Mock, MagicMock)):
                     skip_ollama = True
             except ImportError:
                 pass
@@ -553,11 +581,15 @@ class TradingLoopAgent:
             logger.info("Skipping Ollama readiness validation in test environment.")
             return
         try:
-            from finance_feedback_engine.utils.ollama_readiness import verify_ollama_for_agent
+            from finance_feedback_engine.utils.ollama_readiness import (
+                verify_ollama_for_agent,
+            )
 
             # Get full config from engine (includes decision_engine and ensemble sections)
             # TradingAgentConfig only has agent-specific settings
-            full_config = getattr(self.engine, 'config', {}) if hasattr(self, 'engine') else {}
+            full_config = (
+                getattr(self.engine, "config", {}) if hasattr(self, "engine") else {}
+            )
 
             if not full_config:
                 logger.debug("Engine config not available; skipping Ollama validation")
@@ -579,9 +611,7 @@ class TradingLoopAgent:
             )
 
             requires_ollama = (
-                ai_provider == "local"
-                or ai_provider == "ensemble"
-                or debate_mode
+                ai_provider == "local" or ai_provider == "ensemble" or debate_mode
             )
 
             if requires_ollama:
@@ -699,11 +729,19 @@ class TradingLoopAgent:
 
     # Valid state transitions — prevents illegal jumps (e.g. skipping RISK_CHECK)
     _VALID_TRANSITIONS: dict[AgentState, set[AgentState]] = {
-        AgentState.IDLE: {AgentState.RECOVERING, AgentState.PERCEPTION, AgentState.LEARNING},
+        AgentState.IDLE: {
+            AgentState.RECOVERING,
+            AgentState.PERCEPTION,
+            AgentState.LEARNING,
+        },
         AgentState.RECOVERING: {AgentState.IDLE, AgentState.PERCEPTION},
         AgentState.PERCEPTION: {AgentState.REASONING, AgentState.IDLE},
         AgentState.REASONING: {AgentState.RISK_CHECK, AgentState.IDLE},
-        AgentState.RISK_CHECK: {AgentState.EXECUTION, AgentState.IDLE, AgentState.REASONING},
+        AgentState.RISK_CHECK: {
+            AgentState.EXECUTION,
+            AgentState.IDLE,
+            AgentState.REASONING,
+        },
         AgentState.EXECUTION: {AgentState.LEARNING, AgentState.IDLE},
         AgentState.LEARNING: {AgentState.IDLE, AgentState.PERCEPTION},
     }
@@ -819,7 +857,9 @@ class TradingLoopAgent:
                 try:
                     update_dashboard_queue_metrics(queue_name, q.qsize(), q.maxsize)
                 except Exception:
-                    logger.debug("Unable to update dashboard queue metrics", exc_info=True)
+                    logger.debug(
+                        "Unable to update dashboard queue metrics", exc_info=True
+                    )
 
     def _ensure_cycle_budget(self) -> None:
         """Initialize cycle id and retry budget if not already set."""
@@ -880,7 +920,9 @@ class TradingLoopAgent:
         except Exception as e:
             logger.warning(f"Health check encountered error: {e}", exc_info=True)
 
-    def _handle_state_exception(self, error: Exception, state_name: str) -> Optional[str]:
+    def _handle_state_exception(
+        self, error: Exception, state_name: str
+    ) -> Optional[str]:
         """Emit crash diagnostics and return crash dump path if available."""
 
         dump_path = None
@@ -888,9 +930,11 @@ class TradingLoopAgent:
         context = {
             "state": state_name,
             "cycle_id": self._current_cycle_id,
-            "retry_budget": self._cycle_retry_budget.get(self._current_cycle_id, 0)
-            if self._current_cycle_id
-            else 0,
+            "retry_budget": (
+                self._cycle_retry_budget.get(self._current_cycle_id, 0)
+                if self._current_cycle_id
+                else 0
+            ),
             "asset_pairs": getattr(self.config, "asset_pairs", []),
         }
 
@@ -948,7 +992,10 @@ class TradingLoopAgent:
         import uuid as uuid_module
 
         from finance_feedback_engine.memory.portfolio_memory import TradeOutcome
-        from finance_feedback_engine.utils.shape_normalization import asset_key_candidates, normalize_scalar_id
+        from finance_feedback_engine.utils.shape_normalization import (
+            asset_key_candidates,
+            normalize_scalar_id,
+        )
         from finance_feedback_engine.utils.validation import standardize_asset_pair
 
         logger.info("State: RECOVERING - Checking for existing positions...")
@@ -970,78 +1017,128 @@ class TradingLoopAgent:
                 # Query platform for current portfolio state
                 portfolio = await self.engine.get_portfolio_breakdown_async()
                 logger.info("Portfolio breakdown retrieved: %s", portfolio)
-                self._log_portfolio_risk_snapshot("Recovery portfolio snapshot", portfolio)
+                self._log_portfolio_risk_snapshot(
+                    "Recovery portfolio snapshot", portfolio
+                )
 
                 # Extract positions from platform response
                 raw_positions = []
 
                 engine_config = getattr(self.engine, "config", None)
-                enabled_platform_names = engine_config.get("enabled_platforms") if isinstance(engine_config, dict) else []
-                enabled_platforms = {str(name).lower() for name in (enabled_platform_names or [])}
+                enabled_platform_names = (
+                    engine_config.get("enabled_platforms")
+                    if isinstance(engine_config, dict)
+                    else []
+                )
+                enabled_platforms = {
+                    str(name).lower() for name in (enabled_platform_names or [])
+                }
+
                 def _platform_enabled(name: str) -> bool:
                     lname = str(name).lower()
                     return (
                         not enabled_platforms
                         or lname in enabled_platforms
-                        or (lname == "coinbase" and "coinbase_advanced" in enabled_platforms)
+                        or (
+                            lname == "coinbase"
+                            and "coinbase_advanced" in enabled_platforms
+                        )
                     )
 
                 # Handle UnifiedTradingPlatform (platform_breakdowns)
                 if "platform_breakdowns" in portfolio:
-                    for platform_name, platform_data in portfolio["platform_breakdowns"].items():
+                    for platform_name, platform_data in portfolio[
+                        "platform_breakdowns"
+                    ].items():
                         if not _platform_enabled(platform_name):
                             continue
                         # Coinbase futures
                         if "futures_positions" in platform_data:
                             for pos in platform_data["futures_positions"]:
-                                raw_positions.append({
-                                    "platform": platform_name,
-                                    "product_id": pos.get("product_id") or pos.get("instrument"),
-                                    "side": pos.get("side", "LONG"),
-                                    "size": abs(float(pos.get("contracts", 0) or pos.get("number_of_contracts", 0) or pos.get("units", 0))),
-                                    "entry_price": float(pos.get("entry_price", 0)),
-                                    "current_price": float(pos.get("current_price", 0)),
-                                    "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
-                                    "opened_at": pos.get("opened_at"),
-                                })
+                                raw_positions.append(
+                                    {
+                                        "platform": platform_name,
+                                        "product_id": pos.get("product_id")
+                                        or pos.get("instrument"),
+                                        "side": pos.get("side", "LONG"),
+                                        "size": abs(
+                                            float(
+                                                pos.get("contracts", 0)
+                                                or pos.get("number_of_contracts", 0)
+                                                or pos.get("units", 0)
+                                            )
+                                        ),
+                                        "entry_price": float(pos.get("entry_price", 0)),
+                                        "current_price": float(
+                                            pos.get("current_price", 0)
+                                        ),
+                                        "unrealized_pnl": float(
+                                            pos.get("unrealized_pnl", 0)
+                                        ),
+                                        "opened_at": pos.get("opened_at"),
+                                    }
+                                )
                         # Oanda positions
                         if "positions" in platform_data:
                             for pos in platform_data["positions"]:
-                                raw_positions.append({
-                                    "platform": platform_name,
-                                    "product_id": pos.get("instrument"),
-                                    "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
-                                    "size": abs(float(pos.get("units", 0))),
-                                    "entry_price": float(pos.get("entry_price", 0)),
-                                    "current_price": float(pos.get("current_price", 0)),
-                                    "unrealized_pnl": float(pos.get("pnl", 0)),
-                                    "opened_at": pos.get("opened_at"),
-                                })
+                                raw_positions.append(
+                                    {
+                                        "platform": platform_name,
+                                        "product_id": pos.get("instrument"),
+                                        "side": (
+                                            "LONG"
+                                            if float(pos.get("units", 0)) > 0
+                                            else "SHORT"
+                                        ),
+                                        "size": abs(float(pos.get("units", 0))),
+                                        "entry_price": float(pos.get("entry_price", 0)),
+                                        "current_price": float(
+                                            pos.get("current_price", 0)
+                                        ),
+                                        "unrealized_pnl": float(pos.get("pnl", 0)),
+                                        "opened_at": pos.get("opened_at"),
+                                    }
+                                )
                 # Handle direct platform responses (futures_positions or positions keys)
                 elif "futures_positions" in portfolio:
                     for pos in portfolio["futures_positions"]:
-                        raw_positions.append({
-                            "platform": "coinbase",
-                            "product_id": pos.get("product_id") or pos.get("instrument"),
-                            "side": pos.get("side", "LONG"),
-                            "size": abs(float(pos.get("contracts", 0) or pos.get("number_of_contracts", 0) or pos.get("units", 0))),
-                            "entry_price": float(pos.get("entry_price", 0)),
-                            "current_price": float(pos.get("current_price", 0)),
-                            "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
-                            "opened_at": pos.get("opened_at"),
-                        })
+                        raw_positions.append(
+                            {
+                                "platform": "coinbase",
+                                "product_id": pos.get("product_id")
+                                or pos.get("instrument"),
+                                "side": pos.get("side", "LONG"),
+                                "size": abs(
+                                    float(
+                                        pos.get("contracts", 0)
+                                        or pos.get("number_of_contracts", 0)
+                                        or pos.get("units", 0)
+                                    )
+                                ),
+                                "entry_price": float(pos.get("entry_price", 0)),
+                                "current_price": float(pos.get("current_price", 0)),
+                                "unrealized_pnl": float(pos.get("unrealized_pnl", 0)),
+                                "opened_at": pos.get("opened_at"),
+                            }
+                        )
                 elif "positions" in portfolio:
                     for pos in portfolio["positions"]:
-                        raw_positions.append({
-                            "platform": "oanda",
-                            "product_id": pos.get("instrument"),
-                            "side": "LONG" if float(pos.get("units", 0)) > 0 else "SHORT",
-                            "size": abs(float(pos.get("units", 0))),
-                            "entry_price": float(pos.get("entry_price", 0)),
-                            "current_price": float(pos.get("current_price", 0)),
-                            "unrealized_pnl": float(pos.get("pnl", 0)),
-                            "opened_at": pos.get("opened_at"),
-                        })
+                        raw_positions.append(
+                            {
+                                "platform": "oanda",
+                                "product_id": pos.get("instrument"),
+                                "side": (
+                                    "LONG"
+                                    if float(pos.get("units", 0)) > 0
+                                    else "SHORT"
+                                ),
+                                "size": abs(float(pos.get("units", 0))),
+                                "entry_price": float(pos.get("entry_price", 0)),
+                                "current_price": float(pos.get("current_price", 0)),
+                                "unrealized_pnl": float(pos.get("pnl", 0)),
+                                "opened_at": pos.get("opened_at"),
+                            }
+                        )
 
                 # Filter out positions with zero size
                 active_positions = [p for p in raw_positions if p["size"] > 0]
@@ -1051,23 +1148,32 @@ class TradingLoopAgent:
                 if not active_positions:
                     logger.info("✓ No open positions found - starting with clean slate")
                     self._recovery_has_run = True
-                    self._emit_dashboard_event({
-                        "type": "recovery_complete",
-                        "found": 0,
-                        "kept": 0,
-                        "closed_excess": [],
-                        "timestamp": time.time(),
-                    })
+                    self._emit_dashboard_event(
+                        {
+                            "type": "recovery_complete",
+                            "found": 0,
+                            "kept": 0,
+                            "closed_excess": [],
+                            "timestamp": time.time(),
+                        }
+                    )
                     self._startup_complete.set()
                     await self._transition_to(AgentState.PERCEPTION)
                     return
 
                 # Sort by unrealized P&L (descending) and keep top 2
-                sorted_positions = sorted(active_positions, key=lambda x: x["unrealized_pnl"], reverse=True)
+                sorted_positions = sorted(
+                    active_positions, key=lambda x: x["unrealized_pnl"], reverse=True
+                )
                 positions_to_keep = sorted_positions[:max_positions]
                 positions_to_close = sorted_positions[max_positions:]
 
-                logger.info("Found %d positions: keeping %d, closing %d", len(active_positions), len(positions_to_keep), len(positions_to_close))
+                logger.info(
+                    "Found %d positions: keeping %d, closing %d",
+                    len(active_positions),
+                    len(positions_to_keep),
+                    len(positions_to_close),
+                )
 
                 # Close excess positions synchronously (all-or-nothing)
                 closed_positions = []
@@ -1075,34 +1181,52 @@ class TradingLoopAgent:
                     for pos in positions_to_close:
                         try:
                             asset_pair = standardize_asset_pair(pos["product_id"])
-                            logger.info("Closing excess position: %s (P&L: $%.2f)", asset_pair, pos["unrealized_pnl"])
+                            logger.info(
+                                "Closing excess position: %s (P&L: $%.2f)",
+                                asset_pair,
+                                pos["unrealized_pnl"],
+                            )
 
                             # Close via platform
-                            close_result = await self.trading_platform.aclose_position(pos["product_id"])
+                            close_result = await self.trading_platform.aclose_position(
+                                pos["product_id"]
+                            )
 
-                            closed_positions.append({
-                                "asset_pair": asset_pair,
-                                "unrealized_pnl": pos["unrealized_pnl"],
-                                "reason": "exceeded_max_positions",
-                            })
+                            closed_positions.append(
+                                {
+                                    "asset_pair": asset_pair,
+                                    "unrealized_pnl": pos["unrealized_pnl"],
+                                    "reason": "exceeded_max_positions",
+                                }
+                            )
                             if close_result.get("status") == "success":
-                                logger.info("✓ Successfully closed position for %s", asset_pair)
+                                logger.info(
+                                    "✓ Successfully closed position for %s", asset_pair
+                                )
                             else:
-                                raise Exception(f"Platform close failed: {close_result}")
+                                raise Exception(
+                                    f"Platform close failed: {close_result}"
+                                )
 
                         except Exception as e:
                             # All-or-nothing: if any close fails, abort entire recovery
                             error_msg = f"Failed to close excess position {pos['product_id']}: {e}"
                             logger.error(error_msg)
-                            self._emit_dashboard_event({
-                                "type": "recovery_failed",
-                                "reason": "position_close_failed",
-                                "failed_positions": [{
-                                    "asset_pair": standardize_asset_pair(pos["product_id"]),
-                                    "error": str(e),
-                                }],
-                                "timestamp": time.time(),
-                            })
+                            self._emit_dashboard_event(
+                                {
+                                    "type": "recovery_failed",
+                                    "reason": "position_close_failed",
+                                    "failed_positions": [
+                                        {
+                                            "asset_pair": standardize_asset_pair(
+                                                pos["product_id"]
+                                            ),
+                                            "error": str(e),
+                                        }
+                                    ],
+                                    "timestamp": time.time(),
+                                }
+                            )
                             self._startup_complete.set()
                             await self._transition_to(AgentState.PERCEPTION)
                             return
@@ -1145,7 +1269,10 @@ class TradingLoopAgent:
                             product_id=pos["product_id"],
                         )
 
-                        if recovery_key in self._recovered_position_keys and existing_recovery:
+                        if (
+                            recovery_key in self._recovered_position_keys
+                            and existing_recovery
+                        ):
                             decision_id = existing_recovery["id"]
                             logger.info(
                                 "↺ Skipping duplicate in-process recovery for %s (%s); reusing %s",
@@ -1156,8 +1283,12 @@ class TradingLoopAgent:
                         elif existing_recovery:
                             decision_id = existing_recovery["id"]
                             if not existing_recovery.get("recovery_metadata"):
-                                existing_recovery["recovery_metadata"] = recovery_metadata
-                                self.engine.decision_store.update_decision(existing_recovery)
+                                existing_recovery["recovery_metadata"] = (
+                                    recovery_metadata
+                                )
+                                self.engine.decision_store.update_decision(
+                                    existing_recovery
+                                )
                                 logger.info(
                                     "↺ Backfilled recovery metadata for existing decision %s",
                                     decision_id,
@@ -1176,7 +1307,9 @@ class TradingLoopAgent:
                             decision = {
                                 "id": decision_id,
                                 "asset_pair": asset_pair,
-                                "timestamp": datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
+                                "timestamp": datetime.datetime.now(datetime.UTC)
+                                .isoformat()
+                                .replace("+00:00", "Z"),
                                 "action": action,
                                 "confidence": 75,  # Default confidence for recovered positions
                                 "recommended_position_size": pos["size"],
@@ -1204,14 +1337,18 @@ class TradingLoopAgent:
 
                             # Persist decision to decision store once per live position fingerprint.
                             self.engine.decision_store.save_decision(decision)
-                            logger.info(f"✓ Persisted decision {decision_id} for {asset_pair}")
+                            logger.info(
+                                f"✓ Persisted decision {decision_id} for {asset_pair}"
+                            )
 
                         # Add to portfolio memory
                         outcome = TradeOutcome(
                             decision_id=decision_id,
                             asset_pair=asset_pair,
                             action="BUY" if pos["side"] == "LONG" else "SELL",
-                            entry_timestamp=datetime.datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
+                            entry_timestamp=datetime.datetime.now(datetime.UTC)
+                            .isoformat()
+                            .replace("+00:00", "Z"),
                             entry_price=entry_price,
                             position_size=pos["size"],
                             ai_provider="recovery",
@@ -1225,45 +1362,62 @@ class TradingLoopAgent:
                         self.portfolio_memory.trade_outcomes.append(outcome)
 
                         # Associate with trade monitor
-                        self.trade_monitor.associate_decision_to_trade(decision_id, asset_pair)
+                        self.trade_monitor.associate_decision_to_trade(
+                            decision_id, asset_pair
+                        )
 
                         self._recovered_position_keys.add(recovery_key)
 
-                        normalized_positions.append({
-                            "decision_id": decision_id,
-                            "asset_pair": asset_pair,
-                            "side": pos["side"],
-                            "size": pos["size"],
-                            "entry_price": entry_price,
-                            "unrealized_pnl": pos["unrealized_pnl"],
-                            "platform": pos["platform"],
-                        })
-                        recorder_positions.append({
-                            "product_id": pos["product_id"],
-                            "side": pos["side"],
-                            "size": pos["size"],
-                            "entry_price": entry_price,
-                            "current_price": pos.get("current_price"),
-                            "opened_at": pos.get("opened_at"),
-                            "decision_id": decision_id,
-                        })
+                        normalized_positions.append(
+                            {
+                                "decision_id": decision_id,
+                                "asset_pair": asset_pair,
+                                "side": pos["side"],
+                                "size": pos["size"],
+                                "entry_price": entry_price,
+                                "unrealized_pnl": pos["unrealized_pnl"],
+                                "platform": pos["platform"],
+                            }
+                        )
+                        recorder_positions.append(
+                            {
+                                "product_id": pos["product_id"],
+                                "side": pos["side"],
+                                "size": pos["size"],
+                                "entry_price": entry_price,
+                                "current_price": pos.get("current_price"),
+                                "opened_at": pos.get("opened_at"),
+                                "decision_id": decision_id,
+                            }
+                        )
 
                     except Exception as e:
-                        validation_errors.append({
-                            "asset_pair": standardize_asset_pair(pos.get("product_id", "UNKNOWN")),
-                            "error": str(e),
-                        })
-                        logger.error(f"Failed to normalize position {pos.get('product_id')}: {e}", exc_info=True)
+                        validation_errors.append(
+                            {
+                                "asset_pair": standardize_asset_pair(
+                                    pos.get("product_id", "UNKNOWN")
+                                ),
+                                "error": str(e),
+                            }
+                        )
+                        logger.error(
+                            f"Failed to normalize position {pos.get('product_id')}: {e}",
+                            exc_info=True,
+                        )
 
                 # All-or-nothing: if any position validation failed, abort recovery
                 if validation_errors:
-                    logger.error(f"Position validation failed for {len(validation_errors)} positions")
-                    self._emit_dashboard_event({
-                        "type": "recovery_failed",
-                        "reason": "position_validation_failed",
-                        "failed_positions": validation_errors,
-                        "timestamp": time.time(),
-                    })
+                    logger.error(
+                        f"Position validation failed for {len(validation_errors)} positions"
+                    )
+                    self._emit_dashboard_event(
+                        {
+                            "type": "recovery_failed",
+                            "reason": "position_validation_failed",
+                            "failed_positions": validation_errors,
+                            "timestamp": time.time(),
+                        }
+                    )
                     self._startup_complete.set()
                     await self._transition_to(AgentState.PERCEPTION)
                     return
@@ -1275,17 +1429,21 @@ class TradingLoopAgent:
                 self._recovered_positions = normalized_positions
                 total_pnl = sum(p["unrealized_pnl"] for p in normalized_positions)
 
-                logger.info(f"✓ Recovery complete: {len(normalized_positions)} positions (Total P&L: ${total_pnl:.2f})")
+                logger.info(
+                    f"✓ Recovery complete: {len(normalized_positions)} positions (Total P&L: ${total_pnl:.2f})"
+                )
 
-                self._emit_dashboard_event({
-                    "type": "recovery_complete",
-                    "found": len(active_positions),
-                    "kept": len(normalized_positions),
-                    "closed_excess_positions": closed_positions,
-                    "positions": normalized_positions,
-                    "total_unrealized_pnl": total_pnl,
-                    "timestamp": time.time(),
-                })
+                self._emit_dashboard_event(
+                    {
+                        "type": "recovery_complete",
+                        "found": len(active_positions),
+                        "kept": len(normalized_positions),
+                        "closed_excess_positions": closed_positions,
+                        "positions": normalized_positions,
+                        "total_unrealized_pnl": total_pnl,
+                        "timestamp": time.time(),
+                    }
+                )
 
                 self._startup_complete.set()
                 await self._transition_to(AgentState.PERCEPTION)
@@ -1293,18 +1451,24 @@ class TradingLoopAgent:
 
             except Exception as e:
                 if attempt < max_retries:
-                    logger.warning(f"Recovery attempt {attempt + 1} failed: {e}. Retrying...")
+                    logger.warning(
+                        f"Recovery attempt {attempt + 1} failed: {e}. Retrying..."
+                    )
                     await asyncio.sleep(2.0)  # Brief delay before retry
                     continue
                 else:
                     # Final failure - assume clean slate
-                    logger.info(f"Recovery failed after {max_retries + 1} attempts: {e}. Starting with clean slate.")
-                    self._emit_dashboard_event({
-                        "type": "recovery_failed",
-                        "reason": "platform_api_error",
-                        "error": str(e),
-                        "timestamp": time.time(),
-                    })
+                    logger.info(
+                        f"Recovery failed after {max_retries + 1} attempts: {e}. Starting with clean slate."
+                    )
+                    self._emit_dashboard_event(
+                        {
+                            "type": "recovery_failed",
+                            "reason": "platform_api_error",
+                            "error": str(e),
+                            "timestamp": time.time(),
+                        }
+                    )
                     self._startup_complete.set()
                     await self._transition_to(AgentState.PERCEPTION)
                     return
@@ -1319,15 +1483,16 @@ class TradingLoopAgent:
             await self._recover_existing_positions()
         except Exception as e:
             logger.exception(f"Unexpected error during recovery state: {e}")
-            self._emit_dashboard_event({
-                "type": "recovery_failed",
-                "reason": "unexpected_exception_in_state",
-                "error": str(e),
-                "timestamp": time.time(),
-            })
+            self._emit_dashboard_event(
+                {
+                    "type": "recovery_failed",
+                    "reason": "unexpected_exception_in_state",
+                    "error": str(e),
+                    "timestamp": time.time(),
+                }
+            )
             self._startup_complete.set()
             await self._transition_to(AgentState.PERCEPTION)
-
 
     async def handle_perception_state(self) -> None:
         """PERCEPTION: Fetching market data, portfolio state, and performing safety checks."""
@@ -1341,11 +1506,19 @@ class TradingLoopAgent:
             logger.warning("Failed to update position MTM: %s", e, exc_info=True)
             tracker = getattr(self.engine, "error_tracker", None)
             if tracker:
-                tracker.capture_error(e, context={"phase": "position_mtm_update", "cycle_id": self._current_cycle_id})
+                tracker.capture_error(
+                    e,
+                    context={
+                        "phase": "position_mtm_update",
+                        "cycle_id": self._current_cycle_id,
+                    },
+                )
 
         # --- Data Freshness Validation ---
         # Fetch monitoring context and cache for reuse throughout PERCEPTION state
-        market_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+        market_context = (
+            self.trade_monitor.monitoring_context_provider.get_monitoring_context()
+        )
         asset_type = market_context.get("asset_type", "crypto")
         data_timestamp = market_context.get("latest_market_data_timestamp")
         if str(asset_type).lower() == "crypto":
@@ -1354,16 +1527,17 @@ class TradingLoopAgent:
                 data_timestamp = market_data_timestamp
         timeframe = market_context.get("timeframe", "intraday")
         market_status = market_context.get("market_status")
-        
+
         # Defensive: Handle missing timestamp (THR-XXX: data_timestamp ValueError crash fix)
         if not data_timestamp:
             from datetime import datetime, timezone
+
             data_timestamp = datetime.now(timezone.utc).isoformat()
             logger.warning(
                 "Missing data_timestamp in market_context, using current time: %s",
-                data_timestamp
+                data_timestamp,
             )
-        
+
         is_fresh, age_str, warning_msg = validate_data_freshness(
             data_timestamp=data_timestamp,
             asset_type=asset_type,
@@ -1381,15 +1555,19 @@ class TradingLoopAgent:
                 logger.info(
                     "DATA FRESHNESS CHECK DEFERRED: %s (age: %s)", warning_msg, age_str
                 )
-                await self._transition_to(AgentState.IDLE)
+                # Stay in PERCEPTION so the next loop retries with fresher data.
                 return
-            logger.error("DATA FRESHNESS CHECK FAILED: %s (age: %s)", warning_msg, age_str)
-            self._emit_dashboard_event({
-                "type": "data_freshness_failed",
-                "reason": warning_msg,
-                "age": age_str,
-                "timestamp": time.time(),
-            })
+            logger.error(
+                "DATA FRESHNESS CHECK FAILED: %s (age: %s)", warning_msg, age_str
+            )
+            self._emit_dashboard_event(
+                {
+                    "type": "data_freshness_failed",
+                    "reason": warning_msg,
+                    "age": age_str,
+                    "timestamp": time.time(),
+                }
+            )
             # Halt this cycle safely; outer scheduler can retry later.
             await self._transition_to(AgentState.IDLE)
             return
@@ -1432,7 +1610,7 @@ class TradingLoopAgent:
             logger.critical(
                 "PERFORMANCE KILL SWITCH TRIGGERED! "
                 "%d consecutive losses. Stopping agent.",
-                abs(current_streak)
+                abs(current_streak),
             )
             self.stop()
             return
@@ -1444,7 +1622,7 @@ class TradingLoopAgent:
                 logger.critical(
                     "PERFORMANCE KILL SWITCH TRIGGERED! "
                     "Win rate (%.1f%%) is critically low. Stopping agent.",
-                    win_rate
+                    win_rate,
                 )
                 self.stop()
                 return
@@ -1463,7 +1641,7 @@ class TradingLoopAgent:
                 logger.critical(
                     "PERFORMANCE KILL SWITCH TRIGGERED! "
                     "Total loss of $%.2f exceeds 15%% of reference balance. Stopping agent.",
-                    abs(total_pnl)
+                    abs(total_pnl),
                 )
                 self.stop()
                 return
@@ -1472,7 +1650,8 @@ class TradingLoopAgent:
         today = date.today()
         if today > self.last_trade_date:
             logger.info(
-                "New day detected. Resetting daily trade count from %d to 0.", self.daily_trade_count
+                "New day detected. Resetting daily trade count from %d to 0.",
+                self.daily_trade_count,
             )
             self.daily_trade_count = 0
             self.last_trade_date = today
@@ -1489,8 +1668,6 @@ class TradingLoopAgent:
         # Transition to reasoning after gathering market data
         await self._transition_to(AgentState.REASONING)
 
-
-
     async def _update_position_mtm(self) -> None:
         """
         Mark-to-market: Update all open positions with current market prices.
@@ -1500,21 +1677,30 @@ class TradingLoopAgent:
         - Kill switch triggers
         - Risk metric calculations
         """
-        from finance_feedback_engine.utils.retry import async_exponential_backoff_retry
         from finance_feedback_engine.monitoring.error_tracking import ErrorTracker
+        from finance_feedback_engine.utils.retry import async_exponential_backoff_retry
 
         retry_cfg = RetryConfig.get_config("API_CALL")
+
         @exponential_backoff_retry(**retry_cfg)
         def get_portfolio():
             return self.engine.get_portfolio_breakdown()
 
         try:
-            portfolio = await asyncio.get_event_loop().run_in_executor(None, get_portfolio)
+            portfolio = await asyncio.get_event_loop().run_in_executor(
+                None, get_portfolio
+            )
         except Exception as e:
             logger.error("Failed to retrieve portfolio after retries: %s", e)
             tracker = getattr(self.engine, "error_tracker", None)
             if tracker and hasattr(tracker, "capture_exception"):
-                tracker.capture_exception(e, context={"phase": "mtm_portfolio_retrieval", "cycle_id": getattr(self, "_current_cycle_id", None)})
+                tracker.capture_exception(
+                    e,
+                    context={
+                        "phase": "mtm_portfolio_retrieval",
+                        "cycle_id": getattr(self, "_current_cycle_id", None),
+                    },
+                )
             return
 
         futures_positions = portfolio.get("futures_positions", [])
@@ -1548,9 +1734,11 @@ class TradingLoopAgent:
         if price_updates and hasattr(self.trading_platform, "update_position_prices"):
             # Wrap update_position_prices in retry and error capture
             update_retry_cfg = RetryConfig.get_config("API_CALL")
+
             @exponential_backoff_retry(**update_retry_cfg)
             def update_prices():
                 return self.trading_platform.update_position_prices(price_updates)
+
             try:
                 await asyncio.get_event_loop().run_in_executor(None, update_prices)
                 logger.info("Updated MTM prices for %d positions", len(price_updates))
@@ -1558,7 +1746,13 @@ class TradingLoopAgent:
                 logger.error("Failed to update position prices after retries: %s", e)
                 tracker = getattr(self.engine, "error_tracker", None)
                 if tracker and hasattr(tracker, "capture_exception"):
-                    tracker.capture_exception(e, context={"phase": "mtm_update_position_prices", "cycle_id": getattr(self, "_current_cycle_id", None)})
+                    tracker.capture_exception(
+                        e,
+                        context={
+                            "phase": "mtm_update_position_prices",
+                            "cycle_id": getattr(self, "_current_cycle_id", None),
+                        },
+                    )
 
     async def _fetch_current_price(self, asset_pair: str) -> Optional[float]:
         """
@@ -1568,11 +1762,18 @@ class TradingLoopAgent:
             Current Price or None if unavailable.
         """
         from finance_feedback_engine.utils.retry import async_exponential_backoff_retry
+
         retry_cfg = RetryConfig.get_config("API_CALL")
+
         # Option 1: Use monitoring context if available, with retry
         @async_exponential_backoff_retry(**retry_cfg)
         async def get_monitoring_context():
-            return self.trade_monitor.monitoring_context_provider.get_monitoring_context(asset_pair=asset_pair)
+            return (
+                self.trade_monitor.monitoring_context_provider.get_monitoring_context(
+                    asset_pair=asset_pair
+                )
+            )
+
         try:
             context = await get_monitoring_context()
             latest_price = context.get("latest_price") or context.get("current_price")
@@ -1583,14 +1784,18 @@ class TradingLoopAgent:
 
         # Option 2: Fetch from data provider directly, with retry
         if hasattr(self.engine, "data_provider"):
+
             @async_exponential_backoff_retry(**retry_cfg)
             async def get_price():
                 return await self.engine.data_provider.get_latest_price(asset_pair)
+
             try:
                 price_data = await get_price()
                 return float(price_data.get("price", 0))
             except Exception as e:
-                logger.debug("Error fetching price from data provider for %s: %s", asset_pair, e)
+                logger.debug(
+                    "Error fetching price from data provider for %s: %s", asset_pair, e
+                )
         return None
 
     async def handle_reasoning_state(self) -> None:
@@ -1605,13 +1810,17 @@ class TradingLoopAgent:
         # IMPORTANT: do not forcibly re-add hardcoded pairs here; API callers may
         # intentionally run focused universes (e.g., BTC/ETH long-short only).
         if not self.config.asset_pairs:
-            logger.error("CRITICAL: No asset pairs configured; ending cycle without reasoning")
+            logger.error(
+                "CRITICAL: No asset pairs configured; ending cycle without reasoning"
+            )
             await self._transition_to(AgentState.IDLE)
             return
 
         # Create a snapshot copy for iteration (prevents race conditions)
         asset_pairs_snapshot = list(self.config.asset_pairs)
-        logger.info("Analyzing %d pairs: %s", len(asset_pairs_snapshot), asset_pairs_snapshot)
+        logger.info(
+            "Analyzing %d pairs: %s", len(asset_pairs_snapshot), asset_pairs_snapshot
+        )
 
         max_retries = 5  # Keep existing resilience behavior
 
@@ -1641,10 +1850,8 @@ class TradingLoopAgent:
 
         def _pair_has_active_position(asset_pair: str) -> bool:
             try:
-                monitoring_context = (
-                    self.trade_monitor.monitoring_context_provider.get_monitoring_context(
-                        asset_pair=asset_pair
-                    )
+                monitoring_context = self.trade_monitor.monitoring_context_provider.get_monitoring_context(
+                    asset_pair=asset_pair
                 )
             except Exception as exc:
                 logger.debug(
@@ -1654,10 +1861,16 @@ class TradingLoopAgent:
                 )
                 return False
 
-            active_positions = ((monitoring_context or {}).get("active_positions") or {}).get("futures") or []
+            active_positions = (
+                (monitoring_context or {}).get("active_positions") or {}
+            ).get("futures") or []
             target_asset = str(asset_pair or "").upper()
             for pos in active_positions:
-                raw_pair = pos.get("product_id") or pos.get("instrument") or pos.get("asset_pair")
+                raw_pair = (
+                    pos.get("product_id")
+                    or pos.get("instrument")
+                    or pos.get("asset_pair")
+                )
                 canonical = None
                 try:
                     canonical = standardize_asset_pair(raw_pair) if raw_pair else None
@@ -1666,9 +1879,13 @@ class TradingLoopAgent:
                 raw_upper = str(raw_pair or "").upper()
                 if canonical == target_asset or raw_upper == target_asset:
                     return True
-                if target_asset == "BTCUSD" and raw_upper.startswith(("BIP", "BIT", "BTC")):
+                if target_asset == "BTCUSD" and raw_upper.startswith(
+                    ("BIP", "BIT", "BTC")
+                ):
                     return True
-                if target_asset == "ETHUSD" and raw_upper.startswith(("ETP", "ET", "ETH")):
+                if target_asset == "ETHUSD" and raw_upper.startswith(
+                    ("ETP", "ET", "ETH")
+                ):
                     return True
             return False
 
@@ -1710,7 +1927,9 @@ class TradingLoopAgent:
 
             pairs_to_analyze.append((idx, asset_pair))
 
-        max_concurrent = max(1, int(getattr(self.config, "reasoning_max_concurrent_assets", 3)))
+        max_concurrent = max(
+            1, int(getattr(self.config, "reasoning_max_concurrent_assets", 3))
+        )
         semaphore = asyncio.Semaphore(max_concurrent)
 
         requests_per_minute = float(
@@ -1724,7 +1943,9 @@ class TradingLoopAgent:
                 burst=burst,
             )
 
-        async def _analyze_one(index: int, asset_pair: str) -> tuple[int, Optional[dict]]:
+        async def _analyze_one(
+            index: int, asset_pair: str
+        ) -> tuple[int, Optional[dict]]:
             failure_key = f"analysis:{asset_pair}"
             logger.info(">>> Starting analysis for %s", asset_pair)
 
@@ -1733,13 +1954,22 @@ class TradingLoopAgent:
                     await limiter.acquire()
 
                 try:
-                    logger.info("    → Calling DecisionEngine for %s (90s timeout)...", asset_pair)
+                    logger.info(
+                        "    → Calling DecisionEngine for %s (90s timeout)...",
+                        asset_pair,
+                    )
 
                     analyze_fn = getattr(self.engine, "analyze_asset", None)
                     analyze_async_fn = getattr(self.engine, "analyze_asset_async", None)
                     engine_config = getattr(self.engine, "config", None)
-                    monitoring_cfg = engine_config.get("monitoring", {}) if isinstance(engine_config, dict) else {}
-                    include_sentiment = bool(monitoring_cfg.get("include_sentiment", True))
+                    monitoring_cfg = (
+                        engine_config.get("monitoring", {})
+                        if isinstance(engine_config, dict)
+                        else {}
+                    )
+                    include_sentiment = bool(
+                        monitoring_cfg.get("include_sentiment", True)
+                    )
                     include_macro = bool(monitoring_cfg.get("include_macro", False))
 
                     if callable(analyze_async_fn):
@@ -1797,9 +2027,13 @@ class TradingLoopAgent:
                     )
                     return index, None
 
-        analysis_results = await asyncio.gather(
-            *[_analyze_one(index, pair) for index, pair in pairs_to_analyze]
-        ) if pairs_to_analyze else []
+        analysis_results = (
+            await asyncio.gather(
+                *[_analyze_one(index, pair) for index, pair in pairs_to_analyze]
+            )
+            if pairs_to_analyze
+            else []
+        )
 
         # Preserve deterministic ordering by original asset index
         ordered_results = sorted(analysis_results, key=lambda item: item[0])
@@ -1846,14 +2080,19 @@ class TradingLoopAgent:
                         except Exception:
                             pass
             else:
-                candidate_positions.extend(portfolio_snapshot.get("futures_positions", []))
+                candidate_positions.extend(
+                    portfolio_snapshot.get("futures_positions", [])
+                )
                 candidate_positions.extend(portfolio_snapshot.get("positions", []))
 
             # Coinbase CFM product prefixes -> canonical base asset
             cfm_base_map = {
-                "BIP": "BTC", "BIT": "BTC",
-                "ETP": "ETH", "ET": "ETH",
-                "SOL": "SOL", "SLP": "SOL",
+                "BIP": "BTC",
+                "BIT": "BTC",
+                "ETP": "ETH",
+                "ET": "ETH",
+                "SOL": "SOL",
+                "SLP": "SOL",
             }
 
             self._sync_trade_outcome_recorder(candidate_positions)
@@ -1873,7 +2112,11 @@ class TradingLoopAgent:
                         signed = 0.0
                     if signed == 0:
                         try:
-                            signed = float(pos.get("number_of_contracts", 0) or pos.get("contracts", 0) or 0)
+                            signed = float(
+                                pos.get("number_of_contracts", 0)
+                                or pos.get("contracts", 0)
+                                or 0
+                            )
                         except Exception:
                             signed = 0.0
                     side = "LONG" if signed >= 0 else "SHORT"
@@ -1903,7 +2146,11 @@ class TradingLoopAgent:
                             open_asset_pairs.add(canonical)
                             break
 
-                if canonical and managed_asset_pairs and canonical not in managed_asset_pairs:
+                if (
+                    canonical
+                    and managed_asset_pairs
+                    and canonical not in managed_asset_pairs
+                ):
                     logger.info(
                         "Duplicate-entry guard ignoring position outside global managed scope: asset=%s raw_product=%s",
                         canonical,
@@ -1932,10 +2179,16 @@ class TradingLoopAgent:
                     margin_usage_limit_pct * 100,
                 )
         except Exception as e:
-            logger.warning("Unable to load open positions for duplicate-entry guard: %s", e)
+            logger.warning(
+                "Unable to load open positions for duplicate-entry guard: %s", e
+            )
 
         for index, decision in ordered_results:
-            asset_pair = asset_pairs_snapshot[index] if index < len(asset_pairs_snapshot) else None
+            asset_pair = (
+                asset_pairs_snapshot[index]
+                if index < len(asset_pairs_snapshot)
+                else None
+            )
             if not decision:
                 self._log_council_summary(decision or {}, asset_pair=asset_pair)
                 self._persist_no_action_decision(
@@ -1951,27 +2204,40 @@ class TradingLoopAgent:
                 continue
             self._log_council_summary(decision, asset_pair=asset_pair)
             intent = _derive_execution_intent(decision)
-            action_label = intent["canonical_action"] or (decision.get("policy_action") or decision.get("action"))
+            action_label = intent["canonical_action"] or (
+                decision.get("policy_action") or decision.get("action")
+            )
 
             if intent["policy_action"] and not decision.get("policy_action"):
                 decision["policy_action"] = intent["policy_action"]
-            if intent["policy_action_family"] and not decision.get("policy_action_family"):
+            if intent["policy_action_family"] and not decision.get(
+                "policy_action_family"
+            ):
                 decision["policy_action_family"] = intent["policy_action_family"]
 
             if intent["is_actionable"]:
                 # Block only same-direction entry stacking; allow reduce/close flows to proceed.
                 try:
-                    decision_pair = standardize_asset_pair(decision.get("asset_pair", ""))
+                    decision_pair = standardize_asset_pair(
+                        decision.get("asset_pair", "")
+                    )
                 except Exception:
                     decision_pair = decision.get("asset_pair")
 
                 requested_side = intent["entry_side"]
-                if requested_side and decision_pair and decision_pair in open_asset_pairs:
+                if (
+                    requested_side
+                    and decision_pair
+                    and decision_pair in open_asset_pairs
+                ):
                     existing_side = open_position_side.get(decision_pair)
 
                     if existing_side == requested_side:
                         # Allow same-direction scaling on BTC/ETH futures rails until margin usage reaches 50%.
-                        if decision_pair in {"BTCUSD", "ETHUSD"} and margin_usage_pct < margin_usage_limit_pct:
+                        if (
+                            decision_pair in {"BTCUSD", "ETHUSD"}
+                            and margin_usage_pct < margin_usage_limit_pct
+                        ):
                             logger.info(
                                 "Allowing scale-in %s for %s: existing side=%s, margin usage %.2f%% < %.2f%% limit.",
                                 action_label,
@@ -1985,7 +2251,9 @@ class TradingLoopAgent:
                                 f"Duplicate entry blocked: existing {existing_side} for {decision_pair}; "
                                 f"margin usage {margin_usage_pct*100:.2f}% (limit {margin_usage_limit_pct*100:.2f}%)"
                             )
-                            self._mark_decision_not_executed(decision, "DUPLICATE_ENTRY_GUARD", reason)
+                            self._mark_decision_not_executed(
+                                decision, "DUPLICATE_ENTRY_GUARD", reason
+                            )
                             logger.info(
                                 "Skipping %s for %s: %s position already exists (duplicate-entry guard).",
                                 action_label,
@@ -2000,7 +2268,9 @@ class TradingLoopAgent:
                         existing_side,
                     )
 
-                should_execute, reason_code, reason_msg = await self._should_execute_with_reason(decision)
+                should_execute, reason_code, reason_msg = (
+                    await self._should_execute_with_reason(decision)
+                )
                 if should_execute:
                     decision["actionable"] = True
                     self._attach_decision_artifact(decision, execution_attempted=False)
@@ -2024,14 +2294,18 @@ class TradingLoopAgent:
                     self._ensure_decision_identity(decision)
                     decision["executed"] = False
                     fallback_reason_code = decision.get("filtered_reason_code")
-                    if decision.get("decision_origin") == "fallback" and fallback_reason_code:
+                    if (
+                        decision.get("decision_origin") == "fallback"
+                        and fallback_reason_code
+                    ):
                         decision.setdefault("hold_origin", "provider_fallback")
                         decision.setdefault("hold_is_genuine", False)
                         decision["execution_status"] = "filtered"
                         decision["execution_result"] = {
                             "success": False,
                             "reason_code": fallback_reason_code,
-                            "error": decision.get("reasoning") or "Provider fallback decision",
+                            "error": decision.get("reasoning")
+                            or "Provider fallback decision",
                         }
                     else:
                         if decision.get("position_state_violation"):
@@ -2073,7 +2347,14 @@ class TradingLoopAgent:
             pairs_to_analyze,
             [d.get("asset_pair") for d in ordered_actionable_decisions],
             len(ordered_actionable_decisions),
-            len([1 for _, decision in ordered_results if decision and not _derive_execution_intent(decision)["is_actionable"]]),
+            len(
+                [
+                    1
+                    for _, decision in ordered_results
+                    if decision
+                    and not _derive_execution_intent(decision)["is_actionable"]
+                ]
+            ),
             max(0, len(asset_pairs_snapshot) - len(pairs_to_analyze)),
         )
 
@@ -2087,16 +2368,24 @@ class TradingLoopAgent:
             logger.info("No actionable trades found for any asset. Going back to IDLE.")
             await self._transition_to(AgentState.IDLE)
 
-    def _apply_derisking_execution_metadata(self, decision: Dict[str, Any], monitoring_context: Dict[str, Any]) -> None:
-        normalized_action = str(decision.get("policy_action") or decision.get("action") or "").upper()
+    def _apply_derisking_execution_metadata(
+        self, decision: Dict[str, Any], monitoring_context: Dict[str, Any]
+    ) -> None:
+        normalized_action = str(
+            decision.get("policy_action") or decision.get("action") or ""
+        ).upper()
         if not normalized_action.startswith(("CLOSE_", "REDUCE_")):
             return
 
-        active_positions = ((monitoring_context or {}).get("active_positions") or {}).get("futures") or []
+        active_positions = (
+            (monitoring_context or {}).get("active_positions") or {}
+        ).get("futures") or []
         target_asset = str(decision.get("asset_pair") or "").upper()
         matched_position = None
         for pos in active_positions:
-            raw_pair = pos.get("product_id") or pos.get("instrument") or pos.get("asset_pair")
+            raw_pair = (
+                pos.get("product_id") or pos.get("instrument") or pos.get("asset_pair")
+            )
             canonical = None
             try:
                 canonical = standardize_asset_pair(raw_pair) if raw_pair else None
@@ -2117,24 +2406,32 @@ class TradingLoopAgent:
             return
 
         try:
-            current_position_size = abs(float(
-                matched_position.get("number_of_contracts", 0)
-                or matched_position.get("contracts", 0)
-                or matched_position.get("units", 0)
-                or 0.0
-            ))
+            current_position_size = abs(
+                float(
+                    matched_position.get("number_of_contracts", 0)
+                    or matched_position.get("contracts", 0)
+                    or matched_position.get("units", 0)
+                    or 0.0
+                )
+            )
         except Exception:
             current_position_size = 0.0
 
         try:
-            current_price = float(matched_position.get("current_price", 0) or decision.get("entry_price", 0) or 0.0)
+            current_price = float(
+                matched_position.get("current_price", 0)
+                or decision.get("entry_price", 0)
+                or 0.0
+            )
         except Exception:
             current_price = 0.0
 
         if current_position_size <= 0:
             return
 
-        legacy_action = decision.get("legacy_action_compatibility") or get_legacy_action_compatibility(normalized_action)
+        legacy_action = decision.get(
+            "legacy_action_compatibility"
+        ) or get_legacy_action_compatibility(normalized_action)
         decision["has_existing_position"] = True
         decision["current_position_size"] = current_position_size
         decision["recommended_position_size"] = current_position_size
@@ -2175,11 +2472,17 @@ class TradingLoopAgent:
                     asset_pair=asset_pair
                 )
                 safety_config = self.engine.config.get("safety", {})
-                monitoring_context["max_leverage"] = safety_config.get("max_leverage", 5.0)
-                monitoring_context["max_concentration"] = safety_config.get("max_position_pct", 25.0)
+                monitoring_context["max_leverage"] = safety_config.get(
+                    "max_leverage", 5.0
+                )
+                monitoring_context["max_concentration"] = safety_config.get(
+                    "max_position_pct", 25.0
+                )
                 self._apply_derisking_execution_metadata(decision, monitoring_context)
             except Exception as e:
-                logger.warning("Failed to get monitoring context for risk validation: %s", e)
+                logger.warning(
+                    "Failed to get monitoring context for risk validation: %s", e
+                )
                 monitoring_context = {"max_leverage": 5.0, "max_concentration": 25.0}
 
             # First run the standard RiskGatekeeper validation
@@ -2201,9 +2504,11 @@ class TradingLoopAgent:
                     reason = performance_reason
                     decision.setdefault("gatekeeper_message", performance_reason)
 
-            should_execute, outcome_kind, outcome_code, outcome_message = self._classify_action_execution_outcome(
-                decision,
-                risk_reason=None if approved else reason,
+            should_execute, outcome_kind, outcome_code, outcome_message = (
+                self._classify_action_execution_outcome(
+                    decision,
+                    risk_reason=None if approved else reason,
+                )
             )
 
             if should_execute:
@@ -2214,7 +2519,9 @@ class TradingLoopAgent:
                         context=decision,
                         current_price=decision.get("entry_price", 0),
                         action=decision.get("action", "UNKNOWN"),
-                        has_existing_position=decision.get("has_existing_position", False),
+                        has_existing_position=decision.get(
+                            "has_existing_position", False
+                        ),
                         relevant_balance=decision.get("relevant_balance", {}),
                         balance_source=decision.get("balance_source", "unknown"),
                     )
@@ -2222,20 +2529,30 @@ class TradingLoopAgent:
                         recommended_size = sizing.get("recommended_position_size")
                         decision["recommended_position_size"] = recommended_size
                 except Exception as e:
-                    logger.warning("Failed to calculate position size for %s: %s", decision_id, e)
+                    logger.warning(
+                        "Failed to calculate position size for %s: %s", decision_id, e
+                    )
 
                 decision["control_outcome"] = build_control_outcome(
                     action=decision.get("action"),
-                    structural_action_validity=decision.get("structural_action_validity"),
+                    structural_action_validity=decision.get(
+                        "structural_action_validity"
+                    ),
                     invalid_action_reason_text=decision.get("invalid_action_reason"),
                     risk_vetoed=bool(decision.get("risk_vetoed", False)),
                     risk_veto_reason=decision.get("risk_veto_reason"),
                 )
                 policy_package = decision.get("policy_package")
                 if isinstance(policy_package, dict):
-                    policy_package["control_outcome"] = decision["control_outcome"].copy()
-                if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
-                    decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
+                    policy_package["control_outcome"] = decision[
+                        "control_outcome"
+                    ].copy()
+                if isinstance(decision.get("policy_trace"), dict) and isinstance(
+                    decision["policy_trace"].get("policy_package"), dict
+                ):
+                    decision["policy_trace"]["policy_package"]["control_outcome"] = (
+                        decision["control_outcome"].copy()
+                    )
                 logger.info(
                     "Trade for %s approved by RiskGatekeeper. Adding to execution queue.",
                     asset_pair,
@@ -2243,12 +2560,22 @@ class TradingLoopAgent:
                 approved_decisions.append(decision)
                 try:
                     exposure_manager = get_exposure_manager()
-                    reserve_trade_exposure(exposure_manager=exposure_manager, decision=decision)
+                    reserve_trade_exposure(
+                        exposure_manager=exposure_manager, decision=decision
+                    )
                 except Exception as e:
-                    logger.warning("Failed to reserve exposure for %s: %s", decision_id, e)
+                    logger.warning(
+                        "Failed to reserve exposure for %s: %s", decision_id, e
+                    )
                     tracker = getattr(self.engine, "error_tracker", None)
                     if tracker:
-                        tracker.capture_error(e, context={"decision_id": decision_id, "phase": "reserve_exposure"})
+                        tracker.capture_error(
+                            e,
+                            context={
+                                "decision_id": decision_id,
+                                "phase": "reserve_exposure",
+                            },
+                        )
 
                 # Record decision confidence for metrics dashboards
                 try:
@@ -2258,7 +2585,9 @@ class TradingLoopAgent:
                         float(decision.get("confidence", 0)),
                     )
                 except Exception:
-                    logger.debug("Failed to record decision confidence metric", exc_info=True)
+                    logger.debug(
+                        "Failed to record decision confidence metric", exc_info=True
+                    )
 
                 # Emit approval event for dashboard
                 self._emit_dashboard_event(
@@ -2275,7 +2604,11 @@ class TradingLoopAgent:
                 logger.info(
                     "Trade for %s is %s: %s.", asset_pair, outcome_kind, outcome_message
                 )
-                self._mark_decision_not_executed(decision, outcome_code or "REJECTED", outcome_message or reason or "Rejected")
+                self._mark_decision_not_executed(
+                    decision,
+                    outcome_code or "REJECTED",
+                    outcome_message or reason or "Rejected",
+                )
                 if outcome_kind in {"vetoed", "rejected"}:
                     self._rejected_decisions_cache[decision_id] = (
                         datetime.datetime.now(datetime.timezone.utc),
@@ -2284,7 +2617,11 @@ class TradingLoopAgent:
 
                 self._emit_dashboard_event(
                     {
-                        "type": "decision_rejected" if outcome_kind in {"vetoed", "rejected", "invalid"} else "decision_filtered",
+                        "type": (
+                            "decision_rejected"
+                            if outcome_kind in {"vetoed", "rejected", "invalid"}
+                            else "decision_filtered"
+                        ),
                         "asset": asset_pair,
                         "action": decision.get("action", "UNKNOWN"),
                         "reason": outcome_message or reason,
@@ -2424,9 +2761,15 @@ class TradingLoopAgent:
                     execution_result = await self.engine.execute_decision_async(
                         decision_id
                     )
-                    action = decision.get("policy_action") or decision.get("action") or "UNKNOWN"
+                    action = (
+                        decision.get("policy_action")
+                        or decision.get("action")
+                        or "UNKNOWN"
+                    )
                     normalized_action = self._normalize_execution_action(decision)
-                    extracted_order_id = self._extract_order_id_from_execution_result(execution_result)
+                    extracted_order_id = self._extract_order_id_from_execution_result(
+                        execution_result
+                    )
                     if extracted_order_id and not execution_result.get("order_id"):
                         execution_result["order_id"] = extracted_order_id
                     if execution_result.get("success"):
@@ -2435,28 +2778,42 @@ class TradingLoopAgent:
                         decision["execution_result"] = execution_result
                         decision["control_outcome"] = build_control_outcome(
                             action=decision.get("action"),
-                            structural_action_validity=decision.get("structural_action_validity"),
-                            invalid_action_reason_text=decision.get("invalid_action_reason"),
+                            structural_action_validity=decision.get(
+                                "structural_action_validity"
+                            ),
+                            invalid_action_reason_text=decision.get(
+                                "invalid_action_reason"
+                            ),
                             risk_vetoed=bool(decision.get("risk_vetoed", False)),
                             risk_veto_reason=decision.get("risk_veto_reason"),
                             execution_status=decision.get("execution_status"),
                             execution_result=decision.get("execution_result"),
                         )
                         if isinstance(decision.get("policy_package"), dict):
-                            decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
-                        if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
-                            decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
-                        
+                            decision["policy_package"]["control_outcome"] = decision[
+                                "control_outcome"
+                            ].copy()
+                        if isinstance(
+                            decision.get("policy_trace"), dict
+                        ) and isinstance(
+                            decision["policy_trace"].get("policy_package"), dict
+                        ):
+                            decision["policy_trace"]["policy_package"][
+                                "control_outcome"
+                            ] = decision["control_outcome"].copy()
+
                         # Update Stage 62 execution confirmation contract
                         self._update_execution_confirmation_contract(decision)
-                        
+
                         logger.info(
                             "Trade execution succeeded for %s %s. Associating decision with monitor.",
                             action,
                             asset_pair,
                         )
 
-                        if self._counts_toward_daily_trade_limit(decision, execution_result):
+                        if self._counts_toward_daily_trade_limit(
+                            decision, execution_result
+                        ):
                             self.daily_trade_count += 1
                             logger.info(
                                 "Daily trade count incremented to %d for %s",
@@ -2474,14 +2831,21 @@ class TradingLoopAgent:
                             decision_id, asset_pair
                         )
 
-                        order_status_worker = getattr(self.engine, "order_status_worker", None)
-                        if order_status_worker and extracted_order_id and normalized_action:
+                        order_status_worker = getattr(
+                            self.engine, "order_status_worker", None
+                        )
+                        if (
+                            order_status_worker
+                            and extracted_order_id
+                            and normalized_action
+                        ):
                             try:
                                 order_status_worker.add_pending_order(
                                     order_id=extracted_order_id,
                                     decision_id=decision_id,
                                     asset_pair=asset_pair,
-                                    platform=execution_result.get("platform") or "unknown",
+                                    platform=execution_result.get("platform")
+                                    or "unknown",
                                     action=normalized_action,
                                     size=float(
                                         decision.get("recommended_position_size")
@@ -2517,29 +2881,45 @@ class TradingLoopAgent:
                                 execution_succeeded=True,
                             )
                         except Exception as e:
-                            logger.warning(f"Failed to finalize reservation for {decision_id}: {e}")
+                            logger.warning(
+                                f"Failed to finalize reservation for {decision_id}: {e}"
+                            )
                     else:
                         decision["execution_status"] = "execution_failed"
                         decision["executed"] = False
                         decision["execution_result"] = execution_result
                         decision["control_outcome"] = build_control_outcome(
                             action=decision.get("action"),
-                            structural_action_validity=decision.get("structural_action_validity"),
-                            invalid_action_reason_text=decision.get("invalid_action_reason"),
+                            structural_action_validity=decision.get(
+                                "structural_action_validity"
+                            ),
+                            invalid_action_reason_text=decision.get(
+                                "invalid_action_reason"
+                            ),
                             risk_vetoed=bool(decision.get("risk_vetoed", False)),
                             risk_veto_reason=decision.get("risk_veto_reason"),
                             execution_status=decision.get("execution_status"),
                             execution_result=decision.get("execution_result"),
                         )
                         if isinstance(decision.get("policy_package"), dict):
-                            decision["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
-                        if isinstance(decision.get("policy_trace"), dict) and isinstance(decision["policy_trace"].get("policy_package"), dict):
-                            decision["policy_trace"]["policy_package"]["control_outcome"] = decision["control_outcome"].copy()
-                        
+                            decision["policy_package"]["control_outcome"] = decision[
+                                "control_outcome"
+                            ].copy()
+                        if isinstance(
+                            decision.get("policy_trace"), dict
+                        ) and isinstance(
+                            decision["policy_trace"].get("policy_package"), dict
+                        ):
+                            decision["policy_trace"]["policy_package"][
+                                "control_outcome"
+                            ] = decision["control_outcome"].copy()
+
                         # Update Stage 62 execution confirmation contract
                         self._update_execution_confirmation_contract(decision)
-                        
-                        error_msg = execution_result.get('message') or execution_result.get('error', 'Unknown error')
+
+                        error_msg = execution_result.get(
+                            "message"
+                        ) or execution_result.get("error", "Unknown error")
                         logger.error(
                             f"Trade execution failed for {asset_pair}: {error_msg}. Full result: {execution_result}"
                         )
@@ -2552,7 +2932,9 @@ class TradingLoopAgent:
                                 execution_succeeded=False,
                             )
                         except Exception as e:
-                            logger.warning(f"Failed to finalize reservation for {decision_id}: {e}")
+                            logger.warning(
+                                f"Failed to finalize reservation for {decision_id}: {e}"
+                            )
                 except asyncio.CancelledError:
                     logger.warning(
                         f"Trade execution cancelled for decision {decision_id} (agent shutdown?)"
@@ -2573,7 +2955,7 @@ class TradingLoopAgent:
                         "Exception during trade execution for decision %s: %s",
                         decision_id,
                         e,
-                        exc_info=True
+                        exc_info=True,
                     )
                     # THR-134: Rollback reservation on exception
                     try:
@@ -2781,7 +3163,9 @@ class TradingLoopAgent:
             )
             logger.warning(f"Failed signals: {'; '.join(failure_reasons)}")
 
-    def _recover_decision_lineage_for_closed_outcome(self, outcome: Dict[str, Any]) -> tuple[Optional[str], str, list[str]]:
+    def _recover_decision_lineage_for_closed_outcome(
+        self, outcome: Dict[str, Any]
+    ) -> tuple[Optional[str], str, list[str]]:
         """Best-effort recovery of decision lineage for recorder close events."""
         product = outcome.get("product")
         side = outcome.get("side")
@@ -2824,7 +3208,11 @@ class TradingLoopAgent:
                         association = expected.get(candidate_asset_pair)
                         decision_id = normalize_scalar_id(association)
                         if decision_id:
-                            return decision_id, "trade_monitor.expected_trades", attempted_sources
+                            return (
+                                decision_id,
+                                "trade_monitor.expected_trades",
+                                attempted_sources,
+                            )
 
                 active_trackers = getattr(trade_monitor, "active_trackers", None)
                 attempted_sources.append("trade_monitor.active_trackers")
@@ -2834,10 +3222,19 @@ class TradingLoopAgent:
                         if not raw_product:
                             continue
                         tracker_candidates = asset_key_candidates(raw_product)
-                        if any(candidate in tracker_candidates for candidate in candidate_asset_pairs):
-                            decision_id = normalize_scalar_id(getattr(tracker, "decision_id", None))
+                        if any(
+                            candidate in tracker_candidates
+                            for candidate in candidate_asset_pairs
+                        ):
+                            decision_id = normalize_scalar_id(
+                                getattr(tracker, "decision_id", None)
+                            )
                             if decision_id:
-                                return decision_id, "trade_monitor.active_trackers", attempted_sources
+                                return (
+                                    decision_id,
+                                    "trade_monitor.active_trackers",
+                                    attempted_sources,
+                                )
 
                 getter = getattr(trade_monitor, "get_decision_id_by_asset", None)
                 attempted_sources.append("trade_monitor.get_decision_id_by_asset")
@@ -2845,25 +3242,37 @@ class TradingLoopAgent:
                     for candidate_asset_pair in candidate_asset_pairs:
                         decision_id = normalize_scalar_id(getter(candidate_asset_pair))
                         if decision_id:
-                            return decision_id, "trade_monitor.get_decision_id_by_asset", attempted_sources
+                            return (
+                                decision_id,
+                                "trade_monitor.get_decision_id_by_asset",
+                                attempted_sources,
+                            )
 
                 attempted_sources.append("trade_monitor.closed_trades_queue")
                 closed_queue = getattr(trade_monitor, "closed_trades_queue", None)
                 if closed_queue is not None:
                     queue_items = list(getattr(closed_queue, "queue", []))
                     for closed_trade in reversed(queue_items):
-                        closed_product = closed_trade.get("product_id") or closed_trade.get("product")
+                        closed_product = closed_trade.get(
+                            "product_id"
+                        ) or closed_trade.get("product")
                         closed_side = closed_trade.get("side")
                         closed_decision_id = closed_trade.get("decision_id")
                         if not closed_product or not closed_decision_id:
                             continue
-                        if closed_side and side and str(closed_side).upper() != str(side).upper():
+                        if (
+                            closed_side
+                            and side
+                            and str(closed_side).upper() != str(side).upper()
+                        ):
                             continue
                         try:
                             closed_asset_pair = standardize_asset_pair(closed_product)
                         except Exception:
                             closed_asset_pair = None
-                        closed_candidates = [closed_asset_pair] if closed_asset_pair else []
+                        closed_candidates = (
+                            [closed_asset_pair] if closed_asset_pair else []
+                        )
                         closed_raw_upper = str(closed_product or "").upper()
                         if closed_raw_upper.startswith(("ETP", "ET", "ETH")):
                             closed_candidates.append("ETHUSD")
@@ -2871,8 +3280,15 @@ class TradingLoopAgent:
                             closed_candidates.append("BTCUSD")
                         if closed_raw_upper.startswith(("SLP", "SOL")):
                             closed_candidates.append("SOLUSD")
-                        if any(candidate in closed_candidates for candidate in candidate_asset_pairs):
-                            return closed_decision_id, "trade_monitor.closed_trades_queue", attempted_sources
+                        if any(
+                            candidate in closed_candidates
+                            for candidate in candidate_asset_pairs
+                        ):
+                            return (
+                                closed_decision_id,
+                                "trade_monitor.closed_trades_queue",
+                                attempted_sources,
+                            )
             except Exception:
                 logger.debug(
                     "Failed trade-monitor decision recovery for closed outcome %s",
@@ -2901,9 +3317,17 @@ class TradingLoopAgent:
                         continue
                     if str(recovery_product).upper() != str(product).upper():
                         continue
-                    if expected_action and decision_action and decision_action != expected_action:
+                    if (
+                        expected_action
+                        and decision_action
+                        and decision_action != expected_action
+                    ):
                         continue
-                    return decision_id, "decision_store.recovery_metadata_product", attempted_sources
+                    return (
+                        decision_id,
+                        "decision_store.recovery_metadata_product",
+                        attempted_sources,
+                    )
             except Exception:
                 logger.debug(
                     "Failed decision-store recovery by product metadata for closed outcome %s",
@@ -2913,11 +3337,17 @@ class TradingLoopAgent:
 
         return None, "no-hit", attempted_sources
 
-    def _recover_decision_id_for_closed_outcome(self, outcome: Dict[str, Any]) -> Optional[str]:
-        decision_id, _lineage_source, _attempted_sources = self._recover_decision_lineage_for_closed_outcome(outcome)
+    def _recover_decision_id_for_closed_outcome(
+        self, outcome: Dict[str, Any]
+    ) -> Optional[str]:
+        decision_id, _lineage_source, _attempted_sources = (
+            self._recover_decision_lineage_for_closed_outcome(outcome)
+        )
         return decision_id
 
-    def _annotate_positions_with_decision_ids(self, current_positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _annotate_positions_with_decision_ids(
+        self, current_positions: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Best-effort enrichment so recorder state preserves decision lineage while positions remain open."""
         if not current_positions:
             return []
@@ -2941,13 +3371,19 @@ class TradingLoopAgent:
 
         for raw_position in current_positions:
             position = dict(raw_position)
-            existing_decision_id = _normalize_lineage_candidate(position.get("decision_id"))
+            existing_decision_id = _normalize_lineage_candidate(
+                position.get("decision_id")
+            )
             if existing_decision_id:
                 position["decision_id"] = existing_decision_id
                 enriched_positions.append(position)
                 continue
 
-            product_id = position.get("product_id") or position.get("product") or position.get("instrument")
+            product_id = (
+                position.get("product_id")
+                or position.get("product")
+                or position.get("instrument")
+            )
             side = position.get("side")
             decision_id = None
 
@@ -2957,7 +3393,9 @@ class TradingLoopAgent:
                     open_positions = getattr(recorder, "open_positions", None)
                     if isinstance(open_positions, dict):
                         existing = open_positions.get(pos_key) or {}
-                        decision_id = _normalize_lineage_candidate(existing.get("decision_id"))
+                        decision_id = _normalize_lineage_candidate(
+                            existing.get("decision_id")
+                        )
                 except Exception:
                     logger.debug(
                         "Failed recorder-state lookup while annotating active position %s",
@@ -2984,13 +3422,17 @@ class TradingLoopAgent:
 
         return enriched_positions
 
-    def _sync_trade_outcome_recorder(self, current_positions: list[dict[str, Any]]) -> None:
+    def _sync_trade_outcome_recorder(
+        self, current_positions: list[dict[str, Any]]
+    ) -> None:
         """Sync the outcome recorder with live positions and forward closes into learning."""
         recorder = getattr(self.engine, "trade_outcome_recorder", None)
         if recorder is None:
             return
 
-        current_positions = self._annotate_positions_with_decision_ids(current_positions or [])
+        current_positions = self._annotate_positions_with_decision_ids(
+            current_positions or []
+        )
 
         try:
             outcomes = recorder.update_positions(current_positions or [])
@@ -3013,7 +3455,9 @@ class TradingLoopAgent:
             lineage_source = "outcome"
             attempted_sources: list[str] = []
             if not decision_id:
-                decision_id, lineage_source, attempted_sources = self._recover_decision_lineage_for_closed_outcome(outcome)
+                decision_id, lineage_source, attempted_sources = (
+                    self._recover_decision_lineage_for_closed_outcome(outcome)
+                )
                 if decision_id:
                     outcome["decision_id"] = decision_id
                     logger.info(
@@ -3108,16 +3552,29 @@ class TradingLoopAgent:
             logger.info(f"Processing {len(closed_trades)} closed trades...")
             for trade_outcome in closed_trades:
                 if "product" not in trade_outcome and "product_id" in trade_outcome:
-                    trade_outcome = {**trade_outcome, "product": trade_outcome["product_id"]}
+                    trade_outcome = {
+                        **trade_outcome,
+                        "product": trade_outcome["product_id"],
+                    }
 
                 decision_id = trade_outcome.get("decision_id")
-                product = trade_outcome.get("product") or trade_outcome.get("product_id") or "UNKNOWN"
-                trade_id = trade_outcome.get("trade_id") or trade_outcome.get("id") or "UNKNOWN"
+                product = (
+                    trade_outcome.get("product")
+                    or trade_outcome.get("product_id")
+                    or "UNKNOWN"
+                )
+                trade_id = (
+                    trade_outcome.get("trade_id")
+                    or trade_outcome.get("id")
+                    or "UNKNOWN"
+                )
                 lineage_source = "outcome"
                 attempted_sources: list[str] = []
 
                 if not decision_id:
-                    decision_id, lineage_source, attempted_sources = self._recover_decision_lineage_for_closed_outcome(trade_outcome)
+                    decision_id, lineage_source, attempted_sources = (
+                        self._recover_decision_lineage_for_closed_outcome(trade_outcome)
+                    )
                     if decision_id:
                         trade_outcome = {**trade_outcome, "decision_id": decision_id}
                         logger.info(
@@ -3405,7 +3862,12 @@ class TradingLoopAgent:
             bool: True if delivered successfully
         """
         import httpx
-        from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+        from tenacity import (
+            retry,
+            retry_if_exception,
+            stop_after_attempt,
+            wait_exponential,
+        )
 
         def is_retryable_error(exception):
             """
@@ -3489,9 +3951,17 @@ class TradingLoopAgent:
         success_response = response.get("success_response") or {}
         candidates = [
             execution_result.get("order_id"),
-            top_level_success_response.get("order_id") if isinstance(top_level_success_response, dict) else None,
+            (
+                top_level_success_response.get("order_id")
+                if isinstance(top_level_success_response, dict)
+                else None
+            ),
             response.get("order_id") if isinstance(response, dict) else None,
-            success_response.get("order_id") if isinstance(success_response, dict) else None,
+            (
+                success_response.get("order_id")
+                if isinstance(success_response, dict)
+                else None
+            ),
         ]
         for candidate in candidates:
             if candidate:
@@ -3540,9 +4010,7 @@ class TradingLoopAgent:
             return False
 
         order_status = str(
-            execution_result.get("order_status")
-            or response.get("status")
-            or ""
+            execution_result.get("order_status") or response.get("status") or ""
         ).upper()
         non_count_statuses = {
             "FAILED",
@@ -3593,11 +4061,14 @@ class TradingLoopAgent:
         if not decision.get("id"):
             decision["id"] = str(uuid.uuid4())
         if not decision.get("timestamp"):
-            decision["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            decision["timestamp"] = datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat()
         return decision
 
-
-    def _attach_decision_artifact(self, decision: Dict[str, Any], *, execution_attempted: bool) -> Dict[str, Any]:
+    def _attach_decision_artifact(
+        self, decision: Dict[str, Any], *, execution_attempted: bool
+    ) -> Dict[str, Any]:
         """Attach a compact per-decision artifact for later sweep/debug inspection."""
         self._ensure_decision_identity(decision)
         decision["decision_artifact"] = {
@@ -3612,7 +4083,9 @@ class TradingLoopAgent:
             "hold_origin": decision.get("hold_origin"),
             "hold_is_genuine": decision.get("hold_is_genuine"),
             "execution_attempted": execution_attempted,
-            "provider_decisions": ((decision.get("ensemble_metadata") or {}).get("provider_decisions")),
+            "provider_decisions": (
+                (decision.get("ensemble_metadata") or {}).get("provider_decisions")
+            ),
         }
         return decision
 
@@ -3636,8 +4109,12 @@ class TradingLoopAgent:
             unrealized_pnl = 0.0
 
             if "platform_breakdowns" in portfolio_snapshot:
-                for platform_name, platform_data in (portfolio_snapshot.get("platform_breakdowns") or {}).items():
-                    candidate_positions.extend((platform_data.get("futures_positions") or []))
+                for platform_name, platform_data in (
+                    portfolio_snapshot.get("platform_breakdowns") or {}
+                ).items():
+                    candidate_positions.extend(
+                        (platform_data.get("futures_positions") or [])
+                    )
                     candidate_positions.extend((platform_data.get("positions") or []))
                     if str(platform_name).lower() == "coinbase":
                         futures_summary = platform_data.get("futures_summary") or {}
@@ -3647,22 +4124,49 @@ class TradingLoopAgent:
                             or total_balance
                             or 0.0
                         )
-                        buying_power = float(futures_summary.get("buying_power", 0.0) or buying_power or 0.0)
-                        initial_margin = float(futures_summary.get("initial_margin", 0.0) or initial_margin or 0.0)
-                        unrealized_pnl = float(futures_summary.get("unrealized_pnl", 0.0) or unrealized_pnl or 0.0)
+                        buying_power = float(
+                            futures_summary.get("buying_power", 0.0)
+                            or buying_power
+                            or 0.0
+                        )
+                        initial_margin = float(
+                            futures_summary.get("initial_margin", 0.0)
+                            or initial_margin
+                            or 0.0
+                        )
+                        unrealized_pnl = float(
+                            futures_summary.get("unrealized_pnl", 0.0)
+                            or unrealized_pnl
+                            or 0.0
+                        )
             else:
-                candidate_positions.extend((portfolio_snapshot.get("futures_positions") or []))
+                candidate_positions.extend(
+                    (portfolio_snapshot.get("futures_positions") or [])
+                )
                 candidate_positions.extend((portfolio_snapshot.get("positions") or []))
-                total_balance = float(portfolio_snapshot.get("total_value_usd", 0.0) or 0.0)
+                total_balance = float(
+                    portfolio_snapshot.get("total_value_usd", 0.0) or 0.0
+                )
                 buying_power = float(portfolio_snapshot.get("buying_power", 0.0) or 0.0)
-                initial_margin = float(portfolio_snapshot.get("initial_margin", 0.0) or 0.0)
-                unrealized_pnl = float(portfolio_snapshot.get("unrealized_pnl", 0.0) or 0.0)
+                initial_margin = float(
+                    portfolio_snapshot.get("initial_margin", 0.0) or 0.0
+                )
+                unrealized_pnl = float(
+                    portfolio_snapshot.get("unrealized_pnl", 0.0) or 0.0
+                )
 
             raw_products = []
             derived_assets = set(open_asset_pairs or [])
             side_summary = dict(open_position_side or {})
 
-            cfm_base_map = {"BIP": "BTC", "BIT": "BTC", "ETP": "ETH", "ET": "ETH", "SOL": "SOL", "SLP": "SOL"}
+            cfm_base_map = {
+                "BIP": "BTC",
+                "BIT": "BTC",
+                "ETP": "ETH",
+                "ET": "ETH",
+                "SOL": "SOL",
+                "SLP": "SOL",
+            }
             for pos in candidate_positions:
                 raw_pair = pos.get("product_id") or pos.get("instrument")
                 if raw_pair:
@@ -3675,17 +4179,25 @@ class TradingLoopAgent:
                     canonical = f"{mapped_base}USD"
                 else:
                     try:
-                        canonical = standardize_asset_pair(raw_pair) if raw_pair else None
+                        canonical = (
+                            standardize_asset_pair(raw_pair) if raw_pair else None
+                        )
                     except Exception:
                         canonical = None
                 if canonical:
                     derived_assets.add(canonical)
                     if canonical not in side_summary:
-                        side_summary[canonical] = str(pos.get("side") or "UNKNOWN").upper()
+                        side_summary[canonical] = str(
+                            pos.get("side") or "UNKNOWN"
+                        ).upper()
 
             positions_count = len(candidate_positions)
             margin_usage_effective = margin_usage_pct
-            if margin_usage_effective is None and total_balance > 0 and initial_margin > 0:
+            if (
+                margin_usage_effective is None
+                and total_balance > 0
+                and initial_margin > 0
+            ):
                 margin_usage_effective = initial_margin / total_balance
 
             logger.info(
@@ -3698,14 +4210,20 @@ class TradingLoopAgent:
                 buying_power,
                 unrealized_pnl,
                 initial_margin,
-                f"{margin_usage_effective * 100:.2f}%" if margin_usage_effective is not None else "n/a",
+                (
+                    f"{margin_usage_effective * 100:.2f}%"
+                    if margin_usage_effective is not None
+                    else "n/a"
+                ),
                 sorted(managed_asset_pairs) if managed_asset_pairs else [],
                 sorted(raw_products),
             )
         except Exception:
             logger.debug("Failed to log portfolio risk snapshot", exc_info=True)
 
-    def _log_council_summary(self, decision: Dict[str, Any], asset_pair: Optional[str] = None) -> None:
+    def _log_council_summary(
+        self, decision: Dict[str, Any], asset_pair: Optional[str] = None
+    ) -> None:
         """Log concise bull/bear/judge council summaries with canonical policy-action labels."""
         try:
             ensemble_metadata = decision.get("ensemble_metadata") or {}
@@ -3718,26 +4236,42 @@ class TradingLoopAgent:
                 role_decision = role_decisions.get(role) or {}
                 if not role_decision:
                     continue
-                provider = role_decision.get("provider") or (ensemble_metadata.get("debate_seats") or {}).get(role) or "unknown"
-                raw_action = role_decision.get("policy_action") or role_decision.get("action") or "UNKNOWN"
+                provider = (
+                    role_decision.get("provider")
+                    or (ensemble_metadata.get("debate_seats") or {}).get(role)
+                    or "unknown"
+                )
+                raw_action = (
+                    role_decision.get("policy_action")
+                    or role_decision.get("action")
+                    or "UNKNOWN"
+                )
                 try:
-                    action = normalize_policy_action(raw_action).value if is_policy_action(raw_action) else str(raw_action).upper()
+                    action = (
+                        normalize_policy_action(raw_action).value
+                        if is_policy_action(raw_action)
+                        else str(raw_action).upper()
+                    )
                 except Exception:
                     action = str(raw_action)
                 confidence = role_decision.get("confidence")
                 confidence_text = str(confidence) if confidence is not None else "?"
                 reasoning = str(role_decision.get("reasoning") or "")
-                reasoning_snippet = reasoning[:80] + ("..." if len(reasoning) > 80 else "")
+                reasoning_snippet = reasoning[:80] + (
+                    "..." if len(reasoning) > 80 else ""
+                )
                 if reasoning_snippet:
-                    parts.append(f"{role}={provider}:{action}/{confidence_text} ({reasoning_snippet})")
+                    parts.append(
+                        f"{role}={provider}:{action}/{confidence_text} ({reasoning_snippet})"
+                    )
                 else:
                     parts.append(f"{role}={provider}:{action}/{confidence_text}")
             if parts:
-                logger.info("Council summary for %s | %s", asset_label, " | ".join(parts))
+                logger.info(
+                    "Council summary for %s | %s", asset_label, " | ".join(parts)
+                )
         except Exception:
             logger.debug("Failed to log council summary", exc_info=True)
-
-
 
     def _update_execution_confirmation_contract(self, decision: Dict[str, Any]) -> None:
         """Update execution confirmation contract after trade execution."""
@@ -3745,33 +4279,42 @@ class TradingLoopAgent:
             policy_trace = decision.get("policy_trace")
             if not isinstance(policy_trace, dict):
                 return
-            
+
             chain = policy_trace.get("stage_49_62_contract_chain", {})
             orch = chain.get("orchestration_summary", {})
             exec_ex = orch.get("exchange_execution", {})
-            
+
             if "execution_confirmation_contract" not in exec_ex:
                 return
-            
+
             exec_result = decision.get("execution_result", {})
             exec_conf = exec_ex["execution_confirmation_contract"]
-            
+
             # Map execution result to contract
             exec_conf["execution_status"] = decision.get("execution_status", "unknown")
             exec_conf["execution_success"] = exec_result.get("success", False)
-            exec_conf["execution_timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            
+            exec_conf["execution_timestamp"] = datetime.datetime.now(
+                datetime.timezone.utc
+            ).isoformat()
+
             if exec_result.get("order_id"):
                 exec_conf["order_id"] = exec_result["order_id"]
             if exec_result.get("platform"):
                 exec_conf["platform"] = exec_result["platform"]
             if exec_result.get("message"):
                 exec_conf["execution_message"] = exec_result["message"]
-                
+
         except Exception as e:
             logger.warning(f"Failed to update execution confirmation contract: {e}")
 
-    def _persist_no_action_decision(self, decision: Dict[str, Any], *, asset_pair: str, reason_code: str, reason: str) -> None:
+    def _persist_no_action_decision(
+        self,
+        decision: Dict[str, Any],
+        *,
+        asset_pair: str,
+        reason_code: str,
+        reason: str,
+    ) -> None:
         """Persist explicit no-action artifacts when analysis returns no materialized decision payload."""
         try:
             normalized = dict(decision or {})
@@ -3792,9 +4335,13 @@ class TradingLoopAgent:
             if getattr(self.engine, "decision_store", None):
                 self.engine.decision_store.save_decision(normalized)
         except Exception as e:
-            logger.warning("Failed to persist no-action decision for %s: %s", asset_pair, e)
+            logger.warning(
+                "Failed to persist no-action decision for %s: %s", asset_pair, e
+            )
 
-    def _mark_decision_not_executed(self, decision: Dict[str, Any], reason_code: str, reason: str) -> None:
+    def _mark_decision_not_executed(
+        self, decision: Dict[str, Any], reason_code: str, reason: str
+    ) -> None:
         """Persist explicit non-execution reason on a decision for observability."""
         try:
             had_id = bool(decision.get("id"))
@@ -3826,17 +4373,24 @@ class TradingLoopAgent:
             if isinstance(policy_trace, dict):
                 trace_package = policy_trace.get("policy_package")
                 if isinstance(trace_package, dict):
-                    trace_package["control_outcome"] = decision["control_outcome"].copy()
+                    trace_package["control_outcome"] = decision[
+                        "control_outcome"
+                    ].copy()
             if getattr(self.engine, "decision_store", None):
                 if had_id:
                     self.engine.decision_store.update_decision(decision)
                 else:
                     self.engine.decision_store.save_decision(decision)
         except Exception as e:
-            logger.warning("Failed to persist non-execution reason for %s: %s", decision.get("id"), e)
+            logger.warning(
+                "Failed to persist non-execution reason for %s: %s",
+                decision.get("id"),
+                e,
+            )
 
-
-    def _classify_action_execution_outcome(self, decision: Dict[str, Any], risk_reason: str | None = None) -> tuple[bool, str | None, str | None, str | None]:
+    def _classify_action_execution_outcome(
+        self, decision: Dict[str, Any], risk_reason: str | None = None
+    ) -> tuple[bool, str | None, str | None, str | None]:
         """Classify whether a policy-aware decision is executable vs invalid/vetoed/rejected."""
         structural_validity = decision.get("structural_action_validity")
         invalid_reason = decision.get("invalid_action_reason")
@@ -3844,10 +4398,20 @@ class TradingLoopAgent:
         risk_veto_reason = decision.get("risk_veto_reason")
 
         if structural_validity == "invalid":
-            return False, "invalid", "INVALID_POLICY_ACTION", invalid_reason or f"Invalid policy action: {action}"
+            return (
+                False,
+                "invalid",
+                "INVALID_POLICY_ACTION",
+                invalid_reason or f"Invalid policy action: {action}",
+            )
 
         if risk_vetoed:
-            return False, "vetoed", "RISK_VETO", risk_veto_reason or risk_reason or f"Risk vetoed action: {action}"
+            return (
+                False,
+                "vetoed",
+                "RISK_VETO",
+                risk_veto_reason or risk_reason or f"Risk vetoed action: {action}",
+            )
 
         if risk_reason:
             return False, "rejected", "RISK_REJECTED", risk_reason
@@ -3859,21 +4423,27 @@ class TradingLoopAgent:
         confidence = decision.get("confidence", 0)
         confidence_normalized = confidence / 100.0
         if confidence_normalized < self.config.min_confidence_threshold:
-            msg = (
-                f"Low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
-            )
+            msg = f"Low confidence ({confidence}% < {self.config.min_confidence_threshold*100:.0f}%)"
             logger.info("Skipping trade due to %s", msg)
             return False, "LOW_CONFIDENCE", msg
 
         controls = ExecutionQualityControls(
             enabled=bool(getattr(self.config, "quality_gate_enabled", True)),
-            min_risk_reward_ratio=float(getattr(self.config, "min_risk_reward_ratio", 1.25)),
-            high_volatility_threshold=float(getattr(self.config, "high_volatility_threshold", 0.04)),
+            min_risk_reward_ratio=float(
+                getattr(self.config, "min_risk_reward_ratio", 1.25)
+            ),
+            high_volatility_threshold=float(
+                getattr(self.config, "high_volatility_threshold", 0.04)
+            ),
             high_volatility_min_confidence=float(
                 getattr(self.config, "high_volatility_min_confidence", 80.0)
             ),
-            full_size_confidence=float(getattr(self.config, "position_size_full_confidence", 90.0)),
-            min_size_multiplier=float(getattr(self.config, "position_size_min_multiplier", 0.50)),
+            full_size_confidence=float(
+                getattr(self.config, "position_size_full_confidence", 90.0)
+            ),
+            min_size_multiplier=float(
+                getattr(self.config, "position_size_min_multiplier", 0.50)
+            ),
             high_volatility_size_scale=float(
                 getattr(self.config, "position_size_high_volatility_scale", 0.75)
             ),
@@ -3906,7 +4476,9 @@ class TradingLoopAgent:
             )
             return False, "QUALITY_GATE_BLOCK", msg
 
-        normalized_action = str(decision.get("policy_action") or decision.get("action") or "").upper()
+        normalized_action = str(
+            decision.get("policy_action") or decision.get("action") or ""
+        ).upper()
         is_derisking_action = normalized_action.startswith(("CLOSE_", "REDUCE_"))
 
         if (
@@ -3922,9 +4494,7 @@ class TradingLoopAgent:
                     self.config.max_daily_trades,
                 )
                 return True, "OK", "De-risking action bypassed daily trade limit"
-            msg = (
-                f"Max daily trade limit reached ({self.daily_trade_count}/{self.config.max_daily_trades})"
-            )
+            msg = f"Max daily trade limit reached ({self.daily_trade_count}/{self.config.max_daily_trades})"
             logger.warning("%s. Skipping %s", msg, decision.get("asset_pair"))
             return False, "DAILY_TRADE_LIMIT", msg
 
@@ -3944,7 +4514,9 @@ class TradingLoopAgent:
         telegram_enabled = telegram_config.get("enabled", False)
 
         if telegram_enabled:
-            logger.info("Decision will be sent to Telegram for approval (signal-only mode)")
+            logger.info(
+                "Decision will be sent to Telegram for approval (signal-only mode)"
+            )
             return True, "OK", "Signal mode with Telegram enabled"
 
         if self.config.approval_policy == "never":
@@ -4038,16 +4610,16 @@ class TradingLoopAgent:
                                 exc_info=True,
                             )
                             if dump_path:
-                                logger.error(
-                                    "Crash dump captured at %s", dump_path
-                                )
+                                logger.error("Crash dump captured at %s", dump_path)
                             self._reset_cycle_budget()
                             return False
                         finally:
                             if phase_name in cycle_phase_durations:
                                 phase_duration = time.perf_counter() - phase_start
                                 cycle_phase_durations[phase_name] += phase_duration
-                                self._loop_metrics.record_phase(phase_name, phase_duration)
+                                self._loop_metrics.record_phase(
+                                    phase_name, phase_duration
+                                )
 
                         cycle_span.add_event(
                             "state_handler_end", {"state": self.state.name}
