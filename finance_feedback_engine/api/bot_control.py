@@ -36,18 +36,25 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ..agent.config import TradingAgentConfig
 from ..agent.trading_loop_agent import TradingLoopAgent
 from ..core import FinanceFeedbackEngine
-from ..decision_engine.policy_actions import get_legacy_action_compatibility, is_policy_action
+from ..decision_engine.policy_actions import (
+    get_legacy_action_compatibility,
+    is_policy_action,
+)
 from ..memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from ..monitoring.trade_monitor import TradeMonitor
-from .unified_status import UnifiedAgentStatus, AgentStateMapper
 from .dependencies import get_auth_manager, get_engine, verify_api_key_or_dev
+from .unified_status import AgentStateMapper, UnifiedAgentStatus
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_legacy_action(action: str) -> str:
     normalized = str(action or "").upper()
-    return "BUY" if normalized == "LONG" else "SELL" if normalized == "SHORT" else normalized
+    return (
+        "BUY"
+        if normalized == "LONG"
+        else "SELL" if normalized == "SHORT" else normalized
+    )
 
 
 def _policy_metadata_from_action(action: str) -> Dict[str, Optional[str]]:
@@ -85,6 +92,7 @@ def _trade_metadata_for_position_side(side: str) -> Dict[str, str]:
         "policy_action": close_meta["close_policy_action"],
         "legacy_action_compatibility": close_meta["close_legacy_action_compatibility"],
     }
+
 
 # ===== Model Definitions (must be defined before use in type hints) =====
 class BotState(str, Enum):
@@ -145,16 +153,13 @@ class AgentStatusResponse(BaseModel):
     state: BotState
     agent_ooda_state: Optional[str] = None
     unified_status: UnifiedAgentStatus = Field(
-        ...,
-        description="Clear, unified agent status for clients"
+        ..., description="Clear, unified agent status for clients"
     )
     status_description: str = Field(
-        ...,
-        description="Human-readable description of the current status"
+        ..., description="Human-readable description of the current status"
     )
     is_operational: bool = Field(
-        ...,
-        description="True if agent is ready or actively trading"
+        ..., description="True if agent is ready or actively trading"
     )
     uptime_seconds: Optional[float] = None
     total_trades: int = 0
@@ -181,7 +186,8 @@ class ManualTradeRequest(BaseModel):
         None, description="Canonical policy action when provided or derivable"
     )
     legacy_action_compatibility: Optional[str] = Field(
-        None, description="Legacy directional compatibility value for adapter-facing execution"
+        None,
+        description="Legacy directional compatibility value for adapter-facing execution",
     )
     size: Optional[float] = Field(
         None, description="Position size (uses default if not specified)"
@@ -196,7 +202,9 @@ class ManualTradeRequest(BaseModel):
     @classmethod
     def validate_action(cls, v: str) -> str:
         normalized = v.upper()
-        if normalized in ["BUY", "SELL", "LONG", "SHORT"] or is_policy_action(normalized):
+        if normalized in ["BUY", "SELL", "LONG", "SHORT"] or is_policy_action(
+            normalized
+        ):
             return normalized
         raise ValueError(
             "Action must be BUY, SELL, LONG, SHORT, or a supported policy action"
@@ -340,7 +348,11 @@ async def _start_agent_from_request(
 
     logger.info("✅ Trading agent started successfully")
 
-    agent_state = _agent_instance.state if _agent_instance and hasattr(_agent_instance, "state") else None
+    agent_state = (
+        _agent_instance.state
+        if _agent_instance and hasattr(_agent_instance, "state")
+        else None
+    )
     unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, agent_state)
     status_description = AgentStateMapper.get_status_description(unified_status)
     is_operational = AgentStateMapper.is_operational(unified_status)
@@ -375,7 +387,9 @@ async def _enqueue_or_start_agent(
         return response, False
 
 
-def _extract_bearer_from_websocket(websocket: WebSocket) -> tuple[Optional[str], Optional[str]]:
+def _extract_bearer_from_websocket(
+    websocket: WebSocket,
+) -> tuple[Optional[str], Optional[str]]:
     """Extract bearer token and selected subprotocol from WebSocket handshake headers or query params."""
 
     # Try Authorization header first
@@ -424,7 +438,9 @@ async def start_agent(
         response, queued = await _enqueue_or_start_agent(request, engine)
         if queued:
             assert response is None  # When queued, response is None
-            unified_status = AgentStateMapper.get_unified_status(BotState.STARTING, None)
+            unified_status = AgentStateMapper.get_unified_status(
+                BotState.STARTING, None
+            )
             status_description = AgentStateMapper.get_status_description(unified_status)
             is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
@@ -604,7 +620,7 @@ async def pause_agent(
             if _agent_instance is None or _agent_task is None or _agent_task.done():
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Agent is not running - cannot pause an agent that isn't started"
+                    detail="Agent is not running - cannot pause an agent that isn't started",
                 )
 
             # Set flag to pause (stop accepting new decisions)
@@ -625,7 +641,9 @@ async def pause_agent(
                     datetime.now(UTC) - _agent_instance.start_time
                 ).total_seconds()
 
-            unified_status = AgentStateMapper.get_unified_status(BotState.STOPPED, _agent_instance.state if _agent_instance else None)
+            unified_status = AgentStateMapper.get_unified_status(
+                BotState.STOPPED, _agent_instance.state if _agent_instance else None
+            )
             status_description = AgentStateMapper.get_status_description(unified_status)
             is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
@@ -697,7 +715,9 @@ async def resume_agent(
                     datetime.now(UTC) - _agent_instance.start_time
                 ).total_seconds()
 
-            unified_status = AgentStateMapper.get_unified_status(BotState.RUNNING, _agent_instance.state if _agent_instance else None)
+            unified_status = AgentStateMapper.get_unified_status(
+                BotState.RUNNING, _agent_instance.state if _agent_instance else None
+            )
             status_description = AgentStateMapper.get_status_description(unified_status)
             is_operational = AgentStateMapper.is_operational(unified_status)
             return AgentStatusResponse(
@@ -724,7 +744,9 @@ async def resume_agent(
         )
 
 
-async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStatusResponse:
+async def _get_agent_status_internal(
+    engine: FinanceFeedbackEngine,
+) -> AgentStatusResponse:
     """
     Internal helper to get agent status without dependency injection.
     Used by both the API endpoint and internal callers.
@@ -734,13 +756,18 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
     try:
         # Determine environment
         import os
+
         is_development = os.environ.get("ENVIRONMENT", "").lower() == "development"
 
         # Agent running state
         agent_running = (
-            _agent_instance is not None and _agent_task is not None and not _agent_task.done()
+            _agent_instance is not None
+            and _agent_task is not None
+            and not _agent_task.done()
         )
-        agent_state = _agent_instance.state if (_agent_instance and agent_running) else None
+        agent_state = (
+            _agent_instance.state if (_agent_instance and agent_running) else None
+        )
 
         # Portfolio info (always attempt, even if agent is stopped)
         portfolio_value = None
@@ -754,7 +781,9 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
             try:
                 # Try async balance first, fall back to sync via executor
                 if hasattr(platform, "aget_balance"):
-                    balance = await asyncio.wait_for(platform.aget_balance(), timeout=3.0)
+                    balance = await asyncio.wait_for(
+                        platform.aget_balance(), timeout=3.0
+                    )
                 else:
                     loop = asyncio.get_running_loop()
                     balance = await asyncio.wait_for(
@@ -781,7 +810,11 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
                 if isinstance(breakdown, dict):
                     portfolio_payload = breakdown
                     # Prefer explicit positions list if available, else derive
-                    positions = breakdown.get("positions") or breakdown.get("futures_positions") or []
+                    positions = (
+                        breakdown.get("positions")
+                        or breakdown.get("futures_positions")
+                        or []
+                    )
                     active_positions = len(positions)
 
                     # Fallback: infer portfolio value from breakdown if balance lacks totals
@@ -792,7 +825,11 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
 
                 # Final fallback: sum numeric balances when no total provided
                 if portfolio_value is None and isinstance(balances_payload, dict):
-                    numeric_balances = [v for v in balances_payload.values() if isinstance(v, (int, float))]
+                    numeric_balances = [
+                        v
+                        for v in balances_payload.values()
+                        if isinstance(v, (int, float))
+                    ]
                     if numeric_balances:
                         portfolio_value = float(sum(numeric_balances))
             except asyncio.TimeoutError:
@@ -823,7 +860,11 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
                     pass
 
         # Prefer live runtime agent config when available; fallback to engine config.
-        if _agent_instance and hasattr(_agent_instance, "config") and hasattr(_agent_instance.config, "asset_pairs"):
+        if (
+            _agent_instance
+            and hasattr(_agent_instance, "config")
+            and hasattr(_agent_instance.config, "asset_pairs")
+        ):
             asset_pairs = _agent_instance.config.asset_pairs
         else:
             # Safe access to engine config (handle both dict and object forms)
@@ -846,8 +887,10 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
 
         # Build response
         resp = AgentStatusResponse(
-            state=bot_state, # For backward compatibility
-            agent_ooda_state=agent_state.name if agent_state else None, # For backward compatibility
+            state=bot_state,  # For backward compatibility
+            agent_ooda_state=(
+                agent_state.name if agent_state else None
+            ),  # For backward compatibility
             unified_status=unified_status,
             status_description=AgentStateMapper.get_status_description(unified_status),
             is_operational=AgentStateMapper.is_operational(unified_status),
@@ -880,9 +923,11 @@ async def _get_agent_status_internal(engine: FinanceFeedbackEngine) -> AgentStat
             state=BotState.ERROR,
             agent_ooda_state=None,
             unified_status=error_unified_status,
-            status_description=AgentStateMapper.get_status_description(error_unified_status),
+            status_description=AgentStateMapper.get_status_description(
+                error_unified_status
+            ),
             is_operational=False,
-            error_message=str(e)
+            error_message=str(e),
         )
 
 
@@ -905,7 +950,9 @@ async def _build_stream_payload(
     event_payload = None
 
     # Drain dashboard queue (non-blocking)
-    if _agent_instance is not None and hasattr(_agent_instance, "_dashboard_event_queue"):
+    if _agent_instance is not None and hasattr(
+        _agent_instance, "_dashboard_event_queue"
+    ):
         try:
             loop = asyncio.get_running_loop()
 
@@ -938,7 +985,7 @@ async def _build_stream_payload(
         if now - last_status_sent >= 5:
             status_payload = await _get_agent_status_internal(engine)
             status_data = (
-                status_payload.model_dump(mode='json')
+                status_payload.model_dump(mode="json")
                 if hasattr(status_payload, "model_dump")
                 else status_payload.__dict__
             )
@@ -981,7 +1028,9 @@ async def stream_agent_events(
         "Connection": "keep-alive",
     }
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
+    return StreamingResponse(
+        event_generator(), media_type="text/event-stream", headers=headers
+    )
 
 
 @bot_control_router.websocket("/ws")
@@ -993,6 +1042,7 @@ async def agent_websocket(
 
     # Check if in development mode (skip auth)
     import os
+
     environment = os.getenv("ENVIRONMENT", "production").lower()
     if environment == "development":
         # Development mode: skip authentication
@@ -1007,6 +1057,7 @@ async def agent_websocket(
 
         # Get auth manager from engine (avoid dependency injection issues with WebSocket)
         from .dependencies import get_auth_manager_instance
+
         auth_manager = get_auth_manager_instance()
 
         client_ip = websocket.client.host if websocket.client else None
@@ -1024,7 +1075,9 @@ async def agent_websocket(
             return
         except Exception as exc:  # noqa: BLE001
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
+            await websocket.close(
+                code=4001, reason="Unauthorized: Authentication failed"
+            )
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1073,15 +1126,17 @@ async def agent_websocket(
                     )
                     continue
 
-                response, queued = await _enqueue_or_start_agent(
-                    request_model, engine
-                )
+                response, queued = await _enqueue_or_start_agent(request_model, engine)
                 await websocket.send_json(
                     {
                         "event": "start_ack",
                         "data": {
                             "queued": queued,
-                            "state": response.state.value if response else BotState.STARTING.value,
+                            "state": (
+                                response.state.value
+                                if response
+                                else BotState.STARTING.value
+                            ),
                         },
                     }
                 )
@@ -1415,6 +1470,8 @@ async def get_open_positions(
             "positions": transformed,
             "count": len(transformed),
             "total_value": total_value,
+            "portfolio_value_error": portfolio_value_error,
+            "portfolio_value_degraded": portfolio_value_degraded,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
@@ -1459,7 +1516,9 @@ async def close_position(
 
         raw_units = position.get("units")
         raw_contracts = position.get("number_of_contracts") or position.get("contracts")
-        size = abs(float(raw_units if raw_units not in (None, "") else (raw_contracts or 0)))
+        size = abs(
+            float(raw_units if raw_units not in (None, "") else (raw_contracts or 0))
+        )
         if not size or size <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1490,7 +1549,9 @@ async def close_position(
                 "asset_pair": asset_pair,
                 "action": trade_metadata["legacy_action_compatibility"],
                 "policy_action": trade_metadata["policy_action"],
-                "legacy_action_compatibility": trade_metadata["legacy_action_compatibility"],
+                "legacy_action_compatibility": trade_metadata[
+                    "legacy_action_compatibility"
+                ],
                 "recommended_position_size": size,
                 "order_type": "MARKET",
             }
@@ -1502,7 +1563,9 @@ async def close_position(
             "status": "closed",
             "position_id": position_id,
             "policy_action": trade_metadata["policy_action"],
-            "legacy_action_compatibility": trade_metadata["legacy_action_compatibility"],
+            "legacy_action_compatibility": trade_metadata[
+                "legacy_action_compatibility"
+            ],
             "result": result,
             "timestamp": datetime.now(UTC).isoformat(),
         }
@@ -1534,9 +1597,12 @@ async def portfolio_stream_websocket(
     """
     # Check if in development mode (skip auth)
     import os
+
     environment = os.getenv("ENVIRONMENT", "production").lower()
     if environment == "development":
-        logger.debug("WebSocket /ws/portfolio connected in development mode (auth bypassed)")
+        logger.debug(
+            "WebSocket /ws/portfolio connected in development mode (auth bypassed)"
+        )
         selected_protocol = None
     else:
         # Production mode: validate API key
@@ -1546,6 +1612,7 @@ async def portfolio_stream_websocket(
             return
 
         from .dependencies import get_auth_manager_instance
+
         auth_manager = get_auth_manager_instance()
 
         client_ip = websocket.client.host if websocket.client else None
@@ -1563,7 +1630,9 @@ async def portfolio_stream_websocket(
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
+            await websocket.close(
+                code=4001, reason="Unauthorized: Authentication failed"
+            )
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1576,19 +1645,24 @@ async def portfolio_stream_websocket(
         while not stop_event.is_set():
             try:
                 from ..api.routes import get_portfolio_status
+
                 portfolio = await get_portfolio_status(engine)
 
                 # Only send if data changed
                 portfolio_dict = (
-                    portfolio.model_dump() if hasattr(portfolio, "model_dump")
-                    else (portfolio.__dict__ if hasattr(portfolio, "__dict__") else portfolio)
+                    portfolio.model_dump()
+                    if hasattr(portfolio, "model_dump")
+                    else (
+                        portfolio.__dict__
+                        if hasattr(portfolio, "__dict__")
+                        else portfolio
+                    )
                 )
 
                 if last_portfolio != portfolio_dict:
-                    await websocket.send_json({
-                        "event": "portfolio_update",
-                        "data": portfolio_dict
-                    })
+                    await websocket.send_json(
+                        {"event": "portfolio_update", "data": portfolio_dict}
+                    )
                     last_portfolio = portfolio_dict
 
             except WebSocketDisconnect:
@@ -1630,9 +1704,12 @@ async def positions_stream_websocket(
     """
     # Check if in development mode (skip auth)
     import os
+
     environment = os.getenv("ENVIRONMENT", "production").lower()
     if environment == "development":
-        logger.debug("WebSocket /ws/positions connected in development mode (auth bypassed)")
+        logger.debug(
+            "WebSocket /ws/positions connected in development mode (auth bypassed)"
+        )
         selected_protocol = None
     else:
         # Production mode: validate API key
@@ -1642,6 +1719,7 @@ async def positions_stream_websocket(
             return
 
         from .dependencies import get_auth_manager_instance
+
         auth_manager = get_auth_manager_instance()
 
         client_ip = websocket.client.host if websocket.client else None
@@ -1659,7 +1737,9 @@ async def positions_stream_websocket(
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
+            await websocket.close(
+                code=4001, reason="Unauthorized: Authentication failed"
+            )
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1682,10 +1762,12 @@ async def positions_stream_websocket(
                     # Check if positions changed
                     positions_snapshot = str(positions)  # Simple change detection
                     if last_positions != positions_snapshot:
-                        await websocket.send_json({
-                            "event": "positions_update",
-                            "data": {"positions": positions}
-                        })
+                        await websocket.send_json(
+                            {
+                                "event": "positions_update",
+                                "data": {"positions": positions},
+                            }
+                        )
                         last_positions = positions_snapshot
 
             except WebSocketDisconnect:
@@ -1728,9 +1810,12 @@ async def decisions_stream_websocket(
     """
     # Check if in development mode (skip auth)
     import os
+
     environment = os.getenv("ENVIRONMENT", "production").lower()
     if environment == "development":
-        logger.debug("WebSocket /ws/decisions connected in development mode (auth bypassed)")
+        logger.debug(
+            "WebSocket /ws/decisions connected in development mode (auth bypassed)"
+        )
         selected_protocol = None
     else:
         # Production mode: validate API key
@@ -1740,6 +1825,7 @@ async def decisions_stream_websocket(
             return
 
         from .dependencies import get_auth_manager_instance
+
         auth_manager = get_auth_manager_instance()
 
         client_ip = websocket.client.host if websocket.client else None
@@ -1757,7 +1843,9 @@ async def decisions_stream_websocket(
             return
         except Exception as exc:
             logger.warning("WebSocket auth failed: %s", exc)
-            await websocket.close(code=4001, reason="Unauthorized: Authentication failed")
+            await websocket.close(
+                code=4001, reason="Unauthorized: Authentication failed"
+            )
             return
 
     await websocket.accept(subprotocol=selected_protocol)
@@ -1776,10 +1864,9 @@ async def decisions_stream_websocket(
                     if decisions and len(decisions) > last_decision_count:
                         # Send new decision
                         latest = decisions[0]
-                        await websocket.send_json({
-                            "event": "decision_made",
-                            "data": latest
-                        })
+                        await websocket.send_json(
+                            {"event": "decision_made", "data": latest}
+                        )
                         last_decision_count = len(decisions)
 
             except WebSocketDisconnect:
@@ -1806,4 +1893,3 @@ async def decisions_stream_websocket(
         stop_event.set()
         sender_task.cancel()
         logger.info("Client disconnected from decisions stream")
-
