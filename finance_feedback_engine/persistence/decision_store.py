@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from finance_feedback_engine.decision_engine.policy_actions import get_position_side
+from finance_feedback_engine.utils.shape_normalization import asset_key_candidates
 from finance_feedback_engine.utils.file_io import FileIOManager, FileIOError
 
 logger = logging.getLogger(__name__)
@@ -262,11 +264,27 @@ class DecisionStore:
         wrapping an already-open position in a synthetic recovery decision.
         """
 
-        normalized_asset_pair = (asset_pair or "").upper()
-        normalized_action = (action or "").upper()
+        live_asset_candidates = set(asset_key_candidates(asset_pair))
+        live_asset_candidates.add((asset_pair or "").upper())
+        live_position_side = get_position_side(action)
 
-        for decision in self.get_decisions(asset_pair=asset_pair, limit=lookback):
-            if str(decision.get("action", "")).upper() != normalized_action:
+        candidates: list[Dict[str, Any]] = []
+        for candidate_pair in live_asset_candidates:
+            candidates.extend(self.get_decisions(asset_pair=candidate_pair, limit=lookback))
+
+        seen_ids: set[str] = set()
+        for decision in candidates:
+            decision_id = str(decision.get("id") or "")
+            if decision_id in seen_ids:
+                continue
+            seen_ids.add(decision_id)
+
+            decision_asset_candidates = set(asset_key_candidates(decision.get("asset_pair")))
+            decision_asset_candidates.add(str(decision.get("asset_pair") or "").upper())
+            if not (live_asset_candidates & decision_asset_candidates):
+                continue
+
+            if live_position_side and get_position_side(decision.get("action")) != live_position_side:
                 continue
 
             try:
@@ -277,13 +295,19 @@ class DecisionStore:
             except (TypeError, ValueError):
                 continue
 
-            if abs(existing_entry - float(entry_price)) > 1e-9:
-                continue
-            if abs(existing_size - float(position_size)) > 1e-9:
+            entry_price_value = float(entry_price)
+            entry_tolerance = max(1.0, abs(entry_price_value) * 0.01)
+            if abs(existing_entry - entry_price_value) > entry_tolerance:
                 continue
 
-            existing_asset_pair = str(decision.get("asset_pair") or "").upper()
-            if existing_asset_pair != normalized_asset_pair:
+            position_size_value = float(position_size)
+            size_matches = abs(existing_size - position_size_value) <= 1e-9
+            cross_domain_contract_bridge = (
+                position_size_value == 1.0
+                and existing_size > 0.0
+                and existing_size < 1.0
+            )
+            if not size_matches and not cross_domain_contract_bridge:
                 continue
 
             return decision

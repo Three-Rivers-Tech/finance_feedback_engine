@@ -668,6 +668,66 @@ async def test_recovery_upgrades_existing_recovery_decision_with_preserved_attri
 
 
 @pytest.mark.asyncio
+async def test_recovery_upgrades_existing_contract_recovery_decision_from_underlying_ensemble_source(
+    agent, mock_engine
+):
+    mock_engine.get_portfolio_breakdown_async.return_value = {
+        "futures_positions": [
+            {
+                "product_id": "BIP-20DEC30-CDE",
+                "side": "SHORT",
+                "contracts": 1.0,
+                "units": 1.0,
+                "entry_price": 67450.0,
+                "current_price": 67420.0,
+                "unrealized_pnl": 30.0,
+                "opened_at": "2026-03-30T15:24:11Z",
+            }
+        ]
+    }
+    mock_engine.decision_store.find_equivalent_recovery_decision.return_value = {
+        "id": "existing-recovery-bip-sticky",
+        "asset_pair": "BIP20DEC30CDE",
+        "action": "SELL",
+        "ai_provider": "recovery",
+        "ensemble_metadata": {
+            "providers_used": ["recovery"],
+            "active_weights": {"recovery": 1.0},
+        },
+        "recovery_metadata": {
+            "platform": "coinbase",
+            "product_id": "BIP-20DEC30-CDE",
+            "opened_at": None,
+        },
+    }
+    mock_engine.decision_store.find_recent_decision_for_position.return_value = {
+        "id": "btc-ensemble-open-48539299",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_SHORT",
+        "ai_provider": "ensemble",
+        "decision_source": "debate",
+        "ensemble_metadata": {
+            "voting_strategy": "debate",
+            "providers_used": ["gemma2:9b", "llama3.1:8b", "deepseek-r1:8b"],
+            "provider_decisions": {"deepseek-r1:8b": {"action": "OPEN_SMALL_SHORT"}},
+        },
+        "policy_trace": {"decision_metadata": {"decision_id": "btc-ensemble-open-48539299"}},
+    }
+
+    await agent.handle_recovering_state()
+
+    updated = mock_engine.decision_store.update_decision.call_args.args[0]
+    assert updated["id"] == "existing-recovery-bip-sticky"
+    assert updated["ai_provider"] == "ensemble"
+    assert updated["decision_source"] == "debate"
+    assert updated["ensemble_metadata"]["voting_strategy"] == "debate"
+    assert updated["policy_trace"]["decision_metadata"]["decision_id"] == "btc-ensemble-open-48539299"
+    assert updated["recovery_metadata"]["product_id"] == "BIP-20DEC30-CDE"
+    assert updated["recovery_metadata"]["shadowed_from_decision_id"] == "btc-ensemble-open-48539299"
+    assert updated["recovery_metadata"]["shadowed_from_provider"] == "ensemble"
+
+
+@pytest.mark.asyncio
 async def test_recovery_trade_monitor_association(agent, mock_engine, mock_trade_monitor):
     """Test that recovered positions are associated with trade monitor."""
     # Setup
