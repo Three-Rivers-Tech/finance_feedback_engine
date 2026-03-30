@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, Protocol
 
+from finance_feedback_engine.utils.shape_normalization import normalize_scalar_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +42,7 @@ class DecisionReservationPayload:
 
     @classmethod
     def from_decision(cls, decision: Dict[str, Any]) -> "DecisionReservationPayload":
-        decision_id = str(decision.get("id") or "")
+        decision_id = str(normalize_scalar_id(decision) or "")
         asset_pair = str(decision.get("asset_pair") or "")
         action = str(decision.get("action") or "UNKNOWN")
         position_size = float(decision.get("recommended_position_size") or 0.0)

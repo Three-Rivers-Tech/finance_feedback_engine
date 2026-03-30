@@ -46,6 +46,20 @@ def test_reserve_trade_exposure_calls_manager_with_normalized_payload() -> None:
     )
 
 
+def test_decision_reservation_payload_accepts_legacy_decision_id_alias() -> None:
+    payload = DecisionReservationPayload.from_decision(
+        {
+            "decision_id": "d-legacy",
+            "asset_pair": "BTCUSD",
+            "action": "BUY",
+            "recommended_position_size": 1,
+            "entry_price": 100,
+        }
+    )
+
+    assert payload.decision_id == "d-legacy"
+
+
 def test_reserve_trade_exposure_requires_decision_id() -> None:
     manager = MagicMock()
 

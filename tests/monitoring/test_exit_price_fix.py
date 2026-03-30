@@ -421,5 +421,23 @@ def test_update_positions_overwrites_stale_decision_id_when_live_position_has_fr
         assert recorder.open_positions["BTC-USD_SHORT"]["decision_id"] == "ensemble-btc-fresh"
 
 
+def test_update_positions_normalizes_wrapper_shaped_decision_id(tmp_path):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        recorder = TradeOutcomeRecorder(data_dir=temp_dir, unified_provider=MagicMock())
+
+        recorder.update_positions([
+            {
+                "product_id": "BTC-USD",
+                "side": "SHORT",
+                "size": "1.0",
+                "current_price": "49900.00",
+                "entry_price": "50000.00",
+                "decision_id": {"decision": {"id": "wrapped-btc-1"}},
+            }
+        ])
+
+        assert recorder.open_positions["BTC-USD_SHORT"]["decision_id"] == "wrapped-btc-1"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

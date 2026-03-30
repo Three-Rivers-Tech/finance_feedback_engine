@@ -21,6 +21,8 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+from finance_feedback_engine.utils.shape_normalization import normalize_scalar_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -280,7 +282,7 @@ class TradeOutcomeRecorder:
                     "entry_price": entry_price,
                     "entry_size": size,
                     "last_price": current_price,
-                    "decision_id": pos.get("decision_id"),
+                    "decision_id": normalize_scalar_id(pos.get("decision_id")),
                 }
                 logger.info(f"New position opened: {pos_key} @ {entry_price}")
                 # Save state immediately when new position detected
@@ -300,8 +302,10 @@ class TradeOutcomeRecorder:
                     )
                     self.open_positions[pos_key]["entry_size"] = size
                     state_changed = True
-                incoming_decision_id = pos.get("decision_id")
-                existing_decision_id = self.open_positions[pos_key].get("decision_id")
+                incoming_decision_id = normalize_scalar_id(pos.get("decision_id"))
+                existing_decision_id = normalize_scalar_id(
+                    self.open_positions[pos_key].get("decision_id")
+                )
                 if incoming_decision_id and incoming_decision_id != existing_decision_id:
                     self.open_positions[pos_key]["decision_id"] = incoming_decision_id
                     state_changed = True
@@ -731,7 +735,7 @@ class TradeOutcomeRecorder:
             
             outcome = {
                 "order_id": order_id,
-                "decision_id": decision_id,
+                "decision_id": normalize_scalar_id(decision_id),
                 "product": asset_pair,
                 "side": side,
                 "entry_time": entry_time,

@@ -11,6 +11,12 @@ def test_normalize_scalar_id_unwraps_tuple():
     assert normalize_scalar_id("decision-456") == "decision-456"
 
 
+def test_normalize_scalar_id_handles_wrapper_dict_shapes():
+    assert normalize_scalar_id({"id": "decision-789"}) == "decision-789"
+    assert normalize_scalar_id({"decision_id": "decision-790"}) == "decision-790"
+    assert normalize_scalar_id({"decision": {"id": "decision-791"}}) == "decision-791"
+
+
 def test_merge_nested_payload_flattens_order_key():
     payload = {"foo": 1, "order": {"status": "FILLED", "filled_size": "1"}}
     normalized = merge_nested_payload(payload)

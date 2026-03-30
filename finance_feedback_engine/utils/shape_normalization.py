@@ -8,12 +8,22 @@ from finance_feedback_engine.utils.validation import standardize_asset_pair
 
 
 def normalize_scalar_id(value: Any) -> Optional[str]:
-    """Unwrap tuple/list-shaped ids into a plain scalar id string when possible."""
+    """Unwrap recurring id wrapper shapes into one plain scalar id string when possible."""
     if isinstance(value, (tuple, list)):
         value = value[0] if value else None
+    if isinstance(value, dict):
+        for key in ("id", "decision_id"):
+            candidate = value.get(key)
+            if candidate not in (None, ""):
+                return normalize_scalar_id(candidate)
+        nested = value.get("decision")
+        if nested is not None:
+            return normalize_scalar_id(nested)
+        return None
     if value is None:
         return None
     if isinstance(value, str):
+        value = value.strip()
         return value or None
     return str(value)
 

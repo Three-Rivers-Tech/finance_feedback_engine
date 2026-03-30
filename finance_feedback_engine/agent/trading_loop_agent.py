@@ -3355,17 +3355,7 @@ class TradingLoopAgent:
             return []
 
         def _normalize_lineage_candidate(value: Any) -> Optional[str]:
-            raw_value = value
-            if isinstance(raw_value, (tuple, list)):
-                raw_value = raw_value[0] if raw_value else None
-            if raw_value is None:
-                return None
-            if isinstance(raw_value, str):
-                normalized = raw_value.strip()
-                return normalized or None
-            if isinstance(raw_value, (int, float)):
-                return str(raw_value)
-            return None
+            return normalize_scalar_id(value)
 
         recorder = getattr(self.engine, "trade_outcome_recorder", None)
         trade_monitor = getattr(self, "trade_monitor", None)
@@ -3474,7 +3464,7 @@ class TradingLoopAgent:
 
         for outcome in outcomes:
             outcome = self._normalize_trade_outcome_product_aliases(outcome)
-            decision_id = outcome.get("decision_id")
+            decision_id = normalize_scalar_id(outcome.get("decision_id"))
             product = outcome.get("product") or outcome.get("product_id") or "UNKNOWN"
             order_id = outcome.get("order_id") or outcome.get("trade_id") or "UNKNOWN"
             lineage_source = "outcome"
@@ -3580,7 +3570,7 @@ class TradingLoopAgent:
                     trade_outcome
                 )
 
-                decision_id = trade_outcome.get("decision_id")
+                decision_id = normalize_scalar_id(trade_outcome.get("decision_id"))
                 product = (
                     trade_outcome.get("product")
                     or trade_outcome.get("product_id")
