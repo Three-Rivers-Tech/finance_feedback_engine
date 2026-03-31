@@ -1221,6 +1221,49 @@ async def test_risk_check_keeps_executable_policy_action_flowing_normally(tradin
     assert mock_dependencies["engine"].decision_store.update_decision.call_count == 0
 
 
+@pytest.mark.asyncio
+async def test_risk_check_reapplies_derisking_execution_metadata_after_generic_sizing(trading_agent, mock_dependencies):
+    decision = {
+        "id": "decision-derisk-size",
+        "action": "CLOSE_SHORT",
+        "policy_action": "CLOSE_SHORT",
+        "confidence": 95,
+        "asset_pair": "ETHUSD",
+        "entry_price": 2127.0,
+        "structural_action_validity": "valid",
+        "risk_vetoed": False,
+    }
+    async with trading_agent._current_decisions_lock:
+        trading_agent._current_decisions = [decision]
+    trading_agent.state = AgentState.RISK_CHECK
+
+    mock_dependencies["trade_monitor"].monitoring_context_provider.get_monitoring_context.return_value = {
+        "active_positions": {
+            "futures": [
+                {
+                    "product_id": "ETP-20DEC30-CDE",
+                    "side": "SHORT",
+                    "number_of_contracts": "5",
+                    "current_price": "2127.0",
+                }
+            ]
+        }
+    }
+    trading_agent.risk_gatekeeper.validate_trade = Mock(return_value=(True, "approved"))
+    trading_agent._check_performance_based_risks = Mock(return_value=(True, "ok"))
+    mock_dependencies["engine"].position_sizing_calculator.calculate_position_sizing_params.return_value = {
+        "recommended_position_size": 0
+    }
+
+    await trading_agent.handle_risk_check_state()
+
+    async with trading_agent._current_decisions_lock:
+        kept = trading_agent._current_decisions[0]
+        assert kept["current_position_size"] == 5.0
+        assert kept["recommended_position_size"] == 5.0
+        assert kept["suggested_amount"] == 10635.0
+
+
 
 @pytest.mark.asyncio
 async def test_risk_check_rejected_policy_action_stays_distinct_from_veto(trading_agent, mock_dependencies):

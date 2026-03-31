@@ -26,9 +26,17 @@ def test_debate_mode_contract_is_explicit_and_weightless():
     assert metadata["original_weights"] == {}
     assert metadata["adjusted_weights"] == {}
     assert metadata["judge_hold_override_applied"] is False
-    assert metadata["provider_decisions"] == {
-        "deepseek-r1:8b": {"action": "HOLD", "confidence": 50, "reasoning": "judge"}
+    assert set(metadata["provider_decisions"].keys()) == {
+        "gemma2:9b",
+        "llama3.1:8b",
+        "deepseek-r1:8b",
     }
+    assert metadata["provider_decisions"]["gemma2:9b"]["action"] == "HOLD"
+    assert metadata["provider_decisions"]["gemma2:9b"]["provider"] == "gemma2:9b"
+    assert metadata["provider_decisions"]["llama3.1:8b"]["action"] == "REDUCE_SHORT"
+    assert metadata["provider_decisions"]["llama3.1:8b"]["provider"] == "llama3.1:8b"
+    assert metadata["provider_decisions"]["deepseek-r1:8b"]["action"] == "HOLD"
+    assert metadata["provider_decisions"]["deepseek-r1:8b"]["provider"] == "deepseek-r1:8b"
     assert set(metadata["role_decisions"].keys()) == {"bull", "bear", "judge"}
     assert metadata["debate_seats"] == {
         "bull": "gemma2:9b",

@@ -716,7 +716,9 @@ class FinanceFeedbackEngine:
             self.memory_engine.record_trade_outcome(outcome)
 
         ensemble_metadata = (decision.get("ensemble_metadata") or {}) if isinstance(decision, dict) else {}
-        provider_decisions = ensemble_metadata.get("provider_decisions")
+        provider_decisions = self._normalize_learning_provider_decisions(
+            ensemble_metadata
+        )
         ensemble_manager = getattr(self.decision_engine, "ensemble_manager", None)
         if provider_decisions and ensemble_manager and hasattr(ensemble_manager, "update_base_weights"):
             try:
@@ -745,6 +747,47 @@ class FinanceFeedbackEngine:
                 logger.exception("Failed to update ensemble weights for decision %s", getattr(outcome, "decision_id", "unknown"))
 
         return outcome
+
+    @staticmethod
+    def _normalize_learning_provider_decisions(
+        ensemble_metadata: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Dict[str, Any]]]:
+        if not isinstance(ensemble_metadata, dict):
+            return None
+
+        provider_decisions = ensemble_metadata.get("provider_decisions")
+        normalized_provider_decisions: Dict[str, Dict[str, Any]] = {}
+        if isinstance(provider_decisions, dict):
+            normalized_provider_decisions = {
+                str(provider): details
+                for provider, details in provider_decisions.items()
+                if provider and isinstance(details, dict)
+            }
+
+        role_decisions = ensemble_metadata.get("role_decisions")
+        if not isinstance(role_decisions, dict):
+            return normalized_provider_decisions or None
+
+        reconstructed_provider_decisions: Dict[str, Dict[str, Any]] = {}
+        for role_decision in role_decisions.values():
+            if not isinstance(role_decision, dict):
+                continue
+            provider_name = role_decision.get("provider")
+            if not provider_name:
+                continue
+            reconstructed_provider_decisions[str(provider_name)] = {
+                key: value for key, value in role_decision.items() if key != "role"
+            }
+
+        if not reconstructed_provider_decisions:
+            return normalized_provider_decisions or None
+
+        if set(reconstructed_provider_decisions).issubset(
+            set(normalized_provider_decisions)
+        ):
+            return normalized_provider_decisions or reconstructed_provider_decisions
+
+        return reconstructed_provider_decisions
 
     def _run_startup_health_checks(self):
         """

@@ -2619,6 +2619,12 @@ class TradingLoopAgent:
                     if sizing:
                         recommended_size = sizing.get("recommended_position_size")
                         decision["recommended_position_size"] = recommended_size
+                    # De-risking actions must carry executable close size metadata.
+                    # Re-apply live position metadata after generic sizing because the
+                    # sizing path intentionally zeroes CLOSE_/REDUCE_ recommendations.
+                    self._apply_derisking_execution_metadata(
+                        decision, monitoring_context
+                    )
                 except Exception as e:
                     logger.warning(
                         "Failed to calculate position size for %s: %s", decision_id, e

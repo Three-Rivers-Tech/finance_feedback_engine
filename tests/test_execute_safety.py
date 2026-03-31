@@ -221,7 +221,6 @@ def test_learning_loop_logs_adaptive_handoff_packet(tmp_path, caplog):
     ) in caplog.text
 
 
-
 @freeze_time("2025-01-01T00:00:01Z")
 def test_learning_loop_uses_role_decisions_for_debate_adaptation(tmp_path):
     cfg = make_config(storage_path=str(tmp_path / "decisions"))
@@ -256,7 +255,7 @@ def test_learning_loop_uses_role_decisions_for_debate_adaptation(tmp_path):
             "provider_decisions": {
                 "gemma2:9b": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
                 "llama3.1:8b": {"action": "OPEN_SMALL_SHORT", "provider": "llama3.1:8b"},
-                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"}
+                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"},
             },
             "role_decisions": {
                 "bull": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
@@ -284,6 +283,73 @@ def test_learning_loop_uses_role_decisions_for_debate_adaptation(tmp_path):
     assert provider_decisions["deepseek-r1:8b"]["action"] == "HOLD"
     assert actual_outcome == "OPEN_SMALL_SHORT"
     assert isinstance(perf_metric, (int, float))
+
+
+@freeze_time("2025-01-01T00:00:01Z")
+def test_learning_loop_rebuilds_provider_decisions_from_role_metadata(tmp_path, caplog):
+    cfg = make_config(storage_path=str(tmp_path / "decisions"))
+    cfg["portfolio_memory"] = {"enabled": True}
+    engine = FinanceFeedbackEngine(cfg)
+
+    class StubEnsemble:
+        def __init__(self):
+            self.last_args = None
+
+        def update_base_weights(self, provider_decisions, actual_outcome, perf_metric):
+            self.last_args = (provider_decisions, actual_outcome, perf_metric)
+
+    stub = StubEnsemble()
+    engine.decision_engine.ensemble_manager = stub
+
+    decision = {
+        "id": "test-learn-rebuild",
+        "asset_pair": "BTCUSD",
+        "signal_only": False,
+        "action": "SELL",
+        "confidence": 70,
+        "amount": 0.1,
+        "timestamp": "2025-01-01T00:00:01Z",
+        "entry_price": 100.0,
+        "recommended_position_size": 1.0,
+        "ai_provider": "ensemble",
+        "ensemble_metadata": {
+            "provider_decisions": {
+                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"}
+            },
+            "role_decisions": {
+                "bull": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b", "role": "bull"},
+                "bear": {"action": "OPEN_SMALL_SHORT", "provider": "llama3.1:8b", "role": "bear"},
+                "judge": {"action": "HOLD", "provider": "deepseek-r1:8b", "role": "judge"},
+            },
+            "debate_seats": {
+                "bull": "gemma2:9b",
+                "bear": "llama3.1:8b",
+                "judge": "deepseek-r1:8b",
+            },
+            "providers_used": ["gemma2:9b", "llama3.1:8b", "deepseek-r1:8b"],
+        },
+        "recovery_metadata": {
+            "shadowed_from_decision_id": "shadowed-open-2",
+        },
+        "market_data": {"close": 100.0},
+    }
+    engine.decision_store.save_decision(decision)
+
+    with caplog.at_level(logging.INFO):
+        engine.record_trade_outcome("test-learn-rebuild", exit_price=90.0)
+
+    assert stub.last_args is not None
+    provider_decisions, actual_outcome, _perf_metric = stub.last_args
+    assert sorted(provider_decisions.keys()) == [
+        "deepseek-r1:8b",
+        "gemma2:9b",
+        "llama3.1:8b",
+    ]
+    assert actual_outcome == "SELL"
+    assert (
+        "Adaptive learning handoff | decision_id=test-learn-rebuild | ai_provider=ensemble | "
+        "shadowed_from_decision_id=shadowed-open-2 | provider_decisions=['deepseek-r1:8b', 'gemma2:9b', 'llama3.1:8b']"
+    ) in caplog.text
 
 
 @freeze_time("2025-01-01T00:00:01Z")
@@ -325,7 +391,7 @@ def test_learning_loop_recovery_shadow_uses_preserved_debate_attribution(tmp_pat
             "provider_decisions": {
                 "gemma2:9b": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
                 "llama3.1:8b": {"action": "OPEN_SMALL_SHORT", "provider": "llama3.1:8b"},
-                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"}
+                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"},
             },
             "role_decisions": {
                 "bull": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
@@ -337,6 +403,7 @@ def test_learning_loop_recovery_shadow_uses_preserved_debate_attribution(tmp_pat
                 "bear": "llama3.1:8b",
                 "judge": "deepseek-r1:8b",
             },
+            "providers_used": ["gemma2:9b", "llama3.1:8b", "deepseek-r1:8b"],
         },
         "market_data": {"close": 100.0},
     }
