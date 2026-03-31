@@ -954,3 +954,46 @@ class TestPositionSizingLogBehavior:
         assert result["recommended_position_size"] == 0
         assert "No valid Coinbase balance - using minimum order size" not in caplog.text
         assert "Position sizing skipped" in caplog.text
+
+
+class TestBalanceValidityReconciliation:
+    @pytest.fixture
+    def calculator(self):
+        config = {
+            "agent": {
+                "asset_pairs": ["BTCUSD", "ETHUSD"],
+                "position_sizing": {"risk_percentage": 0.01, "default_stop_loss": 0.02},
+            }
+        }
+        return PositionSizingCalculator(config)
+
+    def test_valid_balance_never_falls_through_to_minimum_order_warning(self, calculator, caplog):
+        '''If has_valid_balance is True, we must never emit "No valid ... balance - using minimum order size".'''
+        import logging
+        with caplog.at_level(logging.DEBUG):
+            result = calculator.calculate_position_sizing_params(
+                context={"asset_pair": "BTCUSD", "market_data": {"type": "crypto", "close": 65000.0}},
+                current_price=65000.0,
+                action="OPEN_SMALL_SHORT",
+                has_existing_position=False,
+                relevant_balance={"coinbase_FUTURES_USD": 300.0},
+                balance_source="Coinbase",
+            )
+        assert "No valid" not in caplog.text or "using minimum order size" not in caplog.text
+        assert result["recommended_position_size"] is not None
+        assert result["recommended_position_size"] > 0
+
+    def test_valid_balance_with_unknown_action_does_not_use_minimum_order(self, calculator, caplog):
+        '''Even if action normalization produces an unrecognized legacy action, valid balance should still size properly.'''
+        import logging
+        with caplog.at_level(logging.DEBUG):
+            result = calculator.calculate_position_sizing_params(
+                context={"asset_pair": "ETHUSD", "market_data": {"type": "crypto", "close": 2050.0}},
+                current_price=2050.0,
+                action="UNKNOWN_ACTION",
+                has_existing_position=False,
+                relevant_balance={"coinbase_FUTURES_USD": 300.0},
+                balance_source="Coinbase",
+            )
+        assert "using minimum order size" not in caplog.text
+        assert result["position_sizing_method"] != "minimum_order_size"

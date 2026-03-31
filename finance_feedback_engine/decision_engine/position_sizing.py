@@ -258,9 +258,11 @@ class PositionSizingCalculator:
         # should_calculate gate, and downstream minimum-order branch should share one canonical
         # notion of usable balance so logs and execution behavior stay consistent.
         # Determine if we should calculate position sizing (no signal-only mode)
-        should_calculate = has_valid_balance and (
+        _is_derisking = has_existing_position and str(normalized_action).startswith(("CLOSE_", "REDUCE_"))
+        should_calculate = has_valid_balance and not _is_derisking and (
             legacy_action in ["BUY", "SELL"]
             or (legacy_action == "HOLD" and has_existing_position)
+            or legacy_action not in ["BUY", "SELL", "HOLD"]
         )
         
         if not should_calculate:
@@ -540,6 +542,29 @@ class PositionSizingCalculator:
             return result
 
         # CASE 2: No valid balance - use minimum order size (no signal-only mode)
+        if has_valid_balance:
+            logger.warning(
+                "Balance validity reconciliation: has_valid_balance=True but reached minimum-order fallback. "
+                "action=%s, legacy_action=%s, has_existing_position=%s, balance_source=%s. "
+                "This should not happen; filing through with risk-based sizing.",
+                action, legacy_action, has_existing_position, balance_source,
+            )
+            total_balance = sum(relevant_balance.values())
+            recommended_position_size = self.calculate_position_size(
+                account_balance=total_balance,
+                risk_percentage=risk_percentage,
+                entry_price=current_price,
+                stop_loss_percentage=sizing_stop_loss_percentage,
+            )
+            result.update({
+                "recommended_position_size": recommended_position_size,
+                "stop_loss_price": current_price,
+                "sizing_stop_loss_percentage": sizing_stop_loss_percentage,
+                "risk_percentage": risk_percentage,
+                "position_sizing_method": "risk_based_fallback",
+            })
+            return result
+
         if str(balance_source).lower() in {"unknown", "combined"}:
             logger.info(
                 "No valid %s balance - using minimum order size for trade execution",
