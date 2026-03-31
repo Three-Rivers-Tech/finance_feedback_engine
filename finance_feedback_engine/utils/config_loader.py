@@ -174,6 +174,20 @@ def _normalize_platform_config(config: Dict[str, Any]) -> None:
     config["enabled_platforms"] = [p["name"] for p in normalized_platforms]
 
 
+def _dedupe_provider_names(providers: List[Any]) -> List[str]:
+    seen = set()
+    normalized: List[str] = []
+    for provider in providers:
+        if provider is None:
+            continue
+        provider_str = str(provider).strip()
+        if not provider_str or provider_str in seen:
+            continue
+        seen.add(provider_str)
+        normalized.append(provider_str)
+    return normalized
+
+
 def _has_any_env(*names: str) -> bool:
     return any(os.getenv(name) is not None for name in names)
 
@@ -245,11 +259,9 @@ def _normalize_ensemble_config(config: Dict[str, Any]) -> None:
     if not isinstance(ensemble_cfg, dict):
         return
 
-    enabled_providers = [
-        str(provider).strip()
-        for provider in (ensemble_cfg.get("enabled_providers") or [])
-        if str(provider).strip()
-    ]
+    enabled_providers = _dedupe_provider_names(
+        ensemble_cfg.get("enabled_providers") or []
+    )
     if enabled_providers:
         ensemble_cfg["enabled_providers"] = enabled_providers
 

@@ -717,19 +717,6 @@ class FinanceFeedbackEngine:
 
         ensemble_metadata = (decision.get("ensemble_metadata") or {}) if isinstance(decision, dict) else {}
         provider_decisions = ensemble_metadata.get("provider_decisions")
-        voting_strategy = str(ensemble_metadata.get("voting_strategy") or "").lower()
-        role_decisions = ensemble_metadata.get("role_decisions") or {}
-        if voting_strategy == "debate" and isinstance(role_decisions, dict):
-            normalized_debate_decisions = {}
-            for role_decision in role_decisions.values():
-                if not isinstance(role_decision, dict):
-                    continue
-                provider_name = role_decision.get("provider") or role_decision.get("model_name")
-                if not provider_name:
-                    continue
-                normalized_debate_decisions[str(provider_name)] = dict(role_decision)
-            if normalized_debate_decisions:
-                provider_decisions = normalized_debate_decisions
         ensemble_manager = getattr(self.decision_engine, "ensemble_manager", None)
         if provider_decisions and ensemble_manager and hasattr(ensemble_manager, "update_base_weights"):
             try:

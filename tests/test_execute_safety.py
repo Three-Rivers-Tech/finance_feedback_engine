@@ -254,7 +254,9 @@ def test_learning_loop_uses_role_decisions_for_debate_adaptation(tmp_path):
         "ensemble_metadata": {
             "voting_strategy": "debate",
             "provider_decisions": {
-                "deepseek-r1:8b": {"action": "HOLD"}
+                "gemma2:9b": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
+                "llama3.1:8b": {"action": "OPEN_SMALL_SHORT", "provider": "llama3.1:8b"},
+                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"}
             },
             "role_decisions": {
                 "bull": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
@@ -321,7 +323,9 @@ def test_learning_loop_recovery_shadow_uses_preserved_debate_attribution(tmp_pat
         "ensemble_metadata": {
             "voting_strategy": "debate",
             "provider_decisions": {
-                "deepseek-r1:8b": {"action": "HOLD"}
+                "gemma2:9b": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},
+                "llama3.1:8b": {"action": "OPEN_SMALL_SHORT", "provider": "llama3.1:8b"},
+                "deepseek-r1:8b": {"action": "HOLD", "provider": "deepseek-r1:8b"}
             },
             "role_decisions": {
                 "bull": {"action": "OPEN_SMALL_LONG", "provider": "gemma2:9b"},

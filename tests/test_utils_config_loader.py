@@ -5,7 +5,7 @@ import os
 import pytest
 import yaml
 
-from finance_feedback_engine.utils.config_loader import load_config
+from finance_feedback_engine.utils.config_loader import _normalize_ensemble_config, load_config
 
 
 @pytest.mark.external_service
@@ -160,3 +160,25 @@ class TestConfigLoader:
         loaded_config = load_config(str(config_file))
         # Empty YAML file loads as None
         assert loaded_config is None or loaded_config == {}
+
+
+def test_normalize_ensemble_config_dedupes_enabled_providers_and_aligns_weights():
+    cfg = {
+        "ensemble": {
+            "enabled_providers": [" gemma2:9b ", "llama3.1:8b", "gemma2:9b", "deepseek-r1:8b", "llama3.1:8b"],
+            "provider_weights": {
+                "gemma2:9b": 0.2,
+                "llama3.1:8b": 0.3,
+                "deepseek-r1:8b": 0.5,
+            },
+        }
+    }
+
+    _normalize_ensemble_config(cfg)
+
+    assert cfg["ensemble"]["enabled_providers"] == ["gemma2:9b", "llama3.1:8b", "deepseek-r1:8b"]
+    assert cfg["ensemble"]["provider_weights"] == {
+        "gemma2:9b": 0.2,
+        "llama3.1:8b": 0.3,
+        "deepseek-r1:8b": 0.5,
+    }
