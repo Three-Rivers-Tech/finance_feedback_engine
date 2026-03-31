@@ -1104,9 +1104,105 @@ Format response as a structured technical analysis demonstration.
         bear_case = None
         judge_decision = None
 
+        bull_prompt = prompt + """
+
+DEBATE ROLE: BULLISH ADVOCATE
+==============================
+You are the bullish advocate on a trading decision council.
+Your role is to present the STRONGEST PLAUSIBLE BULLISH CASE for this asset.
+
+Allowed policy actions:
+- HOLD
+- OPEN_SMALL_LONG
+- OPEN_MEDIUM_LONG
+- ADD_SMALL_LONG
+- REDUCE_LONG
+- CLOSE_LONG
+
+Primary priorities:
+1. Multi-timeframe trend alignment
+2. Momentum improvement or reversal evidence
+3. Support structure and bounce quality
+4. Regime suitability (trend vs ranging)
+5. Risk/reward and execution quality
+
+⚠️ CRITICAL CONSTRAINT:
+If multi-timeframe trend consensus is BEARISH or STRONG_BEARISH, explicitly acknowledge this major headwind.
+Do NOT recommend strong bullish positioning against bearish higher-timeframe trend unless there is exceptional reversal evidence.
+If the bullish case is weak, noisy, stale, or non-actionable, prefer HOLD.
+
+Be optimistic but not reckless. Respect longer-timeframe trends.
+
+Return ONLY valid JSON with these exact keys:
+- action
+- confidence
+- reasoning
+- amount
+
+In reasoning, use this exact mini-structure:
+Thesis: <one-sentence bullish thesis>
+Actionability: <actionable_now|monitor|no_trade>
+Trend Alignment: <aligned|countertrend|mixed>
+Top Evidence:
+1. <best bullish evidence>
+2. <second bullish evidence>
+3. <third bullish evidence>
+Major Risk: <biggest reason the bullish case could fail>
+Thesis Breaker: <specific condition that invalidates the bullish case>
+Data Quality: <good|degraded|stale>
+"""
+
+        bear_prompt = prompt + """
+
+DEBATE ROLE: BEARISH ADVOCATE
+==============================
+You are the bearish advocate on a trading decision council.
+Your role is to present the STRONGEST PLAUSIBLE BEARISH CASE for this asset.
+
+Allowed policy actions:
+- HOLD
+- OPEN_SMALL_SHORT
+- OPEN_MEDIUM_SHORT
+- ADD_SMALL_SHORT
+- REDUCE_SHORT
+- CLOSE_SHORT
+
+Primary priorities:
+1. Multi-timeframe trend alignment
+2. Momentum deterioration or reversal evidence
+3. Resistance, rejection, and breakdown quality
+4. Regime suitability (trend vs ranging)
+5. Risk/reward and execution quality
+
+⚠️ CRITICAL CONSTRAINT:
+If multi-timeframe trend consensus is BULLISH or STRONG_BULLISH, explicitly acknowledge this major tailwind.
+Do NOT recommend strong bearish positioning against bullish higher-timeframe trend unless there is exceptional reversal evidence.
+If the bearish case is weak, noisy, stale, or non-actionable, prefer HOLD.
+
+Be skeptical but not reflexively bearish. Respect longer-timeframe trends.
+
+Return ONLY valid JSON with these exact keys:
+- action
+- confidence
+- reasoning
+- amount
+
+In reasoning, use this exact mini-structure:
+Thesis: <one-sentence bearish thesis>
+Actionability: <actionable_now|monitor|no_trade>
+Trend Alignment: <aligned|countertrend|mixed>
+Top Evidence:
+1. <best bearish evidence>
+2. <second bearish evidence>
+3. <third bearish evidence>
+Major Risk: <biggest reason the bearish case could fail>
+Thesis Breaker: <specific condition that invalidates the bearish case>
+Data Quality: <good|degraded|stale>
+"""
+
         # Query bull provider (bullish case)
         try:
-            bull_case = await self._query_single_provider(bull_provider, prompt)
+            bull_case = await self._query_single_provider(bull_provider, bull_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 bull_case, bull_provider
             ):
@@ -1125,7 +1221,7 @@ Format response as a structured technical analysis demonstration.
 
         # Query bear provider (bearish case)
         try:
-            bear_case = await self._query_single_provider(bear_provider, prompt)
+            bear_case = await self._query_single_provider(bear_provider, bear_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 bear_case, bear_provider
             ):
@@ -1144,7 +1240,51 @@ Format response as a structured technical analysis demonstration.
 
         # Query judge provider (final decision)
         try:
-            judge_decision = await self._query_single_provider(judge_provider, prompt)
+            judge_prompt = prompt + f"""
+
+DEBATE ROLE: IMPARTIAL JUDGE
+=============================
+You are the final arbiter on a trading decision council.
+You must evaluate both the bullish and bearish cases and decide whether one side has a real actionable edge or whether the correct decision is HOLD.
+
+Bull case summary:
+{bull_case.get('reasoning', 'Bull provider failed') if bull_case else 'Bull provider failed'}
+
+Bear case summary:
+{bear_case.get('reasoning', 'Bear provider failed') if bear_case else 'Bear provider failed'}
+
+Your role is to make the FINAL DECISION weighing both perspectives.
+Do NOT reward persuasive writing. Judge evidence quality, trend alignment, actionability, and execution suitability.
+HOLD is an active decision, not the default fallback.
+Do not choose HOLD merely because the bull and bear disagree. Disagreement is expected.
+If one case is materially stronger, more specific, and more actionable, prefer that side.
+
+Decision Framework:
+1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
+2. Evidence quality and structural alignment
+3. Actionability right now
+
+MANDATORY HOLD CONDITIONS:
+- Disagreement alone is not sufficient for HOLD
+- HOLD when evidence quality is degraded or stale
+- HOLD when neither thesis has a clear actionable edge
+
+Return ONLY valid JSON with these exact keys:
+- action
+- confidence
+- reasoning
+- amount
+
+In reasoning, use this exact mini-structure:
+Winning Thesis: <bull|bear|hold>
+Decision Basis: <one-sentence core reason>
+Why Not Bull: <why bullish case did not win>
+Why Not Bear: <why bearish case did not win>
+Data Quality: <good|degraded|stale>
+Missing Evidence: <what additional evidence would increase confidence>
+"""
+
+            judge_decision = await self._query_single_provider(judge_provider, judge_prompt)
             if not self.ensemble_manager._is_valid_provider_response(
                 judge_decision, judge_provider
             ):

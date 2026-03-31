@@ -176,6 +176,177 @@ The system is only "special" if the learning chain can be demonstrated on demand
 - an operator can verify the learning chain without deep code spelunking
 - Track 0 status can be reported in roadmap terms with evidence, not vibes
 
+### PR-5 proposed slice plan (post PR-4 live proof)
+
+PR-4 established that the adaptive chain is real.
+PR-5 should turn that one-off proof into a repeatable operator workflow.
+
+#### PR-5A — Proof packet collector
+
+##### Goal
+Given a recent close window or explicit `decision_id`, collect one bounded packet of evidence instead of requiring log spelunking.
+
+##### Suggested deliverable
+- a small script or CLI helper under `scripts/`, `tools/`, or an existing FFE CLI surface
+
+##### Minimum output
+- decision artifact path
+- outcome artifact path
+- decision id
+- product / asset pair
+- lineage source
+- `ai_provider`
+- `shadowed_from_decision_id` if present
+- accepted handoff line
+- adaptive handoff line
+- adaptive mutation line
+- `weights_before`
+- `weights_after`
+- history artifact path / mtime
+- verdict:
+  - lower chain passed?
+  - adaptation passed?
+
+##### Acceptance
+- one command can collect the exact PR-4 proof packet from live artifacts for a recent qualifying close
+
+##### PR-5A.1 verification refinement
+
+The first collector draft should be hardened with audit semantics before broadening scope.
+
+Required additions:
+- explicit `verdict`
+- explicit `verdict_reason`
+- extracted accepted-handoff timestamp
+- extracted realized pnl
+- extracted provider-decision keys
+- extracted changed-weight keys
+
+Required negative cases:
+- lower-chain-only packet
+- adaptive packet with `weights_before == weights_after`
+- interleaved-log packet where a foreign adaptive weight line must **not** be attached to the target decision
+
+Acceptance for PR-5A.1:
+- the collector can distinguish:
+  - `pr4_proved`
+  - `lower_chain_only`
+  - `adaptive_no_delta`
+  - incomplete packet failure reasons
+- audit semantics are pinned by fixture-backed tests rather than manual interpretation
+
+#### PR-5B — Operator runbook / checklist
+
+##### Goal
+Document how to verify Track 0 without needing deep code familiarity.
+
+##### Deliverable
+- a concise runbook in `docs/monitoring/` or `docs/guides/`
+
+##### Required contents
+- how to identify the candidate close
+- where decision artifacts live
+- where outcome artifacts live
+- which log lines matter
+- how to distinguish:
+  - plain recovery anchor
+  - enriched recovery wrapper
+  - ensemble-attributed adaptive packet
+- pass/fail criteria for:
+  - PR-1/2/3 lower chain
+  - PR-4 adaptation
+
+##### Acceptance
+- a non-expert operator can follow the checklist and reach the same verdict as a developer
+
+#### PR-5C — Fixture-backed audit harness
+
+##### Goal
+Make the runbook expectations executable under tests so auditability itself does not depend on live luck.
+
+##### Suggested scope
+- fixture for plain recovery close
+- fixture for enriched recovery wrapper close
+- fixture for full adaptive packet with weight delta
+- parser/assertion helper that converts a mixed packet of artifacts/logs into a verdict
+
+##### Acceptance
+- tests can classify known-good and known-bad audit packets deterministically
+
+#### PR-5D — Operator summary view
+
+##### Goal
+Provide a compact status summary rather than forcing full packet inspection every time.
+
+##### Possible form
+- CLI summary
+- markdown summary generator
+- small API/report helper
+
+##### Minimum fields
+- last accepted close
+- last adaptive proof packet
+- latest `weights_before -> weights_after`
+- current blocker if adaptation not observed recently
+
+##### Acceptance
+- overnight/operator checks can report Track 0 status in a few lines with evidence links
+
+### Recommended PR-5 order
+
+1. **PR-5A** proof packet collector
+2. **PR-5B** runbook/checklist
+3. **PR-5C** fixture-backed audit tests
+4. **PR-5D** operator summary layer
+
+### Why this order
+
+- A gives us the raw audit object
+- B makes it usable by humans
+- C makes the audit semantics regression-testable
+- D improves ergonomics once the underlying proof shape is stable
+
+## Prompt-bias / debate-role audit follow-up
+
+### Architectural finding
+
+The prompt-bias audit uncovered a significant split in the debate architecture:
+
+- `AIDecisionManager._debate_mode_inference(...)` already appends explicit role-specific prompt instructions for:
+  - bullish advocate
+  - bearish advocate
+  - judge
+- `DecisionEngine._debate_mode_inference(...)` still sends the same base prompt text to bull, bear, and judge providers without role-specific prompt separation
+
+This means the debate architecture is currently inconsistent across code paths.
+
+### Why this matters
+
+If the shared/base prompt carries any directional skew, the `DecisionEngine` debate path can propagate that skew across all three seats.
+That undermines the intended value of debate mode, because provider diversity is not the same thing as stance diversity.
+
+### Next prompt-audit slice (TDD first)
+
+#### Goal
+Unify debate-role prompting so both debate entry points enforce explicit bull / bear / judge separation.
+
+#### TDD contract
+- green test: `AIDecisionManager` debate prompts are role-distinct
+- green test: `DecisionEngine` debate prompts are also role-distinct
+
+#### Implementation target
+- extract or share role-prompt builders so `DecisionEngine` does not keep using a single shared prompt for all debate seats
+- keep JSON/output contracts separate from role instructions
+
+#### Status
+- landed in code: `DecisionEngine` now applies explicit bullish advocate / bearish advocate / impartial judge prompt variants rather than reusing one shared prompt across all debate seats
+- tests now verify role-distinct prompt separation in both debate entry points
+
+#### Acceptance
+- bull, bear, and judge prompts are explicitly different in both debate paths
+- role instructions are test-visible and no longer implicit/provider-dependent
+- prompt-bias audits can reason about one intentional debate architecture rather than two divergent ones
+
 ---
 
 ## Slice ordering rationale
