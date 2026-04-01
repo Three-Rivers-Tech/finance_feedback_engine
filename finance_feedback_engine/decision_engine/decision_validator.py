@@ -18,6 +18,7 @@ from .policy_actions import (
     get_policy_action_family,
     get_position_orientation,
     is_entry_policy_action,
+    is_exit_policy_action,
     is_long_policy_action,
     is_policy_action,
     is_short_policy_action,
@@ -303,6 +304,40 @@ class DecisionValidator:
             else:
                 # For forex or other, use unit amount
                 suggested_amount = recommended_position_size
+
+        # For exit/close actions (CLOSE_SHORT, CLOSE_LONG, REDUCE_*): derive
+        # suggested_amount from the existing position size, not from entry sizing.
+        # Position sizing intentionally returns 0 for de-risking actions, so we must
+        # source the amount from the current position contracts.
+        _is_exit_action = is_policy_action(action) and is_exit_policy_action(action)
+        if (
+            _is_exit_action
+            and has_existing_position
+            and current_price > 0
+            and (suggested_amount is None or float(suggested_amount or 0) <= 0)
+        ):
+            position_state = context.get("position_state")
+            if isinstance(position_state, dict):
+                position_contracts = float(position_state.get("contracts", 0) or 0)
+            else:
+                position_contracts = 0
+            if position_contracts > 0:
+                suggested_amount = position_contracts * current_price
+                recommended_position_size = position_contracts
+                logger.info(
+                    "Exit sizing: $%.2f USD notional for %s (%.6f contracts @ $%.2f)",
+                    suggested_amount,
+                    action,
+                    position_contracts,
+                    current_price,
+                )
+            else:
+                logger.warning(
+                    "Exit sizing: no position contracts found for %s %s; suggested_amount remains %.2f",
+                    action,
+                    asset_pair,
+                    float(suggested_amount or 0),
+                )
 
         # Apply adaptive size scaling (confidence + volatility) to reduce tail-risk.
         agent_cfg = self.config.get("agent", {}) if isinstance(self.config, dict) else {}
