@@ -167,8 +167,8 @@ ensemble:
   agreement_threshold: 0.6
   debate_mode: true
   debate_providers:
-    bear: llama3.1:8b
-    bull: gemma2:9b
+    bear: deepseek-r1:8b
+    bull: deepseek-r1:8b
     judge: deepseek-r1:8b
   enabled_providers:
   - llama3.1:8b
