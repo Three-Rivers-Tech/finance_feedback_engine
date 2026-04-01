@@ -752,42 +752,45 @@ class FinanceFeedbackEngine:
     def _normalize_learning_provider_decisions(
         ensemble_metadata: Optional[Dict[str, Any]],
     ) -> Optional[Dict[str, Dict[str, Any]]]:
+        """Normalize ensemble metadata into a dict suitable for the learning pipeline.
+
+        When role_decisions are present (debate mode), return seat-keyed dict
+        (bull/bear/judge) so adaptive learning tracks per-seat performance
+        instead of per-model. This is critical when multiple seats use the
+        same underlying model — model-keyed dicts collapse N seats into 1.
+
+        Falls back to provider_decisions for non-debate (legacy) ensembles.
+        """
         if not isinstance(ensemble_metadata, dict):
             return None
 
+        # Prefer role_decisions (seat-keyed) for debate mode learning.
+        # This avoids the single-model collapse problem where 3 seats using
+        # the same model produce only 1 provider_decisions entry.
+        role_decisions = ensemble_metadata.get("role_decisions")
+        if isinstance(role_decisions, dict) and role_decisions:
+            seat_decisions: Dict[str, Dict[str, Any]] = {}
+            for role_name, role_decision in role_decisions.items():
+                if not isinstance(role_decision, dict):
+                    continue
+                # Key by role (bull/bear/judge), strip the "role" field itself
+                seat_decisions[str(role_name)] = {
+                    key: value for key, value in role_decision.items() if key != "role"
+                }
+            if seat_decisions:
+                return seat_decisions
+
+        # Fallback: legacy provider-keyed decisions (non-debate ensembles)
         provider_decisions = ensemble_metadata.get("provider_decisions")
-        normalized_provider_decisions: Dict[str, Dict[str, Any]] = {}
         if isinstance(provider_decisions, dict):
-            normalized_provider_decisions = {
+            normalized = {
                 str(provider): details
                 for provider, details in provider_decisions.items()
                 if provider and isinstance(details, dict)
             }
+            return normalized or None
 
-        role_decisions = ensemble_metadata.get("role_decisions")
-        if not isinstance(role_decisions, dict):
-            return normalized_provider_decisions or None
-
-        reconstructed_provider_decisions: Dict[str, Dict[str, Any]] = {}
-        for role_decision in role_decisions.values():
-            if not isinstance(role_decision, dict):
-                continue
-            provider_name = role_decision.get("provider")
-            if not provider_name:
-                continue
-            reconstructed_provider_decisions[str(provider_name)] = {
-                key: value for key, value in role_decision.items() if key != "role"
-            }
-
-        if not reconstructed_provider_decisions:
-            return normalized_provider_decisions or None
-
-        if set(reconstructed_provider_decisions).issubset(
-            set(normalized_provider_decisions)
-        ):
-            return normalized_provider_decisions or reconstructed_provider_decisions
-
-        return reconstructed_provider_decisions
+        return None
 
     def _run_startup_health_checks(self):
         """
