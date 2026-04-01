@@ -2968,6 +2968,39 @@ class TradingLoopAgent:
                             asset_pair,
                         )
 
+                        # FIX-LINEAGE: For exit/close actions, immediately record the
+                        # trade outcome with the correct decision_id instead of relying
+                        # on the async detection pipeline which loses lineage.
+                        _is_close_action = str(action or "").upper().startswith(("CLOSE_", "REDUCE_"))
+                        if _is_close_action and decision_id:
+                            try:
+                                exit_price = float(
+                                    execution_result.get("execution_price")
+                                    or execution_result.get("fill_price")
+                                    or decision.get("entry_price")
+                                    or 0
+                                )
+                                if exit_price > 0:
+                                    self.engine.record_trade_outcome(
+                                        decision_id,
+                                        exit_price=exit_price,
+                                        exit_timestamp=decision.get("executed_at"),
+                                    )
+                                    logger.info(
+                                        "Direct learning handoff for %s %s | decision_id=%s | exit_price=%.2f",
+                                        action, asset_pair, decision_id, exit_price,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "Direct learning handoff skipped for %s %s: no exit price available",
+                                        action, asset_pair,
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    "Direct learning handoff failed for %s %s: %s",
+                                    action, asset_pair, e,
+                                )
+
                         if self._counts_toward_daily_trade_limit(
                             decision, execution_result
                         ):

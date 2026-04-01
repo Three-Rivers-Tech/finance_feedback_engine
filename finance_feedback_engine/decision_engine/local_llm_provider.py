@@ -611,6 +611,16 @@ class LocalLLMProvider:
                     except (ValueError, TypeError):
                         decision["confidence"] = 60
 
+                    # FIX-HOLD-CONF: 72% of HOLD decisions have confidence 0-9%.
+                    # Models output low/zero confidence for HOLD, meaning "no trade
+                    # conviction" — but downstream systems interpret 0% as "zero
+                    # confidence in the HOLD decision itself". Remap to 50% (neutral).
+                    if (
+                        str(decision.get("action", "")).upper() == "HOLD"
+                        and decision["confidence"] < 10
+                    ):
+                        decision["confidence"] = 50
+
                     # Safely convert amount to float (get default from config)
                     default_position_size = self.config.get("decision_engine", {}).get("default_position_size", 0.1)
                     try:

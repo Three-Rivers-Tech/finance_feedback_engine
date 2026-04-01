@@ -59,27 +59,76 @@ def _directional_side(action: Optional[str]) -> Optional[str]:
     return None
 
 
+# Minimum absolute confidence for a single-sided hold override
+_HOLD_OVERRIDE_MIN_CONFIDENCE = 70
+
+
 def _judge_hold_override(
     bull_case: Dict[str, Any],
     bear_case: Dict[str, Any],
     judge_decision: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
+    """Override judge HOLD when one advocate has a strong entry signal.
+
+    Previously required BOTH bull=bullish AND bear=bearish simultaneously,
+    which never happened in practice (0/4853 decisions). Relaxed to: if
+    either advocate recommends a directional ENTRY action with confidence
+    >= 70% and a material gap over the other, override the judge.
+    Note: exit/derisking overrides are handled by _judge_exit_override.
+    """
     if str(judge_decision.get('action', '')).upper() != 'HOLD':
         return None
 
     bull_side = _directional_side(bull_case.get('action'))
     bear_side = _directional_side(bear_case.get('action'))
-    if bull_side != 'bull' or bear_side != 'bear':
-        return None
 
     bull_conf = int(bull_case.get('confidence', 0) or 0)
     bear_conf = int(bear_case.get('confidence', 0) or 0)
-    gap = abs(bull_conf - bear_conf)
-    if gap < MATERIAL_CONFIDENCE_GAP:
+
+    # Original strict mode: both must be directional + gap check
+    if bull_side == 'bull' and bear_side == 'bear':
+        gap = abs(bull_conf - bear_conf)
+        if gap >= MATERIAL_CONFIDENCE_GAP:
+            stronger_side = 'bull' if bull_conf > bear_conf else 'bear'
+            stronger_case = bull_case if stronger_side == 'bull' else bear_case
+            override = deepcopy(stronger_case)
+            override['reasoning'] = (
+                f"Judge HOLD overridden: {stronger_side} case materially stronger by confidence gap {gap}. | "
+                f"Judge said HOLD ({judge_decision.get('confidence', 0)}). | "
+                f"Original {stronger_side} reasoning: {stronger_case.get('reasoning', '')}"
+            )
+            override['judge_hold_override_applied'] = True
+            override['judge_hold_override_side'] = stronger_side
+            override['judge_hold_override_gap'] = gap
+            override['original_judge_decision'] = deepcopy(judge_decision)
+            return override
+
+    # Relaxed mode: ONE advocate is directional with high confidence,
+    # the other is HOLD or weakly opposed. This unblocks entries that the
+    # judge conservatively suppresses.
+    candidates = []
+    if bull_side == 'bull' and bull_conf >= _HOLD_OVERRIDE_MIN_CONFIDENCE:
+        # Bull wants to go long with high confidence
+        other_conf = bear_conf if bear_side == 'bear' else 0
+        gap = bull_conf - other_conf
+        if gap >= MATERIAL_CONFIDENCE_GAP:
+            candidates.append(('bull', bull_case, bull_conf, gap))
+    if bear_side == 'bear' and bear_conf >= _HOLD_OVERRIDE_MIN_CONFIDENCE:
+        # Bear wants to go short with high confidence
+        other_conf = bull_conf if bull_side == 'bull' else 0
+        gap = bear_conf - other_conf
+        if gap >= MATERIAL_CONFIDENCE_GAP:
+            candidates.append(('bear', bear_case, bear_conf, gap))
+
+    if not candidates:
         return None
 
-    stronger_side = 'bull' if bull_conf > bear_conf else 'bear'
-    stronger_case = bull_case if stronger_side == 'bull' else bear_case
+    # Pick the strongest candidate
+    stronger_side, stronger_case, _, gap = max(candidates, key=lambda c: c[2])
+    # Skip exit/derisking actions — those are handled by _judge_exit_override
+    stronger_action = str(stronger_case.get('action', '')).upper()
+    if stronger_action.startswith(('CLOSE_', 'REDUCE_')):
+        return None
     override = deepcopy(stronger_case)
     override['reasoning'] = (
         f"Judge HOLD overridden: {stronger_side} case materially stronger by confidence gap {gap}. | "
