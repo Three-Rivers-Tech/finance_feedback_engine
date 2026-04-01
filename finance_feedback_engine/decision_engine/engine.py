@@ -833,8 +833,39 @@ Format response as a structured technical analysis demonstration.
         ]
 
         balance = context.get("balance", {})
-        total_balance = sum(float(v) for v in balance.values() if isinstance(v, (int, float)))
-        lines.append(f"Account Balance: ${total_balance:,.2f}")
+        cash_balance = sum(float(v) for v in balance.values() if isinstance(v, (int, float)))
+
+        # Include open position value for true portfolio picture.
+        # Without this, models see cash drop when positions open and
+        # incorrectly interpret margin allocation as losses.
+        monitoring = context.get("monitoring_context") or {}
+        active_positions = (monitoring.get("active_positions") or {}).get("futures", [])
+        total_unrealized_pnl = 0.0
+        total_notional = 0.0
+        position_lines = []
+        for pos in active_positions:
+            contracts = float(pos.get("number_of_contracts") or pos.get("contracts") or 0)
+            entry = float(pos.get("entry_price") or pos.get("average_price") or 0)
+            pnl = float(pos.get("unrealized_pnl") or 0)
+            side = pos.get("side", "?")
+            pid = pos.get("product_id", "?")
+            if contracts > 0 and entry > 0:
+                notional = contracts * entry
+                total_notional += notional
+                total_unrealized_pnl += pnl
+                pnl_sign = "+" if pnl >= 0 else ""
+                position_lines.append(
+                    f"  {pid}: {side} {contracts:.0f} @ ${entry:,.2f} "
+                    f"(notional ${notional:,.2f}, P&L {pnl_sign}${pnl:,.2f})"
+                )
+
+        total_portfolio = cash_balance + total_unrealized_pnl
+        lines.append(f"Cash Balance: ${cash_balance:,.2f}")
+        if position_lines:
+            lines.append(f"Open Positions ({len(position_lines)}):")
+            lines.extend(position_lines)
+            lines.append(f"Unrealized P&L: {'+'if total_unrealized_pnl>=0 else ''}${total_unrealized_pnl:,.2f}")
+        lines.append(f"Total Portfolio Value: ${total_portfolio:,.2f}")
 
         memory_context = context.get("memory_context")
         if memory_context and memory_context.get("has_history"):
