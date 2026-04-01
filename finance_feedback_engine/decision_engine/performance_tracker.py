@@ -114,8 +114,8 @@ class PerformanceTracker:
         for provider in enabled_providers:
             if provider in self.performance_history:
                 history = self.performance_history[provider]
-                if history["total"] > 0:
-                    accuracy = history["correct"] / history["total"]
+                if history.get("total", 0) > 0:
+                    accuracy = history.get("correct", 0) / history.get("total", 1)
                 else:
                     accuracy = 0.5  # Default neutral prior
                 avg_performance = float(history.get("avg_performance", 0.0) or 0.0)
@@ -159,8 +159,8 @@ class PerformanceTracker:
         stats = {"provider_performance": {}}
 
         for provider, history in self.performance_history.items():
-            if history["total"] > 0:
-                accuracy = history["correct"] / history["total"]
+            if history.get("total", 0) > 0:
+                accuracy = history.get("correct", 0) / history.get("total", 1)
                 # Convert avg_performance to percentage format
                 # If value <= 1.0, it's in decimal form; multiply by 100
                 avg_perf_value = history["avg_performance"]
