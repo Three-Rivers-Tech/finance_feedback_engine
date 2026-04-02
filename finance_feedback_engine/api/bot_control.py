@@ -1367,6 +1367,8 @@ async def get_open_positions(
         raw = await platform.aget_active_positions()  # {"positions": [...]}
         raw_positions = raw.get("positions", [])
 
+        portfolio_value_error = None
+        portfolio_value_degraded = False
         transformed = []
         for pos in raw_positions:
             try:

@@ -10,6 +10,7 @@ from finance_feedback_engine.utils.market_regime_detector import MarketRegimeDet
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
 
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
 logger = logging.getLogger(__name__)
 
 
