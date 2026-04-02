@@ -33,10 +33,12 @@ def _normalize_asset_key(value: Any) -> str:
     return str(value or "").upper().replace("-", "").replace("_", "").strip()
 
 
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
+
+
 def _position_asset_keys(pos: Dict[str, Any]) -> set[str]:
     """Return candidate canonical asset keys for a position payload."""
     keys: set[str] = set()
-    cfm_map = {"BIP": "BTC", "BIT": "BTC", "ETP": "ETH", "ET": "ETH", "SOL": "SOL", "SLP": "SOL", "GOL": "XAU", "SLR": "XAG"}
     for field in ("asset_pair", "product_id", "instrument", "symbol", "asset"):
         raw = str(pos.get(field) or "").strip().upper()
         if not raw:
@@ -44,11 +46,10 @@ def _position_asset_keys(pos: Dict[str, Any]) -> set[str]:
         normalized = _normalize_asset_key(raw)
         if normalized:
             keys.add(normalized)
-        if "-" in raw:
-            mapped = cfm_map.get(raw.split("-")[0])
-            if mapped:
-                keys.add(f"{mapped}USD")
-        elif "_" in raw:
+        cfm_resolved = _pid_to_pair(raw)
+        if cfm_resolved:
+            keys.add(cfm_resolved)
+        if "_" in raw and "-" not in raw:
             parts = raw.split("_")
             if len(parts) == 2:
                 keys.add(_normalize_asset_key("".join(parts)))
@@ -406,21 +407,17 @@ class MonitoringContextProvider:
         This maps product prefixes to base assets for correct matching.
         """
         base = asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").upper()
-        cfm_map = {
-            "BIP": "BTC", "BIT": "BTC",
-            "ETP": "ETH", "ET": "ETH",
-            "SOL": "SOL", "SLP": "SOL",
-            "GOL": "XAU", "SLR": "XAG",
-        }
         matched = []
         for p in positions:
             pid = p.get("product_id", "")
             if asset_pair in pid:
                 matched.append(p)
-            elif "-" in pid and cfm_map.get(pid.split("-")[0]) == base:
-                matched.append(p)
-            elif base in pid.upper():
-                matched.append(p)
+            else:
+                pid_canonical = _pid_to_pair(pid)
+                if pid_canonical and pid_canonical.replace("USD", "") == base:
+                    matched.append(p)
+                elif base in pid.upper():
+                    matched.append(p)
         return matched
 
     def _calculate_risk_metrics(

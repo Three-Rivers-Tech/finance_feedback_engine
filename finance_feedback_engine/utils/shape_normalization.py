@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from finance_feedback_engine.utils.validation import standardize_asset_pair
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair
 
 
 def normalize_scalar_id(value: Any) -> Optional[str]:
@@ -85,17 +86,10 @@ def asset_key_candidates(value: Any) -> list[str]:
     except Exception:
         canonical = None
 
-    raw_upper = raw.upper()
-    prefix_map = {
-        ("ETP", "ET", "ETH"): "ETHUSD",
-        ("BIP", "BIT", "BTC"): "BTCUSD",
-        ("SLP", "SOL"): "SOLUSD",
-        ("GOL",): "XAUUSD",
-        ("SLR",): "XAGUSD",
-    }
-    for prefixes, mapped in prefix_map.items():
-        if raw_upper.startswith(prefixes) and mapped not in candidates:
-            candidates.append(mapped)
+    # Use canonical product ID module for CFM prefix resolution
+    cfm_resolved = product_id_to_asset_pair(raw)
+    if cfm_resolved and cfm_resolved not in candidates:
+        candidates.append(cfm_resolved)
 
     fallback = raw_upper.replace("-", "").replace("_", "")
     if fallback and fallback not in candidates:

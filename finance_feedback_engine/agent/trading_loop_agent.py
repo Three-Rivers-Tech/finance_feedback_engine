@@ -49,6 +49,7 @@ from finance_feedback_engine.utils.shape_normalization import (
     normalize_scalar_id,
 )
 from finance_feedback_engine.utils.validation import standardize_asset_pair
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
 
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
@@ -1970,13 +1971,8 @@ class TradingLoopAgent:
                 raw_upper = str(raw_pair or "").upper()
                 if canonical == target_asset or raw_upper == target_asset:
                     return True
-                if target_asset == "BTCUSD" and raw_upper.startswith(
-                    ("BIP", "BIT", "BTC")
-                ):
-                    return True
-                if target_asset == "ETHUSD" and raw_upper.startswith(
-                    ("ETP", "ET", "ETH")
-                ):
+                cfm_pair = _pid_to_pair(raw_upper)
+                if cfm_pair == target_asset:
                     return True
             return False
 
@@ -2176,16 +2172,6 @@ class TradingLoopAgent:
                 )
                 candidate_positions.extend(portfolio_snapshot.get("positions", []))
 
-            # Coinbase CFM product prefixes -> canonical base asset
-            cfm_base_map = {
-                "BIP": "BTC",
-                "BIT": "BTC",
-                "ETP": "ETH",
-                "ET": "ETH",
-                "SOL": "SOL",
-                "SLP": "SOL",
-            }
-
             self._sync_trade_outcome_recorder(candidate_positions)
 
             for pos in candidate_positions:
@@ -2223,19 +2209,10 @@ class TradingLoopAgent:
 
                 # 2) Also map Coinbase futures product IDs (e.g., BIP-20DEC30-CDE)
                 #    to underlying canonical pairs (e.g., BTCUSD) for duplicate blocking.
-                raw_upper = str(raw_pair).upper()
-                prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
-                mapped_base = cfm_base_map.get(prefix)
-                if mapped_base:
-                    canonical = f"{mapped_base}USD"
+                cfm_canonical = _pid_to_pair(raw_pair)
+                if cfm_canonical:
+                    canonical = cfm_canonical
                     open_asset_pairs.add(canonical)
-                elif canonical is None:
-                    # 3) Fallback: infer base from symbol text if present
-                    for base in ("BTC", "ETH", "SOL"):
-                        if base in raw_upper:
-                            canonical = f"{base}USD"
-                            open_asset_pairs.add(canonical)
-                            break
 
                 if (
                     canonical
@@ -2489,10 +2466,8 @@ class TradingLoopAgent:
             if canonical == target_asset or raw_upper == target_asset:
                 matched_position = pos
                 break
-            if target_asset == "BTCUSD" and raw_upper.startswith(("BIP", "BIT", "BTC")):
-                matched_position = pos
-                break
-            if target_asset == "ETHUSD" and raw_upper.startswith(("ETP", "ET", "ETH")):
+            cfm_pair = _pid_to_pair(raw_upper)
+            if cfm_pair == target_asset:
                 matched_position = pos
                 break
 
@@ -3465,13 +3440,9 @@ class TradingLoopAgent:
                         closed_candidates = (
                             [closed_asset_pair] if closed_asset_pair else []
                         )
-                        closed_raw_upper = str(closed_product or "").upper()
-                        if closed_raw_upper.startswith(("ETP", "ET", "ETH")):
-                            closed_candidates.append("ETHUSD")
-                        if closed_raw_upper.startswith(("BIP", "BIT", "BTC")):
-                            closed_candidates.append("BTCUSD")
-                        if closed_raw_upper.startswith(("SLP", "SOL")):
-                            closed_candidates.append("SOLUSD")
+                        closed_cfm = _pid_to_pair(closed_product)
+                        if closed_cfm and closed_cfm not in closed_candidates:
+                            closed_candidates.append(closed_cfm)
                         if any(
                             candidate in closed_candidates
                             for candidate in candidate_asset_pairs
@@ -4386,25 +4357,12 @@ class TradingLoopAgent:
             derived_assets = set(open_asset_pairs or [])
             side_summary = dict(open_position_side or {})
 
-            cfm_base_map = {
-                "BIP": "BTC",
-                "BIT": "BTC",
-                "ETP": "ETH",
-                "ET": "ETH",
-                "SOL": "SOL",
-                "SLP": "SOL",
-            }
             for pos in candidate_positions:
                 raw_pair = pos.get("product_id") or pos.get("instrument")
                 if raw_pair:
                     raw_products.append(str(raw_pair))
-                raw_upper = str(raw_pair or "").upper()
-                prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
-                mapped_base = cfm_base_map.get(prefix)
-                canonical = None
-                if mapped_base:
-                    canonical = f"{mapped_base}USD"
-                else:
+                canonical = _pid_to_pair(raw_pair)
+                if canonical is None:
                     try:
                         canonical = (
                             standardize_asset_pair(raw_pair) if raw_pair else None

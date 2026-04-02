@@ -205,28 +205,17 @@ class MarketAnalysisContext:
         coinbase_breakdown = platform_breakdowns.get("coinbase") or {}
         if coinbase_enabled and not coinbase_holdings and coinbase_breakdown:
             derived_coinbase_holdings: Dict[str, Dict[str, Any]] = {}
-            cfm_base_map = {"BIP": "BTC", "BIT": "BTC", "ETP": "ETH", "ET": "ETH", "SOL": "SOL", "SLP": "SOL"}
             for pos in (coinbase_breakdown.get("futures_positions") or []):
                 raw_pair = pos.get("product_id") or pos.get("instrument")
                 if not raw_pair:
                     continue
-                canonical = None
-                try:
-                    from finance_feedback_engine.utils.validation import standardize_asset_pair
-                    canonical = standardize_asset_pair(raw_pair)
-                except Exception:
-                    canonical = None
-                raw_upper = str(raw_pair).upper()
-                prefix = raw_upper.split("-")[0] if "-" in raw_upper else raw_upper
+                canonical = _pid_to_pair(raw_pair)
                 if canonical is None:
-                    mapped_base = cfm_base_map.get(prefix)
-                    if mapped_base:
-                        canonical = f"{mapped_base}USD"
-                    else:
-                        for base in ("BTC", "ETH", "SOL"):
-                            if base in raw_upper:
-                                canonical = f"{base}USD"
-                                break
+                    try:
+                        from finance_feedback_engine.utils.validation import standardize_asset_pair
+                        canonical = standardize_asset_pair(raw_pair)
+                    except Exception:
+                        canonical = None
                 if not canonical:
                     continue
                 try:
@@ -297,11 +286,6 @@ class MarketAnalysisContext:
             else:
                 futures_positions = []
 
-            cfm_base_map = {
-                "BIP": "BTC", "BIT": "BTC",
-                "ETP": "ETH", "ET": "ETH",
-                "SOL": "SOL", "SLP": "SOL",
-            }
             normalized_asset_pair = asset_pair.upper()
             base_asset = normalized_asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").replace("_", "")
 
@@ -314,8 +298,8 @@ class MarketAnalysisContext:
                 if product_id == normalized_asset_pair:
                     has_position = True
                     break
-                prefix = product_id.split("-")[0] if "-" in product_id else ""
-                if cfm_base_map.get(prefix) == base_asset:
+                pid_canonical = _pid_to_pair(product_id)
+                if pid_canonical and pid_canonical.replace("USD", "") == base_asset:
                     has_position = True
                     break
                 if base_asset and base_asset in product_id:

@@ -111,10 +111,7 @@ class UnifiedDataProvider:
 
     def _is_cfm_product(self, asset_pair: str) -> bool:
         """Check if asset pair is a Coinbase CFM product (e.g., BIP-20DEC30-CDE)."""
-        pair = asset_pair.upper()
-        # CFM products follow pattern like BIP-20DEC30-CDE, ETP-20DEC30-CDE
-        # Check for the known prefixes
-        return any(pair.startswith(prefix) for prefix in ["BIP", "ETP", "SLP", "XRP", "ADA", "DOT", "LINK"])
+        return _canonical_is_cfm(asset_pair)
 
     def _is_forex(self, asset_pair: str) -> bool:
         """Check if asset pair is a fiat currency pair (forex).

@@ -111,8 +111,7 @@ class CoinbaseDataProvider:
             Coinbase product ID (e.g., 'BTC-USD', 'ETH-USD')
         """
         raw_pair = str(asset_pair or "").strip().upper()
-        cfm_prefixes = ("BIP-", "ETP-", "SLP-", "XRP-", "ADA-", "DOT-", "LINK-")
-        if raw_pair.startswith(cfm_prefixes) and raw_pair.endswith("-CDE"):
+        if is_cfm_product(raw_pair):
             return raw_pair
 
         # Remove any existing separators

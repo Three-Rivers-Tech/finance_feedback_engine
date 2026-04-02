@@ -11,6 +11,7 @@ import pytz
 from finance_feedback_engine.memory.vector_store import VectorMemory
 from finance_feedback_engine.observability.metrics import create_counters, create_histograms, get_meter
 from finance_feedback_engine.utils.config_loader import normalize_decision_config
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
 from finance_feedback_engine.decision_engine.policy_actions import (
     PolicyAction,
     build_policy_state_from_position_snapshot,
@@ -1816,13 +1817,6 @@ Missing Evidence: <what additional evidence would increase confidence>
         # asset_pair is simple format (BTCUSD/BTC-USD). Match by base asset.
         base_asset = asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").upper()
 
-        # Map known CFM product prefixes to base assets
-        CFM_BASE_MAP = {
-            "BIP": "BTC", "BIT": "BTC",  # BTC perpetual / monthly
-            "ETP": "ETH", "ET": "ETH",   # ETH perpetual / monthly
-            "SOL": "SOL", "SLP": "SOL",  # SOL
-        }
-
         current_position = None
         for pos in futures:
             pid = pos.get("product_id", "")
@@ -1830,12 +1824,12 @@ Missing Evidence: <what additional evidence would increase confidence>
             if pid == asset_pair:
                 current_position = pos
                 break
-            # CFM product prefix match (e.g., BIP-20DEC30-CDE → BTC)
-            prefix = pid.split("-")[0] if "-" in pid else ""
-            if CFM_BASE_MAP.get(prefix) == base_asset:
+            # Canonical CFM product ID resolution
+            pid_canonical = _pid_to_pair(pid)
+            if pid_canonical and pid_canonical.replace("USD", "") == base_asset:
                 current_position = pos
                 break
-            # Simple base match (e.g., BTC-PERP-INTX contains BTC)
+            # Simple base match fallback (e.g., BTC-PERP-INTX contains BTC)
             if base_asset in pid.upper():
                 current_position = pos
                 break

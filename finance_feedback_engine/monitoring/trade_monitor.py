@@ -422,16 +422,13 @@ class TradeMonitor:
                 )
                 # Associate with a decision if one is expected for this asset
                 from ..utils.validation import standardize_asset_pair
+                from ..utils.product_id import product_id_to_asset_pair
 
                 standardized_key = standardize_asset_pair(product_id)
                 candidate_keys = [standardized_key]
-                raw_upper = str(product_id or "").upper()
-                if raw_upper.startswith(("ETP", "ET", "ETH")) and "ETHUSD" not in candidate_keys:
-                    candidate_keys.append("ETHUSD")
-                if raw_upper.startswith(("BIP", "BIT", "BTC")) and "BTCUSD" not in candidate_keys:
-                    candidate_keys.append("BTCUSD")
-                if raw_upper.startswith(("SLP", "SOL")) and "SOLUSD" not in candidate_keys:
-                    candidate_keys.append("SOLUSD")
+                cfm_pair = product_id_to_asset_pair(product_id)
+                if cfm_pair and cfm_pair not in candidate_keys:
+                    candidate_keys.append(cfm_pair)
 
                 association = None
                 with self._expected_trades_lock:
