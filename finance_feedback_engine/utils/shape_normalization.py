@@ -91,7 +91,7 @@ def asset_key_candidates(value: Any) -> list[str]:
     if cfm_resolved and cfm_resolved not in candidates:
         candidates.append(cfm_resolved)
 
-    fallback = raw_upper.replace("-", "").replace("_", "")
+    fallback = raw.upper().replace("-", "").replace("_", "")
     if fallback and fallback not in candidates:
         candidates.append(fallback)
 
