@@ -1,0 +1,390 @@
+advanced_backtesting:
+  take_profit_percentage: 0.0358921111551528
+agent:
+  analysis_frequency_seconds: 300
+  approval_policy: on_new_asset
+  asset_pairs:
+  - BTCUSD
+  - ETHUSD
+  asset_parameters:
+    BTCUSD:
+      position_size_pct: 4.0229
+      stop_loss_pct: 4.1872
+      take_profit_pct: 3.5892
+      timeframe: M5
+    BTC_USD:
+      position_size_pct: 2.8
+      stop_loss_pct: 1.5
+      take_profit_pct: 3.0
+      timeframe: M5
+    ETHUSD:
+      position_size_pct: 2.0
+      stop_loss_pct: 2.5
+      take_profit_pct: 4.0
+      timeframe: M5
+    ETH_USD:
+      position_size_pct: 2.0
+      stop_loss_pct: 2.5
+      take_profit_pct: 4.0
+      timeframe: M5
+    EURUSD:
+      position_size_pct: 1.7
+      stop_loss_pct: 0.6
+      take_profit_pct: 1.0
+      timeframe: M15
+    EUR_USD:
+      position_size_pct: 1.7
+      stop_loss_pct: 0.6
+      take_profit_pct: 1.0
+      timeframe: M15
+    GBPUSD:
+      position_size_pct: 2.3
+      stop_loss_pct: 2.6
+      take_profit_pct: 4.8
+      timeframe: M5
+    GBP_USD:
+      position_size_pct: 2.3
+      stop_loss_pct: 2.6
+      take_profit_pct: 4.8
+      timeframe: M5
+  autonomous:
+    enabled: true
+    profit_target: 0.05
+    stop_loss: 0.02
+  autonomous_execution: true
+  core_pairs:
+  - BTCUSD
+  - ETHUSD
+  correlation_threshold: 0.7
+  dashboard_event_queue_size: 500
+  development_risk_limits:
+    correlation_threshold: 0.7
+    max_correlated_assets: 5
+    max_var_pct: 0.1
+    var_confidence: 0.9
+  main_loop_error_backoff_seconds: 300
+  max_correlated_assets: 2
+  max_daily_trades: 0
+  max_retries_per_cycle: 3
+  max_var_pct: 0.05
+  position_sizing:
+    dynamic_sizing: true
+    max_position_usd_dev: 500.0
+    max_position_usd_prod: 500.0
+    risk_percentage: 0.02
+    target_utilization_pct: 0.02
+  reasoning_max_concurrent_assets: 2
+  reasoning_retry_delay_seconds: 20
+  risk_appetite: low
+  strategic_goal: capital_preservation
+  var_confidence: 0.95
+  watchlist:
+  - BTCUSD
+  - ETHUSD
+  webhook:
+    enabled: false
+    retry_attempts: 3
+    timeout_seconds: 10
+    url: ''
+alpha_vantage_api_key: ${ALPHA_VANTAGE_API_KEY:-YOUR_ALPHA_VANTAGE_API_KEY}
+api_auth:
+  enable_fallback_to_config: true
+  rate_limit_max: 100
+  rate_limit_window: 60
+api_keys: {}
+api_timeouts:
+  llm_connection: 5
+  llm_debate: 180
+  llm_query: 120
+  macro: 10
+  market_data: 10
+  platform_balance: 5
+  platform_connection: 3
+  platform_execute: 30
+  platform_portfolio: 10
+  redis_operations: 2
+  sentiment: 15
+  telegram_webhook: 5
+auto_trading:
+  enabled: true
+backtesting:
+  enabled: false
+  fee_percentage: 0.1
+  initial_balance: 10000.0
+  rl:
+    discount_factor: 0.95
+    exploration_rate: 0.1
+    learning_rate: 0.01
+  strategy:
+    long_window: 20
+    name: sma_crossover
+    short_window: 5
+  use_real_data: false
+benchmark:
+  asset_pairs:
+  - BTCUSD
+  - ETHUSD
+  benchmark_frequency: 5
+  end_date: '2024-12-01'
+  reports_directory: data/benchmarks
+  save_reports: true
+  start_date: '2024-01-01'
+circuit_breaker:
+  failure_threshold: 3
+  half_open_retry: 1
+  recovery_timeout_seconds: 300
+data_providers:
+  alpha_vantage:
+    cache_ttl: 300
+  unified:
+    cache_ttl: 120
+database:
+  echo: ${DB_ECHO:-false}
+  isolation_level: READ_COMMITTED
+  max_overflow: ${DB_POOL_OVERFLOW:-10}
+  pool_recycle: ${DB_POOL_RECYCLE:-3600}
+  pool_size: ${DB_POOL_SIZE:-20}
+  pool_timeout: ${DB_POOL_TIMEOUT:-30}
+  url: ${DATABASE_URL:-postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}
+debate:
+  bear_model: llama3.1:8b
+  bull_model: gemma2:9b
+  consensus_threshold: 0.6
+  enabled: true
+  judge_model: deepseek-r1:8b
+decision_engine:
+  ai_provider: local
+  decision_threshold: 0.7
+  default_position_size: 0.03
+  ensemble_timeout: 120
+  max_retries: 3
+  model_name: llama3.1:8b
+  risk_per_trade: 0.0402289620713378
+  stop_loss_percentage: 0.0418722903729898
+  veto_threshold: 0.6
+ensemble:
+  adaptive_learning: true
+  agreement_threshold: 0.6
+  debate_mode: true
+  debate_providers:
+    bear: llama3.1:8b
+    bull: gemma2:9b
+    judge: deepseek-r1:8b
+  enabled_providers:
+  - llama3.1:8b
+  - deepseek-r1:8b
+  - gemma2:9b
+  - gemma2:9b
+  - gemma3:4b
+  learning_rate: 0.1
+  provider_weights:
+    deepseek-r1:8b: 0.2
+    gemma2:9b: 0.2
+    gemma3:4b: 0.2
+    llama3.1:8b: 0.2
+  two_phase:
+    asset_routing:
+      codex_as_tiebreaker: true
+      crypto: cli
+      fallback: gpt-oss:120b-cloud
+      forex: gemini
+      max_premium_calls_per_day: 50
+      stock: gemini
+    enabled: true
+    high_stakes_position_threshold: 1000
+    phase1_agreement_threshold: 0.6
+    phase1_confidence_threshold: 0.75
+    phase1_min_quorum: 3
+    require_premium_for_high_stakes: true
+  vote_thresholds:
+    buy: 0.5
+    neutral: -0.5
+    strong_buy: 1.5
+  voting_strategy: weighted
+error_tracking:
+  backend: logging
+  enabled: false
+  environment: ${FFE_ENVIRONMENT:development}
+  sentry_dsn: ${SENTRY_DSN:}
+  traces_sample_rate: 0.1
+features:
+  enhanced_slippage_model: false
+  limit_stop_orders: false
+  multi_agent_system: false
+  optuna_hyperparameter_search: false
+  paper_trading_mode: false
+  parallel_backtesting: false
+  rl_agent: false
+  sentiment_veto: false
+  thompson_sampling_weights: false
+  visual_reports: false
+logging:
+  file:
+    base_path: logs
+    enabled: true
+    handlers:
+    - filename: ffe_all.log
+      level: DEBUG
+      name: all
+    - filename: ffe_errors.log
+      level: ERROR
+      name: error
+    - filename: ffe_audit.log
+      level: INFO
+      name: audit
+    rotation:
+      backup_count: 30
+      max_bytes: 10485760
+  level: INFO
+  pii_patterns: []
+  retention:
+    cold_tier: 365
+    hot_tier: 7
+    warm_tier: 30
+  structured:
+    correlation_ids: true
+    enabled: true
+    format: json
+    pii_redaction: true
+monitoring:
+  enable_context_integration: true
+  enable_live_view: false
+  enabled: false
+  include_macro: false
+  include_sentiment: true
+  live_view:
+    decision_log:
+      max_entries: 10
+      max_reasoning_length: 200
+      show_reasoning: true
+    panels:
+      active_trades: true
+      agent_status: true
+      market_pulse: true
+      performance: true
+      portfolio: true
+      recent_decisions: true
+    performance:
+      lookback_hours: 24
+    refresh_rates:
+      fast: 2
+      lazy: 30
+      medium: 5
+      slow: 10
+  manual_cli: false
+  pulse_interval_seconds: 300
+observability:
+  logging:
+    file_base_path: logs
+    file_enabled: true
+    format: json
+    level: INFO
+  metrics:
+    enabled: true
+    prometheus_port: 8000
+  tracing:
+    backend: console
+    enabled: false
+    jaeger:
+      agent_host: localhost
+      agent_port: 6831
+    otlp:
+      endpoint: http://localhost:4317
+    sample_rate: 0.1
+optimization:
+  n_trials: 50
+  optimize_for: sharpe_ratio
+  results_directory: data/optimization
+  save_results: true
+  search_spaces:
+    atr_multiplier:
+      max: 3.0
+      min: 1.5
+    confidence_threshold:
+      max: 0.85
+      min: 0.65
+    position_size_pct:
+      max: 0.02
+      min: 0.005
+    rsi_period:
+      max: 20
+      min: 10
+    stop_loss_pct:
+      max: 0.05
+      min: 0.01
+  timeout: null
+paper_trading:
+  enabled: true
+  simulate_execution: true
+  verify_outcomes: true
+paper_trading_defaults:
+  enabled: false
+  initial_cash_usd: 10000.0
+persistence:
+  cleanup_days: 30
+  max_decisions: 1000
+  storage_path: data/decisions
+platform_credentials:
+  api_key: ${COINBASE_API_KEY:-YOUR_COINBASE_API_KEY}
+  api_secret: ${COINBASE_API_SECRET:-YOUR_COINBASE_API_SECRET}
+  use_sandbox: false
+platform_execute_circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout_seconds: 15
+platforms:
+- credentials:
+    api_key: ${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}
+    api_secret: ${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}
+    use_sandbox: false
+  name: coinbase_advanced
+- credentials:
+    account_id: ${OANDA_ACCOUNT_ID:YOUR_OANDA_ACCOUNT_ID}
+    api_key: ${OANDA_API_KEY:YOUR_OANDA_API_KEY}
+    environment: ${OANDA_ENVIRONMENT:practice}
+portfolio_memory:
+  context_window: 20
+  enabled: true
+  learning_rate: 0.1
+  max_memory_size: 1000
+providers:
+  alpha_vantage:
+    api_key: ${ALPHA_VANTAGE_API_KEY:YOUR_ALPHA_VANTAGE_API_KEY}
+  coinbase:
+    credentials:
+      api_key: ${COINBASE_API_KEY:YOUR_COINBASE_API_KEY}
+      api_secret: ${COINBASE_API_SECRET:YOUR_COINBASE_API_SECRET}
+      use_sandbox: false
+refactoring:
+  auto_rollback: true
+  benchmark_frequency: 5
+  degradation_threshold: -0.05
+  max_concurrent: 1
+  output_directory: data/refactoring
+  use_git: true
+risk:
+  correlation_threshold: 0.7
+  max_correlated_assets: 2
+  max_drawdown_pct: 0.05
+  max_position_size: 0.05
+  max_var_pct: 0.05
+  var_confidence: 0.95
+safety:
+  max_leverage: 5.0
+  max_position_pct: 25.0
+service:
+  environment: development
+  name: finance_feedback_engine
+  version: 2.0.0
+signal_only_default: false
+telegram:
+  bot_token: ${TELEGRAM_BOT_TOKEN:YOUR_TELEGRAM_BOT_TOKEN}
+  chat_id: ${TELEGRAM_CHAT_ID:YOUR_TELEGRAM_CHAT_ID}
+  enabled: false
+trading:
+  assets:
+  - BTCUSD
+  - ETHUSD
+  enabled: true
+  interval_minutes: 30
+  paper_mode: false
+trading_platform: unified

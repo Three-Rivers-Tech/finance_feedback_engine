@@ -351,3 +351,60 @@ class TestSeatBasedIntegration:
         # Since none of the seats have history, should fall back to base weights
         total = sum(weights.values())
         assert abs(total - 1.0) < 0.001
+
+
+class TestSeatBasedWeightCalculation:
+    """Tests that weight calculation uses seat keys, not model keys."""
+
+    def test_weights_change_after_trade_in_debate_mode(self):
+        """In debate mode, update_base_weights should produce changed weights."""
+        config = {
+            "persistence": {"storage_path": "/tmp/ffe_test_decisions"},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {"deepseek-r1:8b": 1.0},
+                "adaptive_learning": True,
+                "learning_rate": 0.1,
+                "voting_strategy": "weighted",
+                "agreement_threshold": 0.6,
+                "debate_mode": {"enabled": True},
+                "debate_providers": {
+                    "bull": "deepseek-r1:8b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "deepseek-r1:8b",
+                },
+                "local_dominance_target": 0.6,
+                "min_local_providers": 1,
+            },
+        }
+
+        from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
+
+        manager = EnsembleDecisionManager(config)
+        manager.performance_tracker.performance_history = {}
+
+        # Simulate multiple trades where bear is consistently right
+        for i in range(5):
+            seat_decisions = {
+                "bull": {"action": "HOLD", "confidence": 30},
+                "bear": {"action": "OPEN_SMALL_SHORT", "confidence": 70},
+                "judge": {"action": "HOLD", "confidence": 50},
+            }
+            manager.update_base_weights(
+                provider_decisions=seat_decisions,
+                actual_outcome="OPEN_SMALL_SHORT",
+                performance_metric=2.0,  # profitable
+            )
+
+        # After multiple profitable shorts where bear was right,
+        # bear's weight should be different from bull's
+        history = manager.performance_tracker.performance_history
+        assert "bull" in history
+        assert "bear" in history
+        assert "judge" in history
+        assert history["bear"]["correct"] > history["bull"]["correct"]
+
+        # Weights should have actually changed (not stuck at base)
+        weights = manager.base_weights
+        assert "bull" in weights or "bear" in weights or "judge" in weights, \
+            f"Weights should be seat-keyed, got: {weights}"

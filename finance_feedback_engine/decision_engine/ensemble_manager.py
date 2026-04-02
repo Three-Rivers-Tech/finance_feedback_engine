@@ -1676,17 +1676,22 @@ class EnsembleDecisionManager:
 
         base_weights_before = dict(self.base_weights)
 
+        # In debate mode, decisions are seat-keyed (bull/bear/judge) not
+        # model-keyed. Use the actual decision keys so the tracker records
+        # and calculates weights against the correct history entries.
+        learning_providers = list(provider_decisions.keys()) if self.debate_mode else self.enabled_providers
+
         # Use the PerformanceTracker component
         self.performance_tracker.update_provider_performance(
             provider_decisions,
             actual_outcome,
             performance_metric,
-            self.enabled_providers,
+            learning_providers,
         )
 
         # Update the base weights with the newly calculated values
         new_weights = self.performance_tracker.calculate_adaptive_weights(
-            self.enabled_providers, self.base_weights
+            learning_providers, self.base_weights
         )
         self.base_weights = new_weights
 
