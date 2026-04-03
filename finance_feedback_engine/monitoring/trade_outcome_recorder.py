@@ -458,6 +458,120 @@ class TradeOutcomeRecorder:
             logger.error(f"Failed to create outcome: {e}")
             return None
 
+    def annotate_open_position_decision(
+        self,
+        product_id: str,
+        side: str,
+        decision_id: Optional[str],
+    ) -> bool:
+        """Set decision_id on an open position in the recorder state.
+
+        Called by order_status_worker when an OPEN fill is confirmed,
+        bridging the decision_id from the order pipeline into the
+        position-tracking state. This ensures that when the position
+        later closes, the outcome carries the correct decision_id
+        without relying on the fragile recovery cascade.
+
+        Args:
+            product_id: Coinbase product ID (e.g., "BIP-20DEC30-CDE")
+            side: Position side ("SHORT" or "LONG")
+            decision_id: The decision ID to annotate
+
+        Returns:
+            True if annotation was applied, False if skipped/not found
+        """
+        if not decision_id or not product_id or not side:
+            return False
+
+        pos_key = f"{product_id}_{side.upper()}"
+        if pos_key not in self.open_positions:
+            logger.debug(
+                "annotate_open_position_decision: position %s not found in recorder state",
+                pos_key,
+            )
+            return False
+
+        existing = self.open_positions[pos_key].get("decision_id")
+        if existing:
+            logger.debug(
+                "annotate_open_position_decision: position %s already has decision_id=%s, not overwriting with %s",
+                pos_key, existing, decision_id,
+            )
+            return False
+
+        self.open_positions[pos_key]["decision_id"] = decision_id
+        self._save_state()
+        logger.info(
+            "annotate_open_position_decision: set decision_id=%s on %s",
+            decision_id, pos_key,
+        )
+        return True
+
+    def annotate_open_position_decision_by_asset(
+        self,
+        asset_pair: str,
+        side: str,
+        decision_id: Optional[str],
+    ) -> bool:
+        """Set decision_id by scanning open_positions for a matching asset pair.
+
+        Fallback for when the exact product_id (e.g., BIP-20DEC30-CDE) is not
+        known, but the asset pair (BTCUSD) and side are. Scans all open positions
+        for a product that maps to the given asset pair.
+
+        Args:
+            asset_pair: Trading pair (e.g., "BTCUSD")
+            side: Position side ("SHORT" or "LONG")
+            decision_id: The decision ID to annotate
+
+        Returns:
+            True if annotation was applied, False if skipped/not found
+        """
+        if not decision_id or not asset_pair or not side:
+            return False
+
+        side_upper = side.upper()
+
+        # Try to resolve asset_pair to product_id candidates
+        try:
+            from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
+        except ImportError:
+            _pid_to_pair = None
+
+        for pos_key, pos_data in self.open_positions.items():
+            if not pos_key.endswith(f"_{side_upper}"):
+                continue
+
+            product = pos_data.get("product", "")
+
+            # Check if this product matches the asset pair
+            matches = False
+            if _pid_to_pair:
+                try:
+                    resolved_pair = _pid_to_pair(product)
+                    if resolved_pair and resolved_pair.upper() == asset_pair.upper():
+                        matches = True
+                except Exception:
+                    pass
+
+            # Fallback: simple substring match (BIP→BTC, ETP→ETH)
+            if not matches:
+                if ("BIP" in product or "BTC" in product) and "BTC" in asset_pair.upper():
+                    matches = True
+                elif ("ETP" in product or "ETH" in product) and "ETH" in asset_pair.upper():
+                    matches = True
+
+            if matches:
+                return self.annotate_open_position_decision(
+                    product_id=product, side=side_upper, decision_id=decision_id,
+                )
+
+        logger.debug(
+            "annotate_open_position_decision_by_asset: no matching position for %s %s",
+            asset_pair, side,
+        )
+        return False
+
     def _recompute_realized_pnl(self, outcome: Dict[str, Any]) -> Decimal:
         """Recompute realized P&L from side/qty/prices/fees."""
         side = str(outcome.get("side", "")).upper()

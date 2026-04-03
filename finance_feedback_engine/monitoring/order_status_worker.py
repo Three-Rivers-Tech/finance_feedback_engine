@@ -450,6 +450,33 @@ class OrderStatusWorker:
                 fees=Decimal(str(fill_info.get("fees", 0))),
             )
 
+            # Bridge decision_id into recorder open_positions for OPEN fills.
+            # This ensures that when the position later closes (detected by
+            # update_positions polling), the outcome carries the decision_id
+            # natively — no recovery cascade needed.
+            action = str(order_data.get("action", "")).upper()
+            if action.startswith("OPEN_") and order_data.get("decision_id"):
+                side = order_data.get("side") or ""
+                annotate_fn = getattr(self.recorder, "annotate_open_position_decision_by_asset", None)
+                if callable(annotate_fn):
+                    try:
+                        annotated = annotate_fn(
+                            asset_pair=order_data["asset_pair"],
+                            side=side,
+                            decision_id=order_data["decision_id"],
+                        )
+                        if annotated:
+                            logger.info(
+                                "Bridged decision_id %s to recorder open position for %s %s",
+                                order_data["decision_id"],
+                                order_data["asset_pair"],
+                                side,
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to bridge decision_id to recorder: %s", e
+                        )
+
             return outcome
 
         except Exception as e:
