@@ -31,6 +31,12 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     normalize_policy_action,
 )
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+
+try:
+    from finance_feedback_engine.decision_engine.sortino_gate import SortinoGate, SortinoGateResult
+except ImportError:
+    SortinoGate = None  # Graceful degradation
+    SortinoGateResult = None
 from finance_feedback_engine.monitoring.prometheus import (
     increment_dashboard_events_dropped,
     update_agent_state,
@@ -375,6 +381,12 @@ class TradingLoopAgent:
         self._batch_review_counter = 0
         self._kelly_activated = False
         self._last_batch_review_time = None
+
+        # Track SK: Sortino-gated adaptive Kelly position sizing
+        self._trade_pnl_history: list[float] = []
+        self._trade_pnl_history_max = 500  # Rolling window cap
+        self._sortino_gate = SortinoGate() if SortinoGate is not None else None
+        self._last_sortino_gate_result: SortinoGateResult | None = None
 
         # Validate notification delivery path on startup
         notification_valid, notification_errors = self._validate_notification_config()
@@ -2638,6 +2650,30 @@ class TradingLoopAgent:
             )
 
             if should_execute:
+                # --- Track SK: Inject sortino gate + performance metrics ---
+                try:
+                    if self._sortino_gate is not None:
+                        self._last_sortino_gate_result = self._sortino_gate.compute(
+                            self._trade_pnl_history
+                        )
+                        decision["sortino_gate_result"] = self._last_sortino_gate_result
+                except Exception as e:
+                    logger.warning("Sortino gate computation failed: %s", e)
+
+                # Inject performance_metrics for Kelly parameter extraction
+                raw_wr = self._performance_metrics.get("win_rate", 0)
+                decision["performance_metrics"] = {
+                    "win_rate": raw_wr / 100.0 if raw_wr > 1.0 else raw_wr,
+                    "avg_win": self._performance_metrics.get("avg_win", 0),
+                    "avg_loss": self._performance_metrics.get("avg_loss", 0),
+                    "payoff_ratio": (
+                        abs(self._performance_metrics.get("avg_win", 0)
+                            / self._performance_metrics.get("avg_loss", 1))
+                        if self._performance_metrics.get("avg_loss", 0) != 0
+                        else 1.0
+                    ),
+                }
+
                 # --- INJECT POSITION SIZING HERE ---
                 try:
                     # Use the engine's position_sizing_calculator
@@ -3833,6 +3869,12 @@ class TradingLoopAgent:
             realized_pnl = trade_outcome.get("realized_pnl", 0)
             is_profitable = trade_outcome.get("was_profitable", realized_pnl > 0)
 
+            # Track SK: append to P&L history for sortino gate
+            if realized_pnl != 0:
+                self._trade_pnl_history.append(float(realized_pnl))
+                if len(self._trade_pnl_history) > self._trade_pnl_history_max:
+                    self._trade_pnl_history = self._trade_pnl_history[-self._trade_pnl_history_max:]
+
             # Update basic metrics
             self._performance_metrics["total_trades"] += 1
             self._performance_metrics["total_pnl"] += realized_pnl
@@ -3929,53 +3971,41 @@ class TradingLoopAgent:
                 )
 
             # 2. Check Kelly activation criteria (requires 50+ trades)
+            # --- Track SK: Sortino-gated Kelly status (replaces legacy _kelly_activated) ---
+            if self._sortino_gate is not None and self._last_sortino_gate_result is not None:
+                sgr = self._last_sortino_gate_result
+                logger.info(
+                    f"\nSortino-Kelly Status: {sgr.sizing_mode.upper()} "
+                    f"(sortino={sgr.weighted_sortino:.3f}, multiplier={sgr.kelly_multiplier:.2f}, "
+                    f"trades={sgr.trade_count}, windows={sgr.windows_used})"
+                )
+                if sgr.short_window_veto:
+                    logger.warning("  ⚠️ Short-window veto active — recent performance deteriorating")
+                if sgr.sizing_mode != "fixed_risk":
+                    logger.info(f"  🎯 Kelly active: {sgr.reason}")
+                else:
+                    logger.info(f"  ℹ️ Fixed risk: {sgr.reason}")
+            elif self._sortino_gate is not None:
+                logger.info(
+                    f"\nSortino-Kelly Status: BOOTSTRAP ({len(self._trade_pnl_history)} P&L samples collected)"
+                )
+
+            # Legacy Kelly check (kept for backward compat logging, no longer drives sizing)
             if self._performance_metrics["total_trades"] >= 50:
                 kelly_check = self.portfolio_memory.check_kelly_activation_criteria(
                     window=50
                 )
-
                 previous_status = self._kelly_activated
                 should_activate = kelly_check.get("should_activate_kelly", False)
                 self._kelly_activated = should_activate
-
                 logger.info(
-                    f"\nKelly Criterion Status: {'ACTIVATED' if should_activate else 'NOT ACTIVATED'}"
+                    f"  Legacy Kelly check: {'ACTIVATED' if should_activate else 'NOT ACTIVATED'} "
+                    f"(PF={kelly_check.get('avg_pf', 0):.3f}, PF_std={kelly_check.get('pf_std', 0):.3f})"
                 )
-                logger.info(
-                    f"  - Profit Factor: {kelly_check.get('avg_pf', 0):.3f} (threshold: 1.20)"
-                )
-                logger.info(
-                    f"  - PF Stability (std): {kelly_check.get('pf_std', 0):.3f} (threshold: 0.15)"
-                )
-                logger.info(f"  - Window: {kelly_check.get('actual_window', 0)} trades")
-
-                if should_activate and not previous_status:
-                    logger.info(
-                        "\n🎯 Kelly Criterion NEWLY ACTIVATED! Position sizing will use Quarter Kelly (0.25) with adaptive scaling to Half Kelly (0.5)."
-                    )
-                elif not should_activate and previous_status:
-                    logger.warning(
-                        "\n⚠️  Kelly Criterion DEACTIVATED due to instability. Reverting to 2% fixed risk."
-                    )
-
-                # Recommendation based on stability
-                if kelly_check.get("avg_pf", 0) >= 1.20:
-                    if kelly_check.get("pf_std", 1.0) < 0.10:
-                        logger.info(
-                            "Recommendation: Excellent stability. Consider scaling to Half Kelly (0.50)."
-                        )
-                    elif kelly_check.get("pf_std", 1.0) < 0.15:
-                        logger.info(
-                            "Recommendation: Good stability. Maintain Quarter Kelly (0.25)."
-                        )
-                    else:
-                        logger.info(
-                            "Recommendation: Borderline stability. Keep Quarter Kelly and monitor."
-                        )
             else:
                 remaining_trades = 50 - self._performance_metrics["total_trades"]
                 logger.info(
-                    f"\nKelly Criterion Status: BOOTSTRAP PERIOD ({remaining_trades} trades until eligibility)"
+                    f"\nLegacy Kelly Status: BOOTSTRAP PERIOD ({remaining_trades} trades until eligibility)"
                 )
                 logger.info(
                     "  Using platform-specific fixed sizing until 50-trade threshold."
