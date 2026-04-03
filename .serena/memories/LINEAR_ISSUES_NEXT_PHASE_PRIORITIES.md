@@ -23,7 +23,7 @@
 - **Impact:** Production deployment security
 - **Scope:**
   - cert-manager ClusterIssuer for Let's Encrypt
-  - nginx ingress for HTTPS on ffe.three-rivers-tech.com
+  - nginx ingress for HTTPS on ffe.grovextech.com
   - Cloudflare DNS integration
   - TLS secret auto-renewal
 - **Blocking:** YES - Required for production deployment

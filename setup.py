@@ -34,7 +34,7 @@ setup(
     description="AI-powered finance tool for automated portfolio simulation and trading decisions",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Three Rivers Tech",
+    author="Grovex Tech & Solutions",
     license="Apache License 2.0",
     packages=find_packages(),
     install_requires=install_requires,

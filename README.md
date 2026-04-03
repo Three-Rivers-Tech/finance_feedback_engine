@@ -1,9 +1,9 @@
 # Finance Feedback Engine
 
-[![Test Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
-[![Tests](https://img.shields.io/badge/tests-598%20passed-success)](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0)
-[![CI](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/ci.yml)
-[![Staging](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/staging.yml/badge.svg)](https://github.com/Three-Rivers-Tech/finance_feedback_engine/actions/workflows/staging.yml)
+[![Test Coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine)
+[![Tests](https://img.shields.io/badge/tests-598%20passed-success)](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine)
+[![CI](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/actions/workflows/ci.yml)
+[![Staging](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/actions/workflows/staging.yml/badge.svg)](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/actions/workflows/staging.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 
 The Finance Feedback Engine is a Python-based tool designed to provide validation and feedback for financial data processing, particularly for applications interacting with market data APIs like Alpha Vantage.
@@ -173,7 +173,7 @@ For detailed GPU setup, see [GPU Setup Guide](docs/GPU_SETUP_GUIDE.md).
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0.git
+git clone https://github.com/Grovex-Tech-Solutions/finance_feedback_engine.git
 cd finance_feedback_engine-2.0
 ```
 
@@ -1259,7 +1259,7 @@ The Finance Feedback Engine 2.0 is production-ready with full Docker support, au
 
 ```bash
 # Clone the repository
-git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0.git
+git clone https://github.com/Grovex-Tech-Solutions/finance_feedback_engine.git
 cd finance_feedback_engine-2.0
 
 # Create production environment file

@@ -79,7 +79,7 @@ terraform apply tfplan
 ### networking/
 - VPC/network configuration
 - Firewall rules (UFW or iptables)
-- DNS records for `ffe.three-rivers-tech.com` and `api.ffe.three-rivers-tech.com`
+- DNS records for `ffe.grovextech.com` and `api.ffe.grovextech.com`
 - Load balancer endpoints (ports 80, 443)
 
 **Outputs:**
@@ -123,8 +123,8 @@ node_count            = 1
 kubernetes_version    = "v1.29"
 postgres_version      = "16"
 vault_version         = "1.17"
-acme_email            = "cpenrod@three-rivers-tech.com"
-domain_names          = ["ffe.three-rivers-tech.com", "api.ffe.three-rivers-tech.com"]
+acme_email            = "cpenrod@grovextech.com"
+domain_names          = ["ffe.grovextech.com", "api.ffe.grovextech.com"]
 ```
 
 ## State Management

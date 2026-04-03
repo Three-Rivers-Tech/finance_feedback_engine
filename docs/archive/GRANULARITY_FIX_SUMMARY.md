@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-05  
 **Status:** ✅ CODE COMPLETE - READY FOR DEPLOYMENT  
-**GitHub:** https://github.com/Three-Rivers-Tech/finance_feedback_engine  
+**GitHub:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine  
 
 ---
 
@@ -75,7 +75,7 @@ commit ada1af5
 test: Add granularity mapping verification script
 ```
 
-**All commits pushed to:** https://github.com/Three-Rivers-Tech/finance_feedback_engine
+**All commits pushed to:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine
 
 ---
 
@@ -241,7 +241,7 @@ docker restart ffe-backend
 
 - [x] ✅ Code fix implemented
 - [x] ✅ Changes committed to git
-- [x] ✅ Changes pushed to GitHub (Three-Rivers-Tech/finance_feedback_engine)
+- [x] ✅ Changes pushed to GitHub (Grovex-Tech-Solutions/finance_feedback_engine)
 - [x] ✅ Test script created and passing
 - [x] ✅ Documentation updated
 - [ ] ⏳ Container rebuilt (pending deployment)
@@ -258,7 +258,7 @@ docker restart ffe-backend
 ## Contact
 
 **Developer:** Nyarlathotep (Hive Mind Agent)  
-**Repository:** https://github.com/Three-Rivers-Tech/finance_feedback_engine  
+**Repository:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine  
 **Commit Hash:** 0a39250 (core fix)  
 **Deployment Target:** CT250 (Proxmox LXC) or Local Mac  
 

@@ -542,7 +542,7 @@ Before running the bot with real money:
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/Three-Rivers-Tech/finance-feedback-engine/issues
+- GitHub Issues: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues
 - Documentation: `docs/`
 - Logs: `data/logs`
 

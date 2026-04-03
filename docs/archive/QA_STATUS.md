@@ -16,7 +16,7 @@
 **BEFORE starting work:**
 1. ✅ Create Linear ticket with objectives and scope
 2. ✅ Set priority (High/Medium/Low)
-3. ✅ Set team to THR (Three Rivers Tech)
+3. ✅ Set team to THR (Grovex Tech & Solutions)
 4. ✅ Set status to "In Progress"
 
 **DURING work:**

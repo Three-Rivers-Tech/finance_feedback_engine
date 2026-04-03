@@ -70,29 +70,29 @@ ingress:
     nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
     nginx.ingress.kubernetes.io/enable-cors: "true"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://ffe.three-rivers-tech.com"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://ffe.grovextech.com"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
     nginx.ingress.kubernetes.io/configuration-snippet: |
         more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
         more_set_headers "X-Frame-Options: DENY";
         more_set_headers "X-Content-Type-Options: nosniff";
         more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
-        more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net https://www.googletagmanager.com; connect-src 'self' https://api.ffe.three-rivers-tech.com wss://ws.ffe.three-rivers-tech.com; font-src 'self' https://cdn.jsdelivr.net; frame-src 'self'";
+        more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://cdn.jsdelivr.net https://www.googletagmanager.com; connect-src 'self' https://api.ffe.grovextech.com wss://ws.ffe.grovextech.com; font-src 'self' https://cdn.jsdelivr.net; frame-src 'self'";
           'self' https://api.example.com wss://ws.example.com; font-src 'self' https://cdn.jsdelivr.net; frame-src 'self'";
   hosts:
-    - host: ffe.three-rivers-tech.com
+    - host: ffe.grovextech.com
       paths:
         - path: /
           pathType: Prefix
-    - host: api.ffe.three-rivers-tech.com
+    - host: api.ffe.grovextech.com
       paths:
         - path: /api
           pathType: Prefix
   tls:
     - secretName: ffe-tls
       hosts:
-        - ffe.three-rivers-tech.com
-        - api.ffe.three-rivers-tech.com
+        - ffe.grovextech.com
+        - api.ffe.grovextech.com
 
 # ============================================================================
 # RESOURCES (Requests & Limits)

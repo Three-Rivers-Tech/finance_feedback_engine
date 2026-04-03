@@ -11,7 +11,7 @@
 ## Mission Objectives
 
 ### 1. Review PR #63 ✅ COMPLETE
-**PR:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/63  
+**PR:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/63  
 **Decision:** ✅ **APPROVED**
 
 **Summary:**

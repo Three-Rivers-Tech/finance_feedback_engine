@@ -17,7 +17,7 @@
   - `DeploymentOrchestrator` - Main orchestration class
   - `cli` - Click CLI interface
 - **Version**: 1.0.0
-- **Author**: Three Rivers Tech
+- **Author**: Grovex Tech & Solutions
 
 ### Module: `__main__.py`
 - **Location**: `finance_feedback_engine/deployment/__main__.py`

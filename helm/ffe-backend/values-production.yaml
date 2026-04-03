@@ -33,19 +33,19 @@ ingress:
       more_set_headers "X-Content-Type-Options: nosniff";
       more_set_headers "X-XSS-Protection: 1; mode=block";
   hosts:
-    - host: ffe.three-rivers-tech.com
+    - host: ffe.grovextech.com
       paths:
         - path: /
           pathType: Prefix
-    - host: api.ffe.three-rivers-tech.com
+    - host: api.ffe.grovextech.com
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: ffe-tls
       hosts:
-        - ffe.three-rivers-tech.com
-        - api.ffe.three-rivers-tech.com
+        - ffe.grovextech.com
+        - api.ffe.grovextech.com
 
 # Resources - High for production
 resources:

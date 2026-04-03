@@ -350,6 +350,6 @@ A: No, old config files will continue to work. We'll issue deprecation warnings 
 ## Support
 
 For deprecation-related questions or migration assistance:
-- 📧 Email: dev@threerivers.tech
-- 📖 Docs: https://github.com/Three-Rivers-Tech/finance_feedback_engine/docs
+- 📧 Email: dev@grovextech.com
+- 📖 Docs: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/docs
 - 💬 Discussions: GitHub Discussions

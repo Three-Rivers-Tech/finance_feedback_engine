@@ -14,7 +14,7 @@ The n8n container on `business-tools` (192.168.1.197:5678) now has these env var
 ```bash
 PLANE_API_KEY=${PLANE_API_KEY}
 PLANE_API_BASE=http://192.168.1.177:8088
-PLANE_WORKSPACE_SLUG=three-rivers-tech-llc
+PLANE_WORKSPACE_SLUG=grovex-tech-solutions
 PLANE_PROJECT_ID=a751111c-fa00-4004-b725-d1174e488fe0
 ```
 
@@ -103,7 +103,7 @@ All n8n workflows can now use these variables:
 ```javascript
 // In n8n Function nodes or HTTP Request nodes
 $env.PLANE_API_BASE        // http://192.168.1.177:8088
-$env.PLANE_WORKSPACE_SLUG  // three-rivers-tech-llc
+$env.PLANE_WORKSPACE_SLUG  // grovex-tech-solutions
 $env.PLANE_PROJECT_ID      // a751111c-fa00-4004-b725-d1174e488fe0
 $env.PLANE_API_KEY         // ${PLANE_API_KEY}
 
@@ -122,7 +122,7 @@ Current FFE-related tickets (as of 2026-02-19):
 3. **[INCIDENT] FFE not opening BTC/ETH trades - investigation**
 
 You can view all issues at:
-http://192.168.1.177:8088/three-rivers-tech-llc/projects/a751111c-fa00-4004-b725-d1174e488fe0/issues/
+http://192.168.1.177:8088/grovex-tech-solutions/projects/a751111c-fa00-4004-b725-d1174e488fe0/issues/
 
 ---
 

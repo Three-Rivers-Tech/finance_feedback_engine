@@ -2,7 +2,7 @@
 
 **Reviewer:** QA Lead Agent (Subagent)  
 **Date:** 2026-02-15 14:23 EST  
-**PR:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/64  
+**PR:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/64  
 **Branch:** `fix/thr-226-227-critical-bugs`  
 **Status:** **APPROVED FOR MERGE**
 

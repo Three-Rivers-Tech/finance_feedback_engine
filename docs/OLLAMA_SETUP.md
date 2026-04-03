@@ -444,7 +444,7 @@ If Ollama setup fails:
 2. **Review logs**: `docker-compose logs ollama`
 3. **Test connectivity**: `curl http://localhost:11434/api/tags`
 4. **Try fallback**: `python main.py analyze BTCUSD --provider gemini` (uses API)
-5. **Open issue**: https://github.com/three-rivers-tech/finance_feedback_engine/issues
+5. **Open issue**: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues
 
 ---
 

@@ -351,7 +351,7 @@ All code references include:
 
 This documentation is part of the Finance Feedback Engine project.
 
-**Copyright** © 2024-2025 Three Rivers Tech
+**Copyright** © 2024-2025 Grovex Tech & Solutions
 **License**: Proprietary
 
 ---

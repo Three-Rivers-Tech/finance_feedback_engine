@@ -83,4 +83,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[2.0.0]: https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/releases/tag/v2.0.0
+[2.0.0]: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/releases/tag/v2.0.0

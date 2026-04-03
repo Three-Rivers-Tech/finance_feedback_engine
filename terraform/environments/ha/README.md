@@ -140,8 +140,8 @@ postgres_version   = "16"
 vault_version      = "1.17"
 
 # Networking
-domain_names    = ["ffe.three-rivers-tech.com", "api.ffe.three-rivers-tech.com"]
-acme_email      = "cpenrod@three-rivers-tech.com"
+domain_names    = ["ffe.grovextech.com", "api.ffe.grovextech.com"]
+acme_email      = "cpenrod@grovextech.com"
 network_cidr    = "10.0.0.0/16"
 
 # Master nodes

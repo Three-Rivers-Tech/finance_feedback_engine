@@ -5,7 +5,7 @@ This test suite verifies the interaction between:
 1. Fail-fast credential validation (core.py line 70)
 2. Graceful fallback to MockTradingPlatform (core.py lines 220-240)
 
-Issue: https://github.com/Three-Rivers-Tech/finance_feedback_engine/issues/...
+Issue: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues/...
 The credential validation raises ValueError BEFORE platform initialization,
 preventing the catch block that enables analysis-only mode fallback.
 """
@@ -135,7 +135,7 @@ class TestAnalysisOnlyModeFallback:
         reason="Known issue: credential validation doesn't trigger fallback to MockTradingPlatform. "
         "Design intent is to fallback gracefully, but validate_credentials() currently allows "
         "invalid credentials through without triggering the catch block. "
-        "See: https://github.com/Three-Rivers-Tech/finance_feedback_engine/issues/TBD",
+        "See: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues/TBD",
         strict=False
     )
     def test_documented_fallback_should_work_on_credential_error(self, tmp_path):

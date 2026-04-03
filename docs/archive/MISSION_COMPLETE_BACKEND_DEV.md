@@ -95,7 +95,7 @@ Falling back to simple momentum strategy
 
 ### Pull Request
 
-**PR #64:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/64  
+**PR #64:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/64  
 **Title:** "Fix THR-226 & THR-227: Critical bugs blocking first trade"  
 **Status:** Open, awaiting review  
 **Tests:** ✅ All passing

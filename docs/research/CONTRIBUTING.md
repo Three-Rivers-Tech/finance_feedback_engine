@@ -76,7 +76,7 @@ Feature suggestions are welcome! Please:
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0.git
+git clone https://github.com/Grovex-Tech-Solutions/finance_feedback_engine.git
 cd finance_feedback_engine-2.0
 
 # Create virtual environment

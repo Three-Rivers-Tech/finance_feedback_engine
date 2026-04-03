@@ -139,19 +139,19 @@ ingress:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: ffe.three-rivers-tech.com
+    - host: ffe.grovextech.com
       paths:
         - path: /
           pathType: Prefix
-    - host: api.ffe.three-rivers-tech.com
+    - host: api.ffe.grovextech.com
       paths:
         - path: /api
           pathType: Prefix
   tls:
     - secretName: ffe-tls
       hosts:
-        - ffe.three-rivers-tech.com
-        - api.ffe.three-rivers-tech.com
+        - ffe.grovextech.com
+        - api.ffe.grovextech.com
 
 # Resources (requests and limits)
 resources:
@@ -201,7 +201,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: cpenrod@three-rivers-tech.com
+    email: cpenrod@grovextech.com
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:

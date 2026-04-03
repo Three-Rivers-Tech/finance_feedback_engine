@@ -11,7 +11,7 @@ spec:
     server: https://acme-v02.api.letsencrypt.org/directory
 
     # Email for ACME account and notifications
-    email: cpenrod@three-rivers-tech.com
+    email: cpenrod@grovextech.com
 
     # Store ACME account private key in Secret
     privateKeySecretRef:
@@ -37,7 +37,7 @@ spec:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
 
     # Email for ACME account and notifications
-    email: cpenrod@three-rivers-tech.com
+    email: cpenrod@grovextech.com
 
     # Store ACME account private key in Secret
     privateKeySecretRef:

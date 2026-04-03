@@ -915,8 +915,8 @@ curl http://production-url/health
 
 ### Support
 
-- **Issues**: [GitHub Issues](https://github.com/three-rivers-tech/finance_feedback_engine-2.0/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/three-rivers-tech/finance_feedback_engine-2.0/discussions)
+- **Issues**: [GitHub Issues](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/discussions)
 - **Security**: security@example.com
 
 ---

@@ -20,8 +20,8 @@
   ],
   "timezone": "America/New_York",
   "labels": ["dependencies"],
-  "assignees": ["@three-rivers-tech"],
-  "reviewers": ["@three-rivers-tech"],
+  "assignees": ["@Grovex-Tech-Solutions"],
+  "reviewers": ["@Grovex-Tech-Solutions"],
   "prConcurrentLimit": 5,
   "prCreation": "not-pending",
   "prPriority": 0,
@@ -34,8 +34,8 @@
     "labels": ["security", "dependencies"],
     "prPriority": 10,
     "automerge": false,
-    "assignees": ["@three-rivers-tech"],
-    "reviewers": ["@three-rivers-tech"],
+    "assignees": ["@Grovex-Tech-Solutions"],
+    "reviewers": ["@Grovex-Tech-Solutions"],
     "schedule": ["at any time"]
   },
   "packageRules": [
@@ -137,7 +137,7 @@
       "automerge": false,
       "groupName": "AI/ML dependencies",
       "labels": ["dependencies", "ai-ml"],
-      "reviewers": ["@three-rivers-tech"],
+      "reviewers": ["@Grovex-Tech-Solutions"],
       "prPriority": 5
     },
     {

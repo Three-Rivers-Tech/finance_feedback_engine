@@ -25,7 +25,7 @@ All work from Mission 1 has been **retroactively documented in Linear** and a **
 - Pattern verification via automated tests
 - Review findings: All 811/815 tests passing (99.5%)
 - Decision: ✅ APPROVED
-- GitHub comment: https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/63#issuecomment-3904739455
+- GitHub comment: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/63#issuecomment-3904739455
 - Artifact: PR_63_REVIEW.md (11.8 KB)
 
 ---
@@ -79,7 +79,7 @@ All work from Mission 1 has been **retroactively documented in Linear** and a **
 
 **Features:**
 - Automatically retrieves API key from macOS Keychain
-- Sets team to THR (Three Rivers Tech)
+- Sets team to THR (Grovex Tech & Solutions)
 - Sets status to "In Progress" by default
 - Returns ticket identifier and URL
 
@@ -198,5 +198,5 @@ For Mission 2 (Core.py coverage improvement), I will:
 
 **Created by:** QA Lead (OpenClaw Agent)  
 **Date:** 2026-02-15 12:15 EST  
-**Linear Team:** THR (Three Rivers Tech)  
+**Linear Team:** THR (Grovex Tech & Solutions)  
 **API Key:** Stored in macOS Keychain (account: openclaw, service: linear-api-key)

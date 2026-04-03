@@ -5,7 +5,7 @@ A comprehensive, production-ready deployment tool with TDD, tracing, and logging
 
 from finance_feedback_engine import __version__
 
-__author__ = "Three Rivers Tech"
+__author__ = "Grovex Tech & Solutions"
 
 from .cli import cli
 from .orchestrator import DeploymentOrchestrator

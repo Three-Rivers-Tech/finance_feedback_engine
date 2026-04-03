@@ -7,7 +7,7 @@ name = "finance-feedback-engine-2.0"
 dynamic = ["version"]
 description = "A sophisticated Python-based trading system designed to provide validation and feedback for financial data processing"
 readme = "README.md"
-authors = [{name = "Three Rivers Tech", email = "dev@threerivers.tech"}]
+authors = [{name = "Grovex Tech & Solutions", email = "dev@grovextech.com"}]
 license = {text = "MIT"}
 requires-python = ">=3.13"
 classifiers = [

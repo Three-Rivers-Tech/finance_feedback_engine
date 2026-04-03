@@ -2,7 +2,7 @@
 
 **Reviewer:** QA Lead (OpenClaw Agent)  
 **Review Date:** 2026-02-15  
-**PR:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/63  
+**PR:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/63  
 **Branch:** revert/remove-spot-trading  
 **Commit:** af2400a  
 

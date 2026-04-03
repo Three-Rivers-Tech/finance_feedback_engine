@@ -6,19 +6,19 @@ version: 0.1.0
 appVersion: "1.0"
 
 # Chart metadata
-home: https://github.com/Three-Rivers-Tech/finance_feedback_engine
+home: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine
 sources:
-  - https://github.com/Three-Rivers-Tech/finance_feedback_engine
+  - https://github.com/Grovex-Tech-Solutions/finance_feedback_engine
 maintainers:
   - name: Christian Penrod
-    email: cpenrod@three-rivers-tech.com
+    email: cpenrod@grovextech.com
 keywords:
   - finance
   - trading
   - ai
   - fastapi
   - kubernetes
-icon: https://raw.githubusercontent.com/Three-Rivers-Tech/finance_feedback_engine/main/logo.png
+icon: https://raw.githubusercontent.com/Grovex-Tech-Solutions/finance_feedback_engine/main/logo.png
 
 # Dependencies (subcharts)
 dependencies:

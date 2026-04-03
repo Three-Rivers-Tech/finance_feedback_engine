@@ -31,7 +31,7 @@ def example_successful_trade():
     
     if issue_id:
         print(f"✅ Created execution ticket: {issue_id}")
-        print(f"   View at: http://192.168.1.177:8088/workspaces/three-rivers-tech-llc/projects/a751111c-fa00-4004-b725-d1174e488fe0/issues/{issue_id}")
+        print(f"   View at: http://192.168.1.177:8088/workspaces/grovex-tech-solutions/projects/a751111c-fa00-4004-b725-d1174e488fe0/issues/{issue_id}")
     else:
         print("❌ Failed to create ticket")
 

@@ -10,7 +10,7 @@ try:
 except Exception:  # pragma: no cover - fallback when scm metadata is unavailable
     __version__ = "0.10.1"
 
-__author__ = "Three Rivers Tech"
+__author__ = "Grovex Tech & Solutions"
 
 from .core import FinanceFeedbackEngine
 

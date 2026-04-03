@@ -19,7 +19,7 @@
 **Exports**:
 - `FinanceFeedbackEngine`: Main engine class for orchestrating trading operations
 - `__version__`: Version identifier (0.9.9)
-- `__author__`: Author name (Three Rivers Tech)
+- `__author__`: Author name (Grovex Tech & Solutions)
 
 ### Class: `FinanceFeedbackEngine`
 

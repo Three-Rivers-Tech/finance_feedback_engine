@@ -24,7 +24,7 @@ class PlaneClient:
     ):
         self.api_key = api_key or os.getenv('PLANE_API_KEY')
         self.base_url = base_url or os.getenv('PLANE_API_BASE', 'http://192.168.1.177:8088')
-        self.workspace_slug = workspace_slug or os.getenv('PLANE_WORKSPACE_SLUG', 'three-rivers-tech-llc')
+        self.workspace_slug = workspace_slug or os.getenv('PLANE_WORKSPACE_SLUG', 'grovex-tech-solutions')
         self.project_id = project_id or os.getenv('PLANE_PROJECT_ID', 'a751111c-fa00-4004-b725-d1174e488fe0')
         
         if not self.api_key:

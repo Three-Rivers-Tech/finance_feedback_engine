@@ -243,4 +243,4 @@ All requirements from the problem statement have been successfully implemented:
 **Status**: ✅ Complete and Production Ready
 **Version**: 2.0.0
 **License**: Apache 2.0
-**Author**: Three Rivers Tech
+**Author**: Grovex Tech & Solutions

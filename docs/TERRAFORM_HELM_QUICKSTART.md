@@ -16,7 +16,7 @@ Deploy the Finance Feedback Engine to on-premises Kubernetes (K3s) with full GPU
 ### 1. Clone and Configure
 
 ```bash
-git clone https://github.com/Three-Rivers-Tech/finance_feedback_engine.git
+git clone https://github.com/Grovex-Tech-Solutions/finance_feedback_engine.git
 cd finance_feedback_engine/terraform/environments/single-node
 
 # Copy example config
@@ -368,6 +368,6 @@ ssh ubuntu@192.168.1.100 "/usr/local/bin/k3s-uninstall.sh"
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/Three-Rivers-Tech/finance_feedback_engine/issues)
+- Issues: [GitHub Issues](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues)
 - Docs: [Documentation Index](../../docs/README.md)
 - Linear: THR-39 (Terraform), THR-40 (Helm), THR-42 (TLS)

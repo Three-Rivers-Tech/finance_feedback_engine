@@ -12,7 +12,7 @@
 **URL:** https://linear.app/grant-street/issue/THR-253/qa-review-pr-63-exception-handling-fixes-tier-1  
 **Status:** ✅ Done  
 **Priority:** High  
-**Team:** THR (Three Rivers Tech)
+**Team:** THR (Grovex Tech & Solutions)
 
 **Summary:**
 Comprehensive review of PR #63 covering 6 critical exception handling fixes in trade-path files.
@@ -26,7 +26,7 @@ Comprehensive review of PR #63 covering 6 critical exception handling fixes in t
 - ✅ No regressions detected
 
 **Deliverables:**
-- PR review comment: https://github.com/Three-Rivers-Tech/finance_feedback_engine/pull/63#issuecomment-3904739455
+- PR review comment: https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/pull/63#issuecomment-3904739455
 - PR_63_REVIEW.md (11.8 KB comprehensive review)
 - Decision: ✅ APPROVED
 
@@ -36,7 +36,7 @@ Comprehensive review of PR #63 covering 6 critical exception handling fixes in t
 **URL:** https://linear.app/grant-street/issue/THR-254/qa-establish-test-coverage-baseline  
 **Status:** ✅ Done  
 **Priority:** High  
-**Team:** THR (Three Rivers Tech)
+**Team:** THR (Grovex Tech & Solutions)
 
 **Summary:**
 Documented current test coverage baseline and created 5-phase improvement roadmap to reach 70% target.
@@ -71,7 +71,7 @@ Documented current test coverage baseline and created 5-phase improvement roadma
 **URL:** https://linear.app/grant-street/issue/THR-255/qa-set-up-testing-infrastructure-and-documentation  
 **Status:** ✅ Done  
 **Priority:** High  
-**Team:** THR (Three Rivers Tech)
+**Team:** THR (Grovex Tech & Solutions)
 
 **Summary:**
 Established comprehensive QA infrastructure including configuration files, documentation, and testing standards.

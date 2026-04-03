@@ -1,4 +1,4 @@
-# Autonomous Revenue Department Design - Three Rivers Tech
+# Autonomous Revenue Department Design - Grovex Tech & Solutions
 
 **Date:** 2026-02-14  
 **Vision:** Build technology that auto-compounds and grows autonomously  

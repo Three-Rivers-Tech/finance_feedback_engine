@@ -59,7 +59,7 @@ agent.run()
 
 ## Support
 
-For questions, see [GitHub Issues](https://github.com/Three-Rivers-Tech/finance_feedback_engine-2.0/issues)
+For questions, see [GitHub Issues](https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues)
 
 **Timeline:**
 - v2.1: Orchestrator deprecated (current)

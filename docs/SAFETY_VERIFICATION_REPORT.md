@@ -24,7 +24,7 @@ Five critical safety subsystems have been audited through code inspection and au
 - **Timestamp:** December 30, 2025 (see individual test sections for exact timestamps)
 - **Command:** `pytest tests/test_<subsystem>.py -v --tb=short`
 - **CI Workflow:** [.github/workflows/ci.yml](.github/workflows/ci.yml)
-- **Repository:** Three-Rivers-Tech/finance_feedback_engine @ commit `31468ec`
+- **Repository:** Grovex-Tech-Solutions/finance_feedback_engine @ commit `31468ec`
 
 **Verdict:** Code and functional tests verified. **Timing validation and rollback testing required before live deployment.** See "Outstanding Verification Tasks" section below.
 

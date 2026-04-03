@@ -2,7 +2,7 @@
 
 **Sprint:** Feb 17 – Mar 2, 2026  
 **Goal:** Deploy production-ready trading parameters with validated optimization infrastructure  
-**Board:** https://github.com/Three-Rivers-Tech/finance_feedback_engine/issues  
+**Board:** https://github.com/Grovex-Tech-Solutions/finance_feedback_engine/issues  
 **Last Updated:** 2026-02-17 (THR-265 bidirectional momentum complete)
 
 ---

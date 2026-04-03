@@ -74,7 +74,7 @@ All Phase 2 scaffolding and documentation tasks completed successfully. Ready to
   - letsencrypt-prod ClusterIssuer (production certs)
   - letsencrypt-staging ClusterIssuer (testing certs)
   - HTTP-01 solver (Nginx ingress)
-  - ACME email: cpenrod@three-rivers-tech.com
+  - ACME email: cpenrod@grovextech.com
 
 ### 5. Terraform Infrastructure Code (1 file) ✅
 - **terraform/main.tf** (enhanced): Root module orchestration:
@@ -96,7 +96,7 @@ On-Premises Network
 │   ├── Namespace: ffe
 │   ├── Deployment: ffe-backend (3 replicas prod, rolling updates)
 │   ├── Service: ffe-backend (ClusterIP:8000)
-│   ├── Ingress: nginx with cert-manager annotations (ffe.three-rivers-tech.com, api.ffe.three-rivers-tech.com)
+│   ├── Ingress: nginx with cert-manager annotations (ffe.grovextech.com, api.ffe.grovextech.com)
 │   ├── ConfigMap: ffe-backend-config (non-secret app config)
 │   ├── Secrets: ffe-backend-db, ffe-backend-secrets (with Vault injection)
 │   ├── StatefulSet: postgres (3 replicas for HA, if bundled)
@@ -134,10 +134,10 @@ On-Premises Network
 
 ## TLS/ACME Configuration
 
-- **Email:** cpenrod@three-rivers-tech.com (Let's Encrypt notifications)
+- **Email:** cpenrod@grovextech.com (Let's Encrypt notifications)
 - **Domains:** 
-  - ffe.three-rivers-tech.com (UI)
-  - api.ffe.three-rivers-tech.com (API)
+  - ffe.grovextech.com (UI)
+  - api.ffe.grovextech.com (API)
 - **Solver:** HTTP-01 (requires port 80 open to internet)
 - **Issuers:**
   - letsencrypt-prod (production certificates)
@@ -247,7 +247,7 @@ k8s/
 - ✅ Kubernetes manifests follow industry best practices
 - ✅ Health checks align with FastAPI endpoints (/health, /ready, /live)
 - ✅ Rolling update strategy eliminates downtime
-- ✅ ACME email confirmed with user (cpenrod@three-rivers-tech.com)
+- ✅ ACME email confirmed with user (cpenrod@grovextech.com)
 - ✅ Terraform variables cover all deployment scenarios
 - ✅ Environment-specific values enable dev/staging/prod differentiation
 - ✅ Documentation provides both single-node and HA deployment paths

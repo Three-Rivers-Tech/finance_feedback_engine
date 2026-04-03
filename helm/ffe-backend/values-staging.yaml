@@ -21,19 +21,19 @@ ingress:
     cert-manager.io/cluster-issuer: letsencrypt-staging
     nginx.ingress.kubernetes.io/rate-limit: "100"
   hosts:
-    - host: staging-ffe.three-rivers-tech.com
+    - host: staging-ffe.grovextech.com
       paths:
         - path: /
           pathType: Prefix
-    - host: staging-api.ffe.three-rivers-tech.com
+    - host: staging-api.ffe.grovextech.com
       paths:
         - path: /api
           pathType: Prefix
   tls:
     - secretName: staging-ffe-tls
       hosts:
-        - staging-ffe.three-rivers-tech.com
-        - staging-api.ffe.three-rivers-tech.com
+        - staging-ffe.grovextech.com
+        - staging-api.ffe.grovextech.com
 
 # Resources - Medium for staging
 resources:
