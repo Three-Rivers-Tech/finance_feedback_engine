@@ -33,6 +33,11 @@ from finance_feedback_engine.decision_engine.policy_actions import (
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
 
 try:
+    from finance_feedback_engine.monitoring.pending_linkage_store import PendingLinkageStore
+except ImportError:
+    PendingLinkageStore = None
+
+try:
     from finance_feedback_engine.decision_engine.sortino_gate import SortinoGate, SortinoGateResult
 except ImportError:
     SortinoGate = None  # Graceful degradation

@@ -42,6 +42,7 @@ class TradeOutcomeRecorder:
         unified_provider=None,
         trade_close_alert_webhook_url: Optional[str] = None,
         trade_close_alert_token: Optional[str] = None,
+        pending_linkage_store=None,
     ):
         """
         Initialize Trade Outcome Recorder.
@@ -60,6 +61,7 @@ class TradeOutcomeRecorder:
         
         # Load existing state
         self.open_positions: Dict[str, Dict[str, Any]] = self._load_state()
+        self._linkage_store = pending_linkage_store
         
         # THR-237: Async mode configuration
         self.use_async = use_async
@@ -274,6 +276,24 @@ class TradeOutcomeRecorder:
                     now_utc.isoformat()
                 )
                 
+                # Resolve decision_id: first from position snapshot, then from
+                # durable linkage store (which the order_status_worker populated
+                # when the OPEN fill was confirmed).
+                snapshot_decision_id = normalize_scalar_id(pos.get("decision_id"))
+                if not snapshot_decision_id and self._linkage_store:
+                    try:
+                        linkage = self._linkage_store.lookup(
+                            product_id=product, side=side,
+                        )
+                        if linkage:
+                            snapshot_decision_id = linkage.get("decision_id")
+                            logger.info(
+                                "Backfilled decision_id %s for new position %s from linkage store (order=%s)",
+                                snapshot_decision_id, pos_key, linkage.get("order_id"),
+                            )
+                    except Exception as e:
+                        logger.debug("Linkage store lookup failed for %s: %s", pos_key, e)
+
                 self.open_positions[pos_key] = {
                     "trade_id": str(uuid.uuid4()),
                     "product": product,
@@ -282,7 +302,7 @@ class TradeOutcomeRecorder:
                     "entry_price": entry_price,
                     "entry_size": size,
                     "last_price": current_price,
-                    "decision_id": normalize_scalar_id(pos.get("decision_id")),
+                    "decision_id": snapshot_decision_id,
                 }
                 logger.info(f"New position opened: {pos_key} @ {entry_price}")
                 # Save state immediately when new position detected
@@ -431,9 +451,26 @@ class TradeOutcomeRecorder:
             # Fees (placeholder - will be improved when we get actual fee data)
             fees = Decimal("0")
             
+            # Final chance: if decision_id is still None, try linkage store
+            close_decision_id = trade_data.get("decision_id")
+            if not close_decision_id and self._linkage_store:
+                try:
+                    linkage = self._linkage_store.consume(
+                        product_id=trade_data.get("product", ""),
+                        side=trade_data.get("side", ""),
+                    )
+                    if linkage:
+                        close_decision_id = linkage.get("decision_id")
+                        logger.info(
+                            "Recovered decision_id %s for close outcome from linkage store (order=%s)",
+                            close_decision_id, linkage.get("order_id"),
+                        )
+                except Exception as e:
+                    logger.debug("Linkage store consume failed: %s", e)
+
             outcome = {
                 "trade_id": trade_data["trade_id"],
-                "decision_id": trade_data.get("decision_id"),
+                "decision_id": close_decision_id,
                 "product": trade_data["product"],
                 "side": side,
                 "entry_time": trade_data["entry_time"],

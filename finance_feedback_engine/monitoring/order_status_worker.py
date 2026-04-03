@@ -38,6 +38,7 @@ class OrderStatusWorker:
         poll_interval: int = 30,
         flush_every_cycles: int = 5,
         max_stale_checks: int = 20,
+        pending_linkage_store=None,
     ):
         """
         Initialize order status worker.
@@ -71,6 +72,7 @@ class OrderStatusWorker:
         self._pending_cache: Dict[str, Dict[str, Any]] = self._load_pending_from_disk()
         self._dirty = False
         self._cycles_since_flush = 0
+        self._linkage_store = pending_linkage_store
 
     def add_pending_order(
         self,
@@ -450,32 +452,37 @@ class OrderStatusWorker:
                 fees=Decimal(str(fill_info.get("fees", 0))),
             )
 
-            # Bridge decision_id into recorder open_positions for OPEN fills.
-            # This ensures that when the position later closes (detected by
-            # update_positions polling), the outcome carries the decision_id
-            # natively — no recovery cascade needed.
+            # Write decision linkage to durable store for OPEN fills.
+            # The recorder consults this store when it first detects a
+            # position or when it creates a close outcome — eliminating
+            # both the close-before-annotate and annotate-before-position
+            # race conditions.
             action = str(order_data.get("action", "")).upper()
-            if action.startswith("OPEN_") and order_data.get("decision_id"):
-                side = order_data.get("side") or ""
-                annotate_fn = getattr(self.recorder, "annotate_open_position_decision_by_asset", None)
-                if callable(annotate_fn):
-                    try:
-                        annotated = annotate_fn(
-                            asset_pair=order_data["asset_pair"],
-                            side=side,
-                            decision_id=order_data["decision_id"],
-                        )
-                        if annotated:
-                            logger.info(
-                                "Bridged decision_id %s to recorder open position for %s %s",
-                                order_data["decision_id"],
-                                order_data["asset_pair"],
-                                side,
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to bridge decision_id to recorder: %s", e
-                        )
+            if action.startswith("OPEN_") and order_data.get("decision_id") and self._linkage_store:
+                try:
+                    # Resolve product_id from order status if available
+                    product_id = (
+                        order_status.get("product_id")
+                        or order_data.get("product_id")
+                        or ""
+                    )
+                    self._linkage_store.record_fill(
+                        order_id=order_id,
+                        decision_id=order_data["decision_id"],
+                        asset_pair=order_data.get("asset_pair", ""),
+                        side=order_data.get("side", ""),
+                        product_id=product_id,
+                    )
+                    logger.info(
+                        "Recorded fill linkage: order=%s decision=%s asset=%s side=%s product=%s",
+                        order_id,
+                        order_data["decision_id"],
+                        order_data.get("asset_pair"),
+                        order_data.get("side"),
+                        product_id,
+                    )
+                except Exception as e:
+                    logger.warning("Failed to record fill linkage: %s", e)
 
             return outcome
 
