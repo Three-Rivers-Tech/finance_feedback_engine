@@ -130,6 +130,8 @@ grafana-data/
 
 # Secrets and credentials
 *.orig
+scripts/.ffe-monitor.env
+scripts/.ffe-monitor-state.json
 .env.backup*
 config/config.local.yaml*
 !config/config.local.yaml.example
