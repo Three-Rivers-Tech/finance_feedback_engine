@@ -1,6 +1,7 @@
 """Position sizing calculator for trading decisions."""
 
 import logging
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
@@ -364,10 +365,16 @@ class PositionSizingCalculator:
             )
 
             if _use_sortino_kelly:
-                # Dynamic Kelly: set multiplier from sortino gate, then size
+                # Dynamic Kelly: set multiplier from sortino gate, then size.
+                # NOTE: single-thread-only — the temporary mutation of
+                # kelly_fraction_multiplier is safe in the current synchronous
+                # trading loop but would race under concurrent calls. If this
+                # ever moves to async/threaded, pass multiplier as an explicit
+                # arg to calculate_position_size instead.
                 original_multiplier = getattr(
                     self.kelly_calculator, "kelly_fraction_multiplier", 0.25
                 )
+                _sortino_kelly_ok = False
                 try:
                     self.kelly_calculator.kelly_fraction_multiplier = (
                         sortino_gate_result.kelly_multiplier
@@ -383,27 +390,55 @@ class PositionSizingCalculator:
                             payoff_ratio=kelly_params["payoff_ratio"],
                         )
                     )
-                    result["position_sizing_method"] = "sortino_kelly"
-                    result["kelly_details"] = kelly_details
-                    result["sortino_gate"] = {
-                        "sizing_mode": sortino_gate_result.sizing_mode,
-                        "kelly_multiplier": sortino_gate_result.kelly_multiplier,
-                        "weighted_sortino": sortino_gate_result.weighted_sortino,
-                        "trade_count": sortino_gate_result.trade_count,
-                        "windows_used": sortino_gate_result.windows_used,
-                        "short_window_veto": sortino_gate_result.short_window_veto,
-                        "reason": sortino_gate_result.reason,
-                    }
-                    logger.info(
-                        "Sortino-Kelly sizing: %s (multiplier=%.2f, sortino=%.3f, trades=%d)",
-                        sortino_gate_result.sizing_mode,
-                        sortino_gate_result.kelly_multiplier,
-                        sortino_gate_result.weighted_sortino,
-                        sortino_gate_result.trade_count,
+
+                    # Sanitize Kelly output: reject NaN, inf, negative
+                    if (
+                        recommended_position_size is None
+                        or not math.isfinite(recommended_position_size)
+                        or recommended_position_size < 0
+                    ):
+                        logger.warning(
+                            "Sortino-Kelly returned invalid position size (%s), "
+                            "falling back to risk-based sizing",
+                            recommended_position_size,
+                        )
+                    else:
+                        _sortino_kelly_ok = True
+                        result["position_sizing_method"] = "sortino_kelly"
+                        result["kelly_details"] = kelly_details
+                        result["sortino_gate"] = {
+                            "sizing_mode": sortino_gate_result.sizing_mode,
+                            "kelly_multiplier": sortino_gate_result.kelly_multiplier,
+                            "weighted_sortino": sortino_gate_result.weighted_sortino,
+                            "trade_count": sortino_gate_result.trade_count,
+                            "windows_used": sortino_gate_result.windows_used,
+                            "short_window_veto": sortino_gate_result.short_window_veto,
+                            "reason": sortino_gate_result.reason,
+                        }
+                        logger.info(
+                            "Sortino-Kelly sizing: %s (multiplier=%.2f, sortino=%.3f, trades=%d)",
+                            sortino_gate_result.sizing_mode,
+                            sortino_gate_result.kelly_multiplier,
+                            sortino_gate_result.weighted_sortino,
+                            sortino_gate_result.trade_count,
+                        )
+                except Exception:
+                    logger.warning(
+                        "Sortino-Kelly sizing failed, falling back to risk-based",
+                        exc_info=True,
                     )
                 finally:
                     # Always restore original multiplier to avoid global mutation
                     self.kelly_calculator.kelly_fraction_multiplier = original_multiplier
+
+                # If sortino-kelly failed or returned bad output, fall back to risk-based
+                if not _sortino_kelly_ok:
+                    recommended_position_size = self.calculate_position_size(
+                        account_balance=total_balance,
+                        risk_percentage=risk_percentage,
+                        entry_price=current_price,
+                        stop_loss_percentage=sizing_stop_loss_percentage,
+                    )
 
             elif use_kelly_criterion and self.kelly_calculator and sortino_gate_result is None:
                 # Legacy Kelly path: only when no sortino gate is present
