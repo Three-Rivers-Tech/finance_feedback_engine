@@ -2,6 +2,7 @@
 from finance_feedback_engine.decision_engine.pre_reasoner import MarketBrief, PreReasonGatekeeper, build_pre_reason_prompt, parse_pre_reason_response
 
 import asyncio
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -2259,15 +2260,26 @@ Missing Evidence: <what additional evidence would increase confidence>
                     position_state=context.get("position_state"),
                     memory_context=memory_context,
                 )
-                # Use single LLM call (not ensemble/debate) for fast pre-screening
-                pre_reason_response = await self.ai_manager._query_single_provider(
+                # Use a raw single-provider local LLM call so the market-brief
+                # schema is not contaminated by the trading-decision wrapper.
+                pre_reason_raw_response = await self.ai_manager._query_single_provider_raw(
                     "local", pre_reason_prompt,
                 )
                 logger.debug(
                     "Pre-reasoner raw response for %s: %s",
                     asset_pair,
-                    {k: v for k, v in pre_reason_response.items() if k != "reasoning"} if isinstance(pre_reason_response, dict) else str(pre_reason_response)[:200],
+                    str(pre_reason_raw_response)[:200],
                 )
+                try:
+                    pre_reason_response = json.loads(pre_reason_raw_response)
+                except Exception as parse_error:
+                    logger.warning(
+                        "Pre-reasoner JSON parse failed for %s: %s | raw=%s",
+                        asset_pair,
+                        parse_error,
+                        str(pre_reason_raw_response)[:200],
+                    )
+                    pre_reason_response = {}
                 market_brief = parse_pre_reason_response(
                     pre_reason_response,
                     current_price=float(market_data.get("close", 0)),

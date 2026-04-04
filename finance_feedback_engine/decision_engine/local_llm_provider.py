@@ -12,7 +12,7 @@ import os
 import re
 import subprocess
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import ollama
 
@@ -493,6 +493,110 @@ class LocalLLMProvider:
                 self._ensure_model_available()
 
             logger.info("LLM connection restored")
+
+    def raw_query(
+        self,
+        prompt: str,
+        model_name: str = None,
+        system_prompt: Optional[str] = None,
+        response_format: Optional[str] = "json",
+    ) -> str:
+        """
+        Query local LLM without injecting the trading advisor wrapper.
+
+        This is intended for auxiliary structured tasks (for example pre-reason
+        market briefs) that need direct control of the prompt/schema and should
+        not be parsed as a trading decision.
+        """
+        active_model = model_name or self.model_name
+
+        if active_model != self.model_name and not self._is_model_available(active_model):
+            logger.warning("Requested model %s not available, downloading...", active_model)
+            if not self._download_model(active_model):
+                logger.error(
+                    "Failed to download %s, falling back to %s",
+                    active_model,
+                    self.model_name,
+                )
+                active_model = self.model_name
+
+        logger.info(
+            "Using raw local LLM query with model: %s (instance default: %s)",
+            active_model,
+            self.model_name,
+        )
+        self.ensure_connection()
+
+        max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
+        llm_timeout = self.config.get("api_timeouts", {}).get("llm_query", 120)
+        full_prompt = (
+            f"{system_prompt.strip()}\n\n{prompt}" if system_prompt else prompt
+        )
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(
+                    "Querying local LLM raw mode: %s (attempt %d/%d)",
+                    active_model,
+                    attempt + 1,
+                    max_retries,
+                )
+
+                from concurrent.futures import ThreadPoolExecutor
+
+                request_kwargs = {
+                    "model": active_model,
+                    "prompt": full_prompt,
+                    "options": {
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                    },
+                }
+                if response_format:
+                    request_kwargs["format"] = response_format
+
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(self.ollama_client.generate, **request_kwargs)
+                    try:
+                        response = future.result(timeout=llm_timeout)
+                    except Exception:
+                        future.cancel()
+                        raise
+
+                response_text = response.get("response", "").strip()
+                if response_text:
+                    logger.debug("Raw local LLM response: %s", response_text[:200])
+                    self._unload_model()
+                    return response_text
+
+                logger.warning(
+                    "Empty raw response from LLM on attempt %d/%d",
+                    attempt + 1,
+                    max_retries,
+                )
+            except TimeoutError:
+                logger.error(
+                    "Raw local LLM query timed out after %ss on attempt %d",
+                    llm_timeout,
+                    attempt + 1,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Raw local LLM query failed on attempt %d/%d: %s",
+                    attempt + 1,
+                    max_retries,
+                    e,
+                )
+
+            if attempt < max_retries - 1:
+                import time
+
+                time.sleep(2 * (attempt + 1))
+
+        self._unload_model()
+        raise RuntimeError(
+            f"Local raw query failed after {max_retries} attempts for model {active_model}"
+        )
 
     def query(self, prompt: str, model_name: str = None) -> Dict[str, Any]:
         """

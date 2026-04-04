@@ -504,6 +504,35 @@ When choosing HOLD:
             # Unknown provider - raise error, let ensemble manager handle
             raise ValueError(f"Unknown AI provider: {provider_name}")
 
+    async def _query_single_provider_raw(
+        self,
+        provider_name: str,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        response_format: Optional[str] = "json",
+    ) -> str:
+        """Helper to query a single provider in raw mode without decision parsing."""
+        from .provider_tiers import is_ollama_model
+
+        if is_ollama_model(provider_name):
+            return await self._local_ai_raw_inference(
+                prompt,
+                model_name=provider_name,
+                system_prompt=system_prompt,
+                response_format=response_format,
+            )
+
+        if provider_name == "local":
+            return await self._local_ai_raw_inference(
+                prompt,
+                system_prompt=system_prompt,
+                response_format=response_format,
+            )
+
+        raise ValueError(
+            f"Raw single-provider queries are only supported for local/Ollama providers, got: {provider_name}"
+        )
+
     async def _ensemble_ai_inference(
         self,
         prompt: str,
