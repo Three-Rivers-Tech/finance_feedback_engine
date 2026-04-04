@@ -2259,10 +2259,14 @@ Missing Evidence: <what additional evidence would increase confidence>
                     position_state=context.get("position_state"),
                     memory_context=memory_context,
                 )
-                pre_reason_response = await self._query_ai(
-                    pre_reason_prompt,
-                    asset_pair=asset_pair,
-                    market_data=market_data,
+                # Use single LLM call (not ensemble/debate) for fast pre-screening
+                pre_reason_response = await self.ai_manager._query_single_provider(
+                    "local", pre_reason_prompt,
+                )
+                logger.debug(
+                    "Pre-reasoner raw response for %s: %s",
+                    asset_pair,
+                    {k: v for k, v in pre_reason_response.items() if k != "reasoning"} if isinstance(pre_reason_response, dict) else str(pre_reason_response)[:200],
                 )
                 market_brief = parse_pre_reason_response(
                     pre_reason_response,
