@@ -226,9 +226,21 @@ class EnsembleDecisionManager:
             # Re-key base_weights from model names to seat names so the
             # adaptation path (weights_before / weights_after) uses a
             # consistent key domain throughout.
-            seat_keys = list(self.debate_providers.keys())
-            equal_w = 1.0 / len(seat_keys)
-            self.base_weights = {seat: equal_w for seat in seat_keys}
+            seat_keys = set(self.debate_providers.keys())
+            if set(self.base_weights.keys()) == seat_keys:
+                # Config already uses seat keys — keep as-is
+                pass
+            else:
+                # Map model-keyed weights to seats via debate_providers
+                seat_weights = {}
+                for seat, model in self.debate_providers.items():
+                    seat_weights[seat] = self.base_weights.get(model, 0.0)
+                total = sum(seat_weights.values())
+                if total > 0:
+                    self.base_weights = {s: w / total for s, w in seat_weights.items()}
+                else:
+                    equal_w = 1.0 / len(seat_keys)
+                    self.base_weights = {s: equal_w for s in seat_keys}
 
         # Local-First settings
         self.local_keywords = [

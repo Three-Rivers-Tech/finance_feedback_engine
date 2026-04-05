@@ -408,3 +408,129 @@ class TestSeatBasedWeightCalculation:
         weights = manager.base_weights
         assert "bull" in weights or "bear" in weights or "judge" in weights, \
             f"Weights should be seat-keyed, got: {weights}"
+
+
+class TestBaseWeightsSeatNormalizationOnInit:
+    """Verify that base_weights are seat-keyed immediately after __init__ in debate mode."""
+
+    def test_model_keyed_config_normalized_to_seats_on_init(self):
+        """When config has model-keyed provider_weights and debate mode is on,
+        base_weights should be re-keyed to bull/bear/judge after __init__."""
+        config = {
+            "persistence": {"storage_path": "/tmp/ffe_test_decisions"},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {
+                    "llama3.1:8b": 0.34,
+                    "deepseek-r1:8b": 0.33,
+                    "gemma2:9b": 0.33,
+                },
+                "adaptive_learning": True,
+                "learning_rate": 0.1,
+                "voting_strategy": "weighted",
+                "agreement_threshold": 0.6,
+                "debate_mode": {"enabled": True},
+                "debate_providers": {
+                    "bull": "gemma2:9b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "llama3.1:8b",
+                },
+                "local_dominance_target": 0.6,
+                "min_local_providers": 1,
+            },
+        }
+        from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
+
+        manager = EnsembleDecisionManager(config)
+
+        # base_weights must be seat-keyed, not model-keyed
+        assert set(manager.base_weights.keys()) == {"bull", "bear", "judge"}, \
+            f"Expected seat keys, got: {manager.base_weights}"
+        # Weights should sum to ~1.0
+        assert abs(sum(manager.base_weights.values()) - 1.0) < 0.001
+
+    def test_already_seat_keyed_config_preserved(self):
+        """When config already has seat-keyed provider_weights, preserve them."""
+        config = {
+            "persistence": {"storage_path": "/tmp/ffe_test_decisions"},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {
+                    "bull": 0.40,
+                    "bear": 0.25,
+                    "judge": 0.35,
+                },
+                "adaptive_learning": True,
+                "learning_rate": 0.1,
+                "voting_strategy": "weighted",
+                "agreement_threshold": 0.6,
+                "debate_mode": {"enabled": True},
+                "debate_providers": {
+                    "bull": "deepseek-r1:8b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "deepseek-r1:8b",
+                },
+                "local_dominance_target": 0.6,
+                "min_local_providers": 1,
+            },
+        }
+        from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
+
+        manager = EnsembleDecisionManager(config)
+
+        assert set(manager.base_weights.keys()) == {"bull", "bear", "judge"}
+        assert abs(manager.base_weights["bull"] - 0.40) < 0.001
+        assert abs(manager.base_weights["bear"] - 0.25) < 0.001
+        assert abs(manager.base_weights["judge"] - 0.35) < 0.001
+
+    def test_first_adaptation_cycle_has_consistent_key_space(self):
+        """After init, the first update_base_weights call should log
+        weights_before and weights_after in the same key space (seats)."""
+        config = {
+            "persistence": {"storage_path": "/tmp/ffe_test_decisions"},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {
+                    "llama3.1:8b": 0.34,
+                    "deepseek-r1:8b": 0.33,
+                    "gemma2:9b": 0.33,
+                },
+                "adaptive_learning": True,
+                "learning_rate": 0.1,
+                "voting_strategy": "weighted",
+                "agreement_threshold": 0.6,
+                "debate_mode": {"enabled": True},
+                "debate_providers": {
+                    "bull": "gemma2:9b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "llama3.1:8b",
+                },
+                "local_dominance_target": 0.6,
+                "min_local_providers": 1,
+            },
+        }
+        from finance_feedback_engine.decision_engine.ensemble_manager import EnsembleDecisionManager
+
+        manager = EnsembleDecisionManager(config)
+        manager.performance_tracker.performance_history = {}
+
+        # Capture base_weights_before (what would be logged)
+        weights_before = dict(manager.base_weights)
+
+        seat_decisions = {
+            "bull": {"action": "HOLD", "confidence": 30},
+            "bear": {"action": "OPEN_SMALL_SHORT", "confidence": 70},
+            "judge": {"action": "HOLD", "confidence": 50},
+        }
+        manager.update_base_weights(
+            provider_decisions=seat_decisions,
+            actual_outcome="OPEN_SMALL_SHORT",
+            performance_metric=1.0,
+        )
+        weights_after = dict(manager.base_weights)
+
+        # Both should have the same key space: seats
+        assert set(weights_before.keys()) == {"bull", "bear", "judge"}, \
+            f"weights_before has wrong keys: {weights_before}"
+        assert set(weights_after.keys()) == {"bull", "bear", "judge"}, \
+            f"weights_after has wrong keys: {weights_after}"

@@ -172,9 +172,9 @@ ensemble:
   - gemma2:9b
   learning_rate: 0.1
   provider_weights:
-    llama3.1:8b: 0.34
-    deepseek-r1:8b: 0.33
-    gemma2:9b: 0.33
+    bull: 0.34
+    bear: 0.33
+    judge: 0.33
   two_phase:
     asset_routing:
       codex_as_tiebreaker: true
