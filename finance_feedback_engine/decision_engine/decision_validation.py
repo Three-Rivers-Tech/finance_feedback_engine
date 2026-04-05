@@ -199,6 +199,13 @@ def normalize_decision_action_payload(decision: Dict[str, Any]) -> Dict[str, Any
         else:
             normalized["action"] = POLICY_OR_LEGACY_HOLD
             normalized["policy_action"] = POLICY_OR_LEGACY_HOLD
+            # Mark as a fallback so the ghost-HOLD gate in debate mode
+            # and the trading loop persistence layer can trace this coercion.
+            normalized.setdefault("decision_origin", "fallback")
+            normalized.setdefault("hold_origin", "provider_fallback")
+            logger.warning(
+                "Coerced unrecognized action %r to HOLD (decision_origin=fallback)", action,
+            )
             try:
                 conf = int(normalized.get("confidence", 50))
             except (TypeError, ValueError):

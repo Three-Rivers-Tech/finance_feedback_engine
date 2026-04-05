@@ -67,7 +67,11 @@ def test_build_fallback_decision_marks_malformed_provider_origin():
     assert fallback["policy_package"] is None
 
 
-def test_validate_decision_rejects_non_policy_non_legacy_action():
+def test_validate_decision_coerces_non_policy_non_legacy_action_to_fallback_hold():
+    """Unknown actions are coerced to HOLD during normalization (before validation).
+
+    The coerced decision passes validation but must carry degradation markers.
+    """
     ok, errors = validate_decision_comprehensive(
         {
             "action": "PANIC_FLIP",
@@ -76,8 +80,18 @@ def test_validate_decision_rejects_non_policy_non_legacy_action():
         }
     )
 
-    assert ok is False
-    assert any("Invalid action" in error for error in errors)
+    # Coerced HOLD passes validation
+    assert ok is True
+    assert errors == []
+
+    # But normalization stamped fallback markers
+    normalized = normalize_decision_action_payload(
+        {"action": "PANIC_FLIP", "confidence": 50, "reasoning": "bad"}
+    )
+    assert normalized["action"] == "HOLD"
+    assert normalized["decision_origin"] == "fallback"
+    assert normalized["hold_origin"] == "provider_fallback"
+    assert normalized["filtered_reason_code"] == "INVALID_PROVIDER_ACTION_FALLBACK"
 
 
 def test_validate_decision_rejects_zero_confidence_payloads():
