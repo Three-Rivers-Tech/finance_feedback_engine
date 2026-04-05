@@ -160,6 +160,15 @@ class AIDecisionManager:
                 failed.append(provider)
                 increment_provider_request(provider, "failure")
                 case = None
+            elif isinstance(case, dict) and case.get("decision_origin") == "fallback":
+                logger.warning(
+                    "Debate: %s (%s) returned fallback decision (reason: %s) — "
+                    "treating as provider failure to prevent ghost HOLD",
+                    provider, role, case.get("filtered_reason_code", "unknown"),
+                )
+                failed.append(provider)
+                increment_provider_request(provider, "failure")
+                case = None
             else:
                 logger.info(
                     "Debate: %s (%s) -> %s (%s%%)",
@@ -421,6 +430,15 @@ When choosing HOLD:
             ):
                 logger.warning(
                     f"Debate: {judge_provider} (judge) returned invalid response"
+                )
+                failed_debate_providers.append(judge_provider)
+                increment_provider_request(judge_provider, "failure")
+                judge_decision = None
+            elif isinstance(judge_decision, dict) and judge_decision.get("decision_origin") == "fallback":
+                logger.warning(
+                    "Debate: %s (judge) returned fallback decision (reason: %s) — "
+                    "treating as provider failure to prevent ghost HOLD",
+                    judge_provider, judge_decision.get("filtered_reason_code", "unknown"),
                 )
                 failed_debate_providers.append(judge_provider)
                 increment_provider_request(judge_provider, "failure")
