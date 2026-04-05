@@ -21,13 +21,32 @@ LEGACY_DIRECTIONAL_ACTIONS = {"BUY", "SELL"}
 POLICY_OR_LEGACY_HOLD = "HOLD"
 
 
+def _strip_trailing_commas(text: str) -> str:
+    """Remove trailing commas before } or ] (common LLM JSON error)."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
+
+
+def _normalize_single_quotes(text: str) -> str:
+    """Convert single-quoted JSON keys/values to double-quoted.
+
+    Only applied when the text looks like Python dict syntax (has single
+    quotes around keys) and does not already contain double-quoted keys.
+    """
+    # Only convert if text uses single quotes for keys and no double-quoted keys
+    if re.search(r"'\w+'\s*:", text) and not re.search(r'"\w+"\s*:', text):
+        return re.sub(r"'([^']*)'", r'"\1"', text)
+    return text
+
+
 def extract_json_from_text(text: str) -> str:
     """Extract JSON object from LLM response text.
 
     Handles common LLM output patterns:
-    - <think>...</think> blocks (deepseek-r1, etc.)
-    - Markdown code fences
+    - <think>...</think> blocks (deepseek-r1, etc.), including unclosed
+    - Markdown code fences (with nested JSON objects)
     - Preamble/postamble text around JSON
+    - Trailing commas before } or ] (common LLM error)
+    - Single-quoted keys/values (Python dict syntax)
     """
     if not text or not text.strip():
         return text
@@ -36,13 +55,19 @@ def extract_json_from_text(text: str) -> str:
 
     # Strip <think>...</think> blocks (reasoning models)
     cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
+    # Strip unclosed <think> blocks (token limit hit mid-reasoning)
+    cleaned = re.sub(r"<think>.*", "", cleaned, flags=re.DOTALL).strip()
 
-    # Strip markdown code fences
-    fence_match = re.search(r"```(?:json)?\s*\n?(\{.*?\})\s*\n?```", cleaned, re.DOTALL)
+    # Strip markdown code fences -- extract content, then fall through
+    # to brace matching (avoids truncating nested JSON with non-greedy regex)
+    fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", cleaned, re.DOTALL)
     if fence_match:
-        return fence_match.group(1).strip()
+        cleaned = fence_match.group(1).strip()
 
-    # Find the outermost JSON object
+    # Normalize single-quoted dict syntax before brace matching
+    cleaned = _normalize_single_quotes(cleaned)
+
+    # Find the outermost JSON object via brace-depth tracking
     start = cleaned.find("{")
     if start == -1:
         return text
@@ -73,10 +98,10 @@ def extract_json_from_text(text: str) -> str:
                 break
 
     if end > start:
-        return cleaned[start : end + 1]
+        extracted = cleaned[start : end + 1]
+        return _strip_trailing_commas(extracted)
 
     return text
-
 
 
 def _normalize_reasoning_payload(reasoning: Any) -> str:
@@ -321,15 +346,6 @@ def try_parse_decision_json(payload: str) -> Optional[Dict[str, Any]]:
         except (TypeError, ValueError):
             confidence = -1
         if confidence == 0:
-            normalized["confidence"] = 50
-
-    # Normalize confidence to int (handles string/float from LLMs)
-    raw_conf = normalized.get("confidence")
-    if raw_conf is not None and not isinstance(raw_conf, int):
-        try:
-            normalized["confidence"] = int(float(str(raw_conf)))
-        except (ValueError, TypeError):
-            # Non-numeric confidence (e.g. "medium") -> neutral default
             normalized["confidence"] = 50
 
     # Ensure non-empty reasoning (empty dict/list normalizes to "")
