@@ -2280,10 +2280,25 @@ Missing Evidence: <what additional evidence would increase confidence>
                         str(pre_reason_raw_response)[:200],
                     )
                     pre_reason_response = {}
+                # Extract data timestamp for deterministic data-quality computation
+                _data_ts = market_data.get("date") or market_data.get("timestamp")
+                _data_ts_float = None
+                if _data_ts is not None:
+                    try:
+                        from datetime import datetime, timezone
+                        if isinstance(_data_ts, (int, float)):
+                            _data_ts_float = float(_data_ts)
+                        elif isinstance(_data_ts, str):
+                            clean = _data_ts.replace("Z", "+00:00")
+                            _data_ts_float = datetime.fromisoformat(clean).timestamp()
+                    except Exception:
+                        _data_ts_float = None
+
                 market_brief = parse_pre_reason_response(
                     pre_reason_response,
                     current_price=float(market_data.get("close", 0)),
                     position_state=context.get("position_state"),
+                    data_timestamp=_data_ts_float,
                 )
                 context["market_brief"] = market_brief
 

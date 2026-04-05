@@ -41,6 +41,8 @@ DEFAULT_CONFIDENCE_FLOOR = 40  # Below this → force debate
 DEFAULT_VOLATILITY_CEILING = 90  # Above this → force debate (regime novelty)
 DEFAULT_RECENT_CLOSE_WINDOW_S = 300  # 5 min after close → force debate
 DEFAULT_MIN_REASONING_LENGTH = 20  # Chars — below this → force debate
+DEFAULT_DATA_DEGRADED_AGE_S = 300  # 5 min → degraded
+DEFAULT_DATA_STALE_AGE_S = 900  # 15 min → stale
 
 
 @dataclass(frozen=True)
@@ -309,7 +311,7 @@ Return ONLY valid JSON with these keys:
   "skip_reason": "..." or null,
   "key_question": "the one question for the council",
   "reasoning": "2-3 sentence summary",
-  "data_quality": "good|degraded|stale"}}"""
+}}"""
 
     return prompt
 
@@ -323,6 +325,22 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     if not math.isfinite(value):
         return lo
     return max(lo, min(hi, value))
+
+
+def _compute_data_quality(data_timestamp_resolved: float) -> str:
+    """Compute data quality deterministically from data age.
+
+    Thresholds:
+    - < 5 min old -> good
+    - 5-15 min old -> degraded
+    - > 15 min old -> stale
+    """
+    age_s = time.time() - data_timestamp_resolved
+    if age_s > DEFAULT_DATA_STALE_AGE_S:
+        return "stale"
+    if age_s > DEFAULT_DATA_DEGRADED_AGE_S:
+        return "degraded"
+    return "good"
 
 
 def parse_pre_reason_response(
@@ -341,7 +359,9 @@ def parse_pre_reason_response(
 
     regime = _validate_enum(str(_get("regime", "unknown")), _VALID_REGIMES, "unknown")
     momentum = _validate_enum(str(_get("momentum", "neutral")), _VALID_MOMENTUM, "neutral")
-    data_quality = _validate_enum(str(_get("data_quality", "good")), _VALID_DATA_QUALITY, "good")
+    # Ignore LLM data_quality — compute deterministically from data age
+    resolved_timestamp = data_timestamp if data_timestamp is not None else time.time()
+    data_quality = _compute_data_quality(resolved_timestamp)
     volume_context = _validate_enum(str(_get("volume_context", "normal")), _VALID_VOLUME, "normal")
 
     regime_confidence = int(_clamp(float(_get("regime_confidence", 50)), 0, 100))
@@ -365,6 +385,6 @@ def parse_pre_reason_response(
         skip_reason=_get("skip_reason"),
         key_question=str(_get("key_question", "What is the best action right now?")),
         data_quality=data_quality,
-        data_timestamp=data_timestamp or time.time(),
+        data_timestamp=resolved_timestamp,
         reasoning=str(_get("reasoning", "Pre-reasoning analysis unavailable")),
     )

@@ -3,6 +3,8 @@
 import time
 import pytest
 
+from unittest.mock import patch
+
 from finance_feedback_engine.decision_engine.pre_reasoner import (
     DEFAULT_CONFIDENCE_FLOOR,
     DEFAULT_FORCED_DEBATE_INTERVAL,
@@ -89,7 +91,8 @@ class TestParsePreReasonResponse:
         )
         assert brief.regime == "unknown"
         assert brief.momentum == "neutral"
-        assert brief.data_quality == "good"
+        # data_quality is now computed from timestamp, not LLM output — LLM value ignored
+        assert brief.data_quality == "good"  # fresh timestamp → good
         assert brief.volume_context == "normal"
 
     def test_clamp_negative(self):
@@ -110,6 +113,33 @@ class TestParsePreReasonResponse:
         before = time.time()
         brief = parse_pre_reason_response({}, current_price=50000.0)
         assert brief.data_timestamp >= before
+
+    def test_data_quality_computed_not_llm_parsed(self):
+        """data_quality from LLM response should be ignored — computed from timestamp."""
+        brief = parse_pre_reason_response(
+            {"data_quality": "stale"},  # LLM says stale
+            current_price=50000.0,
+            data_timestamp=time.time(),  # but timestamp is fresh
+        )
+        assert brief.data_quality == "good"  # deterministic wins
+
+    def test_data_quality_degraded_from_age(self):
+        """Data older than 5 min should be 'degraded'."""
+        brief = parse_pre_reason_response(
+            {},
+            current_price=50000.0,
+            data_timestamp=time.time() - 400,  # ~6.5 min old
+        )
+        assert brief.data_quality == "degraded"
+
+    def test_data_quality_stale_from_age(self):
+        """Data older than 15 min should be 'stale'."""
+        brief = parse_pre_reason_response(
+            {},
+            current_price=50000.0,
+            data_timestamp=time.time() - 1000,  # ~16.5 min old
+        )
+        assert brief.data_quality == "stale"
 
 
 # ============================================================
