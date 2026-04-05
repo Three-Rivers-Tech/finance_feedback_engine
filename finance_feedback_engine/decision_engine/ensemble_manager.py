@@ -223,6 +223,13 @@ class EnsembleDecisionManager:
 
             logger.info("Debate mode active with resolved providers: %s", self.debate_providers)
 
+            # Re-key base_weights from model names to seat names so the
+            # adaptation path (weights_before / weights_after) uses a
+            # consistent key domain throughout.
+            seat_keys = list(self.debate_providers.keys())
+            equal_w = 1.0 / len(seat_keys)
+            self.base_weights = {seat: equal_w for seat in seat_keys}
+
         # Local-First settings
         self.local_keywords = [
             "local",
@@ -1716,8 +1723,9 @@ class EnsembleDecisionManager:
     def _recalculate_weights(self) -> None:
         """Recalculate provider weights based on historical accuracy."""
         # Use the PerformanceTracker component
+        providers = list(self.debate_providers.keys()) if self.debate_mode else self.enabled_providers
         new_weights = self.performance_tracker.calculate_adaptive_weights(
-            self.enabled_providers, self.base_weights
+            providers, self.base_weights
         )
         self.base_weights = new_weights
 

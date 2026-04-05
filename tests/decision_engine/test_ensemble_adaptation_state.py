@@ -246,3 +246,82 @@ def test_adaptive_weight_formula_uses_config_blend_constants(tmp_path):
         f"Custom blend (perf_weight=0.5, scale=2.0) should produce wider spread than default. "
         f"Got spread={spread:.6f} vs default_spread={default_spread:.6f}"
     )
+
+
+def test_debate_mode_base_weights_use_seat_keys(tmp_path):
+    """In debate mode, base_weights must be keyed by seat (bull/bear/judge),
+    not by model name. This ensures weights_before and weights_after in the
+    adaptation log always use the same key domain."""
+    manager = EnsembleDecisionManager(
+        {
+            "persistence": {"storage_path": str(tmp_path)},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {"deepseek-r1:8b": 1.0},
+                "voting_strategy": "weighted",
+                "adaptive_learning": True,
+                "learning_rate": 1.0,
+                "debate_mode": True,
+                "debate_providers": {
+                    "bull": "deepseek-r1:8b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "deepseek-r1:8b",
+                },
+            },
+        }
+    )
+
+    # base_weights must be seat-keyed, not model-keyed
+    assert set(manager.base_weights.keys()) == {"bull", "bear", "judge"}, (
+        f"Expected seat keys in base_weights, got: {list(manager.base_weights.keys())}"
+    )
+    assert abs(sum(manager.base_weights.values()) - 1.0) < 1e-9
+
+
+def test_debate_mode_adaptation_logs_consistent_keys(tmp_path, caplog):
+    """weights_before and weights_after must both use seat keys in debate mode."""
+    manager = EnsembleDecisionManager(
+        {
+            "persistence": {"storage_path": str(tmp_path)},
+            "ensemble": {
+                "enabled_providers": ["deepseek-r1:8b"],
+                "provider_weights": {"deepseek-r1:8b": 1.0},
+                "voting_strategy": "weighted",
+                "adaptive_learning": True,
+                "learning_rate": 1.0,
+                "debate_mode": True,
+                "debate_providers": {
+                    "bull": "deepseek-r1:8b",
+                    "bear": "deepseek-r1:8b",
+                    "judge": "deepseek-r1:8b",
+                },
+            },
+        }
+    )
+
+    provider_decisions = {
+        "bull": {"action": "BUY", "confidence": 80},
+        "bear": {"action": "SELL", "confidence": 75},
+        "judge": {"action": "BUY", "confidence": 70},
+    }
+
+    with caplog.at_level(logging.INFO):
+        manager.update_base_weights(
+            provider_decisions=provider_decisions,
+            actual_outcome="BUY",
+            performance_metric=10.0,
+        )
+
+    # Find the adaptation log line
+    log_line = [r for r in caplog.records if "Adaptive weights evaluated" in r.message]
+    assert log_line, "Expected an Adaptive weights evaluated log line"
+
+    msg = log_line[0].message
+    # Neither weights_before nor weights_after should contain model names
+    for model_name in ["deepseek-r1:8b", "llama3.1:8b", "gemma2:9b"]:
+        assert model_name not in msg, (
+            f"Model name {model_name!r} found in adaptation log — expected seat keys only. Log: {msg}"
+        )
+    # Both should contain seat keys
+    for seat in ["bull", "bear", "judge"]:
+        assert seat in msg, f"Seat key {seat!r} missing from adaptation log. Log: {msg}"
