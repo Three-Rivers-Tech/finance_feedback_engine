@@ -958,27 +958,26 @@ async def _build_stream_payload(
         _agent_instance, "_dashboard_event_queue"
     ):
         try:
-            loop = asyncio.get_running_loop()
+            queue_obj = _agent_instance._dashboard_event_queue
+            latest_queue_item: Optional[Dict[str, Any]] = None
+            drained = 0
+            max_drain = 100
 
-            def _get_queue_item_nowait() -> Optional[Dict[str, Any]]:
+            while drained < max_drain:
                 try:
-                    result = _agent_instance._dashboard_event_queue.get_nowait()
-                    return result if isinstance(result, dict) else None
+                    result = queue_obj.get_nowait()
                 except queue.Empty:
-                    return None
+                    break
 
-            queue_item = await asyncio.wait_for(
-                loop.run_in_executor(None, _get_queue_item_nowait),
-                timeout=3.0,
-            )
+                drained += 1
+                if isinstance(result, dict):
+                    latest_queue_item = result
 
-            if queue_item is not None:
+            if latest_queue_item is not None:
                 event_payload = {
-                    "event": queue_item.get("type", "event"),
-                    "data": queue_item,
+                    "event": latest_queue_item.get("type", "event"),
+                    "data": latest_queue_item,
                 }
-        except asyncio.TimeoutError:
-            event_payload = None
         except Exception as exc:  # noqa: BLE001
             logger.debug("Dashboard event stream read failed: %s", exc, exc_info=True)
             event_payload = None
