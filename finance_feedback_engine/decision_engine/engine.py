@@ -2331,6 +2331,15 @@ Missing Evidence: <what additional evidence would increase confidence>
                     )
                     skip_decision["pre_reason_skipped"] = True
                     skip_decision["market_brief"] = market_brief.to_dict()
+                    skip_decision["decision_origin"] = "pre_reasoner"
+                    skip_decision["market_regime"] = market_brief.regime
+                    skip_decision["pre_reasoning"] = {
+                        "skip_debate": True,
+                        "regime": market_brief.regime,
+                        "reason": market_brief.skip_reason or "No actionable signal",
+                        "confidence": market_brief.regime_confidence,
+                        "key_question": market_brief.key_question,
+                    }
                     return skip_decision
                 else:
                     self._pre_reason_gatekeeper.record_debate()

@@ -876,6 +876,101 @@ async def test_hold_decision_preserves_ensemble_metadata_and_logs_council_summar
 
 
 @pytest.mark.asyncio
+async def test_hold_decision_preserves_spine_fields_for_judged_hold(trading_agent, mock_dependencies):
+    decision = {
+        "action": "HOLD",
+        "confidence": 30,
+        "asset_pair": "BTCUSD",
+        "reasoning": "Judge sees no edge after debate.",
+        "decision_origin": "judge",
+        "market_regime": "ranging",
+        "ensemble_metadata": {
+            "debate_mode": True,
+            "role_decisions": {
+                "bull": {"role": "bull", "action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "Momentum up.", "provider": "gemini"},
+                "bear": {"role": "bear", "action": "HOLD", "confidence": 40, "reasoning": "Range-bound.", "provider": "qwen"},
+                "judge": {"role": "judge", "action": "HOLD", "confidence": 30, "reasoning": "No strong edge.", "provider": "mistral"},
+            },
+            "debate_seats": {"bull": "gemini", "bear": "qwen", "judge": "mistral"},
+        },
+    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value=decision)
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision.get("filtered_reason_code") != "NO_DECISION_PAYLOAD"
+    assert saved_decision.get("confidence") == 30
+    assert saved_decision.get("decision_origin") == "judge"
+    assert saved_decision.get("reasoning") == "Judge sees no edge after debate."
+    assert saved_decision.get("market_regime") == "ranging"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["bull"]["policy_action"] == "OPEN_SMALL_LONG"
+
+
+@pytest.mark.asyncio
+async def test_judged_hold_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    decision = {
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 60,
+        "asset_pair": "BTCUSD",
+        "reasoning": "Judge rationale preserved.",
+        "decision_origin": "judge",
+        "market_regime": "ranging",
+        "ensemble_metadata": {
+            "debate_mode": True,
+            "debate_seats": {"bull": "gemini", "bear": "qwen", "judge": "mistral"},
+            "role_decisions": {
+                "bull": {"role": "bull", "action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "Momentum up."},
+                "bear": {"role": "bear", "action": "HOLD", "policy_action": "HOLD", "confidence": 40, "reasoning": "Range-bound."},
+                "judge": {"role": "judge", "action": "HOLD", "policy_action": "HOLD", "confidence": 60, "reasoning": "No edge."},
+            },
+        },
+    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value=decision)
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved["decision_origin"] == "judge"
+    assert saved["market_regime"] == "ranging"
+    assert saved["ensemble_metadata"]["debate_seats"]["judge"] == "mistral"
+    assert saved["ensemble_metadata"]["role_decisions"]["bull"]["policy_action"] == "OPEN_SMALL_LONG"
+
+
+@pytest.mark.asyncio
+async def test_pre_reason_skip_hold_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    decision = {
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 75,
+        "asset_pair": "BTCUSD",
+        "reasoning": "[PRE-REASON SKIP] Price is ranging with no catalyst.",
+        "decision_origin": "pre_reasoner",
+        "market_regime": "ranging",
+        "pre_reasoning": {
+            "skip_debate": True,
+            "regime": "ranging",
+            "reason": "No clear catalyst",
+            "key_question": "Wait for breakout?",
+        },
+    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value=decision)
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved["decision_origin"] == "pre_reasoner"
+    assert saved["market_regime"] == "ranging"
+    assert saved["pre_reasoning"]["skip_debate"] is True
+    assert saved["pre_reasoning"]["reason"] == "No clear catalyst"
+
+
+@pytest.mark.asyncio
 async def test_hold_decision_already_persisted_upstream_updates_instead_of_saving_again(trading_agent, mock_dependencies):
     decision = {
         "id": "decision-hold-already-persisted",
