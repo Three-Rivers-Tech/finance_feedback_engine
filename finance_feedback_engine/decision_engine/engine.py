@@ -1425,6 +1425,14 @@ Missing Evidence: <what additional evidence would increase confidence>
             failed_debate_providers=failed_debate_providers,
         )
 
+        if isinstance(final_decision, dict):
+            final_decision.setdefault("decision_origin", "judge")
+            if final_decision.get("market_regime") is None:
+                for candidate in (judge_decision, bull_case, bear_case):
+                    if isinstance(candidate, dict) and candidate.get("market_regime") is not None:
+                        final_decision["market_regime"] = candidate.get("market_regime")
+                        break
+
         return final_decision
 
     async def _query_single_provider(

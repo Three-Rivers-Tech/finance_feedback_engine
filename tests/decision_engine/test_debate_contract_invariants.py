@@ -91,6 +91,18 @@ class TestJudgeIsCanonicalDecision:
         assert result.get("judge_hold_override_applied") is True
 
 
+    def test_judged_hold_preserves_top_level_audit_spine(self, manager):
+        result = manager.synthesize_debate_decision(
+            {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull case", "market_regime": "ranging"},
+            {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear case", "market_regime": "ranging"},
+            {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge says no edge", "decision_origin": "judge", "market_regime": "ranging"},
+        )
+        assert result["decision_origin"] == "judge"
+        assert result["market_regime"] == "ranging"
+        assert result["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+        assert result["ensemble_metadata"]["role_decisions"]["bull"]["policy_action"] == "OPEN_SMALL_LONG"
+
+
 class TestProviderDecisionsContainAllProviders:
     """provider_decisions must contain ALL debate providers, not just judge."""
 

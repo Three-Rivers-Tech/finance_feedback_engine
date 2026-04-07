@@ -740,5 +740,28 @@ async def test_generate_decision_forces_hold_on_policy_position_violation(
         assert "Allowed policy actions: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG" in decision["reasoning"]
 
 
+@pytest.mark.asyncio
+async def test_debate_mode_inference_enriches_judged_hold_with_top_level_audit_fields(
+    decision_engine,
+):
+    bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull", "market_regime": "ranging"}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear", "market_regime": "ranging"}
+    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold"}
+
+    from types import SimpleNamespace
+    decision_engine.ensemble_manager = SimpleNamespace(
+        debate_providers={"bull": "gemma2:9b", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"},
+        _is_valid_provider_response=lambda response, provider: True,
+        debate_decisions=lambda **kwargs: kwargs["judge_decision"],
+    )
+
+    with patch.object(decision_engine, "_query_single_provider", new_callable=AsyncMock) as mock_query:
+        mock_query.side_effect = [bull, bear, judge]
+        result = await decision_engine._debate_mode_inference("test prompt")
+
+    assert result["decision_origin"] == "judge"
+    assert result["market_regime"] == "ranging"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
