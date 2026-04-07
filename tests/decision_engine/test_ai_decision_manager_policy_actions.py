@@ -88,6 +88,37 @@ def test_build_ai_decision_envelope_adds_version_and_policy_package_key():
     assert envelope["version"] == 1
 
 
+def test_build_ai_decision_envelope_preserves_existing_audit_fields_and_policy_package():
+    envelope = build_ai_decision_envelope(
+        decision={
+            "action": "HOLD",
+            "confidence": 50,
+            "reasoning": "test",
+            "decision_origin": "debate_judge",
+            "market_regime": "sideways",
+            "policy_package": {
+                "policy_state": {"position_state": "flat", "version": 1},
+                "action_context": {"structural_action_validity": "valid", "version": 1},
+                "policy_sizing_intent": None,
+                "provider_translation_result": None,
+                "control_outcome": {"status": "proposed", "version": 1},
+                "version": 1,
+            },
+            "ensemble_metadata": {
+                "voting_strategy": "debate",
+                "role_decisions": {"judge": {"action": "HOLD", "confidence": 50}},
+            },
+        },
+        policy_package=None,
+    )
+
+    assert envelope["decision_origin"] == "debate_judge"
+    assert envelope["market_regime"] == "sideways"
+    assert envelope["policy_package"]["policy_state"]["position_state"] == "flat"
+    assert envelope["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+    assert envelope["version"] == 1
+
+
 def test_wrap_decision_envelope_preserves_policy_action_metadata(manager):
     wrapped = manager._wrap_decision_envelope(
         {"action": "OPEN_SMALL_LONG", "confidence": 75, "reasoning": "bounded policy action"}

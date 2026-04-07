@@ -378,7 +378,18 @@ def build_ai_decision_envelope(
     policy_package: Optional[dict] = None,
 ) -> dict:
     payload = dict(decision or {})
-    payload["policy_package"] = policy_package
+
+    existing_policy_package = payload.get("policy_package")
+    if policy_package is None and isinstance(existing_policy_package, dict):
+        payload["policy_package"] = copy.deepcopy(existing_policy_package)
+    else:
+        payload["policy_package"] = policy_package
+
+    if isinstance(payload.get("debate_metadata"), dict):
+        payload["debate_metadata"] = copy.deepcopy(payload["debate_metadata"])
+    if isinstance(payload.get("ensemble_metadata"), dict):
+        payload["ensemble_metadata"] = copy.deepcopy(payload["ensemble_metadata"])
+
     payload["version"] = 1
     return payload
 

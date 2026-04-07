@@ -100,3 +100,36 @@ async def test_weighted_mode_contract_surfaces_weights_and_provider_decisions():
     assert set(metadata["adjusted_weights"].keys()) == set(provider_decisions.keys())
     assert pytest.approx(sum(metadata["adjusted_weights"].values()), rel=1e-6) == 1.0
     assert result["action"] == "SELL"
+
+
+def test_judged_hold_debate_result_preserves_top_level_audit_fields():
+    manager = DebateManager(
+        {"bull": "gemma2:9b", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"}
+    )
+
+    result = manager.synthesize_debate_decision(
+        bull_case={"action": "HOLD", "confidence": 35, "reasoning": "bull"},
+        bear_case={"action": "HOLD", "confidence": 40, "reasoning": "bear"},
+        judge_decision={
+            "action": "HOLD",
+            "confidence": 61,
+            "reasoning": "judge",
+            "decision_origin": "debate_judge",
+            "market_regime": "chop",
+            "policy_package": {
+                "policy_state": {"position_state": "flat", "version": 1},
+                "action_context": {"structural_action_validity": "valid", "version": 1},
+                "policy_sizing_intent": None,
+                "provider_translation_result": None,
+                "control_outcome": {"status": "proposed", "version": 1},
+                "version": 1,
+            },
+        },
+    )
+
+    assert result["action"] == "HOLD"
+    assert result["decision_origin"] == "debate_judge"
+    assert result["market_regime"] == "chop"
+    assert result["ensemble_metadata"]["debate_mode"] is True
+    assert result["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+    assert result["policy_package"]["policy_state"]["position_state"] == "flat"
