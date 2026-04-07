@@ -45,13 +45,29 @@ if [[ ! "$ACTION" =~ ^(start|stop|restart|status)$ ]]; then
     exit 1
 fi
 
+# Detect Docker Compose (v2 preferred, v1 fallback)
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_BIN="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_BIN="docker-compose"
+else
+    log_error "Docker Compose is not installed"
+    exit 1
+fi
+
 # Set environment file
 ENV_FILE=".env.${ENVIRONMENT}"
 if [ ! -f "$ENV_FILE" ]; then
-    log_error "Environment file not found: $ENV_FILE"
-    log_info "Available environment files:"
-    ls -1 .env.* 2>/dev/null || echo "  None found"
-    exit 1
+    if [ -f ".env" ]; then
+        log_warn "Environment file not found: $ENV_FILE"
+        log_info "Falling back to .env"
+        ENV_FILE=".env"
+    else
+        log_error "Environment file not found: $ENV_FILE"
+        log_info "Available environment files:"
+        ls -1 .env* 2>/dev/null || echo "  None found"
+        exit 1
+    fi
 fi
 
 log_info "Deployment Configuration:"
@@ -81,26 +97,26 @@ check_health() {
     done
 
     log_error "Health check failed after $retries attempts"
-    log_warn "Services may still be starting. Check logs with: docker-compose logs -f"
+    log_warn "Services may still be starting. Check logs with: $COMPOSE_BIN logs -f"
     return 1
 }
 
 # Function to show service status
 show_status() {
     log_info "Service Status:"
-    docker-compose --env-file "$ENV_FILE" ps
+    $COMPOSE_BIN --env-file "$ENV_FILE" ps
     echo ""
 
     log_info "Resource Usage:"
     docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" \
-        $(docker-compose --env-file "$ENV_FILE" ps -q) 2>/dev/null || log_warn "No running containers"
+        $($COMPOSE_BIN --env-file "$ENV_FILE" ps -q) 2>/dev/null || log_warn "No running containers"
 }
 
 # Main deployment logic
 case $ACTION in
     start)
         log_info "Starting services..."
-        docker-compose --env-file "$ENV_FILE" up -d
+        $COMPOSE_BIN --env-file "$ENV_FILE" up -d
 
         if check_health; then
             show_status
@@ -113,7 +129,7 @@ case $ACTION in
 
     stop)
         log_info "Stopping services..."
-        docker-compose --env-file "$ENV_FILE" down
+        $COMPOSE_BIN --env-file "$ENV_FILE" down
         log_info "✅ Services stopped"
         ;;
 
@@ -122,11 +138,11 @@ case $ACTION in
 
         # Graceful shutdown
         log_info "Stopping existing containers..."
-        docker-compose --env-file "$ENV_FILE" down
+        $COMPOSE_BIN --env-file "$ENV_FILE" down
 
         # Start services
         log_info "Starting containers..."
-        docker-compose --env-file "$ENV_FILE" up -d
+        $COMPOSE_BIN --env-file "$ENV_FILE" up -d
 
         if check_health; then
             show_status

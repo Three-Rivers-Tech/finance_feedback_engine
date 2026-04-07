@@ -65,12 +65,17 @@ if ! command -v docker &> /dev/null; then
 fi
 log_info "✅ Docker is installed ($(docker --version | head -n1))"
 
-# Check Docker Compose
-if ! command -v docker-compose &> /dev/null; then
+# Check Docker Compose (v2 preferred, v1 fallback)
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_BIN="docker compose"
+    log_info "✅ Docker Compose is installed ($(docker compose version | head -n1))"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_BIN="docker-compose"
+    log_info "✅ Docker Compose is installed ($(docker-compose --version | head -n1))"
+else
     log_error "Docker Compose is not installed"
     exit 1
 fi
-log_info "✅ Docker Compose is installed ($(docker-compose --version | head -n1))"
 
 # Check disk space (warn if less than 5GB free)
 AVAILABLE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
@@ -108,7 +113,7 @@ fi
 log_info "Using compose file: $COMPOSE_FILE"
 
 # Build command
-BUILD_CMD="docker-compose -f $COMPOSE_FILE"
+BUILD_CMD="$COMPOSE_BIN -f $COMPOSE_FILE"
 if [ -f "$ENV_FILE" ]; then
     BUILD_CMD="$BUILD_CMD --env-file $ENV_FILE"
 fi

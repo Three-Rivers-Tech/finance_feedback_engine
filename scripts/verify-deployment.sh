@@ -4,6 +4,15 @@
 
 set -e
 
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_BIN="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_BIN="docker-compose"
+else
+    echo -e "${RED}❌ Docker Compose not found${NC}"
+    exit 1
+fi
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -119,7 +128,7 @@ fi
 # 7. Docker Services
 echo -e "\n${YELLOW}[7/8]${NC} Docker Services"
 echo -n "Checking running containers... "
-running_containers=$(docker-compose ps | grep -c "Up" || true)
+running_containers=$($COMPOSE_BIN ps | grep -c "Up" || true)
 expected_containers=4  # backend, frontend, prometheus, grafana
 
 if [ "$running_containers" -ge "$expected_containers" ]; then
