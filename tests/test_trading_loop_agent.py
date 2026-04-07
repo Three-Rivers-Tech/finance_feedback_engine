@@ -757,6 +757,36 @@ async def test_filtered_low_confidence_decision_sets_observability_fields(tradin
 
 
 @pytest.mark.asyncio
+async def test_filtered_low_confidence_decision_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "BUY",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 10,
+            "asset_pair": "BTCUSD",
+            "reasoning": "Weak but directional signal.",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "OPEN_SMALL_LONG", "confidence": 55, "reasoning": "Breakout try."},
+                    "judge": {"action": "OPEN_SMALL_LONG", "confidence": 10, "reasoning": "Too weak to execute."},
+                }
+            },
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["filtered_reason_code"] == "LOW_CONFIDENCE"
+    assert saved_decision["decision_origin"] == "judge"
+    assert saved_decision["market_regime"] == "ranging"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "OPEN_SMALL_LONG"
+
+
+@pytest.mark.asyncio
 async def test_no_action_decision_persists_compact_decision_artifact(trading_agent, mock_dependencies):
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value={})
     trading_agent.is_running = True
@@ -836,6 +866,37 @@ async def test_position_state_forced_hold_sets_forced_hold_metadata(trading_agen
     assert saved_decision["execution_status"] == "hold"
     assert saved_decision["hold_origin"] == "position_rule"
     assert saved_decision["hold_is_genuine"] is False
+
+
+@pytest.mark.asyncio
+async def test_position_state_forced_hold_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 0,
+            "reasoning": "[FORCED HOLD - Position State Violation] Cannot BUY when already LONG BTCUSD.",
+            "position_state_violation": True,
+            "decision_origin": "judge",
+            "market_regime": "trending",
+            "asset_pair": "BTCUSD",
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "OPEN_SMALL_LONG", "confidence": 88, "reasoning": "double down"},
+                    "judge": {"action": "OPEN_SMALL_LONG", "confidence": 88, "reasoning": "trend continuation"},
+                }
+            },
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["hold_origin"] == "position_rule"
+    assert saved_decision["decision_origin"] == "judge"
+    assert saved_decision["market_regime"] == "trending"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "OPEN_SMALL_LONG"
 
 
 @pytest.mark.asyncio
@@ -968,6 +1029,34 @@ async def test_pre_reason_skip_hold_preserves_audit_spine_fields(trading_agent, 
     assert saved["market_regime"] == "ranging"
     assert saved["pre_reasoning"]["skip_debate"] is True
     assert saved["pre_reasoning"]["reason"] == "No clear catalyst"
+
+
+@pytest.mark.asyncio
+async def test_filtered_pre_reason_hold_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    decision = {
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 50,
+        "asset_pair": "BTCUSD",
+        "reasoning": "[PRE-REASON SKIP] No clear directional signal. Regime: ranging.",
+        "decision_origin": "pre_reasoner",
+        "market_regime": "ranging",
+        "pre_reasoning": {
+            "skip_debate": True,
+            "regime": "ranging",
+            "reason": "No clear directional signal",
+        },
+    }
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value=decision)
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved["execution_status"] == "hold"
+    assert saved["decision_origin"] == "pre_reasoner"
+    assert saved["market_regime"] == "ranging"
+    assert saved["pre_reasoning"]["skip_debate"] is True
 
 
 @pytest.mark.asyncio

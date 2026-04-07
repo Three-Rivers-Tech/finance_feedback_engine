@@ -737,6 +737,52 @@ class TestDecisionPersistence:
         assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
         assert saved_decision["ensemble_metadata"]["debate_seats"]["judge"] == "deepseek-r1:8b"
 
+
+    @pytest.mark.asyncio
+    @patch("finance_feedback_engine.core.ensure_models_installed")
+    @patch("finance_feedback_engine.core.validate_at_startup")
+    async def test_analyze_asset_persists_judged_hold_spine_fields(
+        self, mock_validate, mock_models, minimal_config
+    ):
+        engine = FinanceFeedbackEngine(minimal_config)
+
+        engine.data_provider.get_comprehensive_market_data = AsyncMock(
+            return_value={"current_price": 50000.0, "type": "crypto"}
+        )
+        mock_decision = {
+            "id": str(uuid.uuid4()),
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 50,
+            "reasoning": "Judge sees no edge.",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+            "ensemble_metadata": {
+                "judge_decision": {"action": "HOLD", "confidence": 50, "reasoning": "judge"},
+                "role_decisions": {
+                    "bull": {"provider": "gemma2:9b", "action": "OPEN_SMALL_LONG", "confidence": 40},
+                    "bear": {"provider": "llama3.1:8b", "action": "OPEN_SMALL_SHORT", "confidence": 30},
+                    "judge": {"provider": "deepseek-r1:8b", "action": "HOLD", "confidence": 50},
+                },
+                "debate_seats": {
+                    "bull": "gemma2:9b",
+                    "bear": "llama3.1:8b",
+                    "judge": "deepseek-r1:8b",
+                },
+            },
+        }
+        engine.decision_engine.generate_decision = AsyncMock(return_value=mock_decision)
+        engine.decision_store.save_decision = Mock()
+
+        result = await engine.analyze_asset_async("BTCUSD")
+
+        saved_decision = engine.decision_store.save_decision.call_args[0][0]
+        assert result["decision_origin"] == "judge"
+        assert saved_decision["decision_origin"] == "judge"
+        assert saved_decision["market_regime"] == "ranging"
+        assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+
+
     @pytest.mark.asyncio
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
