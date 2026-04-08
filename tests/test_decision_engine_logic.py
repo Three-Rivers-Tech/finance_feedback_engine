@@ -746,7 +746,7 @@ async def test_debate_mode_inference_enriches_judged_hold_with_top_level_audit_f
 ):
     bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull", "market_regime": "ranging"}
     bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear", "market_regime": "ranging"}
-    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold"}
+    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold", "decision_origin": None, "market_regime": None}
 
     from types import SimpleNamespace
     decision_engine.ensemble_manager = SimpleNamespace(

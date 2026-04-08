@@ -576,3 +576,21 @@ class TestPositionSizingHelpers:
         
         has_position = engine._has_existing_position("BTCUSD", portfolio, None)
         assert has_position is False
+
+
+@pytest.mark.asyncio
+async def test_ai_decision_manager_debate_inference_enriches_judged_hold_top_level_fields(engine):
+    bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull", "market_regime": "ranging"}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear", "market_regime": "ranging"}
+    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold", "decision_origin": None, "market_regime": None}
+    from types import SimpleNamespace
+    engine.ensemble_manager = SimpleNamespace(
+        debate_providers={"bull": "gemma2:9b", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"},
+        _is_valid_provider_response=lambda response, provider: True,
+        debate_decisions=lambda **kwargs: kwargs["judge_decision"],
+    )
+    with patch.object(engine, "_query_single_provider", new_callable=AsyncMock) as mock_query:
+        mock_query.side_effect = [bull, bear, judge]
+        result = await engine._debate_mode_inference("test prompt")
+    assert result["decision_origin"] == "judge"
+    assert result["market_regime"] == "ranging"

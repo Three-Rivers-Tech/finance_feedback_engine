@@ -1426,10 +1426,11 @@ Missing Evidence: <what additional evidence would increase confidence>
         )
 
         if isinstance(final_decision, dict):
-            final_decision.setdefault("decision_origin", "judge")
-            if final_decision.get("market_regime") is None:
+            if not final_decision.get("decision_origin"):
+                final_decision["decision_origin"] = "judge"
+            if not final_decision.get("market_regime"):
                 for candidate in (judge_decision, bull_case, bear_case):
-                    if isinstance(candidate, dict) and candidate.get("market_regime") is not None:
+                    if isinstance(candidate, dict) and candidate.get("market_regime"):
                         final_decision["market_regime"] = candidate.get("market_regime")
                         break
 
