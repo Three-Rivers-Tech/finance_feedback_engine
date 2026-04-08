@@ -430,6 +430,13 @@ class DebateManager:
             "judge_exit_override_role": exit_override.get("judge_exit_override_role") if exit_override else None,
             "judge_exit_override_action": exit_override.get("judge_exit_override_action") if exit_override else None,
         }
+        if not final_decision.get("decision_origin"):
+            final_decision["decision_origin"] = "judge"
+        if not final_decision.get("market_regime"):
+            for candidate in (judge_decision, bull_case, bear_case):
+                if isinstance(candidate, dict) and candidate.get("market_regime"):
+                    final_decision["market_regime"] = candidate.get("market_regime")
+                    break
 
         final_decision = build_ai_decision_envelope(
             decision=final_decision,
