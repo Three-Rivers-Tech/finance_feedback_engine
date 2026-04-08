@@ -738,6 +738,77 @@ class TestDecisionPersistence:
         assert saved_decision["ensemble_metadata"]["debate_seats"]["judge"] == "deepseek-r1:8b"
 
 
+
+
+    @pytest.mark.asyncio
+    @patch("finance_feedback_engine.core.ensure_models_installed")
+    @patch("finance_feedback_engine.core.validate_at_startup")
+    async def test_analyze_asset_end_to_end_pre_reason_skip_persists_spine_fields(
+        self, mock_validate, mock_models, minimal_config
+    ):
+        from types import SimpleNamespace
+    
+        config = json.loads(json.dumps(minimal_config))
+        engine = FinanceFeedbackEngine(config)
+    
+        engine.data_provider.get_comprehensive_market_data = AsyncMock(
+            return_value={"close": 50000.0, "type": "crypto", "asset_type": "crypto"}
+        )
+        engine.unified_provider.get_current_price = Mock(
+            return_value={"price": 50010.0, "provider": "mock"}
+        )
+    
+        market_brief = SimpleNamespace(
+            actionable=False,
+            regime="dead",
+            summary="quiet tape",
+            key_question="wait for expansion?",
+            skip_reason="Dead market",
+            regime_confidence=82,
+            to_dict=lambda: {
+                "regime": "dead",
+                "actionable": False,
+                "skip_reason": "Dead market",
+                "regime_confidence": 82,
+            },
+            to_prompt_section=lambda: "MARKET BRIEF: dead",
+        )
+    
+        engine.decision_engine._pre_reason_gatekeeper = SimpleNamespace(
+            should_force_debate=lambda brief: (False, None),
+            record_debate=lambda: None,
+            record_skip=lambda: None,
+            skip_stats={},
+        )
+        engine.decision_engine.ai_manager._query_single_provider_raw = AsyncMock(
+            return_value='{"actionable": false, "regime": "dead", "summary": "quiet tape", "key_question": "wait for expansion?", "skip_reason": "Dead market", "confidence": 82}'
+        )
+    
+        with patch(
+            "finance_feedback_engine.decision_engine.engine.parse_pre_reason_response",
+            return_value=market_brief,
+        ), patch.object(
+            engine.decision_engine,
+            "_query_ai",
+            new_callable=AsyncMock,
+        ) as mock_query_ai:
+            mock_query_ai.side_effect = AssertionError(
+                "main AI path should not run when pre-reason skip triggers"
+            )
+            result = await engine.analyze_asset_async("BTCUSD")
+    
+        persisted = engine.decision_store.get_decisions(limit=1)[0]
+    
+        assert result["action"] == "HOLD"
+        assert result["pre_reason_skipped"] is True
+        assert result["decision_origin"] == "pre_reasoner"
+        assert result["market_regime"] == "dead"
+        assert result["pre_reasoning"]["skip_debate"] is True
+        assert persisted["pre_reason_skipped"] is True
+        assert persisted["decision_origin"] == "pre_reasoner"
+        assert persisted["market_regime"] == "dead"
+        assert persisted["market_brief"]["regime"] == "dead"
+        assert persisted["pre_reasoning"]["reason"] == "Dead market"
     @pytest.mark.asyncio
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
