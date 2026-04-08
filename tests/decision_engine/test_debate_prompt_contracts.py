@@ -103,3 +103,23 @@ def test_decision_engine_debate_prompts_should_be_role_distinct():
     assert bull_prompt != bear_prompt
     assert bear_prompt != judge_prompt
     assert bull_prompt != judge_prompt
+
+
+def test_judge_prompt_summarizes_long_role_reasoning_without_losing_contract():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    long_reason = "bullish evidence " * 200
+    bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 77, "market_regime": "ranging", "reasoning": long_reason}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 33, "market_regime": "ranging", "reasoning": long_reason}
+
+    judge_prompt = manager._build_judge_prompt('BASE PROMPT', bull, bear)
+
+    assert 'DEBATE ROLE: IMPARTIAL JUDGE' in judge_prompt
+    assert 'Bull case summary:' in judge_prompt
+    assert 'Bear case summary:' in judge_prompt
+    assert 'Action: OPEN_SMALL_LONG' in judge_prompt
+    assert 'Action: OPEN_SMALL_SHORT' in judge_prompt
+    assert 'Reasoning Summary:' in judge_prompt
+    assert long_reason not in judge_prompt
+    assert '...' in judge_prompt
+    assert 'Winning Thesis:' in judge_prompt
+    assert 'Missing Evidence:' in judge_prompt

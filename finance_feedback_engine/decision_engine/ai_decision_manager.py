@@ -266,6 +266,107 @@ class AIDecisionManager:
             case = None
         return {"case": case, "failed": failed, "elapsed_s": time.perf_counter() - _timing_started}
 
+    @staticmethod
+    def _truncate_for_judge(text: Optional[str], max_chars: int = 600) -> str:
+        if not text:
+            return "No reasoning provided"
+        normalized = " ".join(str(text).split())
+        if len(normalized) <= max_chars:
+            return normalized
+        return normalized[: max_chars - 3].rstrip() + "..."
+
+    def _format_case_for_judge(self, side: str, case: Optional[Dict[str, Any]]) -> str:
+        if not case:
+            return f"{side.title()} provider failed"
+        reasoning = self._truncate_for_judge(case.get("reasoning"))
+        action = case.get("policy_action") or case.get("action") or "unknown"
+        confidence = case.get("confidence")
+        regime = case.get("market_regime") or "unknown"
+        return (
+            f"Action: {action}\n"
+            f"Confidence: {confidence}\n"
+            f"Regime: {regime}\n"
+            f"Reasoning Summary: {reasoning}"
+        )
+
+    def _build_judge_prompt(
+        self,
+        prompt: str,
+        bull_case: Optional[Dict[str, Any]],
+        bear_case: Optional[Dict[str, Any]],
+    ) -> str:
+        bull_summary = self._format_case_for_judge("bull", bull_case)
+        bear_summary = self._format_case_for_judge("bear", bear_case)
+        return prompt + f"""
+
+DEBATE ROLE: IMPARTIAL JUDGE
+=============================
+You are the final arbiter on a trading decision council.
+You must evaluate both the bullish and bearish cases and decide whether one side has a real actionable edge or whether the correct decision is HOLD.
+
+Bull case summary:
+{bull_summary}
+
+Bear case summary:
+{bear_summary}
+
+Your role is to make the FINAL DECISION weighing both perspectives.
+Do NOT reward persuasive writing. Judge evidence quality, trend alignment, actionability, and execution suitability.
+HOLD is an active decision, not the default fallback.
+Do not choose HOLD merely because the bull and bear disagree. Disagreement is expected.
+If one case is materially stronger, more specific, and more actionable, prefer that side.
+
+Decision Framework:
+1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
+   - If strong_bearish/bearish consensus -> favor HOLD or SHORT; be very cautious on LONG
+   - If strong_bullish/bullish consensus -> favor LONG; be cautious on SHORT
+   - If neutral -> evaluate other factors more heavily
+2. Evidence quality and structural alignment
+3. Actionability right now
+4. Data quality, freshness, and execution reliability
+5. Lower priority: short-term noise and isolated candle signals
+
+MANDATORY HOLD CONDITIONS:
+- Both directional cases are weak, generic, or poorly grounded
+- Evidence is too mixed to justify positive expected value even for a small position
+- Data is stale, degraded, or market is closed
+- Execution or sizing context is incomplete or unreliable
+- Proposed trade is counter-trend without exceptional reversal evidence
+
+IMPORTANT HOLD RULE:
+- Disagreement alone is not sufficient for HOLD.
+- If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
+- Choose HOLD only if neither side clears the threshold for an actionable trade.
+
+Counter-trend trades should only be recommended with:
+- Exceptional reversal signals
+- Tight stop-losses (max 2%)
+- Reduced size
+- Confidence materially reduced
+
+Return ONLY valid JSON with these exact keys:
+- action
+- confidence
+- reasoning
+- amount
+
+In reasoning, use this exact mini-structure:
+Winning Thesis: <bull|bear|neither>
+Decision Basis: <main factor that decided the outcome>
+Why Not Bull: <required when final action is HOLD or bear-side action>
+Why Not Bear: <required when final action is HOLD or bull-side action>
+Actionability: <actionable_now|monitor|no_trade>
+Data Quality: <good|degraded|stale>
+Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
+Final Rationale: <clear final explanation>
+
+When choosing HOLD:
+- Winning Thesis should normally be 'neither'
+- You must explicitly explain why the bullish case is not strong enough
+- You must explicitly explain why the bearish case is not strong enough
+- You must state what missing evidence or condition would justify action
+"""
+
     async def _debate_mode_inference(
         self,
         prompt: str,
@@ -448,75 +549,7 @@ Data Quality: <good|degraded|stale>
         try:
             # Add judge-specific instructions with bull/bear context
             _timing_started = time.perf_counter()
-            judge_prompt = prompt + f"""
-
-DEBATE ROLE: IMPARTIAL JUDGE
-=============================
-You are the final arbiter on a trading decision council.
-You must evaluate both the bullish and bearish cases and decide whether one side has a real actionable edge or whether the correct decision is HOLD.
-
-Bull case summary:
-{bull_case.get('reasoning', 'Bull provider failed') if bull_case else 'Bull provider failed'}
-
-Bear case summary:
-{bear_case.get('reasoning', 'Bear provider failed') if bear_case else 'Bear provider failed'}
-
-Your role is to make the FINAL DECISION weighing both perspectives.
-Do NOT reward persuasive writing. Judge evidence quality, trend alignment, actionability, and execution suitability.
-HOLD is an active decision, not the default fallback.
-Do not choose HOLD merely because the bull and bear disagree. Disagreement is expected.
-If one case is materially stronger, more specific, and more actionable, prefer that side.
-
-Decision Framework:
-1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
-   - If strong_bearish/bearish consensus → favor HOLD or SHORT; be very cautious on LONG
-   - If strong_bullish/bullish consensus → favor LONG; be cautious on SHORT
-   - If neutral → evaluate other factors more heavily
-2. Evidence quality and structural alignment
-3. Actionability right now
-4. Data quality, freshness, and execution reliability
-5. Lower priority: short-term noise and isolated candle signals
-
-MANDATORY HOLD CONDITIONS:
-- Both directional cases are weak, generic, or poorly grounded
-- Evidence is too mixed to justify positive expected value even for a small position
-- Data is stale, degraded, or market is closed
-- Execution or sizing context is incomplete or unreliable
-- Proposed trade is counter-trend without exceptional reversal evidence
-
-IMPORTANT HOLD RULE:
-- Disagreement alone is not sufficient for HOLD.
-- If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
-- Choose HOLD only if neither side clears the threshold for an actionable trade.
-
-Counter-trend trades should only be recommended with:
-- Exceptional reversal signals
-- Tight stop-losses (max 2%)
-- Reduced size
-- Confidence materially reduced
-
-Return ONLY valid JSON with these exact keys:
-- action
-- confidence
-- reasoning
-- amount
-
-In reasoning, use this exact mini-structure:
-Winning Thesis: <bull|bear|neither>
-Decision Basis: <main factor that decided the outcome>
-Why Not Bull: <required when final action is HOLD or bear-side action>
-Why Not Bear: <required when final action is HOLD or bull-side action>
-Actionability: <actionable_now|monitor|no_trade>
-Data Quality: <good|degraded|stale>
-Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
-Final Rationale: <clear final explanation>
-
-When choosing HOLD:
-- Winning Thesis should normally be 'neither'
-- You must explicitly explain why the bullish case is not strong enough
-- You must explicitly explain why the bearish case is not strong enough
-- You must state what missing evidence or condition would justify action
-"""
+            judge_prompt = self._build_judge_prompt(prompt, bull_case, bear_case)
             
             debate_timing["judge_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
             _timing_started = time.perf_counter()
