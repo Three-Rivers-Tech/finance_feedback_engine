@@ -95,7 +95,7 @@ class TestJudgeIsCanonicalDecision:
         result = manager.synthesize_debate_decision(
             {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull case", "market_regime": "ranging"},
             {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear case", "market_regime": "ranging"},
-            {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge says no edge", "decision_origin": "judge", "market_regime": "ranging"},
+            {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge says no edge", "decision_origin": None, "market_regime": None},
         )
         assert result["decision_origin"] == "judge"
         assert result["market_regime"] == "ranging"
