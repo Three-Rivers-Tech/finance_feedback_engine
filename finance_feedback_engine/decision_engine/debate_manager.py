@@ -452,5 +452,12 @@ class DebateManager:
             f"({final_decision['confidence']}%) - "
             f"Judge: {self.debate_providers['judge']}"
         )
+        logger.info(
+            "DEBATE MANAGER shape: origin=%s regime=%s has_ensemble=%s filtered=%s",
+            final_decision.get("decision_origin") if isinstance(final_decision, dict) else None,
+            final_decision.get("market_regime") if isinstance(final_decision, dict) else None,
+            bool(final_decision.get("ensemble_metadata")) if isinstance(final_decision, dict) else False,
+            final_decision.get("filtered_reason_code") if isinstance(final_decision, dict) else None,
+        )
 
         return final_decision

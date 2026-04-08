@@ -576,6 +576,13 @@ When choosing HOLD:
                     if isinstance(candidate, dict) and candidate.get("market_regime"):
                         final_decision["market_regime"] = candidate.get("market_regime")
                         break
+            logger.info(
+                "AI MANAGER debate return shape: origin=%s regime=%s has_ensemble=%s filtered=%s",
+                final_decision.get("decision_origin"),
+                final_decision.get("market_regime"),
+                bool(final_decision.get("ensemble_metadata")),
+                final_decision.get("filtered_reason_code"),
+            )
 
         return final_decision
 
