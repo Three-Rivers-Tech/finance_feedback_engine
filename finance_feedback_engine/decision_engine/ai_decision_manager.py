@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import re
 from typing import Any, Dict, Optional
 
@@ -223,6 +224,7 @@ class AIDecisionManager:
         """
         failed: list[str] = []
         full_prompt = base_prompt + prompt_suffix
+        _timing_started = time.perf_counter()
         try:
             case = await self._query_single_provider(provider, full_prompt)
             if not self.ensemble_manager._is_valid_provider_response(case, provider):
@@ -262,7 +264,7 @@ class AIDecisionManager:
             failed.append(provider)
             increment_provider_request(provider, "failure")
             case = None
-        return {"case": case, "failed": failed}
+        return {"case": case, "failed": failed, "elapsed_s": time.perf_counter() - _timing_started}
 
     async def _debate_mode_inference(
         self,
@@ -304,6 +306,7 @@ class AIDecisionManager:
         failed_debate_providers = []
 
         failed_debate_providers = []
+        debate_timing = {}
         bull_case = None
         bear_case = None
         judge_decision = None
@@ -412,6 +415,7 @@ Thesis Breaker: <specific condition that invalidates the bearish case>
 Data Quality: <good|degraded|stale>
 """
 
+        _debate_parallel_started = time.perf_counter()
         bull_result, bear_result = await asyncio.gather(
             self._query_debate_role(
                 "bull", bull_provider, _bull_prompt_suffix, prompt, increment_provider_request,
@@ -420,6 +424,13 @@ Data Quality: <good|degraded|stale>
                 "bear", bear_provider, _bear_prompt_suffix, prompt, increment_provider_request,
             ),
         )
+        debate_timing["bull_bear_parallel_s"] = round(time.perf_counter() - _debate_parallel_started, 4)
+        bull_elapsed = bull_result.get("elapsed_s")
+        if bull_elapsed is not None:
+            debate_timing["bull_s"] = round(float(bull_elapsed), 4)
+        bear_elapsed = bear_result.get("elapsed_s")
+        if bear_elapsed is not None:
+            debate_timing["bear_s"] = round(float(bear_elapsed), 4)
         bull_case = bull_result["case"]
         failed_debate_providers.extend(bull_result.get("failed", []))
         bear_case = bear_result["case"]
@@ -436,6 +447,7 @@ Data Quality: <good|degraded|stale>
         # Query judge provider (final decision)
         try:
             # Add judge-specific instructions with bull/bear context
+            _timing_started = time.perf_counter()
             judge_prompt = prompt + f"""
 
 DEBATE ROLE: IMPARTIAL JUDGE
@@ -506,7 +518,10 @@ When choosing HOLD:
 - You must state what missing evidence or condition would justify action
 """
             
+            debate_timing["judge_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
+            _timing_started = time.perf_counter()
             judge_decision = await self._query_single_provider(judge_provider, judge_prompt)
+            debate_timing["judge_s"] = round(time.perf_counter() - _timing_started, 4)
             if not self.ensemble_manager._is_valid_provider_response(
                 judge_decision, judge_provider
             ):
@@ -568,6 +583,7 @@ When choosing HOLD:
             )
 
         # Synthesize debate decisions
+        _timing_started = time.perf_counter()
         final_decision = self.ensemble_manager.debate_decisions(
             bull_case=bull_case,
             bear_case=bear_case,
@@ -577,7 +593,13 @@ When choosing HOLD:
             market_regime=market_regime,
         )
 
+        debate_timing["debate_synthesis_s"] = round(time.perf_counter() - _timing_started, 4)
+
         if isinstance(final_decision, dict):
+            logger.info(
+                "DEBATE timing: %s",
+                ", ".join(f"{k}={v:.4f}s" for k, v in debate_timing.items()),
+            )
             if not final_decision.get("decision_origin"):
                 final_decision["decision_origin"] = "judge"
             if not final_decision.get("market_regime"):

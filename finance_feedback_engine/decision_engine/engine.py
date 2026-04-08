@@ -2226,7 +2226,10 @@ Missing Evidence: <what additional evidence would increase confidence>
             elif monitoring_context:
                 logger.debug("Using provided monitoring context (backtesting mode)")
 
+            reasoning_timing = {}
+
             # Create decision context
+            _timing_started = time.perf_counter()
             context = await self._create_decision_context(
                 asset_pair,
                 market_data,
@@ -2235,12 +2238,15 @@ Missing Evidence: <what additional evidence would increase confidence>
                 memory_context,
                 monitoring_context,
             )
+            reasoning_timing["context_build_s"] = round(time.perf_counter() - _timing_started, 4)
 
             # Retrieve semantic memory
             if self.vector_memory:
                 query = f"Asset: {asset_pair}. Market: {market_data.get('trend', 'neutral')}, RSI {market_data.get('rsi', 'N/A')}. Volatility: {context.get('volatility', 'N/A')}."
                 try:
+                    _timing_started = time.perf_counter()
                     similar = self.vector_memory.find_similar(query, top_k=3)
+                    reasoning_timing["semantic_memory_s"] = round(time.perf_counter() - _timing_started, 4)
                     context["semantic_memory"] = similar
                 except Exception as e:
                     error_counter = self._counters.get("ffe_decisions_errors_total")
@@ -2265,17 +2271,22 @@ Missing Evidence: <what additional evidence would increase confidence>
             # --- Track E1: Pre-Reasoning Layer ---
             # Single fast LLM call to assess market and determine if debate is needed.
             market_brief = None
+            _pre_reason_started = time.perf_counter()
             try:
+                _timing_started = time.perf_counter()
                 pre_reason_prompt = build_pre_reason_prompt(
                     market_data=market_data,
                     position_state=context.get("position_state"),
                     memory_context=memory_context,
                 )
+                reasoning_timing["pre_reason_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
                 # Use a raw single-provider local LLM call so the market-brief
                 # schema is not contaminated by the trading-decision wrapper.
+                _timing_started = time.perf_counter()
                 pre_reason_raw_response = await self.ai_manager._query_single_provider_raw(
                     "deepseek-r1:8b", pre_reason_prompt,
                 )
+                reasoning_timing["pre_reason_raw_call_s"] = round(time.perf_counter() - _timing_started, 4)
                 logger.debug(
                     "Pre-reasoner raw response for %s: %s",
                     asset_pair,
@@ -2305,12 +2316,15 @@ Missing Evidence: <what additional evidence would increase confidence>
                     except Exception:
                         _data_ts_float = None
 
+                _timing_started = time.perf_counter()
                 market_brief = parse_pre_reason_response(
                     pre_reason_response,
                     current_price=float(market_data.get("close", 0)),
                     position_state=context.get("position_state"),
                     data_timestamp=_data_ts_float,
                 )
+                reasoning_timing["pre_reason_parse_s"] = round(time.perf_counter() - _timing_started, 4)
+                reasoning_timing["pre_reason_total_s"] = round(time.perf_counter() - _pre_reason_started, 4)
                 context["market_brief"] = market_brief
 
                 # No-op gate with safety checks (skip streak, consecutive limit, data quality)
@@ -2372,17 +2386,24 @@ Missing Evidence: <what additional evidence would increase confidence>
             # --- End Track E1 ---
 
             # Generate AI prompt
+            _timing_started = time.perf_counter()
             prompt = self._create_ai_prompt(context)
+            reasoning_timing["prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
 
             # Inject market brief into prompt if available
             if market_brief is not None:
+                _timing_started = time.perf_counter()
                 brief_section = market_brief.to_prompt_section()
                 prompt = brief_section + "\n\n" + prompt
+                reasoning_timing["prompt_brief_inject_s"] = round(time.perf_counter() - _timing_started, 4)
 
             # Compress context window to reduce token usage
+            _timing_started = time.perf_counter()
             prompt = self._compress_context_window(prompt, max_tokens=3000)
+            reasoning_timing["prompt_compress_s"] = round(time.perf_counter() - _timing_started, 4)
 
             # Get AI recommendation (pass asset_pair and market_data for two-phase ensemble)
+            _timing_started = time.perf_counter()
             ai_response = await self._query_ai(
                 prompt,
                 asset_pair=asset_pair,
@@ -2390,6 +2411,8 @@ Missing Evidence: <what additional evidence would increase confidence>
                 provider_override=provider_override,
                 market_regime=getattr(market_brief, "regime", None),
             )
+
+            reasoning_timing["ai_query_total_s"] = round(time.perf_counter() - _timing_started, 4)
 
             if (
                 market_brief is not None
@@ -2400,7 +2423,9 @@ Missing Evidence: <what additional evidence would increase confidence>
                 ai_response["market_regime"] = market_brief.regime
 
             # Apply optional veto logic before final decision creation
+            _timing_started = time.perf_counter()
             ai_response, veto_metadata = self._apply_veto_logic(ai_response, context)
+            reasoning_timing["veto_s"] = round(time.perf_counter() - _timing_started, 4)
             if veto_metadata:
                 ai_response["veto_metadata"] = veto_metadata
 
@@ -2443,6 +2468,12 @@ Missing Evidence: <what additional evidence would increase confidence>
                 )
                 ai_response["confidence"] = 0.0  # Zero confidence for forced HOLD
                 ai_response["position_state_violation"] = True
+
+            logger.info(
+                "REASONING timing for %s: %s",
+                asset_pair,
+                ", ".join(f"{k}={v:.4f}s" for k, v in reasoning_timing.items()),
+            )
 
             # Create structured decision object
             decision = self._create_decision(asset_pair, context, ai_response)
