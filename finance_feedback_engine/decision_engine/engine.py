@@ -2388,6 +2388,14 @@ Missing Evidence: <what additional evidence would increase confidence>
                 provider_override=provider_override,
             )
 
+            if (
+                market_brief is not None
+                and isinstance(ai_response, dict)
+                and not ai_response.get("market_regime")
+                and getattr(market_brief, "regime", None)
+            ):
+                ai_response["market_regime"] = market_brief.regime
+
             # Apply optional veto logic before final decision creation
             ai_response, veto_metadata = self._apply_veto_logic(ai_response, context)
             if veto_metadata:

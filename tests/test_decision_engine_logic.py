@@ -763,5 +763,54 @@ async def test_debate_mode_inference_enriches_judged_hold_with_top_level_audit_f
     assert result["market_regime"] == "ranging"
 
 
+@pytest.mark.asyncio
+async def test_generate_decision_propagates_market_brief_regime_into_debate_hold(decision_engine):
+    from types import SimpleNamespace
+
+    market_brief = SimpleNamespace(
+        actionable=True,
+        regime="TRENDING_BULL",
+        summary="trend",
+        key_question="go?",
+        skip_reason=None,
+        regime_confidence=70,
+        to_dict=lambda: {"regime": "TRENDING_BULL"},
+        to_prompt_section=lambda: "MARKET BRIEF: TRENDING_BULL",
+    )
+    decision_engine.ai_manager = SimpleNamespace(
+        ai_provider="ensemble",
+        model_name="test-model",
+        _query_single_provider_raw=AsyncMock(return_value='{"actionable": true, "regime": "TRENDING_BULL", "summary": "trend", "key_question": "go?", "confidence": 70}')
+    )
+    decision_engine._pre_reason_gatekeeper = SimpleNamespace(
+        should_force_debate=lambda brief: (False, None),
+        record_debate=lambda: None,
+        record_skip=lambda: None,
+        skip_stats={},
+    )
+    decision_engine.debate_mode_enabled = True
+    decision_engine.ensemble_manager = SimpleNamespace(
+        debate_providers={"bull": "gemma2:9b", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"},
+        _is_valid_provider_response=lambda response, provider: True,
+        debate_decisions=lambda **kwargs: kwargs["judge_decision"],
+    )
+    bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull"}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear"}
+    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold", "decision_origin": None, "market_regime": None}
+
+    with patch("finance_feedback_engine.decision_engine.engine.parse_pre_reason_response", return_value=market_brief):
+        with patch.object(decision_engine, "_query_ai", new_callable=AsyncMock) as mock_query_ai:
+            mock_query_ai.return_value = judge
+            result = await decision_engine.generate_decision(
+                asset_pair="BTCUSD",
+                market_data={"close": 50000.0, "type": "crypto", "asset_type": "crypto"},
+                balance={"coinbase_FUTURES_USD": 355.0},
+                portfolio={},
+                memory_context="",
+            )
+
+    assert result["market_regime"] == "TRENDING_BULL"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
