@@ -685,6 +685,29 @@ class TestDebateMode:
         assert result["debate_metadata"]["bear_case"] == bear_case
 
 
+    def test_debate_decisions_forwards_market_regime_to_debate_manager(self, ensemble_manager):
+        bull_case = {"action": "BUY", "confidence": 85, "reasoning": "Bullish case"}
+        bear_case = {"action": "SELL", "confidence": 75, "reasoning": "Bearish case"}
+        judge = {"action": "HOLD", "confidence": 70, "reasoning": "Judge decision"}
+
+        captured = {}
+
+        def fake_synthesize(*args, **kwargs):
+            captured.update(kwargs)
+            return {"action": "HOLD", "confidence": 70, "reasoning": "ok", "market_regime": kwargs.get("market_regime")}
+
+        ensemble_manager.debate_manager.synthesize_debate_decision = fake_synthesize
+        result = ensemble_manager.debate_decisions(
+            bull_case,
+            bear_case,
+            judge,
+            market_regime="trending_up",
+        )
+
+        assert result["market_regime"] == "trending_up"
+        assert captured["market_regime"] == "trending_up"
+
+
 # ===== Quorum Tests =====
 
 
