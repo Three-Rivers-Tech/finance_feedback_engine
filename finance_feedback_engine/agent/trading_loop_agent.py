@@ -2419,6 +2419,15 @@ class TradingLoopAgent:
                         e,
                     )
                 logger.info(
+                    "HOLD audit shape for %s: origin=%s regime=%s has_ensemble=%s has_pre_reasoning=%s filtered=%s",
+                    decision.get("asset_pair"),
+                    decision.get("decision_origin"),
+                    decision.get("market_regime"),
+                    bool(decision.get("ensemble_metadata")),
+                    bool(decision.get("pre_reasoning")),
+                    decision.get("filtered_reason_code"),
+                )
+                logger.info(
                     "Decision for %s: HOLD persisted. No action taken.",
                     decision.get("asset_pair"),
                 )
