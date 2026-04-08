@@ -534,6 +534,12 @@ class DecisionValidator:
         if "ensemble_metadata" in ai_response:
             decision["ensemble_metadata"] = ai_response["ensemble_metadata"]
 
+        # Preserve top-level audit fields from upstream decision construction
+        if "decision_origin" in ai_response:
+            decision["decision_origin"] = ai_response.get("decision_origin")
+        if ai_response.get("market_regime"):
+            decision["market_regime"] = ai_response.get("market_regime")
+
         # Add action_votes if available (from weighted voting)
         if "action_votes" in ai_response:
             decision["action_votes"] = ai_response["action_votes"]
