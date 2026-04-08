@@ -2365,6 +2365,11 @@ Missing Evidence: <what additional evidence would increase confidence>
                         "confidence": market_brief.regime_confidence,
                         "key_question": market_brief.key_question,
                     }
+                    logger.info(
+                        "REASONING timing for %s: %s",
+                        asset_pair,
+                        ", ".join(f"{k}={v:.4f}s" for k, v in reasoning_timing.items()),
+                    )
                     return skip_decision
                 else:
                     self._pre_reason_gatekeeper.record_debate()
