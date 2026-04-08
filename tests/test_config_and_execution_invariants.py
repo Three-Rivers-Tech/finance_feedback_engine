@@ -356,6 +356,49 @@ class TestDecisionValidatorContract:
         assert result["confidence"] == 85
 
 
+    def test_create_decision_preserves_ai_response_audit_fields(self, validator):
+        context = {
+            "market_regime": "ranging",
+            "market_data": {"close": 50000.0},
+            "position_state": "flat",
+        }
+        ai_response = {
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 60,
+            "reasoning": "judge hold",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "OPEN_SMALL_LONG", "confidence": 40},
+                    "judge": {"action": "HOLD", "confidence": 60},
+                }
+            },
+        }
+
+        result = validator.create_decision(
+            asset_pair="BTCUSD",
+            context=context,
+            ai_response=ai_response,
+            position_sizing_result={
+                "recommended_position_size": 0,
+                "stop_loss_price": 50000,
+                "sizing_stop_loss_percentage": 0.02,
+                "risk_percentage": 0.01,
+            },
+            relevant_balance={"coinbase_FUTURES_USD": 355.0},
+            balance_source="Coinbase",
+            has_existing_position=False,
+            is_crypto=True,
+            is_forex=False,
+        )
+
+        assert result["decision_origin"] == "judge"
+        assert result["market_regime"] == "ranging"
+        assert result["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SEAM 5: _dedupe_provider_names edge cases
 # ═══════════════════════════════════════════════════════════════════
