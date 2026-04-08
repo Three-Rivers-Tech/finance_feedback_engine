@@ -741,11 +741,120 @@ class TestDecisionPersistence:
     @pytest.mark.asyncio
     @patch("finance_feedback_engine.core.ensure_models_installed")
     @patch("finance_feedback_engine.core.validate_at_startup")
+    async def test_analyze_asset_end_to_end_debate_smoke_persists_spine_fields(
+        self, mock_validate, mock_models, minimal_config
+    ):
+        from types import SimpleNamespace
+    
+        config = json.loads(json.dumps(minimal_config))
+        engine = FinanceFeedbackEngine(config)
+    
+        engine.data_provider.get_comprehensive_market_data = AsyncMock(
+            return_value={"close": 50000.0, "type": "crypto", "asset_type": "crypto"}
+        )
+        engine.unified_provider.get_current_price = Mock(
+            return_value={"price": 50010.0, "provider": "mock"}
+        )
+    
+        market_brief = SimpleNamespace(
+            actionable=True,
+            regime="ranging",
+            summary="balanced tape",
+            key_question="breakout or mean reversion?",
+            skip_reason=None,
+            regime_confidence=67,
+            to_dict=lambda: {"regime": "ranging"},
+            to_prompt_section=lambda: "MARKET BRIEF: ranging",
+        )
+    
+        bull = {
+            "action": "BUY",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 41,
+            "reasoning": "bull case",
+            "market_regime": "ranging",
+        }
+        bear = {
+            "action": "SELL",
+            "policy_action": "OPEN_SMALL_SHORT",
+            "confidence": 39,
+            "reasoning": "bear case",
+            "market_regime": "ranging",
+        }
+        judge = {
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 52,
+            "reasoning": "judge sees no clean edge",
+            "decision_origin": None,
+            "market_regime": None,
+        }
+    
+        engine.decision_engine._pre_reason_gatekeeper = SimpleNamespace(
+            should_force_debate=lambda brief: (False, None),
+            record_debate=lambda: None,
+            record_skip=lambda: None,
+            skip_stats={},
+        )
+        engine.decision_engine.ai_manager.ai_provider = "ensemble"
+        engine.decision_engine.ensemble_manager = SimpleNamespace(
+            debate_mode=True,
+            debate_providers={
+                "bull": "gemma2:9b",
+                "bear": "llama3.1:8b",
+                "judge": "deepseek-r1:8b",
+            },
+            _is_valid_provider_response=lambda response, provider: True,
+            debate_decisions=lambda **kwargs: {
+                **kwargs["judge_decision"],
+                "ensemble_metadata": {
+                    "debate_mode": True,
+                    "role_decisions": {
+                        "bull": kwargs["bull_case"],
+                        "bear": kwargs["bear_case"],
+                        "judge": kwargs["judge_decision"],
+                    },
+                    "debate_seats": {
+                        "bull": "gemma2:9b",
+                        "bear": "llama3.1:8b",
+                        "judge": "deepseek-r1:8b",
+                    },
+                },
+            },
+        )
+        engine.decision_engine.ai_manager._query_single_provider_raw = AsyncMock(
+            return_value='{"actionable": true, "regime": "ranging", "summary": "balanced tape", "key_question": "breakout or mean reversion?", "confidence": 67}'
+        )
+    
+        with patch(
+            "finance_feedback_engine.decision_engine.engine.parse_pre_reason_response",
+            return_value=market_brief,
+        ), patch.object(
+            engine.decision_engine.ai_manager,
+            "_query_single_provider",
+            new_callable=AsyncMock,
+        ) as mock_query:
+            mock_query.side_effect = [bull, bear, judge]
+    
+            result = await engine.analyze_asset_async("BTCUSD")
+    
+        persisted = engine.decision_store.get_decisions(limit=1)[0]
+    
+        assert result["decision_origin"] == "judge"
+        assert result["market_regime"] == "ranging"
+        assert result["ensemble_metadata"]["debate_mode"] is True
+        assert persisted["decision_origin"] == "judge"
+        assert persisted["market_regime"] == "ranging"
+        assert persisted["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
+    
+    @pytest.mark.asyncio
+    @patch("finance_feedback_engine.core.ensure_models_installed")
+    @patch("finance_feedback_engine.core.validate_at_startup")
     async def test_analyze_asset_persists_judged_hold_spine_fields(
         self, mock_validate, mock_models, minimal_config
     ):
         engine = FinanceFeedbackEngine(minimal_config)
-
+    
         engine.data_provider.get_comprehensive_market_data = AsyncMock(
             return_value={"current_price": 50000.0, "type": "crypto"}
         )
@@ -773,9 +882,9 @@ class TestDecisionPersistence:
         }
         engine.decision_engine.generate_decision = AsyncMock(return_value=mock_decision)
         engine.decision_store.save_decision = Mock()
-
+    
         result = await engine.analyze_asset_async("BTCUSD")
-
+    
         saved_decision = engine.decision_store.save_decision.call_args[0][0]
         assert result["decision_origin"] == "judge"
         assert saved_decision["decision_origin"] == "judge"
