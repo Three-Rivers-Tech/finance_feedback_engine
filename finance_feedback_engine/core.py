@@ -1684,6 +1684,16 @@ class FinanceFeedbackEngine:
                 portfolio=portfolio,
                 memory_context=memory_context,
             )
+            if isinstance(decision, dict):
+                logger.info(
+                    "CORE post-generate shape for %s: origin=%s regime=%s has_ensemble=%s has_pre_reasoning=%s filtered=%s",
+                    asset_pair,
+                    decision.get("decision_origin"),
+                    decision.get("market_regime"),
+                    bool(decision.get("ensemble_metadata")),
+                    bool(decision.get("pre_reasoning")),
+                    decision.get("filtered_reason_code"),
+                )
         except InsufficientProvidersError as e:
             # Phase 1 quorum failure - log and return NO_DECISION
             logger.error("Phase 1 quorum failure for %s: %s", asset_pair, e)
@@ -1752,6 +1762,15 @@ class FinanceFeedbackEngine:
 
         # Persist decision. Mark the in-memory object so downstream agent stages can
         # update the same artifact instead of saving a duplicate file/log entry.
+        logger.info(
+            "CORE pre-save shape for %s: origin=%s regime=%s has_ensemble=%s has_pre_reasoning=%s filtered=%s",
+            asset_pair,
+            decision.get("decision_origin") if isinstance(decision, dict) else None,
+            decision.get("market_regime") if isinstance(decision, dict) else None,
+            bool(decision.get("ensemble_metadata")) if isinstance(decision, dict) else False,
+            bool(decision.get("pre_reasoning")) if isinstance(decision, dict) else False,
+            decision.get("filtered_reason_code") if isinstance(decision, dict) else None,
+        )
         self.decision_store.save_decision(decision)
         if isinstance(decision, dict):
             decision["_persisted_to_store"] = True
@@ -1789,4 +1808,13 @@ class FinanceFeedbackEngine:
         except Exception:
             pass
 
+        logger.info(
+            "CORE return shape for %s: origin=%s regime=%s has_ensemble=%s has_pre_reasoning=%s filtered=%s",
+            asset_pair,
+            decision.get("decision_origin") if isinstance(decision, dict) else None,
+            decision.get("market_regime") if isinstance(decision, dict) else None,
+            bool(decision.get("ensemble_metadata")) if isinstance(decision, dict) else False,
+            bool(decision.get("pre_reasoning")) if isinstance(decision, dict) else False,
+            decision.get("filtered_reason_code") if isinstance(decision, dict) else None,
+        )
         return decision
