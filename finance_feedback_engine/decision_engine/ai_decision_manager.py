@@ -135,6 +135,7 @@ class AIDecisionManager:
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None,
         provider_override: Optional[str] = None,
+        market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -162,7 +163,10 @@ class AIDecisionManager:
                 self._get_ensemble_manager()
             return self._wrap_decision_envelope(
                 await self._ensemble_ai_inference(
-                    prompt, asset_pair=asset_pair, market_data=market_data
+                    prompt,
+                    asset_pair=asset_pair,
+                    market_data=market_data,
+                    market_regime=market_regime,
                 )
             )
 
@@ -260,7 +264,11 @@ class AIDecisionManager:
             case = None
         return {"case": case, "failed": failed}
 
-    async def _debate_mode_inference(self, prompt: str) -> Dict[str, Any]:
+    async def _debate_mode_inference(
+        self,
+        prompt: str,
+        market_regime: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Execute debate mode: structured debate with bull, bear, and judge providers.
 
@@ -566,6 +574,7 @@ When choosing HOLD:
             judge_decision=judge_decision,
             failed_debate_providers=failed_debate_providers,
             position_state=_pos_state,
+            market_regime=market_regime,
         )
 
         if isinstance(final_decision, dict):
@@ -647,11 +656,12 @@ When choosing HOLD:
         prompt: str,
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None,
+        market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Centralized ensemble logic with debate mode and two-phase support."""
         # Debate mode: structured debate with bull, bear, and judge providers
         if self.ensemble_manager.debate_mode:
-            return await self._debate_mode_inference(prompt)
+            return await self._debate_mode_inference(prompt, market_regime=market_regime)
 
         # Two-phase logic: escalate to premium providers if Phase 1 confidence is low
         if (

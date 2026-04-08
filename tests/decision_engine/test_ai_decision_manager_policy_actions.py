@@ -190,3 +190,33 @@ def test_wrap_decision_envelope_preserves_existing_policy_package(manager):
 
     assert wrapped["version"] == 1
     assert wrapped["policy_package"]["policy_state"]["position_state"] == "flat"
+
+
+@pytest.mark.asyncio
+async def test_debate_mode_inference_passes_explicit_market_regime_to_debate_manager(manager):
+    manager.ensemble_manager = Mock()
+    manager.ensemble_manager.debate_providers = {"bull": "bull-model", "bear": "bear-model", "judge": "judge-model"}
+    manager.ensemble_manager._is_valid_provider_response = Mock(return_value=True)
+    manager.ensemble_manager.debate_decisions = Mock(return_value={
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 50,
+        "reasoning": "judge",
+        "decision_origin": "judge",
+        "market_regime": "trending_up",
+        "ensemble_metadata": {"debate_mode": True},
+    })
+
+    async def fake_query(provider_name, prompt):
+        if provider_name == "bull-model":
+            return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull"}
+        if provider_name == "bear-model":
+            return {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear"}
+        return {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge"}
+
+    manager._query_single_provider = fake_query
+
+    result = await manager._debate_mode_inference("test prompt", market_regime="trending_up")
+
+    assert result["market_regime"] == "trending_up"
+    assert manager.ensemble_manager.debate_decisions.call_args.kwargs["market_regime"] == "trending_up"

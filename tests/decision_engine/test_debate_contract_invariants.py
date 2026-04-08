@@ -102,6 +102,16 @@ class TestJudgeIsCanonicalDecision:
         assert result["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "HOLD"
         assert result["ensemble_metadata"]["role_decisions"]["bull"]["policy_action"] == "OPEN_SMALL_LONG"
 
+    def test_judged_hold_uses_explicit_market_regime_fallback_when_roles_are_thin(self, manager):
+        result = manager.synthesize_debate_decision(
+            {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull case", "market_regime": None},
+            {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear case", "market_regime": None},
+            {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge says no edge", "decision_origin": None, "market_regime": None},
+            market_regime="trending_up",
+        )
+        assert result["decision_origin"] == "judge"
+        assert result["market_regime"] == "trending_up"
+
 
 class TestProviderDecisionsContainAllProviders:
     """provider_decisions must contain ALL debate providers, not just judge."""
