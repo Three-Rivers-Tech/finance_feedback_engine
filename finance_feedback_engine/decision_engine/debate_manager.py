@@ -226,6 +226,7 @@ class DebateManager:
         judge_decision: Dict[str, Any],
         failed_debate_providers: Optional[List[str]] = None,
         position_state: Optional[str] = None,
+        market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Synthesize debate decisions from bull, bear, and judge providers.
@@ -433,7 +434,12 @@ class DebateManager:
         if not final_decision.get("decision_origin"):
             final_decision["decision_origin"] = "judge"
         if not final_decision.get("market_regime"):
-            for candidate in (judge_decision, bull_case, bear_case):
+            for candidate in (
+                judge_decision,
+                bull_case,
+                bear_case,
+                {"market_regime": market_regime} if market_regime else None,
+            ):
                 if isinstance(candidate, dict) and candidate.get("market_regime"):
                     final_decision["market_regime"] = candidate.get("market_regime")
                     break

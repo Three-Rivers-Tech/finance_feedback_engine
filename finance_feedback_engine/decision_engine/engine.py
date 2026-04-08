@@ -1054,6 +1054,7 @@ Format response as a structured technical analysis demonstration.
         asset_pair: Optional[str] = None,
         market_data: Optional[Dict[str, Any]] = None,
         provider_override: Optional[str] = None,
+        market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Query the AI model for a decision.
@@ -1077,6 +1078,7 @@ Format response as a structured technical analysis demonstration.
                 asset_pair,
                 market_data,
                 provider_override=provider_override,
+                market_regime=market_regime,
             )
 
             # Record successful query latency
@@ -2386,6 +2388,7 @@ Missing Evidence: <what additional evidence would increase confidence>
                 asset_pair=asset_pair,
                 market_data=market_data,
                 provider_override=provider_override,
+                market_regime=getattr(market_brief, "regime", None),
             )
 
             if (
