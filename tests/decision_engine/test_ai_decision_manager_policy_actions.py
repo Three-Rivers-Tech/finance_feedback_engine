@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -220,3 +220,28 @@ async def test_debate_mode_inference_passes_explicit_market_regime_to_debate_man
 
     assert result["market_regime"] == "trending_up"
     assert manager.ensemble_manager.debate_decisions.call_args.kwargs["market_regime"] == "trending_up"
+
+
+
+@pytest.mark.asyncio
+async def test_debate_mode_inference_treats_unknown_judge_market_regime_as_missing(manager):
+    manager.ensemble_manager = Mock()
+    manager.ensemble_manager.debate_providers = {"bull": "bull-model", "bear": "bear-model", "judge": "judge-model"}
+    manager.ensemble_manager._is_valid_provider_response = Mock(return_value=True)
+    manager._query_single_provider = AsyncMock(side_effect=[
+        {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull case", "market_regime": None},
+        {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 35, "reasoning": "bear case", "market_regime": "ranging"},
+        {"action": "HOLD", "policy_action": "HOLD", "confidence": 51, "reasoning": "judge hold", "market_regime": "unknown"},
+    ])
+    manager.ensemble_manager.debate_decisions = Mock(return_value={
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 51,
+        "reasoning": "judge hold",
+        "market_regime": "ranging",
+        "ensemble_metadata": {"debate_mode": True},
+    })
+
+    result = await manager._debate_mode_inference("test prompt", market_regime="trending_up")
+
+    assert result["market_regime"] == "ranging"

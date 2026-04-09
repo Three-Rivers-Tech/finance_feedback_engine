@@ -214,3 +214,14 @@ class TestFailedProviderHandling:
         meta = result["ensemble_metadata"]
         assert "gemma2:9b" in meta["providers_failed"]
         assert meta["num_active"] < meta["num_total"]
+
+
+    def test_judged_hold_treats_unknown_market_regime_as_missing_and_uses_fallback(self, manager):
+        result = manager.synthesize_debate_decision(
+            {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull case", "market_regime": None},
+            {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 30, "reasoning": "bear case", "market_regime": "ranging"},
+            {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge says no edge", "decision_origin": None, "market_regime": "unknown"},
+            market_regime="trending_up",
+        )
+
+        assert result["market_regime"] == "ranging"

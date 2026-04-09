@@ -28,6 +28,17 @@ logger = logging.getLogger(__name__)
 MATERIAL_CONFIDENCE_GAP = 15
 
 
+def _normalize_market_regime(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if normalized.lower() in {"unknown", "none", "null", "n/a", "na"}:
+        return None
+    return normalized
+
+
 def _with_policy_action_metadata(decision: Dict[str, Any]) -> Dict[str, Any]:
     """Add bounded policy-action metadata to a role decision when present."""
     enriched = deepcopy(decision)
@@ -433,16 +444,22 @@ class DebateManager:
         }
         if not final_decision.get("decision_origin"):
             final_decision["decision_origin"] = "judge"
-        if not final_decision.get("market_regime"):
+        normalized_final_regime = _normalize_market_regime(final_decision.get("market_regime"))
+        if normalized_final_regime:
+            final_decision["market_regime"] = normalized_final_regime
+        else:
+            final_decision.pop("market_regime", None)
             for candidate in (
                 judge_decision,
                 bull_case,
                 bear_case,
                 {"market_regime": market_regime} if market_regime else None,
             ):
-                if isinstance(candidate, dict) and candidate.get("market_regime"):
-                    final_decision["market_regime"] = candidate.get("market_regime")
-                    break
+                if isinstance(candidate, dict):
+                    normalized_candidate_regime = _normalize_market_regime(candidate.get("market_regime"))
+                    if normalized_candidate_regime:
+                        final_decision["market_regime"] = normalized_candidate_regime
+                        break
 
         final_decision = build_ai_decision_envelope(
             decision=final_decision,
