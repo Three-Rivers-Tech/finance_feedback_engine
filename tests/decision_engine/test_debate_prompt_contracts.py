@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from finance_feedback_engine.decision_engine.ai_decision_manager import AIDecisionManager
@@ -295,3 +297,17 @@ Open positions: none
     assert "MARKET BRIEF:" in compact
     assert len(compact) >= 300
     assert len(compact) <= 1200
+
+
+
+def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
+    source = Path('/home/cmp6510/finance_feedback_engine/finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()
+
+    assert 'keeping each line short and concrete' in source
+    assert 'Keep the total reasoning concise. Do not add extra sections or long prose.' in source
+    assert '1. <best bullish evidence>' in source
+    assert '2. <second bullish evidence>' in source
+    assert '3. <third bullish evidence>' not in source
+    assert '1. <best bearish evidence>' in source
+    assert '2. <second bearish evidence>' in source
+    assert '3. <third bearish evidence>' not in source

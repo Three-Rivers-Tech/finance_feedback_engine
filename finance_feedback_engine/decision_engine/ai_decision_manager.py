@@ -481,17 +481,17 @@ Return ONLY valid JSON with these exact keys:
 - reasoning
 - amount
 
-In reasoning, use this exact mini-structure:
-Thesis: <one-sentence bullish thesis>
+In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Thesis: <one short bullish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
 Top Evidence:
 1. <best bullish evidence>
 2. <second bullish evidence>
-3. <third bullish evidence>
-Major Risk: <biggest reason the bullish case could fail>
-Thesis Breaker: <specific condition that invalidates the bullish case>
+Major Risk: <short biggest reason the bullish case could fail>
+Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
+Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _bear_prompt_suffix = """
@@ -520,17 +520,17 @@ Return ONLY valid JSON with these exact keys:
 - reasoning
 - amount
 
-In reasoning, use this exact mini-structure:
-Thesis: <one-sentence bearish thesis>
+In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Thesis: <one short bearish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
 Top Evidence:
 1. <best bearish evidence>
 2. <second bearish evidence>
-3. <third bearish evidence>
-Major Risk: <biggest reason the bearish case could fail>
-Thesis Breaker: <specific condition that invalidates the bearish case>
+Major Risk: <short biggest reason the bearish case could fail>
+Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
+Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _debate_parallel_started = time.perf_counter()
