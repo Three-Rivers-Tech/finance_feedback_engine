@@ -311,3 +311,56 @@ def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
     assert '1. <best bearish evidence>' in source
     assert '2. <second bearish evidence>' in source
     assert '3. <third bearish evidence>' not in source
+
+
+
+def test_compact_debate_prompt_trims_verbose_multitimeframe_and_keeps_signal_lines():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    full_prompt = """
+PRICE DATA:
+-----------
+Close: $50000.00
+Trend: bullish
+Volume: elevated
+Noise: ignore me
+
+MULTI-TIMEFRAME TREND ANALYSIS:
+--------------------------------
+Weighted Trend Score: 78.0
+Consensus: TRENDING_UP
+Timeframe Breakdown:
+  1d: BULLISH (score: 85.0, weight: 50%)
+  4h: BULLISH (score: 72.0, weight: 30%)
+  1h: BULLISH (score: 68.0, weight: 20%)
+⚠️ CRITICAL: Multi-timeframe trend consensus MUST be primary factor in direction decisions.
+   - Longer timeframes carry more weight
+
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Position State: flat
+Allowed Policy Actions: HOLD, OPEN_SMALL_LONG
+Max Risk: 1%
+Long descriptive line that should be dropped
+
+MARKET BRIEF:
+-------------
+Regime: trending_up
+Summary: Trend is up.
+Key Question: Is there enough edge?
+Confidence: 72
+Extra line to drop
+"""
+
+    compact = manager._build_compact_debate_prompt(full_prompt, market_regime=None)
+
+    assert "Weighted Trend Score: 78.0" in compact
+    assert "Consensus: TRENDING_UP" in compact
+    assert "1d: BULLISH" in compact
+    assert "4h: BULLISH" in compact
+    assert "1h: BULLISH" in compact
+    assert "CRITICAL: Multi-timeframe trend consensus" not in compact
+    assert "Long descriptive line that should be dropped" not in compact
+    assert "Extra line to drop" not in compact
+    assert "Position State: flat" in compact
+    assert "Allowed Policy Actions: HOLD, OPEN_SMALL_LONG" in compact
+    assert "Regime: trending_up" in compact

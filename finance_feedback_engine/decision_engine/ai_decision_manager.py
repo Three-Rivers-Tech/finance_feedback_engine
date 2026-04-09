@@ -349,18 +349,89 @@ Final Rationale: <clear final explanation>
 
     @staticmethod
     def _extract_prompt_section(prompt: str, header: str) -> str:
+        lines = prompt.splitlines()
         marker = f"{header}:"
-        idx = prompt.find(marker)
-        if idx == -1:
-            return ""
-        tail = prompt[idx:]
-        lines = tail.splitlines()
-        captured = []
+        start_idx = None
         for i, line in enumerate(lines):
-            if i > 0 and line.endswith(":") and not line.startswith(("-", " ")):
+            if line.strip() == marker:
+                start_idx = i
                 break
+        if start_idx is None:
+            return ""
+
+        captured = []
+        i = start_idx
+        while i < len(lines):
+            line = lines[i]
+            if i > start_idx and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if line.strip().endswith(":") and set(next_line) <= {"-"} and next_line:
+                    break
             captured.append(line)
+            i += 1
         return "\n".join(captured).strip()
+
+    @staticmethod
+    def _compact_prompt_section_for_debate(header: str, section: str) -> str:
+        lines = [line for line in section.splitlines() if line.strip()]
+        if not lines:
+            return ""
+
+        header_line = lines[0]
+        body = lines[1:]
+
+        if header == "PRICE DATA":
+            keep = [line for line in body if any(key in line for key in ["Close:", "Trend:", "Volume:"])]
+            return "\n".join([header_line] + keep[:4])
+
+        if header == "TEMPORAL CONTEXT":
+            keep = [line for line in body if any(key in line for key in ["Market Status:", "Current Time:", "Session:"])]
+            return "\n".join([header_line] + keep[:3])
+
+        if header == "TECHNICAL INDICATORS":
+            keep = [line for line in body if any(key in line for key in ["RSI", "MACD", "Stochastic", "ATR", "ADX"])]
+            return "\n".join([header_line] + keep[:5])
+
+        if header == "MULTI-TIMEFRAME TREND ANALYSIS":
+            keep = []
+            for line in body:
+                if (
+                    "Weighted Trend Score:" in line
+                    or "Consensus:" in line
+                    or line.startswith("  1d:")
+                    or line.startswith("  4h:")
+                    or line.startswith("  1h:")
+                ):
+                    keep.append(line)
+            return "\n".join([header_line] + keep)
+
+        if header in {"RISK MANAGEMENT & POSITION CONTEXT", "RISK CONSTRAINTS"}:
+            keep = [line for line in body if any(key in line for key in [
+                "Position State:",
+                "Allowed Policy Actions:",
+                "Position Size:",
+                "Stop Loss:",
+                "Take Profit:",
+                "Risk/Reward:",
+                "Max Risk:",
+            ])]
+            return "\n".join([header_line] + keep[:8])
+
+        if header in {"PORTFOLIO CONTEXT", "PORTFOLIO SUMMARY"}:
+            keep = [line for line in body if any(key in line for key in [
+                "Cash available:",
+                "Open positions:",
+                "Total Portfolio Value:",
+                "Number of Assets:",
+                "Unrealized P&L:",
+            ])]
+            return "\n".join([header_line] + keep[:5])
+
+        if header == "MARKET BRIEF":
+            keep = [line for line in body if any(key in line for key in ["Regime:", "Summary:", "Key Question:", "Confidence:"])]
+            return "\n".join([header_line] + keep[:5])
+
+        return section
 
     def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
         sections = []
@@ -391,6 +462,8 @@ Final Rationale: <clear final explanation>
             "RISK CONSTRAINTS",
         ]:
             section = self._extract_prompt_section(prompt, header)
+            if section:
+                section = self._compact_prompt_section_for_debate(header, section)
             if section and section not in seen:
                 sections.append(section)
                 seen.add(section)
