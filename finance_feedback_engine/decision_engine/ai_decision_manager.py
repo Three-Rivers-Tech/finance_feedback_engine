@@ -404,8 +404,7 @@ Final Rationale: <clear final explanation>
 
 DEBATE ROLE: BULLISH ADVOCATE
 ==============================
-You are the bullish advocate on a trading decision council.
-Your role is to present the STRONGEST PLAUSIBLE BULLISH CASE for this asset.
+Present the strongest actionable bullish case for this asset.
 
 Allowed policy actions:
 - HOLD
@@ -415,19 +414,11 @@ Allowed policy actions:
 - REDUCE_LONG
 - CLOSE_LONG
 
-Primary priorities:
-1. Multi-timeframe trend alignment
-2. Momentum improvement or reversal evidence
-3. Support structure and bounce quality
-4. Regime suitability (trend vs ranging)
-5. Risk/reward and execution quality
-
-⚠️ CRITICAL CONSTRAINT:
-If multi-timeframe trend consensus is BEARISH or STRONG_BEARISH, explicitly acknowledge this major headwind.
-Do NOT recommend strong bullish positioning against bearish higher-timeframe trend unless there is exceptional reversal evidence.
-If the bullish case is weak, noisy, stale, or non-actionable, prefer HOLD.
-
-Be optimistic but not reckless. Respect longer-timeframe trends.
+Rules:
+- Prioritize multi-timeframe trend alignment, momentum/reversal evidence, structure quality, regime fit, and risk/reward.
+- If higher-timeframe trend is bearish, explicitly acknowledge that headwind.
+- Do NOT recommend strong bullish positioning against bearish higher-timeframe trend unless reversal evidence is exceptional.
+- If the bullish case is weak, noisy, stale, or non-actionable, prefer HOLD.
 
 Return ONLY valid JSON with these exact keys:
 - action
@@ -452,8 +443,7 @@ Data Quality: <good|degraded|stale>
 
 DEBATE ROLE: BEARISH ADVOCATE
 ==============================
-You are the bearish advocate on a trading decision council.
-Your role is to present the STRONGEST PLAUSIBLE BEARISH CASE for this asset.
+Present the strongest actionable bearish case for this asset.
 
 Allowed policy actions:
 - HOLD
@@ -463,19 +453,11 @@ Allowed policy actions:
 - REDUCE_SHORT
 - CLOSE_SHORT
 
-Primary priorities:
-1. Multi-timeframe trend alignment
-2. Momentum deterioration or reversal evidence
-3. Resistance, rejection, and breakdown quality
-4. Regime suitability (trend vs ranging)
-5. Risk/reward and execution quality
-
-⚠️ CRITICAL CONSTRAINT:
-If multi-timeframe trend consensus is BULLISH or STRONG_BULLISH, explicitly acknowledge this major tailwind.
-Do NOT recommend strong bearish positioning against bullish higher-timeframe trend unless there is exceptional reversal evidence.
-If the bearish case is weak, noisy, stale, or non-actionable, prefer HOLD.
-
-Be skeptical but not reflexively bearish. Respect longer-timeframe trends.
+Rules:
+- Prioritize multi-timeframe trend alignment, momentum deterioration/reversal evidence, rejection/breakdown quality, regime fit, and risk/reward.
+- If higher-timeframe trend is bullish, explicitly acknowledge that tailwind.
+- Do NOT recommend strong bearish positioning against bullish higher-timeframe trend unless reversal evidence is exceptional.
+- If the bearish case is weak, noisy, stale, or non-actionable, prefer HOLD.
 
 Return ONLY valid JSON with these exact keys:
 - action
