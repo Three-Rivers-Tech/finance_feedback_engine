@@ -224,9 +224,20 @@ class AIDecisionManager:
         """
         failed: list[str] = []
         full_prompt = base_prompt + prompt_suffix
+        prompt_chars = len(full_prompt)
+        logger.info(
+            "DEBATE role start: role=%s provider=%s prompt_chars=%s",
+            role,
+            provider,
+            prompt_chars,
+        )
         _timing_started = time.perf_counter()
         try:
-            case = await self._query_single_provider(provider, full_prompt)
+            case = await self._query_single_provider(
+                provider,
+                full_prompt,
+                request_label=f"debate:{role}",
+            )
             if not self.ensemble_manager._is_valid_provider_response(case, provider):
                 logger.warning("Debate: %s (%s) returned invalid response", provider, role)
                 failed.append(provider)
@@ -264,7 +275,16 @@ class AIDecisionManager:
             failed.append(provider)
             increment_provider_request(provider, "failure")
             case = None
-        return {"case": case, "failed": failed, "elapsed_s": time.perf_counter() - _timing_started}
+        elapsed_s = time.perf_counter() - _timing_started
+        logger.info(
+            "DEBATE role done: role=%s provider=%s elapsed_s=%.4f prompt_chars=%s failed=%s",
+            role,
+            provider,
+            elapsed_s,
+            prompt_chars,
+            bool(failed),
+        )
+        return {"case": case, "failed": failed, "elapsed_s": elapsed_s}
 
     @staticmethod
     def _truncate_for_judge(text: Optional[str], max_chars: int = 240) -> str:
@@ -741,7 +761,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         return final_decision
 
     async def _query_single_provider(
-        self, provider_name: str, prompt: str
+        self, provider_name: str, prompt: str, request_label: Optional[str] = None
     ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
@@ -753,7 +773,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route abstract provider names
         if provider_name == "local":
-            return await self._local_ai_inference(prompt)
+            return await self._local_ai_inference(prompt, request_label=request_label)
         elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
         elif provider_name == "codex":
@@ -966,7 +986,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             raise RuntimeError("Local raw LLM query failed") from e
 
     async def _local_ai_inference(
-        self, prompt: str, model_name: Optional[str] = None
+        self, prompt: str, model_name: Optional[str] = None, request_label: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
