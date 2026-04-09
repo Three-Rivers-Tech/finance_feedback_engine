@@ -207,7 +207,7 @@ async def test_debate_mode_inference_passes_explicit_market_regime_to_debate_man
         "ensemble_metadata": {"debate_mode": True},
     })
 
-    async def fake_query(provider_name, prompt, generation_options=None):
+    async def fake_query(provider_name, prompt):
         if provider_name == "bull-model":
             return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull"}
         if provider_name == "bear-model":
@@ -296,31 +296,3 @@ Summary: Trend is up and broad-based.
     assert "Market Regime: trending_up" in compact_prompt
     assert "MARKET BRIEF:" in compact_prompt
     assert "RISK MANAGEMENT & POSITION CONTEXT:" in compact_prompt
-
-
-
-@pytest.mark.asyncio
-async def test_debate_role_passes_generation_options_to_provider(manager):
-    captured = {}
-
-    async def fake_query(provider_name, prompt, generation_options=None):
-        captured["provider_name"] = provider_name
-        captured["generation_options"] = generation_options
-        return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 44, "reasoning": "ok"}
-
-    manager._query_single_provider = fake_query
-    manager.ensemble_manager = Mock()
-    manager.ensemble_manager._is_valid_provider_response = Mock(return_value=True)
-
-    result = await manager._query_debate_role(
-        "bull",
-        "bull-model",
-        "\nROLE",
-        "BASE",
-        lambda provider, role=None: None,
-        generation_options={"temperature": 0.2, "top_p": 0.8, "num_predict": 180},
-    )
-
-    assert result["case"]["action"] == "BUY"
-    assert captured["provider_name"] == "bull-model"
-    assert captured["generation_options"] == {"temperature": 0.2, "top_p": 0.8, "num_predict": 180}

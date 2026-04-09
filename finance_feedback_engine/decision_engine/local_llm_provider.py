@@ -598,7 +598,7 @@ class LocalLLMProvider:
             f"Local raw query failed after {max_retries} attempts for model {active_model}"
         )
 
-    def query(self, prompt: str, model_name: str = None, generation_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def query(self, prompt: str, model_name: str = None) -> Dict[str, Any]:
         """
         Query local LLM with connection pooling (Phase 2 optimization).
 
