@@ -142,3 +142,45 @@ def test_judge_prompt_is_compact_but_keeps_required_hold_rules():
     assert 'Why Not Bear:' in judge_prompt
     assert 'Missing Evidence:' in judge_prompt
     assert 'Counter-trend trades require exceptional reversal evidence' in judge_prompt
+
+
+
+def test_compact_debate_prompt_keeps_critical_sections_and_is_shorter():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    full_prompt = """
+SYSTEM: full prompt preamble
+
+POSITION STATE:
+flat
+
+ALLOWED POLICY ACTIONS:
+- HOLD
+- OPEN_SMALL_LONG
+
+PORTFOLIO SUMMARY:
+small exposure
+
+MARKET DATA:
+price=50000
+
+MULTI-TIMEFRAME ANALYSIS:
+trend mixed
+
+RISK CONSTRAINTS:
+max risk low
+
+MARKET BRIEF:
+ranging, low edge
+
+LONG TAIL SECTION:
+""" + ("extra filler\n" * 500)
+
+    compact = manager._build_compact_debate_prompt(full_prompt, market_regime="ranging")
+
+    assert "TRADING DECISION CONTEXT (COMPACT DEBATE MODE)" in compact
+    assert "Market Regime: ranging" in compact
+    assert "POSITION STATE:" in compact
+    assert "ALLOWED POLICY ACTIONS:" in compact
+    assert "MARKET DATA:" in compact
+    assert "MARKET BRIEF:" in compact
+    assert len(compact) < len(full_prompt)

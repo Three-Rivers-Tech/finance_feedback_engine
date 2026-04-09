@@ -347,6 +347,43 @@ Missing Evidence: <what would have been needed to justify the losing side or con
 Final Rationale: <clear final explanation>
 """
 
+    @staticmethod
+    def _extract_prompt_section(prompt: str, header: str) -> str:
+        marker = f"{header}:"
+        idx = prompt.find(marker)
+        if idx == -1:
+            return ""
+        tail = prompt[idx:]
+        lines = tail.splitlines()
+        captured = []
+        for i, line in enumerate(lines):
+            if i > 0 and line.endswith(":") and not line.startswith(("-", " ")):
+                break
+            captured.append(line)
+        return "\n".join(captured).strip()
+
+    def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
+        sections = []
+        regime = market_regime or "unknown"
+        sections.append("TRADING DECISION CONTEXT (COMPACT DEBATE MODE)")
+        sections.append(f"Market Regime: {regime}")
+
+        for header in [
+            "POSITION STATE",
+            "ALLOWED POLICY ACTIONS",
+            "PORTFOLIO SUMMARY",
+            "MARKET DATA",
+            "MULTI-TIMEFRAME ANALYSIS",
+            "RISK CONSTRAINTS",
+            "MARKET BRIEF",
+        ]:
+            section = self._extract_prompt_section(prompt, header)
+            if section:
+                sections.append(section)
+
+        compact = "\n\n".join(sections)
+        return compact[:4000]
+
     async def _debate_mode_inference(
         self,
         prompt: str,
@@ -388,6 +425,10 @@ Final Rationale: <clear final explanation>
 
         failed_debate_providers = []
         debate_timing = {}
+        _timing_started = time.perf_counter()
+        prompt = self._build_compact_debate_prompt(prompt, market_regime=market_regime)
+        debate_timing["compact_debate_prompt_s"] = round(time.perf_counter() - _timing_started, 4)
+        debate_timing["compact_debate_prompt_chars"] = len(prompt)
         bull_case = None
         bear_case = None
         judge_decision = None
