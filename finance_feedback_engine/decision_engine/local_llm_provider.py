@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -589,7 +590,6 @@ class LocalLLMProvider:
                 )
 
             if attempt < max_retries - 1:
-                import time
 
                 time.sleep(2 * (attempt + 1))
 
@@ -706,8 +706,7 @@ class LocalLLMProvider:
                         return build_fallback_decision(
                             f"Local LLM timed out after {llm_timeout}s, using fallback decision."
                         )
-                    import time
-                    time.sleep(2 * (attempt + 1))
+                        time.sleep(2 * (attempt + 1))
                     continue
 
                 response_text = response.get("response", "").strip()
@@ -725,8 +724,7 @@ class LocalLLMProvider:
                         )
 
                     # Retry with a brief delay
-                    import time
-
+    
                     time.sleep(2 * (attempt + 1))
                     continue
 
@@ -793,7 +791,6 @@ class LocalLLMProvider:
                 self._unload_model()
                 is_structured_fragment = any(fragment in response_text for fragment in ("{", "}"))
                 if is_structured_fragment and attempt < max_retries - 1:
-                    import time
                     time.sleep(2 * (attempt + 1))
                     continue
                 return self._parse_text_response(response_text)
@@ -817,7 +814,6 @@ class LocalLLMProvider:
                     )
 
                 # Retry with a brief delay
-                import time
 
                 time.sleep(2 * (attempt + 1))
 
