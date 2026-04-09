@@ -208,6 +208,13 @@ class AIDecisionManager:
             "amount": 0.0,
         }
 
+    def _debate_role_generation_options(self) -> Dict[str, Any]:
+        return {
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "num_predict": 180,
+        }
+
     async def _query_debate_role(
         self,
         role: str,
@@ -215,6 +222,7 @@ class AIDecisionManager:
         prompt_suffix: str,
         base_prompt: str,
         increment_provider_request,
+        generation_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Query a single debate role (bull/bear) with error handling.
 
@@ -226,7 +234,7 @@ class AIDecisionManager:
         full_prompt = base_prompt + prompt_suffix
         _timing_started = time.perf_counter()
         try:
-            case = await self._query_single_provider(provider, full_prompt)
+            case = await self._query_single_provider(provider, full_prompt, generation_options=generation_options)
             if not self.ensemble_manager._is_valid_provider_response(case, provider):
                 logger.warning("Debate: %s (%s) returned invalid response", provider, role)
                 failed.append(provider)
@@ -537,9 +545,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         bull_result, bear_result = await asyncio.gather(
             self._query_debate_role(
                 "bull", bull_provider, _bull_prompt_suffix, prompt, increment_provider_request,
+                generation_options=self._debate_role_generation_options(),
             ),
             self._query_debate_role(
                 "bear", bear_provider, _bear_prompt_suffix, prompt, increment_provider_request,
+                generation_options=self._debate_role_generation_options(),
             ),
         )
         debate_timing["bull_bear_parallel_s"] = round(time.perf_counter() - _debate_parallel_started, 4)
@@ -668,7 +678,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         return final_decision
 
     async def _query_single_provider(
-        self, provider_name: str, prompt: str
+        self, provider_name: str, prompt: str, generation_options: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
@@ -676,11 +686,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route Ollama models to local inference with specific model
         if is_ollama_model(provider_name):
-            return await self._local_ai_inference(prompt, model_name=provider_name)
+            return await self._local_ai_inference(prompt, model_name=provider_name, generation_options=generation_options)
 
         # Route abstract provider names
         if provider_name == "local":
-            return await self._local_ai_inference(prompt)
+            return await self._local_ai_inference(prompt, generation_options=generation_options)
         elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
         elif provider_name == "codex":
@@ -893,7 +903,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             raise RuntimeError("Local raw LLM query failed") from e
 
     async def _local_ai_inference(
-        self, prompt: str, model_name: Optional[str] = None
+        self, prompt: str, model_name: Optional[str] = None, generation_options: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
@@ -919,7 +929,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
             # Pass model_name directly to provider.query() for per-query model selection
-            response = await asyncio.to_thread(provider.query, prompt, model_name)
+            response = await asyncio.to_thread(provider.query, prompt, model_name, generation_options)
             # Add model_name to response for debate tracking
             if isinstance(response, dict):
                 response["model_name"] = model_name or self.config.get("model_name", "llama3.1:8b")
