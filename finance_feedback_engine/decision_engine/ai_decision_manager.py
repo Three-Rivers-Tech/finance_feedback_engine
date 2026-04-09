@@ -364,17 +364,29 @@ Final Rationale: <clear final explanation>
 
     def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
         sections = []
-        regime = market_regime or "unknown"
+        extracted_market_brief = self._extract_prompt_section(prompt, "MARKET BRIEF")
+        extracted_regime = None
+        for candidate in ["trending_up", "trending_down", "ranging"]:
+            if f"Regime: {candidate}" in extracted_market_brief:
+                extracted_regime = candidate
+                break
+        regime = market_regime or extracted_regime or "unknown"
         sections.append("TRADING DECISION CONTEXT (COMPACT DEBATE MODE)")
         sections.append(f"Market Regime: {regime}")
 
         for header in [
-            "POSITION STATE",
-            "ALLOWED POLICY ACTIONS",
+            "PRICE DATA",
+            "TEMPORAL CONTEXT",
+            "TECHNICAL INDICATORS",
+            "MULTI-TIMEFRAME TREND ANALYSIS",
+            "RISK MANAGEMENT & POSITION CONTEXT",
+            "PORTFOLIO CONTEXT",
             "PORTFOLIO SUMMARY",
             "MARKET DATA",
             "MULTI-TIMEFRAME ANALYSIS",
             "RISK CONSTRAINTS",
+            "POSITION STATE",
+            "ALLOWED POLICY ACTIONS",
             "MARKET BRIEF",
         ]:
             section = self._extract_prompt_section(prompt, header)
