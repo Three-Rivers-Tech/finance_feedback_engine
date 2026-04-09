@@ -323,3 +323,27 @@ async def test_debate_role_passes_request_label_to_provider(manager):
     assert result["case"]["action"] == "BUY"
     assert captured["provider_name"] == "bear-model"
     assert captured["request_label"] == "debate:bear"
+
+
+
+@pytest.mark.asyncio
+async def test_query_single_provider_forwards_request_label_to_local_inference(manager):
+    captured = {}
+
+    async def fake_local_ai_inference(prompt, model_name=None, request_label=None):
+        captured["prompt"] = prompt
+        captured["model_name"] = model_name
+        captured["request_label"] = request_label
+        return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 44, "reasoning": "ok"}
+
+    manager._local_ai_inference = fake_local_ai_inference
+
+    result = await manager._query_single_provider(
+        "deepseek-r1:8b",
+        "PROMPT",
+        request_label="debate:bull",
+    )
+
+    assert result["action"] == "BUY"
+    assert captured["model_name"] == "deepseek-r1:8b"
+    assert captured["request_label"] == "debate:bull"

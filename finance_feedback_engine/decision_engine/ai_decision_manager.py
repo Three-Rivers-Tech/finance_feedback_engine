@@ -769,7 +769,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route Ollama models to local inference with specific model
         if is_ollama_model(provider_name):
-            return await self._local_ai_inference(prompt, model_name=provider_name)
+            return await self._local_ai_inference(
+                prompt,
+                model_name=provider_name,
+                request_label=request_label,
+            )
 
         # Route abstract provider names
         if provider_name == "local":
