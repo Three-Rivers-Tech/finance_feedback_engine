@@ -374,6 +374,7 @@ Final Rationale: <clear final explanation>
         sections.append("TRADING DECISION CONTEXT (COMPACT DEBATE MODE)")
         sections.append(f"Market Regime: {regime}")
 
+        seen = set()
         for header in [
             "PRICE DATA",
             "TEMPORAL CONTEXT",
@@ -381,17 +382,18 @@ Final Rationale: <clear final explanation>
             "MULTI-TIMEFRAME TREND ANALYSIS",
             "RISK MANAGEMENT & POSITION CONTEXT",
             "PORTFOLIO CONTEXT",
+            "MARKET BRIEF",
+            "POSITION STATE",
+            "ALLOWED POLICY ACTIONS",
             "PORTFOLIO SUMMARY",
             "MARKET DATA",
             "MULTI-TIMEFRAME ANALYSIS",
             "RISK CONSTRAINTS",
-            "POSITION STATE",
-            "ALLOWED POLICY ACTIONS",
-            "MARKET BRIEF",
         ]:
             section = self._extract_prompt_section(prompt, header)
-            if section:
+            if section and section not in seen:
                 sections.append(section)
+                seen.add(section)
 
         compact = "\n\n".join(sections)
         return compact[:4000]
