@@ -36,6 +36,17 @@ except Exception:  # OpenTelemetry optional
     tracer = None
 
 
+def _normalize_market_regime(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if normalized.lower() in {"unknown", "none", "null", "n/a", "na"}:
+        return None
+    return normalized
+
+
 def _legacy_allowed_signals_from_policy_actions(allowed_policy_actions: List[str]) -> List[str]:
     """Derive coarse legacy BUY/SELL/HOLD compatibility from canonical policy-action legality."""
     allowed = {"HOLD"}
@@ -2414,7 +2425,7 @@ Missing Evidence: <what additional evidence would increase confidence>
                 asset_pair=asset_pair,
                 market_data=market_data,
                 provider_override=provider_override,
-                market_regime=getattr(market_brief, "regime", None),
+                market_regime=_normalize_market_regime(getattr(market_brief, "regime", None)),
             )
 
             reasoning_timing["ai_query_total_s"] = round(time.perf_counter() - _timing_started, 4)
@@ -2423,9 +2434,9 @@ Missing Evidence: <what additional evidence would increase confidence>
                 market_brief is not None
                 and isinstance(ai_response, dict)
                 and not ai_response.get("market_regime")
-                and getattr(market_brief, "regime", None)
+                and _normalize_market_regime(getattr(market_brief, "regime", None))
             ):
-                ai_response["market_regime"] = market_brief.regime
+                ai_response["market_regime"] = _normalize_market_regime(market_brief.regime)
 
             # Apply optional veto logic before final decision creation
             _timing_started = time.perf_counter()

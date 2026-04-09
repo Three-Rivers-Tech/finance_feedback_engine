@@ -814,3 +814,51 @@ async def test_generate_decision_propagates_market_brief_regime_into_debate_hold
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+@pytest.mark.asyncio
+async def test_generate_decision_does_not_thread_unknown_market_brief_regime_into_debate(decision_engine):
+    from types import SimpleNamespace
+
+    market_brief = SimpleNamespace(
+        actionable=True,
+        regime="unknown",
+        summary="unclear",
+        key_question="wait?",
+        skip_reason=None,
+        regime_confidence=40,
+        to_dict=lambda: {"regime": "unknown"},
+        to_prompt_section=lambda: "MARKET BRIEF: unknown",
+    )
+    decision_engine.ai_manager = SimpleNamespace(
+        ai_provider="ensemble",
+        model_name="test-model",
+        _query_single_provider_raw=AsyncMock(return_value='{"actionable": true, "regime": "unknown", "summary": "unclear", "key_question": "wait?", "confidence": 40}')
+    )
+    decision_engine._pre_reason_gatekeeper = SimpleNamespace(
+        should_force_debate=lambda brief: (False, None),
+        record_debate=lambda: None,
+        record_skip=lambda: None,
+        skip_stats={},
+    )
+    decision_engine.debate_mode_enabled = True
+    decision_engine.ensemble_manager = SimpleNamespace(
+        debate_providers={"bull": "gemma2:9b", "bear": "llama3.1:8b", "judge": "deepseek-r1:8b"},
+        _is_valid_provider_response=lambda response, provider: True,
+        debate_decisions=lambda **kwargs: kwargs["judge_decision"],
+    )
+    judge = {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge hold", "decision_origin": None, "market_regime": None}
+
+    with patch("finance_feedback_engine.decision_engine.engine.parse_pre_reason_response", return_value=market_brief):
+        with patch.object(decision_engine, "_query_ai", new_callable=AsyncMock) as mock_query_ai:
+            mock_query_ai.return_value = judge
+            result = await decision_engine.generate_decision(
+                asset_pair="BTCUSD",
+                market_data={"close": 50000.0, "type": "crypto", "asset_type": "crypto"},
+                balance={"coinbase_FUTURES_USD": 355.0},
+                portfolio={},
+                memory_context="",
+            )
+
+    assert mock_query_ai.call_args.kwargs["market_regime"] is None
+    assert result.get("market_regime") is None
