@@ -236,3 +236,62 @@ Cash available: 1000
     assert "MARKET BRIEF:" in compact
     assert "Regime: trending_up" in compact
     assert len(compact) > 300
+
+
+
+def test_compact_debate_prompt_preserves_real_engine_sections_without_overcompressing():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    full_prompt = """
+Asset Pair: BTCUSD
+Asset Type: crypto
+
+PRICE DATA:
+-----------
+Close: $50000.00
+Trend: bullish
+Volume: elevated
+
+TEMPORAL CONTEXT:
+-----------------
+Market Status: OPEN
+Session: US
+
+TECHNICAL INDICATORS:
+---------------------
+RSI (14): 62.0
+MACD: positive
+
+MULTI-TIMEFRAME TREND ANALYSIS:
+--------------------------------
+Consensus: TRENDING_UP
+1d: BULLISH
+4h: BULLISH
+1h: BULLISH
+
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Position State: flat
+Allowed Policy Actions: HOLD, OPEN_SMALL_LONG
+
+MARKET BRIEF:
+-------------
+Regime: trending_up
+Summary: Trend is up and broad-based.
+Key Question: Is there enough edge to act now?
+
+PORTFOLIO CONTEXT:
+------------------
+Cash available: 1000
+Open positions: none
+"""
+
+    compact = manager._build_compact_debate_prompt(full_prompt, market_regime=None)
+
+    assert "TRADING DECISION CONTEXT (COMPACT DEBATE MODE)" in compact
+    assert "Market Regime: trending_up" in compact
+    assert "PRICE DATA:" in compact
+    assert "MULTI-TIMEFRAME TREND ANALYSIS:" in compact
+    assert "RISK MANAGEMENT & POSITION CONTEXT:" in compact
+    assert "MARKET BRIEF:" in compact
+    assert len(compact) >= 300
+    assert len(compact) <= 1200

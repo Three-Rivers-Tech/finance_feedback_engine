@@ -245,3 +245,54 @@ async def test_debate_mode_inference_treats_unknown_judge_market_regime_as_missi
     result = await manager._debate_mode_inference("test prompt", market_regime="trending_up")
 
     assert result["market_regime"] == "ranging"
+
+
+
+@pytest.mark.asyncio
+async def test_debate_mode_inference_keeps_non_null_market_regime_with_compact_context(manager):
+    manager.ensemble_manager = Mock()
+    manager.ensemble_manager.debate_providers = {"bull": "bull-model", "bear": "bear-model", "judge": "judge-model"}
+    manager.ensemble_manager._is_valid_provider_response = Mock(return_value=True)
+    manager.ensemble_manager.debate_decisions = Mock(return_value={
+        "action": "HOLD",
+        "policy_action": "HOLD",
+        "confidence": 55,
+        "reasoning": "judge hold",
+        "market_regime": "trending_up",
+        "ensemble_metadata": {"debate_mode": True},
+    })
+    manager._query_single_provider = AsyncMock(side_effect=[
+        {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 41, "reasoning": "bull case", "market_regime": None},
+        {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 35, "reasoning": "bear case", "market_regime": None},
+        {"action": "HOLD", "policy_action": "HOLD", "confidence": 55, "reasoning": "judge hold", "market_regime": None},
+    ])
+
+    full_prompt = """
+Asset Pair: BTCUSD
+
+PRICE DATA:
+-----------
+Close: $50000.00
+
+MULTI-TIMEFRAME TREND ANALYSIS:
+--------------------------------
+Consensus: TRENDING_UP
+
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Position State: flat
+Allowed Policy Actions: HOLD, OPEN_SMALL_LONG
+
+MARKET BRIEF:
+-------------
+Regime: trending_up
+Summary: Trend is up and broad-based.
+"""
+
+    result = await manager._debate_mode_inference(full_prompt, market_regime=None)
+
+    assert result["market_regime"] == "trending_up"
+    compact_prompt = manager._query_single_provider.await_args_list[0].args[1]
+    assert "Market Regime: trending_up" in compact_prompt
+    assert "MARKET BRIEF:" in compact_prompt
+    assert "RISK MANAGEMENT & POSITION CONTEXT:" in compact_prompt
