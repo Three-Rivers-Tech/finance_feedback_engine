@@ -123,3 +123,22 @@ def test_judge_prompt_summarizes_long_role_reasoning_without_losing_contract():
     assert '...' in judge_prompt
     assert 'Winning Thesis:' in judge_prompt
     assert 'Missing Evidence:' in judge_prompt
+
+
+
+def test_judge_prompt_is_compact_but_keeps_required_hold_rules():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    bull = {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 77, "market_regime": "ranging", "reasoning": "bull case"}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 33, "market_regime": "ranging", "reasoning": "bear case"}
+
+    judge_prompt = manager._build_judge_prompt('BASE PROMPT', bull, bear)
+
+    assert 'DEBATE ROLE: IMPARTIAL JUDGE' in judge_prompt
+    assert 'HOLD is an active decision, not the default fallback.' in judge_prompt
+    assert 'Do not choose HOLD merely because the bull and bear disagree.' in judge_prompt
+    assert 'MANDATORY HOLD CONDITIONS:' in judge_prompt
+    assert 'Winning Thesis:' in judge_prompt
+    assert 'Why Not Bull:' in judge_prompt
+    assert 'Why Not Bear:' in judge_prompt
+    assert 'Missing Evidence:' in judge_prompt
+    assert 'Counter-trend trades require exceptional reversal evidence' in judge_prompt

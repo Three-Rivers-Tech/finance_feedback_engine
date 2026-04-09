@@ -267,7 +267,7 @@ class AIDecisionManager:
         return {"case": case, "failed": failed, "elapsed_s": time.perf_counter() - _timing_started}
 
     @staticmethod
-    def _truncate_for_judge(text: Optional[str], max_chars: int = 600) -> str:
+    def _truncate_for_judge(text: Optional[str], max_chars: int = 240) -> str:
         if not text:
             return "No reasoning provided"
         normalized = " ".join(str(text).split())
@@ -302,7 +302,7 @@ class AIDecisionManager:
 DEBATE ROLE: IMPARTIAL JUDGE
 =============================
 You are the final arbiter on a trading decision council.
-You must evaluate both the bullish and bearish cases and decide whether one side has a real actionable edge or whether the correct decision is HOLD.
+Evaluate both cases and choose the strongest actionable edge, or HOLD if neither clears the bar.
 
 Bull case summary:
 {bull_summary}
@@ -310,21 +310,13 @@ Bull case summary:
 Bear case summary:
 {bear_summary}
 
-Your role is to make the FINAL DECISION weighing both perspectives.
-Do NOT reward persuasive writing. Judge evidence quality, trend alignment, actionability, and execution suitability.
-HOLD is an active decision, not the default fallback.
-Do not choose HOLD merely because the bull and bear disagree. Disagreement is expected.
-If one case is materially stronger, more specific, and more actionable, prefer that side.
-
-Decision Framework:
-1. ⚠️ HIGHEST PRIORITY: Multi-timeframe trend consensus
-   - If strong_bearish/bearish consensus -> favor HOLD or SHORT; be very cautious on LONG
-   - If strong_bullish/bullish consensus -> favor LONG; be cautious on SHORT
-   - If neutral -> evaluate other factors more heavily
-2. Evidence quality and structural alignment
-3. Actionability right now
-4. Data quality, freshness, and execution reliability
-5. Lower priority: short-term noise and isolated candle signals
+Decision rules:
+- Do NOT reward persuasive writing.
+- HOLD is an active decision, not the default fallback.
+- Do not choose HOLD merely because the bull and bear disagree.
+- If one case is materially stronger, more specific, and more actionable, prefer that side.
+- Prioritize trend consensus, evidence quality, actionability, and data/execution reliability.
+- Counter-trend trades require exceptional reversal evidence, tight stops, reduced size, and lower confidence.
 
 MANDATORY HOLD CONDITIONS:
 - Both directional cases are weak, generic, or poorly grounded
@@ -337,12 +329,6 @@ IMPORTANT HOLD RULE:
 - Disagreement alone is not sufficient for HOLD.
 - If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
 - Choose HOLD only if neither side clears the threshold for an actionable trade.
-
-Counter-trend trades should only be recommended with:
-- Exceptional reversal signals
-- Tight stop-losses (max 2%)
-- Reduced size
-- Confidence materially reduced
 
 Return ONLY valid JSON with these exact keys:
 - action
@@ -359,12 +345,6 @@ Actionability: <actionable_now|monitor|no_trade>
 Data Quality: <good|degraded|stale>
 Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
 Final Rationale: <clear final explanation>
-
-When choosing HOLD:
-- Winning Thesis should normally be 'neither'
-- You must explicitly explain why the bullish case is not strong enough
-- You must explicitly explain why the bearish case is not strong enough
-- You must state what missing evidence or condition would justify action
 """
 
     async def _debate_mode_inference(
