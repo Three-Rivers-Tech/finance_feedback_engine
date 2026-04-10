@@ -143,11 +143,11 @@ database:
   pool_timeout: ${DB_POOL_TIMEOUT:-30}
   url: ${DATABASE_URL:-postgresql+psycopg2://ffe_user:changeme@localhost:5432/ffe}
 debate:
-  bear_model: llama3.1:8b
-  bull_model: gemma2:9b
+  bear_model: gemma4:e2b
+  bull_model: gemma4:e2b
   consensus_threshold: 0.6
   enabled: true
-  judge_model: deepseek-r1:8b
+  judge_model: gemma4:e2b
 decision_engine:
   ai_provider: local
   decision_threshold: 0.7
@@ -163,13 +163,14 @@ ensemble:
   agreement_threshold: 0.6
   debate_mode: true
   debate_providers:
-    bear: deepseek-r1:8b
-    bull: deepseek-r1:8b
-    judge: deepseek-r1:8b
+    bear: gemma4:e2b
+    bull: gemma4:e2b
+    judge: gemma4:e2b
   enabled_providers:
   - llama3.1:8b
   - deepseek-r1:8b
   - gemma2:9b
+  - gemma4:e2b
   learning_rate: 0.1
   provider_weights:
     bull: 0.34
