@@ -122,7 +122,7 @@ Primary audit references:
 
 ## 3. Trading performance
 
-Status: active. Milestone 1 baseline is established, and milestone 2 has completed its first scaffolding/reporting slice; the next step is producer-side enrichment so those new learning fields stop landing as `unspecified` in live artifacts.
+Status: active. Milestone 1 baseline is established, and milestone 2 has now completed the producer-enrichment and historical-backfill slices; the next step is to use the cleaned selective-coverage view to choose the first tiny-budget exploration or policy-quality experiment.
 
 Goal:
 - improve decision quality and trading outcomes after correctness and system-latency work are on stable footing
@@ -160,17 +160,23 @@ Trading milestone 2: add learning scaffolding before broader policy change
   - keep this slice observational first: improve learning and replay inputs before turning on new live exploration behavior
   - TDD guardrails: regression coverage must prove the new metadata survives validator construction, filtered-decision persistence, and decision-store round-trips without breaking current audit fields
 
+Recently completed in this milestone:
+- producer-side enrichment is live in production artifacts via commit `d9958ca`, so fresh decisions now persist `decision_mode`, `policy_family`, `coverage_bucket`, candidate-action context, and `policy_trace.learning_metadata`
+- a legacy historical backfill was completed via commit `9711476`, which repaired older `BUY`/`SELL` era decision JSONs by synthesizing missing policy-trace learning metadata and canonical top-level learning fields
+- the one-time in-place repair on `gpu-laptop` rewrote `17,793` historical decision artifacts and moved verification from `17,763` missing-learning rows to `0`
+- the refreshed live selective coverage artifact now shows `MODE_COUNTS exploitation: 726` and `POLICY_FAMILY_COUNTS baseline_ffe: 726`, eliminating the earlier all-`unspecified` bottleneck for those dimensions
+
 Next concrete slice:
-- enrich the live producers so the new exploration fields are actually populated in production artifacts, starting with `decision_mode`, `policy_family`, `coverage_bucket`, and any candidate-action context that can be derived safely from the current trading loop
+- use the refreshed selective coverage map to pick the first tiny-budget exploration or policy-quality experiment from a context that is both under-explored and plausible, instead of doing more metadata plumbing
 - why this is next:
-  - the first selective coverage artifact worked, but `MODE_COUNTS` and `POLICY_FAMILY_COUNTS` were still entirely `unspecified`, so the immediate bottleneck is producer-side enrichment, not more report reshaping
-  - now that the production position-state prompt leak is fixed again, Trading Performance work can resume without the roadmap being distorted by that correctness bug
+  - the immediate metadata bottleneck is gone, so the roadmap can shift from instrumentation/backfill into decision-quality selection
+  - the cleaned coverage view now preserves lane plus learning-context dimensions well enough to support a narrow, auditable trading-policy experiment
 - evidence required:
-  - focused green tests around the producer path that emits decisions into `build_policy_trace(...)`, filtered decisions, and replay / decision-store round trips
-  - a refreshed selective coverage artifact showing materially fewer `unspecified` rows for the new learning dimensions on live data
-  - proof that judged and skip lanes remain spine-clean while the new metadata is filled in
+  - a refreshed comparison read against the pre-enrichment coverage artifact, highlighting which cells materially changed once historical and fresh artifacts stopped landing as `unspecified`
+  - a candidate shortlist of 1-2 contexts where the map suggests plausible under-explored opportunity or miscalibrated abstention/open behavior
+  - proof that judged and skip lanes remain spine-clean while the next experiment is selected
 - decision rule:
-  - once producer-side enrichment is live and trustworthy, choose the first tiny-budget exploration experiment only from contexts where the coverage map shows clear under-explored but plausible opportunity
+  - only choose the next experiment from contexts that still look coherent after the cleaned coverage view, and keep the first live change small enough that attribution remains obvious if results move
 
 Trading milestone 3: improve regime handling quality
 - hypothesis: some decision-quality loss is likely coming from weak regime-specific behavior rather than from the global policy shape
