@@ -13,7 +13,7 @@ def test_debate_prompts_include_structured_reasoning_contracts():
 
     prompts = []
 
-    async def fake_query(provider, prompt):
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
         return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
 
@@ -61,7 +61,7 @@ def test_ai_decision_manager_debate_prompts_are_role_distinct():
 
     prompts = []
 
-    async def fake_query(provider, prompt):
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
         return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
 
@@ -89,7 +89,7 @@ def test_decision_engine_debate_prompts_should_be_role_distinct():
 
     prompts = []
 
-    async def fake_query(provider, prompt):
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
         return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
 

@@ -315,6 +315,210 @@ class AIDecisionManager:
         )
         return {"case": case, "failed": failed, "elapsed_s": elapsed_s}
 
+    def _truncate_for_judge(self, reasoning: Optional[str]) -> str:
+        if not reasoning:
+            return "No reasoning provided"
+        compact = " ".join(str(reasoning).split())
+        if len(compact) <= 500:
+            return compact
+        return compact[:497] + "..."
+
+    def _format_case_for_judge(self, side: str, case: Optional[Dict[str, Any]]) -> str:
+        if not case:
+            return f"{side.title()} provider failed"
+        reasoning = self._truncate_for_judge(case.get("reasoning"))
+        action = case.get("policy_action") or case.get("action") or "unknown"
+        confidence = case.get("confidence")
+        regime = case.get("market_regime") or "unknown"
+        return (
+            f"Action: {action}\n"
+            f"Confidence: {confidence}\n"
+            f"Regime: {regime}\n"
+            f"Reasoning Summary: {reasoning}"
+        )
+
+    def _build_judge_prompt(
+        self,
+        prompt: str,
+        bull_case: Optional[Dict[str, Any]],
+        bear_case: Optional[Dict[str, Any]],
+    ) -> str:
+        bull_summary = self._format_case_for_judge("bull", bull_case)
+        bear_summary = self._format_case_for_judge("bear", bear_case)
+        return prompt + f"""
+
+DEBATE ROLE: IMPARTIAL JUDGE
+=============================
+You are the final arbiter on a trading decision council.
+Evaluate both cases and choose the strongest actionable edge, or HOLD if neither clears the bar.
+
+Bull case summary:
+{bull_summary}
+
+Bear case summary:
+{bear_summary}
+
+Decision rules:
+- Do NOT reward persuasive writing.
+- HOLD is an active decision, not the default fallback.
+- Do not choose HOLD merely because the bull and bear disagree.
+- If one case is materially stronger, more specific, and more actionable, prefer that side.
+- Prioritize trend consensus, evidence quality, actionability, and data/execution reliability.
+- Counter-trend trades require exceptional reversal evidence, tight stops, reduced size, and lower confidence.
+
+MANDATORY HOLD CONDITIONS:
+- Both directional cases are weak, generic, or poorly grounded
+- Evidence is too mixed to justify positive expected value even for a small position
+- Data is stale, degraded, or market is closed
+- Execution or sizing context is incomplete or unreliable
+- Proposed trade is counter-trend without exceptional reversal evidence
+
+IMPORTANT HOLD RULE:
+- Disagreement alone is not sufficient for HOLD.
+- If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
+- Choose HOLD only if neither side clears the threshold for an actionable trade.
+
+Return ONLY valid JSON with these exact keys:
+- action
+- confidence
+- reasoning
+- amount
+
+In reasoning, use this exact mini-structure:
+Winning Thesis: <bull|bear|neither>
+Decision Basis: <main factor that decided the outcome>
+Why Not Bull: <required when final action is HOLD or bear-side action>
+Why Not Bear: <required when final action is HOLD or bull-side action>
+Actionability: <actionable_now|monitor|no_trade>
+Data Quality: <good|degraded|stale>
+Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
+Final Rationale: <clear final explanation>
+"""
+
+    @staticmethod
+    def _extract_prompt_section(prompt: str, header: str) -> str:
+        lines = prompt.splitlines()
+        marker = f"{header}:"
+        start_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == marker:
+                start_idx = i
+                break
+        if start_idx is None:
+            return ""
+
+        captured = []
+        i = start_idx
+        while i < len(lines):
+            line = lines[i]
+            if i > start_idx and i + 1 < len(lines):
+                next_line = lines[i + 1].strip()
+                if line.strip().endswith(":") and set(next_line) <= {"-"} and next_line:
+                    break
+            captured.append(line)
+            i += 1
+        return "\n".join(captured).strip()
+
+    @staticmethod
+    def _compact_prompt_section_for_debate(header: str, section: str) -> str:
+        lines = [line for line in section.splitlines() if line.strip()]
+        if not lines:
+            return ""
+
+        header_line = lines[0]
+        body = lines[1:]
+
+        if header == "PRICE DATA":
+            keep = [line for line in body if any(key in line for key in ["Close:", "Trend:", "Volume:"])]
+            return "\n".join([header_line] + keep[:4])
+
+        if header == "TEMPORAL CONTEXT":
+            keep = [line for line in body if any(key in line for key in ["Market Status:", "Current Time:", "Session:"])]
+            return "\n".join([header_line] + keep[:3])
+
+        if header == "TECHNICAL INDICATORS":
+            keep = [line for line in body if any(key in line for key in ["RSI", "MACD", "Stochastic", "ATR", "ADX"])]
+            return "\n".join([header_line] + keep[:5])
+
+        if header == "MULTI-TIMEFRAME TREND ANALYSIS":
+            keep = []
+            for line in body:
+                if (
+                    "Weighted Trend Score:" in line
+                    or "Consensus:" in line
+                    or line.startswith("  1d:")
+                    or line.startswith("  4h:")
+                    or line.startswith("  1h:")
+                ):
+                    keep.append(line)
+            return "\n".join([header_line] + keep)
+
+        if header in {"RISK MANAGEMENT & POSITION CONTEXT", "RISK CONSTRAINTS"}:
+            keep = [line for line in body if any(key in line for key in [
+                "Position State:",
+                "Allowed Policy Actions:",
+                "Position Size:",
+                "Stop Loss:",
+                "Take Profit:",
+                "Risk/Reward:",
+                "Max Risk:",
+            ])]
+            return "\n".join([header_line] + keep[:8])
+
+        if header in {"PORTFOLIO CONTEXT", "PORTFOLIO SUMMARY"}:
+            keep = [line for line in body if any(key in line for key in [
+                "Cash available:",
+                "Open positions:",
+                "Total Portfolio Value:",
+                "Number of Assets:",
+                "Unrealized P&L:",
+            ])]
+            return "\n".join([header_line] + keep[:5])
+
+        if header == "MARKET BRIEF":
+            keep = [line for line in body if any(key in line for key in ["Regime:", "Summary:", "Key Question:", "Confidence:"])]
+            return "\n".join([header_line] + keep[:5])
+
+        return section
+
+    def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
+        sections = []
+        extracted_market_brief = self._extract_prompt_section(prompt, "MARKET BRIEF")
+        extracted_regime = None
+        for candidate in ["trending_up", "trending_down", "ranging"]:
+            if f"Regime: {candidate}" in extracted_market_brief:
+                extracted_regime = candidate
+                break
+        regime = market_regime or extracted_regime or "unknown"
+        sections.append("TRADING DECISION CONTEXT (COMPACT DEBATE MODE)")
+        sections.append(f"Market Regime: {regime}")
+
+        seen = set()
+        for header in [
+            "PRICE DATA",
+            "TEMPORAL CONTEXT",
+            "TECHNICAL INDICATORS",
+            "MULTI-TIMEFRAME TREND ANALYSIS",
+            "RISK MANAGEMENT & POSITION CONTEXT",
+            "PORTFOLIO CONTEXT",
+            "MARKET BRIEF",
+            "POSITION STATE",
+            "ALLOWED POLICY ACTIONS",
+            "PORTFOLIO SUMMARY",
+            "MARKET DATA",
+            "MULTI-TIMEFRAME ANALYSIS",
+            "RISK CONSTRAINTS",
+        ]:
+            section = self._extract_prompt_section(prompt, header)
+            if section:
+                section = self._compact_prompt_section_for_debate(header, section)
+            if section and section not in seen:
+                sections.append(section)
+                seen.add(section)
+
+        compact = "\n\n".join(sections)
+        return compact[:4000]
+
     async def _debate_mode_inference(
         self,
         prompt: str,
