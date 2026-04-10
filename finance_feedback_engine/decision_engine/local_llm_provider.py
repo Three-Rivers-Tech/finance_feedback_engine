@@ -35,7 +35,7 @@ _POLICY_ACTION_ORDER = [
     "CLOSE_SHORT",
 ]
 _ALLOWED_POLICY_ACTIONS_BLOCK_RE = re.compile(
-    r"Allowed Policy Actions(?: ONLY)?:\s*(.*?)(?:\n\s*\n|$)",
+    r"Allowed Policy Actions(?: ONLY| for the current position state)?\s*:\s*(.*?)(?:\n\s*\n|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _ALLOWED_POLICY_ACTION_TOKEN_RE = re.compile(

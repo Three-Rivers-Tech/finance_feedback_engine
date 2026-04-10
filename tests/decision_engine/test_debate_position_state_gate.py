@@ -55,6 +55,14 @@ class TestExtractPositionStateFromPrompt:
     def test_flat_on_empty_prompt(self):
         assert _extract_position_state_from_prompt("") == "flat"
 
+    def test_live_status_long_position_detected(self):
+        prompt = "=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===\nStatus: 📈 LONG position in BTCUSD"
+        assert _extract_position_state_from_prompt(prompt) == "long"
+
+    def test_live_status_short_position_detected(self):
+        prompt = "=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===\nStatus: 📉 SHORT position in BTCUSD"
+        assert _extract_position_state_from_prompt(prompt) == "short"
+
 
 # ---------------------------------------------------------------------------
 # _coerce_invalid_role_action — per-role gate

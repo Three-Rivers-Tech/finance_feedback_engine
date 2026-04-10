@@ -37,6 +37,10 @@ _COMPACT_POSITION_STATE_RE = re.compile(
     r"Position State:\s*(flat|long|short)",
     re.IGNORECASE,
 )
+_LIVE_POSITION_STATUS_RE = re.compile(
+    r"Status:\s*.*?\b(FLAT|LONG|SHORT)\b(?: position)?",
+    re.IGNORECASE,
+)
 
 
 def _extract_position_state_from_prompt(prompt: str) -> str:
@@ -52,6 +56,9 @@ def _extract_position_state_from_prompt(prompt: str) -> str:
     compact_match = _COMPACT_POSITION_STATE_RE.search(prompt)
     if compact_match:
         return compact_match.group(1).lower()
+    live_status_match = _LIVE_POSITION_STATUS_RE.search(prompt)
+    if live_status_match:
+        return live_status_match.group(1).lower()
     return "flat"
 
 
@@ -370,6 +377,30 @@ class AIDecisionManager:
             f"Reasoning Summary: {reasoning}"
         )
 
+    @staticmethod
+    def _extract_live_position_block(prompt: str) -> str:
+        lines = prompt.splitlines()
+        start_idx = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped in {"=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===", "=== YOUR CURRENT POSITION STATE ==="}:
+                start_idx = i
+                break
+        if start_idx is None:
+            return ""
+
+        captured = []
+        blank_run = 0
+        for line in lines[start_idx:]:
+            if line.strip():
+                blank_run = 0
+            else:
+                blank_run += 1
+            captured.append(line)
+            if blank_run >= 2:
+                break
+        return "\n".join(captured).strip()
+
     def _build_judge_prompt(
         self,
         prompt: str,
@@ -535,6 +566,7 @@ Final Rationale: <clear final explanation>
     def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
         sections = []
         extracted_market_brief = self._extract_prompt_section(prompt, "MARKET BRIEF")
+        live_position_block = self._extract_live_position_block(prompt)
         extracted_regime = None
         for candidate in ["trending_up", "trending_down", "ranging"]:
             if f"Regime: {candidate}" in extracted_market_brief:
@@ -545,6 +577,15 @@ Final Rationale: <clear final explanation>
         sections.append(f"Market Regime: {regime}")
 
         seen = set()
+        if live_position_block:
+            live_position_block = self._compact_prompt_section_for_debate(
+                "RISK MANAGEMENT & POSITION CONTEXT",
+                live_position_block,
+            )
+            if live_position_block and live_position_block not in seen:
+                sections.append(live_position_block)
+                seen.add(live_position_block)
+
         for header in [
             "PRICE DATA",
             "TEMPORAL CONTEXT",
