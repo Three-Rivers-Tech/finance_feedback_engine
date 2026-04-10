@@ -175,6 +175,48 @@ def _ensure_learning_metadata(normalized: Dict[str, Any]) -> Dict[str, Any]:
         policy_trace["learning_metadata"] = learning_metadata
 
     if not policy_action:
+        if not isinstance(policy_trace, dict):
+            policy_trace = build_policy_trace(
+                policy_package=normalized.get("policy_package") if isinstance(normalized.get("policy_package"), dict) else None,
+                action=normalized.get("action") or canonical_action,
+                policy_action=None,
+                legacy_action_compatibility=normalized.get("legacy_action_compatibility"),
+                confidence=normalized.get("confidence"),
+                reasoning=normalized.get("reasoning"),
+                asset_pair=normalized.get("asset_pair"),
+                ai_provider=normalized.get("ai_provider"),
+                timestamp=normalized.get("timestamp"),
+                decision_id=normalized.get("id"),
+                policy_family=policy_family,
+                decision_mode=decision_mode,
+                coverage_bucket=coverage_bucket,
+                exploration_metadata=normalized.get("exploration_metadata"),
+                candidate_actions=candidate_actions,
+                candidate_action_scores=candidate_action_scores,
+            )
+        else:
+            decision_envelope = policy_trace.get("decision_envelope")
+            if not isinstance(decision_envelope, dict):
+                decision_envelope = {}
+            decision_envelope.setdefault("action", normalized.get("action") or canonical_action)
+            decision_envelope.setdefault("policy_action", None)
+            decision_envelope.setdefault("legacy_action_compatibility", normalized.get("legacy_action_compatibility"))
+            decision_envelope.setdefault("confidence", normalized.get("confidence"))
+            decision_envelope.setdefault("reasoning", normalized.get("reasoning"))
+            decision_envelope.setdefault("version", 1)
+            policy_trace["decision_envelope"] = decision_envelope
+
+            decision_metadata = policy_trace.get("decision_metadata")
+            if not isinstance(decision_metadata, dict):
+                decision_metadata = {}
+            decision_metadata.setdefault("asset_pair", normalized.get("asset_pair"))
+            decision_metadata.setdefault("ai_provider", normalized.get("ai_provider"))
+            decision_metadata.setdefault("timestamp", normalized.get("timestamp"))
+            decision_metadata.setdefault("decision_id", normalized.get("id"))
+            policy_trace["decision_metadata"] = decision_metadata
+            policy_trace.setdefault("trace_version", 1)
+
+        normalized["policy_trace"] = policy_trace
         return normalized
 
     policy_state = normalized.get("policy_state")

@@ -387,6 +387,28 @@ class TestDecisionStoreNormalizationHelpers:
         assert normalized["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
         assert normalized["policy_trace"]["learning_metadata"]["candidate_action_scores"] == {"HOLD": 61.0}
 
+    def test_normalize_decision_record_creates_policy_trace_for_legacy_buy_shape(self):
+        decision_id = str(uuid.uuid4())
+        normalized = normalize_decision_record(
+            {
+                "decision_id": decision_id,
+                "asset_pair": "BTCUSD",
+                "action": "BUY",
+                "confidence": 75,
+                "market_regime": "unknown",
+                "reasoning": "legacy buy record",
+            }
+        )
+
+        assert normalized["policy_family"] == "baseline_ffe"
+        assert normalized["decision_mode"] == "exploitation"
+        assert normalized["coverage_bucket"] == "unknown:70-79"
+        assert normalized["candidate_actions"] == ["BUY"]
+        assert normalized["candidate_action_scores"] == {"BUY": 75.0}
+        assert normalized["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
+        assert normalized["policy_trace"]["decision_envelope"]["action"] == "BUY"
+        assert normalized["policy_trace"]["decision_metadata"]["decision_id"] == decision_id
+
     def test_wipe_all_decisions(self, tmp_path):
         """Test wiping all decisions."""
         config = {"storage_path": str(tmp_path / "decisions")}
