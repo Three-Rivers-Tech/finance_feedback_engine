@@ -356,6 +356,47 @@ class TestDecisionValidatorContract:
         assert result["confidence"] == 85
 
 
+    def test_create_decision_preserves_learning_scaffold_fields(self, validator):
+        context = {
+            "market_regime": "ranging",
+            "market_data": {"close": 50000.0},
+            "position_state": "flat",
+        }
+        ai_response = {
+            "action": "HOLD",
+            "policy_action": "HOLD",
+            "confidence": 60,
+            "reasoning": "shadow hold",
+            "policy_family": "baseline_ffe",
+            "decision_mode": "shadow",
+            "coverage_bucket": "ranging:50-69",
+            "exploration_metadata": {"experiment_id": "shadow-1"},
+        }
+
+        result = validator.create_decision(
+            asset_pair="BTCUSD",
+            context=context,
+            ai_response=ai_response,
+            position_sizing_result={
+                "recommended_position_size": 0,
+                "stop_loss_price": 50000,
+                "sizing_stop_loss_percentage": 0.02,
+                "risk_percentage": 0.01,
+            },
+            relevant_balance={"coinbase_FUTURES_USD": 355.0},
+            balance_source="Coinbase",
+            has_existing_position=False,
+            is_crypto=True,
+            is_forex=False,
+        )
+
+        assert result["policy_family"] == "baseline_ffe"
+        assert result["decision_mode"] == "shadow"
+        assert result["coverage_bucket"] == "ranging:50-69"
+        assert result["exploration_metadata"]["experiment_id"] == "shadow-1"
+        assert result["policy_trace"]["learning_metadata"]["decision_mode"] == "shadow"
+
+
     def test_create_decision_preserves_ai_response_audit_fields(self, validator):
         context = {
             "market_regime": "ranging",

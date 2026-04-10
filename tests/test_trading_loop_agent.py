@@ -852,6 +852,36 @@ async def test_filtered_judged_open_confidence_gate_preserves_audit_spine_fields
     assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "OPEN_SMALL_LONG"
 
 
+
+@pytest.mark.asyncio
+async def test_filtered_decision_preserves_learning_scaffold_fields(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "BUY",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 10,
+            "asset_pair": "BTCUSD",
+            "reasoning": "Weak exploratory signal.",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+            "policy_family": "baseline_ffe",
+            "decision_mode": "shadow",
+            "coverage_bucket": "ranging:lt70",
+            "exploration_metadata": {"experiment_id": "shadow-low-conf"},
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["filtered_reason_code"] == "LOW_CONFIDENCE"
+    assert saved_decision["policy_family"] == "baseline_ffe"
+    assert saved_decision["decision_mode"] == "shadow"
+    assert saved_decision["coverage_bucket"] == "ranging:lt70"
+    assert saved_decision["exploration_metadata"]["experiment_id"] == "shadow-low-conf"
+
+
 @pytest.mark.asyncio
 async def test_no_action_decision_persists_compact_decision_artifact(trading_agent, mock_dependencies):
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value={})

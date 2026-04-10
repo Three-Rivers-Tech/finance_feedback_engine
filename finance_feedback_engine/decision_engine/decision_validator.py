@@ -439,6 +439,10 @@ class DecisionValidator:
                 ai_provider=ai_response.get("ai_provider"),
                 timestamp=None,
                 decision_id=decision_id,
+                policy_family=ai_response.get("policy_family"),
+                decision_mode=ai_response.get("decision_mode"),
+                coverage_bucket=ai_response.get("coverage_bucket"),
+                exploration_metadata=ai_response.get("exploration_metadata"),
             )
         
         confidence_pct = float(ai_response.get("confidence", 0) or 0)
@@ -478,6 +482,10 @@ class DecisionValidator:
             "control_outcome": canonical_control_outcome,
             "policy_package": canonical_policy_package,
             "policy_trace": canonical_policy_trace,
+            "policy_family": ai_response.get("policy_family"),
+            "decision_mode": ai_response.get("decision_mode"),
+            "coverage_bucket": ai_response.get("coverage_bucket"),
+            "exploration_metadata": ai_response.get("exploration_metadata"),
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),
             "suggested_amount": suggested_amount,

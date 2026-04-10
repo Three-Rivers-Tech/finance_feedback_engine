@@ -59,6 +59,50 @@ def test_decision_store_round_trips_policy_trace(tmp_path):
     assert loaded["policy_package"] == decision["policy_package"]
 
 
+def test_decision_store_round_trips_learning_metadata_in_policy_trace(tmp_path):
+    store = _make_store(tmp_path)
+    decision = {
+        "id": "decision-trace-learning-1",
+        "timestamp": "2026-03-12T14:00:00+00:00",
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_SMALL_LONG",
+        "policy_family": "baseline_ffe",
+        "decision_mode": "shadow",
+        "coverage_bucket": "ranging:70-79",
+        "exploration_metadata": {"experiment_id": "exp-3"},
+        "policy_trace": {
+            "policy_package": {
+                "control_outcome": {"status": "proposed", "version": 1},
+                "version": 1,
+            },
+            "decision_envelope": {
+                "action": "OPEN_SMALL_LONG",
+                "policy_action": "OPEN_SMALL_LONG",
+                "legacy_action_compatibility": "BUY",
+                "confidence": 80,
+                "reasoning": "persist learning trace",
+                "version": 1,
+            },
+            "decision_metadata": {"decision_id": "decision-trace-learning-1"},
+            "learning_metadata": {
+                "policy_family": "baseline_ffe",
+                "decision_mode": "shadow",
+                "coverage_bucket": "ranging:70-79",
+                "exploration_metadata": {"experiment_id": "exp-3"},
+            },
+            "trace_version": 1,
+        },
+    }
+
+    store.save_decision(decision)
+    loaded = store.get_decision_by_id("decision-trace-learning-1")
+
+    assert loaded["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
+    assert loaded["policy_trace"]["learning_metadata"]["decision_mode"] == "shadow"
+    assert loaded["policy_trace"]["learning_metadata"]["coverage_bucket"] == "ranging:70-79"
+    assert loaded["policy_trace"]["learning_metadata"]["exploration_metadata"]["experiment_id"] == "exp-3"
+
+
 def test_decision_store_update_preserves_policy_trace(tmp_path):
     store = _make_store(tmp_path)
     decision = {

@@ -580,6 +580,25 @@ def test_build_policy_trace_bundles_persistence_facing_contract():
 
 
 
+def test_build_policy_trace_preserves_learning_metadata():
+    trace = build_policy_trace(
+        policy_package={"policy_state": {"position_state": "flat", "version": 1}},
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        confidence=82,
+        reasoning="exploration candidate",
+        policy_family="baseline_ffe",
+        decision_mode="shadow",
+        coverage_bucket="ranging:70-79",
+        exploration_metadata={"experiment_id": "exp-1", "arm": "hold-vs-open"},
+    )
+
+    assert trace["learning_metadata"]["policy_family"] == "baseline_ffe"
+    assert trace["learning_metadata"]["decision_mode"] == "shadow"
+    assert trace["learning_metadata"]["coverage_bucket"] == "ranging:70-79"
+    assert trace["learning_metadata"]["exploration_metadata"]["experiment_id"] == "exp-1"
+
+
 def test_build_policy_trace_gracefully_allows_partial_inputs():
     trace = build_policy_trace(
         policy_package=None,
@@ -733,6 +752,38 @@ def test_build_policy_replay_record_extracts_canonical_replay_surface():
 def test_build_policy_replay_record_returns_none_without_policy_trace():
     assert build_policy_replay_record({"id": "legacy-1", "action": "BUY"}) is None
 
+
+
+def test_build_policy_dataset_row_preserves_learning_metadata_fields():
+    policy_trace = build_policy_trace(
+        policy_package=build_policy_package(
+            policy_state={"position_state": "flat", "version": 1},
+            action_context={"structural_action_validity": "valid", "version": 1},
+            policy_sizing_intent=None,
+            provider_translation_result=None,
+            control_outcome={"status": "executed", "version": 1},
+        ),
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        confidence=82,
+        reasoning="dataset metadata",
+        asset_pair="BTCUSD",
+        decision_id="decision-learning-row",
+        policy_family="baseline_ffe",
+        decision_mode="exploration",
+        coverage_bucket="trending_up:80-89",
+        exploration_metadata={"experiment_id": "exp-2"},
+    )
+    row = build_policy_dataset_row_from_decision({
+        "id": "decision-learning-row",
+        "asset_pair": "BTCUSD",
+        "policy_trace": policy_trace,
+    })
+
+    assert row["policy_family"] == "baseline_ffe"
+    assert row["decision_mode"] == "exploration"
+    assert row["coverage_bucket"] == "trending_up:80-89"
+    assert row["exploration_metadata"]["experiment_id"] == "exp-2"
 
 
 def test_build_policy_dataset_row_extracts_canonical_dataset_surface():

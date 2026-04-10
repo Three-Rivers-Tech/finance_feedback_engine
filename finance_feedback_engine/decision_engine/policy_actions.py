@@ -422,6 +422,10 @@ def build_policy_trace(
     ai_provider: Optional[str] = None,
     timestamp: Optional[str] = None,
     decision_id: Optional[str] = None,
+    policy_family: Optional[str] = None,
+    decision_mode: Optional[str] = None,
+    coverage_bucket: Optional[str] = None,
+    exploration_metadata: Optional[dict] = None,
 ) -> dict:
     return {
         "policy_package": dict(policy_package) if isinstance(policy_package, dict) else None,
@@ -439,6 +443,16 @@ def build_policy_trace(
             "timestamp": timestamp,
             "decision_id": decision_id,
         },
+        "learning_metadata": {
+            "policy_family": policy_family,
+            "decision_mode": decision_mode,
+            "coverage_bucket": coverage_bucket,
+            "exploration_metadata": (
+                dict(exploration_metadata)
+                if isinstance(exploration_metadata, dict)
+                else exploration_metadata
+            ),
+        },
         "trace_version": 1,
     }
 
@@ -452,6 +466,7 @@ def build_policy_replay_record(decision: Optional[dict]) -> Optional[dict]:
 
     decision_envelope = policy_trace.get("decision_envelope")
     decision_metadata = policy_trace.get("decision_metadata")
+    learning_metadata = policy_trace.get("learning_metadata")
 
     return {
         "policy_trace": dict(policy_trace),
@@ -490,6 +505,26 @@ def build_policy_replay_record(decision: Optional[dict]) -> Optional[dict]:
             if isinstance(decision_envelope, dict)
             else payload.get("legacy_action_compatibility")
         ),
+        "policy_family": (
+            (learning_metadata or {}).get("policy_family")
+            if isinstance(learning_metadata, dict)
+            else payload.get("policy_family")
+        ),
+        "decision_mode": (
+            (learning_metadata or {}).get("decision_mode")
+            if isinstance(learning_metadata, dict)
+            else payload.get("decision_mode")
+        ),
+        "coverage_bucket": (
+            (learning_metadata or {}).get("coverage_bucket")
+            if isinstance(learning_metadata, dict)
+            else payload.get("coverage_bucket")
+        ),
+        "exploration_metadata": (
+            dict((learning_metadata or {}).get("exploration_metadata"))
+            if isinstance((learning_metadata or {}).get("exploration_metadata"), dict)
+            else payload.get("exploration_metadata")
+        ),
         "control_outcome": (
             ((policy_trace.get("policy_package") or {}).get("control_outcome"))
             if isinstance(policy_trace.get("policy_package"), dict)
@@ -518,6 +553,10 @@ def build_policy_dataset_row(replay_record: Optional[dict]) -> Optional[dict]:
         "action": payload.get("action"),
         "policy_action": payload.get("policy_action"),
         "legacy_action_compatibility": payload.get("legacy_action_compatibility"),
+        "policy_family": payload.get("policy_family"),
+        "decision_mode": payload.get("decision_mode"),
+        "coverage_bucket": payload.get("coverage_bucket"),
+        "exploration_metadata": payload.get("exploration_metadata"),
         "policy_state": policy_package.get("policy_state"),
         "action_context": policy_package.get("action_context"),
         "policy_sizing_intent": policy_package.get("policy_sizing_intent"),
