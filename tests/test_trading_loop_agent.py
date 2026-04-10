@@ -883,6 +883,33 @@ async def test_filtered_decision_preserves_learning_scaffold_fields(trading_agen
 
 
 @pytest.mark.asyncio
+async def test_filtered_decision_backfills_learning_metadata_defaults_before_save(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "BUY",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 10,
+            "asset_pair": "BTCUSD",
+            "reasoning": "Weak exploratory signal.",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["filtered_reason_code"] == "LOW_CONFIDENCE"
+    assert saved_decision["policy_family"] == "baseline_ffe"
+    assert saved_decision["decision_mode"] == "exploitation"
+    assert saved_decision["coverage_bucket"] == "ranging:lt50"
+    assert saved_decision["candidate_actions"] == ["OPEN_SMALL_LONG"]
+    assert saved_decision["candidate_action_scores"] == {"OPEN_SMALL_LONG": 10.0}
+    assert saved_decision["policy_trace"]["learning_metadata"]["decision_mode"] == "exploitation"
+
+
+@pytest.mark.asyncio
 async def test_no_action_decision_persists_compact_decision_artifact(trading_agent, mock_dependencies):
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(return_value={})
     trading_agent.is_running = True

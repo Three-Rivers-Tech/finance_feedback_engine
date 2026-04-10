@@ -348,6 +348,45 @@ class TestDecisionStoreNormalizationHelpers:
         assert normalized["_schema_version"] == DECISION_SCHEMA_VERSION
         assert normalized["timestamp"]
 
+    def test_normalize_decision_record_backfills_learning_metadata_from_partial_policy_trace(self):
+        decision_id = str(uuid.uuid4())
+        normalized = normalize_decision_record(
+            {
+                "decision_id": decision_id,
+                "asset_pair": "BTCUSD",
+                "action": "HOLD",
+                "policy_action": "HOLD",
+                "confidence": 61,
+                "market_regime": "ranging",
+                "reasoning": "hold with sparse scaffold",
+                "policy_trace": {
+                    "policy_package": {
+                        "policy_state": {
+                            "position_state": "flat",
+                            "market_regime": "ranging",
+                            "version": 1,
+                        }
+                    },
+                    "decision_envelope": {
+                        "action": "HOLD",
+                        "policy_action": "HOLD",
+                        "confidence": 61,
+                        "reasoning": "hold with sparse scaffold",
+                        "version": 1,
+                    },
+                    "learning_metadata": None,
+                },
+            }
+        )
+
+        assert normalized["policy_family"] == "baseline_ffe"
+        assert normalized["decision_mode"] == "exploitation"
+        assert normalized["coverage_bucket"] == "ranging:50-69"
+        assert normalized["candidate_actions"] == ["HOLD"]
+        assert normalized["candidate_action_scores"] == {"HOLD": 61.0}
+        assert normalized["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
+        assert normalized["policy_trace"]["learning_metadata"]["candidate_action_scores"] == {"HOLD": 61.0}
+
     def test_wipe_all_decisions(self, tmp_path):
         """Test wiping all decisions."""
         config = {"storage_path": str(tmp_path / "decisions")}

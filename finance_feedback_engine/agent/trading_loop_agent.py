@@ -32,6 +32,7 @@ from finance_feedback_engine.decision_engine.policy_actions import (
     normalize_policy_action,
 )
 from finance_feedback_engine.memory.portfolio_memory import PortfolioMemoryEngine
+from finance_feedback_engine.persistence.decision_store import normalize_decision_record
 
 try:
     from finance_feedback_engine.monitoring.pending_linkage_store import PendingLinkageStore
@@ -1447,6 +1448,7 @@ class TradingLoopAgent:
                                 decision["decision_source"] = inherited_decision_source
 
                             # Persist decision to decision store once per live position fingerprint.
+                            self._normalize_decision_for_persistence(decision)
                             self.engine.decision_store.save_decision(decision)
                             logger.info(
                                 f"✓ Persisted decision {decision_id} for {asset_pair}"
@@ -2409,8 +2411,10 @@ class TradingLoopAgent:
                         }
                     if getattr(self.engine, "decision_store", None):
                         if decision.get("_persisted_to_store"):
+                            self._normalize_decision_for_persistence(decision)
                             self.engine.decision_store.update_decision(decision)
                         else:
+                            self._normalize_decision_for_persistence(decision)
                             self.engine.decision_store.save_decision(decision)
                 except Exception as e:
                     logger.warning(
@@ -4392,6 +4396,15 @@ class TradingLoopAgent:
             ).isoformat()
         return decision
 
+    def _normalize_decision_for_persistence(
+        self, decision: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Backfill canonical learning metadata before save/update operations."""
+        normalized = normalize_decision_record(dict(decision or {}))
+        decision.clear()
+        decision.update(normalized)
+        return decision
+
     def _attach_decision_artifact(
         self, decision: Dict[str, Any], *, execution_attempted: bool
     ) -> Dict[str, Any]:
@@ -4413,7 +4426,7 @@ class TradingLoopAgent:
                 (decision.get("ensemble_metadata") or {}).get("provider_decisions")
             ),
         }
-        return decision
+        return self._normalize_decision_for_persistence(decision)
 
     def _log_portfolio_risk_snapshot(
         self,
@@ -4691,8 +4704,10 @@ class TradingLoopAgent:
                     ].copy()
             if getattr(self.engine, "decision_store", None):
                 if had_id:
+                    self._normalize_decision_for_persistence(decision)
                     self.engine.decision_store.update_decision(decision)
                 else:
+                    self._normalize_decision_for_persistence(decision)
                     self.engine.decision_store.save_decision(decision)
         except Exception as e:
             logger.warning(

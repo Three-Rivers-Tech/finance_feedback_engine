@@ -5,7 +5,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from finance_feedback_engine.decision_engine.policy_actions import get_position_side
+from finance_feedback_engine.decision_engine.policy_actions import (
+    build_action_context,
+    build_control_outcome,
+    build_policy_package,
+    build_policy_state,
+    build_policy_trace,
+    get_legacy_action_compatibility,
+    get_policy_action_family,
+    get_position_side,
+    is_policy_action,
+    normalize_policy_action,
+)
 from finance_feedback_engine.utils.shape_normalization import asset_key_candidates
 from finance_feedback_engine.utils.file_io import FileIOManager, FileIOError
 
@@ -42,6 +53,237 @@ def normalize_decision_id(candidate: Any) -> Optional[str]:
     return str(candidate)
 
 
+def _confidence_bucket_label(confidence: Any) -> str:
+    try:
+        confidence_value = float(confidence)
+    except (TypeError, ValueError):
+        return "unknown"
+    if confidence_value >= 90:
+        return "90-100"
+    if confidence_value >= 80:
+        return "80-89"
+    if confidence_value >= 70:
+        return "70-79"
+    if confidence_value >= 50:
+        return "50-69"
+    return "lt50"
+
+
+def _extract_market_regime(decision: Dict[str, Any]) -> str:
+    policy_state = decision.get("policy_state") or {}
+    policy_package = decision.get("policy_package") or {}
+    trace_package = (decision.get("policy_trace") or {}).get("policy_package") or {}
+    candidates = (
+        decision.get("market_regime"),
+        policy_state.get("market_regime") if isinstance(policy_state, dict) else None,
+        (policy_package.get("policy_state") or {}).get("market_regime") if isinstance(policy_package, dict) else None,
+        (trace_package.get("policy_state") or {}).get("market_regime") if isinstance(trace_package, dict) else None,
+    )
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return "unknown"
+
+
+def _normalize_candidate_actions(decision: Dict[str, Any], canonical_action: str) -> list[str]:
+    raw = decision.get("candidate_actions")
+    if isinstance(raw, list):
+        cleaned = [str(item).strip() for item in raw if str(item).strip()]
+        if cleaned:
+            return cleaned
+    return [canonical_action]
+
+
+def _normalize_candidate_action_scores(
+    decision: Dict[str, Any],
+    candidate_actions: list[str],
+    canonical_action: str,
+) -> Dict[str, float]:
+    raw = decision.get("candidate_action_scores")
+    if isinstance(raw, dict) and raw:
+        cleaned: Dict[str, float] = {}
+        for key, value in raw.items():
+            try:
+                cleaned[str(key)] = float(value)
+            except (TypeError, ValueError):
+                continue
+        if cleaned:
+            return cleaned
+    try:
+        confidence = float(decision.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    anchor = canonical_action or (candidate_actions[0] if candidate_actions else "HOLD")
+    return {anchor: confidence}
+
+
+def _raw_position_state(decision: Dict[str, Any]) -> Any:
+    if decision.get("current_position_state") is not None:
+        return decision.get("current_position_state")
+    if isinstance(decision.get("policy_state"), dict) and decision["policy_state"].get("position_state") is not None:
+        return decision["policy_state"].get("position_state")
+    if isinstance(decision.get("position_state"), dict):
+        return decision["position_state"].get("state")
+    return decision.get("position_state")
+
+
+def _ensure_learning_metadata(normalized: Dict[str, Any]) -> Dict[str, Any]:
+    raw_action = normalized.get("policy_action") or normalized.get("action") or "HOLD"
+    canonical_action = (
+        normalize_policy_action(raw_action).value if is_policy_action(raw_action) else str(raw_action).upper()
+    )
+    policy_action = canonical_action if is_policy_action(canonical_action) else None
+
+    if policy_action and not normalized.get("policy_action"):
+        normalized["policy_action"] = policy_action
+    if policy_action and not normalized.get("policy_action_family"):
+        normalized["policy_action_family"] = get_policy_action_family(policy_action)
+    if policy_action and not normalized.get("legacy_action_compatibility"):
+        normalized["legacy_action_compatibility"] = get_legacy_action_compatibility(policy_action)
+
+    policy_family = normalized.get("policy_family")
+    if not isinstance(policy_family, str) or not policy_family.strip():
+        policy_family = "baseline_ffe"
+    normalized["policy_family"] = policy_family
+
+    decision_mode = normalized.get("decision_mode")
+    if not isinstance(decision_mode, str) or not decision_mode.strip():
+        decision_mode = "exploitation"
+    normalized["decision_mode"] = decision_mode
+
+    coverage_bucket = normalized.get("coverage_bucket")
+    if not isinstance(coverage_bucket, str) or not coverage_bucket.strip():
+        coverage_bucket = f"{_extract_market_regime(normalized)}:{_confidence_bucket_label(normalized.get('confidence'))}"
+    normalized["coverage_bucket"] = coverage_bucket
+
+    candidate_actions = _normalize_candidate_actions(normalized, canonical_action)
+    candidate_action_scores = _normalize_candidate_action_scores(normalized, candidate_actions, canonical_action)
+    normalized["candidate_actions"] = candidate_actions
+    normalized["candidate_action_scores"] = candidate_action_scores
+
+    policy_trace = normalized.get("policy_trace")
+    if isinstance(policy_trace, dict):
+        learning_metadata = policy_trace.get("learning_metadata")
+        if not isinstance(learning_metadata, dict):
+            learning_metadata = {}
+        learning_metadata.setdefault("policy_family", policy_family)
+        learning_metadata.setdefault("decision_mode", decision_mode)
+        learning_metadata.setdefault("coverage_bucket", coverage_bucket)
+        learning_metadata.setdefault("exploration_metadata", normalized.get("exploration_metadata"))
+        learning_metadata.setdefault("candidate_actions", candidate_actions)
+        learning_metadata.setdefault("candidate_action_scores", candidate_action_scores)
+        policy_trace["learning_metadata"] = learning_metadata
+
+    if not policy_action:
+        return normalized
+
+    policy_state = normalized.get("policy_state")
+    if not isinstance(policy_state, dict):
+        policy_state = build_policy_state(
+            position_state=_raw_position_state(normalized),
+            market_data=normalized.get("market_data"),
+            volatility=normalized.get("volatility"),
+            portfolio={"unrealized_pnl": normalized.get("portfolio_unrealized_pnl")},
+            market_regime=normalized.get("market_regime"),
+        )
+    normalized["policy_state"] = policy_state
+
+    action_context = normalized.get("action_context")
+    if not isinstance(action_context, dict):
+        action_context = build_action_context(
+            position_state=_raw_position_state(normalized) or policy_state.get("position_state"),
+            policy_action=policy_action,
+            risk_vetoed=bool(normalized.get("risk_vetoed", False)),
+            risk_veto_reason=normalized.get("risk_veto_reason"),
+            gatekeeper_message=normalized.get("gatekeeper_message"),
+        )
+    normalized["action_context"] = action_context
+
+    if action_context.get("current_position_state") and not normalized.get("current_position_state"):
+        normalized["current_position_state"] = action_context.get("current_position_state")
+    if action_context.get("legal_actions") and not normalized.get("legal_actions"):
+        normalized["legal_actions"] = action_context.get("legal_actions")
+    if action_context.get("structural_action_validity") and not normalized.get("structural_action_validity"):
+        normalized["structural_action_validity"] = action_context.get("structural_action_validity")
+    if action_context.get("invalid_action_reason") and not normalized.get("invalid_action_reason"):
+        normalized["invalid_action_reason"] = action_context.get("invalid_action_reason")
+
+    control_outcome = normalized.get("control_outcome")
+    if not isinstance(control_outcome, dict):
+        control_outcome = build_control_outcome(
+            action=policy_action,
+            structural_action_validity=normalized.get("structural_action_validity") or action_context.get("structural_action_validity"),
+            invalid_action_reason_text=normalized.get("invalid_action_reason") or action_context.get("invalid_action_reason"),
+            risk_vetoed=bool(normalized.get("risk_vetoed", False)),
+            risk_veto_reason=normalized.get("risk_veto_reason"),
+            execution_status=normalized.get("execution_status"),
+            execution_result=normalized.get("execution_result"),
+        )
+    normalized["control_outcome"] = control_outcome
+
+    policy_package = normalized.get("policy_package")
+    if not isinstance(policy_package, dict):
+        policy_package = build_policy_package(
+            policy_state=policy_state,
+            action_context=action_context,
+            policy_sizing_intent=normalized.get("policy_sizing_intent"),
+            provider_translation_result=normalized.get("provider_translation_result"),
+            control_outcome=control_outcome,
+        )
+    else:
+        policy_package.setdefault("policy_state", policy_state)
+        policy_package.setdefault("action_context", action_context)
+        policy_package.setdefault("policy_sizing_intent", normalized.get("policy_sizing_intent"))
+        policy_package.setdefault("provider_translation_result", normalized.get("provider_translation_result"))
+        policy_package.setdefault("control_outcome", control_outcome)
+    normalized["policy_package"] = policy_package
+
+    if not isinstance(policy_trace, dict):
+        policy_trace = build_policy_trace(
+            policy_package=policy_package,
+            action=normalized.get("action") or policy_action,
+            policy_action=policy_action,
+            legacy_action_compatibility=normalized.get("legacy_action_compatibility"),
+            confidence=normalized.get("confidence"),
+            reasoning=normalized.get("reasoning"),
+            asset_pair=normalized.get("asset_pair"),
+            ai_provider=normalized.get("ai_provider"),
+            timestamp=normalized.get("timestamp"),
+            decision_id=normalized.get("id"),
+            policy_family=policy_family,
+            decision_mode=decision_mode,
+            coverage_bucket=coverage_bucket,
+            exploration_metadata=normalized.get("exploration_metadata"),
+            candidate_actions=candidate_actions,
+            candidate_action_scores=candidate_action_scores,
+        )
+    else:
+        policy_trace.setdefault("policy_package", policy_package)
+        decision_envelope = policy_trace.get("decision_envelope")
+        if not isinstance(decision_envelope, dict):
+            decision_envelope = {}
+        decision_envelope.setdefault("action", normalized.get("action") or policy_action)
+        decision_envelope.setdefault("policy_action", policy_action)
+        decision_envelope.setdefault("legacy_action_compatibility", normalized.get("legacy_action_compatibility"))
+        decision_envelope.setdefault("confidence", normalized.get("confidence"))
+        decision_envelope.setdefault("reasoning", normalized.get("reasoning"))
+        decision_envelope.setdefault("version", 1)
+        policy_trace["decision_envelope"] = decision_envelope
+
+        decision_metadata = policy_trace.get("decision_metadata")
+        if not isinstance(decision_metadata, dict):
+            decision_metadata = {}
+        decision_metadata.setdefault("asset_pair", normalized.get("asset_pair"))
+        decision_metadata.setdefault("ai_provider", normalized.get("ai_provider"))
+        decision_metadata.setdefault("timestamp", normalized.get("timestamp"))
+        decision_metadata.setdefault("decision_id", normalized.get("id"))
+        policy_trace["decision_metadata"] = decision_metadata
+        policy_trace.setdefault("trace_version", 1)
+
+    normalized["policy_trace"] = policy_trace
+    return normalized
+
+
 def normalize_decision_record(decision: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize persisted decision records to one canonical write/read shape."""
     normalized = dict(decision or {})
@@ -52,7 +294,7 @@ def normalize_decision_record(decision: Dict[str, Any]) -> Dict[str, Any]:
 
     normalized.setdefault("_schema_version", DECISION_SCHEMA_VERSION)
     normalized.setdefault("timestamp", datetime.now(UTC).isoformat())
-    return normalized
+    return _ensure_learning_metadata(normalized)
 
 
 class DecisionStore:
