@@ -253,6 +253,21 @@ class AIDecisionManager:
                     request_label=f"debate:{role}",
                     request_timeout_s=retry_policy["per_attempt_timeout_s"],
                 )
+                if isinstance(case, dict) and case.get("decision_origin") == "fallback":
+                    logger.warning(
+                        "DEBATE role fallback rejected: role=%s provider=%s attempt=%s/%s reason=%s",
+                        role,
+                        provider,
+                        attempt,
+                        retry_policy["max_attempts"],
+                        case.get("filtered_reason_code", "unknown"),
+                    )
+                    increment_provider_request(provider, "failure")
+                    case = None
+                    if attempt < retry_policy["max_attempts"]:
+                        continue
+                    failed.append(provider)
+                    break
                 if self.ensemble_manager._is_valid_provider_response(case, provider):
                     increment_provider_request(provider, "success")
                     break
@@ -472,7 +487,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             
             debate_timing["judge_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
             _timing_started = time.perf_counter()
-            judge_decision = await self._query_single_provider(judge_provider, judge_prompt)
+            judge_decision = await self._query_single_provider(
+                judge_provider,
+                judge_prompt,
+                request_label="debate:judge",
+            )
             debate_timing["judge_s"] = round(time.perf_counter() - _timing_started, 4)
             if not self.ensemble_manager._is_valid_provider_response(
                 judge_decision, judge_provider
@@ -570,7 +589,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         return final_decision
 
     async def _query_single_provider(
-        self, provider_name: str, prompt: str
+        self,
+        provider_name: str,
+        prompt: str,
+        request_label: Optional[str] = None,
+        request_timeout_s: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
@@ -578,11 +601,20 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route Ollama models to local inference with specific model
         if is_ollama_model(provider_name):
-            return await self._local_ai_inference(prompt, model_name=provider_name)
+            return await self._local_ai_inference(
+                prompt,
+                model_name=provider_name,
+                request_label=request_label,
+                request_timeout_s=request_timeout_s,
+            )
 
         # Route abstract provider names
         if provider_name == "local":
-            return await self._local_ai_inference(prompt)
+            return await self._local_ai_inference(
+                prompt,
+                request_label=request_label,
+                request_timeout_s=request_timeout_s,
+            )
         elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
         elif provider_name == "codex":
@@ -795,7 +827,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             raise RuntimeError("Local raw LLM query failed") from e
 
     async def _local_ai_inference(
-        self, prompt: str, model_name: Optional[str] = None
+        self,
+        prompt: str,
+        model_name: Optional[str] = None,
+        request_label: Optional[str] = None,
+        request_timeout_s: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
@@ -821,7 +857,13 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             provider = LocalLLMProvider(provider_config)
             # Run synchronous query in a separate thread
             # Pass model_name directly to provider.query() for per-query model selection
-            response = await asyncio.to_thread(provider.query, prompt, model_name)
+            response = await asyncio.to_thread(
+                provider.query,
+                prompt,
+                model_name,
+                request_label,
+                request_timeout_s,
+            )
             # Add model_name to response for debate tracking
             if isinstance(response, dict):
                 response["model_name"] = model_name or self.config.get("model_name", "llama3.1:8b")

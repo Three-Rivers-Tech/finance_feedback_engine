@@ -611,7 +611,13 @@ class LocalLLMProvider:
             f"Local raw query failed after {max_retries} attempts for model {active_model}"
         )
 
-    def query(self, prompt: str, model_name: str = None) -> Dict[str, Any]:
+    def query(
+        self,
+        prompt: str,
+        model_name: str = None,
+        request_label: Optional[str] = None,
+        request_timeout_s: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """
         Query local LLM with connection pooling (Phase 2 optimization).
 
@@ -634,7 +640,10 @@ class LocalLLMProvider:
                 logger.error(f"Failed to download {active_model}, falling back to {self.model_name}")
                 active_model = self.model_name
         
-        logger.info(f"Using model: {active_model} (instance default: {self.model_name})")
+        logger.info(
+            f"Using model: {active_model} (instance default: {self.model_name})"
+            + (f" request_label={request_label}" if request_label else "")
+        )
         # Verify connection before query (Phase 2 optimization)
         ensure_connection_started = time.perf_counter()
         self.ensure_connection()
@@ -667,7 +676,7 @@ class LocalLLMProvider:
 
                 # Get LLM timeout from config (default 120s for CPU-based Ollama)
                 # CPU inference can take 45-120s for complex prompts
-                llm_timeout = self.config.get("api_timeouts", {}).get("llm_query", 120)
+                llm_timeout = request_timeout_s or self.config.get("api_timeouts", {}).get("llm_query", 120)
 
                 generate_started = time.perf_counter()
                 try:
@@ -692,7 +701,8 @@ class LocalLLMProvider:
                     generate_wait_s = time.perf_counter() - generate_started
                     logger.error(
                         f"Local LLM query timed out after {llm_timeout}s on attempt {attempt + 1} | "
-                        f"model={active_model} ensure_connection_s={ensure_connection_s:.3f} generate_wait_s={generate_wait_s:.3f}"
+                        f"request_label={request_label or 'none'} model={active_model} "
+                        f"ensure_connection_s={ensure_connection_s:.3f} generate_wait_s={generate_wait_s:.3f}"
                     )
                     if attempt == max_retries - 1:
                         return build_fallback_decision(
@@ -755,8 +765,8 @@ class LocalLLMProvider:
 
                     logger.info(
                         f"Local LLM decision: {decision['action']} "
-                        f"({decision['confidence']}%) | model={active_model} "
-                        f"ensure_connection_s={ensure_connection_s:.3f} generate_s={generate_s:.3f}"
+                        f"({decision['confidence']}%) | request_label={request_label or 'none'} "
+                        f"model={active_model} ensure_connection_s={ensure_connection_s:.3f} generate_s={generate_s:.3f}"
                     )
 
                     # Unload model from memory to free GPU resources for next model

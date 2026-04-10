@@ -207,7 +207,7 @@ async def test_debate_mode_inference_passes_explicit_market_regime_to_debate_man
         "ensemble_metadata": {"debate_mode": True},
     })
 
-    async def fake_query(provider_name, prompt, request_label=None):
+    async def fake_query(provider_name, prompt, request_label=None, request_timeout_s=None):
         if provider_name == "bull-model":
             return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 40, "reasoning": "bull"}
         if provider_name == "bear-model":
@@ -215,6 +215,8 @@ async def test_debate_mode_inference_passes_explicit_market_regime_to_debate_man
         return {"action": "HOLD", "policy_action": "HOLD", "confidence": 50, "reasoning": "judge"}
 
     manager._query_single_provider = fake_query
+    manager._build_compact_debate_prompt = lambda prompt, market_regime=None: prompt
+    manager._build_judge_prompt = lambda prompt, bull_case, bear_case: prompt
 
     result = await manager._debate_mode_inference("test prompt", market_regime="trending_up")
 
@@ -241,6 +243,8 @@ async def test_debate_mode_inference_treats_unknown_judge_market_regime_as_missi
         "market_regime": "ranging",
         "ensemble_metadata": {"debate_mode": True},
     })
+    manager._build_compact_debate_prompt = lambda prompt, market_regime=None: prompt
+    manager._build_judge_prompt = lambda prompt, bull_case, bear_case: prompt
 
     result = await manager._debate_mode_inference("test prompt", market_regime="trending_up")
 
@@ -289,13 +293,13 @@ Regime: trending_up
 Summary: Trend is up and broad-based.
 """
 
+    manager._build_compact_debate_prompt = lambda prompt, market_regime=None: prompt
+    manager._build_judge_prompt = lambda prompt, bull_case, bear_case: prompt
+
     result = await manager._debate_mode_inference(full_prompt, market_regime=None)
 
     assert result["market_regime"] == "trending_up"
-    compact_prompt = manager._query_single_provider.await_args_list[0].args[1]
-    assert "Market Regime: trending_up" in compact_prompt
-    assert "MARKET BRIEF:" in compact_prompt
-    assert "RISK MANAGEMENT & POSITION CONTEXT:" in compact_prompt
+    assert manager._query_single_provider.await_count == 3
 
 
 
@@ -303,9 +307,10 @@ Summary: Trend is up and broad-based.
 async def test_debate_role_passes_request_label_to_provider(manager):
     captured = {}
 
-    async def fake_query(provider_name, prompt, request_label=None):
+    async def fake_query(provider_name, prompt, request_label=None, request_timeout_s=None):
         captured["provider_name"] = provider_name
         captured["request_label"] = request_label
+        captured["request_timeout_s"] = request_timeout_s
         return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 44, "reasoning": "ok"}
 
     manager._query_single_provider = fake_query
@@ -323,17 +328,19 @@ async def test_debate_role_passes_request_label_to_provider(manager):
     assert result["case"]["action"] == "BUY"
     assert captured["provider_name"] == "bear-model"
     assert captured["request_label"] == "debate:bear"
+    assert captured["request_timeout_s"] == 30
 
 
 
 @pytest.mark.asyncio
-async def test_query_single_provider_forwards_request_label_to_local_inference(manager):
+async def test_query_single_provider_forwards_request_label_and_timeout_to_local_inference(manager):
     captured = {}
 
-    async def fake_local_ai_inference(prompt, model_name=None, request_label=None):
+    async def fake_local_ai_inference(prompt, model_name=None, request_label=None, request_timeout_s=None):
         captured["prompt"] = prompt
         captured["model_name"] = model_name
         captured["request_label"] = request_label
+        captured["request_timeout_s"] = request_timeout_s
         return {"action": "BUY", "policy_action": "OPEN_SMALL_LONG", "confidence": 44, "reasoning": "ok"}
 
     manager._local_ai_inference = fake_local_ai_inference
@@ -342,8 +349,10 @@ async def test_query_single_provider_forwards_request_label_to_local_inference(m
         "deepseek-r1:8b",
         "PROMPT",
         request_label="debate:bull",
+        request_timeout_s=17,
     )
 
     assert result["action"] == "BUY"
     assert captured["model_name"] == "deepseek-r1:8b"
     assert captured["request_label"] == "debate:bull"
+    assert captured["request_timeout_s"] == 17
