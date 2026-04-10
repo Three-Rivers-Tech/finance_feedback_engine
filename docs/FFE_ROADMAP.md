@@ -159,7 +159,21 @@ Examples:
 - non-core deployment checks
 - full platform polish
 
-This should not be mixed into core trading correctness or system performance decisions.
+Explicitly out of scope for the current core roadmap unless they block Sections 1-3 directly:
+- UI polish or feature completeness
+- non-core observability surfaces that do not change trading correctness or trading-quality decisions
+- deployment/process improvements that do not materially affect the core trading lanes
+- broad 1.0 packaging work
+
+Preemption rule:
+- Section 4 work should not interrupt Sections 2-3 unless it is blocking live verification, safe deployment of the core trading system, or interpretation of core trading outcomes
+
+## Glossary
+
+- audit spine: the persisted fields, behaviors, and checks that make judged and skip-lane outputs trustworthy and traceable end to end
+- spine-clean: a live run preserves the required audit-spine fields and does not regress persistence truth
+- no-single-sided-debate contract: the judge must never decide a debate when only one advocate seat completed successfully
+- bounded retry baseline: the currently accepted debate-seat retry policy with one retry max, `30s` per-attempt timeout, and `45s` total seat cap
 
 ## Working rule
 
