@@ -76,6 +76,14 @@ Section exit gate:
 - fresh live measurements show the bounded-retry baseline is stable enough that new System Performance slices would be low-yield compared with Trading Performance work
 - judged debate and pre-reason skip lanes both remain spine-clean under the accepted bounded-retry policy
 
+Exit metrics to fill before closing this section:
+- sample size: enough fresh live cycles to judge both judged-debate and pre-reason skip lanes without leaning on one-off wins
+- judged debate latency: record current p50 and p95 from the accepted bounded-retry baseline, then decide whether the remaining gap is worth more system work
+- pre-reason skip latency: record current p50 and p95 from the same measurement window to verify skip-lane regressions were not introduced while optimizing debate
+- stall / timeout rate: record the share of fresh cycles that hit bounded retry, seat timeout, or clean debate abort
+- provider-phase attribution: classify the dominant remaining outlier source as connection/preflight, retry wait, or generate-call execution before declaring the section low-yield
+- audit integrity: confirm zero fresh single-sided debates reaching judge and zero fresh audit-spine regressions in the measurement window
+
 Likely next slices:
 1. continue reducing remaining debate-path variance from the improved bounded baseline
 2. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
