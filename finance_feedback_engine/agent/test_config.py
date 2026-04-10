@@ -52,3 +52,9 @@ def test_bounded_field_validation():
         TradingAgentConfig(correlation_threshold=1.1)  # > 1.0
     with pytest.raises(ValidationError):
         TradingAgentConfig(max_correlated_assets=0)  # Not > 0
+
+
+
+def test_default_judged_open_min_confidence_pct():
+    config = TradingAgentConfig()
+    assert config.judged_open_min_confidence_pct == 80.0

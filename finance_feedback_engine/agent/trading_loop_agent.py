@@ -4794,6 +4794,21 @@ class TradingLoopAgent:
         ).upper()
         is_derisking_action = normalized_action.startswith(("CLOSE_", "REDUCE_"))
 
+        judged_open_min_confidence = float(
+            getattr(self.config, "judged_open_min_confidence_pct", 80.0)
+        )
+        if (
+            decision.get("decision_origin") == "judge"
+            and normalized_action.startswith("OPEN_")
+            and float(confidence) < judged_open_min_confidence
+        ):
+            msg = (
+                "Judged open confidence too low "
+                f"({confidence}% < {judged_open_min_confidence:.0f}%)"
+            )
+            logger.info("Skipping trade due to %s", msg)
+            return False, "JUDGED_OPEN_MIN_CONFIDENCE", msg
+
         if (
             self.config.max_daily_trades > 0
             and self.daily_trade_count >= self.config.max_daily_trades

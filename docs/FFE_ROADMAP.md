@@ -120,7 +120,7 @@ Primary audit references:
 
 ## 3. Trading performance
 
-Status: sequenced next section after System Performance, not the same thing as system performance.
+Status: active. Milestone 1 baseline is established, and the first narrow milestone 2 slice is now in TDD rollout.
 
 Goal:
 - improve decision quality and trading outcomes after correctness and system-latency work are on stable footing
@@ -135,6 +135,11 @@ Trading milestone 1: establish the quality baseline
   - drawdown, win-rate, and risk-adjusted returns on the current strategy window
 - rollback / stop rule:
   - do not change decision policy until this baseline exists and is credible enough to compare later slices against
+- current status:
+  - complete enough for sequencing
+  - baseline artifact: `TRADING_BASELINE_2026-04-10.md`
+  - judged-debate entry map artifact: `JUDGED_ENTRY_MAP_2026-04-10.md`
+  - strongest attributable finding: judged-debate opens in the `70-79` confidence bucket are the weakest current judged-entry bucket, while higher-confidence judged opens look directionally better on the limited linked sample
 
 Trading milestone 2: address HOLD-heavy behavior and calibration
 - hypothesis: a meaningful part of current trading underperformance may come from over-conservative action selection or poor confidence calibration rather than raw runtime
@@ -144,6 +149,15 @@ Trading milestone 2: address HOLD-heavy behavior and calibration
   - judged and skip lanes remain audit-clean
 - rollback / stop rule:
   - revert if action-rate changes increase drawdown, reduce expectancy, or blur lane attribution
+- first accepted slice under this milestone:
+  - add a judged-debate-specific open-entry calibration gate so `OPEN_*` actions from `decision_origin="judge"` require at least `80%` confidence, while `HOLD`, `CLOSE_*`, and `REDUCE_*` behavior stays unchanged
+  - rationale: the judged-entry map showed the current `70-79` judged-open bucket was the weakest attributable open bucket in the live sample, so the first lever should tighten low-edge judged opens rather than broaden the strategy globally
+  - TDD guardrails: regression coverage must prove the new gate blocks low-confidence judged opens, preserves de-risking actions, and preserves audit-spine fields on filtered judged decisions
+
+Next concrete slice:
+- complete rollout and soak evaluation of the judged-debate `80%` open-entry confidence gate
+- evidence required: focused green tests for the new judged-open gate seam, deployed runtime using the new gate, and a follow-up baseline window showing whether judged opens, HOLD rate, and linked judged-open outcomes improve without audit regressions
+- decision rule: keep the judged-open gate only if the follow-up window improves judged entry quality or reduces low-edge opens without harming audit-spine integrity or obviously suppressing necessary de-risking behavior
 
 Trading milestone 3: improve regime handling quality
 - hypothesis: some decision-quality loss is likely coming from weak regime-specific behavior rather than from the global policy shape
