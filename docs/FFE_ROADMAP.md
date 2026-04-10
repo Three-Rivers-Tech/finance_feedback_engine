@@ -91,12 +91,15 @@ Likely next slices:
 1. continue reducing remaining debate-path variance from the improved bounded baseline
 2. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
 3. continue refining shared context/prompt shaping only if it directly helps runtime variance from here
-4. add a scoped same-model Gemma experiment to compare against `deepseek-r1:8b` on the one-GPU box, but only as a controlled A/B on all debate seats together, not as a mixed-seat topology change or blind permanent swap
+4. run a scoped same-model `gemma4:e2b` experiment against `deepseek-r1:8b` on the one-GPU box, but only as a controlled A/B on all debate seats together, not as a mixed-seat topology change or blind permanent swap
 5. avoid the rejected role-only generation-option tuning path on the current one-GPU setup, since live variance got worse after that experiment and it was rolled back
 6. re-measure against the original baseline after each accepted slice
 
 Next concrete slice:
-- finish the live evidence pass and classify the remaining outlier source from fresh judged cycles; if pure generate latency still dominates, the next acceptable experiment is a same-model Gemma-vs-DeepSeek debate-seat bakeoff under the existing audit and bounded-retry guards
+- run a controlled `gemma4:e2b` debate-seat bakeoff against the current `deepseek-r1:8b` baseline under the existing audit and bounded-retry guards
+- implementation shape: switch bull, bear, and judge together for the experiment window; do not introduce mixed-seat topology on the one-GPU box
+- evidence required: fresh judged cycles with seat-labeled `generate_s`, judged-cycle p50/p95, fallback or timeout rate, and audit-spine cleanliness
+- decision rule: keep `gemma4:e2b` only if it materially reduces debate latency or tail variance without introducing new fallback behavior, spine regressions, or obvious decision-quality collapse; otherwise revert to `deepseek-r1:8b`
 
 Next major milestone after this section:
 - move from System Performance into Trading Performance only after the runtime/provider outlier source is explicitly classified and additional System Performance slices look lower-value than trading-quality work
