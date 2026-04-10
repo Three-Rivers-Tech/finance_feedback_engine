@@ -58,3 +58,5 @@ def test_bounded_field_validation():
 def test_default_judged_open_min_confidence_pct():
     config = TradingAgentConfig()
     assert config.judged_open_min_confidence_pct == 80.0
+    assert config.judged_open_min_confidence_pct_ranging == 90.0
+    assert config.judged_open_min_confidence_pct_unknown == 90.0

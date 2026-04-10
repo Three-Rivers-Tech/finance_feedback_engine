@@ -329,6 +329,8 @@ class TradingAgentConfig(BaseModel):
     high_volatility_threshold: float = 0.04
     high_volatility_min_confidence: float = 80.0
     judged_open_min_confidence_pct: float = 80.0
+    judged_open_min_confidence_pct_ranging: float = 90.0
+    judged_open_min_confidence_pct_unknown: float = 90.0
     position_size_full_confidence: float = 90.0
     position_size_min_multiplier: float = 0.50
     position_size_high_volatility_scale: float = 0.75
