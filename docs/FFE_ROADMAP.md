@@ -91,11 +91,12 @@ Likely next slices:
 1. continue reducing remaining debate-path variance from the improved bounded baseline
 2. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
 3. continue refining shared context/prompt shaping only if it directly helps runtime variance from here
-4. avoid the rejected role-only generation-option tuning path on the current one-GPU setup, since live variance got worse after that experiment and it was rolled back
-5. re-measure against the original baseline after each accepted slice
+4. add a scoped same-model Gemma experiment to compare against `deepseek-r1:8b` on the one-GPU box, but only as a controlled A/B on all debate seats together, not as a mixed-seat topology change or blind permanent swap
+5. avoid the rejected role-only generation-option tuning path on the current one-GPU setup, since live variance got worse after that experiment and it was rolled back
+6. re-measure against the original baseline after each accepted slice
 
 Next concrete slice:
-- finish the local-provider phase-attribution pass, then use fresh logs to determine whether the next justified cut is connection churn, retry wait, or pure generate latency
+- finish the live evidence pass and classify the remaining outlier source from fresh judged cycles; if pure generate latency still dominates, the next acceptable experiment is a same-model Gemma-vs-DeepSeek debate-seat bakeoff under the existing audit and bounded-retry guards
 
 Next major milestone after this section:
 - move from System Performance into Trading Performance only after the runtime/provider outlier source is explicitly classified and additional System Performance slices look lower-value than trading-quality work
