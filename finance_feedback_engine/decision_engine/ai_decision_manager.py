@@ -378,6 +378,10 @@ class AIDecisionManager:
     ) -> str:
         bull_summary = self._format_case_for_judge("bull", bull_case)
         bear_summary = self._format_case_for_judge("bear", bear_case)
+        position_state = _extract_position_state_from_prompt(prompt)
+        judge_allowed_actions = "\n".join(
+            f"- {action.value}" for action in legal_actions_for_position_state(position_state)
+        )
         return prompt + f"""
 
 DEBATE ROLE: IMPARTIAL JUDGE
@@ -398,6 +402,12 @@ Decision rules:
 - If one case is materially stronger, more specific, and more actionable, prefer that side.
 - Prioritize trend consensus, evidence quality, actionability, and data/execution reliability.
 - Counter-trend trades require exceptional reversal evidence, tight stops, reduced size, and lower confidence.
+
+Allowed policy actions for the current position state:
+{judge_allowed_actions}
+
+Hard constraint:
+- Never output an action outside the allowed policy-action list above.
 
 MANDATORY HOLD CONDITIONS:
 - Both directional cases are weak, generic, or poorly grounded

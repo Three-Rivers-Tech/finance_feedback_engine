@@ -147,6 +147,26 @@ def test_judge_prompt_is_compact_but_keeps_required_hold_rules():
 
 
 
+def test_judge_prompt_includes_position_aware_allowed_actions_for_long_state():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    bull = {"action": "HOLD", "policy_action": "HOLD", "confidence": 40, "market_regime": "ranging", "reasoning": "bull case"}
+    bear = {"action": "HOLD", "policy_action": "HOLD", "confidence": 40, "market_regime": "ranging", "reasoning": "bear case"}
+
+    judge_prompt = manager._build_judge_prompt(
+        "RISK MANAGEMENT & POSITION CONTEXT:\nPosition State: long\nAllowed Policy Actions: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG",
+        bull,
+        bear,
+    )
+
+    assert 'Allowed policy actions for the current position state:' in judge_prompt
+    assert '- ADD_SMALL_LONG' in judge_prompt
+    assert '- REDUCE_LONG' in judge_prompt
+    assert '- CLOSE_LONG' in judge_prompt
+    assert '- OPEN_MEDIUM_LONG' not in judge_prompt
+    assert 'Never output an action outside the allowed policy-action list above.' in judge_prompt
+
+
+
 def test_compact_debate_prompt_keeps_critical_sections_and_is_shorter():
     manager = AIDecisionManager.__new__(AIDecisionManager)
     full_prompt = """

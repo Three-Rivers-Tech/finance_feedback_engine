@@ -21,6 +21,40 @@ from .decision_validation import build_fallback_decision, try_parse_decision_jso
 
 logger = logging.getLogger(__name__)
 
+_POLICY_ACTION_ORDER = [
+    "HOLD",
+    "OPEN_SMALL_LONG",
+    "OPEN_MEDIUM_LONG",
+    "ADD_SMALL_LONG",
+    "REDUCE_LONG",
+    "CLOSE_LONG",
+    "OPEN_SMALL_SHORT",
+    "OPEN_MEDIUM_SHORT",
+    "ADD_SMALL_SHORT",
+    "REDUCE_SHORT",
+    "CLOSE_SHORT",
+]
+_ALLOWED_POLICY_ACTIONS_BLOCK_RE = re.compile(
+    r"Allowed Policy Actions:\s*(.*?)(?:\n\s*\n|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_ALLOWED_POLICY_ACTION_TOKEN_RE = re.compile(
+    r"\b(?:" + "|".join(_POLICY_ACTION_ORDER) + r")\b"
+)
+
+
+def _extract_allowed_policy_actions(prompt: str) -> list[str]:
+    """Extract a narrowed policy-action set from the prompt when present."""
+    text = str(prompt or "")
+    matches = _ALLOWED_POLICY_ACTIONS_BLOCK_RE.findall(text)
+    if not matches:
+        return list(_POLICY_ACTION_ORDER)
+    found = set()
+    for block in matches:
+        found.update(_ALLOWED_POLICY_ACTION_TOKEN_RE.findall(block.upper()))
+    narrowed = [action for action in _POLICY_ACTION_ORDER if action in found]
+    return narrowed or list(_POLICY_ACTION_ORDER)
+
 
 class LocalLLMProvider:
     """
@@ -658,15 +692,16 @@ class LocalLLMProvider:
                 )
 
                 # Create system prompt for trading
+                allowed_actions = _extract_allowed_policy_actions(prompt)
+                allowed_actions_str = ", ".join(allowed_actions)
                 full_prompt = (
                     "You are a professional day trading advisor. "
                     "Analyze market data and provide trading recommendations. "
                     "Respond ONLY with valid JSON containing these exact keys: "
-                    "action (one of HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, ADD_SMALL_LONG, "
-                    "REDUCE_LONG, CLOSE_LONG, OPEN_SMALL_SHORT, OPEN_MEDIUM_SHORT, "
-                    "ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT), confidence (0-100 integer), "
+                    f"action (one of {allowed_actions_str}), confidence (0-100 integer), "
                     "reasoning (brief explanation string), "
-                    "amount (decimal number for position size).\n\n"
+                    "amount (decimal number for position size). "
+                    "Never output an action outside the allowed policy-action list in the prompt.\n\n"
                     f"{prompt}"
                 )
 
