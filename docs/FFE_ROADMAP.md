@@ -120,7 +120,7 @@ Primary audit references:
 
 ## 3. Trading performance
 
-Status: active. Milestone 1 baseline is established, and the first narrow milestone 2 slice is now in TDD rollout.
+Status: active. Milestone 1 baseline is established, and milestone 2 is now pivoting from tighter restriction experiments toward exploration-first learning scaffolding.
 
 Goal:
 - improve decision quality and trading outcomes after correctness and system-latency work are on stable footing
@@ -141,23 +141,31 @@ Trading milestone 1: establish the quality baseline
   - judged-debate entry map artifact: `JUDGED_ENTRY_MAP_2026-04-10.md`
   - strongest attributable finding: judged-debate opens in the `70-79` confidence bucket are the weakest current judged-entry bucket, while higher-confidence judged opens look directionally better on the limited linked sample
 
-Trading milestone 2: address HOLD-heavy behavior and calibration
-- hypothesis: a meaningful part of current trading underperformance may come from over-conservative action selection or poor confidence calibration rather than raw runtime
-- deliverable: one narrow calibration slice that adjusts decision thresholds or confidence use without changing multiple policy levers at once
+Trading milestone 2: add learning scaffolding before broader policy change
+- hypothesis: current underperformance is more likely coming from a weak exploration / abstention / exploitation balance than from a single static threshold, so FFE should become easier to learn from before it becomes more restrictive
+- deliverable: exploration-grade decision logging plus a selective coverage map that shows where `HOLD` appears correct, where openings are under-covered, and where openings look low-quality
 - success criteria:
-  - HOLD rate moves in the intended direction without a corresponding degradation in risk-adjusted outcomes
   - judged and skip lanes remain audit-clean
+  - decision artifacts persist enough policy context to distinguish exploration vs exploitation and reconstruct candidate action quality later
+  - new reporting can summarize action quality by regime, confidence bucket, volatility bucket, and action family without relying on legacy `unknown` lane data
 - rollback / stop rule:
-  - revert if action-rate changes increase drawdown, reduce expectancy, or blur lane attribution
+  - do not enable broader live exploration until the logging spine, replay path, and audit checks are working end to end
+- completed directional test inside this milestone:
+  - the judged-debate `80%` open-entry gate was useful as a narrow calibration probe, but the first soak suggested it mainly reinforced already-HOLD-heavy behavior
+  - decision implication: do not keep tightening by default; use the result as evidence that the next step should be better learning scaffolding, not another stricter gate
 - first accepted slice under this milestone:
-  - add a judged-debate-specific open-entry calibration gate so `OPEN_*` actions from `decision_origin="judge"` require at least `80%` confidence, while `HOLD`, `CLOSE_*`, and `REDUCE_*` behavior stays unchanged
-  - rationale: the judged-entry map showed the current `70-79` judged-open bucket was the weakest attributable open bucket in the live sample, so the first lever should tighten low-edge judged opens rather than broaden the strategy globally
-  - TDD guardrails: regression coverage must prove the new gate blocks low-confidence judged opens, preserves de-risking actions, and preserves audit-spine fields on filtered judged decisions
+  - persist exploration-grade metadata in the decision spine, starting with `policy_family`, `decision_mode`, candidate-action logging, candidate scores or rankings where available, and an explicit bucket for later selective-coverage analysis
+  - keep this slice observational first: improve learning and replay inputs before turning on new live exploration behavior
+  - TDD guardrails: regression coverage must prove the new metadata survives validator construction, filtered-decision persistence, and decision-store round-trips without breaking current audit fields
 
 Next concrete slice:
-- complete rollout and soak evaluation of the judged-debate `80%` open-entry confidence gate
-- evidence required: focused green tests for the new judged-open gate seam, deployed runtime using the new gate, and a follow-up baseline window showing whether judged opens, HOLD rate, and linked judged-open outcomes improve without audit regressions
-- decision rule: keep the judged-open gate only if the follow-up window improves judged entry quality or reduces low-edge opens without harming audit-spine integrity or obviously suppressing necessary de-risking behavior
+- implement exploration-policy scaffolding in the decision spine and update reporting so FFE can generate a selective coverage map from live artifacts
+- evidence required:
+  - focused green tests around `build_policy_trace(...)`, `decision_validator`, trading-loop persistence, and decision-store round-trip behavior
+  - an updated reporting artifact that can group decisions by exploration/exploitation mode, candidate-action context, regime, confidence bucket, and action family
+  - proof that filtered / non-executed decisions still retain the new learning fields
+- decision rule:
+  - once the logging scaffold is live and trustworthy, choose the first tiny-budget exploration experiment only from contexts where the coverage map shows clear under-explored but plausible opportunity
 
 Trading milestone 3: improve regime handling quality
 - hypothesis: some decision-quality loss is likely coming from weak regime-specific behavior rather than from the global policy shape
