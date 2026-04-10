@@ -17,6 +17,7 @@ from .policy_actions import (
     is_structurally_valid,
     legal_actions_for_position_state,
     normalize_policy_action,
+    normalize_position_state,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,10 @@ _POSITION_STATE_RE = re.compile(
     r"CRITICAL CONSTRAINT: You currently have a (LONG|SHORT) position",
     re.IGNORECASE,
 )
+_COMPACT_POSITION_STATE_RE = re.compile(
+    r"Position State:\s*(flat|long|short)",
+    re.IGNORECASE,
+)
 
 
 def _extract_position_state_from_prompt(prompt: str) -> str:
@@ -44,6 +49,9 @@ def _extract_position_state_from_prompt(prompt: str) -> str:
     m = _POSITION_STATE_RE.search(prompt)
     if m:
         return m.group(1).lower()  # 'long' or 'short'
+    compact_match = _COMPACT_POSITION_STATE_RE.search(prompt)
+    if compact_match:
+        return compact_match.group(1).lower()
     return "flat"
 
 
@@ -84,6 +92,31 @@ def _coerce_invalid_role_action(
     case["position_state_coerced"] = True
     case["position_state_original_action"] = original_action
     return case
+
+
+def _allowed_debate_actions_for_role(role: str, position_state: str) -> list[str]:
+    """Return role-specific canonical actions allowed for the current position state.
+
+    This keeps the debate-role suffix aligned with the base prompt's position
+    constraints so the model is not simultaneously told both "you are LONG" and
+    "OPEN_MEDIUM_LONG is allowed".
+    """
+    state = normalize_position_state(position_state)
+    if role == "bull":
+        if state == "flat":
+            return ["HOLD", "OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG"]
+        if state == "long":
+            return ["HOLD", "ADD_SMALL_LONG"]
+        return ["HOLD", "REDUCE_SHORT", "CLOSE_SHORT"]
+
+    if role == "bear":
+        if state == "flat":
+            return ["HOLD", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT"]
+        if state == "long":
+            return ["HOLD", "REDUCE_LONG", "CLOSE_LONG"]
+        return ["HOLD", "ADD_SMALL_SHORT"]
+
+    raise ValueError(f"Unsupported debate role: {role}")
 
 # ENSEMBLE_TIMEOUT now loaded from config (decision_engine.ensemble_timeout, default 30)
 
@@ -573,22 +606,25 @@ Final Rationale: <clear final explanation>
             increment_provider_request,
         )
 
+        _pos_state = _extract_position_state_from_prompt(prompt)
+        bull_allowed_actions = "\n".join(
+            f"- {action}" for action in _allowed_debate_actions_for_role("bull", _pos_state)
+        )
+        bear_allowed_actions = "\n".join(
+            f"- {action}" for action in _allowed_debate_actions_for_role("bear", _pos_state)
+        )
+
         # OPT-3: Parallelize bull/bear LLM calls (asyncio.gather).
         # DATA: Reasoning is 164s avg / 99.5% of cycle time. Bull and bear are
         # independent — only the judge needs both outputs. Parallel cuts ~40%.
-        _bull_prompt_suffix = """
+        _bull_prompt_suffix = f"""
 
 DEBATE ROLE: BULLISH ADVOCATE
 ==============================
 Present the strongest actionable bullish case for this asset.
 
 Allowed policy actions:
-- HOLD
-- OPEN_SMALL_LONG
-- OPEN_MEDIUM_LONG
-- ADD_SMALL_LONG
-- REDUCE_LONG
-- CLOSE_LONG
+{bull_allowed_actions}
 
 Rules:
 - Prioritize multi-timeframe trend alignment, momentum/reversal evidence, structure quality, regime fit, and risk/reward.
@@ -615,19 +651,14 @@ Data Quality: <good|degraded|stale>
 Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
-        _bear_prompt_suffix = """
+        _bear_prompt_suffix = f"""
 
 DEBATE ROLE: BEARISH ADVOCATE
 ==============================
 Present the strongest actionable bearish case for this asset.
 
 Allowed policy actions:
-- HOLD
-- OPEN_SMALL_SHORT
-- OPEN_MEDIUM_SHORT
-- ADD_SMALL_SHORT
-- REDUCE_SHORT
-- CLOSE_SHORT
+{bear_allowed_actions}
 
 Rules:
 - Prioritize multi-timeframe trend alignment, momentum deterioration/reversal evidence, rejection/breakdown quality, regime fit, and risk/reward.
@@ -677,7 +708,6 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Position-state gate: coerce structurally invalid role actions to HOLD
         # before the judge sees them (prevents e.g. OPEN_SMALL_SHORT when long).
-        _pos_state = _extract_position_state_from_prompt(prompt)
         if bull_case is not None:
             bull_case = _coerce_invalid_role_action(bull_case, "bull", _pos_state)
         if bear_case is not None:

@@ -44,6 +44,14 @@ class TestExtractPositionStateFromPrompt:
         prompt = "Status: FLAT (no active position)"
         assert _extract_position_state_from_prompt(prompt) == "flat"
 
+    def test_compact_long_position_detected(self):
+        prompt = "RISK MANAGEMENT & POSITION CONTEXT:\nPosition State: long\nAllowed Policy Actions: HOLD, ADD_SMALL_LONG"
+        assert _extract_position_state_from_prompt(prompt) == "long"
+
+    def test_compact_short_position_detected(self):
+        prompt = "RISK MANAGEMENT & POSITION CONTEXT:\nPosition State: short\nAllowed Policy Actions: HOLD, ADD_SMALL_SHORT"
+        assert _extract_position_state_from_prompt(prompt) == "short"
+
     def test_flat_on_empty_prompt(self):
         assert _extract_position_state_from_prompt("") == "flat"
 
@@ -168,3 +176,17 @@ class TestSynthesizePositionStateGate:
         # Bear case was already coerced upstream, but if it somehow got through,
         # the synth gate catches it
         assert result["action"] in ("HOLD", "ADD_SMALL_LONG")
+
+
+    def test_exact_live_scenario_judge_open_medium_long_while_already_long(self, manager):
+        """If the judge emits OPEN_MEDIUM_LONG while already long, synth must force HOLD."""
+        bull = _make_decision("ADD_SMALL_LONG", 72, "bull wants to add")
+        bear = _make_decision("REDUCE_LONG", 58, "bear wants to trim")
+        judge = _make_decision("OPEN_MEDIUM_LONG", 81, "judge wants to increase long exposure")
+        result = manager.synthesize_debate_decision(
+            bull, bear, judge, position_state="long",
+        )
+        assert result["action"] == "HOLD"
+        assert result["position_state_coerced"] is True
+        assert result["position_state_original_action"] == "OPEN_MEDIUM_LONG"
+        assert "[SYNTH-POSITION-GATE]" in result["reasoning"]

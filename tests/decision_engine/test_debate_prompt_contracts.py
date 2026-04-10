@@ -364,3 +364,91 @@ Extra line to drop
     assert "Position State: flat" in compact
     assert "Allowed Policy Actions: HOLD, OPEN_SMALL_LONG" in compact
     assert "Regime: trending_up" in compact
+
+
+def test_debate_prompts_respect_long_position_action_constraints():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    manager.ensemble_manager = type('E', (), {
+        '_is_valid_provider_response': lambda *args, **kwargs: True,
+        'debate_providers': {'bull': 'gemma2:9b', 'bear': 'llama3.1:8b', 'judge': 'deepseek-r1:8b'},
+        'debate_decisions': lambda self, **kwargs: kwargs['judge_decision'],
+    })()
+    manager.ensemble_timeout = 90
+
+    prompts = []
+
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
+        prompts.append((provider, prompt))
+        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+
+    manager._query_single_provider = fake_query
+
+    base_prompt = """
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Position State: long
+Allowed Policy Actions: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG
+
+=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===
+Status: 📈 LONG position in BTCUSD
+⚠️ CRITICAL CONSTRAINT: You currently have a LONG position.
+Allowed policy actions ONLY: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG
+"""
+
+    import asyncio
+    asyncio.run(manager._debate_mode_inference(prompt=base_prompt))
+
+    bull_prompt = prompts[0][1]
+    bear_prompt = prompts[1][1]
+
+    assert 'Allowed policy actions:\n- HOLD\n- ADD_SMALL_LONG' in bull_prompt
+    assert 'OPEN_SMALL_LONG' not in bull_prompt
+    assert 'OPEN_MEDIUM_LONG' not in bull_prompt
+
+    assert 'Allowed policy actions:\n- HOLD\n- REDUCE_LONG\n- CLOSE_LONG' in bear_prompt
+    assert 'OPEN_SMALL_SHORT' not in bear_prompt
+    assert 'OPEN_MEDIUM_SHORT' not in bear_prompt
+
+
+def test_debate_prompts_respect_short_position_action_constraints():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    manager.ensemble_manager = type('E', (), {
+        '_is_valid_provider_response': lambda *args, **kwargs: True,
+        'debate_providers': {'bull': 'gemma2:9b', 'bear': 'llama3.1:8b', 'judge': 'deepseek-r1:8b'},
+        'debate_decisions': lambda self, **kwargs: kwargs['judge_decision'],
+    })()
+    manager.ensemble_timeout = 90
+
+    prompts = []
+
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
+        prompts.append((provider, prompt))
+        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+
+    manager._query_single_provider = fake_query
+
+    base_prompt = """
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Position State: short
+Allowed Policy Actions: HOLD, ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT
+
+=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===
+Status: 📉 SHORT position in BTCUSD
+⚠️ CRITICAL CONSTRAINT: You currently have a SHORT position.
+Allowed policy actions ONLY: HOLD, ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT
+"""
+
+    import asyncio
+    asyncio.run(manager._debate_mode_inference(prompt=base_prompt))
+
+    bull_prompt = prompts[0][1]
+    bear_prompt = prompts[1][1]
+
+    assert 'Allowed policy actions:\n- HOLD\n- REDUCE_SHORT\n- CLOSE_SHORT' in bull_prompt
+    assert 'OPEN_SMALL_LONG' not in bull_prompt
+    assert 'OPEN_MEDIUM_LONG' not in bull_prompt
+
+    assert 'Allowed policy actions:\n- HOLD\n- ADD_SMALL_SHORT' in bear_prompt
+    assert 'OPEN_SMALL_SHORT' not in bear_prompt
+    assert 'OPEN_MEDIUM_SHORT' not in bear_prompt
