@@ -16,7 +16,8 @@ Status: complete for the core roadmap track, and strong enough to justify perfor
 Completed:
 - fixed collapse of judged/debate outputs into hollow persisted artifacts
 - preserved `decision_origin`, `market_regime`, and debate metadata through engine, AI manager, debate manager, ensemble wrapper, and persistence
-- added focused regression coverage at seam level
+- closed the production-only debate prompt leak where the live `=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===` block was being dropped during compaction, which had allowed structurally invalid `OPEN_*` actions to be proposed while already in-position
+- added focused regression coverage at seam level, including the real production-shaped long/short position block and narrowed allowed-action contract
 - added core smoke coverage for both live lanes:
   - judged debate persistence
   - pre-reason skip persistence
@@ -30,6 +31,7 @@ Exit criteria met:
 
 Release/readiness note:
 - this section is considered complete for roadmap sequencing purposes, but any actual version bump still depends on ordinary soak, deploy verification, and the current known-good runtime state
+- latest correctness proof point: after commit `8355973`, live post-redeploy BTCUSD debate cycles on `gpu-laptop` preserved the position-state block end to end and stopped reproducing the old `OPEN_MEDIUM_LONG while already LONG` warning in the observed verification window
 
 Primary audit references:
 - `memory/2026-04-08.md`
@@ -120,7 +122,7 @@ Primary audit references:
 
 ## 3. Trading performance
 
-Status: active. Milestone 1 baseline is established, and milestone 2 is now pivoting from tighter restriction experiments toward exploration-first learning scaffolding.
+Status: active. Milestone 1 baseline is established, and milestone 2 has completed its first scaffolding/reporting slice; the next step is producer-side enrichment so those new learning fields stop landing as `unspecified` in live artifacts.
 
 Goal:
 - improve decision quality and trading outcomes after correctness and system-latency work are on stable footing
@@ -159,13 +161,16 @@ Trading milestone 2: add learning scaffolding before broader policy change
   - TDD guardrails: regression coverage must prove the new metadata survives validator construction, filtered-decision persistence, and decision-store round-trips without breaking current audit fields
 
 Next concrete slice:
-- implement exploration-policy scaffolding in the decision spine and update reporting so FFE can generate a selective coverage map from live artifacts
+- enrich the live producers so the new exploration fields are actually populated in production artifacts, starting with `decision_mode`, `policy_family`, `coverage_bucket`, and any candidate-action context that can be derived safely from the current trading loop
+- why this is next:
+  - the first selective coverage artifact worked, but `MODE_COUNTS` and `POLICY_FAMILY_COUNTS` were still entirely `unspecified`, so the immediate bottleneck is producer-side enrichment, not more report reshaping
+  - now that the production position-state prompt leak is fixed again, Trading Performance work can resume without the roadmap being distorted by that correctness bug
 - evidence required:
-  - focused green tests around `build_policy_trace(...)`, `decision_validator`, trading-loop persistence, and decision-store round-trip behavior
-  - an updated reporting artifact that can group decisions by exploration/exploitation mode, candidate-action context, regime, confidence bucket, and action family
-  - proof that filtered / non-executed decisions still retain the new learning fields
+  - focused green tests around the producer path that emits decisions into `build_policy_trace(...)`, filtered decisions, and replay / decision-store round trips
+  - a refreshed selective coverage artifact showing materially fewer `unspecified` rows for the new learning dimensions on live data
+  - proof that judged and skip lanes remain spine-clean while the new metadata is filled in
 - decision rule:
-  - once the logging scaffold is live and trustworthy, choose the first tiny-budget exploration experiment only from contexts where the coverage map shows clear under-explored but plausible opportunity
+  - once producer-side enrichment is live and trustworthy, choose the first tiny-budget exploration experiment only from contexts where the coverage map shows clear under-explored but plausible opportunity
 
 Trading milestone 3: improve regime handling quality
 - hypothesis: some decision-quality loss is likely coming from weak regime-specific behavior rather than from the global policy shape
