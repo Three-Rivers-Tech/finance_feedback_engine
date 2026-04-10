@@ -136,6 +136,22 @@ from .policy_actions import (
 logger = logging.getLogger(__name__)
 
 
+def _confidence_bucket_label(confidence: object) -> str:
+    try:
+        value = float(confidence)
+    except (TypeError, ValueError):
+        return "unknown"
+    if value < 50:
+        return "<50"
+    if value < 70:
+        return "50-69"
+    if value < 80:
+        return "70-79"
+    if value < 90:
+        return "80-89"
+    return "90+"
+
+
 class DecisionValidator:
     """
     Validator for trading decisions.
@@ -181,6 +197,27 @@ class DecisionValidator:
             )
             self.portfolio_take_profit_percentage /= 100
 
+    def _derive_policy_family(self, ai_response: Dict[str, Any]) -> str:
+        value = ai_response.get("policy_family")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return "baseline_ffe"
+
+    def _derive_decision_mode(self, ai_response: Dict[str, Any]) -> str:
+        value = ai_response.get("decision_mode")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        return "exploitation"
+
+    def _derive_coverage_bucket(
+        self, context: Dict[str, Any], ai_response: Dict[str, Any]
+    ) -> str:
+        value = ai_response.get("coverage_bucket")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        regime = ai_response.get("market_regime") or context.get("market_regime") or "unknown"
+        return f"{regime}:{_confidence_bucket_label(ai_response.get('confidence'))}"
+
     def create_decision(
         self,
         asset_pair: str,
@@ -211,6 +248,9 @@ class DecisionValidator:
             Structured decision
         """
         decision_id = str(uuid.uuid4())
+        policy_family = self._derive_policy_family(ai_response)
+        decision_mode = self._derive_decision_mode(ai_response)
+        coverage_bucket = self._derive_coverage_bucket(context, ai_response)
 
         # Extract basic decision parameters
         current_price = context.get("market_data", {}).get("close", 0)
@@ -439,9 +479,9 @@ class DecisionValidator:
                 ai_provider=ai_response.get("ai_provider"),
                 timestamp=None,
                 decision_id=decision_id,
-                policy_family=ai_response.get("policy_family"),
-                decision_mode=ai_response.get("decision_mode"),
-                coverage_bucket=ai_response.get("coverage_bucket"),
+                policy_family=policy_family,
+                decision_mode=decision_mode,
+                coverage_bucket=coverage_bucket,
                 exploration_metadata=ai_response.get("exploration_metadata"),
             )
         
@@ -482,9 +522,9 @@ class DecisionValidator:
             "control_outcome": canonical_control_outcome,
             "policy_package": canonical_policy_package,
             "policy_trace": canonical_policy_trace,
-            "policy_family": ai_response.get("policy_family"),
-            "decision_mode": ai_response.get("decision_mode"),
-            "coverage_bucket": ai_response.get("coverage_bucket"),
+            "policy_family": policy_family,
+            "decision_mode": decision_mode,
+            "coverage_bucket": coverage_bucket,
             "exploration_metadata": ai_response.get("exploration_metadata"),
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),

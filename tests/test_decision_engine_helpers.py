@@ -447,6 +447,30 @@ class TestCreateDecisionIntegration:
         assert decision["confidence"] == 61
 
 
+    def test_create_decision_derives_default_learning_metadata(self, decision_engine):
+        context = {
+            "market_data": {"close": 3000.0, "type": "crypto"},
+            "balance": {"coinbase_USD": 10000.0},
+            "price_change": 1.5,
+            "volatility": 0.031,
+            "market_regime": "trending_up",
+            "portfolio": {},
+            "monitoring_context": {},
+        }
+        ai_response = {
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 82,
+            "reasoning": "derive defaults",
+        }
+
+        decision = decision_engine._create_decision("ETHUSD", context, ai_response)
+
+        assert decision["policy_family"] == "baseline_ffe"
+        assert decision["decision_mode"] == "exploitation"
+        assert decision["coverage_bucket"] == "trending_up:80-89"
+        assert decision["policy_trace"]["learning_metadata"]["coverage_bucket"] == "trending_up:80-89"
+
+
     def test_create_decision_close_short_does_not_use_entry_sizing_path(self, decision_engine):
         context = {
             "market_data": {"close": 3000.0, "type": "crypto"},

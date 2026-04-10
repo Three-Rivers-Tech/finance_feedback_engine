@@ -397,6 +397,42 @@ class TestDecisionValidatorContract:
         assert result["policy_trace"]["learning_metadata"]["decision_mode"] == "shadow"
 
 
+    def test_create_decision_derives_default_learning_scaffold_fields(self, validator):
+        context = {
+            "market_regime": "trending_up",
+            "market_data": {"close": 50000.0},
+            "position_state": "flat",
+        }
+        ai_response = {
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 82,
+            "reasoning": "default learning fields",
+        }
+
+        result = validator.create_decision(
+            asset_pair="BTCUSD",
+            context=context,
+            ai_response=ai_response,
+            position_sizing_result={
+                "recommended_position_size": 0.01,
+                "stop_loss_price": 49000,
+                "sizing_stop_loss_percentage": 0.02,
+                "risk_percentage": 0.01,
+            },
+            relevant_balance={"coinbase_FUTURES_USD": 355.0},
+            balance_source="Coinbase",
+            has_existing_position=False,
+            is_crypto=True,
+            is_forex=False,
+        )
+
+        assert result["policy_family"] == "baseline_ffe"
+        assert result["decision_mode"] == "exploitation"
+        assert result["coverage_bucket"] == "trending_up:80-89"
+        assert result["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
+
+
     def test_create_decision_preserves_ai_response_audit_fields(self, validator):
         context = {
             "market_regime": "ranging",
