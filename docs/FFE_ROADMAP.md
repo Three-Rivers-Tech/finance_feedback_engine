@@ -11,7 +11,7 @@ This file is the cleaned structure, not the full narrative log.
 
 ## 1. Core trading correctness and audit spine
 
-Status: complete, version-bump worthy before performance work.
+Status: complete for the core roadmap track, and strong enough to justify performance work proceeding on top of it.
 
 Completed:
 - fixed collapse of judged/debate outputs into hollow persisted artifacts
@@ -27,6 +27,9 @@ Exit criteria met:
 - live pre-reason lane healthy
 - persistence fidelity covered
 - deploy verifier checks spine truth, not just process liveness
+
+Release/readiness note:
+- this section is considered complete for roadmap sequencing purposes, but any actual version bump still depends on ordinary soak, deploy verification, and the current known-good runtime state
 
 Primary audit references:
 - `memory/2026-04-08.md`
