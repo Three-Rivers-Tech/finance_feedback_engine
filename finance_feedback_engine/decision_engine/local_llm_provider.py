@@ -11,6 +11,7 @@ import logging
 import os
 import re
 import subprocess
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -500,6 +501,7 @@ class LocalLLMProvider:
         model_name: str = None,
         system_prompt: Optional[str] = None,
         response_format: Optional[str] = "json",
+        request_timeout_s: Optional[float] = None,
     ) -> str:
         """
         Query local LLM without injecting the trading advisor wrapper.
@@ -525,7 +527,9 @@ class LocalLLMProvider:
             active_model,
             self.model_name,
         )
+        ensure_connection_started = time.perf_counter()
         self.ensure_connection()
+        ensure_connection_s = time.perf_counter() - ensure_connection_started
 
         max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
         llm_timeout = request_timeout_s or self.config.get("api_timeouts", {}).get("llm_query", 120)
@@ -555,6 +559,7 @@ class LocalLLMProvider:
                 if response_format:
                     request_kwargs["format"] = response_format
 
+                generate_started = time.perf_counter()
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(self.ollama_client.generate, **request_kwargs)
                     try:
@@ -562,9 +567,17 @@ class LocalLLMProvider:
                     except Exception:
                         future.cancel()
                         raise
-
+                generate_s = time.perf_counter() - generate_started
                 response_text = response.get("response", "").strip()
                 if response_text:
+                    logger.info(
+                        "Raw local LLM success | model=%s ensure_connection_s=%.3f generate_s=%.3f timeout_s=%s response_chars=%d",
+                        active_model,
+                        ensure_connection_s,
+                        generate_s,
+                        llm_timeout,
+                        len(response_text),
+                    )
                     logger.debug("Raw local LLM response: %s", response_text[:200])
                     self._unload_model()
                     return response_text
@@ -576,9 +589,11 @@ class LocalLLMProvider:
                 )
             except TimeoutError:
                 logger.error(
-                    "Raw local LLM query timed out after %ss on attempt %d",
+                    "Raw local LLM query timed out after %ss on attempt %d | model=%s ensure_connection_s=%.3f",
                     llm_timeout,
                     attempt + 1,
+                    active_model,
+                    ensure_connection_s,
                 )
             except Exception as e:
                 logger.warning(
@@ -589,8 +604,6 @@ class LocalLLMProvider:
                 )
 
             if attempt < max_retries - 1:
-                import time
-
                 time.sleep(2 * (attempt + 1))
 
         self._unload_model()
@@ -623,7 +636,9 @@ class LocalLLMProvider:
         
         logger.info(f"Using model: {active_model} (instance default: {self.model_name})")
         # Verify connection before query (Phase 2 optimization)
+        ensure_connection_started = time.perf_counter()
         self.ensure_connection()
+        ensure_connection_s = time.perf_counter() - ensure_connection_started
 
         # Get max_retries from config (defaults to 3)
         max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
@@ -654,6 +669,7 @@ class LocalLLMProvider:
                 # CPU inference can take 45-120s for complex prompts
                 llm_timeout = self.config.get("api_timeouts", {}).get("llm_query", 120)
 
+                generate_started = time.perf_counter()
                 try:
                     # Run synchronous Ollama call with timeout
                     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -669,19 +685,23 @@ class LocalLLMProvider:
                         )
                         try:
                             response = future.result(timeout=llm_timeout)
-                        except Exception as e:
+                        except Exception:
                             future.cancel()
                             raise
                 except TimeoutError:
-                    logger.error(f"Local LLM query timed out after {llm_timeout}s on attempt {attempt + 1}")
+                    generate_wait_s = time.perf_counter() - generate_started
+                    logger.error(
+                        f"Local LLM query timed out after {llm_timeout}s on attempt {attempt + 1} | "
+                        f"model={active_model} ensure_connection_s={ensure_connection_s:.3f} generate_wait_s={generate_wait_s:.3f}"
+                    )
                     if attempt == max_retries - 1:
                         return build_fallback_decision(
                             f"Local LLM timed out after {llm_timeout}s, using fallback decision."
                         )
-                    import time
                     time.sleep(2 * (attempt + 1))
                     continue
 
+                generate_s = time.perf_counter() - generate_started
                 response_text = response.get("response", "").strip()
 
                 # Check if response is empty
@@ -697,8 +717,6 @@ class LocalLLMProvider:
                         )
 
                     # Retry with a brief delay
-                    import time
-
                     time.sleep(2 * (attempt + 1))
                     continue
 
@@ -737,7 +755,8 @@ class LocalLLMProvider:
 
                     logger.info(
                         f"Local LLM decision: {decision['action']} "
-                        f"({decision['confidence']}%)"
+                        f"({decision['confidence']}%) | model={active_model} "
+                        f"ensure_connection_s={ensure_connection_s:.3f} generate_s={generate_s:.3f}"
                     )
 
                     # Unload model from memory to free GPU resources for next model
@@ -752,7 +771,6 @@ class LocalLLMProvider:
                 self._unload_model()
                 is_structured_fragment = any(fragment in response_text for fragment in ("{", "}"))
                 if is_structured_fragment and attempt < max_retries - 1:
-                    import time
                     time.sleep(2 * (attempt + 1))
                     continue
                 return self._parse_text_response(response_text)
@@ -767,8 +785,6 @@ class LocalLLMProvider:
                     )
 
                 # Retry with a brief delay
-                import time
-
                 time.sleep(2 * (attempt + 1))
 
         # This should never be reached due to the return statements in the loop,
