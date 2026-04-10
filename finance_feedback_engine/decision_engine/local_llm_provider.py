@@ -11,7 +11,6 @@ import logging
 import os
 import re
 import subprocess
-import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -529,7 +528,7 @@ class LocalLLMProvider:
         self.ensure_connection()
 
         max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
-        llm_timeout = self.config.get("api_timeouts", {}).get("llm_query", 120)
+        llm_timeout = request_timeout_s or self.config.get("api_timeouts", {}).get("llm_query", 120)
         full_prompt = (
             f"{system_prompt.strip()}\n\n{prompt}" if system_prompt else prompt
         )
@@ -590,6 +589,7 @@ class LocalLLMProvider:
                 )
 
             if attempt < max_retries - 1:
+                import time
 
                 time.sleep(2 * (attempt + 1))
 
@@ -598,13 +598,7 @@ class LocalLLMProvider:
             f"Local raw query failed after {max_retries} attempts for model {active_model}"
         )
 
-    def query(
-        self,
-        prompt: str,
-        model_name: str = None,
-        generation_options: Optional[Dict[str, Any]] = None,
-        request_label: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    def query(self, prompt: str, model_name: str = None) -> Dict[str, Any]:
         """
         Query local LLM with connection pooling (Phase 2 optimization).
 
@@ -633,19 +627,10 @@ class LocalLLMProvider:
 
         # Get max_retries from config (defaults to 3)
         max_retries = self.config.get("decision_engine", {}).get("max_retries", 3)
-        prompt_chars = len(prompt)
-        request_kind = request_label or "default"
         for attempt in range(max_retries):
-            attempt_started = time.perf_counter()
             try:
                 logger.info(
-                    "Local LLM request start: kind=%s model=%s attempt=%s/%s prompt_chars=%s timeout_s=%s",
-                    request_kind,
-                    active_model,
-                    attempt + 1,
-                    max_retries,
-                    prompt_chars,
-                    self.config.get("api_timeouts", {}).get("llm_query", 120),
+                    f"Querying local LLM: {active_model} (attempt {attempt + 1}/{max_retries})"
                 )
 
                 # Create system prompt for trading
@@ -680,10 +665,6 @@ class LocalLLMProvider:
                             options={
                                 "temperature": 0.7,
                                 "top_p": 0.9,
-                            } if generation_options is None else {
-                                "temperature": 0.7,
-                                "top_p": 0.9,
-                                **generation_options,
                             },
                         )
                         try:
@@ -692,21 +673,13 @@ class LocalLLMProvider:
                             future.cancel()
                             raise
                 except TimeoutError:
-                    logger.error(
-                        "Local LLM query timed out: kind=%s model=%s attempt=%s/%s timeout_s=%s elapsed_s=%.4f prompt_chars=%s",
-                        request_kind,
-                        active_model,
-                        attempt + 1,
-                        max_retries,
-                        llm_timeout,
-                        time.perf_counter() - attempt_started,
-                        prompt_chars,
-                    )
+                    logger.error(f"Local LLM query timed out after {llm_timeout}s on attempt {attempt + 1}")
                     if attempt == max_retries - 1:
                         return build_fallback_decision(
                             f"Local LLM timed out after {llm_timeout}s, using fallback decision."
                         )
-                        time.sleep(2 * (attempt + 1))
+                    import time
+                    time.sleep(2 * (attempt + 1))
                     continue
 
                 response_text = response.get("response", "").strip()
@@ -724,7 +697,8 @@ class LocalLLMProvider:
                         )
 
                     # Retry with a brief delay
-    
+                    import time
+
                     time.sleep(2 * (attempt + 1))
                     continue
 
@@ -762,15 +736,8 @@ class LocalLLMProvider:
                         decision["amount"] = default_position_size
 
                     logger.info(
-                        "Local LLM success: kind=%s model=%s attempt=%s/%s elapsed_s=%.4f prompt_chars=%s action=%s confidence=%s",
-                        request_kind,
-                        active_model,
-                        attempt + 1,
-                        max_retries,
-                        time.perf_counter() - attempt_started,
-                        prompt_chars,
-                        decision['action'],
-                        decision['confidence'],
+                        f"Local LLM decision: {decision['action']} "
+                        f"({decision['confidence']}%)"
                     )
 
                     # Unload model from memory to free GPU resources for next model
@@ -779,33 +746,19 @@ class LocalLLMProvider:
                     return decision
 
                 logger.info(
-                    "Local LLM non-json: kind=%s model=%s attempt=%s/%s elapsed_s=%.4f raw_len=%s raw_prefix=%r",
-                    request_kind,
-                    active_model,
-                    attempt + 1,
-                    max_retries,
-                    time.perf_counter() - attempt_started,
-                    len(response_text),
-                    response_text[:200],
+                    f"LLM response missing required fields or not JSON on attempt {attempt + 1}, "
+                    f"raw_len={len(response_text)}, raw prefix: {repr(response_text[:200])}"
                 )
                 self._unload_model()
                 is_structured_fragment = any(fragment in response_text for fragment in ("{", "}"))
                 if is_structured_fragment and attempt < max_retries - 1:
+                    import time
                     time.sleep(2 * (attempt + 1))
                     continue
                 return self._parse_text_response(response_text)
 
             except Exception as e:
-                logger.error(
-                    "Local LLM error: kind=%s model=%s attempt=%s/%s elapsed_s=%.4f prompt_chars=%s error=%s",
-                    request_kind,
-                    active_model,
-                    attempt + 1,
-                    max_retries,
-                    time.perf_counter() - attempt_started,
-                    prompt_chars,
-                    e,
-                )
+                logger.error(f"Local LLM error on attempt {attempt + 1}: {e}")
 
                 # If this is the last attempt, return fallback
                 if attempt == max_retries - 1:
@@ -814,6 +767,7 @@ class LocalLLMProvider:
                     )
 
                 # Retry with a brief delay
+                import time
 
                 time.sleep(2 * (attempt + 1))
 

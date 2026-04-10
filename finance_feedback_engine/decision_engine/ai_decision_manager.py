@@ -208,6 +208,9 @@ class AIDecisionManager:
             "amount": 0.0,
         }
 
+    def _debate_role_retry_policy(self) -> Dict[str, Any]:
+        return {"max_attempts": 2, "per_attempt_timeout_s": 30, "total_timeout_s": 45}
+
     async def _query_debate_role(
         self,
         role: str,
@@ -216,66 +219,77 @@ class AIDecisionManager:
         base_prompt: str,
         increment_provider_request,
     ) -> Dict[str, Any]:
-        """Query a single debate role (bull/bear) with error handling.
-
-        Returns dict with 'case' (the decision or None) and 'failed' (list of
-        failed provider names).  Used by _debate_mode_inference to run bull and
-        bear concurrently via asyncio.gather (OPT-3).
-        """
         failed: list[str] = []
         full_prompt = base_prompt + prompt_suffix
         prompt_chars = len(full_prompt)
+        retry_policy = self._debate_role_retry_policy()
         logger.info(
             "DEBATE role start: role=%s provider=%s prompt_chars=%s",
             role,
             provider,
             prompt_chars,
         )
-        _timing_started = time.perf_counter()
-        try:
-            case = await self._query_single_provider(
-                provider,
-                full_prompt,
-                request_label=f"debate:{role}",
-            )
-            if not self.ensemble_manager._is_valid_provider_response(case, provider):
-                logger.warning("Debate: %s (%s) returned invalid response", provider, role)
-                failed.append(provider)
-                increment_provider_request(provider, "failure")
-                case = None
-            elif isinstance(case, dict) and case.get("decision_origin") == "fallback":
+        role_started = time.perf_counter()
+        case = None
+
+        for attempt in range(1, retry_policy["max_attempts"] + 1):
+            elapsed_total = time.perf_counter() - role_started
+            if elapsed_total >= retry_policy["total_timeout_s"]:
                 logger.warning(
-                    "Debate: %s (%s) returned fallback decision (reason: %s) — "
-                    "treating as provider failure to prevent ghost HOLD",
-                    provider, role, case.get("filtered_reason_code", "unknown"),
+                    "DEBATE role cap exceeded before attempt: role=%s provider=%s elapsed_total_s=%.4f cap_s=%s",
+                    role,
+                    provider,
+                    elapsed_total,
+                    retry_policy["total_timeout_s"],
                 )
                 failed.append(provider)
-                increment_provider_request(provider, "failure")
-                case = None
-            else:
-                logger.info(
-                    "Debate: %s (%s) -> %s (%s%%)",
-                    provider, role, case.get('action'), case.get('confidence'),
+                increment_provider_request(provider, "error")
+                break
+
+            try:
+                case = await self._query_single_provider(
+                    provider,
+                    full_prompt,
+                    request_label=f"debate:{role}",
+                    request_timeout_s=retry_policy["per_attempt_timeout_s"],
                 )
-                increment_provider_request(provider, "success")
-        except asyncio.TimeoutError:
-            logger.error(
-                "Debate: %s provider timed out", role,
-                extra={"provider": provider, "role": role, "timeout_seconds": self.ensemble_timeout},
-            )
+                if self.ensemble_manager._is_valid_provider_response(case, provider):
+                    increment_provider_request(provider, "success")
+                    break
+                logger.warning(
+                    "DEBATE role invalid response: role=%s provider=%s attempt=%s/%s",
+                    role,
+                    provider,
+                    attempt,
+                    retry_policy["max_attempts"],
+                )
+                increment_provider_request(provider, "invalid")
+                case = None
+            except Exception as e:
+                logger.error(
+                    "Debate: %s provider failed on attempt %s/%s: %s",
+                    role,
+                    attempt,
+                    retry_policy["max_attempts"],
+                    e,
+                )
+                increment_provider_request(provider, "error")
+                case = None
+
+            if attempt < retry_policy["max_attempts"] and (time.perf_counter() - role_started) < retry_policy["total_timeout_s"]:
+                logger.info(
+                    "DEBATE role retrying: role=%s provider=%s next_attempt=%s elapsed_total_s=%.4f cap_s=%s",
+                    role,
+                    provider,
+                    attempt + 1,
+                    time.perf_counter() - role_started,
+                    retry_policy["total_timeout_s"],
+                )
+                continue
             failed.append(provider)
-            increment_provider_request(provider, "failure")
-            case = None
-        except Exception as e:
-            logger.error(
-                "Debate: %s provider failed with exception", role,
-                extra={"provider": provider, "role": role, "error": str(e), "error_type": type(e).__name__},
-                exc_info=True,
-            )
-            failed.append(provider)
-            increment_provider_request(provider, "failure")
-            case = None
-        elapsed_s = time.perf_counter() - _timing_started
+            break
+
+        elapsed_s = time.perf_counter() - role_started
         logger.info(
             "DEBATE role done: role=%s provider=%s elapsed_s=%.4f prompt_chars=%s failed=%s",
             role,
@@ -285,211 +299,6 @@ class AIDecisionManager:
             bool(failed),
         )
         return {"case": case, "failed": failed, "elapsed_s": elapsed_s}
-
-    @staticmethod
-    def _truncate_for_judge(text: Optional[str], max_chars: int = 240) -> str:
-        if not text:
-            return "No reasoning provided"
-        normalized = " ".join(str(text).split())
-        if len(normalized) <= max_chars:
-            return normalized
-        return normalized[: max_chars - 3].rstrip() + "..."
-
-    def _format_case_for_judge(self, side: str, case: Optional[Dict[str, Any]]) -> str:
-        if not case:
-            return f"{side.title()} provider failed"
-        reasoning = self._truncate_for_judge(case.get("reasoning"))
-        action = case.get("policy_action") or case.get("action") or "unknown"
-        confidence = case.get("confidence")
-        regime = case.get("market_regime") or "unknown"
-        return (
-            f"Action: {action}\n"
-            f"Confidence: {confidence}\n"
-            f"Regime: {regime}\n"
-            f"Reasoning Summary: {reasoning}"
-        )
-
-    def _build_judge_prompt(
-        self,
-        prompt: str,
-        bull_case: Optional[Dict[str, Any]],
-        bear_case: Optional[Dict[str, Any]],
-    ) -> str:
-        bull_summary = self._format_case_for_judge("bull", bull_case)
-        bear_summary = self._format_case_for_judge("bear", bear_case)
-        return prompt + f"""
-
-DEBATE ROLE: IMPARTIAL JUDGE
-=============================
-You are the final arbiter on a trading decision council.
-Evaluate both cases and choose the strongest actionable edge, or HOLD if neither clears the bar.
-
-Bull case summary:
-{bull_summary}
-
-Bear case summary:
-{bear_summary}
-
-Decision rules:
-- Do NOT reward persuasive writing.
-- HOLD is an active decision, not the default fallback.
-- Do not choose HOLD merely because the bull and bear disagree.
-- If one case is materially stronger, more specific, and more actionable, prefer that side.
-- Prioritize trend consensus, evidence quality, actionability, and data/execution reliability.
-- Counter-trend trades require exceptional reversal evidence, tight stops, reduced size, and lower confidence.
-
-MANDATORY HOLD CONDITIONS:
-- Both directional cases are weak, generic, or poorly grounded
-- Evidence is too mixed to justify positive expected value even for a small position
-- Data is stale, degraded, or market is closed
-- Execution or sizing context is incomplete or unreliable
-- Proposed trade is counter-trend without exceptional reversal evidence
-
-IMPORTANT HOLD RULE:
-- Disagreement alone is not sufficient for HOLD.
-- If one case is materially stronger on evidence quality, market coherence, and actionability, choose that side.
-- Choose HOLD only if neither side clears the threshold for an actionable trade.
-
-Return ONLY valid JSON with these exact keys:
-- action
-- confidence
-- reasoning
-- amount
-
-In reasoning, use this exact mini-structure:
-Winning Thesis: <bull|bear|neither>
-Decision Basis: <main factor that decided the outcome>
-Why Not Bull: <required when final action is HOLD or bear-side action>
-Why Not Bear: <required when final action is HOLD or bull-side action>
-Actionability: <actionable_now|monitor|no_trade>
-Data Quality: <good|degraded|stale>
-Missing Evidence: <what would have been needed to justify the losing side or convert HOLD into action>
-Final Rationale: <clear final explanation>
-"""
-
-    @staticmethod
-    def _extract_prompt_section(prompt: str, header: str) -> str:
-        lines = prompt.splitlines()
-        marker = f"{header}:"
-        start_idx = None
-        for i, line in enumerate(lines):
-            if line.strip() == marker:
-                start_idx = i
-                break
-        if start_idx is None:
-            return ""
-
-        captured = []
-        i = start_idx
-        while i < len(lines):
-            line = lines[i]
-            if i > start_idx and i + 1 < len(lines):
-                next_line = lines[i + 1].strip()
-                if line.strip().endswith(":") and set(next_line) <= {"-"} and next_line:
-                    break
-            captured.append(line)
-            i += 1
-        return "\n".join(captured).strip()
-
-    @staticmethod
-    def _compact_prompt_section_for_debate(header: str, section: str) -> str:
-        lines = [line for line in section.splitlines() if line.strip()]
-        if not lines:
-            return ""
-
-        header_line = lines[0]
-        body = lines[1:]
-
-        if header == "PRICE DATA":
-            keep = [line for line in body if any(key in line for key in ["Close:", "Trend:", "Volume:"])]
-            return "\n".join([header_line] + keep[:4])
-
-        if header == "TEMPORAL CONTEXT":
-            keep = [line for line in body if any(key in line for key in ["Market Status:", "Current Time:", "Session:"])]
-            return "\n".join([header_line] + keep[:3])
-
-        if header == "TECHNICAL INDICATORS":
-            keep = [line for line in body if any(key in line for key in ["RSI", "MACD", "Stochastic", "ATR", "ADX"])]
-            return "\n".join([header_line] + keep[:5])
-
-        if header == "MULTI-TIMEFRAME TREND ANALYSIS":
-            keep = []
-            for line in body:
-                if (
-                    "Weighted Trend Score:" in line
-                    or "Consensus:" in line
-                    or line.startswith("  1d:")
-                    or line.startswith("  4h:")
-                    or line.startswith("  1h:")
-                ):
-                    keep.append(line)
-            return "\n".join([header_line] + keep)
-
-        if header in {"RISK MANAGEMENT & POSITION CONTEXT", "RISK CONSTRAINTS"}:
-            keep = [line for line in body if any(key in line for key in [
-                "Position State:",
-                "Allowed Policy Actions:",
-                "Position Size:",
-                "Stop Loss:",
-                "Take Profit:",
-                "Risk/Reward:",
-                "Max Risk:",
-            ])]
-            return "\n".join([header_line] + keep[:8])
-
-        if header in {"PORTFOLIO CONTEXT", "PORTFOLIO SUMMARY"}:
-            keep = [line for line in body if any(key in line for key in [
-                "Cash available:",
-                "Open positions:",
-                "Total Portfolio Value:",
-                "Number of Assets:",
-                "Unrealized P&L:",
-            ])]
-            return "\n".join([header_line] + keep[:5])
-
-        if header == "MARKET BRIEF":
-            keep = [line for line in body if any(key in line for key in ["Regime:", "Summary:", "Key Question:", "Confidence:"])]
-            return "\n".join([header_line] + keep[:5])
-
-        return section
-
-    def _build_compact_debate_prompt(self, prompt: str, market_regime: Optional[str] = None) -> str:
-        sections = []
-        extracted_market_brief = self._extract_prompt_section(prompt, "MARKET BRIEF")
-        extracted_regime = None
-        for candidate in ["trending_up", "trending_down", "ranging"]:
-            if f"Regime: {candidate}" in extracted_market_brief:
-                extracted_regime = candidate
-                break
-        regime = market_regime or extracted_regime or "unknown"
-        sections.append("TRADING DECISION CONTEXT (COMPACT DEBATE MODE)")
-        sections.append(f"Market Regime: {regime}")
-
-        seen = set()
-        for header in [
-            "PRICE DATA",
-            "TEMPORAL CONTEXT",
-            "TECHNICAL INDICATORS",
-            "MULTI-TIMEFRAME TREND ANALYSIS",
-            "RISK MANAGEMENT & POSITION CONTEXT",
-            "PORTFOLIO CONTEXT",
-            "MARKET BRIEF",
-            "POSITION STATE",
-            "ALLOWED POLICY ACTIONS",
-            "PORTFOLIO SUMMARY",
-            "MARKET DATA",
-            "MULTI-TIMEFRAME ANALYSIS",
-            "RISK CONSTRAINTS",
-        ]:
-            section = self._extract_prompt_section(prompt, header)
-            if section:
-                section = self._compact_prompt_section_for_debate(header, section)
-            if section and section not in seen:
-                sections.append(section)
-                seen.add(section)
-
-        compact = "\n\n".join(sections)
-        return compact[:4000]
 
     async def _debate_mode_inference(
         self,
@@ -761,7 +570,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         return final_decision
 
     async def _query_single_provider(
-        self, provider_name: str, prompt: str, request_label: Optional[str] = None
+        self, provider_name: str, prompt: str
     ) -> Dict[str, Any]:
         """Helper to query a single, specified AI provider."""
         # Import inline to avoid circular dependencies
@@ -769,15 +578,11 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route Ollama models to local inference with specific model
         if is_ollama_model(provider_name):
-            return await self._local_ai_inference(
-                prompt,
-                model_name=provider_name,
-                request_label=request_label,
-            )
+            return await self._local_ai_inference(prompt, model_name=provider_name)
 
         # Route abstract provider names
         if provider_name == "local":
-            return await self._local_ai_inference(prompt, request_label=request_label)
+            return await self._local_ai_inference(prompt)
         elif provider_name == "cli":
             return await self._cli_ai_inference(prompt)
         elif provider_name == "codex":
@@ -990,7 +795,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             raise RuntimeError("Local raw LLM query failed") from e
 
     async def _local_ai_inference(
-        self, prompt: str, model_name: Optional[str] = None, request_label: Optional[str] = None
+        self, prompt: str, model_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Local AI inference using Ollama LLM.
