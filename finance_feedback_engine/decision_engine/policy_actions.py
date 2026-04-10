@@ -426,6 +426,8 @@ def build_policy_trace(
     decision_mode: Optional[str] = None,
     coverage_bucket: Optional[str] = None,
     exploration_metadata: Optional[dict] = None,
+    candidate_actions: Optional[list[str]] = None,
+    candidate_action_scores: Optional[dict] = None,
 ) -> dict:
     return {
         "policy_package": dict(policy_package) if isinstance(policy_package, dict) else None,
@@ -451,6 +453,12 @@ def build_policy_trace(
                 dict(exploration_metadata)
                 if isinstance(exploration_metadata, dict)
                 else exploration_metadata
+            ),
+            "candidate_actions": list(candidate_actions) if isinstance(candidate_actions, list) else candidate_actions,
+            "candidate_action_scores": (
+                dict(candidate_action_scores)
+                if isinstance(candidate_action_scores, dict)
+                else candidate_action_scores
             ),
         },
         "trace_version": 1,
@@ -525,6 +533,16 @@ def build_policy_replay_record(decision: Optional[dict]) -> Optional[dict]:
             if isinstance((learning_metadata or {}).get("exploration_metadata"), dict)
             else payload.get("exploration_metadata")
         ),
+        "candidate_actions": (
+            list((learning_metadata or {}).get("candidate_actions"))
+            if isinstance((learning_metadata or {}).get("candidate_actions"), list)
+            else payload.get("candidate_actions")
+        ),
+        "candidate_action_scores": (
+            dict((learning_metadata or {}).get("candidate_action_scores"))
+            if isinstance((learning_metadata or {}).get("candidate_action_scores"), dict)
+            else payload.get("candidate_action_scores")
+        ),
         "control_outcome": (
             ((policy_trace.get("policy_package") or {}).get("control_outcome"))
             if isinstance(policy_trace.get("policy_package"), dict)
@@ -557,6 +575,8 @@ def build_policy_dataset_row(replay_record: Optional[dict]) -> Optional[dict]:
         "decision_mode": payload.get("decision_mode"),
         "coverage_bucket": payload.get("coverage_bucket"),
         "exploration_metadata": payload.get("exploration_metadata"),
+        "candidate_actions": payload.get("candidate_actions"),
+        "candidate_action_scores": payload.get("candidate_action_scores"),
         "policy_state": policy_package.get("policy_state"),
         "action_context": policy_package.get("action_context"),
         "policy_sizing_intent": policy_package.get("policy_sizing_intent"),

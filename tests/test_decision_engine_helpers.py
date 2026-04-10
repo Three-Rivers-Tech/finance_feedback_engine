@@ -447,6 +447,31 @@ class TestCreateDecisionIntegration:
         assert decision["confidence"] == 61
 
 
+    def test_create_decision_preserves_explicit_candidate_action_fields(self, decision_engine):
+        context = {
+            "market_data": {"close": 3000.0, "type": "crypto"},
+            "balance": {"coinbase_USD": 10000.0},
+            "price_change": 1.5,
+            "volatility": 0.031,
+            "market_regime": "trending_up",
+            "portfolio": {},
+            "monitoring_context": {},
+        }
+        ai_response = {
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 82,
+            "reasoning": "explicit candidates",
+            "candidate_actions": ["HOLD", "OPEN_SMALL_LONG"],
+            "candidate_action_scores": {"HOLD": 21, "OPEN_SMALL_LONG": 82},
+        }
+
+        decision = decision_engine._create_decision("ETHUSD", context, ai_response)
+
+        assert decision["candidate_actions"] == ["HOLD", "OPEN_SMALL_LONG"]
+        assert decision["candidate_action_scores"] == {"HOLD": 21.0, "OPEN_SMALL_LONG": 82.0}
+        assert decision["policy_trace"]["learning_metadata"]["candidate_actions"] == ["HOLD", "OPEN_SMALL_LONG"]
+
+
     def test_create_decision_derives_default_learning_metadata(self, decision_engine):
         context = {
             "market_data": {"close": 3000.0, "type": "crypto"},

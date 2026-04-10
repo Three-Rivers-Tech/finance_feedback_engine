@@ -356,6 +356,29 @@ class TestDecisionValidatorContract:
         assert result["confidence"] == 85
 
 
+    def test_create_decision_derives_candidate_action_defaults(self, validator):
+        result = validator.create_decision(
+            asset_pair="BTCUSD",
+            context={"market_regime": "ranging", "market_data": {"close": 50000.0}, "position_state": "flat"},
+            ai_response={"policy_action": "HOLD", "confidence": 61, "reasoning": "default candidates"},
+            position_sizing_result={
+                "recommended_position_size": 0,
+                "stop_loss_price": 50000,
+                "sizing_stop_loss_percentage": 0.02,
+                "risk_percentage": 0.01,
+            },
+            relevant_balance={"coinbase_FUTURES_USD": 355.0},
+            balance_source="Coinbase",
+            has_existing_position=False,
+            is_crypto=True,
+            is_forex=False,
+        )
+
+        assert result["candidate_actions"] == ["HOLD"]
+        assert result["candidate_action_scores"] == {"HOLD": 61.0}
+        assert result["policy_trace"]["learning_metadata"]["candidate_action_scores"] == {"HOLD": 61.0}
+
+
     def test_create_decision_preserves_learning_scaffold_fields(self, validator):
         context = {
             "market_regime": "ranging",

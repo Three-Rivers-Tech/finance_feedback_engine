@@ -749,6 +749,22 @@ def test_build_policy_replay_record_extracts_canonical_replay_surface():
 
 
 
+def test_build_policy_trace_preserves_candidate_action_fields():
+    trace = build_policy_trace(
+        policy_package={},
+        action="OPEN_SMALL_LONG",
+        policy_action="OPEN_SMALL_LONG",
+        confidence=82,
+        reasoning="test",
+        candidate_actions=["HOLD", "OPEN_SMALL_LONG"],
+        candidate_action_scores={"HOLD": 31.0, "OPEN_SMALL_LONG": 82.0},
+    )
+
+    learning = trace["learning_metadata"]
+    assert learning["candidate_actions"] == ["HOLD", "OPEN_SMALL_LONG"]
+    assert learning["candidate_action_scores"]["OPEN_SMALL_LONG"] == 82.0
+
+
 def test_build_policy_replay_record_returns_none_without_policy_trace():
     assert build_policy_replay_record({"id": "legacy-1", "action": "BUY"}) is None
 
@@ -784,6 +800,8 @@ def test_build_policy_dataset_row_preserves_learning_metadata_fields():
     assert row["decision_mode"] == "exploration"
     assert row["coverage_bucket"] == "trending_up:80-89"
     assert row["exploration_metadata"]["experiment_id"] == "exp-2"
+    assert row["candidate_actions"] is None
+    assert row["candidate_action_scores"] is None
 
 
 def test_build_policy_dataset_row_extracts_canonical_dataset_surface():

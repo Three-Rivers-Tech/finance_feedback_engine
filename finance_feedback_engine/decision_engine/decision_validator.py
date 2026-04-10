@@ -152,6 +152,51 @@ def _confidence_bucket_label(confidence: object) -> str:
     return "90+"
 
 
+def _normalize_candidate_actions(value: object, chosen_action: object) -> Optional[list[str]]:
+    actions: list[str] = []
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            if item is None:
+                continue
+            normalized = str(item).strip()
+            if normalized and normalized not in actions:
+                actions.append(normalized)
+    chosen = str(chosen_action).strip() if chosen_action is not None else ""
+    if chosen and chosen not in actions:
+        actions.append(chosen)
+    return actions or None
+
+
+def _normalize_candidate_action_scores(
+    value: object, candidate_actions: Optional[list[str]], chosen_action: object, confidence: object
+) -> Optional[dict[str, float]]:
+    scores: dict[str, float] = {}
+    if isinstance(value, dict):
+        for key, raw_score in value.items():
+            if key is None:
+                continue
+            normalized_key = str(key).strip()
+            if not normalized_key:
+                continue
+            try:
+                scores[normalized_key] = float(raw_score)
+            except (TypeError, ValueError):
+                continue
+    chosen = str(chosen_action).strip() if chosen_action is not None else ""
+    if chosen and chosen not in scores:
+        try:
+            scores[chosen] = float(confidence)
+        except (TypeError, ValueError):
+            pass
+    if candidate_actions:
+        ordered_scores: dict[str, float] = {}
+        for action in candidate_actions:
+            if action in scores:
+                ordered_scores[action] = scores[action]
+        scores = ordered_scores
+    return scores or None
+
+
 class DecisionValidator:
     """
     Validator for trading decisions.
@@ -255,6 +300,13 @@ class DecisionValidator:
         # Extract basic decision parameters
         current_price = context.get("market_data", {}).get("close", 0)
         action = ai_response.get("policy_action") or ai_response.get("action", "HOLD")
+        candidate_actions = _normalize_candidate_actions(ai_response.get("candidate_actions"), action)
+        candidate_action_scores = _normalize_candidate_action_scores(
+            ai_response.get("candidate_action_scores") or ai_response.get("action_scores"),
+            candidate_actions,
+            action,
+            ai_response.get("confidence"),
+        )
         effective_legacy_action = (
             get_legacy_action_compatibility(action)
             if is_policy_action(action)
@@ -483,6 +535,8 @@ class DecisionValidator:
                 decision_mode=decision_mode,
                 coverage_bucket=coverage_bucket,
                 exploration_metadata=ai_response.get("exploration_metadata"),
+                candidate_actions=candidate_actions,
+                candidate_action_scores=candidate_action_scores,
             )
         
         confidence_pct = float(ai_response.get("confidence", 0) or 0)
@@ -526,6 +580,8 @@ class DecisionValidator:
             "decision_mode": decision_mode,
             "coverage_bucket": coverage_bucket,
             "exploration_metadata": ai_response.get("exploration_metadata"),
+            "candidate_actions": candidate_actions,
+            "candidate_action_scores": candidate_action_scores,
             "confidence": ai_response.get("confidence", 50),
             "reasoning": ai_response.get("reasoning", "No reasoning provided"),
             "suggested_amount": suggested_amount,
