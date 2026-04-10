@@ -88,18 +88,28 @@ Exit metrics to fill before closing this section:
 - audit integrity: confirm zero fresh single-sided debates reaching judge and zero fresh audit-spine regressions in the measurement window
 
 Likely next slices:
-1. continue reducing remaining debate-path variance from the improved bounded baseline
-2. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
-3. continue refining shared context/prompt shaping only if it directly helps runtime variance from here
-4. run a scoped same-model `gemma4:e2b` experiment against `deepseek-r1:8b` on the one-GPU box, but only as a controlled A/B on all debate seats together, not as a mixed-seat topology change or blind permanent swap
+1. finish the current same-model `gemma4:e2b` bakeoff measurement window and write the decision note before touching another runtime slice
+2. continue reducing remaining debate-path variance from the improved bounded baseline only if the Gemma soak shows a real unresolved tail after the current bakeoff window
+3. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
+4. continue refining shared context/prompt shaping only if it directly helps runtime variance from here
 5. avoid the rejected role-only generation-option tuning path on the current one-GPU setup, since live variance got worse after that experiment and it was rolled back
 6. re-measure against the original baseline after each accepted slice
 
+Interim `gemma4:e2b` bakeoff evidence:
+- experiment is live on Asus after upgrading Ollama to `0.20.5`; bull, bear, and judge all moved together to `gemma4:e2b`
+- current fresh sample from the first accepted soak window: 5 seat-labeled judged Gemma cycles, 0 observed debate timeouts, 0 observed provider/fallback failures, 0 clean debate aborts
+- current Gemma debate-seat timings from that window:
+  - bull: p50 about `8.452s`, p95 about `10.552s`
+  - bear: p50 about `11.188s`, p95 about `11.647s`
+  - judge: p50 about `4.545s`, p95 about `4.832s`
+- comparison against the earlier DeepSeek same-model sample is directionally encouraging, especially on judge latency and the bull seat, but the current sample is still too small to treat as a keep/revert decision by itself
+- current read: Gemma is a credible candidate on the one-GPU box and has not shown hidden audit, fallback, or timeout regressions so far, but the section should stay open until the soak window is large enough to trust p50/p95 and tail behavior
+
 Next concrete slice:
-- run a controlled `gemma4:e2b` debate-seat bakeoff against the current `deepseek-r1:8b` baseline under the existing audit and bounded-retry guards
-- implementation shape: switch bull, bear, and judge together for the experiment window; do not introduce mixed-seat topology on the one-GPU box
-- evidence required: fresh judged cycles with seat-labeled `generate_s`, judged-cycle p50/p95, fallback or timeout rate, and audit-spine cleanliness
-- decision rule: keep `gemma4:e2b` only if it materially reduces debate latency or tail variance without introducing new fallback behavior, spine regressions, or obvious decision-quality collapse; otherwise revert to `deepseek-r1:8b`
+- continue the live `gemma4:e2b` bakeoff until the measurement window is large enough to close the decision gate for Section 2
+- evidence required before the decision note is final: judged-debate p50/p95, pre-reason skip-lane p50/p95, timeout/retry/clean-abort rate, and audit-spine cleanliness from the same window
+- decision rule: keep `gemma4:e2b` only if the larger soak still shows materially better debate latency or tail variance without introducing new fallback behavior, spine regressions, or obvious decision-quality collapse; otherwise revert to `deepseek-r1:8b`
+- if the larger soak confirms Gemma and the remaining tails look low-yield, close System Performance and move to Trading Performance milestone 1
 
 Next major milestone after this section:
 - move from System Performance into Trading Performance only after the runtime/provider outlier source is explicitly classified and additional System Performance slices look lower-value than trading-quality work
