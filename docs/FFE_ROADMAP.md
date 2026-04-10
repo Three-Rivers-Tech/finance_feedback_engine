@@ -36,7 +36,7 @@ Primary audit references:
 
 ## 2. System performance
 
-Status: active.
+Status: decision-complete for the current runtime-model slice, with low-touch soak still appropriate.
 
 Goal:
 - reduce cycle latency and reasoning cost without changing trading intent
@@ -51,6 +51,7 @@ Measured progress so far:
 - catastrophic single-seat stalls are materially better contained than before due to bounded retry/timeout behavior
 - current accepted seat retry policy remains the known live `30s` per attempt / `45s` total budget unless explicitly changed and re-verified later
 - provider execution time, not Python-side queue wait, is the leading remaining outlier source from the latest attribution work
+- the controlled same-model `gemma4:e2b` bakeoff has now produced a strong enough live sample to accept Gemma as the current debate-seat baseline on the one-GPU box
 
 Completed in this section so far:
 1. instrumented reasoning-path timings in detail
@@ -88,31 +89,30 @@ Exit metrics to fill before closing this section:
 - audit integrity: confirm zero fresh single-sided debates reaching judge and zero fresh audit-spine regressions in the measurement window
 
 Likely next slices:
-1. finish the current same-model `gemma4:e2b` bakeoff measurement window and write the decision note before touching another runtime slice
-2. continue reducing remaining debate-path variance from the improved bounded baseline only if the Gemma soak shows a real unresolved tail after the current bakeoff window
-3. investigate one-GPU provider-runtime hygiene and serialization only where fresh attribution logs point, rather than reopening broad prompt surgery
+1. enter Trading Performance milestone 1 and establish the lane/regime quality baseline before touching decision policy
+2. keep passive Gemma soak monitoring in the background, and only reopen System Performance if the longer window reveals a new tail, retry cluster, or audit regression
+3. investigate one-GPU provider-runtime hygiene and serialization only if the background soak produces fresh attribution evidence that the new baseline is still materially unstable
 4. continue refining shared context/prompt shaping only if it directly helps runtime variance from here
 5. avoid the rejected role-only generation-option tuning path on the current one-GPU setup, since live variance got worse after that experiment and it was rolled back
-6. re-measure against the original baseline after each accepted slice
+6. re-measure against the original baseline after each accepted slice when future system work resumes
 
-Interim `gemma4:e2b` bakeoff evidence:
+Accepted `gemma4:e2b` bakeoff decision:
 - experiment is live on Asus after upgrading Ollama to `0.20.5`; bull, bear, and judge all moved together to `gemma4:e2b`
-- current fresh sample from the first accepted soak window: 5 seat-labeled judged Gemma cycles, 0 observed debate timeouts, 0 observed provider/fallback failures, 0 clean debate aborts
-- current Gemma debate-seat timings from that window:
-  - bull: p50 about `8.452s`, p95 about `10.552s`
-  - bear: p50 about `11.188s`, p95 about `11.647s`
-  - judge: p50 about `4.545s`, p95 about `4.832s`
-- comparison against the earlier DeepSeek same-model sample is directionally encouraging, especially on judge latency and the bull seat, but the current sample is still too small to treat as a keep/revert decision by itself
-- current read: Gemma is a credible candidate on the one-GPU box and has not shown hidden audit, fallback, or timeout regressions so far, but the section should stay open until the soak window is large enough to trust p50/p95 and tail behavior
+- accepted live sample at decision time: 108 judged cycles in the window, 18 seat-labeled Gemma debate samples, 0 observed debate timeouts, 0 observed provider/fallback failures, 0 clean debate aborts
+- accepted Gemma debate-seat timings from that window:
+  - bull: p50 about `8.456s`, p95 about `11.079s`
+  - bear: p50 about `10.640s`, p95 about `11.647s`
+  - judge: p50 about `4.247s`, p95 about `4.832s`
+- comparison against the earlier DeepSeek same-model sample is strong enough to keep Gemma as the current debate-seat baseline, especially because judge latency is materially lower, bull improved, bear stayed within an acceptable band, and no new audit, timeout, or fallback regressions appeared in the soak window
+- decision: keep `gemma4:e2b` as the accepted current debate-seat model on the one-GPU box, and treat further System Performance work as background-only unless the longer soak produces contradictory evidence
 
 Next concrete slice:
-- continue the live `gemma4:e2b` bakeoff until the measurement window is large enough to close the decision gate for Section 2
-- evidence required before the decision note is final: judged-debate p50/p95, pre-reason skip-lane p50/p95, timeout/retry/clean-abort rate, and audit-spine cleanliness from the same window
-- decision rule: keep `gemma4:e2b` only if the larger soak still shows materially better debate latency or tail variance without introducing new fallback behavior, spine regressions, or obvious decision-quality collapse; otherwise revert to `deepseek-r1:8b`
-- if the larger soak confirms Gemma and the remaining tails look low-yield, close System Performance and move to Trading Performance milestone 1
+- move into Trading Performance milestone 1: establish the current quality baseline by lane, regime, and market condition before changing policy
+- deliverable: a baseline read covering HOLD rate by lane, action distribution by lane and regime, realized outcome or expectancy by action family, and headline drawdown/win-rate/risk-adjusted returns on the current strategy window
+- guardrail: keep lane attribution and audit-spine integrity explicit so later trading-quality slices can be compared without reopening correctness questions
 
 Next major milestone after this section:
-- move from System Performance into Trading Performance only after the runtime/provider outlier source is explicitly classified and additional System Performance slices look lower-value than trading-quality work
+- once the Trading Performance baseline exists, choose one narrow quality slice, likely HOLD-heavy behavior or confidence calibration, and measure it against that baseline rather than against runtime anecdotes
 
 Primary audit references:
 - `memory/2026-04-08.md`
