@@ -319,6 +319,39 @@ Open positions: none
     assert len(compact) <= 1200
 
 
+def test_compact_debate_prompt_keeps_live_position_constraint_lines():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    full_prompt = """
+RISK MANAGEMENT & POSITION CONTEXT:
+-----------------------------------
+Status: 📈 LONG position in BTCUSD
+Side: LONG
+Contracts: 1.0000
+Entry Price: $72350.00
+Unrealized P&L: +$8.30
+
+⚠️ CRITICAL CONSTRAINT: You currently have a LONG position.
+Allowed policy actions ONLY: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG
+
+MARKET BRIEF:
+-------------
+Regime: trending_up
+Summary: Trend is up and broad-based.
+Key Question: Should we adjust the existing long position given the overbought RSI?
+"""
+
+    compact = manager._build_compact_debate_prompt(full_prompt, market_regime=None)
+
+    assert 'Status: 📈 LONG position in BTCUSD' in compact
+    assert 'Side: LONG' in compact
+    assert 'Contracts: 1.0000' in compact
+    assert 'Entry Price: $72350.00' in compact
+    assert 'Unrealized P&L: +$8.30' in compact
+    assert 'CRITICAL CONSTRAINT: You currently have a LONG position.' in compact
+    assert 'Allowed policy actions ONLY: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG' in compact
+    assert 'Market Regime: trending_up' in compact
+
+
 
 def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
     source = Path('/home/cmp6510/finance_feedback_engine/finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()

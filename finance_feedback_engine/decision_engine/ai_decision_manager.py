@@ -499,14 +499,22 @@ Final Rationale: <clear final explanation>
         if header in {"RISK MANAGEMENT & POSITION CONTEXT", "RISK CONSTRAINTS"}:
             keep = [line for line in body if any(key in line for key in [
                 "Position State:",
+                "Status:",
+                "Side:",
+                "Contracts:",
+                "Entry Price:",
+                "Unrealized P&L:",
+                "CRITICAL CONSTRAINT: You currently have a",
                 "Allowed Policy Actions:",
+                "Allowed policy actions ONLY:",
+                "Allowed policy actions:",
                 "Position Size:",
                 "Stop Loss:",
                 "Take Profit:",
                 "Risk/Reward:",
                 "Max Risk:",
             ])]
-            return "\n".join([header_line] + keep[:8])
+            return "\n".join([header_line] + keep[:12])
 
         if header in {"PORTFOLIO CONTEXT", "PORTFOLIO SUMMARY"}:
             keep = [line for line in body if any(key in line for key in [

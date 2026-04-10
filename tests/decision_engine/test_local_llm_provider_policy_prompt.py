@@ -47,3 +47,25 @@ Position State: long"""
     assert "OPEN_MEDIUM_LONG" not in prompt
     assert "OPEN_SMALL_SHORT" not in prompt
     assert decision["action"] == "HOLD"
+
+
+def test_local_llm_prompt_honors_allowed_policy_actions_only_variant():
+    provider = LocalLLMProvider({"decision_engine": {"model_name": "mistral:latest"}})
+    client = DummyClient()
+    provider.ollama_client = client
+    provider.ensure_connection = lambda: None
+    provider._unload_model = lambda: None
+
+    decision = provider.query(
+        """=== ⚠️ YOUR CURRENT POSITION STATE ⚠️ ===
+⚠️ CRITICAL CONSTRAINT: You currently have a LONG position.
+Allowed policy actions ONLY: HOLD, ADD_SMALL_LONG, REDUCE_LONG, CLOSE_LONG"""
+    )
+
+    prompt = client.kwargs["prompt"]
+    assert "ADD_SMALL_LONG" in prompt
+    assert "REDUCE_LONG" in prompt
+    assert "CLOSE_LONG" in prompt
+    assert "OPEN_MEDIUM_LONG" not in prompt
+    assert "OPEN_SMALL_SHORT" not in prompt
+    assert decision["action"] == "HOLD"
