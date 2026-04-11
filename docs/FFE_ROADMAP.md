@@ -177,6 +177,22 @@ Next concrete slice:
   - proof that judged and skip lanes remain spine-clean while the next experiment is selected
 - decision rule:
   - only choose the next experiment from contexts that still look coherent after the cleaned coverage view, and keep the first live change small enough that attribution remains obvious if results move
+- planning update after the first weak-pocket tightening slice:
+  - the recent judged-open tightening work was accepted as a low-risk stopgap, but it is not considered a meaningful performance improvement on its own because it mostly raises thresholds rather than improving ranking or probability quality
+  - before more code beyond stopgap tightening, the roadmap now explicitly prefers a decision-quality slice that changes action selection, not just action permission
+- next planned quality slice before broader regime work:
+  - build a small calibrated-confidence and outcome-linked re-ranking layer for judged opens, starting with the weakest attributable pocket: `judged_debate | trending_up | 70-79 | 2-4% | open_long`
+  - implementation order:
+    1. offline confidence-quality read on judged opens using realized outcomes, with proper-scoring diagnostics plus reliability-bin review so bucket labels reflect actual hit quality rather than raw model self-confidence
+    2. derive a narrow historical pocket adjustment for judged candidate actions, using existing persisted dimensions such as lane, regime, confidence bucket, volatility bucket, and action family
+    3. apply that adjustment as a pre-gate ranking penalty or bonus, so weak judged opens get demoted before final selection instead of only being blocked after selection
+    4. keep the current hard confidence gates as safety backstops, not as the primary learning mechanism
+    5. verify via focused tests, short live soak, and refreshed selective-coverage artifacts to confirm the targeted pocket contracts without hidden spillover
+  - guardrails:
+    - start with judged `OPEN_LONG` only
+    - keep the first slice additive and easily reversible
+    - prefer scoring or ranking adjustments over new global threshold increases
+    - do not broaden exploration until calibrated-confidence behavior is understood from fresh outcome-linked data
 
 Trading milestone 3: improve regime handling quality
 - hypothesis: some decision-quality loss is likely coming from weak regime-specific behavior rather than from the global policy shape

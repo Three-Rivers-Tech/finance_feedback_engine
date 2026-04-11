@@ -144,3 +144,21 @@ It does **not** outrank newly exposed live Track 0 regressions in the learning c
 - `coinbase_data.py` vs `coinbase_data_refactored.py` was a false positive from the broader audit; no real duplicate pair remains there
 - `decision_validation.py` vs `decision_validator.py` was also a false positive
 - the real remaining duplicate-family concerns are still: `backtest/` vs `backtesting/` and `monitoring/` vs `observability/`
+
+## Trading Policy Audit Update (2026-04-11)
+
+Current conclusion after the first live weak-pocket tightening slice:
+- the judged-open threshold increases were acceptable as a low-risk containment step, but they are not the preferred long-term optimization path because they mainly suppress actions after selection rather than improving confidence quality or candidate ranking
+- the next trading-policy workstream should therefore target calibrated confidence and outcome-linked action ranking before any further broad tightening
+
+Planned sequence now recorded in the audit trail:
+1. measure judged-open confidence quality against realized outcomes using proper-scoring diagnostics and reliability-bin inspection
+2. derive a narrow historical penalty or bonus for weak judged action pockets, beginning with `judged_debate | trending_up | 70-79 | 2-4% | open_long`
+3. apply that adjustment before final action selection so low-quality pockets are demoted in ranking, not merely vetoed afterward
+4. retain existing hard confidence gates as safety backstops during rollout
+5. validate with focused tests, a short live soak, and refreshed selective-coverage reporting before widening scope
+
+Why this direction outranks more threshold tuning:
+- it changes action ordering instead of only blocking already-selected actions
+- it gives the roadmap a measurable path toward real decision-quality improvement
+- it remains narrow enough for attribution and rollback on the current live system
