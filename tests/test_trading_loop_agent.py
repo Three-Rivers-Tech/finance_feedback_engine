@@ -850,12 +850,64 @@ async def test_judged_open_in_trending_up_keeps_global_confidence_gate(trading_a
         "asset_pair": "BTCUSD",
         "decision_origin": "judge",
         "market_regime": "trending_up",
+        "volatility": 0.045,
     }
 
     should_execute, reason_code, _reason_message = await trading_agent._should_execute_with_reason(decision)
 
     assert should_execute is True
     assert reason_code == "OK"
+
+
+@pytest.mark.asyncio
+async def test_judged_open_long_in_trending_up_moderate_volatility_requires_stricter_confidence_gate(trading_agent):
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 85,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "trending_up",
+        "volatility": 0.03,
+    }
+
+    should_execute, reason_code, reason_message = await trading_agent._should_execute_with_reason(decision)
+
+    assert should_execute is False
+    assert reason_code == "JUDGED_OPEN_CONTEXT_MIN_CONFIDENCE"
+    assert "trending_up/vol=0.030" in reason_message
+    assert "85% < 90%" in reason_message
+
+
+@pytest.mark.asyncio
+async def test_filtered_context_specific_judged_open_gate_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 85,
+            "asset_pair": "BTCUSD",
+            "reasoning": "Judge sees a moderate-vol trend continuation.",
+            "decision_origin": "judge",
+            "market_regime": "trending_up",
+            "volatility": 0.03,
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "OPEN_SMALL_LONG", "confidence": 88, "reasoning": "Trend continuation"},
+                    "judge": {"action": "OPEN_SMALL_LONG", "confidence": 85, "reasoning": "Still too weak for this context"},
+                }
+            },
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["filtered_reason_code"] == "JUDGED_OPEN_CONTEXT_MIN_CONFIDENCE"
+    assert saved_decision["decision_origin"] == "judge"
+    assert saved_decision["market_regime"] == "trending_up"
+    assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "OPEN_SMALL_LONG"
 
 
 @pytest.mark.asyncio

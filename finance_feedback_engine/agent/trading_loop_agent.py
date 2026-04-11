@@ -4813,6 +4813,7 @@ class TradingLoopAgent:
             getattr(self.config, "judged_open_min_confidence_pct", 80.0)
         )
         market_regime = str(decision.get("market_regime") or "unknown").strip().lower()
+        volatility = float(decision.get("volatility", 0.0) or 0.0)
         judged_open_regime_min_confidence = judged_open_min_confidence
         if market_regime == "ranging":
             judged_open_regime_min_confidence = max(
@@ -4823,6 +4824,23 @@ class TradingLoopAgent:
             judged_open_regime_min_confidence = max(
                 judged_open_regime_min_confidence,
                 float(getattr(self.config, "judged_open_min_confidence_pct_unknown", judged_open_min_confidence)),
+            )
+
+        judged_open_context_min_confidence = judged_open_regime_min_confidence
+        if (
+            normalized_action.endswith("_LONG")
+            and market_regime == "trending_up"
+            and 0.02 <= volatility < 0.04
+        ):
+            judged_open_context_min_confidence = max(
+                judged_open_context_min_confidence,
+                float(
+                    getattr(
+                        self.config,
+                        "judged_open_long_min_confidence_pct_trending_up_moderate_volatility",
+                        judged_open_regime_min_confidence,
+                    )
+                ),
             )
 
         if (
@@ -4848,6 +4866,18 @@ class TradingLoopAgent:
             )
             logger.info("Skipping trade due to %s", msg)
             return False, "JUDGED_OPEN_REGIME_MIN_CONFIDENCE", msg
+
+        if (
+            decision.get("decision_origin") == "judge"
+            and normalized_action.startswith("OPEN_")
+            and float(confidence) < judged_open_context_min_confidence
+        ):
+            msg = (
+                "Judged open confidence too low for context "
+                f"{market_regime}/vol={volatility:.3f} ({confidence}% < {judged_open_context_min_confidence:.0f}%)"
+            )
+            logger.info("Skipping trade due to %s", msg)
+            return False, "JUDGED_OPEN_CONTEXT_MIN_CONFIDENCE", msg
 
         if (
             self.config.max_daily_trades > 0
