@@ -879,6 +879,77 @@ async def test_judged_open_long_in_trending_up_moderate_volatility_requires_stri
     assert "85% < 90%" in reason_message
 
 
+def test_judged_open_rerank_adjustment_demotes_target_pocket_to_hold(trading_agent):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 78,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "trending_up",
+        "volatility": 0.03,
+        "candidate_action_scores": {"HOLD": 68.0, "OPEN_SMALL_LONG": 78.0},
+    }
+
+    adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
+
+    assert adjusted["policy_action"] == "HOLD"
+    assert adjusted["action"] == "HOLD"
+    assert adjusted["candidate_action_scores"]["OPEN_SMALL_LONG"] == 66.0
+    assert adjusted["candidate_action_scores"]["HOLD"] == 68.0
+    assert adjusted["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
+    assert adjusted["experiment_adjustments"][0]["reranked_to"] == "HOLD"
+    assert adjusted["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["penalty_pct"] == 12.0
+
+
+def test_judged_open_rerank_adjustment_does_not_touch_other_contexts(trading_agent):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 78,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "trending_up",
+        "volatility": 0.05,
+        "candidate_action_scores": {"HOLD": 68.0, "OPEN_SMALL_LONG": 78.0},
+    }
+
+    adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
+
+    assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
+    assert "experiment_adjustments" not in adjusted
+
+
+@pytest.mark.asyncio
+async def test_reranked_judged_open_persists_experiment_adjustment_metadata(trading_agent, mock_dependencies):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 78,
+            "asset_pair": "BTCUSD",
+            "reasoning": "Judge sees a borderline trend continuation.",
+            "decision_origin": "judge",
+            "market_regime": "trending_up",
+            "volatility": 0.03,
+            "candidate_actions": ["HOLD", "OPEN_SMALL_LONG"],
+            "candidate_action_scores": {"HOLD": 68.0, "OPEN_SMALL_LONG": 78.0},
+        }
+    )
+    trading_agent.is_running = True
+
+    await trading_agent.process_cycle()
+
+    saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
+    assert saved_decision["policy_action"] == "HOLD"
+    assert saved_decision["action"] == "HOLD"
+    assert saved_decision["experiment_adjustments"][0]["reranked_to"] == "HOLD"
+    assert saved_decision["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
+
+
 @pytest.mark.asyncio
 async def test_filtered_context_specific_judged_open_gate_preserves_audit_spine_fields(trading_agent, mock_dependencies):
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(

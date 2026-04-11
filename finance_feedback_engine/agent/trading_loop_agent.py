@@ -2292,6 +2292,7 @@ class TradingLoopAgent:
                 )
                 continue
             self._log_council_summary(decision, asset_pair=asset_pair)
+            decision = self._apply_judged_open_rerank_adjustments(decision)
             intent = _derive_execution_intent(decision)
             action_label = intent["canonical_action"] or (
                 decision.get("policy_action") or decision.get("action")
@@ -4745,6 +4746,92 @@ class TradingLoopAgent:
             return False, "rejected", "RISK_REJECTED", risk_reason
 
         return True, "executable", None, None
+
+    def _judged_open_rerank_penalty_pct(self, decision: Dict[str, Any]) -> float:
+        if not bool(getattr(self.config, "judged_open_rerank_penalty_enabled", False)):
+            return 0.0
+
+        normalized_action = str(
+            decision.get("policy_action") or decision.get("action") or ""
+        ).upper()
+        if decision.get("decision_origin") != "judge" or not normalized_action.startswith("OPEN_"):
+            return 0.0
+        if get_policy_action_family(normalized_action) != "open_long":
+            return 0.0
+
+        market_regime = str(decision.get("market_regime") or "unknown").strip().lower()
+        confidence = float(decision.get("confidence", 0.0) or 0.0)
+        volatility = float(decision.get("volatility", 0.0) or 0.0)
+        if market_regime == "trending_up" and 70.0 <= confidence < 80.0 and 0.02 <= volatility < 0.04:
+            return float(
+                getattr(
+                    self.config,
+                    "judged_open_long_penalty_pct_trending_up_70_79_2_4",
+                    0.0,
+                )
+            )
+        return 0.0
+
+    def _apply_judged_open_rerank_adjustments(self, decision: Dict[str, Any]) -> Dict[str, Any]:
+        penalty_pct = self._judged_open_rerank_penalty_pct(decision)
+        if penalty_pct <= 0:
+            return decision
+
+        raw_scores = decision.get("candidate_action_scores")
+        if not isinstance(raw_scores, dict) or not raw_scores:
+            return decision
+
+        normalized_scores: Dict[str, float] = {}
+        for action_name, score in raw_scores.items():
+            try:
+                normalized_scores[str(action_name).upper()] = float(score)
+            except (TypeError, ValueError):
+                continue
+        if not normalized_scores:
+            return decision
+
+        chosen_action = str(decision.get("policy_action") or decision.get("action") or "").upper()
+        if not chosen_action:
+            return decision
+        chosen_score = normalized_scores.get(chosen_action, float(decision.get("confidence", 0.0) or 0.0))
+        adjusted_scores = dict(normalized_scores)
+        adjusted_scores[chosen_action] = chosen_score - penalty_pct
+
+        adjustment = {
+            "kind": "judged_open_pocket_penalty",
+            "target_action": chosen_action,
+            "penalty_pct": penalty_pct,
+            "pocket": {
+                "market_regime": str(decision.get("market_regime") or "unknown").strip().lower(),
+                "confidence_bucket": "70-79",
+                "volatility_bucket": "2-4%",
+                "action_family": "open_long",
+            },
+            "score_before": chosen_score,
+            "score_after": adjusted_scores[chosen_action],
+            "reranked_to": chosen_action,
+        }
+
+        hold_score = adjusted_scores.get("HOLD")
+        if hold_score is not None and hold_score >= adjusted_scores[chosen_action]:
+            decision["action"] = "HOLD"
+            decision["policy_action"] = "HOLD"
+            decision["policy_action_family"] = "hold"
+            decision["confidence"] = hold_score
+            adjustment["reranked_to"] = "HOLD"
+            decision["reasoning"] = (
+                (decision.get("reasoning") or "").rstrip()
+                + " [experiment: reranked weak judged open_long pocket to HOLD]"
+            ).strip()
+
+        decision["candidate_action_scores"] = adjusted_scores
+        experiment_adjustments = decision.setdefault("experiment_adjustments", [])
+        if isinstance(experiment_adjustments, list):
+            experiment_adjustments.append(adjustment)
+        learning_metadata = decision.setdefault("policy_trace", {}).setdefault("learning_metadata", {})
+        if isinstance(learning_metadata, dict):
+            learning_metadata["experiment_adjustments"] = experiment_adjustments
+        return decision
 
     async def _should_execute_with_reason(self, decision):
         """Return (should_execute, reason_code, reason_message)."""

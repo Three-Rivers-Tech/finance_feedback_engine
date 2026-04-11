@@ -61,3 +61,5 @@ def test_default_judged_open_min_confidence_pct():
     assert config.judged_open_min_confidence_pct_ranging == 90.0
     assert config.judged_open_min_confidence_pct_unknown == 90.0
     assert config.judged_open_long_min_confidence_pct_trending_up_moderate_volatility == 90.0
+    assert config.judged_open_rerank_penalty_enabled is False
+    assert config.judged_open_long_penalty_pct_trending_up_70_79_2_4 == 12.0
