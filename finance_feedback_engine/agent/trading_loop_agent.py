@@ -4772,6 +4772,40 @@ class TradingLoopAgent:
             )
         return 0.0
 
+    def _build_judged_open_rerank_adjustment(
+        self,
+        decision: Dict[str, Any],
+        *,
+        chosen_action: str,
+        penalty_pct: float,
+        chosen_score: float,
+        adjusted_score: float,
+        pre_rerank_winner: str,
+        pre_rerank_winner_score: float,
+        hold_score: Optional[float],
+    ) -> Dict[str, Any]:
+        return {
+            "kind": "judged_open_pocket_penalty",
+            "eligible": True,
+            "target_action": chosen_action,
+            "penalty_pct": penalty_pct,
+            "pocket": {
+                "market_regime": str(decision.get("market_regime") or "unknown").strip().lower(),
+                "confidence_bucket": "70-79",
+                "volatility_bucket": "2-4%",
+                "action_family": "open_long",
+            },
+            "score_before": chosen_score,
+            "score_after": adjusted_score,
+            "hold_score": hold_score,
+            "pre_rerank_winner": pre_rerank_winner,
+            "pre_rerank_winner_score": pre_rerank_winner_score,
+            "post_rerank_winner": chosen_action,
+            "post_rerank_winner_score": adjusted_score,
+            "rerank_outcome": "no_op",
+            "reranked_to": chosen_action,
+        }
+
     def _apply_judged_open_rerank_adjustments(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         penalty_pct = self._judged_open_rerank_penalty_pct(decision)
         if penalty_pct <= 0:
@@ -4794,35 +4828,58 @@ class TradingLoopAgent:
         if not chosen_action:
             return decision
         chosen_score = normalized_scores.get(chosen_action, float(decision.get("confidence", 0.0) or 0.0))
+        pre_rerank_winner, pre_rerank_winner_score = max(
+            normalized_scores.items(),
+            key=lambda item: item[1],
+        )
         adjusted_scores = dict(normalized_scores)
         adjusted_scores[chosen_action] = chosen_score - penalty_pct
-
-        adjustment = {
-            "kind": "judged_open_pocket_penalty",
-            "target_action": chosen_action,
-            "penalty_pct": penalty_pct,
-            "pocket": {
-                "market_regime": str(decision.get("market_regime") or "unknown").strip().lower(),
-                "confidence_bucket": "70-79",
-                "volatility_bucket": "2-4%",
-                "action_family": "open_long",
-            },
-            "score_before": chosen_score,
-            "score_after": adjusted_scores[chosen_action],
-            "reranked_to": chosen_action,
-        }
-
         hold_score = adjusted_scores.get("HOLD")
+
+        adjustment = self._build_judged_open_rerank_adjustment(
+            decision,
+            chosen_action=chosen_action,
+            penalty_pct=penalty_pct,
+            chosen_score=chosen_score,
+            adjusted_score=adjusted_scores[chosen_action],
+            pre_rerank_winner=pre_rerank_winner,
+            pre_rerank_winner_score=pre_rerank_winner_score,
+            hold_score=hold_score,
+        )
+
         if hold_score is not None and hold_score >= adjusted_scores[chosen_action]:
             decision["action"] = "HOLD"
             decision["policy_action"] = "HOLD"
             decision["policy_action_family"] = "hold"
             decision["confidence"] = hold_score
             adjustment["reranked_to"] = "HOLD"
+            adjustment["post_rerank_winner"] = "HOLD"
+            adjustment["post_rerank_winner_score"] = hold_score
+            adjustment["rerank_outcome"] = "demoted_to_hold"
             decision["reasoning"] = (
                 (decision.get("reasoning") or "").rstrip()
                 + " [experiment: reranked weak judged open_long pocket to HOLD]"
             ).strip()
+            logger.info(
+                "Judged open rerank demoted target pocket to HOLD | action=%s | penalty_pct=%.2f | pre_winner=%s | post_winner=HOLD",
+                chosen_action,
+                penalty_pct,
+                pre_rerank_winner,
+            )
+        else:
+            post_rerank_winner, post_rerank_winner_score = max(
+                adjusted_scores.items(),
+                key=lambda item: item[1],
+            )
+            adjustment["post_rerank_winner"] = post_rerank_winner
+            adjustment["post_rerank_winner_score"] = post_rerank_winner_score
+            logger.info(
+                "Judged open rerank eligible but kept action | action=%s | penalty_pct=%.2f | pre_winner=%s | post_winner=%s",
+                chosen_action,
+                penalty_pct,
+                pre_rerank_winner,
+                post_rerank_winner,
+            )
 
         decision["candidate_action_scores"] = adjusted_scores
         experiment_adjustments = decision.setdefault("experiment_adjustments", [])

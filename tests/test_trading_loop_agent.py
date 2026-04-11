@@ -900,6 +900,10 @@ def test_judged_open_rerank_adjustment_demotes_target_pocket_to_hold(trading_age
     assert adjusted["candidate_action_scores"]["HOLD"] == 68.0
     assert adjusted["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
     assert adjusted["experiment_adjustments"][0]["reranked_to"] == "HOLD"
+    assert adjusted["experiment_adjustments"][0]["eligible"] is True
+    assert adjusted["experiment_adjustments"][0]["rerank_outcome"] == "demoted_to_hold"
+    assert adjusted["experiment_adjustments"][0]["pre_rerank_winner"] == "OPEN_SMALL_LONG"
+    assert adjusted["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
     assert adjusted["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["penalty_pct"] == 12.0
 
 
@@ -920,6 +924,31 @@ def test_judged_open_rerank_adjustment_does_not_touch_other_contexts(trading_age
 
     assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
     assert "experiment_adjustments" not in adjusted
+
+
+def test_judged_open_rerank_adjustment_records_no_op_observability(trading_agent):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 78,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "trending_up",
+        "volatility": 0.03,
+        "candidate_action_scores": {"HOLD": 60.0, "OPEN_SMALL_LONG": 78.0},
+    }
+
+    adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
+
+    assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
+    assert adjusted["action"] == "OPEN_SMALL_LONG"
+    adjustment = adjusted["experiment_adjustments"][0]
+    assert adjustment["eligible"] is True
+    assert adjustment["rerank_outcome"] == "no_op"
+    assert adjustment["pre_rerank_winner"] == "OPEN_SMALL_LONG"
+    assert adjustment["post_rerank_winner"] == "OPEN_SMALL_LONG"
+    assert adjustment["reranked_to"] == "OPEN_SMALL_LONG"
 
 
 @pytest.mark.asyncio
@@ -947,6 +976,9 @@ async def test_reranked_judged_open_persists_experiment_adjustment_metadata(trad
     assert saved_decision["policy_action"] == "HOLD"
     assert saved_decision["action"] == "HOLD"
     assert saved_decision["experiment_adjustments"][0]["reranked_to"] == "HOLD"
+    assert saved_decision["experiment_adjustments"][0]["pre_rerank_winner"] == "OPEN_SMALL_LONG"
+    assert saved_decision["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
+    assert saved_decision["experiment_adjustments"][0]["rerank_outcome"] == "demoted_to_hold"
     assert saved_decision["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
 
 
