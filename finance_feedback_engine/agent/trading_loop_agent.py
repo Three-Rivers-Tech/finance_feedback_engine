@@ -4770,6 +4770,19 @@ class TradingLoopAgent:
                     0.0,
                 )
             )
+        if (
+            bool(getattr(self.config, "judged_open_rerank_penalty_ranging_enabled", False))
+            and market_regime == "ranging"
+            and 70.0 <= confidence < 80.0
+            and 0.02 <= volatility < 0.04
+        ):
+            return float(
+                getattr(
+                    self.config,
+                    "judged_open_long_penalty_pct_ranging_70_79_2_4",
+                    0.0,
+                )
+            )
         return 0.0
 
     def _build_judged_open_rerank_adjustment(

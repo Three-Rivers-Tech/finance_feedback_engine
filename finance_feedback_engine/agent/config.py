@@ -334,6 +334,8 @@ class TradingAgentConfig(BaseModel):
     judged_open_long_min_confidence_pct_trending_up_moderate_volatility: float = 90.0
     judged_open_rerank_penalty_enabled: bool = True
     judged_open_long_penalty_pct_trending_up_70_79_2_4: float = 12.0
+    judged_open_rerank_penalty_ranging_enabled: bool = False
+    judged_open_long_penalty_pct_ranging_70_79_2_4: float = 12.0
     position_size_full_confidence: float = 90.0
     position_size_min_multiplier: float = 0.50
     position_size_high_volatility_scale: float = 0.75

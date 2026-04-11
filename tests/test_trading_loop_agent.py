@@ -951,6 +951,50 @@ def test_judged_open_rerank_adjustment_records_no_op_observability(trading_agent
     assert adjustment["reranked_to"] == "OPEN_SMALL_LONG"
 
 
+def test_judged_open_rerank_adjustment_does_not_touch_ranging_pocket_until_enabled(trading_agent):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    trading_agent.config.judged_open_rerank_penalty_ranging_enabled = False
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 78,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "ranging",
+        "volatility": 0.03,
+        "candidate_action_scores": {"HOLD": 68.0, "OPEN_SMALL_LONG": 78.0},
+    }
+
+    adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
+
+    assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
+    assert "experiment_adjustments" not in adjusted
+
+
+
+def test_judged_open_rerank_adjustment_demotes_ranging_pocket_when_enabled(trading_agent):
+    trading_agent.config.judged_open_rerank_penalty_enabled = True
+    trading_agent.config.judged_open_rerank_penalty_ranging_enabled = True
+    decision = {
+        "action": "OPEN_SMALL_LONG",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 78,
+        "asset_pair": "BTCUSD",
+        "decision_origin": "judge",
+        "market_regime": "ranging",
+        "volatility": 0.03,
+        "candidate_action_scores": {"HOLD": 69.0, "OPEN_SMALL_LONG": 78.0},
+    }
+
+    adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
+
+    assert adjusted["policy_action"] == "HOLD"
+    adjustment = adjusted["experiment_adjustments"][0]
+    assert adjustment["pocket"]["market_regime"] == "ranging"
+    assert adjustment["rerank_outcome"] == "demoted_to_hold"
+    assert adjustment["post_rerank_winner"] == "HOLD"
+
+
 @pytest.mark.asyncio
 async def test_reranked_judged_open_persists_experiment_adjustment_metadata(trading_agent, mock_dependencies):
     trading_agent.config.judged_open_rerank_penalty_enabled = True
