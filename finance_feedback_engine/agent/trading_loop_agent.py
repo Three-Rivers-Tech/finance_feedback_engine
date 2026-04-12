@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import date
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from opentelemetry import metrics, trace
 
@@ -4747,65 +4747,148 @@ class TradingLoopAgent:
 
         return True, "executable", None, None
 
-    def _judged_open_rerank_penalty_pct(self, decision: Dict[str, Any]) -> float:
+    def _judged_open_confidence_bucket(self, confidence: Optional[float]) -> str:
+        confidence = float(confidence or 0.0)
+        if confidence < 50.0:
+            return "<50"
+        if confidence < 70.0:
+            return "50-69"
+        if confidence < 80.0:
+            return "70-79"
+        if confidence < 90.0:
+            return "80-89"
+        return "90+"
+
+    def _judged_open_volatility_bucket(self, volatility: Optional[float]) -> str:
+        volatility = float(volatility or 0.0)
+        if volatility < 0.01:
+            return "<1%"
+        if volatility < 0.02:
+            return "1-2%"
+        if volatility < 0.04:
+            return "2-4%"
+        return "4%+"
+
+    def _judged_open_rerank_components(self, decision: Dict[str, Any]) -> List[Dict[str, Any]]:
         if not bool(getattr(self.config, "judged_open_rerank_penalty_enabled", False)):
-            return 0.0
+            return []
 
         normalized_action = str(
             decision.get("policy_action") or decision.get("action") or ""
         ).upper()
         if decision.get("decision_origin") != "judge" or not normalized_action.startswith("OPEN_"):
-            return 0.0
+            return []
         if get_policy_action_family(normalized_action) != "open_long":
-            return 0.0
+            return []
 
         market_regime = str(decision.get("market_regime") or "unknown").strip().lower()
         confidence = float(decision.get("confidence", 0.0) or 0.0)
         volatility = float(decision.get("volatility", 0.0) or 0.0)
-        if market_regime == "trending_up" and 70.0 <= confidence < 80.0 and 0.02 <= volatility < 0.04:
-            return float(
+        confidence_bucket = self._judged_open_confidence_bucket(confidence)
+        volatility_bucket = self._judged_open_volatility_bucket(volatility)
+
+        components: List[Dict[str, Any]] = []
+        if bool(getattr(self.config, "judged_open_confidence_bucket_adjustment_enabled", False)):
+            if confidence_bucket == "70-79":
+                penalty_pct = float(
+                    getattr(self.config, "judged_open_long_penalty_pct_confidence_70_79", 0.0)
+                )
+                if penalty_pct > 0:
+                    components.append(
+                        {
+                            "component": "confidence_bucket_penalty",
+                            "score_delta_pct": -penalty_pct,
+                            "confidence_bucket": confidence_bucket,
+                            "source": "offline_readout_2026-04-12",
+                            "expected_mean_roi": -0.024,
+                            "expected_win_rate": 0.142857,
+                        }
+                    )
+            elif confidence_bucket == "80-89":
+                bonus_pct = float(
+                    getattr(self.config, "judged_open_long_bonus_pct_confidence_80_89", 0.0)
+                )
+                if bonus_pct > 0:
+                    components.append(
+                        {
+                            "component": "confidence_bucket_bonus",
+                            "score_delta_pct": bonus_pct,
+                            "confidence_bucket": confidence_bucket,
+                            "source": "offline_readout_2026-04-12",
+                            "expected_mean_roi": 0.012,
+                            "expected_win_rate": 0.5,
+                        }
+                    )
+
+        if market_regime == "trending_up" and confidence_bucket == "70-79" and volatility_bucket == "2-4%":
+            penalty_pct = float(
                 getattr(
                     self.config,
                     "judged_open_long_penalty_pct_trending_up_70_79_2_4",
                     0.0,
                 )
             )
+            if penalty_pct > 0:
+                components.append(
+                    {
+                        "component": "pocket_penalty",
+                        "score_delta_pct": -penalty_pct,
+                        "source": "offline_readout_2026-04-12",
+                        "expected_mean_roi": -0.050,
+                        "expected_win_rate": 0.0,
+                    }
+                )
         if (
             bool(getattr(self.config, "judged_open_rerank_penalty_ranging_enabled", False))
             and market_regime == "ranging"
-            and 70.0 <= confidence < 80.0
-            and 0.02 <= volatility < 0.04
+            and confidence_bucket == "70-79"
+            and volatility_bucket == "2-4%"
         ):
-            return float(
+            penalty_pct = float(
                 getattr(
                     self.config,
                     "judged_open_long_penalty_pct_ranging_70_79_2_4",
                     0.0,
                 )
             )
-        return 0.0
+            if penalty_pct > 0:
+                components.append(
+                    {
+                        "component": "pocket_penalty",
+                        "score_delta_pct": -penalty_pct,
+                        "source": "offline_readout_2026-04-12",
+                        "expected_mean_roi": -0.095,
+                        "expected_win_rate": 0.0,
+                    }
+                )
+        return components
 
     def _build_judged_open_rerank_adjustment(
         self,
         decision: Dict[str, Any],
         *,
         chosen_action: str,
-        penalty_pct: float,
+        rerank_components: List[Dict[str, Any]],
+        net_score_delta_pct: float,
         chosen_score: float,
         adjusted_score: float,
         pre_rerank_winner: str,
         pre_rerank_winner_score: float,
         hold_score: Optional[float],
     ) -> Dict[str, Any]:
+        confidence = float(decision.get("confidence", 0.0) or 0.0)
+        volatility = float(decision.get("volatility", 0.0) or 0.0)
         return {
             "kind": "judged_open_pocket_penalty",
             "eligible": True,
             "target_action": chosen_action,
-            "penalty_pct": penalty_pct,
+            "penalty_pct": abs(net_score_delta_pct),
+            "net_score_delta_pct": net_score_delta_pct,
+            "components": rerank_components,
             "pocket": {
                 "market_regime": str(decision.get("market_regime") or "unknown").strip().lower(),
-                "confidence_bucket": "70-79",
-                "volatility_bucket": "2-4%",
+                "confidence_bucket": self._judged_open_confidence_bucket(confidence),
+                "volatility_bucket": self._judged_open_volatility_bucket(volatility),
                 "action_family": "open_long",
             },
             "score_before": chosen_score,
@@ -4820,8 +4903,12 @@ class TradingLoopAgent:
         }
 
     def _apply_judged_open_rerank_adjustments(self, decision: Dict[str, Any]) -> Dict[str, Any]:
-        penalty_pct = self._judged_open_rerank_penalty_pct(decision)
-        if penalty_pct <= 0:
+        rerank_components = self._judged_open_rerank_components(decision)
+        net_score_delta_pct = sum(
+            float(component.get("score_delta_pct", 0.0) or 0.0)
+            for component in rerank_components
+        )
+        if net_score_delta_pct == 0:
             return decision
 
         raw_scores = decision.get("candidate_action_scores")
@@ -4846,13 +4933,14 @@ class TradingLoopAgent:
             key=lambda item: item[1],
         )
         adjusted_scores = dict(normalized_scores)
-        adjusted_scores[chosen_action] = chosen_score - penalty_pct
+        adjusted_scores[chosen_action] = chosen_score + net_score_delta_pct
         hold_score = adjusted_scores.get("HOLD")
 
         adjustment = self._build_judged_open_rerank_adjustment(
             decision,
             chosen_action=chosen_action,
-            penalty_pct=penalty_pct,
+            rerank_components=rerank_components,
+            net_score_delta_pct=net_score_delta_pct,
             chosen_score=chosen_score,
             adjusted_score=adjusted_scores[chosen_action],
             pre_rerank_winner=pre_rerank_winner,
@@ -4876,7 +4964,7 @@ class TradingLoopAgent:
             logger.info(
                 "Judged open rerank demoted target pocket to HOLD | action=%s | penalty_pct=%.2f | pre_winner=%s | post_winner=HOLD",
                 chosen_action,
-                penalty_pct,
+                abs(net_score_delta_pct),
                 pre_rerank_winner,
             )
         else:
@@ -4889,7 +4977,7 @@ class TradingLoopAgent:
             logger.info(
                 "Judged open rerank eligible but kept action | action=%s | penalty_pct=%.2f | pre_winner=%s | post_winner=%s",
                 chosen_action,
-                penalty_pct,
+                abs(net_score_delta_pct),
                 pre_rerank_winner,
                 post_rerank_winner,
             )

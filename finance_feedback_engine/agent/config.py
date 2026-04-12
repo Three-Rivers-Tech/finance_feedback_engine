@@ -333,6 +333,9 @@ class TradingAgentConfig(BaseModel):
     judged_open_min_confidence_pct_unknown: float = 90.0
     judged_open_long_min_confidence_pct_trending_up_moderate_volatility: float = 90.0
     judged_open_rerank_penalty_enabled: bool = True
+    judged_open_confidence_bucket_adjustment_enabled: bool = True
+    judged_open_long_penalty_pct_confidence_70_79: float = 6.0
+    judged_open_long_bonus_pct_confidence_80_89: float = 0.0
     judged_open_long_penalty_pct_trending_up_70_79_2_4: float = 12.0
     judged_open_rerank_penalty_ranging_enabled: bool = True
     judged_open_long_penalty_pct_ranging_70_79_2_4: float = 12.0

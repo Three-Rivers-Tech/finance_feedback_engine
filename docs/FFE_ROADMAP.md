@@ -180,14 +180,20 @@ Next concrete slice:
 - planning update after the first weak-pocket tightening slice:
   - the recent judged-open tightening work was accepted as a low-risk stopgap, but it is not considered a meaningful performance improvement on its own because it mostly raises thresholds rather than improving ranking or probability quality
   - before more code beyond stopgap tightening, the roadmap now explicitly prefers a decision-quality slice that changes action selection, not just action permission
+- calibrated-confidence audit update after the offline readout (`JUDGED_OPEN_OFFLINE_READOUT_2026-04-12.md`):
+  - judged confidence is weakly informative, not useless: linked judged-open outcomes remain sparse (`11` linked outcomes from `30` judged opens), but the `80-89` bucket outperformed `70-79` on both mean ROI and win rate in the current window
+  - current readout headline: `70-79` judged opens stayed negative (`mean_roi≈-0.024`, `win_rate≈14%`), while `80-89` was mildly positive (`mean_roi≈0.012`, `win_rate≈50%`)
+  - decision implication: stop treating raw confidence as a simple yes/no gate; use it as one input to ranking, with pocket-specific penalties still doing the heavier work where historical outcomes are clearly weak
 - next planned quality slice before broader regime work:
   - build a small calibrated-confidence and outcome-linked re-ranking layer for judged opens, starting with the weakest attributable pocket: `judged_debate | trending_up | 70-79 | 2-4% | open_long`
   - implementation order:
     1. offline confidence-quality read on judged opens using realized outcomes, with proper-scoring diagnostics plus reliability-bin review so bucket labels reflect actual hit quality rather than raw model self-confidence
     2. derive a narrow historical pocket adjustment for judged candidate actions, using existing persisted dimensions such as lane, regime, confidence bucket, volatility bucket, and action family
-    3. apply that adjustment as a pre-gate ranking penalty or bonus, so weak judged opens get demoted before final selection instead of only being blocked after selection
+    3. add a small confidence-bucket adjustment layer so all judged `70-79` opens can be nudged down before final selection, while stronger pocket penalties continue to dominate in the clearly bad contexts
     4. keep the current hard confidence gates as safety backstops, not as the primary learning mechanism
     5. verify via focused tests, short live soak, and refreshed selective-coverage artifacts to confirm the targeted pocket contracts without hidden spillover
+  - immediate next code slice:
+    - implement additive calibrated rerank components with explicit audit metadata, so each rerank decision records whether it came from a confidence-bucket penalty, a pocket penalty, or both
   - guardrails:
     - start with judged `OPEN_LONG` only
     - keep the first slice additive and easily reversible

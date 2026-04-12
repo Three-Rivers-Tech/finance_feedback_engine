@@ -896,7 +896,7 @@ def test_judged_open_rerank_adjustment_demotes_target_pocket_to_hold(trading_age
 
     assert adjusted["policy_action"] == "HOLD"
     assert adjusted["action"] == "HOLD"
-    assert adjusted["candidate_action_scores"]["OPEN_SMALL_LONG"] == 66.0
+    assert adjusted["candidate_action_scores"]["OPEN_SMALL_LONG"] == 60.0
     assert adjusted["candidate_action_scores"]["HOLD"] == 68.0
     assert adjusted["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
     assert adjusted["experiment_adjustments"][0]["reranked_to"] == "HOLD"
@@ -904,10 +904,12 @@ def test_judged_open_rerank_adjustment_demotes_target_pocket_to_hold(trading_age
     assert adjusted["experiment_adjustments"][0]["rerank_outcome"] == "demoted_to_hold"
     assert adjusted["experiment_adjustments"][0]["pre_rerank_winner"] == "OPEN_SMALL_LONG"
     assert adjusted["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
-    assert adjusted["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["penalty_pct"] == 12.0
+    assert adjusted["experiment_adjustments"][0]["net_score_delta_pct"] == -18.0
+    assert len(adjusted["experiment_adjustments"][0]["components"]) == 2
+    assert adjusted["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["penalty_pct"] == 18.0
 
 
-def test_judged_open_rerank_adjustment_does_not_touch_other_contexts(trading_agent):
+def test_judged_open_rerank_adjustment_applies_confidence_bucket_penalty_outside_target_pocket(trading_agent):
     trading_agent.config.judged_open_rerank_penalty_enabled = True
     decision = {
         "action": "OPEN_SMALL_LONG",
@@ -923,7 +925,10 @@ def test_judged_open_rerank_adjustment_does_not_touch_other_contexts(trading_age
     adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
 
     assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
-    assert "experiment_adjustments" not in adjusted
+    adjustment = adjusted["experiment_adjustments"][0]
+    assert adjustment["net_score_delta_pct"] == -6.0
+    assert adjustment["components"][0]["component"] == "confidence_bucket_penalty"
+    assert adjustment["rerank_outcome"] == "no_op"
 
 
 def test_judged_open_rerank_adjustment_records_no_op_observability(trading_agent):
@@ -936,7 +941,7 @@ def test_judged_open_rerank_adjustment_records_no_op_observability(trading_agent
         "decision_origin": "judge",
         "market_regime": "trending_up",
         "volatility": 0.03,
-        "candidate_action_scores": {"HOLD": 60.0, "OPEN_SMALL_LONG": 78.0},
+        "candidate_action_scores": {"HOLD": 55.0, "OPEN_SMALL_LONG": 78.0},
     }
 
     adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
@@ -949,9 +954,11 @@ def test_judged_open_rerank_adjustment_records_no_op_observability(trading_agent
     assert adjustment["pre_rerank_winner"] == "OPEN_SMALL_LONG"
     assert adjustment["post_rerank_winner"] == "OPEN_SMALL_LONG"
     assert adjustment["reranked_to"] == "OPEN_SMALL_LONG"
+    assert adjustment["net_score_delta_pct"] == -18.0
+    assert len(adjustment["components"]) == 2
 
 
-def test_judged_open_rerank_adjustment_does_not_touch_ranging_pocket_until_enabled(trading_agent):
+def test_judged_open_rerank_adjustment_keeps_only_bucket_penalty_when_ranging_pocket_disabled(trading_agent):
     trading_agent.config.judged_open_rerank_penalty_enabled = True
     trading_agent.config.judged_open_rerank_penalty_ranging_enabled = False
     decision = {
@@ -968,7 +975,10 @@ def test_judged_open_rerank_adjustment_does_not_touch_ranging_pocket_until_enabl
     adjusted = trading_agent._apply_judged_open_rerank_adjustments(decision)
 
     assert adjusted["policy_action"] == "OPEN_SMALL_LONG"
-    assert "experiment_adjustments" not in adjusted
+    adjustment = adjusted["experiment_adjustments"][0]
+    assert adjustment["net_score_delta_pct"] == -6.0
+    assert len(adjustment["components"]) == 1
+    assert adjustment["components"][0]["component"] == "confidence_bucket_penalty"
 
 
 
@@ -993,6 +1003,8 @@ def test_judged_open_rerank_adjustment_demotes_ranging_pocket_when_enabled(tradi
     assert adjustment["pocket"]["market_regime"] == "ranging"
     assert adjustment["rerank_outcome"] == "demoted_to_hold"
     assert adjustment["post_rerank_winner"] == "HOLD"
+    assert adjustment["net_score_delta_pct"] == -18.0
+    assert len(adjustment["components"]) == 2
 
 
 @pytest.mark.asyncio
@@ -1023,6 +1035,8 @@ async def test_reranked_judged_open_persists_experiment_adjustment_metadata(trad
     assert saved_decision["experiment_adjustments"][0]["pre_rerank_winner"] == "OPEN_SMALL_LONG"
     assert saved_decision["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
     assert saved_decision["experiment_adjustments"][0]["rerank_outcome"] == "demoted_to_hold"
+    assert saved_decision["experiment_adjustments"][0]["net_score_delta_pct"] == -18.0
+    assert len(saved_decision["experiment_adjustments"][0]["components"]) == 2
     assert saved_decision["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
 
 
