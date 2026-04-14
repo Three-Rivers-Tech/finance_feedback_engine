@@ -906,6 +906,9 @@ def test_judged_open_rerank_adjustment_demotes_target_pocket_to_hold(trading_age
     assert adjusted["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
     assert adjusted["experiment_adjustments"][0]["net_score_delta_pct"] == -18.0
     assert len(adjusted["experiment_adjustments"][0]["components"]) == 2
+    assert adjusted["experiment_adjustments"][0]["rerank_trigger"] == "confidence_bucket_and_pocket"
+    assert adjusted["experiment_adjustments"][0]["applied_component_types"] == ["confidence_bucket_penalty", "pocket_penalty"]
+    assert adjusted["experiment_adjustments"][0]["component_score_delta_pct"] == {"confidence_bucket_penalty": -6.0, "pocket_penalty": -12.0}
     assert adjusted["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["penalty_pct"] == 18.0
 
 
@@ -928,6 +931,9 @@ def test_judged_open_rerank_adjustment_applies_confidence_bucket_penalty_outside
     adjustment = adjusted["experiment_adjustments"][0]
     assert adjustment["net_score_delta_pct"] == -6.0
     assert adjustment["components"][0]["component"] == "confidence_bucket_penalty"
+    assert adjustment["rerank_trigger"] == "confidence_bucket_only"
+    assert adjustment["applied_component_types"] == ["confidence_bucket_penalty"]
+    assert adjustment["component_score_delta_pct"] == {"confidence_bucket_penalty": -6.0}
     assert adjustment["rerank_outcome"] == "no_op"
 
 
@@ -1004,6 +1010,8 @@ def test_judged_open_rerank_adjustment_demotes_ranging_pocket_when_enabled(tradi
     assert adjustment["rerank_outcome"] == "demoted_to_hold"
     assert adjustment["post_rerank_winner"] == "HOLD"
     assert adjustment["net_score_delta_pct"] == -18.0
+    assert adjustment["rerank_trigger"] == "confidence_bucket_and_pocket"
+    assert adjustment["component_score_delta_pct"] == {"confidence_bucket_penalty": -6.0, "pocket_penalty": -12.0}
     assert len(adjustment["components"]) == 2
 
 
@@ -1036,6 +1044,8 @@ async def test_reranked_judged_open_persists_experiment_adjustment_metadata(trad
     assert saved_decision["experiment_adjustments"][0]["post_rerank_winner"] == "HOLD"
     assert saved_decision["experiment_adjustments"][0]["rerank_outcome"] == "demoted_to_hold"
     assert saved_decision["experiment_adjustments"][0]["net_score_delta_pct"] == -18.0
+    assert saved_decision["experiment_adjustments"][0]["rerank_trigger"] == "confidence_bucket_and_pocket"
+    assert saved_decision["experiment_adjustments"][0]["applied_component_types"] == ["confidence_bucket_penalty", "pocket_penalty"]
     assert len(saved_decision["experiment_adjustments"][0]["components"]) == 2
     assert saved_decision["policy_trace"]["learning_metadata"]["experiment_adjustments"][0]["kind"] == "judged_open_pocket_penalty"
 

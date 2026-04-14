@@ -4878,6 +4878,23 @@ class TradingLoopAgent:
     ) -> Dict[str, Any]:
         confidence = float(decision.get("confidence", 0.0) or 0.0)
         volatility = float(decision.get("volatility", 0.0) or 0.0)
+        component_delta_map: Dict[str, float] = {}
+        component_types: List[str] = []
+        for component in rerank_components:
+            component_name = str(component.get("component") or "unknown")
+            component_types.append(component_name)
+            component_delta_map[component_name] = component_delta_map.get(component_name, 0.0) + float(
+                component.get("score_delta_pct", 0.0) or 0.0
+            )
+        component_type_set = sorted(set(component_types))
+        if component_type_set == ["confidence_bucket_penalty"]:
+            trigger = "confidence_bucket_only"
+        elif component_type_set == ["pocket_penalty"]:
+            trigger = "pocket_only"
+        elif component_type_set:
+            trigger = "confidence_bucket_and_pocket"
+        else:
+            trigger = "none"
         return {
             "kind": "judged_open_pocket_penalty",
             "eligible": True,
@@ -4885,6 +4902,10 @@ class TradingLoopAgent:
             "penalty_pct": abs(net_score_delta_pct),
             "net_score_delta_pct": net_score_delta_pct,
             "components": rerank_components,
+            "applied_component_types": component_type_set,
+            "component_score_delta_pct": component_delta_map,
+            "component_count": len(rerank_components),
+            "rerank_trigger": trigger,
             "pocket": {
                 "market_regime": str(decision.get("market_regime") or "unknown").strip().lower(),
                 "confidence_bucket": self._judged_open_confidence_bucket(confidence),
