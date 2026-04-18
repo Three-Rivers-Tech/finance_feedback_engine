@@ -467,9 +467,19 @@ IMPORTANT HOLD RULE:
 
 Return ONLY valid JSON with these exact keys:
 - action
+- policy_action
+- candidate_actions
 - confidence
 - reasoning
 - amount
+
+JSON requirements:
+- action must equal policy_action
+- policy_action must be exactly one item from the allowed policy actions list above
+- candidate_actions must be a JSON array of allowed policy actions seriously considered for this decision
+- candidate_actions must include policy_action
+- candidate_actions[0] must equal policy_action
+- if the decision is HOLD, still include the strongest alternative action considered when one exists
 
 In reasoning, use this exact mini-structure:
 Winning Thesis: <bull|bear|neither>
@@ -706,9 +716,19 @@ Rules:
 
 Return ONLY valid JSON with these exact keys:
 - action
+- policy_action
+- candidate_actions
 - confidence
 - reasoning
 - amount
+
+JSON requirements:
+- action must equal policy_action
+- policy_action must be exactly one item from the allowed policy actions list above
+- candidate_actions must be a JSON array of allowed policy actions seriously considered for this decision
+- candidate_actions must include policy_action
+- candidate_actions[0] must equal policy_action
+- if the decision is HOLD, still include the strongest alternative action considered when one exists
 
 In reasoning, use this exact mini-structure, keeping each line short and concrete:
 Thesis: <one short bullish thesis>
