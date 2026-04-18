@@ -321,15 +321,32 @@ class AIDecisionManager:
                         continue
                     failed.append(provider)
                     break
-                if self.ensemble_manager._is_valid_provider_response(case, provider):
+                role_policy_action = case.get("policy_action") if isinstance(case, dict) else None
+                role_candidates = case.get("candidate_actions") if isinstance(case, dict) else None
+                role_action = case.get("action") if isinstance(case, dict) else None
+                role_schema_ok = (
+                    isinstance(case, dict)
+                    and isinstance(role_policy_action, str)
+                    and bool(role_policy_action.strip())
+                    and isinstance(role_candidates, list)
+                    and len(role_candidates) > 0
+                    and all(isinstance(item, str) and item.strip() for item in role_candidates)
+                    and role_candidates[0] == role_policy_action
+                    and role_policy_action == role_action
+                )
+                if self.ensemble_manager._is_valid_provider_response(case, provider) and role_schema_ok:
                     increment_provider_request(provider, "success")
                     break
                 logger.warning(
-                    "DEBATE role invalid response: role=%s provider=%s attempt=%s/%s",
+                    "DEBATE role invalid response: role=%s provider=%s attempt=%s/%s schema_ok=%s action=%r policy_action=%r candidate_actions=%r",
                     role,
                     provider,
                     attempt,
                     retry_policy["max_attempts"],
+                    role_schema_ok,
+                    role_action,
+                    role_policy_action,
+                    role_candidates,
                 )
                 increment_provider_request(provider, "invalid")
                 case = None
