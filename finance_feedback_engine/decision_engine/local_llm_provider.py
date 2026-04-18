@@ -789,6 +789,24 @@ class LocalLLMProvider:
                 )
 
                 decision = try_parse_decision_json(response_text)
+                if (
+                    decision
+                    and request_label in {"debate:bull", "debate:bear"}
+                    and (
+                        decision.get("policy_action") is None
+                        or not decision.get("candidate_actions")
+                    )
+                ):
+                    logger.info(
+                        "CANDIDATE_AUDIT role_schema_retry request_label=%s model=%s reason=%s parsed=%s",
+                        request_label or "none",
+                        active_model,
+                        "missing_policy_or_candidates",
+                        _candidate_audit_view(decision),
+                    )
+                    if attempt < max_retries - 1:
+                        time.sleep(2 * (attempt + 1))
+                        continue
                 if decision:
                     logger.info(
                         "CANDIDATE_AUDIT local_parse_ok request_label=%s model=%s parsed=%s",
