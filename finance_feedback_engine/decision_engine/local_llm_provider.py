@@ -21,6 +21,18 @@ from .decision_validation import build_fallback_decision, try_parse_decision_jso
 
 logger = logging.getLogger(__name__)
 
+
+def _candidate_audit_view(decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    payload = decision if isinstance(decision, dict) else {}
+    return {
+        "action": payload.get("action"),
+        "policy_action": payload.get("policy_action"),
+        "candidate_actions": payload.get("candidate_actions"),
+        "confidence": payload.get("confidence"),
+        "decision_origin": payload.get("decision_origin"),
+        "filtered_reason_code": payload.get("filtered_reason_code"),
+    }
+
 _POLICY_ACTION_ORDER = [
     "HOLD",
     "OPEN_SMALL_LONG",
@@ -769,6 +781,12 @@ class LocalLLMProvider:
 
                 decision = try_parse_decision_json(response_text)
                 if decision:
+                    logger.info(
+                        "CANDIDATE_AUDIT local_parse_ok request_label=%s model=%s parsed=%s",
+                        request_label or "none",
+                        active_model,
+                        _candidate_audit_view(decision),
+                    )
                     # Safely convert confidence to int (default 60 if missing/invalid)
                     try:
                         confidence_val = decision.get("confidence", 60)
@@ -818,7 +836,14 @@ class LocalLLMProvider:
                 if is_structured_fragment and attempt < max_retries - 1:
                     time.sleep(2 * (attempt + 1))
                     continue
-                return self._parse_text_response(response_text)
+                parsed_text_decision = self._parse_text_response(response_text)
+                logger.info(
+                    "CANDIDATE_AUDIT local_text_fallback request_label=%s model=%s parsed=%s",
+                    request_label or "none",
+                    active_model,
+                    _candidate_audit_view(parsed_text_decision),
+                )
+                return parsed_text_decision
 
             except Exception as e:
                 logger.error(f"Local LLM error on attempt {attempt + 1}: {e}")

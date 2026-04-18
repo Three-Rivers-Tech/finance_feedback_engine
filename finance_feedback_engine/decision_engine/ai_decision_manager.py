@@ -22,6 +22,19 @@ from .policy_actions import (
 
 logger = logging.getLogger(__name__)
 
+
+def _candidate_audit_view(decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    payload = decision if isinstance(decision, dict) else {}
+    return {
+        "action": payload.get("action"),
+        "policy_action": payload.get("policy_action"),
+        "candidate_actions": payload.get("candidate_actions"),
+        "confidence": payload.get("confidence"),
+        "decision_origin": payload.get("decision_origin"),
+        "filtered_reason_code": payload.get("filtered_reason_code"),
+        "model_name": payload.get("model_name"),
+    }
+
 MAX_WORKERS = 4
 
 
@@ -894,29 +907,71 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
 
         # Route Ollama models to local inference with specific model
         if is_ollama_model(provider_name):
-            return await self._local_ai_inference(
+            result = await self._local_ai_inference(
                 prompt,
                 model_name=provider_name,
                 request_label=request_label,
                 request_timeout_s=request_timeout_s,
             )
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
 
         # Route abstract provider names
         if provider_name == "local":
-            return await self._local_ai_inference(
+            result = await self._local_ai_inference(
                 prompt,
                 request_label=request_label,
                 request_timeout_s=request_timeout_s,
             )
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
         elif provider_name == "cli":
-            return await self._cli_ai_inference(prompt)
+            result = await self._cli_ai_inference(prompt)
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
         elif provider_name == "codex":
-            return await self._codex_ai_inference(prompt)
+            result = await self._codex_ai_inference(prompt)
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
         elif provider_name == "qwen":
             # Qwen CLI provider (routed to CLI)
-            return await self._cli_ai_inference(prompt)
+            result = await self._cli_ai_inference(prompt)
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
         elif provider_name == "gemini":
-            return await self._gemini_ai_inference(prompt)
+            result = await self._gemini_ai_inference(prompt)
+            logger.info(
+                "CANDIDATE_AUDIT single_provider_return provider=%s request_label=%s payload=%s",
+                provider_name,
+                request_label or "none",
+                _candidate_audit_view(result),
+            )
+            return result
         else:
             # Unknown provider - raise error, let ensemble manager handle
             raise ValueError(f"Unknown AI provider: {provider_name}")
