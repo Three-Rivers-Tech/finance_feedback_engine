@@ -778,6 +778,15 @@ class LocalLLMProvider:
                     continue
 
                 logger.debug(f"Raw LLM response: {response_text[:200]}")
+                logger.info(
+                    "CANDIDATE_AUDIT raw_probe request_label=%s model=%s raw_len=%s has_candidate_key=%s has_policy_action_key=%s raw_prefix=%r",
+                    request_label or "none",
+                    active_model,
+                    len(response_text),
+                    'candidate_actions' in response_text,
+                    'policy_action' in response_text,
+                    response_text[:200],
+                )
 
                 decision = try_parse_decision_json(response_text)
                 if decision:
