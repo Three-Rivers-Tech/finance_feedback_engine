@@ -706,16 +706,29 @@ class LocalLLMProvider:
                 # Create system prompt for trading
                 allowed_actions = _extract_allowed_policy_actions(prompt)
                 allowed_actions_str = ", ".join(allowed_actions)
-                full_prompt = (
-                    "You are a professional day trading advisor. "
-                    "Analyze market data and provide trading recommendations. "
-                    "Respond ONLY with valid JSON containing these exact keys: "
-                    f"action (one of {allowed_actions_str}), confidence (0-100 integer), "
-                    "reasoning (brief explanation string), "
-                    "amount (decimal number for position size). "
-                    "Never output an action outside the allowed policy-action list in the prompt.\n\n"
-                    f"{prompt}"
-                )
+                if request_label and request_label.startswith("debate:"):
+                    full_prompt = (
+                        "You are a professional day trading advisor. "
+                        "Analyze market data and provide trading recommendations. "
+                        "Respond ONLY with valid JSON containing these exact keys: "
+                        f"action (one of {allowed_actions_str}), policy_action (must equal action and be one of {allowed_actions_str}), "
+                        "candidate_actions (JSON array of seriously considered allowed policy actions, with candidate_actions[0] equal to policy_action), "
+                        "confidence (0-100 integer), reasoning (brief explanation string), amount (decimal number for position size). "
+                        "Never omit policy_action or candidate_actions for debate requests. "
+                        "Never output an action outside the allowed policy-action list in the prompt.\n\n"
+                        f"{prompt}"
+                    )
+                else:
+                    full_prompt = (
+                        "You are a professional day trading advisor. "
+                        "Analyze market data and provide trading recommendations. "
+                        "Respond ONLY with valid JSON containing these exact keys: "
+                        f"action (one of {allowed_actions_str}), confidence (0-100 integer), "
+                        "reasoning (brief explanation string), "
+                        "amount (decimal number for position size). "
+                        "Never output an action outside the allowed policy-action list in the prompt.\n\n"
+                        f"{prompt}"
+                    )
 
                 # Call Ollama via HTTP API with timeout protection
                 import asyncio
