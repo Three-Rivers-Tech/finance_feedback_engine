@@ -1319,6 +1319,8 @@ Thesis Breaker: <specific condition that invalidates the bearish case>
 Data Quality: <good|degraded|stale>
 """
 
+        failed_debate_roles = []
+
         # Query bull provider (bullish case)
         try:
             bull_case = await self._query_single_provider(bull_provider, bull_prompt)
@@ -1329,6 +1331,7 @@ Data Quality: <good|degraded|stale>
                     f"Debate: {bull_provider} (bull) returned invalid response"
                 )
                 failed_debate_providers.append(bull_provider)
+                failed_debate_roles.append({"role": "bull", "provider": bull_provider, "reason": "invalid_response"})
                 bull_case = None
             else:
                 logger.info(
@@ -1337,6 +1340,7 @@ Data Quality: <good|degraded|stale>
         except Exception as e:
             logger.error(f"Debate: {bull_provider} (bull) failed: {e}")
             failed_debate_providers.append(bull_provider)
+            failed_debate_roles.append({"role": "bull", "provider": bull_provider, "reason": type(e).__name__})
 
         # Query bear provider (bearish case)
         try:
@@ -1348,6 +1352,7 @@ Data Quality: <good|degraded|stale>
                     f"Debate: {bear_provider} (bear) returned invalid response"
                 )
                 failed_debate_providers.append(bear_provider)
+                failed_debate_roles.append({"role": "bear", "provider": bear_provider, "reason": "invalid_response"})
                 bear_case = None
             else:
                 logger.info(
@@ -1356,6 +1361,7 @@ Data Quality: <good|degraded|stale>
         except Exception as e:
             logger.error(f"Debate: {bear_provider} (bear) failed: {e}")
             failed_debate_providers.append(bear_provider)
+            failed_debate_roles.append({"role": "bear", "provider": bear_provider, "reason": type(e).__name__})
 
         # Query judge provider (final decision)
         try:
@@ -1411,6 +1417,7 @@ Missing Evidence: <what additional evidence would increase confidence>
                     f"Debate: {judge_provider} (judge) returned invalid response"
                 )
                 failed_debate_providers.append(judge_provider)
+                failed_debate_roles.append({"role": "judge", "provider": judge_provider, "reason": "invalid_response"})
                 judge_decision = None
             else:
                 logger.info(
@@ -1419,6 +1426,7 @@ Missing Evidence: <what additional evidence would increase confidence>
         except Exception as e:
             logger.error(f"Debate: {judge_provider} (judge) failed: {e}")
             failed_debate_providers.append(judge_provider)
+            failed_debate_roles.append({"role": "judge", "provider": judge_provider, "reason": type(e).__name__})
 
         # Error: if any debate provider failed, raise error
         if bull_case is None or bear_case is None or judge_decision is None:
@@ -1436,6 +1444,7 @@ Missing Evidence: <what additional evidence would increase confidence>
             bear_case=bear_case,
             judge_decision=judge_decision,
             failed_debate_providers=failed_debate_providers,
+            failed_debate_roles=failed_debate_roles,
         )
 
         if isinstance(final_decision, dict):
