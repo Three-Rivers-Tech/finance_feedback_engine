@@ -32,6 +32,8 @@ def _failure_context_snapshot(
     judge_decision: Optional[Dict[str, Any]] = None,
     judge_requires_multi_candidate: Optional[bool] = None,
     failed_debate_providers: Optional[list[str]] = None,
+    failed_debate_roles: Optional[list[Dict[str, Any]]] = None,
+    debate_seats: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     snapshot: Dict[str, Any] = {}
     if market_regime:
@@ -42,6 +44,10 @@ def _failure_context_snapshot(
         snapshot["judge_requires_multi_candidate"] = bool(judge_requires_multi_candidate)
     if failed_debate_providers:
         snapshot["failed_debate_providers"] = list(failed_debate_providers)
+    if failed_debate_roles:
+        snapshot["failed_debate_roles"] = [dict(item) for item in failed_debate_roles if isinstance(item, dict)]
+    if debate_seats:
+        snapshot["debate_seats"] = dict(debate_seats)
 
     role_decisions = {}
     for role_name, role_value in (("bull", bull_case), ("bear", bear_case), ("judge", judge_decision)):
@@ -720,8 +726,13 @@ Final Rationale: <clear final explanation>
             )
 
         failed_debate_providers = []
+        failed_debate_roles = []
+        debate_seats = {
+            "bull": bull_provider,
+            "bear": bear_provider,
+            "judge": judge_provider,
+        }
 
-        failed_debate_providers = []
         debate_timing = {}
         _timing_started = time.perf_counter()
         prompt = self._build_compact_debate_prompt(prompt, market_regime=market_regime)
@@ -913,6 +924,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                     judge_policy_action,
                     judge_candidates,
                 )
+                failed_debate_roles.append({"role": "judge", "provider": judge_provider, "reason": "invalid_response"})
                 failure_context = _failure_context_snapshot(
                     market_regime=market_regime,
                     position_state=_pos_state,
@@ -921,6 +933,8 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                     judge_decision=judge_decision,
                     judge_requires_multi_candidate=judge_requires_multi_candidate,
                     failed_debate_providers=failed_debate_providers + [judge_provider],
+                    failed_debate_roles=failed_debate_roles,
+                    debate_seats=debate_seats,
                 )
                 failed_debate_providers.append(judge_provider)
                 increment_provider_request(judge_provider, "failure")
@@ -956,6 +970,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 }
             )
             failed_debate_providers.append(judge_provider)
+            failed_debate_roles.append({"role": "judge", "provider": judge_provider, "reason": "timeout"})
             increment_provider_request(judge_provider, "failure")
             # TODO: Track debate provider timeouts for alerting (THR-XXX)
         except Exception as e:
@@ -970,6 +985,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 exc_info=True
             )
             failed_debate_providers.append(judge_provider)
+            failed_debate_roles.append({"role": "judge", "provider": judge_provider, "reason": type(e).__name__})
             increment_provider_request(judge_provider, "failure")
             # TODO: Alert on repeated debate provider failures (THR-XXX)
 
@@ -992,6 +1008,8 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                     bear_case=bear_case,
                     judge_decision=judge_decision,
                     failed_debate_providers=failed_debate_providers,
+                    failed_debate_roles=failed_debate_roles,
+                    debate_seats=debate_seats,
                 ),
             )
             raise error

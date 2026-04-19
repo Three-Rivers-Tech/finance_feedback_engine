@@ -4716,6 +4716,35 @@ class TradingLoopAgent:
             if isinstance(failure_context, dict):
                 failure_context.setdefault("persisted_reason_code", reason_code)
                 failure_context.setdefault("persisted_reason_text", reason)
+
+                if failure_context.get("market_regime") and not normalized.get("market_regime"):
+                    normalized["market_regime"] = failure_context.get("market_regime")
+                if failure_context.get("position_state") and not normalized.get("current_position_state"):
+                    normalized["current_position_state"] = failure_context.get("position_state")
+
+                policy_state = normalized.get("policy_state")
+                if not isinstance(policy_state, dict):
+                    policy_state = {}
+                if failure_context.get("position_state") and not policy_state.get("position_state"):
+                    policy_state["position_state"] = failure_context.get("position_state")
+                if failure_context.get("market_regime") and not policy_state.get("market_regime"):
+                    policy_state["market_regime"] = failure_context.get("market_regime")
+                if policy_state:
+                    normalized["policy_state"] = policy_state
+
+                ensemble_metadata = normalized.get("ensemble_metadata")
+                if not isinstance(ensemble_metadata, dict):
+                    ensemble_metadata = {}
+                if failure_context.get("role_decisions") and not ensemble_metadata.get("role_decisions"):
+                    ensemble_metadata["role_decisions"] = failure_context.get("role_decisions")
+                if failure_context.get("debate_seats") and not ensemble_metadata.get("debate_seats"):
+                    ensemble_metadata["debate_seats"] = failure_context.get("debate_seats")
+                if failure_context.get("failed_debate_roles") and not ensemble_metadata.get("providers_failed"):
+                    ensemble_metadata["providers_failed"] = failure_context.get("failed_debate_roles")
+                if (not ensemble_metadata.get("providers_failed") and failure_context.get("failed_debate_providers")):
+                    ensemble_metadata["providers_failed"] = failure_context.get("failed_debate_providers")
+                if ensemble_metadata:
+                    normalized["ensemble_metadata"] = ensemble_metadata
             self._attach_decision_artifact(normalized, execution_attempted=False)
             if getattr(self.engine, "decision_store", None):
                 self.engine.decision_store.save_decision(normalized)
