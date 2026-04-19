@@ -2120,7 +2120,21 @@ class TradingLoopAgent:
                     self.analysis_failures[failure_key] = (
                         self.analysis_failures.get(failure_key, 0) + 1
                     )
-                    return index, None
+                    failure_payload = {
+                        "asset_pair": asset_pair,
+                        "decision_origin": "analysis_failure",
+                        "filtered_reason_code": "ANALYSIS_TIMEOUT",
+                        "filtered_reason_text": "Asset analysis timed out before a decision payload was materialized",
+                        "hold_origin": "analysis_failure",
+                        "hold_is_genuine": False,
+                        "analysis_failure_context": {
+                            "error_type": "TimeoutError",
+                            "error_message": f"Analysis timed out for {asset_pair}",
+                            "failure_key": failure_key,
+                            "failure_count": self.analysis_failures.get(failure_key, 0),
+                        },
+                    }
+                    return index, failure_payload
                 except Exception as e:
                     logger.warning("Analysis for %s failed: %s", asset_pair, e)
                     now = datetime.datetime.now(datetime.timezone.utc)
@@ -2133,7 +2147,21 @@ class TradingLoopAgent:
                         asset_pair,
                         exc_info=True,
                     )
-                    return index, None
+                    failure_payload = {
+                        "asset_pair": asset_pair,
+                        "decision_origin": "analysis_failure",
+                        "filtered_reason_code": "ANALYSIS_EXCEPTION",
+                        "filtered_reason_text": str(e),
+                        "hold_origin": "analysis_failure",
+                        "hold_is_genuine": False,
+                        "analysis_failure_context": {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "failure_key": failure_key,
+                            "failure_count": self.analysis_failures.get(failure_key, 0),
+                        },
+                    }
+                    return index, failure_payload
 
         analysis_results = (
             await asyncio.gather(
@@ -2288,6 +2316,20 @@ class TradingLoopAgent:
                 )
                 logger.info(
                     "No decision payload returned for %s; persisted explicit no-action artifact.",
+                    asset_pair,
+                )
+                continue
+            if decision.get("decision_origin") == "analysis_failure":
+                self._log_council_summary(decision, asset_pair=asset_pair)
+                self._persist_no_action_decision(
+                    decision,
+                    asset_pair=asset_pair or decision.get("asset_pair") or "UNKNOWN",
+                    reason_code=decision.get("filtered_reason_code") or "ANALYSIS_EXCEPTION",
+                    reason=decision.get("filtered_reason_text")
+                    or "Analysis failed before a materialized decision payload was returned",
+                )
+                logger.info(
+                    "Analysis failure for %s persisted as explicit no-action artifact with preserved context.",
                     asset_pair,
                 )
                 continue
@@ -4647,6 +4689,10 @@ class TradingLoopAgent:
             normalized = dict(decision or {})
             normalized.setdefault("asset_pair", asset_pair)
             normalized.setdefault("action", "HOLD")
+            normalized.setdefault("policy_action", "HOLD")
+            normalized.setdefault("decision_origin", "no_decision_payload")
+            normalized.setdefault("hold_origin", "analysis_failure")
+            normalized.setdefault("hold_is_genuine", False)
             self._ensure_decision_identity(normalized)
             normalized["executed"] = False
             normalized["actionable"] = False
@@ -4658,6 +4704,10 @@ class TradingLoopAgent:
                 "reason_code": reason_code,
                 "message": reason,
             }
+            failure_context = normalized.get("analysis_failure_context")
+            if isinstance(failure_context, dict):
+                failure_context.setdefault("persisted_reason_code", reason_code)
+                failure_context.setdefault("persisted_reason_text", reason)
             self._attach_decision_artifact(normalized, execution_attempted=False)
             if getattr(self.engine, "decision_store", None):
                 self.engine.decision_store.save_decision(normalized)
