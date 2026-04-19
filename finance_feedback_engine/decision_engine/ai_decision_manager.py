@@ -851,6 +851,13 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             judge_policy_action = judge_decision.get("policy_action") if isinstance(judge_decision, dict) else None
             judge_candidates = judge_decision.get("candidate_actions") if isinstance(judge_decision, dict) else None
             judge_action = judge_decision.get("action") if isinstance(judge_decision, dict) else None
+            judge_market_regime = str(market_regime or "").lower()
+            judge_requires_multi_candidate = (
+                judge_market_regime == "ranging"
+                and _pos_state == "flat"
+                and isinstance(judge_policy_action, str)
+                and judge_policy_action in {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT"}
+            )
             judge_schema_ok = (
                 isinstance(judge_decision, dict)
                 and isinstance(judge_policy_action, str)
@@ -860,15 +867,19 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 and all(isinstance(item, str) and item.strip() for item in judge_candidates)
                 and judge_candidates[0] == judge_policy_action
                 and judge_policy_action == judge_action
+                and (not judge_requires_multi_candidate or len(judge_candidates) >= 2)
             )
             if not (
                 self.ensemble_manager._is_valid_provider_response(judge_decision, judge_provider)
                 and judge_schema_ok
             ):
                 logger.warning(
-                    "Debate: %s (judge) returned invalid response schema_ok=%s action=%r policy_action=%r candidate_actions=%r",
+                    "Debate: %s (judge) returned invalid response schema_ok=%s requires_multi=%s regime=%r pos_state=%r action=%r policy_action=%r candidate_actions=%r",
                     judge_provider,
                     judge_schema_ok,
+                    judge_requires_multi_candidate,
+                    judge_market_regime,
+                    _pos_state,
                     judge_action,
                     judge_policy_action,
                     judge_candidates,
