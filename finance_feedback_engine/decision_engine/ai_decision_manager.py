@@ -497,6 +497,8 @@ JSON requirements:
 - candidate_actions must include policy_action
 - candidate_actions[0] must equal policy_action
 - if the decision is HOLD, still include the strongest alternative action considered when one exists
+- if the decision is a non-HOLD entry action in a flat/ranging context, include at least one plausible alternative legal action in candidate_actions (usually HOLD, or another legal entry if genuinely considered)
+- only return a singleton candidate_actions array when there was truly just one plausible legal action after evaluating the bull and bear cases
 
 In reasoning, use this exact mini-structure:
 Winning Thesis: <bull|bear|neither>
