@@ -2147,6 +2147,19 @@ class TradingLoopAgent:
                         asset_pair,
                         exc_info=True,
                     )
+                    error_context = getattr(e, "analysis_failure_context", None)
+                    failure_context = {
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "failure_key": failure_key,
+                        "failure_count": self.analysis_failures.get(failure_key, 0),
+                    }
+                    if isinstance(error_context, dict):
+                        for key, value in error_context.items():
+                            if key == "role_decisions" and isinstance(value, dict):
+                                failure_context["role_decisions"] = value
+                            elif key not in failure_context and value is not None:
+                                failure_context[key] = value
                     failure_payload = {
                         "asset_pair": asset_pair,
                         "decision_origin": "analysis_failure",
@@ -2154,12 +2167,7 @@ class TradingLoopAgent:
                         "filtered_reason_text": str(e),
                         "hold_origin": "analysis_failure",
                         "hold_is_genuine": False,
-                        "analysis_failure_context": {
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                            "failure_key": failure_key,
-                            "failure_count": self.analysis_failures.get(failure_key, 0),
-                        },
+                        "analysis_failure_context": failure_context,
                     }
                     return index, failure_payload
 

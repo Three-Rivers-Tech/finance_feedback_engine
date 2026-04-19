@@ -23,6 +23,35 @@ from .policy_actions import (
 logger = logging.getLogger(__name__)
 
 
+def _failure_context_snapshot(
+    *,
+    market_regime: Optional[str],
+    position_state: Optional[str],
+    bull_case: Optional[Dict[str, Any]] = None,
+    bear_case: Optional[Dict[str, Any]] = None,
+    judge_decision: Optional[Dict[str, Any]] = None,
+    judge_requires_multi_candidate: Optional[bool] = None,
+    failed_debate_providers: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    snapshot: Dict[str, Any] = {}
+    if market_regime:
+        snapshot["market_regime"] = market_regime
+    if position_state:
+        snapshot["position_state"] = position_state
+    if judge_requires_multi_candidate is not None:
+        snapshot["judge_requires_multi_candidate"] = bool(judge_requires_multi_candidate)
+    if failed_debate_providers:
+        snapshot["failed_debate_providers"] = list(failed_debate_providers)
+
+    role_decisions = {}
+    for role_name, role_value in (("bull", bull_case), ("bear", bear_case), ("judge", judge_decision)):
+        if isinstance(role_value, dict):
+            role_decisions[role_name] = _candidate_audit_view(role_value)
+    if role_decisions:
+        snapshot["role_decisions"] = role_decisions
+    return snapshot
+
+
 def _candidate_audit_view(decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     payload = decision if isinstance(decision, dict) else {}
     return {
@@ -884,9 +913,25 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                     judge_policy_action,
                     judge_candidates,
                 )
+                failure_context = _failure_context_snapshot(
+                    market_regime=market_regime,
+                    position_state=_pos_state,
+                    bull_case=bull_case,
+                    bear_case=bear_case,
+                    judge_decision=judge_decision,
+                    judge_requires_multi_candidate=judge_requires_multi_candidate,
+                    failed_debate_providers=failed_debate_providers + [judge_provider],
+                )
                 failed_debate_providers.append(judge_provider)
                 increment_provider_request(judge_provider, "failure")
-                judge_decision = None
+                error = RuntimeError(
+                    f"Debate mode failed: Missing providers - "
+                    f"bull={'OK' if bull_case else 'FAILED'}, "
+                    f"bear={'OK' if bear_case else 'FAILED'}, "
+                    f"judge=FAILED"
+                )
+                setattr(error, "analysis_failure_context", failure_context)
+                raise error
             elif isinstance(judge_decision, dict) and judge_decision.get("decision_origin") == "fallback":
                 logger.warning(
                     "Debate: %s (judge) returned fallback decision (reason: %s) — "
@@ -931,12 +976,25 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         # Error: if any debate provider failed, raise error
         if bull_case is None or bear_case is None or judge_decision is None:
             logger.error("Debate mode: Critical debate providers failed")
-            raise RuntimeError(
+            error = RuntimeError(
                 f"Debate mode failed: Missing providers - "
                 f"bull={'OK' if bull_case else 'FAILED'}, "
                 f"bear={'OK' if bear_case else 'FAILED'}, "
                 f"judge={'OK' if judge_decision else 'FAILED'}"
             )
+            setattr(
+                error,
+                "analysis_failure_context",
+                _failure_context_snapshot(
+                    market_regime=market_regime,
+                    position_state=_pos_state,
+                    bull_case=bull_case,
+                    bear_case=bear_case,
+                    judge_decision=judge_decision,
+                    failed_debate_providers=failed_debate_providers,
+                ),
+            )
+            raise error
 
         # Synthesize debate decisions
         _timing_started = time.perf_counter()
