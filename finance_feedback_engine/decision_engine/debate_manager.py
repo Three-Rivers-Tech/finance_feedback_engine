@@ -236,6 +236,7 @@ class DebateManager:
         bear_case: Dict[str, Any],
         judge_decision: Dict[str, Any],
         failed_debate_providers: Optional[List[str]] = None,
+        failed_debate_roles: Optional[List[Dict[str, Any]]] = None,
         position_state: Optional[str] = None,
         market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -356,15 +357,23 @@ class DebateManager:
         )
 
         # Add ensemble metadata for consistency
-        failed_roles = [
-            role
-            for role, provider in self.debate_providers.items()
-            if provider in failed_debate_providers
-        ]
+        explicit_failed_roles = {
+            str(item.get("role"))
+            for item in (failed_debate_roles or [])
+            if isinstance(item, dict) and item.get("role")
+        }
+        if explicit_failed_roles:
+            failed_roles = sorted(explicit_failed_roles)
+        else:
+            failed_roles = [
+                role
+                for role, provider in self.debate_providers.items()
+                if provider in failed_debate_providers
+            ]
         providers_used = [
             p
-            for p in self.debate_providers.values()
-            if p not in failed_debate_providers
+            for role, p in self.debate_providers.items()
+            if role not in failed_roles
         ]
         num_total = len(self.debate_providers)
         num_active = len(providers_used)

@@ -1021,6 +1021,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             bear_case=bear_case,
             judge_decision=judge_decision,
             failed_debate_providers=failed_debate_providers,
+            failed_debate_roles=failed_debate_roles,
             position_state=_pos_state,
             market_regime=market_regime,
         )

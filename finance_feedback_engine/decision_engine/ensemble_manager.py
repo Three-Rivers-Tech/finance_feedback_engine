@@ -890,6 +890,7 @@ class EnsembleDecisionManager:
         bear_case: Dict[str, Any],
         judge_decision: Dict[str, Any],
         failed_debate_providers: Optional[List[str]] = None,
+        failed_debate_roles: Optional[List[Dict[str, Any]]] = None,
         position_state: Optional[str] = None,
         market_regime: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -911,6 +912,7 @@ class EnsembleDecisionManager:
             bear_case,
             judge_decision,
             failed_debate_providers,
+            failed_debate_roles=failed_debate_roles,
             position_state=position_state,
             market_regime=market_regime,
         )
