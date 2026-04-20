@@ -1,6 +1,10 @@
 import logging
 
-from finance_feedback_engine.decision_engine.local_llm_provider import LocalLLMProvider
+from finance_feedback_engine.decision_engine.local_llm_provider import (
+    LocalLLMProvider,
+    _extract_market_regime,
+    _extract_position_state,
+)
 
 
 class DummyClient:
@@ -77,3 +81,17 @@ Allowed Policy Actions: HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, OPEN_SMALL_SHOR
     assert provider.ollama_client.calls == 2
     assert decision["candidate_actions"] == ["OPEN_MEDIUM_LONG", "HOLD"]
     assert "role_schema_retry request_label=debate:judge" in caplog.text
+
+
+
+def test_extract_position_state_from_live_prompt_shape_without_explicit_marker():
+    prompt = """TRADING DECISION CONTEXT (COMPACT DEBATE MODE)
+Market Regime: ranging
+
+RISK MANAGEMENT & POSITION CONTEXT:
+Status: no open position (FLAT)
+Allowed policy actions ONLY: HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, OPEN_SMALL_SHORT, OPEN_MEDIUM_SHORT
+"""
+
+    assert _extract_position_state(prompt) == "flat"
+    assert _extract_market_regime(prompt) == "ranging"

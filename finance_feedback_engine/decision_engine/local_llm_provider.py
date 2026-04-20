@@ -56,10 +56,20 @@ _ALLOWED_POLICY_ACTION_TOKEN_RE = re.compile(
 
 
 def _extract_position_state(prompt: str) -> str | None:
-    match = re.search(r"Position State:\s*([A-Za-z_]+)", str(prompt or ""), re.IGNORECASE)
-    if not match:
-        return None
-    return match.group(1).strip().lower()
+    text = str(prompt or "")
+    match = re.search(r"Position State:\s*([A-Za-z_]+)", text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().lower()
+
+    status_match = re.search(r"Status:\s*.*?\b(FLAT|LONG|SHORT)\b(?: position)?", text, re.IGNORECASE)
+    if status_match:
+        return status_match.group(1).strip().lower()
+
+    constraint_match = re.search(r"CRITICAL CONSTRAINT:\s*You currently have a\s+(LONG|SHORT)\s+position", text, re.IGNORECASE)
+    if constraint_match:
+        return constraint_match.group(1).strip().lower()
+
+    return None
 
 
 def _extract_market_regime(prompt: str) -> str | None:
