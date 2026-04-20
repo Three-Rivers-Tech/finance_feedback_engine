@@ -3486,7 +3486,7 @@ class TradingLoopAgent:
                 open_positions = getattr(recorder, "open_positions", None)
                 if isinstance(open_positions, dict):
                     existing = open_positions.get(pos_key) or {}
-                    decision_id = existing.get("decision_id")
+                    decision_id = normalize_scalar_id(existing.get("decision_id"))
                     if decision_id:
                         return decision_id, "recorder.open_positions", attempted_sources
             except Exception:
@@ -3545,12 +3545,19 @@ class TradingLoopAgent:
                 attempted_sources.append("trade_monitor.get_decision_id_by_asset")
                 if callable(getter):
                     for candidate_asset_pair in candidate_asset_pairs:
-                        decision_id = normalize_scalar_id(getter(candidate_asset_pair))
+                        raw_decision_id = getter(candidate_asset_pair)
+                        decision_id = normalize_scalar_id(raw_decision_id)
                         if decision_id:
                             return (
                                 decision_id,
                                 "trade_monitor.get_decision_id_by_asset",
                                 attempted_sources,
+                            )
+                        if raw_decision_id is not None:
+                            logger.debug(
+                                "Ignoring non-scalar recovered decision_id from trade_monitor.get_decision_id_by_asset for %s: %r",
+                                candidate_asset_pair,
+                                raw_decision_id,
                             )
 
                 attempted_sources.append("trade_monitor.closed_trades_queue")

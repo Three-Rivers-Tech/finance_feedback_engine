@@ -26,7 +26,9 @@ def normalize_scalar_id(value: Any) -> Optional[str]:
     if isinstance(value, str):
         value = value.strip()
         return value or None
-    return str(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    return None
 
 
 def merge_nested_payload(payload: Any, nested_key: str = "order") -> Any:
