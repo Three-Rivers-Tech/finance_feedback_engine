@@ -453,6 +453,7 @@ class OrderStatusWorker:
                 entry_price=Decimal(str(fill_info["fill_price"])),
                 size=Decimal(str(fill_info["filled_size"])),
                 fees=Decimal(str(fill_info.get("fees", 0))),
+                product_id=(order_status.get("product_id") or order_data.get("product_id")),
             )
 
             # Write decision linkage to durable store for OPEN fills.

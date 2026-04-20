@@ -485,3 +485,23 @@ class TestRecordOrderOutcomeEdgeCases:
         )
         assert result is not None
         assert result["decision_id"] == "tuple-dec-1"
+
+
+def test_record_order_outcome_preserves_futures_product_identity(tmp_path):
+    recorder = TradeOutcomeRecorder(data_dir=str(tmp_path), use_async=False)
+    result = recorder.record_order_outcome(
+        order_id='o-fut-1',
+        decision_id='d-fut-1',
+        asset_pair='BTCUSD',
+        side='BUY',
+        entry_time='2026-03-31T10:00:00+00:00',
+        entry_price=Decimal('68000'),
+        size=Decimal('1'),
+        fees=Decimal('0'),
+        exit_price=Decimal('68500'),
+        product_id='BIP-20DEC30-CDE',
+    )
+    assert result is not None
+    assert result['product'] == 'BIP-20DEC30-CDE'
+    assert result['product_id'] == 'BIP-20DEC30-CDE'
+    assert result['asset_pair'] == 'BTCUSD'

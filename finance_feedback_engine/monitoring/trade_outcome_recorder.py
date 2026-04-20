@@ -818,6 +818,7 @@ class TradeOutcomeRecorder:
         fees: Decimal,
         exit_time: Optional[str] = None,
         exit_price: Optional[Decimal] = None,
+        product_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Record outcome for a specific order (THR-236).
@@ -897,10 +898,16 @@ class TradeOutcomeRecorder:
             position_value = entry_price * size
             roi_percent = (realized_pnl / position_value * Decimal("100")) if position_value > 0 else Decimal("0")
             
+            normalized_product_id = normalize_scalar_id(product_id)
+            normalized_asset_pair = normalize_scalar_id(asset_pair)
+            persisted_product = normalized_product_id or normalized_asset_pair
+
             outcome = {
                 "order_id": order_id,
                 "decision_id": normalize_scalar_id(decision_id),
-                "product": asset_pair,
+                "product": persisted_product,
+                "product_id": normalized_product_id or persisted_product,
+                "asset_pair": normalized_asset_pair,
                 "side": side,
                 "entry_time": entry_time,
                 "entry_price": str(entry_price),
