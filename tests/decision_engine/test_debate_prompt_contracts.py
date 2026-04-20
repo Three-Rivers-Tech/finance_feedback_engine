@@ -538,3 +538,19 @@ Allowed policy actions ONLY: HOLD, ADD_SMALL_SHORT, REDUCE_SHORT, CLOSE_SHORT
     assert 'Allowed policy actions:\n- HOLD\n- ADD_SMALL_SHORT' in bear_prompt
     assert 'OPEN_SMALL_SHORT' not in bear_prompt
     assert 'OPEN_MEDIUM_SHORT' not in bear_prompt
+
+def test_judge_prompt_makes_flat_ranging_entry_multi_candidate_rule_explicit():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    bull = {"action": "BUY", "policy_action": "OPEN_MEDIUM_LONG", "confidence": 77, "market_regime": "ranging", "reasoning": "bull case"}
+    bear = {"action": "SELL", "policy_action": "OPEN_SMALL_SHORT", "confidence": 55, "market_regime": "ranging", "reasoning": "bear case"}
+
+    base_prompt = """RISK MANAGEMENT & POSITION CONTEXT:
+Position State: flat
+Allowed Policy Actions: HOLD, OPEN_SMALL_LONG, OPEN_MEDIUM_LONG, OPEN_SMALL_SHORT, OPEN_MEDIUM_SHORT
+Market Regime: ranging"""
+    judge_prompt = manager._build_judge_prompt(base_prompt, bull, bear)
+
+    assert 'In flat/ranging context, a non-HOLD entry decision must include at least 2 candidate_actions.' in judge_prompt
+    assert 'If you choose OPEN_' in judge_prompt
+    assert 'do not return a singleton candidate_actions array' in judge_prompt
+
