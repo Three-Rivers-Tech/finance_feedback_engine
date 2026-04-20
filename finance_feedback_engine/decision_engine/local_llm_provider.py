@@ -76,13 +76,23 @@ def _judge_output_requires_multi_candidate_retry(request_label: str | None, prom
     market_regime = _extract_market_regime(prompt)
     action = str(decision.get("policy_action") or decision.get("action") or "").strip().upper()
     candidates = decision.get("candidate_actions")
-    return (
+    should_retry = (
         position_state == "flat"
         and market_regime == "ranging"
         and action in {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT"}
         and isinstance(candidates, list)
         and len(candidates) < 2
     )
+    logger.info(
+        "CANDIDATE_AUDIT judge_retry_probe request_label=%s pos_state=%r regime=%r action=%r candidate_count=%r should_retry=%s",
+        request_label or "none",
+        position_state,
+        market_regime,
+        action,
+        len(candidates) if isinstance(candidates, list) else None,
+        should_retry,
+    )
+    return should_retry
 
 
 def _extract_allowed_policy_actions(prompt: str) -> list[str]:
