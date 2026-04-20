@@ -55,6 +55,36 @@ _ALLOWED_POLICY_ACTION_TOKEN_RE = re.compile(
 )
 
 
+def _extract_position_state(prompt: str) -> str | None:
+    match = re.search(r"Position State:\s*([A-Za-z_]+)", str(prompt or ""), re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1).strip().lower()
+
+
+def _extract_market_regime(prompt: str) -> str | None:
+    match = re.search(r"Market Regime:\s*([A-Za-z_]+)", str(prompt or ""), re.IGNORECASE)
+    if not match:
+        return None
+    return match.group(1).strip().lower()
+
+
+def _judge_output_requires_multi_candidate_retry(request_label: str | None, prompt: str, decision: dict | None) -> bool:
+    if request_label != "debate:judge" or not isinstance(decision, dict):
+        return False
+    position_state = _extract_position_state(prompt)
+    market_regime = _extract_market_regime(prompt)
+    action = str(decision.get("policy_action") or decision.get("action") or "").strip().upper()
+    candidates = decision.get("candidate_actions")
+    return (
+        position_state == "flat"
+        and market_regime == "ranging"
+        and action in {"OPEN_SMALL_LONG", "OPEN_MEDIUM_LONG", "OPEN_SMALL_SHORT", "OPEN_MEDIUM_SHORT"}
+        and isinstance(candidates, list)
+        and len(candidates) < 2
+    )
+
+
 def _extract_allowed_policy_actions(prompt: str) -> list[str]:
     """Extract a narrowed policy-action set from the prompt when present."""
     text = str(prompt or "")
@@ -802,24 +832,27 @@ class LocalLLMProvider:
                 )
 
                 decision = try_parse_decision_json(response_text)
-                if (
-                    decision
-                    and request_label in {"debate:bull", "debate:bear"}
-                    and (
+                if decision:
+                    retry_reason = None
+                    if request_label in {"debate:bull", "debate:bear"} and (
                         decision.get("policy_action") is None
                         or not decision.get("candidate_actions")
-                    )
-                ):
-                    logger.info(
-                        "CANDIDATE_AUDIT role_schema_retry request_label=%s model=%s reason=%s parsed=%s",
-                        request_label or "none",
-                        active_model,
-                        "missing_policy_or_candidates",
-                        _candidate_audit_view(decision),
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(2 * (attempt + 1))
-                        continue
+                    ):
+                        retry_reason = "missing_policy_or_candidates"
+                    elif _judge_output_requires_multi_candidate_retry(request_label, prompt, decision):
+                        retry_reason = "judge_singleton_ranging_entry"
+
+                    if retry_reason is not None:
+                        logger.info(
+                            "CANDIDATE_AUDIT role_schema_retry request_label=%s model=%s reason=%s parsed=%s",
+                            request_label or "none",
+                            active_model,
+                            retry_reason,
+                            _candidate_audit_view(decision),
+                        )
+                        if attempt < max_retries - 1:
+                            time.sleep(2 * (attempt + 1))
+                            continue
                 if decision:
                     logger.info(
                         "CANDIDATE_AUDIT local_parse_ok request_label=%s model=%s parsed=%s",
