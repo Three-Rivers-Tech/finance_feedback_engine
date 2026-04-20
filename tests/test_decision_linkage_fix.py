@@ -308,3 +308,39 @@ class TestEndToEndLinkage:
         assert outcome is not None
         assert outcome["decision_id"] == "decision-abc-123"
         assert float(outcome["realized_pnl"]) != 0  # Should have actual P&L
+
+
+class TestRecorderBackfillsLinkageByAssetPair:
+    """Recorder should recover CFM lineage from durable asset-pair linkage when exact product-id linkage is absent."""
+
+    def test_new_cfm_position_uses_asset_pair_linkage_fallback(self, tmp_path):
+        from finance_feedback_engine.monitoring.pending_linkage_store import PendingLinkageStore
+
+        linkage_store = PendingLinkageStore(data_dir=tmp_path)
+        linkage_store.record_fill(
+            order_id="order-btc-1",
+            decision_id="decision-btc-asset",
+            asset_pair="BTCUSD",
+            side="LONG",
+            product_id="",
+        )
+
+        recorder = TradeOutcomeRecorder(
+            data_dir=tmp_path,
+            use_async=False,
+            unified_provider=None,
+            pending_linkage_store=linkage_store,
+        )
+
+        outcomes = recorder.update_positions([
+            {
+                "product_id": "BIP-20DEC30-CDE",
+                "side": "LONG",
+                "contracts": 1.0,
+                "entry_price": 67000.0,
+                "current_price": 67010.0,
+            }
+        ])
+
+        assert outcomes == []
+        assert recorder.open_positions["BIP-20DEC30-CDE_LONG"]["decision_id"] == "decision-btc-asset"

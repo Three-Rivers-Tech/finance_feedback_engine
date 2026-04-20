@@ -285,11 +285,24 @@ class TradeOutcomeRecorder:
                         linkage = self._linkage_store.lookup(
                             product_id=product, side=side,
                         )
+                        linkage_source = "product_id"
+                        if not linkage:
+                            asset_pair = None
+                            try:
+                                from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
+                                asset_pair = _pid_to_pair(product)
+                            except Exception:
+                                asset_pair = None
+                            if asset_pair:
+                                linkage = self._linkage_store.lookup_by_asset(
+                                    asset_pair=asset_pair, side=side,
+                                )
+                                linkage_source = "asset_pair"
                         if linkage:
-                            snapshot_decision_id = linkage.get("decision_id")
+                            snapshot_decision_id = normalize_scalar_id(linkage.get("decision_id"))
                             logger.info(
-                                "Backfilled decision_id %s for new position %s from linkage store (order=%s)",
-                                snapshot_decision_id, pos_key, linkage.get("order_id"),
+                                "Backfilled decision_id %s for new position %s from linkage store via %s (order=%s)",
+                                snapshot_decision_id, pos_key, linkage_source, linkage.get("order_id"),
                             )
                     except Exception as e:
                         logger.debug("Linkage store lookup failed for %s: %s", pos_key, e)
