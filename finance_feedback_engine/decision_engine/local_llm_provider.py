@@ -839,7 +839,7 @@ class LocalLLMProvider:
                         or not decision.get("candidate_actions")
                     ):
                         retry_reason = "missing_policy_or_candidates"
-                    elif _judge_output_requires_multi_candidate_retry(request_label, prompt, decision):
+                    elif _judge_output_requires_multi_candidate_retry(request_label, full_prompt, decision):
                         retry_reason = "judge_singleton_ranging_entry"
 
                     if retry_reason is not None:
