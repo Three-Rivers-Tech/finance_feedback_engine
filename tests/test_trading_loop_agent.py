@@ -438,6 +438,16 @@ def test_normalize_trade_outcome_product_aliases_populates_both_keys(trading_age
     assert product_id_only["product_id"] == "BIP-20DEC30-CDE"
 
 
+def test_normalize_trade_outcome_product_aliases_backfills_asset_pair_and_recorded_via_for_futures_polling(trading_agent):
+    outcome = trading_agent._normalize_trade_outcome_product_aliases(
+        {"product": "BIP-20DEC30-CDE", "side": "LONG"}
+    )
+    assert outcome["product"] == "BIP-20DEC30-CDE"
+    assert outcome["product_id"] == "BIP-20DEC30-CDE"
+    assert outcome["asset_pair"] == "BTCUSD"
+    assert outcome["recorded_via"] == "position_polling"
+
+
 @pytest.mark.asyncio
 async def test_perception_uses_fresh_default_crypto_context_even_with_stale_pulse(trading_agent, mock_dependencies):
     stale_context = {

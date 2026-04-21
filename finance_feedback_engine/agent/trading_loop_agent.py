@@ -3757,17 +3757,32 @@ class TradingLoopAgent:
     def _normalize_trade_outcome_product_aliases(
         trade_outcome: dict[str, Any]
     ) -> dict[str, Any]:
-        """Populate both `product` and `product_id` aliases for close outcomes."""
+        """Populate both product aliases and canonical polling metadata for close outcomes."""
         if not isinstance(trade_outcome, dict):
             return trade_outcome
 
-        product = trade_outcome.get("product")
-        product_id = trade_outcome.get("product_id")
+        normalized = dict(trade_outcome)
+        product = normalized.get("product")
+        product_id = normalized.get("product_id")
         if product and not product_id:
-            trade_outcome = {**trade_outcome, "product_id": product}
+            normalized["product_id"] = product
         elif product_id and not product:
-            trade_outcome = {**trade_outcome, "product": product_id}
-        return trade_outcome
+            normalized["product"] = product_id
+
+        canonical_product = normalized.get("product_id") or normalized.get("product")
+        if canonical_product and not normalized.get("asset_pair"):
+            try:
+                from finance_feedback_engine.utils.product_id import product_id_to_asset_pair
+                asset_pair = product_id_to_asset_pair(canonical_product)
+            except Exception:
+                asset_pair = None
+            if asset_pair:
+                normalized["asset_pair"] = asset_pair
+
+        if not normalized.get("recorded_via"):
+            normalized["recorded_via"] = "position_polling"
+
+        return normalized
 
     def _sync_trade_outcome_recorder(
         self, current_positions: list[dict[str, Any]]
