@@ -86,3 +86,33 @@ def test_asset_scoped_filter_matches_cfm_btc_product_to_btcusd():
 
     assert len(context["active_positions"]["futures"]) == 1
     assert context["active_positions"]["futures"][0]["product_id"] == "BIP-20DEC30-CDE"
+
+
+def test_monitoring_context_includes_portfolio_breakdown_for_risk_gate_boundary():
+    provider = MonitoringContextProvider(_DummyPlatform())
+    portfolio = {
+        "total_value_usd": 267.10,
+        "platform_breakdowns": {
+            "coinbase": {
+                "futures_summary": {
+                    "initial_margin": 76.34,
+                    "total_balance_usd": 267.10,
+                },
+                "futures_positions": [
+                    {
+                        "product_id": "BIP-20DEC30-CDE",
+                        "side": "LONG",
+                        "contracts": 1,
+                        "current_price": 76845.0,
+                    }
+                ],
+            }
+        },
+    }
+
+    provider.platform.get_portfolio_breakdown = lambda: portfolio
+    context = provider.get_monitoring_context(asset_pair="BTCUSD")
+
+    assert context["portfolio_breakdown"]["platform_breakdowns"]["coinbase"]["futures_summary"]["initial_margin"] == 76.34
+    assert context["portfolio_breakdown"]["platform_breakdowns"]["coinbase"]["futures_summary"]["total_balance_usd"] == 267.10
+

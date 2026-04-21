@@ -236,6 +236,7 @@ class MonitoringContextProvider:
             "recent_performance": {},
             "risk_metrics": {},
             "position_concentration": {},
+            "portfolio_breakdown": {},
             "multi_timeframe_pulse": None,  # Multi-TF technical indicators
         }
 
@@ -244,6 +245,8 @@ class MonitoringContextProvider:
             if hasattr(self.platform, "get_portfolio_breakdown"):
                 # Use sync method for backward compatibility
                 portfolio = self.platform.get_portfolio_breakdown()
+
+                context["portfolio_breakdown"] = portfolio
 
                 # Extract active positions
                 futures_positions, holdings = self._extract_active_positions_from_portfolio(portfolio)
