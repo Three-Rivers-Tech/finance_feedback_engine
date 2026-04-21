@@ -45,11 +45,19 @@ class DecisionReservationPayload:
         decision_id = str(normalize_scalar_id(decision) or "")
         asset_pair = str(decision.get("asset_pair") or "")
         action = str(decision.get("action") or "UNKNOWN")
+        policy_action = str(decision.get("policy_action") or action or "").upper()
         position_size = float(decision.get("recommended_position_size") or 0.0)
-        notional_value = float(
-            decision.get("notional_value")
-            or (position_size * float(decision.get("entry_price") or 0.0))
-        )
+
+        execution_metadata = decision.get("execution_metadata") or {}
+        execution_amount_usd = execution_metadata.get("execution_amount_usd")
+
+        if policy_action.startswith(("CLOSE_", "REDUCE_")) and execution_amount_usd is not None:
+            notional_value = float(execution_amount_usd)
+        else:
+            notional_value = float(
+                decision.get("notional_value")
+                or (position_size * float(decision.get("entry_price") or 0.0))
+            )
         return cls(
             decision_id=decision_id,
             asset_pair=asset_pair,

@@ -82,6 +82,9 @@ class TestNormalizeScalarId:
         """Tuple inside dict — the real production shape."""
         assert normalize_scalar_id({"decision_id": ("abc-123",)}) == "abc-123"
 
+    def test_arbitrary_object_returns_none(self):
+        assert normalize_scalar_id(MagicMock(name="fake-id")) is None
+
 
 # ═══════════════════════════════════════════════════════════════════
 # SEAM 2: Trade outcome P&L computation
@@ -554,3 +557,26 @@ class TestPositionProductId:
 
     def test_none(self):
         assert position_product_id(None) is None
+
+
+
+def test_derisking_reservation_payload_prefers_execution_notional_when_present():
+    decision = {
+        "id": "reduce-1",
+        "asset_pair": "BTCUSD",
+        "action": "REDUCE_LONG",
+        "policy_action": "REDUCE_LONG",
+        "recommended_position_size": 1.0,
+        "entry_price": 76000.0,
+        "notional_value": 76000.0,
+        "suggested_amount": 1.0,
+        "execution_metadata": {
+            "execution_amount_usd": 1.0,
+        },
+    }
+
+    payload = DecisionReservationPayload.from_decision(decision)
+
+    assert payload.position_size == 1.0
+    assert payload.notional_value == 1.0
+
