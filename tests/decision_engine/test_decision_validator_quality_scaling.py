@@ -1339,3 +1339,53 @@ def test_decision_validator_preserves_contract_effective_futures_notional_for_op
     assert decision["policy_action"] == "OPEN_MEDIUM_LONG"
     assert decision["position_size_multiplier"] < 1.0
     assert decision["suggested_amount"] == 142.24
+
+
+def test_decision_validator_still_scales_open_small_entries_outside_preservation_seam():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 20.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+    }
+    ai_response = {
+        "action": "BUY",
+        "policy_action": "OPEN_SMALL_LONG",
+        "confidence": 72,
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 7.112,
+        "stop_loss_price": 19.0,
+        "sizing_stop_loss_percentage": 0.05,
+        "risk_percentage": 0.01,
+        "policy_sizing_intent": {
+            "semantic_action": "OPEN_SMALL_LONG",
+            "target_exposure_pct": 142.24,
+            "target_delta_pct": 142.24,
+            "reduction_fraction": None,
+            "sizing_anchor": "quarter_kelly_conservative",
+            "provider_agnostic": True,
+            "version": 1,
+        },
+    }
+
+    decision = validator.create_decision(
+        asset_pair="BTCUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=False,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["policy_action"] == "OPEN_SMALL_LONG"
+    assert decision["position_size_multiplier"] < 1.0
+    assert decision["suggested_amount"] < 142.24
+
