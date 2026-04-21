@@ -454,3 +454,77 @@ class TestDrawdownIntegrationScenarios:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+from unittest.mock import patch
+
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+
+
+from unittest.mock import patch
+
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+
+
+from unittest.mock import patch
+
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+
+
+from unittest.mock import patch
+
+from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
+
+
+@patch("finance_feedback_engine.risk.gatekeeper.MarketSchedule")
+def test_gatekeeper_allows_futures_scale_in_when_margin_usage_implies_sub_limit_effective_leverage(
+    mock_schedule,
+):
+    mock_schedule.get_market_status.return_value = {"is_open": True, "warning": None}
+
+    gatekeeper = RiskGatekeeper(is_backtest=False)
+
+    decision = {
+        "action": "BUY",
+        "policy_action": "ADD_SMALL_LONG",
+        "asset_pair": "BTCUSD",
+        "confidence": 85,
+        "volatility": 0.02,
+    }
+
+    initial_margin = 76.34
+    total_balance = 267.10
+    margin_usage_pct = initial_margin / total_balance
+
+    context = {
+        "asset_type": "crypto",
+        "market_data_timestamp": "2026-04-21T10:21:04+00:00",
+        "recent_performance": {"total_pnl": 0.0},
+        "holdings": {},
+        "max_leverage": 5.0,
+        "risk_metrics": {
+            "leverage_estimate": 286.63,
+            "account_value": total_balance,
+            "total_exposure_usd": 76540.0,
+        },
+        "portfolio_breakdown": {
+            "total_value_usd": total_balance,
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_summary": {
+                        "initial_margin": initial_margin,
+                        "total_balance_usd": total_balance,
+                    }
+                }
+            },
+        },
+    }
+
+    assert margin_usage_pct < 0.50
+    assert (margin_usage_pct * context["max_leverage"]) < context["max_leverage"]
+
+    allowed, reason = gatekeeper.validate_trade(decision, context)
+
+    assert allowed is True
+    assert reason == "Trade approved"
+

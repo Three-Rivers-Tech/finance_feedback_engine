@@ -14,6 +14,7 @@ from finance_feedback_engine.observability.metrics import create_counters, get_m
 from finance_feedback_engine.risk.exposure_reservation import get_exposure_manager
 from finance_feedback_engine.utils.market_schedule import MarketSchedule
 from finance_feedback_engine.utils.validation import validate_data_freshness
+from finance_feedback_engine.monitoring.context_provider import _coerce_monitoring_float
 
 logger = logging.getLogger(__name__)
 
@@ -633,6 +634,23 @@ class RiskGatekeeper:
         risk_metrics = context.get("risk_metrics", {})
         leverage = risk_metrics.get("leverage_estimate", 0)
 
+        portfolio_breakdown = context.get("portfolio_breakdown", {}) or {}
+        futures_summary = portfolio_breakdown.get("platform_breakdowns", {}).get("coinbase", {}).get("futures_summary", {}) or {}
+        initial_margin = _coerce_monitoring_float(
+            futures_summary.get("initial_margin")
+            or portfolio_breakdown.get("initial_margin")
+            or context.get("initial_margin"),
+            0.0,
+        )
+        account_value = _coerce_monitoring_float(
+            futures_summary.get("total_balance_usd")
+            or risk_metrics.get("account_value")
+            or context.get("total_value_usd")
+            or portfolio_breakdown.get("total_value_usd"),
+            0.0,
+        )
+        margin_usage_pct = (initial_margin / account_value) if initial_margin > 0 and account_value > 0 else 0.0
+
         # Extract concentration metrics
         position_concentration = context.get("position_concentration", {})
         largest_pct = position_concentration.get("largest_position_pct", 0)
@@ -661,16 +679,29 @@ class RiskGatekeeper:
         is_derisking_action = normalized_action.startswith(("CLOSE_", "REDUCE_"))
 
         # Validate leverage
-        if leverage and leverage > max_leverage:
+        effective_leverage = leverage
+        if margin_usage_pct > 0 and max_leverage > 0:
+            effective_leverage = margin_usage_pct * max_leverage
+            logger.info(
+                "Using futures margin usage for leverage gate: margin_usage_pct=%.4f account_value=%.2f initial_margin=%.2f effective_leverage=%.2f raw_leverage_estimate=%.2f max_leverage=%.2f",
+                margin_usage_pct,
+                account_value,
+                initial_margin,
+                effective_leverage,
+                float(leverage or 0.0),
+                max_leverage,
+            )
+
+        if effective_leverage and effective_leverage > max_leverage:
             if is_derisking_action:
                 logger.info(
                     "Allowing de-risking action despite leverage breach: action=%s leverage=%.2f max=%.2f",
                     normalized_action,
-                    leverage,
+                    effective_leverage,
                     max_leverage,
                 )
                 return True, "De-risking action bypassed leverage limit"
-            logger.warning(f"Leverage limit exceeded: {leverage:.2f} > {max_leverage}")
+            logger.warning(f"Leverage limit exceeded: {effective_leverage:.2f} > {max_leverage}")
             asset_pair = decision.get("asset_pair", "UNKNOWN")
             asset_type = (
                 "crypto" if any(x in asset_pair for x in ["BTC", "ETH"]) else "forex"
@@ -678,7 +709,7 @@ class RiskGatekeeper:
             self._metrics["ffe_risk_blocks_total"].add(
                 1, {"reason": "leverage", "asset_type": asset_type}
             )
-            return False, f"Leverage {leverage:.2f} exceeds max {max_leverage}"
+            return False, f"Leverage {effective_leverage:.2f} exceeds max {max_leverage}"
 
         # Validate concentration (including reserved exposure from pending trades)
         asset_pair = decision.get("asset_pair", "UNKNOWN")
